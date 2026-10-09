@@ -1,0 +1,30 @@
+{
+  "Keys": {
+    "approval:claude-v1": {},
+    "approval:codex-v1": {},
+    "approval:command-code-v1": {},
+    "approval:copilot-v1": {},
+    "approval:cursor-agent-v1": {},
+    "approval:generic-v1": {},
+    "approval:grok-v1": {},
+    "approval:opencode-v1": {},
+    "history:claude-v1": {},
+    "history:codex-v1": {},
+    "history:command-code-v1": {},
+    "history:cursor-agent-v1": {},
+    "history:opencode-v1": {},
+    "launch:generic-v1": {},
+    "permissions:generic-v1": {},
+    "subagent:claude-v1": {},
+    "subagent:codex-v1": {},
+    "subagent:grok-v1": {},
+    "subscription:claude-v1": {},
+    "subscription:codex-v1": {},
+    "subscription:grok-v1": {},
+    "subscription:opencode-v1": {},
+    "usage:claude-v1": {},
+    "usage:codex-v1": {},
+    "usage:grok-v1": {},
+    "usage:opencode-v1": {}
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "go_behavior_baseline": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "go_version": "go1.26.8",
+  "source_base": "https://go.googlesource.com/go/+/refs/tags/go1.26.8/",
+  "source_sha256": {
+    "LICENSE": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
+    "VERSION": "25b231b380ff42bb887b29e7c2eb176167820f3416665cd4fbc2d3b116bc417d",
+    "src/regexp/backtrack.go": "ac5a1e4cf49b1c7f4372c0a7c2e8d156100c17d3a114fcf9539f55d223d06092",
+    "src/regexp/exec.go": "cc9fda63ad7056d4c4abaaa49c00470f726be35ccee53f1c3fe73259e9634dd5",
+    "src/regexp/onepass.go": "fd0e29803438c6ea3021c78227d4f69de163f693e82c155dc62d721eaacbd24b",
+    "src/regexp/regexp.go": "addd07fbda0b622c063e0f5516b55c684d48ab9cc5d3a4a9f90d82b19c527772",
+    "src/regexp/syntax/compile.go": "2e1f753be77bf1fa54aed2a7f98932394324b82c91109e19d93283f482f7ee01",
+    "src/regexp/syntax/parse.go": "d0f657113901da39d6118e4172206a0358b71c96ef43051cc0a741a0a4d04820",
+    "src/regexp/syntax/perl_groups.go": "d060a0645b60b210eaec7c3dba6d554dc297c14fe71cdbcc9c25b4fc7562c3a4",
+    "src/regexp/syntax/prog.go": "7a24ebd22eec504ceaeffbd33641ae330d3ca666d54f6a29ce6d96fc127e6c64",
+    "src/regexp/syntax/regexp.go": "72fad4645d96cf8b0ef0ea4a9dae21f09e7bea090d1bdd500732d811982b2192",
+    "src/unicode/letter.go": "b35a6d259313cef88d07e9e4027b8bd72c60ae140418f5be2c41a2ecea6074fe",
+    "src/unicode/tables.go": "6a88d48746c4b2c471cc04ae40559694b734770212e6f5ea5f1962adb0c0bdb1"
+  },
+  "unicode_version": "15.0.0"
+}

@@ -1,0 +1,100 @@
+{
+  "branches_retained": true,
+  "concurrent_names": [
+    "review-worker-20260711-1234",
+    "review-worker-20260711-1234-2"
+  ],
+  "created": [
+    {
+      "branch": "many-ai/a.b-20260711-1234",
+      "created": true,
+      "path": ".git-worktrees/a.b-20260711-1234"
+    },
+    {
+      "branch": "many-ai/a.b-20260711-1234-2",
+      "created": true,
+      "path": ".git-worktrees/a.b-20260711-1234-2"
+    }
+  ],
+  "dirty": "worktree retained: uncommitted changes",
+  "exclude": "# keep this without newline\n.git-worktrees/\n",
+  "ignored_cleanup_error": "",
+  "ignored_removed": true,
+  "invalid_token": "create worktree",
+  "locked_remove": "remove worktree",
+  "locked_retained": true,
+  "missing_cleanup": "inspect worktree status",
+  "names": [
+    {
+      "label": "review worker",
+      "safe": "review-worker"
+    },
+    {
+      "label": "a.b",
+      "safe": "a.b"
+    },
+    {
+      "label": "..a..b..",
+      "safe": "a..b"
+    },
+    {
+      "label": "日本語 review",
+      "safe": "review"
+    },
+    {
+      "label": " -_. ",
+      "safe": "item"
+    },
+    {
+      "label": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.tail",
+      "safe": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
+    }
+  ],
+  "not_git": "parent cwd is not a git repository",
+  "parent_clean": true,
+  "policies": [
+    {
+      "effective": "manual",
+      "valid": true,
+      "value": ""
+    },
+    {
+      "effective": "delete",
+      "valid": true,
+      "value": "delete"
+    },
+    {
+      "effective": "keep",
+      "valid": true,
+      "value": "keep"
+    },
+    {
+      "effective": "manual",
+      "valid": true,
+      "value": "manual"
+    },
+    {
+      "effective": "manual",
+      "valid": false,
+      "value": "discard"
+    },
+    {
+      "effective": "manual",
+      "valid": false,
+      "value": "DELETE"
+    },
+    {
+      "effective": "manual",
+      "valid": false,
+      "value": " delete "
+    }
+  ],
+  "removed_after_merge": true,
+  "retained_branch_collision": "create worktree",
+  "retained_policies_keep_path": true,
+  "root_create_failure": "create worktree root",
+  "root_retained": true,
+  "unborn_create": "create worktree",
+  "unborn_root_retained": true,
+  "unmerged": "worktree retained: branch \"many-ai/a.b-20260711-1234\" is not merged"
+}

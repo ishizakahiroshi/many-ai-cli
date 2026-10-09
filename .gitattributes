@@ -24,3 +24,8 @@ deploy/docker/Dockerfile.dockerignore text eol=lf
 
 # Windows-only PowerShell scripts; let CRLF be the working-tree default.
 *.ps1 text eol=crlf
+
+# Keep Rust source fixtures byte-stable across Windows and Unix checkouts.
+*.rs text eol=lf
+rust/src/wrapper/approval_injection/rules.txt text eol=lf
+rust/tests/fixtures/services/asset-content/data/app/index.html text eol=lf

@@ -1,0 +1,189 @@
+{
+  "oracle": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "status": "implementation_in_progress",
+  "implemented_components": [
+    {
+      "source": [
+        "internal/hub/approval_identity.go"
+      ],
+      "rust": [
+        "rust/src/approval/identity.rs"
+      ],
+      "tests": [
+        "candidate_identity_ignores_labels_order_and_reflow",
+        "marker_identity_and_corruption_classification",
+        "go_oracle_risk_summaries_and_native_detectors"
+      ]
+    },
+    {
+      "source": [
+        "internal/approval/summary.go",
+        "internal/provider/approval.go"
+      ],
+      "rust": [
+        "rust/src/approval/summary.rs"
+      ],
+      "tests": [
+        "risk_syntax_and_summary",
+        "provider_summary_masks_only_synthetic_secrets",
+        "go_oracle_risk_summaries_and_native_detectors"
+      ]
+    },
+    {
+      "source": [
+        "internal/hub/approval_detector.go",
+        "internal/hub/approval_trigger_phrases.go"
+      ],
+      "rust": [
+        "rust/src/approval/detect.rs"
+      ],
+      "tests": [
+        "native_provider_shapes_shortcuts_feedback_and_notices",
+        "go_oracle_risk_summaries_and_native_detectors"
+      ]
+    },
+    {
+      "source": [
+        "internal/hub/approval_marker.go",
+        "internal/hub/approval_marker_verdict.go",
+        "internal/hub/provider_feature_source.go"
+      ],
+      "rust": [
+        "rust/src/approval/marker.rs"
+      ],
+      "tests": [
+        "marker_identity_and_corruption_classification",
+        "approval_source_capabilities_resolution_misses_and_recovery"
+      ]
+    },
+    {
+      "source": [
+        "internal/hub/approval_record.go",
+        "internal/hub/approval_identity.go",
+        "internal/hub/approval_text_question.go:vtQuestionAnsweredInLedger"
+      ],
+      "rust": [
+        "rust/src/approval/record.rs"
+      ],
+      "tests": [
+        "record_closure_precedes_reused_signature_insert",
+        "transcript_user_turn_allows_repeated_question",
+        "vt_answer_carries_without_ttl_while_latest_question_remains",
+        "native_record_blocks_only_vt_marker_while_visible",
+        "late_consumption_cannot_close_newer_record",
+        "ledger_restore_is_narrow_and_preserves_different_consumed_slot",
+        "native_action_answers_preserve_exact_input_while_marker_answers_stay_bounded"
+      ]
+    },
+    {
+      "source": [
+        "internal/hub/approval_action.go:oneTapApprovalManager"
+      ],
+      "rust": [
+        "rust/src/approval/token.rs"
+      ],
+      "tests": [
+        "one_tap_tokens_bind_identity_epoch_action_and_expire_without_consuming_on_verify"
+      ]
+    },
+    {
+      "source": [
+        "internal/hub/auto_approval.go:approvalOptionInput/autoApprovalInput",
+        "internal/hub/approval_action.go:oneTapRejectInput/sendNativeApprovalAction/commitNativeApprovalAction"
+      ],
+      "rust": [
+        "rust/src/approval/selection.rs",
+        "rust/src/terminal/session/approvals.rs"
+      ],
+      "fixtures": [
+        "rust/tests/fixtures/core/approval/selection-oracle-21d0bc7.json"
+      ],
+      "generator": "rust/tests/fixtures/core/approval/generate_selection_oracle.py",
+      "go_observations": {
+        "labels": 27,
+        "option_focus_sets": 8,
+        "generator_exit_code": 0
+      },
+      "caller_tests": "rust/tests/session_engine/approval_actions.rs",
+      "tests": [
+        "one_shot_selection_matches_fixed_go_labels_options_and_focus",
+        "one_shot_intent_uses_focus_observed_after_fifo_acquisition",
+        "only_human_exact_selection_carries_supplied_text_and_persistent_option",
+        "one_shot_high_risk_approval_is_refused_but_rejection_remains_available",
+        "native_action_reservation_spans_send_until_release_or_commit",
+        "failed_send_releases_reservation_and_nonce_is_consumed_only_before_commit",
+        "failed_nonce_consume_releases_only_lease_without_clearing_pending_record",
+        "dropping_action_during_send_releases_reservation_and_unsent_frame",
+        "absent_live_automatic_policy_releases_reservation_before_any_send",
+        "commit_from_replaced_wrapper_cannot_clear_restored_pending_record"
+      ],
+      "author_validation": {
+        "selection_unit_passed": 1,
+        "session_suite_passed": 33,
+        "failed": 0,
+        "ignored": 0,
+        "strict_lib_session_clippy_exit_code": 0
+      },
+      "boundary": "Core selects freshly detected options after FIFO, reserves through send/nonce/commit and never infers one-shot intent from precomputed keys. HTTP one-tap/automatic/batch callers remain separate pending integration; these are ordinary author tests, not independent review."
+    },
+    {
+      "source": [
+        "internal/hub/approval_batch.go:20-58 (fresh pending snapshot)",
+        "internal/hub/approval_batch.go:124-143 (low-risk batch apply)",
+        "internal/hub/approval_action.go:275-304 (post-input-lock risk validation)"
+      ],
+      "rust": [
+        "rust/src/terminal/session/approvals.rs:pending_native_approval_actions/prepare_and_send"
+      ],
+      "tests": [
+        "batch_snapshot_redetects_summary_without_mutating_immutable_record",
+        "batch_and_automatic_recheck_low_risk_after_fifo_but_one_tap_allows_mid",
+        "batch_snapshot_excludes_vanished_prompts_and_notices_without_options",
+        "captured_batch_match_remains_counted_when_connection_disappears_before_apply"
+      ],
+      "author_validation": {
+        "action_caller_tests_passed": 13,
+        "failed": 0,
+        "ignored": 0,
+        "filtered_out": 24,
+        "strict_lib_session_clippy_exit_code": 0
+      },
+      "initial_fixture_failure": "Two first-run assertions expected git add synthetic.txt to be mid risk, but the inherited dd-space signal classified it high. The input was corrected to the existing Go-golden git branch foo mid-risk case; production classification and assertions were unchanged.",
+      "risk_oracle": "rust/tests/fixtures/core/approval/approval-oracle-21d0bc7.json",
+      "boundary": "Read-only core snapshot includes connected without using it as a filter; fresh detection supplies summary and candidate under one State lock. Batch/Automatic low-risk validation repeats after FIFO. C3 HTTP matched/applied response and empty socket-registry coverage remain separate."
+    },
+    {
+      "source": [
+        "internal/hub/approval_action.go:405-435 (native commit retains result.input verbatim)",
+        "internal/hub/approval_record.go:353-367 (ledger receives closure.answer)",
+        "internal/hub/approval_record.go:376-387,435 (marker/transcript answer truncation)"
+      ],
+      "rust": [
+        "rust/src/approval/record.rs:consume/close_with_answer"
+      ],
+      "tests": [
+        "native_action_answers_preserve_exact_input_while_marker_answers_stay_bounded",
+        "successful_one_tap_commits_shared_core_ledger_ui_and_nonce_once"
+      ],
+      "author_validation": {
+        "approval_http_adapter_tests_passed": 22,
+        "approval_contract_tests_passed": 16,
+        "session_engine_contract_tests_passed": 37,
+        "failed": 0,
+        "ignored": 0,
+        "strict_lib_tests_clippy_exit_code": 0
+      },
+      "boundary": "The actual C3 one-tap caller exposed CR becoming an empty ledger answer. Native consume now preserves control bytes, surrounding whitespace and long input exactly; generic close and marker/transcript truncation remain unchanged. The C3 exact-CR assertion passed unchanged. These are coordinated synthetic author checks, not independent review or served Web/native acceptance."
+    }
+  ],
+  "pending_components": [
+    "approval_text_question.go full text-question detector and output-idle scheduling",
+    "approval marker suppression notice throttling/caller",
+    "HTTP one-tap/automatic/batch routes and end-to-end nonce transaction caller integration",
+    "approval auto/batch policy actual caller",
+    "provider transcript resolver and Codex thread-following",
+    "complete transcript poll -> detect -> wire -> ledger -> next poll real session integration",
+    "served existing Web approval UI acceptance"
+  ],
+  "note": "Unit/component results do not accept K05 without the actual session call chain."
+}

@@ -1,0 +1,63 @@
+package launcher
+
+import (
+ "bytes"
+ "context"
+ "io"
+ "strings"
+ "time"
+ "encoding/json"
+ "fmt"
+ "os"
+ "path/filepath"
+ "testing"
+)
+func TestRustLauncherOracle(t *testing.T) {
+ home:=t.TempDir();t.Setenv("HOME",home);t.Setenv("USERPROFILE",home)
+ if err:=os.Mkdir(filepath.Join(home,".many-ai-cli"),0700);err!=nil{t.Fatal(err)}
+ var out []map[string]any
+ for _,input:=range []string{
+ "", "  \n", "version: 1\n", "version: -2\nprofiles: []\n", "version: 2\n", "profiles: null\nlast_used: missing\n",
+ "version: 1\nprofiles:\n- name: legacy\n  type: ssh\n  host: first@example.invalid\n  user: ignored\n  binary: '/synthetic/two words'\n  future_optional: [one, two]\n",
+ "version: 1\nprofiles:\n- name: 0777\n  type: ssh\n  host: 0xCAFE\n  hub_port: 49001.9\n",
+ "version: 1\nprofiles:\n- null\n- name: on\n  type: wsl\n  future: { ? [one,two] : arbitrary }\n",
+ "version: 1\nprofiles:\n- name: absent-type\n  binary: x\nlast_used: missing\n",
+ "defaults: &base {type: ssh, host: example.invalid}\nversion: 1\nprofiles:\n- <<: *base\n  name: merged\n",
+ "version: 1\nversion: 1\n", "version: 1\nprofiles: [wrong]\n", "version: 1\nprofiles:\n- {name: null, type: null, host: null, hub_port: null}\n",
+ "null\n", "version: 1\n---\nversion: 99\n",
+ } {
+  path:=filepath.Join(home,".many-ai-cli","launcher-profiles.yaml")
+  if err:=os.WriteFile(path,[]byte(input),0600);err!=nil{t.Fatal(err)}
+  file,err:=LoadProfiles();row:=map[string]any{"kind":"yaml","input":input,"ok":err==nil}
+  if err==nil{row["output"]=file;if err=Validate(file);err!=nil{row["validation_error"]=err.Error()}else{row["validation_error"]=""}}
+  out=append(out,row)
+ }
+ base:=Profile{Name:"remote",Type:ProfileTypeSSH,Host:"example.invalid"}
+ var candidates []Profile
+ candidates=append(candidates,base,Profile{Name:"wsl",Type:ProfileTypeWSL})
+ for _,kind:=range []ProfileType{ProfileTypeSSH,ProfileTypeWSL}{for _,field:=range []string{"host","user","binary","identity_file","cwd","distro"}{for _,value:=range []string{"-option","two words","line\nbreak","quote';&日本語","\u0085"}{p:=base;p.Type=kind;switch field{case "host":p.Host=value;case "user":p.User=value;case "binary":p.Binary=value;case "identity_file":p.IdentityFile=value;case "cwd":p.CWD=value;case "distro":p.Distro=value};candidates=append(candidates,p)}}}
+ for _,mode:=range []SSHMode{"serve","tunnel","other"}{for _,port:=range []int{-1,0,1,65535,65536}{p:=base;p.Mode=mode;p.HubPort=port;p.TokenCommand="printf opaque";candidates=append(candidates,p)}}
+ for _,p:=range candidates{file:=ProfilesFile{Version:1,Profiles:[]Profile{p}};detail:="";if err:=Validate(&file);err!=nil{detail=err.Error()};out=append(out,map[string]any{"kind":"validate","input":p,"error":detail})}
+ for _,input:=range []string{"","a'b","two words; $(echo no)","日本語\nline"}{out=append(out,map[string]any{"kind":"quote","input":input,"output":ShellQuote(input)})}
+ for _,token:=range []string{"a+b&x=1","~!*()","日本語"}{out=append(out,map[string]any{"kind":"tunnel_url","token":token,"host":"host&label=日本語","output":buildTunnelHubURL(49001,token,"host&label=日本語")})}
+ for _,input:=range []string{"noise\nhttp://127.0.0.1:49001/?token=Abc123\x1b[0m\n","http://127.0.0.1:49002/?token=abc123 trailing\r\nlast","no url\n","http://127.0.0.1:49003/?token=a+b"}{var mirror bytes.Buffer;urls:=make(chan string,20);ScanForURL(bytes.NewBufferString(input),&mirror,urls);close(urls);found:=[]string{};for url:=range urls{found=append(found,url)};out=append(out,map[string]any{"kind":"scan","input":input,"output":mirror.String(),"urls":found})}
+ for _,input:=range []string{`{"profile":{"name":"remote","type":"ssh"},"host_candidates":["example.invalid"]}`,"welcome\n{\"profile\":{\"name\":\"remote\"}}\ntrailing",`{"PROFILE":{"NAME":"remote"},"PROFILE":{"TYPE":"ssh"}}`,`null`,`no JSON`,`{} {}`}{got,err:=parseExportedProfile([]byte(input));row:=map[string]any{"kind":"import","input":input,"ok":err==nil};if err==nil{row["output"]=got};out=append(out,row)}
+ for _,version:=range []string{"","dev","1.2.3"," v2.0 "}{out=append(out,map[string]any{"kind":"banner","input":version,"output":StartupBanner(version)})}
+ for _,host:=range []string{"127.0.0.1:49001","127.0.0.1:80","localhost.","[::1]:49001","::1","localhost:","example.invalid:49001","127.0.0.1:+49001"}{out=append(out,map[string]any{"kind":"ui_host","input":host,"output":isAllowedUIHost(host,49001)})}
+ for _,origin:=range []string{"http://localhost:49001","http://localhost:80","http://user@localhost:49001/path","HTTP://LOCALHOST.:49001","https://localhost:49001","null"}{out=append(out,map[string]any{"kind":"ui_origin","input":origin,"output":isAllowedUIOrigin(origin,49001)})}
+ // Exercise the real Go tryServe caller with an owned fake ssh executable.
+ // No SSH client or remote endpoint is ever invoked.
+ binDir:=t.TempDir();capture:=filepath.Join(binDir,"args")
+ stub:="#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$LAUNCHER_ORACLE_CAPTURE\"\nprintf 'http://127.0.0.1:49001/?token=abc123\\n'\nexec sleep 5\n"
+ if err:=os.WriteFile(filepath.Join(binDir,"ssh"),[]byte(stub),0700);err!=nil{t.Fatal(err)}
+ t.Setenv("PATH",binDir+string(os.PathListSeparator)+os.Getenv("PATH"));t.Setenv("LAUNCHER_ORACLE_CAPTURE",capture)
+ p:=Profile{Name:"boundary",Type:ProfileTypeSSH,Host:"example.invalid",User:"synthetic",SSHPort:2201,IdentityFile:"key with spaces",Binary:"/synthetic/app ' ; 日本語",CWD:"/synthetic/cwd ' ; 日本語"}
+ ctx,cancel:=context.WithTimeout(context.Background(),2*time.Second)
+ conn:=SSHConnector{out:io.Discard};_,cmd,wait,err:=conn.tryServe(ctx,p,p.Binary,49001)
+ if err!=nil{cancel();t.Fatal(err)}
+ _=cmd.Process.Kill();<-wait;cancel()
+ captured,err:=os.ReadFile(capture);if err!=nil{t.Fatal(err)}
+ args:=strings.Split(strings.TrimSuffix(string(captured),"\x00"),"\x00")
+ out=append(out,map[string]any{"kind":"ssh_serve_args","profile":p,"output":args})
+ bytes,err:=json.Marshal(out);if err!=nil{t.Fatal(err)};fmt.Printf("RUST_LAUNCHER_ORACLE=%s\n",bytes)
+}

@@ -1,0 +1,145 @@
+{
+  "code_sha": "9cfa99ac88b8f0caf2fe59e7bd630a75a3cc7c41",
+  "updated_utc": "2026-10-06T10:28:24.659614+00:00",
+  "checks": [
+    {
+      "name": "all-targets",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--no-fail-fast",
+        "--",
+        "--test-threads=8"
+      ],
+      "exit_code": 0,
+      "seconds": 37.896,
+      "log": "f1-all-targets.log",
+      "log_sha256": "af387579aa44404e542dbafdef52624f7f32bb18b8e112351703dddb4db2d761",
+      "counts": [
+        1422,
+        0,
+        0
+      ],
+      "summaries": 33,
+      "library_included": [
+        1111,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "seconds": 42.208,
+      "log": "f1-clippy.log",
+      "log_sha256": "4855b18c87349a0f13001a15421929024a24dba75472611a11642245790bf366"
+    },
+    {
+      "name": "doctests",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--doc"
+      ],
+      "exit_code": 0,
+      "seconds": 3.437,
+      "log": "f1-doctests.log",
+      "log_sha256": "b1cfc227704162757834ef187a99e00c458b42e7b14de7aeb80b7888ff7a6a17",
+      "counts": [
+        3,
+        0,
+        0
+      ],
+      "summaries": 1,
+      "library_included": null
+    },
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 1.858,
+      "log": "f1-fmt.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "instrumentation",
+      "command": [
+        "bun",
+        "scripts/check-instrumentation.mjs"
+      ],
+      "exit_code": 0,
+      "seconds": 0.168,
+      "log": "f1-instrumentation.log",
+      "log_sha256": "c54bcee9779815b0f31c1c2c70c5873510614865da2b36dd2d884bd9fa11734d"
+    }
+  ],
+  "identity_proof": {
+    "verified_utc": "2026-10-06T10:27:20.147074+00:00",
+    "public_baseline": "fd62456359f5220297a7f7ef3fd1b16d59bc53d3",
+    "local_tree_equivalent_baseline": "ac03f1a4f659eea6275bbb92c5cd067ad28f3c87",
+    "baseline_tree": "64af2bdd5bb26d652bab3061cdd090e3cbc49320",
+    "local_code_checkpoint": "9cfa99ac88b8f0caf2fe59e7bd630a75a3cc7c41",
+    "only_allowed_changed_existing_paths": [
+      "docs/bot/rust-recovery-resume/PROGRESS.md",
+      "docs/bot/rust-recovery-resume/WINDOWS-CHECK.md",
+      "instrumentation.json",
+      "rust/src/application/event_observer/tests.rs"
+    ],
+    "unchanged_tracked_paths": 1929,
+    "unchanged_rust_src_paths_excluding_one_test_module": 499,
+    "unchanged_rust_src_manifest_sha256": "4227c309f43ddf5672980838ca9f20a59e6cef0e074a1dcf879280bcb12bebda",
+    "non_test_parent_module_cfg_test_gate_unchanged": true,
+    "non_test_rust_source_bytes_unchanged": true,
+    "build_inputs_workflows_and_scanner_git_content_unchanged": true,
+    "preexisting_attribute_eol_variants": [
+      "internal/whisperruntime/fetch_windows_runtime.ps1",
+      "rust/packaging/prepare_windows_runtime.ps1",
+      "scripts/deploy-wsl.ps1",
+      "scripts/embed_icon.ps1",
+      "scripts/install-hooks.ps1",
+      "scripts/local/check-third-party.ps1",
+      "scripts/local/gen-third-party-notices.ps1",
+      "scripts/test_attach.ps1"
+    ],
+    "note": "All Rust source paths except the one cfg(test) module match raw baseline bytes. Other tracked paths are identical except the three requested docs and eight existing PowerShell CRLF working-tree conversions explicitly required by unchanged .gitattributes. Runtime source equivalence does not imply reproducible binary bytes; source/build metadata may differ."
+  },
+  "focused_event_observer": {
+    "counts": [
+      7,
+      0,
+      0
+    ],
+    "log_sha256": "db38662b14a77eb8f27195f744714b89bece1db278a86138c8c6a9279c034366"
+  },
+  "removed_test_scope": "One diagnostic-only trace-summary test removed; all non-diagnostic behavior assertions retained. The trace-dependent maintenance checks were replaced by effective Git configuration reads after immediate real capture.",
+  "native_ci": "pending; fd624 results remain historical",
+  "formal_review": "Owner external review covers fd624; no new formal review run during red CI."
+}

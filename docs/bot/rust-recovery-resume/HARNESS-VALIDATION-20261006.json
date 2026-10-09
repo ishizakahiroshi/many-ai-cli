@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "code_checkpoint": "41be8917c3cf73f4c6c7dca97ff9e5b058099e4e",
+  "code_tree": "4f49cf05ee3680f01bb20318871589adb975fa46",
+  "compiled_rust_src_tree": "deddeb0b78484b39c71bd8093bdb4161c66f45e6",
+  "recorded_utc": "2026-10-06T08:40:10.259519+00:00",
+  "scope": "Linux cloud validation of the committed test-harness source, pinned Rust1.90/Go1.26.8/Bun1.3.14. Windows source/helper body has a separate portable check below; Windows cmd/Job behavior is not inferred from Linux.",
+  "all_targets": {
+    "command": "cargo test --manifest-path rust/Cargo.toml --locked --offline --all-targets --no-fail-fast -- --test-threads=8",
+    "exit_code": 0,
+    "summaries": 33,
+    "passed_failed_ignored": [
+      1421,
+      0,
+      0
+    ],
+    "library_included": [
+      1110,
+      0,
+      0
+    ],
+    "log_sha256": "be86b71e0a9b9ad177e64f571cedb7d95c1c7bf9c9006bea2c313f2259f9dd6d"
+  },
+  "other_checks": [
+    {
+      "check": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "seconds": 41.301,
+      "log": "harness-clippy.log",
+      "log_sha256": "85417ab99901fa1c95e2388efd68b335ac32b45985a9bbeb1a9f36f15e543c07"
+    },
+    {
+      "check": "doctests",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--doc"
+      ],
+      "exit_code": 0,
+      "seconds": 3.298,
+      "log": "harness-doctests.log",
+      "log_sha256": "bb18da64f828cd03cb8f1902ac76a79fcb6679f6e02088d6b7fc09bd1b7568d5"
+    },
+    {
+      "check": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 1.911,
+      "log": "harness-fmt.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "check": "python",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "rust/packaging",
+        "-p",
+        "test_*.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.468,
+      "log": "harness-python.log",
+      "log_sha256": "d881f3eeee658f1f80d8cdd8bc7319e41ebcfacde94771e669d0386982a29a13"
+    },
+    {
+      "check": "instrumentation",
+      "command": [
+        "bun",
+        "scripts/check-instrumentation.mjs"
+      ],
+      "exit_code": 0,
+      "seconds": 0.099,
+      "log": "harness-instrumentation.log",
+      "log_sha256": "c54bcee9779815b0f31c1c2c70c5873510614865da2b36dd2d884bd9fa11734d"
+    }
+  ],
+  "rpc_helper_portable_check": {
+    "scope": "Exact portable helper body compiled with pinned Rust1.90 and existing locked serde_json rlib, executed through real Linux pipes/libtest. Does not exercise Windows .cmd, Job containment or production15s RPC caller.",
+    "helper_body_sha256": "e511a145fcde11e004689694cadce6d8db7fbf0cbdea95dca79d94768caa54d5",
+    "results": [
+      {
+        "account": "chatgpt",
+        "requests": [
+          "initialize",
+          "initialized",
+          "account/read",
+          "account/rateLimits/read"
+        ],
+        "response_ids": [
+          0,
+          1,
+          2
+        ],
+        "exit_code": 0,
+        "each_response_before_next_request": true
+      },
+      {
+        "account": "apiKey",
+        "requests": [
+          "initialize",
+          "initialized",
+          "account/read"
+        ],
+        "response_ids": [
+          0,
+          1
+        ],
+        "exit_code": 0,
+        "each_response_before_next_request": true
+      }
+    ]
+  },
+  "bounded_diagnostic_observations": {
+    "native_groups_before_watchdog_changes": [
+      {
+        "attempt": 1,
+        "exit_code": 0
+      },
+      {
+        "attempt": 2,
+        "exit_code": 0
+      },
+      {
+        "attempt": 3,
+        "exit_code": 0
+      },
+      {
+        "attempt": 4,
+        "exit_code": 0
+      },
+      {
+        "attempt": 5,
+        "exit_code": 0
+      }
+    ],
+    "full_libraries_before_watchdog_changes": [
+      {
+        "attempt": 1,
+        "exit_code": 0
+      },
+      {
+        "attempt": 2,
+        "exit_code": 0
+      },
+      {
+        "attempt": 3,
+        "exit_code": 0
+      }
+    ],
+    "scope": "Five isolated7-test groups and three1110-test libraries passed after fixed assertion context was added, before native watchdog changes. Non-reproduction does not explain prior early completion. No iteration was treated as erasing a prior failure.",
+    "syscall_observation": "Existing strace was blocked by PTRACE_TRACEME Operation not permitted before tests launched; stopped without elevation or security changes."
+  },
+  "formal_review": "Not run for this red-CI harness batch at the owner's explicit direction. Prior853 source review does not cover these changes.",
+  "production_boundary": "Changes are limited to three test modules plus records. Production CLI10s, RPC15s, native process options/deadline semantics and picker code remain byte-identical to853. The intentional timeout test explicitly retains10s. Workflow, scan configuration/exclusions and release.yml are unchanged.",
+  "pending": [
+    "One normal append publication, exact-head native results and scoped scans",
+    "Three consecutive successful Windows confirmation workflow attempts at one source SHA",
+    "Original Linux early-completion cause and legacy PowerShell behavior remain unestablished",
+    "Owner real-provider/browser/device/signing/rollback acceptance; no merge/release/cutover"
+  ]
+}

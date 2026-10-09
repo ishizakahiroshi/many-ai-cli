@@ -1,0 +1,998 @@
+[
+  {
+    "approval": {
+      "tier": "attended"
+    },
+    "input": {
+      "name": "claude-attended",
+      "provider": "claude",
+      "preset": "attended",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "dontAsk",
+      "allowed_tools": [
+        "Read",
+        "Glob",
+        "Grep",
+        "Edit",
+        "Write",
+        "NotebookEdit",
+        "TodoWrite",
+        "Bash(git status)",
+        "Bash(git status *)",
+        "Bash(git diff)",
+        "Bash(git diff *)",
+        "Bash(git log)",
+        "Bash(git log *)",
+        "Bash(git add *)",
+        "Bash(git commit *)",
+        "Bash(go test *)",
+        "Bash(go vet *)",
+        "Bash(gofmt *)",
+        "Bash(bun run check)",
+        "Bash(bun run check *)"
+      ],
+      "risk_confirmed": true,
+      "tier": "bounded"
+    },
+    "input": {
+      "name": "claude-bounded",
+      "provider": "claude",
+      "preset": "bounded",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full"
+    },
+    "input": {
+      "name": "claude-full",
+      "provider": "claude",
+      "preset": "full",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "tier": "attended"
+    },
+    "input": {
+      "name": "codex-attended",
+      "provider": "codex",
+      "preset": "attended",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "sandbox": "workspace-write",
+      "ask_for_approval": "never",
+      "risk_confirmed": true,
+      "tier": "bounded"
+    },
+    "input": {
+      "name": "codex-bounded",
+      "provider": "codex",
+      "preset": "bounded",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "sandbox": "danger-full-access",
+      "ask_for_approval": "never",
+      "risk_confirmed": true,
+      "tier": "full"
+    },
+    "input": {
+      "name": "codex-full",
+      "provider": "codex",
+      "preset": "full",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "tier": "attended"
+    },
+    "input": {
+      "name": "copilot-attended",
+      "provider": "copilot",
+      "preset": "attended",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "bounded",
+      "allowed_tools": [
+        "write",
+        "shell(git status:*)",
+        "shell(git diff:*)",
+        "shell(git log:*)",
+        "shell(git add:*)",
+        "shell(git commit:*)",
+        "shell(go test:*)",
+        "shell(go vet:*)",
+        "shell(gofmt:*)",
+        "shell(bun run check:*)"
+      ],
+      "risk_confirmed": true,
+      "tier": "bounded"
+    },
+    "input": {
+      "name": "copilot-bounded",
+      "provider": "copilot",
+      "preset": "bounded",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full"
+    },
+    "input": {
+      "name": "copilot-full",
+      "provider": "copilot",
+      "preset": "full",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "tier": "attended"
+    },
+    "input": {
+      "name": "opencode-attended",
+      "provider": "opencode",
+      "preset": "attended",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "bounded",
+      "risk_confirmed": true,
+      "tier": "bounded"
+    },
+    "input": {
+      "name": "opencode-bounded",
+      "provider": "opencode",
+      "preset": "bounded",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full"
+    },
+    "input": {
+      "name": "opencode-full",
+      "provider": "opencode",
+      "preset": "full",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "tier": "attended"
+    },
+    "input": {
+      "name": "grok-attended",
+      "provider": "grok",
+      "preset": "attended",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full",
+      "fallback_from": "bounded"
+    },
+    "input": {
+      "name": "grok-bounded",
+      "provider": "grok",
+      "preset": "bounded",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full"
+    },
+    "input": {
+      "name": "grok-full",
+      "provider": "grok",
+      "preset": "full",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "tier": "attended"
+    },
+    "input": {
+      "name": "cursor-agent-attended",
+      "provider": "cursor-agent",
+      "preset": "attended",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full",
+      "fallback_from": "bounded"
+    },
+    "input": {
+      "name": "cursor-agent-bounded",
+      "provider": "cursor-agent",
+      "preset": "bounded",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full"
+    },
+    "input": {
+      "name": "cursor-agent-full",
+      "provider": "cursor-agent",
+      "preset": "full",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "tier": "attended"
+    },
+    "input": {
+      "name": "command-code-attended",
+      "provider": "command-code",
+      "preset": "attended",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full",
+      "fallback_from": "bounded"
+    },
+    "input": {
+      "name": "command-code-bounded",
+      "provider": "command-code",
+      "preset": "bounded",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full"
+    },
+    "input": {
+      "name": "command-code-full",
+      "provider": "command-code",
+      "preset": "full",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "tier": "attended"
+    },
+    "input": {
+      "name": "shell-attended",
+      "provider": "shell",
+      "preset": "attended",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "tier": "bounded"
+    },
+    "input": {
+      "name": "shell-bounded",
+      "provider": "shell",
+      "preset": "bounded",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "tier": "full"
+    },
+    "input": {
+      "name": "shell-full",
+      "provider": "shell",
+      "preset": "full",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "tier": "attended"
+    },
+    "input": {
+      "name": "synthetic-custom-attended",
+      "provider": "synthetic-custom",
+      "preset": "attended",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full",
+      "fallback_from": "bounded"
+    },
+    "input": {
+      "name": "synthetic-custom-bounded",
+      "provider": "synthetic-custom",
+      "preset": "bounded",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full"
+    },
+    "input": {
+      "name": "synthetic-custom-full",
+      "provider": "synthetic-custom",
+      "preset": "full",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full"
+    },
+    "input": {
+      "name": "autonomous-interactive",
+      "provider": "claude",
+      "preset": "",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "interactive",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": "interactive"
+  },
+  {
+    "approval": {
+      "tier": "attended"
+    },
+    "input": {
+      "name": "direct-ui-interactive",
+      "provider": "claude",
+      "preset": "",
+      "mode": "",
+      "origin": "ui",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "interactive",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": "interactive"
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full"
+    },
+    "input": {
+      "name": "confirmed-autonomous-interactive",
+      "provider": "claude",
+      "preset": "",
+      "mode": "",
+      "origin": "",
+      "confirmed": true,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "interactive",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": "interactive"
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full"
+    },
+    "input": {
+      "name": "autonomous-auto",
+      "provider": "claude",
+      "preset": "",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "auto",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": "headless"
+  },
+  {
+    "approval": {
+      "tier": "attended"
+    },
+    "input": {
+      "name": "direct-ui-auto",
+      "provider": "claude",
+      "preset": "",
+      "mode": "",
+      "origin": "ui",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "auto",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": "interactive"
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full"
+    },
+    "input": {
+      "name": "confirmed-autonomous-auto",
+      "provider": "claude",
+      "preset": "",
+      "mode": "",
+      "origin": "",
+      "confirmed": true,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "auto",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": "headless"
+  },
+  {
+    "approval": {
+      "tier": "attended"
+    },
+    "input": {
+      "name": "full-bypass-disabled",
+      "provider": "codex",
+      "preset": "full",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": false,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "sandbox": "read-only",
+      "ask_for_approval": "on-request",
+      "tier": "attended"
+    },
+    "input": {
+      "name": "explicit-fields-survive-disabled",
+      "provider": "codex",
+      "preset": "bounded",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": false,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "read-only",
+      "ask_for_approval": "on-request"
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "default",
+      "allowed_tools": [
+        "Read",
+        "Glob",
+        "Grep",
+        "Edit",
+        "Write",
+        "NotebookEdit",
+        "TodoWrite",
+        "Bash(git status)",
+        "Bash(git status *)",
+        "Bash(git diff)",
+        "Bash(git diff *)",
+        "Bash(git log)",
+        "Bash(git log *)",
+        "Bash(git add *)",
+        "Bash(git commit *)",
+        "Bash(go test *)",
+        "Bash(go vet *)",
+        "Bash(gofmt *)",
+        "Bash(bun run check)",
+        "Bash(bun run check *)"
+      ],
+      "risk_confirmed": true,
+      "tier": "bounded"
+    },
+    "input": {
+      "name": "explicit-mode-survives-bounded",
+      "provider": "claude",
+      "preset": "bounded",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "default",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "dontAsk",
+      "risk_confirmed": true,
+      "tier": "bounded"
+    },
+    "input": {
+      "name": "empty-allowlist-override",
+      "provider": "claude",
+      "preset": "bounded",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": {
+        "claude": []
+      },
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "approval": {
+      "permission_mode": "dontAsk",
+      "allowed_tools": [
+        "Read"
+      ],
+      "risk_confirmed": true,
+      "tier": "bounded"
+    },
+    "input": {
+      "name": "existing-internal-tools-preserved",
+      "provider": "claude",
+      "preset": "bounded",
+      "mode": "",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": [
+        "Read"
+      ],
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": ""
+  },
+  {
+    "error": "execution_mode headless is not supported for this provider",
+    "input": {
+      "name": "unsupported-explicit-headless",
+      "provider": "codex",
+      "preset": "",
+      "mode": "headless",
+      "origin": "",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    }
+  },
+  {
+    "approval": {
+      "permission_mode": "bypassPermissions",
+      "risk_confirmed": true,
+      "tier": "full"
+    },
+    "input": {
+      "name": "direct-ui-headless-unattended",
+      "provider": "claude",
+      "preset": "",
+      "mode": "headless",
+      "origin": "ui",
+      "confirmed": false,
+      "full_bypass": null,
+      "default_tier": "",
+      "default_mode": "",
+      "tools": null,
+      "existing_tools": null,
+      "permission_mode": "",
+      "sandbox": "",
+      "ask_for_approval": ""
+    },
+    "mode": "headless"
+  }
+]

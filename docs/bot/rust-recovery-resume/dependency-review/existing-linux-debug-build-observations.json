@@ -1,0 +1,272 @@
+{
+  "checked_at_utc": "2026-10-05T02:02:00Z",
+  "scope": "Existing mutable shared debug cache observations only; they do not bind a successful complete build to a clean candidate SHA or prove final binary linkage. Metadata may include optional unresolved-for-build crates; cargo tree and observed compiler artifacts are stronger for build selection.",
+  "observations": [
+    {
+      "package": "aws-lc-rs",
+      "receipt": ".fingerprint/aws-lc-rs-3efc2d41d97d0a59/lib-aws_lc_rs.json",
+      "receipt_sha256": "064b8488cc20a87f7410ebf0fb214af7fe769f4269a1e8f31cf5fc07c28c01e9",
+      "features": [
+        "aws-lc-sys",
+        "prebuilt-nasm"
+      ]
+    },
+    {
+      "package": "aws-lc-rs",
+      "receipt": ".fingerprint/aws-lc-rs-86b4e6ca528cb6cd/lib-aws_lc_rs.json",
+      "receipt_sha256": "9543c0f7065261752d5f16c5cb30a009019362ebe7dcdf2296c08484cf85efdc",
+      "features": [
+        "aws-lc-sys",
+        "prebuilt-nasm"
+      ]
+    },
+    {
+      "package": "aws-lc-sys",
+      "receipt": ".fingerprint/aws-lc-sys-7c3c78f39d0eba63/lib-aws_lc_sys.json",
+      "receipt_sha256": "5f59ff4a04b5c379934eb76e6ccb1a0452fcc71688b06e8706003807680aca9d",
+      "features": [
+        "prebuilt-nasm"
+      ]
+    },
+    {
+      "package": "aws-lc-sys",
+      "receipt": ".fingerprint/aws-lc-sys-b7890d50078d0e1c/lib-aws_lc_sys.json",
+      "receipt_sha256": "d8e23e518fd8e6a994b7a870988fc7123b43609a47c0ddb556dabd5979ec47c6",
+      "features": [
+        "prebuilt-nasm"
+      ]
+    },
+    {
+      "package": "libc",
+      "receipt": ".fingerprint/libc-5d33c44436891b11/lib-libc.json",
+      "receipt_sha256": "94d7ebff4fc10b0890a23740701a16a26f405dad6172acd12eac8e1328dbd51c",
+      "features": [
+        "default",
+        "extra_traits",
+        "std"
+      ]
+    },
+    {
+      "package": "libc",
+      "receipt": ".fingerprint/libc-8fe89df7f3e8ac74/lib-libc.json",
+      "receipt_sha256": "15f5b0da58303fab60f861c78deffdae7863ea6ae13319f2825bae8518e8a9a5",
+      "features": [
+        "default",
+        "extra_traits",
+        "std"
+      ]
+    },
+    {
+      "package": "libc",
+      "receipt": ".fingerprint/libc-cd7f20b7c909004c/lib-libc.json",
+      "receipt_sha256": "086212486860c52dad838e86d7cf91cdd0cc9785ce990843c37845e648b5da33",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "package": "libsqlite3-sys",
+      "receipt": ".fingerprint/libsqlite3-sys-04fd558646275027/lib-libsqlite3_sys.json",
+      "receipt_sha256": "f5ffe6e6e21022f699612eb5cc9c27dbf92c03abebce6f0da30916f00fbd92a3",
+      "features": [
+        "bundled",
+        "bundled_bindings",
+        "cc",
+        "default",
+        "min_sqlite_version_3_34_1",
+        "pkg-config",
+        "vcpkg"
+      ]
+    },
+    {
+      "package": "libsqlite3-sys",
+      "receipt": ".fingerprint/libsqlite3-sys-ebdb5d06a7e11a37/lib-libsqlite3_sys.json",
+      "receipt_sha256": "44a797c25155379d43e0e1421d4b602a1d40f83647398d92dedf3ee72d711ec9",
+      "features": [
+        "bundled",
+        "bundled_bindings",
+        "cc",
+        "default",
+        "min_sqlite_version_3_34_1",
+        "pkg-config",
+        "vcpkg"
+      ]
+    },
+    {
+      "package": "nix",
+      "receipt": ".fingerprint/nix-544878945f77db04/lib-nix.json",
+      "receipt_sha256": "1b066f25e9032ea11decb290db31183cea3b1c408ad3137197590ed61316b673",
+      "features": [
+        "default",
+        "fs",
+        "term"
+      ]
+    },
+    {
+      "package": "nix",
+      "receipt": ".fingerprint/nix-c8ef908b0a73e1bc/lib-nix.json",
+      "receipt_sha256": "3bbff2d4144b60d09e5aadba51af322cf7697abcdaba8e83558c7a644848b7ff",
+      "features": [
+        "default",
+        "fs",
+        "term"
+      ]
+    },
+    {
+      "package": "portable-pty",
+      "receipt": ".fingerprint/portable-pty-50055af94e74a3e5/lib-portable_pty.json",
+      "receipt_sha256": "6cc34035dc7a231e1a96c0179eb08af2cb1ae039835cff90c728222ae9d6811b",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "package": "portable-pty",
+      "receipt": ".fingerprint/portable-pty-67d254f477e85c5d/lib-portable_pty.json",
+      "receipt_sha256": "82b3d2c4b2e9437822c33e3bce4f16c45223bbd7780b3d895a431dc82a137920",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "package": "reqwest",
+      "receipt": ".fingerprint/reqwest-187f47227260c97e/lib-reqwest.json",
+      "receipt_sha256": "89520ad3596ed62e3814030559a53809f5f860e347f20799d1e52da052e0e490",
+      "features": [
+        "__rustls",
+        "__rustls-aws-lc-rs",
+        "__tls",
+        "json",
+        "multipart",
+        "query",
+        "rustls",
+        "stream"
+      ]
+    },
+    {
+      "package": "reqwest",
+      "receipt": ".fingerprint/reqwest-2e04a19ecf11bb6e/lib-reqwest.json",
+      "receipt_sha256": "d8d560e9017ee46f01a2fe754397a56a85bb7bf70e451c3c5b46b1a47c059a7a",
+      "features": [
+        "__rustls",
+        "__rustls-aws-lc-rs",
+        "__tls",
+        "json",
+        "multipart",
+        "query",
+        "rustls",
+        "stream"
+      ]
+    },
+    {
+      "package": "rustls",
+      "receipt": ".fingerprint/rustls-0f5787de7d89602c/lib-rustls.json",
+      "receipt_sha256": "85441169e9bd2a9824564dfb0115cbc3aee7836e3c9881b8037b6f21da05df1e",
+      "features": [
+        "aws-lc-rs",
+        "aws_lc_rs",
+        "std",
+        "tls12"
+      ]
+    },
+    {
+      "package": "rustls",
+      "receipt": ".fingerprint/rustls-bbce3ef902be6f3c/lib-rustls.json",
+      "receipt_sha256": "25a72becdadaf431b57eb7ea3163ea9eb142854c60a4b87c6def38562fbb5669",
+      "features": [
+        "aws-lc-rs",
+        "aws_lc_rs",
+        "std",
+        "tls12"
+      ]
+    },
+    {
+      "package": "rustls-webpki",
+      "receipt": ".fingerprint/rustls-webpki-4526c304f2146771/lib-webpki.json",
+      "receipt_sha256": "98bb6d868e6c4b737d8f4fec640f8fe4c670c933575d8226f6c659fe7c232765",
+      "features": [
+        "alloc",
+        "aws-lc-rs",
+        "std"
+      ]
+    },
+    {
+      "package": "rustls-webpki",
+      "receipt": ".fingerprint/rustls-webpki-4654b2374f4bc7a6/lib-webpki.json",
+      "receipt_sha256": "75180afc7066ec54e534cc5ac630f9a8260df441c8664dbd4e70ae1cd2fc73ea",
+      "features": [
+        "alloc",
+        "aws-lc-rs",
+        "std"
+      ]
+    },
+    {
+      "package": "tokio",
+      "receipt": ".fingerprint/tokio-0ad99458db2bf472/lib-tokio.json",
+      "receipt_sha256": "e6d9496cf981dedbccd4536ac6d84368bfc265a6177ef46e23077c1a076ccfe9",
+      "features": [
+        "bytes",
+        "default",
+        "fs",
+        "io-util",
+        "libc",
+        "macros",
+        "mio",
+        "net",
+        "process",
+        "rt",
+        "rt-multi-thread",
+        "signal",
+        "signal-hook-registry",
+        "socket2",
+        "sync",
+        "test-util",
+        "time",
+        "tokio-macros"
+      ]
+    },
+    {
+      "package": "tokio",
+      "receipt": ".fingerprint/tokio-5589f6fa48087faa/lib-tokio.json",
+      "receipt_sha256": "a151d2a4980ea8627d00c9cf38a9b7fcb2289e4a2db5d82469c6347fa5ea0012",
+      "features": [
+        "bytes",
+        "default",
+        "fs",
+        "io-util",
+        "libc",
+        "macros",
+        "mio",
+        "net",
+        "process",
+        "rt",
+        "rt-multi-thread",
+        "signal",
+        "signal-hook-registry",
+        "socket2",
+        "sync",
+        "test-util",
+        "time",
+        "tokio-macros"
+      ]
+    }
+  ],
+  "native_link_directives": [
+    {
+      "receipt": "build/aws-lc-sys-5e6ceb94c60190c9/output",
+      "receipt_sha256": "b94478109f2b4ff944e4009cb2330b31b154912ebb4bbe02eb9ffa7a4d9619af",
+      "link_directives": [
+        "cargo:rustc-link-lib=static=aws_lc_0_45_0_crypto"
+      ]
+    },
+    {
+      "receipt": "build/libsqlite3-sys-5f514b91838143de/output",
+      "receipt_sha256": "40ef014eb5bae8fad219bd4c560572f78ffc7aeefd7a328245cbccec5c339082",
+      "link_directives": [
+        "cargo:rustc-link-lib=static=sqlite3"
+      ]
+    }
+  ],
+  "release_build_input_receipt": "pending integration owner"
+}

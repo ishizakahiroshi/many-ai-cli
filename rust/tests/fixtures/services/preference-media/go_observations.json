@@ -1,0 +1,5021 @@
+{
+  "baseline": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "go_version": "go version go1.26.8 windows/amd64",
+  "observer_platform": {
+    "goos": "windows",
+    "goarch": "amd64"
+  },
+  "go_sniff_sha256": "3cf7e02214e5c8eeca9f5b12940c17723f4cd7a243c33b98386849c918644667",
+  "source_sha256": {
+    "internal/config/child_permission.go": "e0297861ac408172b09da533b7b77088d3ac96c293798279b9a80f878dcefb87",
+    "internal/config/config.go": "b487210ee59a19cec4270534a5539d563afe6a171f1e5ecab34fd2942bf45a16",
+    "internal/config/custom_provider.go": "190d55b47b3e7ee9f5e079e75dcef4fa95c71b7002181a590df72a039381777d",
+    "internal/config/custom_provider_command.go": "b2417ef23e005d65594a6fb66e07d82ad09d09be9e11e43472a35ee864f7b39d",
+    "internal/config/effort.go": "62a92f2472a9a53077002d35a28a3a9bd7c90cf532d277bedda56a9bd6ad3d72",
+    "internal/config/headless.go": "2a90ed738382c874fbd48f8b536ddea2856490aa03cb2690e88284dbdec8f78a",
+    "internal/config/launch_prompt.go": "64bdf682cf1168bb56950c0066c999d32f778757fcd5b901cd9a5fae95e97e98",
+    "internal/config/provider_legacy.go": "d3a3bf643c8806e0b5c17b6c4aaa81477aa107e52a1e48bc2006bd934a5d2099",
+    "internal/config/subscription.go": "5251e3e45fd4e957ab5ddb196f6726c3be502d0181d8d3b84b44929f8d23a52c",
+    "internal/hub/http_helpers.go": "6175da5759f10b3d17fb6c664ce38102a15ee9029658af6f05d6c1bc146be450",
+    "internal/hub/misc_handlers.go": "a7323dccce83b4ac21584e4d3f25866695c7304edce4586a1d3c4c5fe6c5d0f2",
+    "internal/hub/server.go": "1e38b7353fc41f2b4d91607bcd7f72ec3f1b96f35b057f91348ac3ddd400dadd",
+    "internal/hub/user_prefs_handlers.go": "6dd1c6d9ee4d1b1a3076e51f5ba13b2e15aa53d596b165f8811feadde520118d",
+    "internal/securefile/atomic.go": "3d3ff3c1e43e5156c51461bffc7b21a78c5a66d27a36dd52368e730a06bb42d7",
+    "internal/securefile/securefile.go": "4ea99b562da17fce5845d224014b15d6c625608650e40498f31242532ab6dbd1",
+    "internal/securefile/securefile_other.go": "69f869197e5931b6353638fda818f71ef948654cd4b0deb1d80bc41da658d077",
+    "internal/securefile/securefile_windows.go": "8a268089885cda34dc61a5140edc4157a24f97d19115547eaf9f3d729e5014a4",
+    "internal/wslutil/wslutil_unix.go": "6d3d692a2a44fbff6f164fbb71c7bc4d5f7d413f891441f586c8dff4c9760818",
+    "internal/wslutil/wslutil_windows.go": "e54844f900484145e35bc7445011efd880ffec654ce410353193f442bd4d8958"
+  },
+  "cases": [
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": {
+          "len": 8,
+          "sha256": "4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-put-png",
+      "runtime": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "iVBORw0KGgo="
+      },
+      "files": {
+        "avatar": {
+          "len": 8,
+          "sha256": "4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "max-age=3600",
+        "Content-Disposition": "",
+        "Content-Type": "image/png"
+      },
+      "name": "avatar-get-png",
+      "runtime": {
+        "avatar": "<root>/user_avatar.bin",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-png-1",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-png-2",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-png-3",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-png-4",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-png-5",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-png-6",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-png-7",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": {
+          "len": 3,
+          "sha256": "6e568e1f67fba258184c78181539e5e8fdee447e49bb706fc0ea34fbf12336a5"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-put-jpeg",
+      "runtime": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "/9j/"
+      },
+      "files": {
+        "avatar": {
+          "len": 3,
+          "sha256": "6e568e1f67fba258184c78181539e5e8fdee447e49bb706fc0ea34fbf12336a5"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "max-age=3600",
+        "Content-Disposition": "",
+        "Content-Type": "image/jpeg"
+      },
+      "name": "avatar-get-jpeg",
+      "runtime": {
+        "avatar": "<root>/user_avatar.bin",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-jpeg-1",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-jpeg-2",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": {
+          "len": 6,
+          "sha256": "9faccac8ea389a38814e46d03b2d4704bc2caf3bed368f3d6a694cfebcbf1d29"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-put-gif87",
+      "runtime": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "R0lGODdh"
+      },
+      "files": {
+        "avatar": {
+          "len": 6,
+          "sha256": "9faccac8ea389a38814e46d03b2d4704bc2caf3bed368f3d6a694cfebcbf1d29"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "max-age=3600",
+        "Content-Disposition": "",
+        "Content-Type": "image/gif"
+      },
+      "name": "avatar-get-gif87",
+      "runtime": {
+        "avatar": "<root>/user_avatar.bin",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-gif87-1",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-gif87-2",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-gif87-3",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-gif87-4",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-gif87-5",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": {
+          "len": 6,
+          "sha256": "610f5ae4d76e332636a17bd357fd6ce99029316a99d320280d4d77a746bf29e8"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-put-gif89",
+      "runtime": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "R0lGODlh"
+      },
+      "files": {
+        "avatar": {
+          "len": 6,
+          "sha256": "610f5ae4d76e332636a17bd357fd6ce99029316a99d320280d4d77a746bf29e8"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "max-age=3600",
+        "Content-Disposition": "",
+        "Content-Type": "image/gif"
+      },
+      "name": "avatar-get-gif89",
+      "runtime": {
+        "avatar": "<root>/user_avatar.bin",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-gif89-1",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-gif89-2",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-gif89-3",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-gif89-4",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-gif89-5",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": {
+          "len": 14,
+          "sha256": "591457d86c5549cf67bfebb774789c006d52dee531d206ca4669e5cf37985094"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-put-webp",
+      "runtime": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "UklGRv////9XRUJQVlA="
+      },
+      "files": {
+        "avatar": {
+          "len": 14,
+          "sha256": "591457d86c5549cf67bfebb774789c006d52dee531d206ca4669e5cf37985094"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "max-age=3600",
+        "Content-Disposition": "",
+        "Content-Type": "image/webp"
+      },
+      "name": "avatar-get-webp",
+      "runtime": {
+        "avatar": "<root>/user_avatar.bin",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-webp-1",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-webp-2",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-webp-3",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-webp-4",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-webp-5",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-webp-6",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-webp-7",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-webp-8",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-webp-9",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-webp-10",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-webp-11",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-webp-12",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-truncated-webp-13",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 12,
+          "sha256": "3f87bac3e584734ceb6fe71c342459c1b8eb8c50519f28d33b7efc36255c7e96"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-put-aiff",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/aiff",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/aiff",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-aiff-1",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-aiff-2",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-aiff-3",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-aiff-4",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-aiff-5",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-aiff-6",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-aiff-7",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-aiff-8",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-aiff-9",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-aiff-10",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-aiff-11",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 3,
+          "sha256": "041149186b23a9502aea5a4e81bbc9620d2b4b76b4bad94e36c744abcf9d3771"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-put-mpeg",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/mpeg",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/mpeg",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-mpeg-1",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-mpeg-2",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 8,
+          "sha256": "c544f202399efd9496ec73682b1ac063e3dd75f6d0317eacfb14e70857416168"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-put-midi",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/midi",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/midi",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-midi-1",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-midi-2",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-midi-3",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-midi-4",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-midi-5",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-midi-6",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-midi-7",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 12,
+          "sha256": "b37c22696a69c26f4ec1b22c7c36c223761ba7fc351cf5d1a7c47726a2fa4700"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-put-wave",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/wave",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/wave",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-wave-1",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-wave-2",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-wave-3",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-wave-4",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-wave-5",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-wave-6",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-wave-7",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-wave-8",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-wave-9",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-wave-10",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-truncated-wave-11",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-empty",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-empty",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-html",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-html",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-svg",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-svg",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-text",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-text",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-ogg",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-ogg",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-mp3-frame",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-mp3-frame",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-flac",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-flac",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-aac",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-aac",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-webm",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-webm",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-bmp",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-bmp",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-icon",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-icon",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-pdf",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-pdf",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-mp4",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-mp4",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-nul-png",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-nul-png",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-space-wave",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-space-wave",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-lower-id3",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-lower-id3",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-image-png",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-image-jpeg",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-image-gif87",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-image-gif89",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "audio/* MIME type required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-reject-image-webp",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-audio-aiff",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-audio-mpeg",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-audio-midi",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "detail": "image/png, image/jpeg, image/gif, or image/webp required",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-reject-audio-wave",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 415
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": {
+          "len": 5242879,
+          "sha256": "e49464f4dfce9991a0489192586e7432fd42c0a4b6119ffb768a023a69c866b3"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-limit--1",
+      "runtime": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": {
+          "len": 5242880,
+          "sha256": "a3f8fb5b0c161cebf9bd46ee1fbe1b1413fb83f789ebc25303534be8e8b3b080"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-limit-0",
+      "runtime": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "read body error: http: request body too large",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-limit-1",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 400
+    },
+    {
+      "body": {
+        "detail": "read body error: http: request body too large",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-invalid-over-limit",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 400
+    },
+    {
+      "body": {
+        "detail": "save failed: <owned filesystem error>",
+        "error": "save_failed",
+        "ok": false
+      },
+      "files": {
+        "avatar": {
+          "len": 8,
+          "sha256": "4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-save-failure-published",
+      "runtime": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "save failed",
+      "status": 500
+    },
+    {
+      "body": {
+        "detail": "write error: <owned filesystem error>",
+        "error": "write_error",
+        "ok": false
+      },
+      "files": {
+        "avatar": "directory",
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-write-failure-unpublished",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "write error",
+      "status": 500
+    },
+    {
+      "body": {
+        "detail": "write error: <owned filesystem error>",
+        "error": "write_error",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-missing-root",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "write error",
+      "status": 500
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": {
+          "len": 8,
+          "sha256": "4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-replace-shorter",
+      "runtime": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 2097151,
+          "sha256": "dbe6bb94901f88f3ef9d557ff8cd4c7d440e7484e2394a8b3994c6e6522c7c87"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-limit--1",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/wave",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/wave",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 2097152,
+          "sha256": "cfa516c7bffa48b506a4d8574ff62aad81211a0aa1b7cdfcab03c91c142854a2"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-limit-0",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/wave",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/wave",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "read body error: http: request body too large",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-limit-1",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 400
+    },
+    {
+      "body": {
+        "detail": "read body error: http: request body too large",
+        "error": "bad_request",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-invalid-over-limit",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 400
+    },
+    {
+      "body": {
+        "detail": "save failed: <owned filesystem error>",
+        "error": "save_failed",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 12,
+          "sha256": "b37c22696a69c26f4ec1b22c7c36c223761ba7fc351cf5d1a7c47726a2fa4700"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-save-failure-published",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/wave",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "save failed",
+      "status": 500
+    },
+    {
+      "body": {
+        "detail": "write error: <owned filesystem error>",
+        "error": "write_error",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": "directory"
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-write-failure-unpublished",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "write error",
+      "status": 500
+    },
+    {
+      "body": {
+        "detail": "write error: <owned filesystem error>",
+        "error": "write_error",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-missing-root",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "write error",
+      "status": 500
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 12,
+          "sha256": "b37c22696a69c26f4ec1b22c7c36c223761ba7fc351cf5d1a7c47726a2fa4700"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-replace-shorter",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/wave",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/wave",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-upload-method-POST",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 405
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-upload-method-GET",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 405
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-upload-method-HEAD",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 405
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-upload-method-PATCH",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 405
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-get-method-PUT",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 405
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-get-method-DELETE",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 405
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-get-method-HEAD",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 405
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-method-DELETE",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 405
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-method-POST",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 405
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-method-HEAD",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 405
+    },
+    {
+      "body": {
+        "base64": "NDA0IHBhZ2Ugbm90IGZvdW5kCg=="
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "text/plain; charset=utf-8"
+      },
+      "name": "avatar-get-unset",
+      "runtime": {
+        "avatar": "",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 404
+    },
+    {
+      "body": {
+        "base64": "NDA0IHBhZ2Ugbm90IGZvdW5kCg=="
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "text/plain; charset=utf-8"
+      },
+      "name": "avatar-get-https",
+      "runtime": {
+        "avatar": "https://example.invalid/image.png",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 404
+    },
+    {
+      "body": {
+        "base64": "NDA0IHBhZ2Ugbm90IGZvdW5kCg=="
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "text/plain; charset=utf-8"
+      },
+      "name": "avatar-get-http",
+      "runtime": {
+        "avatar": "http://example.invalid/image.png",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 404
+    },
+    {
+      "body": {
+        "base64": "NDA0IHBhZ2Ugbm90IGZvdW5kCg=="
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "text/plain; charset=utf-8"
+      },
+      "name": "avatar-get-other-fixed-file",
+      "runtime": {
+        "avatar": "<root>/config.yaml",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 404
+    },
+    {
+      "body": {
+        "base64": "NDA0IHBhZ2Ugbm90IGZvdW5kCg=="
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "text/plain; charset=utf-8"
+      },
+      "name": "avatar-get-other-file",
+      "runtime": {
+        "avatar": "<root>/missing.bin",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 404
+    },
+    {
+      "body": {
+        "base64": "NDA0IHBhZ2Ugbm90IGZvdW5kCg=="
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "text/plain; charset=utf-8"
+      },
+      "name": "avatar-get-missing",
+      "runtime": {
+        "avatar": "<root>/user_avatar.bin",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 404
+    },
+    {
+      "body": {
+        "base64": "iVBORw0KGgo="
+      },
+      "files": {
+        "avatar": {
+          "len": 8,
+          "sha256": "4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "max-age=3600",
+        "Content-Disposition": "",
+        "Content-Type": "image/png"
+      },
+      "name": "avatar-get-clean-parent",
+      "runtime": {
+        "avatar": "<root>/x/../user_avatar.bin",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "iVBORw0KGgo="
+      },
+      "files": {
+        "avatar": {
+          "len": 8,
+          "sha256": "4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "max-age=3600",
+        "Content-Disposition": "",
+        "Content-Type": "image/png"
+      },
+      "name": "avatar-get-clean-dot",
+      "runtime": {
+        "avatar": "<root>/./user_avatar.bin",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "NDA0IHBhZ2Ugbm90IGZvdW5kCg=="
+      },
+      "files": {
+        "avatar": {
+          "len": 8,
+          "sha256": "4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "text/plain; charset=utf-8"
+      },
+      "name": "avatar-get-untrimmed",
+      "runtime": {
+        "avatar": " <root>/user_avatar.bin ",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 404
+    },
+    {
+      "body": {
+        "base64": ""
+      },
+      "files": {
+        "avatar": {
+          "len": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "max-age=3600",
+        "Content-Disposition": "",
+        "Content-Type": "application/octet-stream"
+      },
+      "name": "avatar-get-empty",
+      "runtime": {
+        "avatar": "<root>/user_avatar.bin",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "PGh0bWw+c3ludGhldGlj"
+      },
+      "files": {
+        "avatar": {
+          "len": 15,
+          "sha256": "793a16d4056c3ac09d37f494dc88e5d69bee2b47847891d66d0fcf93fb112833"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "max-age=3600",
+        "Content-Disposition": "",
+        "Content-Type": "application/octet-stream"
+      },
+      "name": "avatar-get-corrupt",
+      "runtime": {
+        "avatar": "<root>/user_avatar.bin",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "UklGRv////9XQVZF"
+      },
+      "files": {
+        "avatar": {
+          "len": 12,
+          "sha256": "b37c22696a69c26f4ec1b22c7c36c223761ba7fc351cf5d1a7c47726a2fa4700"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "max-age=3600",
+        "Content-Disposition": "",
+        "Content-Type": "application/octet-stream"
+      },
+      "name": "avatar-get-audio",
+      "runtime": {
+        "avatar": "<root>/user_avatar.bin",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "NDA0IHBhZ2Ugbm90IGZvdW5kCg=="
+      },
+      "files": {
+        "avatar": "directory",
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "text/plain; charset=utf-8"
+      },
+      "name": "avatar-get-directory",
+      "runtime": {
+        "avatar": "<root>/user_avatar.bin",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 404
+    },
+    {
+      "body": {
+        "len": 5242881,
+        "sha256": "dcb45560b7b5ebf43e9eec1856b42e0ac856d8051376fb44b633462eca98661c"
+      },
+      "files": {
+        "avatar": {
+          "len": 5242881,
+          "sha256": "dcb45560b7b5ebf43e9eec1856b42e0ac856d8051376fb44b633462eca98661c"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "max-age=3600",
+        "Content-Disposition": "",
+        "Content-Type": "image/png"
+      },
+      "name": "avatar-get-oversize-existing",
+      "runtime": {
+        "avatar": "<root>/user_avatar.bin",
+        "notify_sound": {}
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "PGh0bWw+c3ludGhldGlj"
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 15,
+          "sha256": "793a16d4056c3ac09d37f494dc88e5d69bee2b47847891d66d0fcf93fb112833"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "inline; filename=\"notify-sound\"",
+        "Content-Type": "application/octet-stream"
+      },
+      "name": "sound-get-empty-mime",
+      "runtime": {
+        "avatar": "",
+        "notify_sound": {
+          "custom_file": "<root>/another.bin"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "PGh0bWw+c3ludGhldGlj"
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 15,
+          "sha256": "793a16d4056c3ac09d37f494dc88e5d69bee2b47847891d66d0fcf93fb112833"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "inline; filename=\"notify-sound\"",
+        "Content-Type": "application/octet-stream"
+      },
+      "name": "sound-get-invalid-mime",
+      "runtime": {
+        "avatar": "",
+        "notify_sound": {
+          "custom_file": "<root>/another.bin",
+          "custom_mime": "text/html"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "PGh0bWw+c3ludGhldGlj"
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 15,
+          "sha256": "793a16d4056c3ac09d37f494dc88e5d69bee2b47847891d66d0fcf93fb112833"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "inline; filename=\"notify-sound\"",
+        "Content-Type": "audio/ogg"
+      },
+      "name": "sound-get-historical-ogg",
+      "runtime": {
+        "avatar": "",
+        "notify_sound": {
+          "custom_file": "<root>/another.bin",
+          "custom_mime": "audio/ogg"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "PGh0bWw+c3ludGhldGlj"
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 15,
+          "sha256": "793a16d4056c3ac09d37f494dc88e5d69bee2b47847891d66d0fcf93fb112833"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "inline; filename=\"notify-sound\"",
+        "Content-Type": " AuDiO/Custom ; codec=synthetic "
+      },
+      "name": "sound-get-historical-spelling",
+      "runtime": {
+        "avatar": "",
+        "notify_sound": {
+          "custom_file": "<root>/another.bin",
+          "custom_mime": " AuDiO/Custom ; codec=synthetic "
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "base64": "PGh0bWw+c3ludGhldGlj"
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 15,
+          "sha256": "793a16d4056c3ac09d37f494dc88e5d69bee2b47847891d66d0fcf93fb112833"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "inline; filename=\"notify-sound\"",
+        "Content-Type": "audio/"
+      },
+      "name": "sound-get-prefix-only",
+      "runtime": {
+        "avatar": "",
+        "notify_sound": {
+          "custom_file": "<root>/another.bin",
+          "custom_mime": "audio/"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "not found",
+        "error": "not_found",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-get-missing",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 404
+    },
+    {
+      "body": {
+        "detail": "read error: <owned filesystem error>",
+        "error": "read_error",
+        "ok": false
+      },
+      "files": {
+        "avatar": null,
+        "sound": "directory"
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "sound-get-directory",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "read error",
+      "status": 500
+    },
+    {
+      "body": {
+        "base64": ""
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "inline; filename=\"notify-sound\"",
+        "Content-Type": "audio/old"
+      },
+      "name": "sound-get-empty",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "len": 2097153,
+        "sha256": "2c8783fc71c1113b043d2f86cc265cdf7609b5e9ce48329fae3bb82ac1126b35"
+      },
+      "files": {
+        "avatar": null,
+        "sound": {
+          "len": 2097153,
+          "sha256": "2c8783fc71c1113b043d2f86cc265cdf7609b5e9ce48329fae3bb82ac1126b35"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "inline; filename=\"notify-sound\"",
+        "Content-Type": "audio/old"
+      },
+      "name": "sound-get-oversize-existing",
+      "runtime": {
+        "avatar": "https://example.invalid/existing.png",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": {
+          "len": 8,
+          "sha256": "4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6"
+        },
+        "sound": {
+          "len": 12,
+          "sha256": "b37c22696a69c26f4ec1b22c7c36c223761ba7fc351cf5d1a7c47726a2fa4700"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-delete-success",
+      "runtime": {
+        "avatar": "",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": {
+        "avatar": "",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "save failed: <owned filesystem error>",
+        "error": "save_failed",
+        "ok": false
+      },
+      "files": {
+        "avatar": {
+          "len": 8,
+          "sha256": "4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6"
+        },
+        "sound": {
+          "len": 12,
+          "sha256": "b37c22696a69c26f4ec1b22c7c36c223761ba7fc351cf5d1a7c47726a2fa4700"
+        }
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-delete-save-failure",
+      "runtime": {
+        "avatar": "",
+        "notify_sound": {
+          "custom_file": "<root>/notify_sound_custom.bin",
+          "custom_mime": "audio/old",
+          "enabled": true,
+          "type": "custom"
+        }
+      },
+      "saved": null,
+      "source_detail_prefix": "save failed",
+      "status": 500
+    },
+    {
+      "body": {
+        "ok": true
+      },
+      "files": {
+        "avatar": {
+          "len": 6,
+          "sha256": "610f5ae4d76e332636a17bd357fd6ce99029316a99d320280d4d77a746bf29e8"
+        },
+        "sound": null
+      },
+      "headers": {
+        "Cache-Control": "",
+        "Content-Disposition": "",
+        "Content-Type": "application/json"
+      },
+      "name": "avatar-replace-write-only",
+      "runtime": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {}
+      },
+      "saved": {
+        "avatar": "<root>\\user_avatar.bin",
+        "notify_sound": {}
+      },
+      "source_detail_prefix": "",
+      "status": 200
+    }
+  ]
+}

@@ -1,0 +1,168 @@
+{
+  "reviewed_at_utc": "2026-10-05T03:00:00Z",
+  "head": "15db189db643143191e8b8063165fc6f2f5d2b14",
+  "dirty": true,
+  "scope": "selected working-source files only; hashes do not imply committed or accepted candidate",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "bytes": 2701,
+      "sha256": "1dd6216af049c92dea58b8cab28524191bae580e359beed06bc6c0417f7eee57"
+    },
+    {
+      "path": "CLAUDE.md",
+      "bytes": 20465,
+      "sha256": "cc05f02cb48d94c8a8ce945d646aac653326a0e41169d8b52a7f7009a3dfe092"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/README.md",
+      "bytes": 10630,
+      "sha256": "e0c2a3459a7ac7c1cfbc15057a67ed8030cbe842782accdde145cf34e9d04ee7"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/REVIEW.md",
+      "bytes": 2164,
+      "sha256": "b3e1ffd6edf0d378e6eb1614a140eb6cc0e2740fb913256ec0d760d593b67030"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/RV-CONTRACTS.md",
+      "bytes": 5682,
+      "sha256": "b1f6feb634357433947af39d90d15fcf4b7f5494acc45a951825808dcb01159a"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/BEHAVIOR-MATRIX.md",
+      "bytes": 55679,
+      "sha256": "9ad1b1468e568a49dd05ff4b0c3572dbd58e0089ec759fb4cad6a9b7594771d7"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "bytes": 18066,
+      "sha256": "fbbe2e18663432ad159f4ddee73b086be7c5a318c8c12bef0d6364e4a04aed3a"
+    },
+    {
+      "path": ".github/workflows/rust-migration.yml",
+      "bytes": 2982,
+      "sha256": "20083138ae0c2565108b0248c48828a5abc98ecf419f7a199672f0b56f82a182"
+    },
+    {
+      "path": ".goreleaser.yaml",
+      "bytes": 9219,
+      "sha256": "d9aa11b6a41e435c4b5c74dc03e70deb8b896312041da17499e6b986a387bbeb"
+    },
+    {
+      "path": "scripts/rust-candidate-ci.py",
+      "bytes": 11009,
+      "sha256": "d46a9c3a4d42b7b6ea0485d0d5ddf04bf5db8b9467703bf6fb04b38394fe90ce"
+    },
+    {
+      "path": "scripts/stage-npm-binaries.mjs",
+      "bytes": 3097,
+      "sha256": "d690d6c9b468968fd0c81e6ca700be37917658b4a297619c1d2cf201f9ae9f01"
+    },
+    {
+      "path": "scripts/stage-npm-from-release.mjs",
+      "bytes": 5614,
+      "sha256": "25df0344bbe240f633736730d9a621640da4300eac4faa42dc4a17c1c79c23aa"
+    },
+    {
+      "path": "scripts/publish-npm.sh",
+      "bytes": 2359,
+      "sha256": "3b4d4c6e29dd5a40ed385e3ccf8b85c38a830d4ca5bb39c55415783086a1aaf3"
+    },
+    {
+      "path": "scripts/sync-npm-version.mjs",
+      "bytes": 2284,
+      "sha256": "75e247f59eef5b2b20ef802078ad545e1379a7f084b4756af3b67cab73b0ef45"
+    },
+    {
+      "path": "scripts/check-artifact-clean.mjs",
+      "bytes": 3966,
+      "sha256": "7f8dd2e7d1f17632471a2041cfd14c64fd555fa5e2bb12572054496ad4e1204e"
+    },
+    {
+      "path": "web/package.json",
+      "bytes": 1619,
+      "sha256": "23de6f03d61aa770dc1da01139c0cf56e5404a942821f556cd896e06cf65dfdb"
+    },
+    {
+      "path": "web/bun.lock",
+      "bytes": 8141,
+      "sha256": "d4a04eddf3b01f44967c2fe00dde58681f6e435d5200b691bcdc238c44a0d89f"
+    },
+    {
+      "path": "web/scripts/build.mjs",
+      "bytes": 4542,
+      "sha256": "b6e78a9b8fbe3fc60c63d2feaa7590085ce32e1aa4442cfc35f1ed92400a30e1"
+    },
+    {
+      "path": "rust/Cargo.toml",
+      "bytes": 2902,
+      "sha256": "1f42bef50c432e9c57066d21bb6fda57615c0cb59847f7c2f7f0c22de2efe816"
+    },
+    {
+      "path": "rust/Cargo.lock",
+      "bytes": 77270,
+      "sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12"
+    },
+    {
+      "path": "rust/build.rs",
+      "bytes": 4167,
+      "sha256": "543cce3587507c052803db952a4a435b4459db16a5ed7db623679c1c3ce9d7d4"
+    },
+    {
+      "path": "rust/packaging/README.md",
+      "bytes": 11260,
+      "sha256": "ad93a747cffe498e6eedc8eff4de8ea066d236d3400d644dd5e6cc8184c1250e"
+    },
+    {
+      "path": "rust/packaging/collect_inputs.py",
+      "bytes": 20232,
+      "sha256": "85ce9ce731a3a853d7aba4b8e549d9479ba40f159ab162de39b56ef71c3f3da3"
+    },
+    {
+      "path": "rust/packaging/source-notices.json",
+      "bytes": 458,
+      "sha256": "3f222cd95747b6c85c793782a52fa40caea77b674f9d883786c53b7b301286e4"
+    },
+    {
+      "path": "rust/src/launcher/delivery.rs",
+      "bytes": 12034,
+      "sha256": "0d1444293aa6957ed7b73c1c59990c90630304ec85212ba4c92f842b525379a6"
+    },
+    {
+      "path": "rust/src/application/main_program/serve.rs",
+      "bytes": 66399,
+      "sha256": "9444d775e34dec750647533baa665ccded431f9b11432cde2ddd7116e2c31259"
+    },
+    {
+      "path": "internal/whisperruntime/fetch_windows_runtime.ps1",
+      "bytes": 6215,
+      "sha256": "3d6f059ab1b87c481888c6eca755b2fc23aea92aa5a52896f3ffac5ec1ce1642"
+    },
+    {
+      "path": "npm/many-ai-cli/package.json",
+      "bytes": 1196,
+      "sha256": "7de99c517a62480081fd256fb00990f3efc7a08d8e131e79a1ef5764fd6d0979"
+    },
+    {
+      "path": "npm/many-ai-cli-linux-x64/package.json",
+      "bytes": 573,
+      "sha256": "9c587871d189adf38391cd445b241cf5bbefefbf937e356cb64a9ac68f163221"
+    },
+    {
+      "path": "npm/many-ai-cli-windows-x64/package.json",
+      "bytes": 581,
+      "sha256": "614e7362756e0ff5ba4b8ce5274a794e30cf8e2af3fc273a576e4de82eec052b"
+    },
+    {
+      "path": "npm/many-ai-cli-macos-intel/package.json",
+      "bytes": 584,
+      "sha256": "0b44016767483b0c79aa014d4c76e31b92ee03c9dcd06c5ebd71fa95932345aa"
+    },
+    {
+      "path": "npm/many-ai-cli-macos-apple-silicon/package.json",
+      "bytes": 604,
+      "sha256": "ca5bb7aa68c9a0b8226ad59bb24c0d638303294f7dcfcac203967e94a78db67b"
+    }
+  ]
+}

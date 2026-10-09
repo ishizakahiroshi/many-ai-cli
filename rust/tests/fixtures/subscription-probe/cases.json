@@ -1,0 +1,78 @@
+[
+  [
+    "❯ No, exit",
+    " Yes, I trust this folder"
+  ],
+  [
+    "Yes, I trust this folder",
+    "❯ No, exit"
+  ],
+  [
+    "❯ Yes, I trust this folder"
+  ],
+  [
+    "Yes, I trust this folder"
+  ],
+  [
+    "❯ Yes",
+    "Enter to confirm"
+  ],
+  [
+    "❯ Disable external imports",
+    " Yes, allow external imports"
+  ],
+  [
+    "Yes, allow external imports",
+    "› Disable external imports"
+  ],
+  [
+    "old > cursor",
+    " No",
+    "> Yes, I trust this folder"
+  ],
+  [
+    "❯ stale cursor",
+    "",
+    "> No",
+    "Yes, I trust this folder"
+  ],
+  [
+    "❯ above",
+    "Yes, I trust this folder",
+    "› below"
+  ],
+  [
+    " Is this a project you created?",
+    "❯ No, exit",
+    " Yes, I trust this folder"
+  ],
+  [
+    "Allow external CLAUDE.md",
+    "No cursor"
+  ],
+  [
+    "",
+    "Try a prompt",
+    "> write test"
+  ],
+  [
+    "❯  YES, I TRUST THIS FOLDER"
+  ],
+  [
+    " › Yes, allow external imports"
+  ],
+  [
+    "❯ No, exit",
+    "Yes, I trust this folder",
+    "> Yes, allow external imports"
+  ],
+  [
+    "> Yes, I trust this folder"
+  ],
+  [
+    "tool permission",
+    "❯ Yes",
+    "No",
+    "Enter to confirm"
+  ]
+]

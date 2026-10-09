@@ -1,0 +1,395 @@
+[
+  {
+    "name": "empty",
+    "dns": "",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "single-dot",
+    "dns": ".",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "double-dot",
+    "dns": "Node..",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "space",
+    "dns": " \r\nNode.",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "go-space",
+    "dns": " Node.　",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "bom",
+    "dns": "﻿Node.",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "empty-url",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "https://login.tailscale.com/ https://login.tailscale.com/admin/dns",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "first-url",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "prefix https://login.tailscale.com/admin/dns?x=1. second https://login.tailscale.com/other",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "unicode-space",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "https://login.tailscale.com/admin keep",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "vertical-tab",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "https://login.tailscale.com/admin\u000bkeep",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "newline",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "https://login.tailscale.com/admin\nend",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "form-feed",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "https://login.tailscale.com/admin\fend",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "wrong-host",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "https://evil.invalid/login.tailscale.com/admin",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "null",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "null"
+  },
+  {
+    "name": "empty-object",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{}"
+  },
+  {
+    "name": "array",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "[]"
+  },
+  {
+    "name": "wrong-backend",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":12}"
+  },
+  {
+    "name": "wrong-online",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"Self\":{\"Online\":\"true\"}}"
+  },
+  {
+    "name": "null-fields",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":null,\"Self\":{\"DNSName\":null,\"Online\":null}}"
+  },
+  {
+    "name": "duplicate-merge",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"Self\":{\"DNSName\":\"node.\"},\"Self\":{\"Online\":true}}"
+  },
+  {
+    "name": "duplicate-null",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"Self\":{\"DNSName\":\"node.\"},\"Self\":null}"
+  },
+  {
+    "name": "folded",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"backendstate\":\"Running\",\"sELF\":{\"dnsname\":\"folded.\",\"online\":true}}"
+  },
+  {
+    "name": "wrong-dns",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"Self\":{\"DNSName\":[]}}"
+  },
+  {
+    "name": "ignored-large",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"unknown\":1e999,\"Self\":{\"DNSName\":\"safe\"}}"
+  },
+  {
+    "name": "trailing",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{} {}"
+  },
+  {
+    "name": "wrong-self",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"Self\":true}"
+  },
+  {
+    "name": "duplicate-leaf",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"BackendState\":\"NeedsLogin\"}"
+  },
+  {
+    "name": "go-simple-lower",
+    "dns": "node.example",
+    "token": " +&/~!()*'日本",
+    "stderr": "",
+    "hosts": [
+      "İ.",
+      "i",
+      "K.",
+      "k",
+      "Σ.",
+      "σ",
+      "ς"
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "all-token-bytes",
+    "dns": "node.example",
+    "token": "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  },
+  {
+    "name": "query-unicode",
+    "dns": "node.example",
+    "token": "🙂 é 　",
+    "stderr": "",
+    "hosts": [
+      "Node.",
+      " node ",
+      "192.0.2.1",
+      "HOST."
+    ],
+    "status": "{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"node.\",\"Online\":true}}"
+  }
+]

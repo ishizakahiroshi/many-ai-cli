@@ -1,0 +1,386 @@
+[
+  {
+    "expanded_launch": "",
+    "inject_after_start": true,
+    "input": {
+      "name": "-False-plain",
+      "base": "Synthetic child task.\n",
+      "mode": "",
+      "via_arg": false,
+      "board": "board.md",
+      "role": "review",
+      "branch": "",
+      "id": 42
+    },
+    "launch_prompt": "",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n"
+  },
+  {
+    "expanded_launch": "",
+    "inject_after_start": true,
+    "input": {
+      "name": "-False-controls",
+      "base": "one\r\ntwo\r\t\u0007\u001b[31m世界\n",
+      "mode": "",
+      "via_arg": false,
+      "board": "board.md",
+      "role": "review",
+      "branch": "",
+      "id": 42
+    },
+    "launch_prompt": "",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n"
+  },
+  {
+    "expanded_launch": "",
+    "inject_after_start": true,
+    "input": {
+      "name": "-False-placeholder",
+      "base": "Caller literal {{many-ai-cli:session-id}}.",
+      "mode": "",
+      "via_arg": false,
+      "board": "board.md",
+      "role": "review",
+      "branch": "",
+      "id": 42
+    },
+    "launch_prompt": "",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal {{many-ai-cli:session-id}}."
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n",
+    "inject_after_start": false,
+    "input": {
+      "name": "-True-plain",
+      "base": "Synthetic child task.\n",
+      "mode": "",
+      "via_arg": true,
+      "board": "board.md",
+      "role": "review",
+      "branch": "synthetic-branch",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n"
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n",
+    "inject_after_start": false,
+    "input": {
+      "name": "-True-controls",
+      "base": "one\r\ntwo\r\t\u0007\u001b[31m世界\n",
+      "mode": "",
+      "via_arg": true,
+      "board": "board.md",
+      "role": "review",
+      "branch": "synthetic-branch",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n"
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal 42.",
+    "inject_after_start": false,
+    "input": {
+      "name": "-True-placeholder",
+      "base": "Caller literal {{many-ai-cli:session-id}}.",
+      "mode": "",
+      "via_arg": true,
+      "board": "board.md",
+      "role": "review",
+      "branch": "synthetic-branch",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal {{many-ai-cli:session-id}}.",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal {{many-ai-cli:session-id}}."
+  },
+  {
+    "expanded_launch": "",
+    "inject_after_start": true,
+    "input": {
+      "name": "interactive-False-plain",
+      "base": "Synthetic child task.\n",
+      "mode": "interactive",
+      "via_arg": false,
+      "board": "board.md",
+      "role": "review",
+      "branch": "",
+      "id": 42
+    },
+    "launch_prompt": "",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n"
+  },
+  {
+    "expanded_launch": "",
+    "inject_after_start": true,
+    "input": {
+      "name": "interactive-False-controls",
+      "base": "one\r\ntwo\r\t\u0007\u001b[31m世界\n",
+      "mode": "interactive",
+      "via_arg": false,
+      "board": "board.md",
+      "role": "review",
+      "branch": "",
+      "id": 42
+    },
+    "launch_prompt": "",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n"
+  },
+  {
+    "expanded_launch": "",
+    "inject_after_start": true,
+    "input": {
+      "name": "interactive-False-placeholder",
+      "base": "Caller literal {{many-ai-cli:session-id}}.",
+      "mode": "interactive",
+      "via_arg": false,
+      "board": "board.md",
+      "role": "review",
+      "branch": "",
+      "id": 42
+    },
+    "launch_prompt": "",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal {{many-ai-cli:session-id}}."
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n",
+    "inject_after_start": false,
+    "input": {
+      "name": "interactive-True-plain",
+      "base": "Synthetic child task.\n",
+      "mode": "interactive",
+      "via_arg": true,
+      "board": "board.md",
+      "role": "review",
+      "branch": "synthetic-branch",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n"
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n",
+    "inject_after_start": false,
+    "input": {
+      "name": "interactive-True-controls",
+      "base": "one\r\ntwo\r\t\u0007\u001b[31m世界\n",
+      "mode": "interactive",
+      "via_arg": true,
+      "board": "board.md",
+      "role": "review",
+      "branch": "synthetic-branch",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n"
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal 42.",
+    "inject_after_start": false,
+    "input": {
+      "name": "interactive-True-placeholder",
+      "base": "Caller literal {{many-ai-cli:session-id}}.",
+      "mode": "interactive",
+      "via_arg": true,
+      "board": "board.md",
+      "role": "review",
+      "branch": "synthetic-branch",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal {{many-ai-cli:session-id}}.",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal {{many-ai-cli:session-id}}."
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n",
+    "inject_after_start": false,
+    "input": {
+      "name": "headless-False-plain",
+      "base": "Synthetic child task.\n",
+      "mode": "headless",
+      "via_arg": false,
+      "board": "board.md",
+      "role": "review",
+      "branch": "",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n"
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n",
+    "inject_after_start": false,
+    "input": {
+      "name": "headless-False-controls",
+      "base": "one\r\ntwo\r\t\u0007\u001b[31m世界\n",
+      "mode": "headless",
+      "via_arg": false,
+      "board": "board.md",
+      "role": "review",
+      "branch": "",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n"
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal 42.",
+    "inject_after_start": false,
+    "input": {
+      "name": "headless-False-placeholder",
+      "base": "Caller literal {{many-ai-cli:session-id}}.",
+      "mode": "headless",
+      "via_arg": false,
+      "board": "board.md",
+      "role": "review",
+      "branch": "",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal {{many-ai-cli:session-id}}.",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal {{many-ai-cli:session-id}}."
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n",
+    "inject_after_start": false,
+    "input": {
+      "name": "headless-True-plain",
+      "base": "Synthetic child task.\n",
+      "mode": "headless",
+      "via_arg": true,
+      "board": "board.md",
+      "role": "review",
+      "branch": "synthetic-branch",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n"
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n",
+    "inject_after_start": false,
+    "input": {
+      "name": "headless-True-controls",
+      "base": "one\r\ntwo\r\t\u0007\u001b[31m世界\n",
+      "mode": "headless",
+      "via_arg": true,
+      "board": "board.md",
+      "role": "review",
+      "branch": "synthetic-branch",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n"
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal 42.",
+    "inject_after_start": false,
+    "input": {
+      "name": "headless-True-placeholder",
+      "base": "Caller literal {{many-ai-cli:session-id}}.",
+      "mode": "headless",
+      "via_arg": true,
+      "board": "board.md",
+      "role": "review",
+      "branch": "synthetic-branch",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal {{many-ai-cli:session-id}}.",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal {{many-ai-cli:session-id}}."
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n",
+    "inject_after_start": false,
+    "input": {
+      "name": " headless -False-plain",
+      "base": "Synthetic child task.\n",
+      "mode": " headless ",
+      "via_arg": false,
+      "board": "board.md",
+      "role": "review",
+      "branch": "",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n"
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n",
+    "inject_after_start": false,
+    "input": {
+      "name": " headless -False-controls",
+      "base": "one\r\ntwo\r\t\u0007\u001b[31m世界\n",
+      "mode": " headless ",
+      "via_arg": false,
+      "board": "board.md",
+      "role": "review",
+      "branch": "",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n"
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal 42.",
+    "inject_after_start": false,
+    "input": {
+      "name": " headless -False-placeholder",
+      "base": "Caller literal {{many-ai-cli:session-id}}.",
+      "mode": " headless ",
+      "via_arg": false,
+      "board": "board.md",
+      "role": "review",
+      "branch": "",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal {{many-ai-cli:session-id}}.",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal {{many-ai-cli:session-id}}."
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n",
+    "inject_after_start": false,
+    "input": {
+      "name": " headless -True-plain",
+      "base": "Synthetic child task.\n",
+      "mode": " headless ",
+      "via_arg": true,
+      "board": "board.md",
+      "role": "review",
+      "branch": "synthetic-branch",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nSynthetic child task.\n"
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n",
+    "inject_after_start": false,
+    "input": {
+      "name": " headless -True-controls",
+      "base": "one\r\ntwo\r\t\u0007\u001b[31m世界\n",
+      "mode": " headless ",
+      "via_arg": true,
+      "board": "board.md",
+      "role": "review",
+      "branch": "synthetic-branch",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\none\ntwo\n\t[31m世界\n"
+  },
+  {
+    "expanded_launch": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal 42.",
+    "inject_after_start": false,
+    "input": {
+      "name": " headless -True-placeholder",
+      "base": "Caller literal {{many-ai-cli:session-id}}.",
+      "mode": " headless ",
+      "via_arg": true,
+      "board": "board.md",
+      "role": "review",
+      "branch": "synthetic-branch",
+      "id": 42
+    },
+    "launch_prompt": "You are an orchestration child session.\nRole: review\nSession ID: {{many-ai-cli:session-id}}\nShared board (read-only for you): board.md\nYour progress file (write here): child-{{many-ai-cli:session-id}}.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session={{many-ai-cli:session-id}} \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session={{many-ai-cli:session-id}}`; the conductor will answer with orchestrate send. When complete, append `## DONE review session={{many-ai-cli:session-id}}` (or the explicit success form `## SUCCESS review session={{many-ai-cli:session-id}}`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal {{many-ai-cli:session-id}}.",
+    "typed_prompt": "You are an orchestration child session.\nRole: review\nSession ID: 42\nShared board (read-only for you): board.md\nYour progress file (write here): child-42.md\nWorktree branch: synthetic-branch\nRead the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## review session=42 \u003cRFC3339 time\u003e` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION review session=42`; the conductor will answer with orchestrate send. When complete, append `## DONE review session=42` (or the explicit success form `## SUCCESS review session=42`) and a concise summary to your progress file. Do not write to the shared board.\n\nCaller literal {{many-ai-cli:session-id}}."
+  }
+]

@@ -1,0 +1,4131 @@
+{
+  "documentation_schema_version": 2,
+  "current_source_coverage": {
+    "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+    "authority": "Authoritative current source-binding view; top-level routes/dynamic_operations and earlier receipt fields are historical compatibility data.",
+    "source_index": "rust/inventory/recovery-current-20261005.json",
+    "counts": {
+      "http_registrations": 155,
+      "http_source_bound": 155,
+      "http_source_binding_missing": 0,
+      "dynamic_operation_rows": 49,
+      "dynamic_source_bound": 49,
+      "dynamic_source_binding_missing": 0,
+      "cli_entries": 32,
+      "cli_source_dispatch_present": 32,
+      "native_browser_device_product_accepted": 0
+    },
+    "status_vocabulary": {
+      "source_implemented_bound_unaccepted": "Owner, registration/dispatch and main composition present; no exhaustive behavior or product-acceptance claim.",
+      "source_dispatch_bound_unaccepted": "Dynamic operation handler and main owner present; no exhaustive method/configuration or product-acceptance claim."
+    },
+    "routes": [
+      {
+        "path": "/",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/0"
+      },
+      {
+        "path": "/app-entry.js",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/1"
+      },
+      {
+        "path": "/app.js",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/2"
+      },
+      {
+        "path": "/app/",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/3"
+      },
+      {
+        "path": "/debug/",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/4"
+      },
+      {
+        "path": "/styles.css",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/5"
+      },
+      {
+        "path": "/styles/",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/6"
+      },
+      {
+        "path": "/icon.svg",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/7"
+      },
+      {
+        "path": "/icons/",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/8"
+      },
+      {
+        "path": "/manifest.webmanifest",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/9"
+      },
+      {
+        "path": "/sw.js",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/10"
+      },
+      {
+        "path": "/whisper-recorder-worklet.js",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/11"
+      },
+      {
+        "path": "/i18n.js",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/12"
+      },
+      {
+        "path": "/i18n/",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/13"
+      },
+      {
+        "path": "/vendor/",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/14"
+      },
+      {
+        "path": "/approval-patterns/",
+        "rust_owner": "rust/src/hub/approval_pattern_routes.rs",
+        "main_binding": "with_approval_patterns",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/15"
+      },
+      {
+        "path": "/ws",
+        "rust_owner": "rust/src/hub/websocket.rs",
+        "main_binding": "WebSocketService::new",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/16"
+      },
+      {
+        "path": "/api/info",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/17"
+      },
+      {
+        "path": "/api/jev/evaluate",
+        "rust_owner": "rust/src/hub/jev_routes.rs",
+        "main_binding": "with_jev",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/18"
+      },
+      {
+        "path": "/api/providers",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "main_binding": "with_provider_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/19"
+      },
+      {
+        "path": "/api/providers/",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "main_binding": "with_provider_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/20"
+      },
+      {
+        "path": "/api/provider-distributions/",
+        "rust_owner": "rust/src/hub/distribution_routes.rs",
+        "main_binding": "with_provider_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/21"
+      },
+      {
+        "path": "/api/provider-icons/",
+        "rust_owner": "rust/src/hub/icon_routes.rs",
+        "main_binding": "with_provider_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/22"
+      },
+      {
+        "path": "/api/bug-report/preview",
+        "rust_owner": "rust/src/hub/diagnostic_routes.rs",
+        "main_binding": "with_diagnostics",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/23"
+      },
+      {
+        "path": "/api/bug-report/finalize",
+        "rust_owner": "rust/src/hub/diagnostic_routes.rs",
+        "main_binding": "with_diagnostics",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/24"
+      },
+      {
+        "path": "/api/doctor",
+        "rust_owner": "rust/src/hub/diagnostic_routes.rs",
+        "main_binding": "with_diagnostics",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/25"
+      },
+      {
+        "path": "/api/mobile-connect",
+        "rust_owner": "rust/src/hub/mobile_routes.rs",
+        "main_binding": "with_mobile",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/26"
+      },
+      {
+        "path": "/api/mobile-connect/tailscale",
+        "rust_owner": "rust/src/hub/mobile_routes.rs",
+        "main_binding": "with_mobile",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/27"
+      },
+      {
+        "path": "/api/mobile-connect/tailscale/serve",
+        "rust_owner": "rust/src/hub/mobile_routes.rs",
+        "main_binding": "with_mobile",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/28"
+      },
+      {
+        "path": "/api/auth/revoke-all",
+        "rust_owner": "rust/src/hub/auth.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/29"
+      },
+      {
+        "path": "/api/auth/status",
+        "rust_owner": "rust/src/hub/auth.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/30"
+      },
+      {
+        "path": "/api/auth/login",
+        "rust_owner": "rust/src/hub/auth.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/31"
+      },
+      {
+        "path": "/api/auth/logout",
+        "rust_owner": "rust/src/hub/auth.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/32"
+      },
+      {
+        "path": "/api/auth/set-pin",
+        "rust_owner": "rust/src/hub/auth.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/33"
+      },
+      {
+        "path": "/api/net-hint",
+        "rust_owner": "rust/src/hub/runtime_routes.rs",
+        "main_binding": "with_runtime_observations",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/34"
+      },
+      {
+        "path": "/api/avatar",
+        "rust_owner": "rust/src/hub/preference_media.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/35"
+      },
+      {
+        "path": "/api/spawn",
+        "rust_owner": "rust/src/hub/spawn_routes.rs",
+        "main_binding": "with_spawn",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/36"
+      },
+      {
+        "path": "/api/spawn-grid",
+        "rust_owner": "rust/src/hub/grid_spawn_routes.rs",
+        "main_binding": "with_grid",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/37"
+      },
+      {
+        "path": "/api/session/",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/38"
+      },
+      {
+        "path": "/api/sessions/",
+        "rust_owner": "rust/src/hub/child_routes.rs",
+        "main_binding": "with_children",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/39"
+      },
+      {
+        "path": "/api/pick-directory",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/40"
+      },
+      {
+        "path": "/api/path-exists",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/41"
+      },
+      {
+        "path": "/api/list-subdirs",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/42"
+      },
+      {
+        "path": "/api/pick-file",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/43"
+      },
+      {
+        "path": "/api/open-default-file",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/44"
+      },
+      {
+        "path": "/api/open-folder",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/45"
+      },
+      {
+        "path": "/api/open-terminal",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/46"
+      },
+      {
+        "path": "/api/terminal-app",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/47"
+      },
+      {
+        "path": "/api/kill-all",
+        "rust_owner": "rust/src/hub/lifecycle.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/48"
+      },
+      {
+        "path": "/api/shutdown",
+        "rust_owner": "rust/src/hub/lifecycle.rs",
+        "main_binding": "with_shutdown",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/49"
+      },
+      {
+        "path": "/api/log-config",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/50"
+      },
+      {
+        "path": "/api/session-chat",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/51"
+      },
+      {
+        "path": "/api/session-log",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/52"
+      },
+      {
+        "path": "/api/agent-log",
+        "rust_owner": "rust/src/hub/agent_history_routes.rs",
+        "main_binding": "with_agent_history",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/53"
+      },
+      {
+        "path": "/api/agent-log/open",
+        "rust_owner": "rust/src/hub/agent_history_routes.rs",
+        "main_binding": "with_agent_history",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/54"
+      },
+      {
+        "path": "/api/agent-chat",
+        "rust_owner": "rust/src/hub/agent_history_routes.rs",
+        "main_binding": "with_agent_history",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/55"
+      },
+      {
+        "path": "/api/grok-history",
+        "rust_owner": "rust/src/hub/agent_history_routes.rs",
+        "main_binding": "with_agent_history",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/56"
+      },
+      {
+        "path": "/api/session-search",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/57"
+      },
+      {
+        "path": "/api/session-history",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/58"
+      },
+      {
+        "path": "/api/approval-history",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/59"
+      },
+      {
+        "path": "/api/session-store/reset",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/60"
+      },
+      {
+        "path": "/api/session-store/prune-transcript-noise",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/61"
+      },
+      {
+        "path": "/api/logs/purge",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/62"
+      },
+      {
+        "path": "/api/logs/legacy-notice",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/63"
+      },
+      {
+        "path": "/api/attachments/purge",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/64"
+      },
+      {
+        "path": "/api/open-dir",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/65"
+      },
+      {
+        "path": "/api/idle-timeout",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/66"
+      },
+      {
+        "path": "/api/terminal-color",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/67"
+      },
+      {
+        "path": "/api/handoff-intent-mode",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/68"
+      },
+      {
+        "path": "/api/handoff",
+        "rust_owner": "rust/src/hub/handoff_routes.rs",
+        "main_binding": "with_handoff",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/69"
+      },
+      {
+        "path": "/api/handoff/",
+        "rust_owner": "rust/src/hub/handoff_routes.rs",
+        "main_binding": "with_handoff",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/70"
+      },
+      {
+        "path": "/api/reconnect-grace",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/71"
+      },
+      {
+        "path": "/api/input-config",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/72"
+      },
+      {
+        "path": "/api/orchestration-config",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/73"
+      },
+      {
+        "path": "/api/subscriptions",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "main_binding": "with_subscriptions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/74"
+      },
+      {
+        "path": "/api/subscriptions/",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "main_binding": "with_subscriptions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/75"
+      },
+      {
+        "path": "/api/subscription-usage",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "main_binding": "with_subscriptions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/76"
+      },
+      {
+        "path": "/api/subscription-usage/refresh",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "main_binding": "with_subscriptions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/77"
+      },
+      {
+        "path": "/api/subscription-usage/probe",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "main_binding": "with_subscriptions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/78"
+      },
+      {
+        "path": "/api/notify-config",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/79"
+      },
+      {
+        "path": "/api/notify-test",
+        "rust_owner": "rust/src/hub/notify_routes.rs",
+        "main_binding": "with_notifications",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/80"
+      },
+      {
+        "path": "/api/notify-generate-topic",
+        "rust_owner": "rust/src/hub/notify_routes.rs",
+        "main_binding": "with_notifications",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/81"
+      },
+      {
+        "path": "/api/nvidia-nim",
+        "rust_owner": "rust/src/hub/nvidia_routes.rs",
+        "main_binding": "with_nvidia",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/82"
+      },
+      {
+        "path": "/api/nvidia-nim/key",
+        "rust_owner": "rust/src/hub/nvidia_routes.rs",
+        "main_binding": "with_nvidia",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/83"
+      },
+      {
+        "path": "/api/nvidia-nim/test",
+        "rust_owner": "rust/src/hub/nvidia_routes.rs",
+        "main_binding": "with_nvidia",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/84"
+      },
+      {
+        "path": "/api/encoding-check",
+        "rust_owner": "rust/src/hub/runtime_routes.rs",
+        "main_binding": "with_runtime_observations",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/85"
+      },
+      {
+        "path": "/api/approval/status",
+        "rust_owner": "rust/src/hub/approval_actions.rs",
+        "main_binding": "with_approval_actions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/86"
+      },
+      {
+        "path": "/api/approval/enable",
+        "rust_owner": "rust/src/hub/approval_actions.rs",
+        "main_binding": "with_approval_actions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/87"
+      },
+      {
+        "path": "/api/approval/disable",
+        "rust_owner": "rust/src/hub/approval_actions.rs",
+        "main_binding": "with_approval_actions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/88"
+      },
+      {
+        "path": "/api/approval/dismiss",
+        "rust_owner": "rust/src/hub/approval_actions.rs",
+        "main_binding": "with_approval_actions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/89"
+      },
+      {
+        "path": "/api/approval/batch",
+        "rust_owner": "rust/src/hub/approval_actions.rs",
+        "main_binding": "with_approval_actions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/90"
+      },
+      {
+        "path": "/api/approval-action/",
+        "rust_owner": "rust/src/hub/approval_actions.rs",
+        "main_binding": "with_approval_actions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/91"
+      },
+      {
+        "path": "/api/attach",
+        "rust_owner": "rust/src/files/attachments.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/92"
+      },
+      {
+        "path": "/api/slash-cmd-sources",
+        "rust_owner": "rust/src/hub/slash_routes.rs",
+        "main_binding": "with_slash_commands",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/93"
+      },
+      {
+        "path": "/api/slash-commands",
+        "rust_owner": "rust/src/hub/slash_routes.rs",
+        "main_binding": "with_slash_commands",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/94"
+      },
+      {
+        "path": "/api/usage-link-defaults",
+        "rust_owner": "rust/src/application/link_defaults.rs",
+        "main_binding": "with_link_defaults",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/95"
+      },
+      {
+        "path": "/api/install-link-defaults",
+        "rust_owner": "rust/src/application/link_defaults.rs",
+        "main_binding": "with_link_defaults",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/96"
+      },
+      {
+        "path": "/api/cli-versions",
+        "rust_owner": "rust/src/hub/cli_version.rs",
+        "main_binding": "with_cli_versions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/97"
+      },
+      {
+        "path": "/api/cli-updates",
+        "rust_owner": "rust/src/hub/update_routes.rs",
+        "main_binding": "with_cli_updates",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/98"
+      },
+      {
+        "path": "/api/cli-updates/",
+        "rust_owner": "rust/src/hub/update_routes.rs",
+        "main_binding": "with_cli_updates",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/99"
+      },
+      {
+        "path": "/api/cli-update-eligibility",
+        "rust_owner": "rust/src/hub/update_routes.rs",
+        "main_binding": "with_cli_updates",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/100"
+      },
+      {
+        "path": "/api/models",
+        "rust_owner": "rust/src/application/main_program/model_catalog.rs",
+        "main_binding": "with_models",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/101"
+      },
+      {
+        "path": "/api/approval-patterns",
+        "rust_owner": "rust/src/hub/approval_pattern_routes.rs",
+        "main_binding": "with_approval_patterns",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/102"
+      },
+      {
+        "path": "/api/approval-patterns/",
+        "rust_owner": "rust/src/hub/approval_pattern_routes.rs",
+        "main_binding": "with_approval_patterns",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/103"
+      },
+      {
+        "path": "/api/files-list",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/104"
+      },
+      {
+        "path": "/api/files-content",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/105"
+      },
+      {
+        "path": "/api/files-asset",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/106"
+      },
+      {
+        "path": "/api/files-download",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/107"
+      },
+      {
+        "path": "/api/files-roots",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/108"
+      },
+      {
+        "path": "/api/files-move",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/109"
+      },
+      {
+        "path": "/api/files-rename",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/110"
+      },
+      {
+        "path": "/api/files-mkdir",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/111"
+      },
+      {
+        "path": "/api/files-create",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/112"
+      },
+      {
+        "path": "/api/files-save",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/113"
+      },
+      {
+        "path": "/api/files-delete-dir",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/114"
+      },
+      {
+        "path": "/api/git-log",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/115"
+      },
+      {
+        "path": "/api/git-show",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/116"
+      },
+      {
+        "path": "/api/git-refs",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/117"
+      },
+      {
+        "path": "/api/git-status",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/118"
+      },
+      {
+        "path": "/api/git-diff",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/119"
+      },
+      {
+        "path": "/api/git-turns",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/120"
+      },
+      {
+        "path": "/api/git-turn-diff",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/121"
+      },
+      {
+        "path": "/api/git-commit-all",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/122"
+      },
+      {
+        "path": "/api/git-commit-message",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/123"
+      },
+      {
+        "path": "/api/git-fetch",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/124"
+      },
+      {
+        "path": "/api/git-pull",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/125"
+      },
+      {
+        "path": "/api/git-push",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/126"
+      },
+      {
+        "path": "/api/user-prefs/notify-sound-custom",
+        "rust_owner": "rust/src/hub/preference_media.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/127"
+      },
+      {
+        "path": "/api/user-prefs/avatar",
+        "rust_owner": "rust/src/hub/preference_media.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/128"
+      },
+      {
+        "path": "/api/user-prefs",
+        "rust_owner": "rust/src/hub/preferences.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/129"
+      },
+      {
+        "path": "/api/routines",
+        "rust_owner": "rust/src/hub/routines.rs",
+        "main_binding": "with_routines",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/130"
+      },
+      {
+        "path": "/api/routines/",
+        "rust_owner": "rust/src/hub/routines.rs",
+        "main_binding": "with_routines",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/131"
+      },
+      {
+        "path": "/api/routine-runs",
+        "rust_owner": "rust/src/hub/routines.rs",
+        "main_binding": "with_routines",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/132"
+      },
+      {
+        "path": "/api/routine-runs/",
+        "rust_owner": "rust/src/hub/routines.rs",
+        "main_binding": "with_routines",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/133"
+      },
+      {
+        "path": "/api/memos",
+        "rust_owner": "rust/src/routine/memo.rs",
+        "main_binding": "with_memos",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/134"
+      },
+      {
+        "path": "/api/memos/",
+        "rust_owner": "rust/src/routine/memo.rs",
+        "main_binding": "with_memos",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/135"
+      },
+      {
+        "path": "/api/memo-images",
+        "rust_owner": "rust/src/routine/memo.rs",
+        "main_binding": "with_memos",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/136"
+      },
+      {
+        "path": "/api/memo-images/",
+        "rust_owner": "rust/src/routine/memo.rs",
+        "main_binding": "with_memos",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/137"
+      },
+      {
+        "path": "/api/auto-approval/status",
+        "rust_owner": "rust/src/hub/auto_approval.rs",
+        "main_binding": "with_auto_approval",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/138"
+      },
+      {
+        "path": "/api/auto-approval/simulate",
+        "rust_owner": "rust/src/hub/auto_approval.rs",
+        "main_binding": "with_auto_approval",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/139"
+      },
+      {
+        "path": "/api/push/status",
+        "rust_owner": "rust/src/hub/push_routes.rs",
+        "main_binding": "with_push",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/140"
+      },
+      {
+        "path": "/api/push/vapid-public-key",
+        "rust_owner": "rust/src/hub/push_routes.rs",
+        "main_binding": "with_push",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/141"
+      },
+      {
+        "path": "/api/push/subscriptions",
+        "rust_owner": "rust/src/hub/push_routes.rs",
+        "main_binding": "with_push",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/142"
+      },
+      {
+        "path": "/api/voice/transcribe",
+        "rust_owner": "rust/src/hub/voice_routes.rs",
+        "main_binding": "with_voice",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/143"
+      },
+      {
+        "path": "/api/whisper/status",
+        "rust_owner": "rust/src/hub/whisper_routes.rs",
+        "main_binding": "with_whisper",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/144"
+      },
+      {
+        "path": "/api/whisper/install",
+        "rust_owner": "rust/src/hub/whisper_routes.rs",
+        "main_binding": "with_whisper",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/145"
+      },
+      {
+        "path": "/api/whisper/uninstall",
+        "rust_owner": "rust/src/hub/whisper_routes.rs",
+        "main_binding": "with_whisper",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/146"
+      },
+      {
+        "path": "/api/whisper/start",
+        "rust_owner": "rust/src/hub/whisper_routes.rs",
+        "main_binding": "with_whisper",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/147"
+      },
+      {
+        "path": "/api/whisper/stop",
+        "rust_owner": "rust/src/hub/whisper_routes.rs",
+        "main_binding": "with_whisper",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/148"
+      },
+      {
+        "path": "/api/session-usage",
+        "rust_owner": "rust/src/hub/usage_routes.rs",
+        "main_binding": "with_session_usage",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/149"
+      },
+      {
+        "path": "/api/servers",
+        "rust_owner": "rust/src/hub/server_routes.rs",
+        "main_binding": "with_servers",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/150"
+      },
+      {
+        "path": "/api/servers/connect",
+        "rust_owner": "rust/src/hub/server_routes.rs",
+        "main_binding": "with_servers",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/151"
+      },
+      {
+        "path": "/api/servers/connect/status",
+        "rust_owner": "rust/src/hub/server_routes.rs",
+        "main_binding": "with_servers",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/152"
+      },
+      {
+        "path": "/api/servers/disconnect",
+        "rust_owner": "rust/src/hub/server_routes.rs",
+        "main_binding": "with_servers",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/153"
+      },
+      {
+        "path": "/api/profiles/fetch",
+        "rust_owner": "rust/src/hub/server_routes.rs",
+        "main_binding": "with_servers",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/154"
+      }
+    ],
+    "dynamic_operations": [
+      {
+        "pattern": "/approval-patterns/{provider}[.official|.custom].json",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleApprovalPatternAsset",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/approval_pattern_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/approval_pattern_routes.rs",
+            "line": 49
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_approval_patterns",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1109
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/validate",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleProviderValidate",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleProviderDetail",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}",
+        "methods": [
+          "PATCH"
+        ],
+        "source_handler": "handleProviderPatch",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}",
+        "methods": [
+          "DELETE"
+        ],
+        "source_handler": "handleProviderDelete",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/history",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleProviderHistory",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/history/{revision}/diff",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleProviderHistoryDiff",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/reset",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleProviderReset",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/restore",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleProviderRestore",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/backups",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleProviderBackups",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/backups/{backup}/verify",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleProviderBackupVerify",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/backups/{backup}/restore",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleProviderBackupRestore",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/recovery",
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "source_handler": "handleProviderRecovery",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/provider-distributions/status",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleProviderDistributionStatus",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/distribution_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/distribution_routes.rs",
+            "line": 29
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_assets",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1131
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/provider-distributions/diff",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleProviderDistributionDiff",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/distribution_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/distribution_routes.rs",
+            "line": 29
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_assets",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1131
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/provider-distributions/check",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleProviderDistributionCheck",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/distribution_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/distribution_routes.rs",
+            "line": 29
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_assets",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1131
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
+        "expected_unavailable_contract": "Fixed Go ships no trusted catalog signing keys; composed check/accept explicitly return503 distribution_keys_unconfigured. This is not a missing route or successful catalog download/signature acceptance."
+      },
+      {
+        "pattern": "/api/provider-distributions/accept",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleProviderDistributionAccept",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/distribution_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/distribution_routes.rs",
+            "line": 29
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_assets",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1131
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
+        "expected_unavailable_contract": "Fixed Go ships no trusted catalog signing keys; composed check/accept explicitly return503 distribution_keys_unconfigured. This is not a missing route or successful catalog download/signature acceptance."
+      },
+      {
+        "pattern": "/api/provider-distributions/rollback",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleProviderDistributionRollback",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/distribution_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/distribution_routes.rs",
+            "line": 29
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_assets",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1131
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/provider-icons/{id}",
+        "methods": [
+          "GET",
+          "PUT",
+          "DELETE"
+        ],
+        "source_handler": "handleProviderIcon",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/icon_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/icon_routes.rs",
+            "line": 14
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_assets",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1131
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/session/{id}/meta",
+        "methods": [
+          "PATCH"
+        ],
+        "source_handler": "handleSessionMeta",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/session_routes/metadata.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/session_routes/metadata.rs",
+            "line": 55
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_session_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1201
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/sessions/{id}/meta",
+        "methods": [
+          "PATCH"
+        ],
+        "source_handler": "handleSessionMeta",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/session_routes/metadata.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/session_routes/metadata.rs",
+            "line": 55
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_session_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1201
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/sessions/{id}/spawn-child",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSpawnChild",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/child_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/child_routes.rs",
+            "line": 109
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_children",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1159
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/sessions/{id}/spawn-confirm",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSpawnConfirmation",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/confirmations.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/confirmations.rs",
+            "line": 58
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_confirmations",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1156
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/sessions/{id}/send-child",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSendChild",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/child_control.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/child_control.rs",
+            "line": 72
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_child_controls",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1170
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/sessions/{id}/inject",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSessionInject",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/child_control.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/child_control.rs",
+            "line": 72
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_child_controls",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1170
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/sessions/{id}/children",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleSessionChildren",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/child_control.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/child_control.rs",
+            "line": 72
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_child_controls",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1170
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/sessions/{id}/relay",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleRelayGet",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/relay_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/relay_routes.rs",
+            "line": 34
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_relay",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1167
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
+        "executed_regression": "application::main_program::tests::actual_http_composition_keeps_relay_guards_and_trial_notification_denial; passed in four-target4dc961ce library suites"
+      },
+      {
+        "pattern": "/api/sessions/{id}/relay",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleRelayStart",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/relay_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/relay_routes.rs",
+            "line": 34
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_relay",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1167
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
+        "executed_regression": "application::main_program::tests::actual_http_composition_keeps_relay_guards_and_trial_notification_denial; passed in four-target4dc961ce library suites"
+      },
+      {
+        "pattern": "/api/sessions/{id}/relay-stop",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleRelayStop",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/relay_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/relay_routes.rs",
+            "line": 34
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_relay",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1167
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
+        "executed_regression": "application::main_program::tests::actual_http_composition_keeps_relay_guards_and_trial_notification_denial; passed in four-target4dc961ce library suites"
+      },
+      {
+        "pattern": "/api/sessions/{id}/relay-resume",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleRelayResume",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/relay_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/relay_routes.rs",
+            "line": 34
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_relay",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1167
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
+        "executed_regression": "application::main_program::tests::actual_http_composition_keeps_relay_guards_and_trial_notification_denial; passed in four-target4dc961ce library suites"
+      },
+      {
+        "pattern": "/api/sessions/{id}/relay-cleanup",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleRelayCleanup",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/relay_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/relay_routes.rs",
+            "line": 34
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_relay",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1167
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
+        "executed_regression": "application::main_program::tests::actual_http_composition_keeps_relay_guards_and_trial_notification_denial; passed in four-target4dc961ce library suites"
+      },
+      {
+        "pattern": "/api/handoff/{id}",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleHandoffItem",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/handoff_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/handoff_routes.rs",
+            "line": 110
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_handoff",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1251
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/handoff/{id}/note",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleHandoffNoteRequest",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/handoff_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/handoff_routes.rs",
+            "line": 110
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_handoff",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1251
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/handoff/{id}/manual-note",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleHandoffManualNoteSave",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/handoff_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/handoff_routes.rs",
+            "line": 110
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_handoff",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1251
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/subscriptions/update",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSubscriptionUpdate",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/subscription_routes.rs",
+            "line": 37
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_subscriptions",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1221
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/subscriptions/remove",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSubscriptionRemove",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/subscription_routes.rs",
+            "line": 37
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_subscriptions",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1221
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/subscriptions/test",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSubscriptionTest",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/subscription_routes.rs",
+            "line": 37
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_subscriptions",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1221
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/subscriptions/login",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSubscriptionLogin",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/subscription_routes.rs",
+            "line": 37
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_subscriptions",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1221
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/approval-action/{action_token}",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleOneTapApproval",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/approval_actions.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/approval_actions.rs",
+            "line": 25
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_approval_actions",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1257
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/cli-updates/{job_id}",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleCLIUpdateJobStatus",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/update_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/update_routes.rs",
+            "line": 49
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_cli_updates",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1227
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/cli-updates/{job_id}/{provider_id}/log",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleCLIUpdateJobLog",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/update_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/update_routes.rs",
+            "line": 49
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_cli_updates",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1227
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/approval-patterns/profile",
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "source_handler": "handleApprovalProfile",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/approval_pattern_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/approval_pattern_routes.rs",
+            "line": 67
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_approval_patterns",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1109
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/approval-patterns/copy-official",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleApprovalCopyOfficial",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/approval_pattern_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/approval_pattern_routes.rs",
+            "line": 67
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_approval_patterns",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1109
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/approval-patterns/{provider}[/{ignored_suffix}]",
+        "methods": [
+          "PUT"
+        ],
+        "source_handler": "handleApprovalPatternsItem",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/approval_pattern_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/approval_pattern_routes.rs",
+            "line": 67
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_approval_patterns",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1109
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/routines/{id}",
+        "methods": [
+          "GET",
+          "PUT",
+          "DELETE"
+        ],
+        "source_handler": "handleRoutines",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/routines.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/routines.rs",
+            "line": 37
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_routines",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1176
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/routines/{id}/runs",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleRoutines",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/routines.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/routines.rs",
+            "line": 37
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_routines",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1176
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/routine-runs/{id}",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleRoutineRuns",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/routines.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/routines.rs",
+            "line": 37
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_routines",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1176
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/memos/{id}",
+        "methods": [
+          "PATCH",
+          "DELETE"
+        ],
+        "source_handler": "handleMemos",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/routine/memo.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/routine/memo.rs",
+            "line": 273
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_memos",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1181
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/memo-images/{basename}",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleMemoImages",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/routine/memo.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/routine/memo.rs",
+            "line": 410
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_memos",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1181
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      }
+    ],
+    "validation_receipt": "docs/bot/rust-recovery-resume/VALIDATION-4dc961ce.json",
+    "artifacts": "docs/bot/rust-recovery-resume/ARTIFACTS-4dc961ce.md",
+    "remaining_known_implementation_gap": {
+      "id": "windows-whisper-bundled-runtime",
+      "state": "missing_in_4dc_baseline_continuation_implements_dynamic_vs_receipt",
+      "gate_receipt": "docs/bot/rust-recovery-resume/WINDOWS-RUNTIME-SUPPLY-GATE.md",
+      "source_refs": [
+        {
+          "file": "rust/src/application/main_program/serve.rs",
+          "line": 1062
+        }
+      ],
+      "detail": "At recorded source4dc961ce the composed Whisper owner had no supplemental embedded runtime DLL bytes. The corrected continuation policy uses the existing Go VS-only acquisition and validation, records actual FileVersion/SHA256 per build, and wires embedded payloads to serve. No pre-pinned DLL version/hash is required. Final native payload evidence and product acceptance remain separate."
+    },
+    "acceptance_limit": "Green native synthetic CI, source binding and zero placeholder macros do not accept all behavior, supported OS versions, providers, devices, signed packaging, installed data or cutover."
+  },
+  "historical_fields_scope": {
+    "fields": [
+      "baseline_go_sha",
+      "note",
+      "routes",
+      "dynamic_operations",
+      "verification_receipt",
+      "owned_runtime_addition",
+      "persisted_launch_addition"
+    ],
+    "source_url": "https://github.com/ishizakahiroshi/many-ai-cli/blob/4dc961ce600d12aa0911e5a9620e50411ab13d9f/rust/src/hub/route_coverage.json",
+    "original_sha256": "3cd2a8398baba80b4f9d8a3245369a8166e532fd2c71225c48a1388d4c234d78",
+    "route_status_counts": {
+      "partial": 71,
+      "unresolved": 84,
+      "implemented": 0
+    },
+    "dynamic_status_counts": {
+      "partial": 10,
+      "unresolved": 39,
+      "implemented": 0
+    },
+    "interpretation": "Preserved earlier checkpoint evidence, not current unresolved implementation totals. Existing legacy enum/schema is retained for its test consumer."
+  },
+  "baseline_go_sha": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "note": "Implementation coverage only. No route is accepted by inventory presence. Native/browser/remote/provider acceptance remains pending.",
+  "routes": [
+    {
+      "path": "/",
+      "source_handler": "handleIndex",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/app-entry.js",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/app.js",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/app/",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/debug/",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/styles.css",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/styles/",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/icon.svg",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/icons/",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/manifest.webmanifest",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/sw.js",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/whisper-recorder-worklet.js",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/i18n.js",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/i18n/",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/vendor/",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/approval-patterns/",
+      "source_handler": "handleApprovalPatternAsset",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/ws",
+      "source_handler": "handleWS",
+      "status": "partial",
+      "implementation": "rust/src/hub/websocket.rs",
+      "fixture": "rust/src/hub/ws_transport_tests.rs",
+      "remaining": "Five actual loopback tests with SessionEngine and19 socket/auth unit tests pass. Production bootstrap, real browser/native wrapper, notification/usage/transcript observers, internal launch-proof end-to-end and remaining orchestration capability acceptance are pending."
+    },
+    {
+      "path": "/api/info",
+      "source_handler": "handleInfo",
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes.rs + session_routes/ + router.rs",
+      "fixture": "hub::session_routes::tests + registered_http_session_routes_preserve_guards_and_real_store_effects",
+      "remaining": "Actual main Hub bootstrap context/caller and browser/manual acceptance pending; nonregular log-file behavior remains a documented boundary"
+    },
+    {
+      "path": "/api/jev/evaluate",
+      "source_handler": "handleJevEvaluate",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/providers",
+      "source_handler": "handleProviders",
+      "status": "partial",
+      "implementation": "rust/src/profile/store.rs + rust/src/hub/provider_routes.rs + router.rs",
+      "fixture": "profile::store::tests + hub::provider_routes::tests + provider_transport_tests",
+      "remaining": "Reset/restore/diff/backups/recovery/distribution/icon operations, actual main bootstrap and browser/manual acceptance pending"
+    },
+    {
+      "path": "/api/providers/",
+      "source_handler": "handleProviderRoute",
+      "status": "partial",
+      "implementation": "rust/src/profile/store.rs + rust/src/hub/provider_routes.rs + router.rs",
+      "fixture": "profile::store::tests + hub::provider_routes::tests + provider_transport_tests",
+      "remaining": "Reset/restore/diff/backups/recovery/distribution/icon operations, actual main bootstrap and browser/manual acceptance pending"
+    },
+    {
+      "path": "/api/provider-distributions/",
+      "source_handler": "handleProviderDistributions",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/provider-icons/",
+      "source_handler": "handleProviderIcon",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/bug-report/preview",
+      "source_handler": "handleBugReportPreview",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/bug-report/finalize",
+      "source_handler": "handleBugReportFinalize",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/doctor",
+      "source_handler": "handleDoctor",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/mobile-connect",
+      "source_handler": "handleMobileConnect",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/mobile-connect/tailscale",
+      "source_handler": "handleTailscaleStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/mobile-connect/tailscale/serve",
+      "source_handler": "handleTailscaleServe",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/auth/revoke-all",
+      "source_handler": "handleAuthRevokeAll",
+      "status": "partial",
+      "implementation": "rust/src/hub/pin.rs + router.rs",
+      "fixture": "rust/src/hub/tests.rs::service_pin_* / service_remote_pin_*",
+      "remaining": "Core revoke effects, concurrent auth transitions, device notification, full route integration pending"
+    },
+    {
+      "path": "/api/auth/status",
+      "source_handler": "handleAuthStatus",
+      "status": "partial",
+      "implementation": "rust/src/hub/pin.rs + router.rs",
+      "fixture": "rust/src/hub/tests.rs::service_pin_* / service_remote_pin_*",
+      "remaining": "Core revoke effects, concurrent auth transitions, device notification, full route integration pending"
+    },
+    {
+      "path": "/api/auth/login",
+      "source_handler": "handleAuthLogin",
+      "status": "partial",
+      "implementation": "rust/src/hub/pin.rs + router.rs",
+      "fixture": "rust/src/hub/tests.rs::service_pin_* / service_remote_pin_*",
+      "remaining": "Core revoke effects, concurrent auth transitions, device notification, full route integration pending"
+    },
+    {
+      "path": "/api/auth/logout",
+      "source_handler": "handleAuthLogout",
+      "status": "partial",
+      "implementation": "rust/src/hub/pin.rs + router.rs",
+      "fixture": "rust/src/hub/tests.rs::service_pin_* / service_remote_pin_*",
+      "remaining": "Core revoke effects, concurrent auth transitions, device notification, full route integration pending"
+    },
+    {
+      "path": "/api/auth/set-pin",
+      "source_handler": "handleAuthSetPIN",
+      "status": "partial",
+      "implementation": "rust/src/hub/pin.rs + router.rs",
+      "fixture": "rust/src/hub/tests.rs::service_pin_* / service_remote_pin_*",
+      "remaining": "Core revoke effects, concurrent auth transitions, device notification, full route integration pending"
+    },
+    {
+      "path": "/api/net-hint",
+      "source_handler": "handleNetHint",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/avatar",
+      "source_handler": "handleAvatar",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/spawn",
+      "source_handler": "handleSpawn",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/spawn-grid",
+      "source_handler": "handleSpawnGrid",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/session/",
+      "source_handler": "handleSessionMetaAPI",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/sessions/",
+      "source_handler": "handleSessionAPI",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/pick-directory",
+      "source_handler": "handlePickDirectory",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/path-exists",
+      "source_handler": "handlePathExists",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/list-subdirs",
+      "source_handler": "handleListSubdirs",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/pick-file",
+      "source_handler": "handlePickFile",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/open-default-file",
+      "source_handler": "handleOpenDefaultFile",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/open-folder",
+      "source_handler": "handleOpenFolder",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/open-terminal",
+      "source_handler": "handleOpenTerminal",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/terminal-app",
+      "source_handler": "handleTerminalApp",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/kill-all",
+      "source_handler": "handleKillAll",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/shutdown",
+      "source_handler": "handleShutdown",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/log-config",
+      "source_handler": "handleLogConfig",
+      "status": "partial",
+      "implementation": "rust/src/hub/settings.rs::handle",
+      "fixture": "rust/src/hub/tests.rs::service_settings_*",
+      "remaining": "Live HTTP/Web caller and core configuration consumption acceptance pending"
+    },
+    {
+      "path": "/api/session-chat",
+      "source_handler": "handleSessionChat",
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes.rs + session_routes/ + router.rs",
+      "fixture": "hub::session_routes::tests + registered_http_session_routes_preserve_guards_and_real_store_effects",
+      "remaining": "Actual main Hub bootstrap context/caller and browser/manual acceptance pending; nonregular log-file behavior remains a documented boundary"
+    },
+    {
+      "path": "/api/session-log",
+      "source_handler": "handleSessionLog",
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes.rs + session_routes/ + router.rs",
+      "fixture": "hub::session_routes::tests + registered_http_session_routes_preserve_guards_and_real_store_effects",
+      "remaining": "Actual main Hub bootstrap context/caller and browser/manual acceptance pending; nonregular log-file behavior remains a documented boundary"
+    },
+    {
+      "path": "/api/agent-log",
+      "source_handler": "handleAgentLog",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/agent-log/open",
+      "source_handler": "handleOpenAgentLog",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/agent-chat",
+      "source_handler": "handleAgentChat",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/grok-history",
+      "source_handler": "handleGrokHistory",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/session-search",
+      "source_handler": "handleSessionSearch",
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes.rs + session_routes/ + router.rs",
+      "fixture": "hub::session_routes::tests + registered_http_session_routes_preserve_guards_and_real_store_effects",
+      "remaining": "Actual main Hub bootstrap context/caller and browser/manual acceptance pending; nonregular log-file behavior remains a documented boundary"
+    },
+    {
+      "path": "/api/session-history",
+      "source_handler": "handleSessionHistory",
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes.rs + session_routes/ + router.rs",
+      "fixture": "hub::session_routes::tests + registered_http_session_routes_preserve_guards_and_real_store_effects",
+      "remaining": "Actual main Hub bootstrap context/caller and browser/manual acceptance pending; nonregular log-file behavior remains a documented boundary"
+    },
+    {
+      "path": "/api/approval-history",
+      "source_handler": "handleApprovalHistory",
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes.rs + session_routes/ + router.rs",
+      "fixture": "hub::session_routes::tests + registered_http_session_routes_preserve_guards_and_real_store_effects",
+      "remaining": "Actual main Hub bootstrap context/caller and browser/manual acceptance pending; nonregular log-file behavior remains a documented boundary"
+    },
+    {
+      "path": "/api/session-store/reset",
+      "source_handler": "handleSessionStoreReset",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/session-store/prune-transcript-noise",
+      "source_handler": "handleSessionStorePruneTranscriptNoise",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/logs/purge",
+      "source_handler": "handleLogsPurge",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/logs/legacy-notice",
+      "source_handler": "handleLegacyLogsNotice",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/attachments/purge",
+      "source_handler": "handleAttachmentsPurge",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/open-dir",
+      "source_handler": "handleOpenDir",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/idle-timeout",
+      "source_handler": "handleIdleTimeout",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/terminal-color",
+      "source_handler": "handleTerminalColor",
+      "status": "partial",
+      "implementation": "rust/src/hub/settings.rs::handle",
+      "fixture": "rust/src/hub/tests.rs::service_settings_*",
+      "remaining": "Live HTTP/Web caller and core configuration consumption acceptance pending"
+    },
+    {
+      "path": "/api/handoff-intent-mode",
+      "source_handler": "handleHandoffIntentMode",
+      "status": "partial",
+      "implementation": "rust/src/hub/settings.rs::handle",
+      "fixture": "rust/src/hub/tests.rs::service_settings_*",
+      "remaining": "Live HTTP/Web caller and core configuration consumption acceptance pending"
+    },
+    {
+      "path": "/api/handoff",
+      "source_handler": "handleHandoffList",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/handoff/",
+      "source_handler": "handleHandoffItem",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/reconnect-grace",
+      "source_handler": "handleReconnectGrace",
+      "status": "partial",
+      "implementation": "rust/src/hub/settings.rs::handle",
+      "fixture": "rust/src/hub/tests.rs::service_settings_*",
+      "remaining": "Live HTTP/Web caller and core configuration consumption acceptance pending"
+    },
+    {
+      "path": "/api/input-config",
+      "source_handler": "handleInputConfig",
+      "status": "partial",
+      "implementation": "rust/src/hub/settings.rs::handle",
+      "fixture": "rust/src/hub/tests.rs::service_settings_*",
+      "remaining": "Live HTTP/Web caller and core configuration consumption acceptance pending"
+    },
+    {
+      "path": "/api/orchestration-config",
+      "source_handler": "handleOrchestrationConfig",
+      "status": "partial",
+      "implementation": "rust/src/hub/settings.rs::handle",
+      "fixture": "rust/src/hub/tests.rs::service_settings_*",
+      "remaining": "Live HTTP/Web caller and core configuration consumption acceptance pending"
+    },
+    {
+      "path": "/api/subscriptions",
+      "source_handler": "handleSubscriptions",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/subscriptions/",
+      "source_handler": "handleSubscriptionsItem",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/subscription-usage",
+      "source_handler": "handleSubscriptionUsage",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/subscription-usage/refresh",
+      "source_handler": "handleCodexUsageRefresh",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/subscription-usage/probe",
+      "source_handler": "handleSubscriptionUsageProbe",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/notify-config",
+      "source_handler": "handleNotifyConfig",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/notify-test",
+      "source_handler": "handleNotifyTest",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/notify-generate-topic",
+      "source_handler": "handleNotifyGenerateTopic",
+      "status": "partial",
+      "implementation": "rust/src/hub/router.rs",
+      "fixture": null,
+      "remaining": "Dedicated response fixture and live HTTP route acceptance pending"
+    },
+    {
+      "path": "/api/nvidia-nim",
+      "source_handler": "handleNVIDIANIMSettings",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/nvidia-nim/key",
+      "source_handler": "handleNVIDIANIMKeyDelete",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/nvidia-nim/test",
+      "source_handler": "handleNVIDIANIMTest",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/encoding-check",
+      "source_handler": "handleEncodingCheck",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval/status",
+      "source_handler": "handleApprovalStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval/enable",
+      "source_handler": "handleApprovalEnable",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval/disable",
+      "source_handler": "handleApprovalDisable",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval/dismiss",
+      "source_handler": "handleApprovalDismiss",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval/batch",
+      "source_handler": "handleApprovalBatch",
+      "status": "partial",
+      "implementation": "rust/src/hub/{approval_actions,router,transport,task_owner}.rs",
+      "fixture": "rust/src/hub/approval_actions_tests.rs",
+      "remaining": "Served owned one-tap disconnect/body-ignore and adapter batch fixtures; complete Hub startup, live notification issuance, automatic policy dispatch, native/browser acceptance remain pending."
+    },
+    {
+      "path": "/api/approval-action/",
+      "source_handler": "handleOneTapApproval",
+      "status": "partial",
+      "implementation": "rust/src/hub/{approval_actions,router,transport,task_owner}.rs",
+      "fixture": "rust/src/hub/approval_actions_tests.rs",
+      "remaining": "Served owned one-tap disconnect/body-ignore and adapter batch fixtures; complete Hub startup, live notification issuance, automatic policy dispatch, native/browser acceptance remain pending."
+    },
+    {
+      "path": "/api/attach",
+      "source_handler": "handleAttach",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/slash-cmd-sources",
+      "source_handler": "handleSlashCmdSources",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/slash-commands",
+      "source_handler": "handleSlashCommands",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/usage-link-defaults",
+      "source_handler": "handleUsageLinkDefaults",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/install-link-defaults",
+      "source_handler": "handleInstallLinkDefaults",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/cli-versions",
+      "source_handler": "handleCLIVersions",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/cli-updates",
+      "source_handler": "handleCLIUpdatesCreate",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/cli-updates/",
+      "source_handler": "handleCLIUpdatesItem",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/cli-update-eligibility",
+      "source_handler": "handleCLIUpdateEligibility",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/models",
+      "source_handler": "handleModels",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval-patterns",
+      "source_handler": "handleApprovalPatterns",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval-patterns/",
+      "source_handler": "handleApprovalPatternsItem",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/files-list",
+      "source_handler": "handleFilesList",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/files-content",
+      "source_handler": "handleFilesContent",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/files-asset",
+      "source_handler": "handleFilesAsset",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/files-download",
+      "source_handler": "handleFilesDownload",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/files-roots",
+      "source_handler": "handleFilesRoots",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/files-move",
+      "source_handler": "handleFilesMove",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/files-rename",
+      "source_handler": "handleFilesRename",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/files-mkdir",
+      "source_handler": "handleFilesMkdir",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/files-create",
+      "source_handler": "handleFilesCreate",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/files-save",
+      "source_handler": "handleFilesSave",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/files-delete-dir",
+      "source_handler": "handleFilesDeleteDir",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/git-log",
+      "source_handler": "handleGitLog",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/git-show",
+      "source_handler": "handleGitShow",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/git-refs",
+      "source_handler": "handleGitRefs",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/git-status",
+      "source_handler": "handleGitStatus",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/git-diff",
+      "source_handler": "handleGitDiff",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/git-turns",
+      "source_handler": "handleGitTurns",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/git-turn-diff",
+      "source_handler": "handleGitTurnDiff",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/git-commit-all",
+      "source_handler": "handleGitCommitAll",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/git-commit-message",
+      "source_handler": "handleGitCommitMessage",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/git-fetch",
+      "source_handler": "handleGitFetch",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/git-pull",
+      "source_handler": "handleGitPull",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/git-push",
+      "source_handler": "handleGitPush",
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
+    },
+    {
+      "path": "/api/user-prefs/notify-sound-custom",
+      "source_handler": "handleUserPrefsNotifySoundCustom",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/user-prefs/avatar",
+      "source_handler": "handleUserPrefsAvatarUpload",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/user-prefs",
+      "source_handler": "handleUserPrefs",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/routines",
+      "source_handler": "handleRoutines",
+      "status": "partial",
+      "implementation": "rust/src/hub/{routines,router,transport}.rs + rust/src/routine/{store,runner}.rs",
+      "fixture": "rust/src/hub/transport.rs::served_routine_crud_persists_and_delete_does_not_wait_for_a_body",
+      "remaining": "Real loopback CRUD and component run-store fixtures; production scheduler, launch preparer, event lifecycle and browser/native acceptance remain pending."
+    },
+    {
+      "path": "/api/routines/",
+      "source_handler": "handleRoutines",
+      "status": "partial",
+      "implementation": "rust/src/hub/{routines,router,transport}.rs + rust/src/routine/{store,runner}.rs",
+      "fixture": "rust/src/hub/transport.rs::served_routine_crud_persists_and_delete_does_not_wait_for_a_body",
+      "remaining": "Real loopback CRUD and component run-store fixtures; production scheduler, launch preparer, event lifecycle and browser/native acceptance remain pending."
+    },
+    {
+      "path": "/api/routine-runs",
+      "source_handler": "handleRoutineRuns",
+      "status": "partial",
+      "implementation": "rust/src/hub/{routines,router,transport}.rs + rust/src/routine/{store,runner}.rs",
+      "fixture": "rust/src/hub/transport.rs::served_routine_crud_persists_and_delete_does_not_wait_for_a_body",
+      "remaining": "Real loopback CRUD and component run-store fixtures; production scheduler, launch preparer, event lifecycle and browser/native acceptance remain pending."
+    },
+    {
+      "path": "/api/routine-runs/",
+      "source_handler": "handleRoutineRuns",
+      "status": "partial",
+      "implementation": "rust/src/hub/{routines,router,transport}.rs + rust/src/routine/{store,runner}.rs",
+      "fixture": "rust/src/hub/transport.rs::served_routine_crud_persists_and_delete_does_not_wait_for_a_body",
+      "remaining": "Real loopback CRUD and component run-store fixtures; production scheduler, launch preparer, event lifecycle and browser/native acceptance remain pending."
+    },
+    {
+      "path": "/api/memos",
+      "source_handler": "handleMemos",
+      "status": "partial",
+      "implementation": "rust/src/routine/memo.rs + hub/router.rs",
+      "fixture": "rust/src/routine/tests.rs::memo_*",
+      "remaining": "Synthetic persistence/image fixtures passed; full HTTP/core/workspace wiring, native ACL and user acceptance pending"
+    },
+    {
+      "path": "/api/memos/",
+      "source_handler": "handleMemos",
+      "status": "partial",
+      "implementation": "rust/src/routine/memo.rs + hub/router.rs",
+      "fixture": "rust/src/routine/tests.rs::memo_*",
+      "remaining": "Synthetic persistence/image fixtures passed; full HTTP/core/workspace wiring, native ACL and user acceptance pending"
+    },
+    {
+      "path": "/api/memo-images",
+      "source_handler": "handleMemoImages",
+      "status": "partial",
+      "implementation": "rust/src/routine/memo.rs + hub/router.rs",
+      "fixture": "rust/src/routine/tests.rs::memo_*",
+      "remaining": "Synthetic persistence/image fixtures passed; full HTTP/core/workspace wiring, native ACL and user acceptance pending"
+    },
+    {
+      "path": "/api/memo-images/",
+      "source_handler": "handleMemoImages",
+      "status": "partial",
+      "implementation": "rust/src/routine/memo.rs + hub/router.rs",
+      "fixture": "rust/src/routine/tests.rs::memo_*",
+      "remaining": "Synthetic persistence/image fixtures passed; full HTTP/core/workspace wiring, native ACL and user acceptance pending"
+    },
+    {
+      "path": "/api/auto-approval/status",
+      "source_handler": "handleAutoApprovalStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/auto-approval/simulate",
+      "source_handler": "handleAutoApprovalSimulation",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/push/status",
+      "source_handler": "handlePushStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/push/vapid-public-key",
+      "source_handler": "handlePushVAPIDPublicKey",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/push/subscriptions",
+      "source_handler": "handlePushSubscriptions",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/voice/transcribe",
+      "source_handler": "handleVoiceTranscribe",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/whisper/status",
+      "source_handler": "handleWhisperStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/whisper/install",
+      "source_handler": "handleWhisperInstall",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/whisper/uninstall",
+      "source_handler": "handleWhisperUninstall",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/whisper/start",
+      "source_handler": "handleWhisperStart",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/whisper/stop",
+      "source_handler": "handleWhisperStop",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/session-usage",
+      "source_handler": "handleSessionUsage",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/servers",
+      "source_handler": "handleServers",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/servers/connect",
+      "source_handler": "handleServerConnect",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/servers/connect/status",
+      "source_handler": "handleServerConnectStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/servers/disconnect",
+      "source_handler": "handleServerDisconnect",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/profiles/fetch",
+      "source_handler": "handleProfilesFetch",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    }
+  ],
+  "dynamic_operations": [
+    {
+      "pattern": "/approval-patterns/{provider}[.official|.custom].json",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleApprovalPatternAsset",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/validate",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleProviderValidate",
+      "status": "partial",
+      "implementation": "rust/src/hub/provider_routes.rs",
+      "fixture": "hub::provider_routes::tests + provider_transport_tests",
+      "remaining": "Full prefix family and actual main bootstrap/native/browser/manual acceptance pending"
+    },
+    {
+      "pattern": "/api/providers/{id}",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleProviderDetail",
+      "status": "partial",
+      "implementation": "rust/src/hub/provider_routes.rs",
+      "fixture": "hub::provider_routes::tests + provider_transport_tests",
+      "remaining": "Full prefix family and actual main bootstrap/native/browser/manual acceptance pending"
+    },
+    {
+      "pattern": "/api/providers/{id}",
+      "methods": [
+        "PATCH"
+      ],
+      "source_handler": "handleProviderPatch",
+      "status": "partial",
+      "implementation": "rust/src/hub/provider_routes.rs",
+      "fixture": "hub::provider_routes::tests + provider_transport_tests",
+      "remaining": "Full prefix family and actual main bootstrap/native/browser/manual acceptance pending"
+    },
+    {
+      "pattern": "/api/providers/{id}",
+      "methods": [
+        "DELETE"
+      ],
+      "source_handler": "handleProviderDelete",
+      "status": "partial",
+      "implementation": "rust/src/hub/provider_routes.rs",
+      "fixture": "hub::provider_routes::tests + provider_transport_tests",
+      "remaining": "Full prefix family and actual main bootstrap/native/browser/manual acceptance pending"
+    },
+    {
+      "pattern": "/api/providers/{id}/history",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleProviderHistory",
+      "status": "partial",
+      "implementation": "rust/src/hub/provider_routes.rs",
+      "fixture": "hub::provider_routes::tests + provider_transport_tests",
+      "remaining": "Full prefix family and actual main bootstrap/native/browser/manual acceptance pending"
+    },
+    {
+      "pattern": "/api/providers/{id}/history/{revision}/diff",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleProviderHistoryDiff",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}/reset",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleProviderReset",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}/restore",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleProviderRestore",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}/backups",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleProviderBackups",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}/backups/{backup}/verify",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleProviderBackupVerify",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}/backups/{backup}/restore",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleProviderBackupRestore",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}/recovery",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source_handler": "handleProviderRecovery",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/provider-distributions/status",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleProviderDistributionStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/provider-distributions/diff",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleProviderDistributionDiff",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/provider-distributions/check",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleProviderDistributionCheck",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/provider-distributions/accept",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleProviderDistributionAccept",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/provider-distributions/rollback",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleProviderDistributionRollback",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/provider-icons/{id}",
+      "methods": [
+        "GET",
+        "PUT",
+        "DELETE"
+      ],
+      "source_handler": "handleProviderIcon",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/session/{id}/meta",
+      "methods": [
+        "PATCH"
+      ],
+      "source_handler": "handleSessionMeta",
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes/metadata.rs + rust/src/terminal/session/observations.rs",
+      "fixture": "hub::session_routes::tests + loopback_tests",
+      "remaining": "Actual main bootstrap/browser/manual acceptance pending"
+    },
+    {
+      "pattern": "/api/sessions/{id}/meta",
+      "methods": [
+        "PATCH"
+      ],
+      "source_handler": "handleSessionMeta",
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes/metadata.rs + rust/src/terminal/session/observations.rs",
+      "fixture": "hub::session_routes::tests + loopback_tests",
+      "remaining": "Actual main bootstrap/browser/manual acceptance pending"
+    },
+    {
+      "pattern": "/api/sessions/{id}/spawn-child",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSpawnChild",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/spawn-confirm",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSpawnConfirmation",
+      "status": "partial",
+      "implementation": "rust/src/hub/{confirmations,router,transport,task_owner}.rs + terminal/session/confirmations.rs",
+      "fixture": "terminal/session/confirmations/tests.rs::served_confirmation_uses_ordinary_guard_and_transfers_to_the_real_task_owner",
+      "remaining": "Real loopback ordinary guard and owned refusal handoff; production child executor/board/preparation, complete orchestration caller and independent/native/browser acceptance remain pending."
+    },
+    {
+      "pattern": "/api/sessions/{id}/send-child",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSendChild",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/inject",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSessionInject",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/children",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleSessionChildren",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/relay",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleRelayGet",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/relay",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleRelayStart",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/relay-stop",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleRelayStop",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/relay-resume",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleRelayResume",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/relay-cleanup",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleRelayCleanup",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/handoff/{id}",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleHandoffItem",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/handoff/{id}/note",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleHandoffNoteRequest",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/handoff/{id}/manual-note",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleHandoffManualNoteSave",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/subscriptions/update",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSubscriptionUpdate",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/subscriptions/remove",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSubscriptionRemove",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/subscriptions/test",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSubscriptionTest",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/subscriptions/login",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSubscriptionLogin",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/approval-action/{action_token}",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleOneTapApproval",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/cli-updates/{job_id}",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleCLIUpdateJobStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/cli-updates/{job_id}/{provider_id}/log",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleCLIUpdateJobLog",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/approval-patterns/profile",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source_handler": "handleApprovalProfile",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/approval-patterns/copy-official",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleApprovalCopyOfficial",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/approval-patterns/{provider}[/{ignored_suffix}]",
+      "methods": [
+        "PUT"
+      ],
+      "source_handler": "handleApprovalPatternsItem",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/routines/{id}",
+      "methods": [
+        "GET",
+        "PUT",
+        "DELETE"
+      ],
+      "source_handler": "handleRoutines",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/routines/{id}/runs",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleRoutines",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/routine-runs/{id}",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleRoutineRuns",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/memos/{id}",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "source_handler": "handleMemos",
+      "status": "partial",
+      "implementation": "rust/src/routine/memo.rs",
+      "fixture": "rust/src/routine/tests.rs::memo_*"
+    },
+    {
+      "pattern": "/api/memo-images/{basename}",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleMemoImages",
+      "status": "partial",
+      "implementation": "rust/src/routine/memo.rs",
+      "fixture": "rust/src/routine/tests.rs::memo_*"
+    }
+  ],
+  "verification_receipt": {
+    "reported_at_utc": "2026-10-03T09:17:31Z",
+    "snapshot": "integration-owner index-only frozen export before publication",
+    "aggregate_tests_passed": 430,
+    "aggregate_tests_failed": 0,
+    "included_c3": "registered hub/files/profile/update/routine memo and schedule components",
+    "excluded_new_lanes": [
+      "wrapper",
+      "voice",
+      "notify"
+    ],
+    "current_full_static_guards": "fmt, strict all-targets clippy, gosec and staticcheck passed; staticcheck rerun with isolated cache",
+    "scope_caution": "Synthetic component and loopback evidence only; no accepted production/browser/native/remote/provider/audio/model/notification route claim.",
+    "settings_correction": "Six source-specific settings writes publish before failed Save; 500, updated memory/revision, unchanged filesystem fixtures passed. Correct empty/null orchestration projection retained."
+  },
+  "owned_runtime_addition": {
+    "reported_at_utc": "2026-10-03T14:06:00Z",
+    "state": "author implementation; integration freeze validation follows",
+    "scope": "Six registered routes and one dynamic confirmation operation advance to partial; zero accepted routes. Earlier aggregate430 receipt is retained as historical evidence."
+  },
+  "persisted_launch_addition": {
+    "status": "author_frozen_775_tests_fmt_clippy_pass",
+    "scope": "Persisted provider layers, exact launch policy, session reads/metadata, child preparation, initial prompt driver and pinned Unicode regex",
+    "no_route_accepted": true
+  }
+}

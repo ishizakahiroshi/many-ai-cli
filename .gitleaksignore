@@ -1,0 +1,34 @@
+# Exact historical false positives in the C1 public source-hash inventory.
+# Each value was recomputed from Go baseline 21d0bc7 and is a SHA-256 digest,
+# not a credential. Current schema v2 separates path keys from digest fields.
+# Do not broaden this to a rule/path allowlist or new commits.
+756b28154a77dd10a258f01cd2fc69c076d5bc87:rust/inventory/services.json:generic-api-key:1999
+756b28154a77dd10a258f01cd2fc69c076d5bc87:rust/inventory/services.json:generic-api-key:2042
+756b28154a77dd10a258f01cd2fc69c076d5bc87:rust/inventory/services.json:generic-api-key:2049
+# Exact synthetic redaction regression, independently verified: fixed PEM
+# markers enclose only literal synthetic-only-not-a-key, not encoded key bytes.
+# Future fixture delimiters are constructed at runtime; keep history scanned.
+8355b1060ca8753b8d469ec1244a33c355d307bd:rust/src/storage/text.rs:private-key-block:211
+
+# Exact synthetic Go redaction oracle: invalid bytes abc + FF, no key material.
+# Future delimiter construction preserves the same observed input bytes.
+a02223c622345e44c6da8cbcc4e2e9da1b225ded:rust/tests/fixtures/core/journal/mask_oracle.go:private-key-block:28
+
+# Exact recovery inventory value: independently recomputed SHA256 of token.rs, not a credential.
+7b937e0edc646a5b35d1b3ddd33bf86c3e2f2c5b:rust/inventory/recovery-current-20261005.json:generic-api-key:8996
+# Exact recovery inventory value: independently recomputed SHA256 of auth.rs, not a credential.
+7b937e0edc646a5b35d1b3ddd33bf86c3e2f2c5b:rust/inventory/recovery-current-20261005.json:generic-api-key:9026
+# Exact synthetic DNS-classification example; replaced by RFC5737 documentation address in 7c2d7d3.
+7b937e0edc646a5b35d1b3ddd33bf86c3e2f2c5b:rust/src/application/nvidia_nim/native.rs:public-ipv4-literal:218
+
+# Public JSON metadata identifier; false match spans a prose sentence and the next field.
+2be97163be9302563bc810c857760a52ddc90376:rust/inventory/windows-check-timing-8530565.json:generic-api-key:305
+
+# G1 Windows CI receipt: verified public source commit identity.
+4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf:docs/bot/rust-recovery-resume/G1-CI-41e4b8.json:generic-api-key:276
+# G1 Linux CI receipt: verified public source commit identity.
+4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf:docs/bot/rust-recovery-resume/G1-CI-41e4b8.json:generic-api-key:414
+# G1 macOS ARM CI receipt: verified public source commit identity.
+4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf:docs/bot/rust-recovery-resume/G1-CI-41e4b8.json:generic-api-key:702
+# G1 macOS Intel CI receipt: verified public source commit identity.
+4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf:docs/bot/rust-recovery-resume/G1-CI-41e4b8.json:generic-api-key:990

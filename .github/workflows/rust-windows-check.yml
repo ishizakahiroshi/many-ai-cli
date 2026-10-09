@@ -1,0 +1,179 @@
+name: Rust Windows check
+
+on:
+  push:
+    branches: ['dots/rust-recovery-resume-3']
+    paths:
+      - 'rust/**'
+      - 'web/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'scripts/rust-candidate-ci.py'
+      - 'scripts/rust-windows-check-ci.py'
+      - '.github/workflows/rust-windows-check.yml'
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Fixed test group (all choices retain fmt, Clippy and doctests)
+        type: choice
+        default: all-tests
+        options: [all-tests, appserver, relay, git-turn, conpty]
+      repeat:
+        description: Repetitions (a later pass never erases a failure)
+        type: choice
+        default: '1'
+        options: ['1', '2', '3']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-windows-check-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-check:
+    if: github.ref == 'refs/heads/dots/rust-recovery-resume-3'
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: '1.90.0'
+      GOTOOLCHAIN: local
+      PYTHONDONTWRITEBYTECODE: '1'
+      MANY_AI_REVIEW_HEAD_SHA: ${{ github.sha }}
+      MANY_AI_WINDOWS_CHECK_SUITE: ${{ inputs.suite || 'all-tests' }}
+      MANY_AI_WINDOWS_CHECK_REPEAT: ${{ inputs.repeat || '1' }}
+    steps:
+      - name: Record start and preserve committed source bytes
+        id: start
+        shell: pwsh
+        run: |
+          "utc=$([DateTime]::UtcNow.ToString('o'))" >> $env:GITHUB_OUTPUT
+          git config --global core.autocrlf false
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        id: checkout
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        id: python
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        id: go
+        with:
+          go-version: '1.26.8'
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        id: bun
+        with:
+          bun-version: '1.3.14'
+      - name: Install pinned Rust
+        id: rust
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Identify isolated debug cache
+        id: cache-key
+        shell: pwsh
+        env:
+          INPUT_DIGEST: ${{ hashFiles('rust/Cargo.lock', 'rust/Cargo.toml', 'rust/build.rs', 'scripts/rust-candidate-ci.py', 'scripts/rust-windows-check-ci.py', '.github/workflows/rust-windows-check.yml') }}
+        run: |
+          $image = $env:ImageVersion
+          if ($image -notmatch '^[0-9.]+$' -or -not $env:INPUT_DIGEST) {
+            'enabled=false' >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          $prefix = "rust-win-check-v1-dots-rust-recovery-resume-3-windows2022-$image-x64-rust190-devdebug0-testdebug0-inc0-$env:INPUT_DIGEST-"
+          'enabled=true' >> $env:GITHUB_OUTPUT
+          "prefix=$prefix" >> $env:GITHUB_OUTPUT
+          "key=$prefix$env:GITHUB_SHA" >> $env:GITHUB_OUTPUT
+      - name: Restore only dependency and debug build caches
+        id: cache
+        if: steps.cache-key.outputs.enabled == 'true'
+        continue-on-error: true
+        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: |
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/index
+            ~/.cargo/registry/src
+            ~/.cargo/git/db
+            rust/target/debug
+            rust/target/x86_64-pc-windows-msvc/debug
+          key: ${{ steps.cache-key.outputs.key }}
+          restore-keys: ${{ steps.cache-key.outputs.prefix }}
+      - name: Prepare and validate native Windows source
+        id: check
+        shell: pwsh
+        env:
+          MANY_AI_WINDOWS_CHECK_CACHE_HIT: ${{ steps.cache.outputs.cache-hit || 'false' }}
+          MANY_AI_WINDOWS_CHECK_CACHE_KEY: ${{ steps.cache-key.outputs.key || 'disabled' }}
+          MANY_AI_WINDOWS_CHECK_CACHE_MATCHED_KEY: ${{ steps.cache.outputs.cache-matched-key || 'none' }}
+          MANY_AI_WINDOWS_CHECK_CACHE_SOURCE: actions-cache-branch-and-build-inputs
+        run: |
+          python scripts/rust-windows-check-ci.py
+          exit $LASTEXITCODE
+      - name: Retain cache even when a test fails
+        id: cache-save
+        if: always() && !cancelled() && steps.cache-key.outputs.enabled == 'true' && steps.check.outcome != 'skipped' && steps.cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: |
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/index
+            ~/.cargo/registry/src
+            ~/.cargo/git/db
+            rust/target/debug
+            rust/target/x86_64-pc-windows-msvc/debug
+          key: ${{ steps.cache-key.outputs.key }}
+      - name: Retain setup and cache timing context
+        if: always()
+        shell: pwsh
+        env:
+          CHECK_START_UTC: ${{ steps.start.outputs.utc }}
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+          CACHE_OUTCOME: ${{ steps.cache.outcome }}
+          CACHE_MATCH: ${{ steps.cache.outputs.cache-matched-key }}
+          CACHE_SAVE_OUTCOME: ${{ steps.cache-save.outcome }}
+          CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
+          PYTHON_OUTCOME: ${{ steps.python.outcome }}
+          GO_OUTCOME: ${{ steps.go.outcome }}
+          BUN_OUTCOME: ${{ steps.bun.outcome }}
+          RUST_OUTCOME: ${{ steps.rust.outcome }}
+        run: |
+          $out = '.rust-candidate-artifacts/windows-check'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          @{
+            requested_source_sha = $env:GITHUB_SHA
+            run_id = $env:GITHUB_RUN_ID
+            run_attempt = $env:GITHUB_RUN_ATTEMPT
+            first_step_started_utc = $env:CHECK_START_UTC
+            evidence_written_utc = [DateTime]::UtcNow.ToString('o')
+            check_outcome = $env:CHECK_OUTCOME
+            cache_restore_outcome = $env:CACHE_OUTCOME
+            cache_matched_key = $env:CACHE_MATCH
+            cache_save_step_outcome = $env:CACHE_SAVE_OUTCOME
+            cache_save_evidence_scope = 'A successful save step may only warn on a save failure; persistence requires cache logs or a later matched restore.'
+            setup_outcomes = @{
+              checkout = $env:CHECKOUT_OUTCOME
+              python = $env:PYTHON_OUTCOME
+              go = $env:GO_OUTCOME
+              bun = $env:BUN_OUTCOME
+              rust = $env:RUST_OUTCOME
+            }
+            timing_scope = 'First step through cache save; final job duration including all setup/upload is read from Actions job timestamps.'
+          } | ConvertTo-Json | Set-Content -Encoding utf8 "$out/WORKFLOW-CONTEXT.json"
+      - name: Retain partial-check logs and receipts for this attempt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rust-windows-check-${{ github.sha }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .rust-candidate-artifacts/windows-check/
+          if-no-files-found: warn
+          retention-days: 7
+          include-hidden-files: true

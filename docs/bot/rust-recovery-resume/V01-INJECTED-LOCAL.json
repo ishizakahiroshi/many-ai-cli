@@ -1,0 +1,279 @@
+{
+  "schema": 1,
+  "scope": "Approved test-only native-error input; local checks do not establish native Windows behavior",
+  "source_revision": "7deacef2ffaa2f4b5c46920e82e8025937254209",
+  "source_tree": "296549e9baa7e5b2e86369a38c404daada6a6068",
+  "checks": [
+    {
+      "label": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--",
+        "--check"
+      ],
+      "source_revision": "7deacef2ffaa2f4b5c46920e82e8025937254209",
+      "exit_code": 0,
+      "elapsed_seconds": 2.071,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "source_revision": "7deacef2ffaa2f4b5c46920e82e8025937254209",
+      "exit_code": 0,
+      "elapsed_seconds": 44.566,
+      "log_sha256": "9aec1f718568899e142b0d3645f587bc6f9438e1f3c44e72d2639a4064c4aec4"
+    },
+    {
+      "label": "all-targets",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--all-targets",
+        "--",
+        "--test-threads=8"
+      ],
+      "source_revision": "7deacef2ffaa2f4b5c46920e82e8025937254209",
+      "exit_code": 101,
+      "elapsed_seconds": 104.483,
+      "log_sha256": "09badcd0250837a4e3b655e6bb1ec0c4cc88f4dd0218bba08181895a517b9c28",
+      "summaries": 1,
+      "totals": [
+        1140,
+        1,
+        0
+      ]
+    },
+    {
+      "label": "integration-and-bins",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--test",
+        "*",
+        "--bins",
+        "--no-fail-fast",
+        "--",
+        "--test-threads=8"
+      ],
+      "source_revision": "7deacef2ffaa2f4b5c46920e82e8025937254209",
+      "exit_code": 0,
+      "elapsed_seconds": 21.325,
+      "log_sha256": "73f7e9eb512d6316a344fa638c404816d384b52cc5456b94ad5b1d85998a232f",
+      "summaries": 34,
+      "totals": [
+        322,
+        0,
+        0
+      ]
+    },
+    {
+      "label": "doctests",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--doc"
+      ],
+      "source_revision": "7deacef2ffaa2f4b5c46920e82e8025937254209",
+      "exit_code": 0,
+      "elapsed_seconds": 3.375,
+      "log_sha256": "bb18da64f828cd03cb8f1902ac76a79fcb6679f6e02088d6b7fc09bd1b7568d5",
+      "summaries": 1,
+      "totals": [
+        3,
+        0,
+        0
+      ]
+    },
+    {
+      "label": "instrumentation",
+      "command": [
+        "node",
+        "scripts/check-instrumentation.mjs"
+      ],
+      "source_revision": "7deacef2ffaa2f4b5c46920e82e8025937254209",
+      "exit_code": 0,
+      "elapsed_seconds": 0.215,
+      "log_sha256": "8412c59dbc927823be661216cda83ce75f38df159678b2513c7829e76f74c16b"
+    },
+    {
+      "label": "release",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--release",
+        "--bins"
+      ],
+      "source_revision": "7deacef2ffaa2f4b5c46920e82e8025937254209",
+      "exit_code": 0,
+      "elapsed_seconds": 323.59,
+      "log_sha256": "2671344e4dbdff4709115a6e2dc2a2cc11631b2915279d2a8d06f835216489c4"
+    }
+  ],
+  "linux_totals": {
+    "passed": 1462,
+    "failed": 1,
+    "ignored": 0,
+    "library_passed": 1140,
+    "library_failed": 1,
+    "integration_and_bin_passed": 322,
+    "separate_doctests_passed": 3
+  },
+  "deferred_linux_failure": {
+    "test": "application::main_program::tests::corrupt_history_and_obstructed_logs_do_not_abort_all_hub_composition",
+    "source_location": "rust/src/application/main_program/tests.rs:313",
+    "error": "AddrInUse; OS98; Address already in use",
+    "action": "Recorded without repair or rerunning to obtain green; cause unestablished"
+  },
+  "go_private_variant_cross_compile": {
+    "source_revision": "7deacef2ffaa2f4b5c46920e82e8025937254209",
+    "fixed_oracle": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+    "fixed_input_count": 57,
+    "original_sha256": "de290713ffabbc43029e6684292c18a8ce4554d6dc1f74f6763b591fb1dd853b",
+    "variant_sha256": "94834488e70c871061667400eed5d52404642357d0e0693f77c14e9f2342faf4",
+    "helper_sha256": "d6f143e5a3b14721012aa1933b6ee929c6e54e5c1168b25453afee74dc95d581",
+    "replacement": {
+      "from": "windows.AssignProcessToJobObject(job, proc)",
+      "to": "v01FaultAssignProcessToJobObject(job, proc)",
+      "count": 1
+    },
+    "command": [
+      "go",
+      "test",
+      "-c",
+      "-mod=readonly",
+      "-buildvcs=false",
+      "-tags=many_ai_v01_oracle",
+      "-overlay=<TOOLS>/v01-injected-stage/overlay.json",
+      "-o",
+      "<TOOLS>/v01-injected-stage/headless-v01.exe",
+      "./internal/headless"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.072,
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native_execution": false
+  },
+  "source_guard_proof": {
+    "baseline_revision": "3d7b417eb410a2072729bf6706339a29f57ae95d",
+    "scope": "Exact removal of enumerated compiler-guarded additions reproduces original production-module bytes; no general Rust preprocessor claim.",
+    "files": [
+      {
+        "path": "rust/src/orchestration/headless.rs",
+        "guarded_additions": 1,
+        "retained_source_sha256": "9557250cef4bcf6288a8f771870aa150ae67da35f7f6b6797c4fdd7df9e8e5dd",
+        "non_test_bytes_equal_to_baseline": true
+      },
+      {
+        "path": "rust/src/process/mod.rs",
+        "guarded_additions": 4,
+        "retained_source_sha256": "34be06278e6ec287a5948cc26a4e9b7ac124c5c5d1df76b011dd159da70bc1c0",
+        "non_test_bytes_equal_to_baseline": true
+      }
+    ],
+    "hook_module_double_guarded": true,
+    "original_repository_go_changed": false,
+    "release_binary_marker_check": "Separate built-artifact evidence required; marker absence alone is not sufficient.",
+    "source_revision": "7deacef2ffaa2f4b5c46920e82e8025937254209",
+    "new_test_modules": [
+      "rust/src/orchestration/headless/windows_contracts.rs",
+      "rust/src/process/windows_job/testing.rs"
+    ]
+  },
+  "linux_release_marker_proof": {
+    "source_revision": "7deacef2ffaa2f4b5c46920e82e8025937254209",
+    "target": "x86_64-unknown-linux-gnu",
+    "scope": "Supplemental known-marker absence; compiler cfg/source proof remains required. Windows binaries await native CI.",
+    "markers": [
+      "windows_job::testing",
+      "with_job_assignment",
+      "V01_EVIDENCE",
+      "MANY_AI_V01_ROOT",
+      "v01FaultAssignProcessToJobObject",
+      "native_headless_fixture"
+    ],
+    "binaries": [
+      {
+        "name": "many-ai-cli",
+        "sha256": "6ccda5721810250958f32835598155de15fd413823f29a7723e96b64600aad04",
+        "bytes": 48351824,
+        "known_test_markers_absent": true
+      },
+      {
+        "name": "many-ai-cli-launcher",
+        "sha256": "5fd046a7bd0340864213143d51d9a8683ed9df4cea53d44e78931f8a800028d4",
+        "bytes": 14139168,
+        "known_test_markers_absent": true
+      }
+    ]
+  },
+  "io_lint_expression_probe": {
+    "scope": "Five identical IO expressions only, Linux std; not full Windows target Clippy",
+    "results": [
+      {
+        "phase": "before",
+        "exit_code": 1,
+        "explicit_write_errors": 5,
+        "command": [
+          "clippy-driver",
+          "--edition=2024",
+          "--emit=metadata",
+          "<TOOLS>/v01-native-stage/lint-probe/before.rs",
+          "-o",
+          "<TOOLS>/v01-native-stage/lint-probe/before.rmeta",
+          "-D",
+          "warnings"
+        ]
+      },
+      {
+        "phase": "after",
+        "exit_code": 0,
+        "explicit_write_errors": 0,
+        "command": [
+          "clippy-driver",
+          "--edition=2024",
+          "--emit=metadata",
+          "<TOOLS>/v01-native-stage/lint-probe/after.rs",
+          "-o",
+          "<TOOLS>/v01-native-stage/lint-probe/after.rmeta",
+          "-D",
+          "warnings"
+        ]
+      }
+    ]
+  },
+  "windows_target_clippy": "Not locally available: only Linux std installed; next native CI required",
+  "native_windows_execution": "Pending at this source revision",
+  "production_go_oracle_unchanged": true,
+  "natural_windows_or_unchanged_go_failure_proven": false
+}

@@ -1,0 +1,337 @@
+{
+  "checked_at_utc": "2026-10-05T02:00:00Z",
+  "scope": "Point-in-time registry publisher/owner and recent release history; upstream commit presence and GitHub verification metadata. No historical ownership attestation; verification metadata is not independent signature verification.",
+  "packages": [
+    {
+      "package": "aws-lc-sys",
+      "version": "0.45.0",
+      "upstream_repo": "https://github.com/aws/aws-lc-rs",
+      "source_commit": "7943223c99d909bc399bdf1b856821bb04f1f3c5",
+      "commit": {
+        "url": "https://api.github.com/repos/aws/aws-lc-rs/git/commits/7943223c99d909bc399bdf1b856821bb04f1f3c5",
+        "sha": "7943223c99d909bc399bdf1b856821bb04f1f3c5",
+        "committer_date": "2026-09-01T01:08:24Z",
+        "verification": {
+          "verified": true,
+          "reason": "valid"
+        }
+      },
+      "owners": {
+        "url": "https://crates.io/api/v1/crates/aws-lc-sys/owners",
+        "users": [
+          {
+            "id": 156764,
+            "login": "justsmth",
+            "kind": "user"
+          },
+          {
+            "id": 184010,
+            "login": "skmcgrail",
+            "kind": "user"
+          },
+          {
+            "id": 220328,
+            "login": "crypto-alg",
+            "kind": "user"
+          },
+          {
+            "id": 7883,
+            "login": "github:aws:aws-lc-rs-team",
+            "kind": "team"
+          }
+        ]
+      },
+      "recent_versions": {
+        "url": "https://crates.io/api/v1/crates/aws-lc-sys/versions?page=1&per_page=5",
+        "error": "HTTP Error 400: Bad Request"
+      }
+    },
+    {
+      "package": "aws-lc-rs",
+      "version": "1.18.1",
+      "upstream_repo": "https://github.com/aws/aws-lc-rs",
+      "source_commit": "22e629d5c46276497a24ee3e575be4315940e7cb",
+      "commit": {
+        "url": "https://api.github.com/repos/aws/aws-lc-rs/git/commits/22e629d5c46276497a24ee3e575be4315940e7cb",
+        "sha": "22e629d5c46276497a24ee3e575be4315940e7cb",
+        "committer_date": "2026-09-01T19:43:47Z",
+        "verification": {
+          "verified": true,
+          "reason": "valid"
+        }
+      },
+      "owners": {
+        "url": "https://crates.io/api/v1/crates/aws-lc-rs/owners",
+        "users": [
+          {
+            "id": 156764,
+            "login": "justsmth",
+            "kind": "user"
+          },
+          {
+            "id": 184010,
+            "login": "skmcgrail",
+            "kind": "user"
+          },
+          {
+            "id": 220328,
+            "login": "crypto-alg",
+            "kind": "user"
+          },
+          {
+            "id": 7883,
+            "login": "github:aws:aws-lc-rs-team",
+            "kind": "team"
+          }
+        ]
+      },
+      "recent_versions": {
+        "url": "https://crates.io/api/v1/crates/aws-lc-rs/versions?page=1&per_page=5",
+        "error": "HTTP Error 400: Bad Request"
+      }
+    },
+    {
+      "package": "rustls",
+      "version": "0.23.45",
+      "upstream_repo": "https://github.com/rustls/rustls",
+      "source_commit": "2976d90fd1c2db6b518700dd101b714069cfcb17",
+      "commit": {
+        "url": "https://api.github.com/repos/rustls/rustls/git/commits/2976d90fd1c2db6b518700dd101b714069cfcb17",
+        "sha": "2976d90fd1c2db6b518700dd101b714069cfcb17",
+        "committer_date": "2026-09-14T13:32:03Z",
+        "verification": {
+          "verified": false,
+          "reason": "unsigned"
+        }
+      },
+      "owners": {
+        "url": "https://crates.io/api/v1/crates/rustls/owners",
+        "users": [
+          {
+            "id": 2751,
+            "login": "ctz",
+            "kind": "user"
+          },
+          {
+            "id": 4556,
+            "login": "djc",
+            "kind": "user"
+          },
+          {
+            "id": 7807,
+            "login": "github:rustls:publishers",
+            "kind": "team"
+          }
+        ]
+      },
+      "recent_versions": {
+        "url": "https://crates.io/api/v1/crates/rustls/versions?page=1&per_page=5",
+        "error": "HTTP Error 400: Bad Request"
+      }
+    },
+    {
+      "package": "rustls-webpki",
+      "version": "0.103.15",
+      "upstream_repo": "https://github.com/rustls/webpki",
+      "source_commit": "c14836d8de33c0ad0ac7dcb28fe9aade20831a4d",
+      "commit": {
+        "url": "https://api.github.com/repos/rustls/webpki/git/commits/c14836d8de33c0ad0ac7dcb28fe9aade20831a4d",
+        "sha": "c14836d8de33c0ad0ac7dcb28fe9aade20831a4d",
+        "committer_date": "2026-08-21T16:19:40Z",
+        "verification": {
+          "verified": false,
+          "reason": "unsigned"
+        }
+      },
+      "owners": {
+        "url": "https://crates.io/api/v1/crates/rustls-webpki/owners",
+        "users": [
+          {
+            "id": 2751,
+            "login": "ctz",
+            "kind": "user"
+          },
+          {
+            "id": 4556,
+            "login": "djc",
+            "kind": "user"
+          },
+          {
+            "id": 7807,
+            "login": "github:rustls:publishers",
+            "kind": "team"
+          }
+        ]
+      },
+      "recent_versions": {
+        "url": "https://crates.io/api/v1/crates/rustls-webpki/versions?page=1&per_page=5",
+        "error": "HTTP Error 400: Bad Request"
+      }
+    },
+    {
+      "package": "libc",
+      "version": "0.2.190",
+      "upstream_repo": "https://github.com/rust-lang/libc",
+      "source_commit": "7b0ab5528dc7f361f3a0b4c06c2cad9971617f75",
+      "commit": {
+        "url": "https://api.github.com/repos/rust-lang/libc/git/commits/7b0ab5528dc7f361f3a0b4c06c2cad9971617f75",
+        "sha": "7b0ab5528dc7f361f3a0b4c06c2cad9971617f75",
+        "committer_date": "2026-10-02T19:14:14Z",
+        "verification": {
+          "verified": false,
+          "reason": "unsigned"
+        }
+      },
+      "owners": {
+        "url": "https://crates.io/api/v1/crates/libc/owners",
+        "users": [
+          {
+            "id": 55123,
+            "login": "rust-lang-owner",
+            "kind": "user"
+          }
+        ]
+      },
+      "recent_versions": {
+        "url": "https://crates.io/api/v1/crates/libc/versions?page=1&per_page=5",
+        "error": "HTTP Error 400: Bad Request"
+      }
+    },
+    {
+      "package": "portable-pty",
+      "version": "0.9.0",
+      "upstream_repo": "https://github.com/wezterm/wezterm",
+      "source_commit": "f8921727a11b9f8b073e8c24821d72fd41283500",
+      "commit": {
+        "url": "https://api.github.com/repos/wezterm/wezterm/git/commits/f8921727a11b9f8b073e8c24821d72fd41283500",
+        "sha": "f8921727a11b9f8b073e8c24821d72fd41283500",
+        "committer_date": "2025-02-11T04:20:00Z",
+        "verification": {
+          "verified": true,
+          "reason": "valid"
+        }
+      },
+      "owners": {
+        "url": "https://crates.io/api/v1/crates/portable-pty/owners",
+        "users": [
+          {
+            "id": 11243,
+            "login": "wez",
+            "kind": "user"
+          }
+        ]
+      },
+      "recent_versions": {
+        "url": "https://crates.io/api/v1/crates/portable-pty/versions?page=1&per_page=5",
+        "error": "HTTP Error 400: Bad Request"
+      }
+    },
+    {
+      "package": "libsqlite3-sys",
+      "version": "0.38.2",
+      "upstream_repo": "https://github.com/rusqlite/rusqlite",
+      "source_commit": "e88f112bef7899234a497baed5cc3c3d553deeb8",
+      "commit": {
+        "url": "https://api.github.com/repos/rusqlite/rusqlite/git/commits/e88f112bef7899234a497baed5cc3c3d553deeb8",
+        "sha": "e88f112bef7899234a497baed5cc3c3d553deeb8",
+        "committer_date": "2026-08-08T14:16:04Z",
+        "verification": {
+          "verified": false,
+          "reason": "unsigned"
+        }
+      },
+      "owners": {
+        "url": "https://crates.io/api/v1/crates/libsqlite3-sys/owners",
+        "users": [
+          {
+            "id": 4357,
+            "login": "thomcc",
+            "kind": "user"
+          },
+          {
+            "id": 5062,
+            "login": "gwenn",
+            "kind": "user"
+          }
+        ]
+      },
+      "recent_versions": {
+        "url": "https://crates.io/api/v1/crates/libsqlite3-sys/versions?page=1&per_page=5",
+        "error": "HTTP Error 400: Bad Request"
+      }
+    },
+    {
+      "package": "tokio",
+      "version": "1.53.1",
+      "upstream_repo": "https://github.com/tokio-rs/tokio",
+      "source_commit": "75fef53d0a8590c2d1dbb63672aa7b7d1ef51155",
+      "commit": {
+        "url": "https://api.github.com/repos/tokio-rs/tokio/git/commits/75fef53d0a8590c2d1dbb63672aa7b7d1ef51155",
+        "sha": "75fef53d0a8590c2d1dbb63672aa7b7d1ef51155",
+        "committer_date": "2026-07-20T17:05:08Z",
+        "verification": {
+          "verified": true,
+          "reason": "valid"
+        }
+      },
+      "owners": {
+        "url": "https://crates.io/api/v1/crates/tokio/owners",
+        "users": [
+          {
+            "id": 10,
+            "login": "carllerche",
+            "kind": "user"
+          },
+          {
+            "id": 6741,
+            "login": "Darksonn",
+            "kind": "user"
+          },
+          {
+            "id": 1461,
+            "login": "github:tokio-rs:core",
+            "kind": "team"
+          }
+        ]
+      },
+      "recent_versions": {
+        "url": "https://crates.io/api/v1/crates/tokio/versions?page=1&per_page=5",
+        "error": "HTTP Error 400: Bad Request"
+      }
+    },
+    {
+      "package": "nix",
+      "version": "0.28.0",
+      "upstream_repo": "https://github.com/nix-rust/nix",
+      "source_commit": "21ab06ef23de214174ddb039be5b5f08750d19e6",
+      "commit": {
+        "url": "https://api.github.com/repos/nix-rust/nix/git/commits/21ab06ef23de214174ddb039be5b5f08750d19e6",
+        "sha": "21ab06ef23de214174ddb039be5b5f08750d19e6",
+        "committer_date": "2024-02-24T04:24:20Z",
+        "verification": {
+          "verified": false,
+          "reason": "unsigned"
+        }
+      },
+      "owners": {
+        "url": "https://crates.io/api/v1/crates/nix/owners",
+        "users": [
+          {
+            "id": 10,
+            "login": "carllerche",
+            "kind": "user"
+          },
+          {
+            "id": 32,
+            "login": "github:nix-rust:nix-maintainers",
+            "kind": "team"
+          }
+        ]
+      },
+      "recent_versions": {
+        "url": "https://crates.io/api/v1/crates/nix/versions?page=1&per_page=5",
+        "error": "HTTP Error 400: Bad Request"
+      }
+    }
+  ]
+}

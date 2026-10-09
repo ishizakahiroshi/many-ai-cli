@@ -1,0 +1,92 @@
+[
+  {
+    "confirm": true,
+    "key": "\u001b[B",
+    "ok": true
+  },
+  {
+    "confirm": true,
+    "key": "\u001b[A",
+    "ok": true
+  },
+  {
+    "confirm": true,
+    "key": "\r",
+    "ok": true
+  },
+  {
+    "confirm": true,
+    "key": "",
+    "ok": false
+  },
+  {
+    "confirm": false,
+    "key": "",
+    "ok": false
+  },
+  {
+    "confirm": true,
+    "key": "\u001b[B",
+    "ok": true
+  },
+  {
+    "confirm": true,
+    "key": "\u001b[A",
+    "ok": true
+  },
+  {
+    "confirm": true,
+    "key": "\r",
+    "ok": true
+  },
+  {
+    "confirm": true,
+    "key": "\u001b[B",
+    "ok": true
+  },
+  {
+    "confirm": true,
+    "key": "\u001b[B",
+    "ok": true
+  },
+  {
+    "confirm": true,
+    "key": "\u001b[B",
+    "ok": true
+  },
+  {
+    "confirm": true,
+    "key": "",
+    "ok": false
+  },
+  {
+    "confirm": false,
+    "key": "",
+    "ok": false
+  },
+  {
+    "confirm": true,
+    "key": "\r",
+    "ok": true
+  },
+  {
+    "confirm": true,
+    "key": "\r",
+    "ok": true
+  },
+  {
+    "confirm": true,
+    "key": "\u001b[B",
+    "ok": true
+  },
+  {
+    "confirm": true,
+    "key": "\r",
+    "ok": true
+  },
+  {
+    "confirm": false,
+    "key": "",
+    "ok": false
+  }
+]

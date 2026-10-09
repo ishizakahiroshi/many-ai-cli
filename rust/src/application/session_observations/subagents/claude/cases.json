@@ -1,0 +1,1031 @@
+[
+  {
+    "Name": "empty",
+    "Children": [],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status-completed",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"completed\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status-FAILED",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"FAILED\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status-failure",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"failure\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status-killed",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"killed\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status-stopped",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"stopped\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status-cancelled",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"cancelled\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status-canceled",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"canceled\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status-aborted",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"aborted\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status-interrupted",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"interrupted\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status-error",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"error\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status-timeout",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"timeout\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status-timed_out",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"timed_out\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status-async_launched",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"async_launched\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status-unknown",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"unknown\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "status- completed ",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \" completed \", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "notice-completed",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"queue-operation\", \"operation\": \"enqueue\", \"timestamp\": \"2026-10-05T00:00:12Z\", \"content\": \"<task-notification><tool-use-id>tool-a</tool-use-id><status>completed</status><result>PRIVATE_BODY</result></task-notification>\"}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "notice-failed",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"queue-operation\", \"operation\": \"enqueue\", \"timestamp\": \"2026-10-05T00:00:12Z\", \"content\": \"<task-notification><tool-use-id>tool-a</tool-use-id><status>failed</status><result>PRIVATE_BODY</result></task-notification>\"}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "notice-killed",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"queue-operation\", \"operation\": \"enqueue\", \"timestamp\": \"2026-10-05T00:00:12Z\", \"content\": \"<task-notification><tool-use-id>tool-a</tool-use-id><status>killed</status><result>PRIVATE_BODY</result></task-notification>\"}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "notice-unknown",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{\"type\": \"queue-operation\", \"operation\": \"enqueue\", \"timestamp\": \"2026-10-05T00:00:12Z\", \"content\": \"<task-notification><tool-use-id>tool-a</tool-use-id><status>unknown</status><result>PRIVATE_BODY</result></task-notification>\"}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "background-ack",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 1000
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"completed\", \"isAsync\": true}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "sticky-running",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 1000
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      },
+      {
+        "Parent": "",
+        "Now": 2000,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "sticky-resolved",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"failed\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      },
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n",
+        "Now": 2000,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "latest-completion",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"completed\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"failed\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "stale-unknown-pruned",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 1000
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": 1,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "stale-running-kept",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 1000
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": 1,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "bad-meta",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"description\":12,\"toolUseId\":\"tool-a\"}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "meta-null",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "null",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "meta-duplicate-invalid",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"description\":12,\"description\":\"label\",\"toolUseId\":\"tool-a\"}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "meta-uppercase",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"AGENTTYPE\":\"general\",\"DESCRIPTION\":\"label\",\"TOOLUSEID\":\"tool-a\",\"SPAWNDEPTH\":null}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "nested-duplicate-message",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\":\"assistant\",\"timestamp\":\"2026-10-05T00:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Bash\",\"input\":{\"command\":\"one\"}}]},\"MESSAGE\":{\"role\":\"assistant\"}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "array-null",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"content\": [null, {\"type\": \"tool_use\", \"name\": \"Read\", \"input\": {\"file_path\": \"file\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "summary-32",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"prompt\": \"PRIVATE_BODY\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "summary-33",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"pattern\": \"a\\n b\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "summary-34",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"path\": \"path\", \"file_path\": \"fallback\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "summary-35",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"\", \"pattern\": \"next\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "summary-36",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "summary-37",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": 12}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "summary-38",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"x\", \"pattern\": 12}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "summary-39",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"COMMAND\": \"caps\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "summary-40",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "workflow-filter",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\":\"workflow-subagent\",\"description\":\"ignored\",\"toolUseId\":\"tool-a\"}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "orphans",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      },
+      {
+        "ID": "b",
+        "Meta": "{\"description\":\"child\",\"toolUseId\":\"tool-b\",\"spawnDepth\":2,\"parentAgentId\":\"missing\"}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      },
+      {
+        "ID": "c",
+        "Meta": "{\"description\":\"grand\",\"toolUseId\":\"tool-c\",\"spawnDepth\":3,\"parentAgentId\":\"b\"}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "cap-cascade",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      },
+      {
+        "ID": "b",
+        "Meta": "{\"description\":\"child\",\"toolUseId\":\"tool-b\",\"spawnDepth\":2,\"parentAgentId\":\"a\"}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      },
+      {
+        "ID": "c",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-c\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"completed\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"failed\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-b\"}]}}\n{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-c\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 2
+      }
+    ]
+  },
+  {
+    "Name": "cap-ties",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      },
+      {
+        "ID": "b",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-b\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      },
+      {
+        "ID": "c",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-c\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"completed\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-a\"}]}}\n{\"type\": \"user\", \"timestamp\": \"2026-10-05T00:00:10Z\", \"toolUseResult\": {\"status\": \"completed\", \"isAsync\": false}, \"message\": {\"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"tool-b\"}]}}\n",
+        "Now": 0,
+        "Since": -100,
+        "Max": 2
+      }
+    ]
+  },
+  {
+    "Name": "no-newline-tail",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "bad-transcript-knownfield",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"isSidechain\": \"bad\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"name\": \"Bad\"}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "ignored-huge-raw",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\":\"assistant\",\"timestamp\":\"2026-10-05T00:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Bash\",\"input\":{\"command\":\"safe\",\"unknown\":1e999}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "unknown-block-typed-error",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}, \"text\": 12}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "zero-cap",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 60
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "",
+        "Now": 0,
+        "Since": -100,
+        "Max": 0
+      }
+    ]
+  },
+  {
+    "Name": "parent-500-incomplete-final-old-child",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-04T23:40:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 1200
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}",
+        "Now": 0,
+        "Since": -1,
+        "Max": 50
+      }
+    ]
+  },
+  {
+    "Name": "parent-500-complete-final-old-child",
+    "Children": [
+      {
+        "ID": "a",
+        "Meta": "{\"agentType\": \"general\", \"description\": \"short label\", \"toolUseId\": \"tool-a\", \"spawnDepth\": 1}",
+        "JSONL": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-04T23:40:00Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"tool_use\", \"id\": \"tool-child\", \"name\": \"Bash\", \"input\": {\"command\": \"git status\"}}]}}\n",
+        "Age": 1200
+      }
+    ],
+    "Stages": [
+      {
+        "Parent": "{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{\"type\": \"assistant\", \"timestamp\": \"2026-10-05T00:00:01Z\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"id\": \"tool-a\"}]}}\n",
+        "Now": 0,
+        "Since": 0,
+        "Max": 50
+      }
+    ]
+  }
+]

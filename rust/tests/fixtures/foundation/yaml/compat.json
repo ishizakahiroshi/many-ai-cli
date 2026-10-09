@@ -1,0 +1,603 @@
+[
+  {
+    "name": "string-lexemes-and-octal-int",
+    "yaml": "token: 00123\nauth_cookie_secret: 0xFF\nremote_pin_hash: TRUE\nhub: {port: 0123}\n",
+    "paths": [
+      "/token",
+      "/auth_cookie_secret",
+      "/remote_pin_hash",
+      "/Hub/Port"
+    ],
+    "expected": {
+      "/Hub/Port": 83,
+      "/auth_cookie_secret": "0xFF",
+      "/remote_pin_hash": "TRUE",
+      "/token": "00123"
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "exponent-lexemes-and-map-keys",
+    "yaml": "token: 1e3\nauth_cookie_secret: 1_234\nremote_pin_hash: .125\nuser_prefs:\n  spawn:\n    last_model: {00123: 0xFF, TRUE: 1e3, 1e3: TRUE, nullish: null}\n",
+    "paths": [
+      "/token",
+      "/auth_cookie_secret",
+      "/remote_pin_hash",
+      "/user_prefs/spawn/last_model"
+    ],
+    "expected": {
+      "/auth_cookie_secret": "1_234",
+      "/remote_pin_hash": ".125",
+      "/token": "1e3",
+      "/user_prefs/spawn/last_model": {
+        "00123": "0xFF",
+        "1e3": "TRUE",
+        "TRUE": "1e3",
+        "nullish": ""
+      }
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "quoted-lexemes",
+    "yaml": "token: '00123'\nauth_cookie_secret: \"0xFF\"\nremote_pin_hash: 'TRUE'\n",
+    "paths": [
+      "/token",
+      "/auth_cookie_secret",
+      "/remote_pin_hash"
+    ],
+    "expected": {
+      "/auth_cookie_secret": "0xFF",
+      "/remote_pin_hash": "TRUE",
+      "/token": "00123"
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "string-tags",
+    "yaml": "token: !!str 00123\nauth_cookie_secret: !future 0xFF\nremote_pin_hash: !!str null\n",
+    "paths": [
+      "/token",
+      "/auth_cookie_secret",
+      "/remote_pin_hash"
+    ],
+    "expected": {
+      "/auth_cookie_secret": "0xFF",
+      "/remote_pin_hash": "null",
+      "/token": "00123"
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "explicit-numeric-tags-keep-string-lexemes",
+    "yaml": "token: !!int '00123'\nauth_cookie_secret: !!float 1e3\nremote_pin_hash: !!bool TRUE\nhub: {port: !!int '0123'}\n",
+    "paths": [
+      "/token",
+      "/auth_cookie_secret",
+      "/remote_pin_hash",
+      "/Hub/Port"
+    ],
+    "expected": {
+      "/Hub/Port": 83,
+      "/auth_cookie_secret": "1e3",
+      "/remote_pin_hash": "TRUE",
+      "/token": "00123"
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "binary-string",
+    "yaml": "token: !!binary c3ludGhldGljLWJpbmFyeQ==\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": {
+      "/token": "synthetic-binary"
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "block-strings",
+    "yaml": "token: |\n  synthetic line one\n  line two\nauth_cookie_secret: \u003e-\n  folded synthetic\n  text\n",
+    "paths": [
+      "/token",
+      "/auth_cookie_secret"
+    ],
+    "expected": {
+      "/auth_cookie_secret": "folded synthetic text",
+      "/token": "synthetic line one\nline two\n"
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "unknown-yaml-only-values",
+    "yaml": "token: synthetic-stable-token\nfuture_nan: .nan\nfuture_inf: -.inf\nfuture_complex: {[a, b]: x}\nhub: {port: 48888, future: {[x, y]: .nan}}\n",
+    "paths": [
+      "/token",
+      "/Hub/Port"
+    ],
+    "expected": {
+      "/Hub/Port": 48888,
+      "/token": "synthetic-stable-token"
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "unknown-invalid-tag-is-not-decoded",
+    "yaml": "token: synthetic-stable-token\nfuture_tag: !!int not-a-number\nfuture_binary: !!binary not-base64!\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": {
+      "/token": "synthetic-stable-token"
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "unused-alias-cycle",
+    "yaml": "token: synthetic-stable-token\nfuture: \u0026unused {self: *unused}\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": {
+      "/token": "synthetic-stable-token"
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "unknown-duplicate-subtree",
+    "yaml": "token: synthetic-stable-token\nfuture: {a: 1, a: 2}\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": {
+      "/token": "synthetic-stable-token"
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "null-slice-elements",
+    "yaml": "token: synthetic-stable-token\nvoice:\n  whisper:\n    hallucination_phrases: [null, 00123, ~, TRUE, 'null', '', 0xFF]\nsubscriptions:\n  claude:\n    - id: work\n      profile_owned_keys: [null, 00123, TRUE, ~, 'null']\n      default_wins_keys: [null, theme]\n",
+    "paths": [
+      "/token",
+      "/voice/whisper/hallucination_phrases",
+      "/subscriptions"
+    ],
+    "expected": {
+      "/subscriptions": {
+        "claude": [
+          {
+            "default_wins_keys": [
+              "theme"
+            ],
+            "id": "work",
+            "profile_owned_keys": [
+              "00123",
+              "TRUE",
+              "null"
+            ]
+          }
+        ]
+      },
+      "/token": "synthetic-stable-token",
+      "/voice/whisper/hallucination_phrases": [
+        "00123",
+        "TRUE",
+        "null",
+        "",
+        "0xFF"
+      ]
+    },
+    "saved_has_hallucination_phrases": true
+  },
+  {
+    "name": "all-null-string-list",
+    "yaml": "token: synthetic-stable-token\nvoice: {whisper: {hallucination_phrases: [null, ~]}}\n",
+    "paths": [
+      "/voice/whisper/hallucination_phrases"
+    ],
+    "expected": {
+      "/voice/whisper/hallucination_phrases": null
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "legacy-session-order-scalars",
+    "yaml": "token: synthetic-stable-token\nuser_prefs: {session_order: [0123, 08, '0123', 1e3, 1.5, null, .nan, 0xFF, ' 7 ', TRUE, {}, -2]}\n",
+    "paths": [
+      "/user_prefs/session_order"
+    ],
+    "expected": {
+      "/user_prefs/session_order": [
+        83,
+        8,
+        123,
+        1000,
+        255,
+        7,
+        -2
+      ]
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "integer-numeric-forms",
+    "yaml": "token: synthetic-stable-token\nhub: {port: 0xFF}\nlog: {max_size_mb: 0123, max_backups: 0b11, session_retention_days: 1e3, session_max_size_mb: 7.9}\n",
+    "paths": [
+      "/Hub/Port",
+      "/Log/max_size_mb",
+      "/Log/max_backups",
+      "/Log/session_retention_days",
+      "/Log/session_max_size_mb"
+    ],
+    "expected": {
+      "/Hub/Port": 255,
+      "/Log/max_backups": 3,
+      "/Log/max_size_mb": 83,
+      "/Log/session_max_size_mb": 7,
+      "/Log/session_retention_days": 1000
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "integer-legacy-invalid-octal-falls-back-float",
+    "yaml": "token: synthetic-stable-token\nhub: {port: 08}\n",
+    "paths": [
+      "/Hub/Port"
+    ],
+    "expected": {
+      "/Hub/Port": 8
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "boolean-legacy-and-explicit",
+    "yaml": "token: synthetic-stable-token\nhub: {open_browser: 'off'}\nlog: {enabled: Yes, compress: !!bool 'TRUE'}\n",
+    "paths": [
+      "/Hub/OpenBrowser",
+      "/Log/enabled",
+      "/Log/compress"
+    ],
+    "expected": {
+      "/Hub/OpenBrowser": false,
+      "/Log/compress": true,
+      "/Log/enabled": true
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "boolean-null-leaves-existing-default",
+    "yaml": "token: synthetic-stable-token\nhub: {open_browser: null}\n",
+    "paths": [
+      "/Hub/OpenBrowser"
+    ],
+    "expected": {
+      "/Hub/OpenBrowser": true
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "anchor-scalars-use-destination-type",
+    "yaml": "future: \u0026value 0123\ntoken: *value\nauth_cookie_secret: *value\nhub: {port: *value}\n",
+    "paths": [
+      "/token",
+      "/auth_cookie_secret",
+      "/Hub/Port"
+    ],
+    "expected": {
+      "/Hub/Port": 83,
+      "/auth_cookie_secret": "0123",
+      "/token": "0123"
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "anchor-strings-with-nan",
+    "yaml": "future: \u0026value .nan\ntoken: *value\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": {
+      "/token": ".nan"
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "mapping-merge-explicit-wins",
+    "yaml": "token: synthetic-stable-token\ndefaults: \u0026defaults {port: 0123, open_browser: false, future: .nan}\nhub: {\u003c\u003c: *defaults, port: 48888}\n",
+    "paths": [
+      "/Hub/Port",
+      "/Hub/OpenBrowser"
+    ],
+    "expected": {
+      "/Hub/OpenBrowser": false,
+      "/Hub/Port": 48888
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "mapping-merge-sequence-first-wins",
+    "yaml": "token: synthetic-stable-token\nfirst: \u0026first {port: 0123, open_browser: false}\nsecond: \u0026second {port: 49999, open_browser: true}\nhub: {\u003c\u003c: [*first, *second]}\n",
+    "paths": [
+      "/Hub/Port",
+      "/Hub/OpenBrowser"
+    ],
+    "expected": {
+      "/Hub/OpenBrowser": false,
+      "/Hub/Port": 83
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "mapping-merge-later-position",
+    "yaml": "token: synthetic-stable-token\ndefaults: \u0026defaults {port: 0123, open_browser: false}\nhub: {port: 48888, \u003c\u003c: *defaults}\n",
+    "paths": [
+      "/Hub/Port",
+      "/Hub/OpenBrowser"
+    ],
+    "expected": {
+      "/Hub/OpenBrowser": false,
+      "/Hub/Port": 48888
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "anchor-sequence-and-tolerant-profile",
+    "yaml": "token: synthetic-stable-token\nkeys: \u0026keys [00123, null, TRUE, {}, theme]\nsubscriptions:\n  claude:\n    - id: 00123\n      profile_owned_keys: *keys\n      default_wins_keys: *keys\n      enabled: invalid\n      future: {[x,y]: .nan}\n",
+    "paths": [
+      "/subscriptions"
+    ],
+    "expected": {
+      "/subscriptions": {
+        "claude": [
+          {
+            "default_wins_keys": [
+              "00123",
+              "TRUE",
+              "theme"
+            ],
+            "enabled": false,
+            "id": "00123",
+            "profile_owned_keys": [
+              "00123",
+              "TRUE",
+              "theme"
+            ]
+          }
+        ]
+      }
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "custom-providers-historical-scalars",
+    "yaml": "token: synthetic-stable-token\ncustom_providers:\n  - {id: 00123, command: 0xFF, label: TRUE, headless: {args: [null, 00123], format: text}}\n  - {id: bad, command: fake, headless: {args: [.nan, null], format: text}}\n  - {id: wrong, command: [fake]}\n",
+    "paths": [
+      "/custom_providers"
+    ],
+    "expected": {
+      "/custom_providers": [
+        {
+          "command": "0xFF",
+          "headless": {
+            "args": [
+              "00123"
+            ],
+            "format": "text"
+          },
+          "id": "00123",
+          "label": "TRUE"
+        },
+        {
+          "command": "fake",
+          "headless": {
+            "args": [
+              ".nan"
+            ],
+            "format": "text"
+          },
+          "id": "bad"
+        }
+      ]
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "tolerant-malformed-optional-sections",
+    "yaml": "token: synthetic-stable-token\ncustom_providers: {[a,b]: .nan}\nsubscriptions: {[x,y]: .nan}\nuser_prefs: {session_order: .nan}\n",
+    "paths": [
+      "/token",
+      "/custom_providers",
+      "/subscriptions",
+      "/user_prefs/session_order"
+    ],
+    "expected": {
+      "/custom_providers": null,
+      "/subscriptions": null,
+      "/token": "synthetic-stable-token",
+      "/user_prefs/session_order": null
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "duplicate-top-level-known",
+    "yaml": "token: synthetic-stable-token\nhub: {port: 48888}\nhub: {port: 48889}\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": null,
+    "rejected": true,
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "duplicate-top-level-unknown",
+    "yaml": "token: synthetic-stable-token\nfuture: 1\nfuture: 2\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": null,
+    "rejected": true,
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "malformed-known-int-quoted",
+    "yaml": "token: synthetic-stable-token\nhub: {port: '0123'}\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": null,
+    "rejected": true,
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "malformed-known-int-tag",
+    "yaml": "token: synthetic-stable-token\nhub: {port: !!int invalid}\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": null,
+    "rejected": true,
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "malformed-known-string-tag",
+    "yaml": "token: !!int invalid\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": null,
+    "rejected": true,
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "malformed-known-string-map",
+    "yaml": "token: {[a,b]: x}\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": null,
+    "rejected": true,
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "malformed-known-bool-quoted-true",
+    "yaml": "token: synthetic-stable-token\nhub: {open_browser: 'true'}\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": null,
+    "rejected": true,
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "malformed-known-nan-int",
+    "yaml": "token: synthetic-stable-token\nhub: {port: .nan}\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": null,
+    "rejected": true,
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "malformed-known-map-key",
+    "yaml": "token: synthetic-stable-token\nuser_prefs: {spawn: {last_model: {[a,b]: x}}}\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": null,
+    "rejected": true,
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "malformed-merge-target",
+    "yaml": "token: synthetic-stable-token\nhub: {\u003c\u003c: [scalar]}\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": null,
+    "rejected": true,
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "malformed-syntax",
+    "yaml": "token: synthetic-stable-token\nhub: {port: [}\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": null,
+    "rejected": true,
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "first-document-only",
+    "yaml": "token: synthetic-stable-token\nhub: {port: 48888}\n---\ntoken: later-document\n",
+    "paths": [
+      "/token",
+      "/Hub/Port"
+    ],
+    "expected": {
+      "/Hub/Port": 48888,
+      "/token": "synthetic-stable-token"
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "timestamp-tags-valid",
+    "yaml": "token: !!timestamp 2026-2-3\nauth_cookie_secret: !!timestamp 2026-10-03T04:50:00Z\n",
+    "paths": [
+      "/token",
+      "/auth_cookie_secret"
+    ],
+    "expected": {
+      "/auth_cookie_secret": "2026-10-03T04:50:00Z",
+      "/token": "2026-2-3"
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "timestamp-tag-malformed",
+    "yaml": "token: !!timestamp not-a-date\n",
+    "paths": [
+      "/token"
+    ],
+    "expected": null,
+    "rejected": true,
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "session-order-complex-key-discards-list",
+    "yaml": "token: synthetic-stable-token\nuser_prefs: {session_order: [1, {[a,b]: x}, 2]}\n",
+    "paths": [
+      "/user_prefs/session_order"
+    ],
+    "expected": {
+      "/user_prefs/session_order": null
+    },
+    "saved_has_hallucination_phrases": false
+  },
+  {
+    "name": "custom-null-pointer-elements",
+    "yaml": "token: synthetic-stable-token\ncustom_providers: [null, {id: fake, command: fake-cli}]\nsubscriptions: {claude: [null, {id: work, enabled: null}]}\n",
+    "paths": [
+      "/custom_providers",
+      "/subscriptions"
+    ],
+    "expected": {
+      "/custom_providers": [
+        {
+          "command": "fake-cli",
+          "id": "fake"
+        }
+      ],
+      "/subscriptions": {
+        "claude": [
+          {
+            "id": "work"
+          }
+        ]
+      }
+    },
+    "saved_has_hallucination_phrases": false
+  }
+]

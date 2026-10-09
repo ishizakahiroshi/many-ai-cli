@@ -1876,6 +1876,7 @@
   "cli_maintenance_version_error_generic": "確認に失敗しました",
   "cli_maintenance_executable_modified_at": "実行ファイルの更新日: {date}",
   "cli_maintenance_update_reason_not_installed": "未インストールです",
+  "cli_maintenance_update_reason_trial_scope": "試験モードのため、更新の対象外です",
   "cli_maintenance_update_reason_disabled": "更新 OFF（設定で更新をオンにできます）",
   "cli_maintenance_update_reason_not_configured": "更新コマンドが未設定です",
   "cli_maintenance_update_reason_running_sessions": "実行中のセッションが {count} 件あります",

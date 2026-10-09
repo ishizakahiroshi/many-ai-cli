@@ -1,0 +1,2184 @@
+{
+  "baseline": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "structs": {
+    "LogConfig": [
+      {
+        "go": "Enabled",
+        "rust": "enabled",
+        "type": "bool",
+        "yaml": "enabled",
+        "json": "enabled",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "SessionEnabled",
+        "rust": "session_enabled",
+        "type": "bool",
+        "yaml": "session_enabled",
+        "json": "session_enabled",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "LegacyLogsNoticeShown",
+        "rust": "legacy_logs_notice_shown",
+        "type": "bool",
+        "yaml": "legacy_logs_notice_shown",
+        "json": "legacy_logs_notice_shown",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "MaxSizeMB",
+        "rust": "max_size_mb",
+        "type": "int",
+        "yaml": "max_size_mb",
+        "json": "max_size_mb",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "MaxBackups",
+        "rust": "max_backups",
+        "type": "int",
+        "yaml": "max_backups",
+        "json": "max_backups",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Compress",
+        "rust": "compress",
+        "type": "bool",
+        "yaml": "compress",
+        "json": "compress",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "SessionRetentionDays",
+        "rust": "session_retention_days",
+        "type": "int",
+        "yaml": "session_retention_days",
+        "json": "session_retention_days",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "SessionMaxSizeMB",
+        "rust": "session_max_size_mb",
+        "type": "int",
+        "yaml": "session_max_size_mb",
+        "json": "session_max_size_mb",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "AttachmentRetentionDays",
+        "rust": "attachment_retention_days",
+        "type": "int",
+        "yaml": "attachment_retention_days",
+        "json": "attachment_retention_days",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "AttachmentMaxTotalMB",
+        "rust": "attachment_max_total_mb",
+        "type": "int",
+        "yaml": "attachment_max_total_mb",
+        "json": "attachment_max_total_mb",
+        "yomit": false,
+        "jomit": false
+      }
+    ],
+    "HandoffConfig": [
+      {
+        "go": "Enabled",
+        "rust": "enabled",
+        "type": "*bool",
+        "yaml": "enabled",
+        "json": "enabled",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "RetentionDays",
+        "rust": "retention_days",
+        "type": "int",
+        "yaml": "retention_days",
+        "json": "retention_days",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "IntentMode",
+        "rust": "intent_mode",
+        "type": "string",
+        "yaml": "intent_mode",
+        "json": "intent_mode",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "NotifyRemainingPercent",
+        "rust": "notify_remaining_percent",
+        "type": "int",
+        "yaml": "notify_remaining_percent",
+        "json": "notify_remaining_percent",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "NoteOnThreshold",
+        "rust": "note_on_threshold",
+        "type": "string",
+        "yaml": "note_on_threshold",
+        "json": "note_on_threshold",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "ApprovalConfig": [
+      {
+        "go": "Enabled",
+        "rust": "enabled",
+        "type": "bool",
+        "yaml": "enabled",
+        "json": "Enabled",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "FirstLaunchShown",
+        "rust": "first_launch_shown",
+        "type": "bool",
+        "yaml": "first_launch_shown",
+        "json": "FirstLaunchShown",
+        "yomit": false,
+        "jomit": false
+      }
+    ],
+    "SlashCmdSources": [
+      {
+        "go": "Claude",
+        "rust": "claude",
+        "type": "string",
+        "yaml": "claude",
+        "json": "claude",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Codex",
+        "rust": "codex",
+        "type": "string",
+        "yaml": "codex",
+        "json": "codex",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Copilot",
+        "rust": "copilot",
+        "type": "string",
+        "yaml": "copilot",
+        "json": "copilot",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "CursorAgent",
+        "rust": "cursor_agent",
+        "type": "string",
+        "yaml": "cursor-agent",
+        "json": "cursor-agent",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Opencode",
+        "rust": "opencode",
+        "type": "string",
+        "yaml": "opencode",
+        "json": "opencode",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Grok",
+        "rust": "grok",
+        "type": "string",
+        "yaml": "grok",
+        "json": "grok",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "CommandCode",
+        "rust": "command_code",
+        "type": "string",
+        "yaml": "command-code",
+        "json": "command-code",
+        "yomit": false,
+        "jomit": false
+      }
+    ],
+    "ApprovalPatternSources": [
+      {
+        "go": "Claude",
+        "rust": "claude",
+        "type": "string",
+        "yaml": "claude",
+        "json": "claude",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Codex",
+        "rust": "codex",
+        "type": "string",
+        "yaml": "codex",
+        "json": "codex",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Copilot",
+        "rust": "copilot",
+        "type": "string",
+        "yaml": "copilot",
+        "json": "copilot",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "CursorAgent",
+        "rust": "cursor_agent",
+        "type": "string",
+        "yaml": "cursor-agent",
+        "json": "cursor-agent",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Opencode",
+        "rust": "opencode",
+        "type": "string",
+        "yaml": "opencode",
+        "json": "opencode",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Grok",
+        "rust": "grok",
+        "type": "string",
+        "yaml": "grok",
+        "json": "grok",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "CommandCode",
+        "rust": "command_code",
+        "type": "string",
+        "yaml": "command-code",
+        "json": "command-code",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Common",
+        "rust": "common",
+        "type": "string",
+        "yaml": "common",
+        "json": "common",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "ApprovalProfiles": [
+      {
+        "go": "Claude",
+        "rust": "claude",
+        "type": "ApprovalProfileName",
+        "yaml": "claude",
+        "json": "claude",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Codex",
+        "rust": "codex",
+        "type": "ApprovalProfileName",
+        "yaml": "codex",
+        "json": "codex",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Copilot",
+        "rust": "copilot",
+        "type": "ApprovalProfileName",
+        "yaml": "copilot",
+        "json": "copilot",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "CursorAgent",
+        "rust": "cursor_agent",
+        "type": "ApprovalProfileName",
+        "yaml": "cursor-agent",
+        "json": "cursor-agent",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Opencode",
+        "rust": "opencode",
+        "type": "ApprovalProfileName",
+        "yaml": "opencode",
+        "json": "opencode",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Grok",
+        "rust": "grok",
+        "type": "ApprovalProfileName",
+        "yaml": "grok",
+        "json": "grok",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "CommandCode",
+        "rust": "command_code",
+        "type": "ApprovalProfileName",
+        "yaml": "command-code",
+        "json": "command-code",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Common",
+        "rust": "common",
+        "type": "ApprovalProfileName",
+        "yaml": "common",
+        "json": "common",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsNotifySound": [
+      {
+        "go": "Enabled",
+        "rust": "enabled",
+        "type": "bool",
+        "yaml": "enabled",
+        "json": "enabled",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Type",
+        "rust": "type",
+        "type": "string",
+        "yaml": "type",
+        "json": "type",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "CustomFile",
+        "rust": "custom_file",
+        "type": "string",
+        "yaml": "custom_file",
+        "json": "custom_file",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "CustomMime",
+        "rust": "custom_mime",
+        "type": "string",
+        "yaml": "custom_mime",
+        "json": "custom_mime",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsTrigger": [
+      {
+        "go": "Enabled",
+        "rust": "enabled",
+        "type": "bool",
+        "yaml": "enabled",
+        "json": "enabled",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Phrase",
+        "rust": "phrase",
+        "type": "string",
+        "yaml": "phrase",
+        "json": "phrase",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsApproval": [
+      {
+        "go": "AutoSwitch",
+        "rust": "auto_switch",
+        "type": "bool",
+        "yaml": "auto_switch",
+        "json": "auto_switch",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "AutoApprovalEnabled",
+        "rust": "auto_approval_enabled",
+        "type": "bool",
+        "yaml": "auto_approval_enabled",
+        "json": "auto_approval_enabled",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "HighRiskConfirmationMode",
+        "rust": "high_risk_confirmation_mode",
+        "type": "string",
+        "yaml": "high_risk_confirmation_mode",
+        "json": "high_risk_confirmation_mode",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsDesktopNotifications": [
+      {
+        "go": "Enabled",
+        "rust": "enabled",
+        "type": "bool",
+        "yaml": "enabled",
+        "json": "enabled",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsPushNotifications": [
+      {
+        "go": "Enabled",
+        "rust": "enabled",
+        "type": "bool",
+        "yaml": "enabled",
+        "json": "enabled",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsQuickCmds": [
+      {
+        "go": "Cmd1",
+        "rust": "cmd1",
+        "type": "string",
+        "yaml": "cmd1",
+        "json": "cmd1",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Cmd2",
+        "rust": "cmd2",
+        "type": "string",
+        "yaml": "cmd2",
+        "json": "cmd2",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Cmd3",
+        "rust": "cmd3",
+        "type": "string",
+        "yaml": "cmd3",
+        "json": "cmd3",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Cmd4",
+        "rust": "cmd4",
+        "type": "string",
+        "yaml": "cmd4",
+        "json": "cmd4",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Cmd5",
+        "rust": "cmd5",
+        "type": "string",
+        "yaml": "cmd5",
+        "json": "cmd5",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Show1",
+        "rust": "show1",
+        "type": "*bool",
+        "yaml": "show1",
+        "json": "show1",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Show2",
+        "rust": "show2",
+        "type": "*bool",
+        "yaml": "show2",
+        "json": "show2",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Show3",
+        "rust": "show3",
+        "type": "*bool",
+        "yaml": "show3",
+        "json": "show3",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Show4",
+        "rust": "show4",
+        "type": "*bool",
+        "yaml": "show4",
+        "json": "show4",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Show5",
+        "rust": "show5",
+        "type": "*bool",
+        "yaml": "show5",
+        "json": "show5",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsTemplate": [
+      {
+        "go": "Label",
+        "rust": "label",
+        "type": "string",
+        "yaml": "label",
+        "json": "label",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Body",
+        "rust": "body",
+        "type": "string",
+        "yaml": "body",
+        "json": "body",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Providers",
+        "rust": "providers",
+        "type": "[]string",
+        "yaml": "providers",
+        "json": "providers",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Tags",
+        "rust": "tags",
+        "type": "[]string",
+        "yaml": "tags",
+        "json": "tags",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsTemplateSend": [
+      {
+        "go": "Immediate",
+        "rust": "immediate",
+        "type": "*bool",
+        "yaml": "immediate",
+        "json": "immediate",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsUsageLinks": [
+      {
+        "go": "Claude",
+        "rust": "claude",
+        "type": "string",
+        "yaml": "claude",
+        "json": "claude",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Codex",
+        "rust": "codex",
+        "type": "string",
+        "yaml": "codex",
+        "json": "codex",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Copilot",
+        "rust": "copilot",
+        "type": "string",
+        "yaml": "copilot",
+        "json": "copilot",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "CursorAgent",
+        "rust": "cursor_agent",
+        "type": "string",
+        "yaml": "cursor-agent",
+        "json": "cursor-agent",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Opencode",
+        "rust": "opencode",
+        "type": "string",
+        "yaml": "opencode",
+        "json": "opencode",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Grok",
+        "rust": "grok",
+        "type": "string",
+        "yaml": "grok",
+        "json": "grok",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "CommandCode",
+        "rust": "command_code",
+        "type": "string",
+        "yaml": "command-code",
+        "json": "command-code",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsVoice": [
+      {
+        "go": "GraceSeconds",
+        "rust": "grace_seconds",
+        "type": "int",
+        "yaml": "grace_seconds",
+        "json": "grace_seconds",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "WakeWordEnabled",
+        "rust": "wake_word_enabled",
+        "type": "bool",
+        "yaml": "wake_word_enabled",
+        "json": "wake_word_enabled",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "WakeWordPhrase",
+        "rust": "wake_word_phrase",
+        "type": "string",
+        "yaml": "wake_word_phrase",
+        "json": "wake_word_phrase",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "InputDisabled",
+        "rust": "input_disabled",
+        "type": "bool",
+        "yaml": "input_disabled",
+        "json": "input_disabled",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsSpawn": [
+      {
+        "go": "Defaults",
+        "rust": "defaults",
+        "type": "map[string]string",
+        "yaml": "defaults",
+        "json": "defaults",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "LastModel",
+        "rust": "last_model",
+        "type": "map[string]string",
+        "yaml": "last_model",
+        "json": "last_model",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "WorktreeAuto",
+        "rust": "worktree_auto",
+        "type": "bool",
+        "yaml": "worktree_auto",
+        "json": "worktree_auto",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "WorktreeCleanup",
+        "rust": "worktree_cleanup",
+        "type": "string",
+        "yaml": "worktree_cleanup",
+        "json": "worktree_cleanup",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "DelegationAuto",
+        "rust": "delegation_auto",
+        "type": "bool",
+        "yaml": "delegation_auto",
+        "json": "delegation_auto",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "RoleProvider",
+        "rust": "role_provider",
+        "type": "map[string]string",
+        "yaml": "role_provider",
+        "json": "role_provider",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "RoleEffort",
+        "rust": "role_effort",
+        "type": "map[string]string",
+        "yaml": "role_effort",
+        "json": "role_effort",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "RolePermission",
+        "rust": "role_permission",
+        "type": "map[string]string",
+        "yaml": "role_permission",
+        "json": "role_permission",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsDoneSummaryNotify": [
+      {
+        "go": "Enabled",
+        "rust": "enabled",
+        "type": "*bool",
+        "yaml": "enabled",
+        "json": "enabled",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsWorkflowCompletionNotify": [
+      {
+        "go": "Enabled",
+        "rust": "enabled",
+        "type": "bool",
+        "yaml": "enabled",
+        "json": "enabled",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsTokenStatusbar": [
+      {
+        "go": "Enabled",
+        "rust": "enabled",
+        "type": "*bool",
+        "yaml": "enabled",
+        "json": "enabled",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Segments",
+        "rust": "segments",
+        "type": "map[string]bool",
+        "yaml": "segments",
+        "json": "segments",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsDisplay": [
+      {
+        "go": "Theme",
+        "rust": "theme",
+        "type": "string",
+        "yaml": "theme",
+        "json": "theme",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "FontSize",
+        "rust": "font_size",
+        "type": "string",
+        "yaml": "font_size",
+        "json": "font_size",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Lang",
+        "rust": "lang",
+        "type": "string",
+        "yaml": "lang",
+        "json": "lang",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "LockedMode",
+        "rust": "locked_mode",
+        "type": "string",
+        "yaml": "locked_mode",
+        "json": "locked_mode",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "LiveStatusBg",
+        "rust": "live_status_bg",
+        "type": "string",
+        "yaml": "live_status_bg",
+        "json": "live_status_bg",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "LiveStatusFg",
+        "rust": "live_status_fg",
+        "type": "string",
+        "yaml": "live_status_fg",
+        "json": "live_status_fg",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "CustomThemes",
+        "rust": "custom_themes",
+        "type": "[]UserPrefsCustomTheme",
+        "yaml": "custom_themes",
+        "json": "custom_themes",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsCustomTheme": [
+      {
+        "go": "ID",
+        "rust": "id",
+        "type": "string",
+        "yaml": "id",
+        "json": "id",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Name",
+        "rust": "name",
+        "type": "string",
+        "yaml": "name",
+        "json": "name",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Mode",
+        "rust": "mode",
+        "type": "string",
+        "yaml": "mode",
+        "json": "mode",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Hue",
+        "rust": "hue",
+        "type": "int",
+        "yaml": "hue",
+        "json": "hue",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Contrast",
+        "rust": "contrast",
+        "type": "int",
+        "yaml": "contrast",
+        "json": "contrast",
+        "yomit": false,
+        "jomit": false
+      }
+    ],
+    "VoiceWhisperConfig": [
+      {
+        "go": "ServerURL",
+        "rust": "server_url",
+        "type": "string",
+        "yaml": "server_url",
+        "json": "server_url",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "RequestPath",
+        "rust": "request_path",
+        "type": "string",
+        "yaml": "request_path",
+        "json": "request_path",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Language",
+        "rust": "language",
+        "type": "string",
+        "yaml": "language",
+        "json": "language",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "TimeoutSeconds",
+        "rust": "timeout_seconds",
+        "type": "int",
+        "yaml": "timeout_seconds",
+        "json": "timeout_seconds",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Managed",
+        "rust": "managed",
+        "type": "bool",
+        "yaml": "managed",
+        "json": "managed",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Model",
+        "rust": "model",
+        "type": "string",
+        "yaml": "model",
+        "json": "model",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ServerPort",
+        "rust": "server_port",
+        "type": "int",
+        "yaml": "server_port",
+        "json": "server_port",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "HallucinationPhrases",
+        "rust": "hallucination_phrases",
+        "type": "[]string",
+        "yaml": "hallucination_phrases",
+        "json": "hallucination_phrases",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "VoiceConfig": [
+      {
+        "go": "Whisper",
+        "rust": "whisper",
+        "type": "VoiceWhisperConfig",
+        "yaml": "whisper",
+        "json": "whisper",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefsProjectView": [
+      {
+        "go": "SessionID",
+        "rust": "session_id",
+        "type": "int",
+        "yaml": "session_id",
+        "json": "session_id",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Tab",
+        "rust": "tab",
+        "type": "string",
+        "yaml": "tab",
+        "json": "tab",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "UserPrefs": [
+      {
+        "go": "Trigger",
+        "rust": "trigger",
+        "type": "UserPrefsTrigger",
+        "yaml": "trigger",
+        "json": "trigger",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "NotifySound",
+        "rust": "notify_sound",
+        "type": "UserPrefsNotifySound",
+        "yaml": "notify_sound",
+        "json": "notify_sound",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "DesktopNotifications",
+        "rust": "desktop_notifications",
+        "type": "UserPrefsDesktopNotifications",
+        "yaml": "desktop_notifications",
+        "json": "desktop_notifications",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "PushNotifications",
+        "rust": "push_notifications",
+        "type": "UserPrefsPushNotifications",
+        "yaml": "push_notifications",
+        "json": "push_notifications",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Approval",
+        "rust": "approval",
+        "type": "UserPrefsApproval",
+        "yaml": "approval",
+        "json": "approval",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "QuickCmds",
+        "rust": "quick_cmds",
+        "type": "UserPrefsQuickCmds",
+        "yaml": "quick_cmds",
+        "json": "quick_cmds",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Templates",
+        "rust": "templates",
+        "type": "[]UserPrefsTemplate",
+        "yaml": "templates",
+        "json": "templates",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "TemplateSend",
+        "rust": "template_send",
+        "type": "UserPrefsTemplateSend",
+        "yaml": "template_send",
+        "json": "template_send",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "UsageLinks",
+        "rust": "usage_links",
+        "type": "UserPrefsUsageLinks",
+        "yaml": "usage_links",
+        "json": "usage_links",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "UsageProbeModel",
+        "rust": "usage_probe_model",
+        "type": "string",
+        "yaml": "usage_probe_model",
+        "json": "usage_probe_model",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Voice",
+        "rust": "voice",
+        "type": "UserPrefsVoice",
+        "yaml": "voice",
+        "json": "voice",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "SessionOrder",
+        "rust": "session_order",
+        "type": "SessionOrderIDs",
+        "yaml": "session_order",
+        "json": "session_order",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "GroupOrder",
+        "rust": "group_order",
+        "type": "[]string",
+        "yaml": "group_order",
+        "json": "group_order",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ProjectFavorites",
+        "rust": "project_favorites",
+        "type": "[]string",
+        "yaml": "project_favorites",
+        "json": "project_favorites",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "CollapsedNodes",
+        "rust": "collapsed_nodes",
+        "type": "[]string",
+        "yaml": "collapsed_nodes",
+        "json": "collapsed_nodes",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "CwdHistory",
+        "rust": "cwd_history",
+        "type": "[]string",
+        "yaml": "cwd_history",
+        "json": "cwd_history",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "CwdFavorites",
+        "rust": "cwd_favorites",
+        "type": "[]string",
+        "yaml": "cwd_favorites",
+        "json": "cwd_favorites",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Spawn",
+        "rust": "spawn",
+        "type": "UserPrefsSpawn",
+        "yaml": "spawn",
+        "json": "spawn",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Display",
+        "rust": "display",
+        "type": "UserPrefsDisplay",
+        "yaml": "display",
+        "json": "display",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "MigratedFromLocalstorage",
+        "rust": "migrated_from_localstorage",
+        "type": "bool",
+        "yaml": "migrated_from_localstorage",
+        "json": "migrated_from_localstorage",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "SidebarPinMigrated",
+        "rust": "sidebar_pin_migrated",
+        "type": "bool",
+        "yaml": "sidebar_pin_migrated",
+        "json": "sidebar_pin_migrated",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ProjectViews",
+        "rust": "project_views",
+        "type": "map[string]UserPrefsProjectView",
+        "yaml": "project_views",
+        "json": "project_views",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "OpenProject",
+        "rust": "open_project",
+        "type": "string",
+        "yaml": "open_project",
+        "json": "open_project",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Avatar",
+        "rust": "avatar",
+        "type": "string",
+        "yaml": "avatar",
+        "json": "avatar",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "DisplayName",
+        "rust": "display_name",
+        "type": "string",
+        "yaml": "display_name",
+        "json": "display_name",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "TokenStatusbar",
+        "rust": "token_statusbar",
+        "type": "UserPrefsTokenStatusbar",
+        "yaml": "token_statusbar",
+        "json": "token_statusbar",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "DoneSummaryNotify",
+        "rust": "done_summary_notify",
+        "type": "UserPrefsDoneSummaryNotify",
+        "yaml": "done_summary_notify",
+        "json": "done_summary_notify",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "WorkflowCompletionNotify",
+        "rust": "workflow_completion_notify",
+        "type": "UserPrefsWorkflowCompletionNotify",
+        "yaml": "workflow_completion_notify",
+        "json": "workflow_completion_notify",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "LocalModel": [
+      {
+        "go": "ID",
+        "rust": "id",
+        "type": "string",
+        "yaml": "id",
+        "json": "id",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Label",
+        "rust": "label",
+        "type": "string",
+        "yaml": "label",
+        "json": "label",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "OllamaConfig": [
+      {
+        "go": "BaseURL",
+        "rust": "base_url",
+        "type": "string",
+        "yaml": "base_url",
+        "json": "base_url",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "AllowPrivateHosts",
+        "rust": "allow_private_hosts",
+        "type": "bool",
+        "yaml": "allow_private_hosts",
+        "json": "allow_private_hosts",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "LMStudioConfig": [
+      {
+        "go": "BaseURL",
+        "rust": "base_url",
+        "type": "string",
+        "yaml": "base_url",
+        "json": "base_url",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "AllowPrivateHosts",
+        "rust": "allow_private_hosts",
+        "type": "bool",
+        "yaml": "allow_private_hosts",
+        "json": "allow_private_hosts",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "NVIDIANIMConfig": [
+      {
+        "go": "Enabled",
+        "rust": "enabled",
+        "type": "bool",
+        "yaml": "enabled",
+        "json": "enabled",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "NotifyBackendConfig": [
+      {
+        "go": "Type",
+        "rust": "type",
+        "type": "string",
+        "yaml": "type",
+        "json": "type",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "URL",
+        "rust": "url",
+        "type": "string",
+        "yaml": "url",
+        "json": "url",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Topic",
+        "rust": "topic",
+        "type": "string",
+        "yaml": "topic",
+        "json": "topic",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "NotifyConfig": [
+      {
+        "go": "Backends",
+        "rust": "backends",
+        "type": "[]NotifyBackendConfig",
+        "yaml": "backends",
+        "json": "backends",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Events",
+        "rust": "events",
+        "type": "[]string",
+        "yaml": "events",
+        "json": "events",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "IncludeBody",
+        "rust": "include_body",
+        "type": "bool",
+        "yaml": "include_body",
+        "json": "include_body",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "OrchestrationConfig": [
+      {
+        "go": "MaxDepth",
+        "rust": "max_depth",
+        "type": "int",
+        "yaml": "max_depth",
+        "json": "max_depth",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "MaxChildrenPerParent",
+        "rust": "max_children_per_parent",
+        "type": "int",
+        "yaml": "max_children_per_parent",
+        "json": "max_children_per_parent",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "MaxTotalSessions",
+        "rust": "max_total_sessions",
+        "type": "int",
+        "yaml": "max_total_sessions",
+        "json": "max_total_sessions",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ChildTimeoutSeconds",
+        "rust": "child_timeout_seconds",
+        "type": "int",
+        "yaml": "child_timeout_seconds",
+        "json": "child_timeout_seconds",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "TimeoutRespawn",
+        "rust": "timeout_respawn",
+        "type": "bool",
+        "yaml": "timeout_respawn",
+        "json": "timeout_respawn",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "MaxTimeoutRespawns",
+        "rust": "max_timeout_respawns",
+        "type": "int",
+        "yaml": "max_timeout_respawns",
+        "json": "max_timeout_respawns",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "IdleDoneThresholdSec",
+        "rust": "idle_done_threshold_sec",
+        "type": "int",
+        "yaml": "idle_done_threshold_seconds",
+        "json": "idle_done_threshold_seconds",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "WorktreeAuto",
+        "rust": "worktree_auto",
+        "type": "*bool",
+        "yaml": "worktree_auto",
+        "json": "worktree_auto",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "WorktreeDirRoot",
+        "rust": "worktree_dir_root",
+        "type": "string",
+        "yaml": "worktree_dir_root",
+        "json": "worktree_dir_root",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "BoardNotifyMode",
+        "rust": "board_notify_mode",
+        "type": "BoardNotifyMode",
+        "yaml": "board_notify_mode",
+        "json": "board_notify_mode",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "SpawnConfirmMode",
+        "rust": "spawn_confirm_mode",
+        "type": "SpawnConfirmMode",
+        "yaml": "spawn_confirm_mode",
+        "json": "spawn_confirm_mode",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "SpawnConfirmProviders",
+        "rust": "spawn_confirm_providers",
+        "type": "[]string",
+        "yaml": "spawn_confirm_providers",
+        "json": "spawn_confirm_providers",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ChildStartupGraceSeconds",
+        "rust": "child_startup_grace_seconds",
+        "type": "int",
+        "yaml": "child_startup_grace_seconds",
+        "json": "child_startup_grace_seconds",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ChildStartupFail",
+        "rust": "child_startup_fail",
+        "type": "*bool",
+        "yaml": "child_startup_fail_enabled",
+        "json": "child_startup_fail_enabled",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ChildStartupKill",
+        "rust": "child_startup_kill",
+        "type": "*bool",
+        "yaml": "child_startup_kill",
+        "json": "child_startup_kill",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ChildFullBypass",
+        "rust": "child_full_bypass",
+        "type": "*bool",
+        "yaml": "child_full_bypass",
+        "json": "child_full_bypass",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ChildPermissionDefault",
+        "rust": "child_permission_default",
+        "type": "string",
+        "yaml": "child_permission_default",
+        "json": "child_permission_default",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ChildExecutionMode",
+        "rust": "child_execution_mode",
+        "type": "string",
+        "yaml": "child_execution_mode",
+        "json": "child_execution_mode",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "RelayExecutionMode",
+        "rust": "relay_execution_mode",
+        "type": "string",
+        "yaml": "relay_execution_mode",
+        "json": "relay_execution_mode",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "BoundedAllowedTools",
+        "rust": "bounded_allowed_tools",
+        "type": "map[string][]string",
+        "yaml": "bounded_allowed_tools",
+        "json": "bounded_allowed_tools",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "HubConfig": [
+      {
+        "go": "Port",
+        "rust": "port",
+        "type": "int",
+        "yaml": "port",
+        "json": "Port",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "OpenBrowser",
+        "rust": "open_browser",
+        "type": "bool",
+        "yaml": "open_browser",
+        "json": "OpenBrowser",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "AutoShutdown",
+        "rust": "auto_shutdown",
+        "type": "bool",
+        "yaml": "auto_shutdown",
+        "json": "AutoShutdown",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "StaleBinaryAutoRestart",
+        "rust": "stale_binary_auto_restart",
+        "type": "bool",
+        "yaml": "stale_binary_auto_restart",
+        "json": "StaleBinaryAutoRestart",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "LogDir",
+        "rust": "log_dir",
+        "type": "string",
+        "yaml": "log_dir",
+        "json": "LogDir",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "IdleTimeoutMin",
+        "rust": "idle_timeout_min",
+        "type": "int",
+        "yaml": "idle_timeout_min",
+        "json": "IdleTimeoutMin",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "WrapperReconnectGraceSec",
+        "rust": "wrapper_reconnect_grace_sec",
+        "type": "int",
+        "yaml": "wrapper_reconnect_grace_sec",
+        "json": "WrapperReconnectGraceSec",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "WrapperSendWriteTimeoutSec",
+        "rust": "wrapper_send_write_timeout_sec",
+        "type": "int",
+        "yaml": "wrapper_send_write_timeout_sec",
+        "json": "WrapperSendWriteTimeoutSec",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "AllowLoopbackWithoutToken",
+        "rust": "allow_loopback_without_token",
+        "type": "bool",
+        "yaml": "allow_loopback_without_token",
+        "json": "allow_loopback_without_token",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "TrustedNetworks",
+        "rust": "trusted_networks",
+        "type": "[]string",
+        "yaml": "trusted_networks",
+        "json": "trusted_networks",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "AllowedHosts",
+        "rust": "allowed_hosts",
+        "type": "[]string",
+        "yaml": "allowed_hosts",
+        "json": "allowed_hosts",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "EnvKind",
+        "rust": "env_kind",
+        "type": "string",
+        "yaml": "env_kind",
+        "json": "env_kind",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "TerminalColor",
+        "rust": "terminal_color",
+        "type": "string",
+        "yaml": "terminal_color",
+        "json": "TerminalColor",
+        "yomit": false,
+        "jomit": false
+      }
+    ],
+    "InputConfig": [
+      {
+        "go": "DeferredEnterMS",
+        "rust": "deferred_enter_ms",
+        "type": "int",
+        "yaml": "deferred_enter_ms",
+        "json": "deferred_enter_ms",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "SpawnConfig": [
+      {
+        "go": "LastModel",
+        "rust": "last_model",
+        "type": "map[string]string",
+        "yaml": "last_model",
+        "json": "last_model",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "WorkflowConfig": [
+      {
+        "go": "JournalEnabled",
+        "rust": "journal_enabled",
+        "type": "bool",
+        "yaml": "journal_enabled",
+        "json": "journal_enabled",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "TaskDetailEnabled",
+        "rust": "task_detail_enabled",
+        "type": "bool",
+        "yaml": "task_detail_enabled",
+        "json": "task_detail_enabled",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "SubagentTreeEnabled",
+        "rust": "subagent_tree_enabled",
+        "type": "bool",
+        "yaml": "subagent_tree_enabled",
+        "json": "subagent_tree_enabled",
+        "yomit": false,
+        "jomit": false
+      }
+    ],
+    "Config": [
+      {
+        "go": "Hub",
+        "rust": "hub",
+        "type": "HubConfig",
+        "yaml": "hub",
+        "json": "Hub",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Log",
+        "rust": "log",
+        "type": "LogConfig",
+        "yaml": "log",
+        "json": "Log",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Input",
+        "rust": "input",
+        "type": "InputConfig",
+        "yaml": "input",
+        "json": "input",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Spawn",
+        "rust": "spawn",
+        "type": "SpawnConfig",
+        "yaml": "spawn",
+        "json": "spawn",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Workflow",
+        "rust": "workflow",
+        "type": "WorkflowConfig",
+        "yaml": "workflow",
+        "json": "workflow",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Approval",
+        "rust": "approval",
+        "type": "ApprovalConfig",
+        "yaml": "approval",
+        "json": "Approval",
+        "yomit": true,
+        "jomit": false
+      },
+      {
+        "go": "SlashCmdSources",
+        "rust": "slash_cmd_sources",
+        "type": "SlashCmdSources",
+        "yaml": "slash_cmd_sources",
+        "json": "slash_cmd_sources",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ModelsSource",
+        "rust": "models_source",
+        "type": "string",
+        "yaml": "models_source",
+        "json": "models_source",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ApprovalPatternSources",
+        "rust": "approval_pattern_sources",
+        "type": "ApprovalPatternSources",
+        "yaml": "approval_pattern_sources",
+        "json": "approval_pattern_sources",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ApprovalProfiles",
+        "rust": "approval_profiles",
+        "type": "ApprovalProfiles",
+        "yaml": "approval_profiles",
+        "json": "approval_profiles",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "TerminalApp",
+        "rust": "terminal_app",
+        "type": "string",
+        "yaml": "terminal_app",
+        "json": "TerminalApp",
+        "yomit": true,
+        "jomit": false
+      },
+      {
+        "go": "Token",
+        "rust": "token",
+        "type": "string",
+        "yaml": "token",
+        "json": "Token",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "AuthCookieSecret",
+        "rust": "auth_cookie_secret",
+        "type": "string",
+        "yaml": "auth_cookie_secret",
+        "json": "-",
+        "yomit": true,
+        "jomit": false
+      },
+      {
+        "go": "RemotePINHash",
+        "rust": "remote_pin_hash",
+        "type": "string",
+        "yaml": "remote_pin_hash",
+        "json": "-",
+        "yomit": true,
+        "jomit": false
+      },
+      {
+        "go": "Ollama",
+        "rust": "ollama",
+        "type": "OllamaConfig",
+        "yaml": "ollama",
+        "json": "ollama",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "LMStudio",
+        "rust": "lm_studio",
+        "type": "LMStudioConfig",
+        "yaml": "lm_studio",
+        "json": "lm_studio",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "NVIDIANIM",
+        "rust": "nvidianim",
+        "type": "NVIDIANIMConfig",
+        "yaml": "nvidia_nim",
+        "json": "nvidia_nim",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "LocalModels",
+        "rust": "local_models",
+        "type": "[]LocalModel",
+        "yaml": "local_models",
+        "json": "local_models",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "UserPrefs",
+        "rust": "user_prefs",
+        "type": "UserPrefs",
+        "yaml": "user_prefs",
+        "json": "user_prefs",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Voice",
+        "rust": "voice",
+        "type": "VoiceConfig",
+        "yaml": "voice",
+        "json": "voice",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Notify",
+        "rust": "notify",
+        "type": "NotifyConfig",
+        "yaml": "notify",
+        "json": "notify",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Orchestration",
+        "rust": "orchestration",
+        "type": "OrchestrationConfig",
+        "yaml": "orchestration",
+        "json": "orchestration",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Handoff",
+        "rust": "handoff",
+        "type": "HandoffConfig",
+        "yaml": "handoff",
+        "json": "handoff",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Subscriptions",
+        "rust": "subscriptions",
+        "type": "SubscriptionProfiles",
+        "yaml": "subscriptions",
+        "json": "subscriptions",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "CustomProviders",
+        "rust": "custom_providers",
+        "type": "CustomProviders",
+        "yaml": "custom_providers",
+        "json": "custom_providers",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "SubscriptionProfile": [
+      {
+        "go": "ID",
+        "rust": "id",
+        "type": "string",
+        "yaml": "id",
+        "json": "id",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Name",
+        "rust": "name",
+        "type": "string",
+        "yaml": "name",
+        "json": "name",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Plan",
+        "rust": "plan",
+        "type": "string",
+        "yaml": "plan",
+        "json": "plan",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Enabled",
+        "rust": "enabled",
+        "type": "*bool",
+        "yaml": "enabled",
+        "json": "enabled",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Dir",
+        "rust": "dir",
+        "type": "string",
+        "yaml": "dir",
+        "json": "dir",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ProfileDir",
+        "rust": "profile_dir",
+        "type": "string",
+        "yaml": "profile_dir",
+        "json": "profile_dir",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "SettingsSync",
+        "rust": "settings_sync",
+        "type": "*bool",
+        "yaml": "settings_sync",
+        "json": "settings_sync",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "ProfileOwnedKeys",
+        "rust": "profile_owned_keys",
+        "type": "[]string",
+        "yaml": "profile_owned_keys",
+        "json": "profile_owned_keys",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "DefaultWinsKeys",
+        "rust": "default_wins_keys",
+        "type": "[]string",
+        "yaml": "default_wins_keys",
+        "json": "default_wins_keys",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "CustomProvider": [
+      {
+        "go": "ID",
+        "rust": "id",
+        "type": "string",
+        "yaml": "id",
+        "json": "id",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "Label",
+        "rust": "label",
+        "type": "string",
+        "yaml": "label",
+        "json": "label",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Command",
+        "rust": "command",
+        "type": "string",
+        "yaml": "command",
+        "json": "command",
+        "yomit": false,
+        "jomit": false
+      },
+      {
+        "go": "ApprovalPatternSource",
+        "rust": "approval_pattern_source",
+        "type": "string",
+        "yaml": "approval_pattern_source",
+        "json": "approval_pattern_source",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Headless",
+        "rust": "headless",
+        "type": "*HeadlessDef",
+        "yaml": "headless",
+        "json": "headless",
+        "yomit": true,
+        "jomit": true
+      }
+    ],
+    "HeadlessDef": [
+      {
+        "go": "Args",
+        "rust": "args",
+        "type": "[]string",
+        "yaml": "args",
+        "json": "args",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "Format",
+        "rust": "format",
+        "type": "string",
+        "yaml": "format",
+        "json": "format",
+        "yomit": true,
+        "jomit": true
+      },
+      {
+        "go": "PromptVia",
+        "rust": "prompt_via",
+        "type": "string",
+        "yaml": "prompt_via",
+        "json": "prompt_via",
+        "yomit": true,
+        "jomit": true
+      }
+    ]
+  }
+}

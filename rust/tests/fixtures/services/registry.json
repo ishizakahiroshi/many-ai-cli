@@ -1,0 +1,5000 @@
+{
+  "registry": [
+    {
+      "name": "empty",
+      "layers": {
+        "Embedded": null,
+        "AcceptedDistribution": null,
+        "Distribution": null,
+        "Legacy": null,
+        "User": null,
+        "Overrides": null
+      },
+      "revision": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "list": [],
+      "definitions": [],
+      "diagnostics": null
+    },
+    {
+      "name": "embedded",
+      "layers": {
+        "Embedded": [
+          {
+            "schema_version": 1,
+            "id": "claude",
+            "display_name": "Claude",
+            "description": "Claude Code command line interface",
+            "launch": {
+              "executable": "claude",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "effort_args": [
+                "--effort",
+                "{effort}"
+              ],
+              "effort_levels": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "headless": {
+                "args": [
+                  "-p",
+                  "--output-format",
+                  "stream-json",
+                  "--verbose"
+                ],
+                "format": "claude-stream-json",
+                "prompt_via": "stdin"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:claude-v1",
+              "transcript": "history:claude-v1",
+              "usage": "usage:claude-v1",
+              "subscription": "subscription:claude-v1",
+              "permissions": "permissions:generic-v1",
+              "subagents": "subagent:claude-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "codex",
+            "display_name": "Codex",
+            "description": "Codex command line interface",
+            "launch": {
+              "executable": "codex",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "effort_args": [
+                "-c",
+                "model_reasoning_effort=\"{effort}\""
+              ],
+              "effort_levels": [
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:codex-v1",
+              "transcript": "history:codex-v1",
+              "usage": "usage:codex-v1",
+              "subscription": "subscription:codex-v1",
+              "permissions": "permissions:generic-v1",
+              "subagents": "subagent:codex-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "copilot",
+            "display_name": "GitHub Copilot",
+            "description": "GitHub Copilot command line interface",
+            "launch": {
+              "executable_candidates": [
+                "copilot",
+                "gh"
+              ],
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "--output-format",
+                  "text",
+                  "-s",
+                  "-p"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:copilot-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "cursor-agent",
+            "display_name": "Cursor Agent",
+            "description": "Cursor Agent command line interface",
+            "launch": {
+              "executable": "cursor-agent",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "-p",
+                  "--output-format",
+                  "text"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:cursor-agent-v1",
+              "transcript": "history:cursor-agent-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": false,
+              "login_may_be_required": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "opencode",
+            "display_name": "OpenCode",
+            "description": "OpenCode command line interface",
+            "launch": {
+              "executable": "opencode",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "effort_args": [
+                "--variant",
+                "{effort}"
+              ],
+              "effort_levels": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "headless": {
+                "args": [
+                  "run",
+                  "--format",
+                  "default"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:opencode-v1",
+              "transcript": "history:opencode-v1",
+              "usage": "usage:opencode-v1",
+              "subscription": "subscription:opencode-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "upgrade"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "grok",
+            "display_name": "Grok Build",
+            "description": "Grok Build command line interface",
+            "launch": {
+              "executable": "grok",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "--output-format",
+                  "plain",
+                  "-p"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:grok-v1",
+              "usage": "usage:grok-v1",
+              "subscription": "subscription:grok-v1",
+              "permissions": "permissions:generic-v1",
+              "subagents": "subagent:grok-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "command-code",
+            "display_name": "Command Code",
+            "description": "Command Code command line interface",
+            "launch": {
+              "executable": "command-code",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "--output-format",
+                  "text",
+                  "-p"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:command-code-v1",
+              "transcript": "history:command-code-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": false,
+              "login_may_be_required": true
+            }
+          }
+        ],
+        "AcceptedDistribution": null,
+        "Distribution": null,
+        "Legacy": null,
+        "User": null,
+        "Overrides": null
+      },
+      "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+      "list": [
+        {
+          "id": "claude",
+          "display_name": "Claude",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "id": "codex",
+          "display_name": "Codex",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": false,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "id": "copilot",
+          "display_name": "GitHub Copilot",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "id": "cursor-agent",
+          "display_name": "Cursor Agent",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "id": "opencode",
+          "display_name": "OpenCode",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "id": "grok",
+          "display_name": "Grok Build",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "id": "command-code",
+          "display_name": "Command Code",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        }
+      ],
+      "definitions": [
+        {
+          "schema_version": 1,
+          "id": "claude",
+          "display_name": "Claude",
+          "description": "Claude Code command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "claude",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "effort_args": [
+              "--effort",
+              "{effort}"
+            ],
+            "effort_levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "headless": {
+              "args": [
+                "-p",
+                "--output-format",
+                "stream-json",
+                "--verbose"
+              ],
+              "format": "claude-stream-json",
+              "prompt_via": "stdin"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:claude-v1",
+            "transcript": "history:claude-v1",
+            "usage": "usage:claude-v1",
+            "subscription": "subscription:claude-v1",
+            "permissions": "permissions:generic-v1",
+            "subagents": "subagent:claude-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "codex",
+          "display_name": "Codex",
+          "description": "Codex command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "codex",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "effort_args": [
+              "-c",
+              "model_reasoning_effort=\"{effort}\""
+            ],
+            "effort_levels": [
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:codex-v1",
+            "transcript": "history:codex-v1",
+            "usage": "usage:codex-v1",
+            "subscription": "subscription:codex-v1",
+            "permissions": "permissions:generic-v1",
+            "subagents": "subagent:codex-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": false,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "copilot",
+          "display_name": "GitHub Copilot",
+          "description": "GitHub Copilot command line interface",
+          "enabled": true,
+          "launch": {
+            "executable_candidates": [
+              "copilot",
+              "gh"
+            ],
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "--output-format",
+                "text",
+                "-s",
+                "-p"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:copilot-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "cursor-agent",
+          "display_name": "Cursor Agent",
+          "description": "Cursor Agent command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "cursor-agent",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "-p",
+                "--output-format",
+                "text"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:cursor-agent-v1",
+            "transcript": "history:cursor-agent-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": false,
+            "login_may_be_required": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "opencode",
+          "display_name": "OpenCode",
+          "description": "OpenCode command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "opencode",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "effort_args": [
+              "--variant",
+              "{effort}"
+            ],
+            "effort_levels": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "headless": {
+              "args": [
+                "run",
+                "--format",
+                "default"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:opencode-v1",
+            "transcript": "history:opencode-v1",
+            "usage": "usage:opencode-v1",
+            "subscription": "subscription:opencode-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "upgrade"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "grok",
+          "display_name": "Grok Build",
+          "description": "Grok Build command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "grok",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "--output-format",
+                "plain",
+                "-p"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:grok-v1",
+            "usage": "usage:grok-v1",
+            "subscription": "subscription:grok-v1",
+            "permissions": "permissions:generic-v1",
+            "subagents": "subagent:grok-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "command-code",
+          "display_name": "Command Code",
+          "description": "Command Code command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "command-code",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "--output-format",
+                "text",
+                "-p"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:command-code-v1",
+            "transcript": "history:command-code-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": false,
+            "login_may_be_required": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        }
+      ],
+      "diagnostics": null
+    },
+    {
+      "name": "custom",
+      "layers": {
+        "Embedded": null,
+        "AcceptedDistribution": null,
+        "Distribution": null,
+        "Legacy": null,
+        "User": [
+          {
+            "schema_version": 1,
+            "id": "synthetic",
+            "display_name": "日本語 \u0026 \u003cTest\u003e",
+            "launch": {
+              "executable": "synthetic-cli",
+              "args": [
+                "--safe"
+              ]
+            },
+            "adapters": {
+              "launch": "launch:generic-v1"
+            },
+            "source": {}
+          }
+        ],
+        "Overrides": null
+      },
+      "revision": "f1a71f9621598d4d6475eff3a913d64415243d0d08a5615a49a62529fa3f9e83",
+      "list": [
+        {
+          "id": "synthetic",
+          "display_name": "日本語 \u0026 \u003cTest\u003e",
+          "enabled": true,
+          "origin": "user",
+          "revision": "f1a71f9621598d4d6475eff3a913d64415243d0d08a5615a49a62529fa3f9e83",
+          "capabilities": {
+            "launch": true,
+            "models": false,
+            "effort": false,
+            "headless": false,
+            "approval": false,
+            "transcript": false,
+            "usage": false,
+            "subscription": false,
+            "permissions": false,
+            "subagents": false
+          }
+        }
+      ],
+      "definitions": [
+        {
+          "schema_version": 1,
+          "id": "synthetic",
+          "display_name": "日本語 \u0026 \u003cTest\u003e",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-cli",
+            "args": [
+              "--safe"
+            ]
+          },
+          "adapters": {
+            "launch": "launch:generic-v1"
+          },
+          "source": {},
+          "effective_source": {
+            "origin": "user"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "user"
+            },
+            "display_name": {
+              "origin": "user"
+            },
+            "id": {
+              "origin": "user"
+            },
+            "launch": {
+              "origin": "user"
+            },
+            "schema_version": {
+              "origin": "user"
+            },
+            "source": {
+              "origin": "user"
+            }
+          },
+          "revision": "f1a71f9621598d4d6475eff3a913d64415243d0d08a5615a49a62529fa3f9e83",
+          "capabilities_summary": {
+            "launch": true,
+            "models": false,
+            "effort": false,
+            "headless": false,
+            "approval": false,
+            "transcript": false,
+            "usage": false,
+            "subscription": false,
+            "permissions": false,
+            "subagents": false
+          }
+        }
+      ],
+      "diagnostics": null
+    },
+    {
+      "name": "builtin_collision",
+      "layers": {
+        "Embedded": [
+          {
+            "schema_version": 1,
+            "id": "claude",
+            "display_name": "Claude",
+            "description": "Claude Code command line interface",
+            "launch": {
+              "executable": "claude",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "effort_args": [
+                "--effort",
+                "{effort}"
+              ],
+              "effort_levels": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "headless": {
+                "args": [
+                  "-p",
+                  "--output-format",
+                  "stream-json",
+                  "--verbose"
+                ],
+                "format": "claude-stream-json",
+                "prompt_via": "stdin"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:claude-v1",
+              "transcript": "history:claude-v1",
+              "usage": "usage:claude-v1",
+              "subscription": "subscription:claude-v1",
+              "permissions": "permissions:generic-v1",
+              "subagents": "subagent:claude-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "codex",
+            "display_name": "Codex",
+            "description": "Codex command line interface",
+            "launch": {
+              "executable": "codex",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "effort_args": [
+                "-c",
+                "model_reasoning_effort=\"{effort}\""
+              ],
+              "effort_levels": [
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:codex-v1",
+              "transcript": "history:codex-v1",
+              "usage": "usage:codex-v1",
+              "subscription": "subscription:codex-v1",
+              "permissions": "permissions:generic-v1",
+              "subagents": "subagent:codex-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "copilot",
+            "display_name": "GitHub Copilot",
+            "description": "GitHub Copilot command line interface",
+            "launch": {
+              "executable_candidates": [
+                "copilot",
+                "gh"
+              ],
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "--output-format",
+                  "text",
+                  "-s",
+                  "-p"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:copilot-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "cursor-agent",
+            "display_name": "Cursor Agent",
+            "description": "Cursor Agent command line interface",
+            "launch": {
+              "executable": "cursor-agent",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "-p",
+                  "--output-format",
+                  "text"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:cursor-agent-v1",
+              "transcript": "history:cursor-agent-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": false,
+              "login_may_be_required": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "opencode",
+            "display_name": "OpenCode",
+            "description": "OpenCode command line interface",
+            "launch": {
+              "executable": "opencode",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "effort_args": [
+                "--variant",
+                "{effort}"
+              ],
+              "effort_levels": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "headless": {
+                "args": [
+                  "run",
+                  "--format",
+                  "default"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:opencode-v1",
+              "transcript": "history:opencode-v1",
+              "usage": "usage:opencode-v1",
+              "subscription": "subscription:opencode-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "upgrade"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "grok",
+            "display_name": "Grok Build",
+            "description": "Grok Build command line interface",
+            "launch": {
+              "executable": "grok",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "--output-format",
+                  "plain",
+                  "-p"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:grok-v1",
+              "usage": "usage:grok-v1",
+              "subscription": "subscription:grok-v1",
+              "permissions": "permissions:generic-v1",
+              "subagents": "subagent:grok-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "command-code",
+            "display_name": "Command Code",
+            "description": "Command Code command line interface",
+            "launch": {
+              "executable": "command-code",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "--output-format",
+                  "text",
+                  "-p"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:command-code-v1",
+              "transcript": "history:command-code-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": false,
+              "login_may_be_required": true
+            }
+          }
+        ],
+        "AcceptedDistribution": null,
+        "Distribution": null,
+        "Legacy": null,
+        "User": [
+          {
+            "id": "codex",
+            "display_name": "blocked",
+            "adapters": {},
+            "source": {}
+          }
+        ],
+        "Overrides": null
+      },
+      "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+      "list": [
+        {
+          "id": "claude",
+          "display_name": "Claude",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "id": "codex",
+          "display_name": "Codex",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": false,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "id": "copilot",
+          "display_name": "GitHub Copilot",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "id": "cursor-agent",
+          "display_name": "Cursor Agent",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "id": "opencode",
+          "display_name": "OpenCode",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "id": "grok",
+          "display_name": "Grok Build",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "id": "command-code",
+          "display_name": "Command Code",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        }
+      ],
+      "definitions": [
+        {
+          "schema_version": 1,
+          "id": "claude",
+          "display_name": "Claude",
+          "description": "Claude Code command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "claude",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "effort_args": [
+              "--effort",
+              "{effort}"
+            ],
+            "effort_levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "headless": {
+              "args": [
+                "-p",
+                "--output-format",
+                "stream-json",
+                "--verbose"
+              ],
+              "format": "claude-stream-json",
+              "prompt_via": "stdin"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:claude-v1",
+            "transcript": "history:claude-v1",
+            "usage": "usage:claude-v1",
+            "subscription": "subscription:claude-v1",
+            "permissions": "permissions:generic-v1",
+            "subagents": "subagent:claude-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "codex",
+          "display_name": "Codex",
+          "description": "Codex command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "codex",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "effort_args": [
+              "-c",
+              "model_reasoning_effort=\"{effort}\""
+            ],
+            "effort_levels": [
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:codex-v1",
+            "transcript": "history:codex-v1",
+            "usage": "usage:codex-v1",
+            "subscription": "subscription:codex-v1",
+            "permissions": "permissions:generic-v1",
+            "subagents": "subagent:codex-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": false,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "copilot",
+          "display_name": "GitHub Copilot",
+          "description": "GitHub Copilot command line interface",
+          "enabled": true,
+          "launch": {
+            "executable_candidates": [
+              "copilot",
+              "gh"
+            ],
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "--output-format",
+                "text",
+                "-s",
+                "-p"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:copilot-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "cursor-agent",
+          "display_name": "Cursor Agent",
+          "description": "Cursor Agent command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "cursor-agent",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "-p",
+                "--output-format",
+                "text"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:cursor-agent-v1",
+            "transcript": "history:cursor-agent-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": false,
+            "login_may_be_required": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "opencode",
+          "display_name": "OpenCode",
+          "description": "OpenCode command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "opencode",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "effort_args": [
+              "--variant",
+              "{effort}"
+            ],
+            "effort_levels": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "headless": {
+              "args": [
+                "run",
+                "--format",
+                "default"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:opencode-v1",
+            "transcript": "history:opencode-v1",
+            "usage": "usage:opencode-v1",
+            "subscription": "subscription:opencode-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "upgrade"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "grok",
+          "display_name": "Grok Build",
+          "description": "Grok Build command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "grok",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "--output-format",
+                "plain",
+                "-p"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:grok-v1",
+            "usage": "usage:grok-v1",
+            "subscription": "subscription:grok-v1",
+            "permissions": "permissions:generic-v1",
+            "subagents": "subagent:grok-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "command-code",
+          "display_name": "Command Code",
+          "description": "Command Code command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "command-code",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "--output-format",
+                "text",
+                "-p"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:command-code-v1",
+            "transcript": "history:command-code-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": false,
+            "login_may_be_required": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "bc71a18fcf82c55db643ad29da61fb2c9580eccc3cd7d32ec068df177097e707",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        }
+      ],
+      "diagnostics": [
+        {
+          "code": "builtin_collision",
+          "severity": "error",
+          "field": "codex",
+          "message": "user definition cannot replace an embedded provider"
+        }
+      ]
+    },
+    {
+      "name": "override",
+      "layers": {
+        "Embedded": [
+          {
+            "schema_version": 1,
+            "id": "claude",
+            "display_name": "Claude",
+            "description": "Claude Code command line interface",
+            "launch": {
+              "executable": "claude",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "effort_args": [
+                "--effort",
+                "{effort}"
+              ],
+              "effort_levels": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "headless": {
+                "args": [
+                  "-p",
+                  "--output-format",
+                  "stream-json",
+                  "--verbose"
+                ],
+                "format": "claude-stream-json",
+                "prompt_via": "stdin"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:claude-v1",
+              "transcript": "history:claude-v1",
+              "usage": "usage:claude-v1",
+              "subscription": "subscription:claude-v1",
+              "permissions": "permissions:generic-v1",
+              "subagents": "subagent:claude-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "codex",
+            "display_name": "Codex",
+            "description": "Codex command line interface",
+            "launch": {
+              "executable": "codex",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "effort_args": [
+                "-c",
+                "model_reasoning_effort=\"{effort}\""
+              ],
+              "effort_levels": [
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:codex-v1",
+              "transcript": "history:codex-v1",
+              "usage": "usage:codex-v1",
+              "subscription": "subscription:codex-v1",
+              "permissions": "permissions:generic-v1",
+              "subagents": "subagent:codex-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "copilot",
+            "display_name": "GitHub Copilot",
+            "description": "GitHub Copilot command line interface",
+            "launch": {
+              "executable_candidates": [
+                "copilot",
+                "gh"
+              ],
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "--output-format",
+                  "text",
+                  "-s",
+                  "-p"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:copilot-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "cursor-agent",
+            "display_name": "Cursor Agent",
+            "description": "Cursor Agent command line interface",
+            "launch": {
+              "executable": "cursor-agent",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "-p",
+                  "--output-format",
+                  "text"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:cursor-agent-v1",
+              "transcript": "history:cursor-agent-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": false,
+              "login_may_be_required": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "opencode",
+            "display_name": "OpenCode",
+            "description": "OpenCode command line interface",
+            "launch": {
+              "executable": "opencode",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "effort_args": [
+                "--variant",
+                "{effort}"
+              ],
+              "effort_levels": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "headless": {
+                "args": [
+                  "run",
+                  "--format",
+                  "default"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:opencode-v1",
+              "transcript": "history:opencode-v1",
+              "usage": "usage:opencode-v1",
+              "subscription": "subscription:opencode-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "upgrade"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "grok",
+            "display_name": "Grok Build",
+            "description": "Grok Build command line interface",
+            "launch": {
+              "executable": "grok",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "--output-format",
+                  "plain",
+                  "-p"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:grok-v1",
+              "usage": "usage:grok-v1",
+              "subscription": "subscription:grok-v1",
+              "permissions": "permissions:generic-v1",
+              "subagents": "subagent:grok-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "command-code",
+            "display_name": "Command Code",
+            "description": "Command Code command line interface",
+            "launch": {
+              "executable": "command-code",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "--output-format",
+                  "text",
+                  "-p"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:command-code-v1",
+              "transcript": "history:command-code-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": false,
+              "login_may_be_required": true
+            }
+          }
+        ],
+        "AcceptedDistribution": null,
+        "Distribution": null,
+        "Legacy": null,
+        "User": null,
+        "Overrides": [
+          {
+            "id": "codex",
+            "enabled": false,
+            "launch": {
+              "args": [
+                "--custom"
+              ]
+            },
+            "adapters": {},
+            "source": {}
+          }
+        ]
+      },
+      "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+      "list": [
+        {
+          "id": "claude",
+          "display_name": "Claude",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "id": "codex",
+          "display_name": "Codex",
+          "enabled": false,
+          "origin": "override",
+          "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": false,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "id": "copilot",
+          "display_name": "GitHub Copilot",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "id": "cursor-agent",
+          "display_name": "Cursor Agent",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "id": "opencode",
+          "display_name": "OpenCode",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "id": "grok",
+          "display_name": "Grok Build",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "id": "command-code",
+          "display_name": "Command Code",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        }
+      ],
+      "definitions": [
+        {
+          "schema_version": 1,
+          "id": "claude",
+          "display_name": "Claude",
+          "description": "Claude Code command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "claude",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "effort_args": [
+              "--effort",
+              "{effort}"
+            ],
+            "effort_levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "headless": {
+              "args": [
+                "-p",
+                "--output-format",
+                "stream-json",
+                "--verbose"
+              ],
+              "format": "claude-stream-json",
+              "prompt_via": "stdin"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:claude-v1",
+            "transcript": "history:claude-v1",
+            "usage": "usage:claude-v1",
+            "subscription": "subscription:claude-v1",
+            "permissions": "permissions:generic-v1",
+            "subagents": "subagent:claude-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "codex",
+          "display_name": "Codex",
+          "description": "Codex command line interface",
+          "enabled": false,
+          "launch": {
+            "executable": "codex",
+            "args": [
+              "--custom"
+            ],
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "effort_args": [
+              "-c",
+              "model_reasoning_effort=\"{effort}\""
+            ],
+            "effort_levels": [
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:codex-v1",
+            "transcript": "history:codex-v1",
+            "usage": "usage:codex-v1",
+            "subscription": "subscription:codex-v1",
+            "permissions": "permissions:generic-v1",
+            "subagents": "subagent:codex-v1"
+          },
+          "source": {},
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "override"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "override"
+            },
+            "description": {
+              "origin": "override"
+            },
+            "display_name": {
+              "origin": "override"
+            },
+            "enabled": {
+              "origin": "override"
+            },
+            "id": {
+              "origin": "override"
+            },
+            "launch": {
+              "origin": "override"
+            },
+            "models": {
+              "origin": "override"
+            },
+            "schema_version": {
+              "origin": "override"
+            },
+            "source": {
+              "origin": "override"
+            },
+            "update": {
+              "origin": "override"
+            }
+          },
+          "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": false,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "copilot",
+          "display_name": "GitHub Copilot",
+          "description": "GitHub Copilot command line interface",
+          "enabled": true,
+          "launch": {
+            "executable_candidates": [
+              "copilot",
+              "gh"
+            ],
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "--output-format",
+                "text",
+                "-s",
+                "-p"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:copilot-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "cursor-agent",
+          "display_name": "Cursor Agent",
+          "description": "Cursor Agent command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "cursor-agent",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "-p",
+                "--output-format",
+                "text"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:cursor-agent-v1",
+            "transcript": "history:cursor-agent-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": false,
+            "login_may_be_required": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "opencode",
+          "display_name": "OpenCode",
+          "description": "OpenCode command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "opencode",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "effort_args": [
+              "--variant",
+              "{effort}"
+            ],
+            "effort_levels": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "headless": {
+              "args": [
+                "run",
+                "--format",
+                "default"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:opencode-v1",
+            "transcript": "history:opencode-v1",
+            "usage": "usage:opencode-v1",
+            "subscription": "subscription:opencode-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "upgrade"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "grok",
+          "display_name": "Grok Build",
+          "description": "Grok Build command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "grok",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "--output-format",
+                "plain",
+                "-p"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:grok-v1",
+            "usage": "usage:grok-v1",
+            "subscription": "subscription:grok-v1",
+            "permissions": "permissions:generic-v1",
+            "subagents": "subagent:grok-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "command-code",
+          "display_name": "Command Code",
+          "description": "Command Code command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "command-code",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "--output-format",
+                "text",
+                "-p"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:command-code-v1",
+            "transcript": "history:command-code-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": false,
+            "login_may_be_required": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "6102881ef5747e0e10f7dd2ff8d4bfcb3484e98c4fd49f32d2ec50e4231c5576",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        }
+      ],
+      "diagnostics": null
+    },
+    {
+      "name": "legacy_replaced",
+      "layers": {
+        "Embedded": null,
+        "AcceptedDistribution": null,
+        "Distribution": null,
+        "Legacy": [
+          {
+            "schema_version": 1,
+            "id": "synthetic",
+            "display_name": "日本語 \u0026 \u003cTest\u003e",
+            "launch": {
+              "executable": "synthetic-cli",
+              "args": [
+                "--safe"
+              ]
+            },
+            "adapters": {
+              "launch": "launch:generic-v1"
+            },
+            "source": {}
+          }
+        ],
+        "User": [
+          {
+            "id": "synthetic",
+            "display_name": "explicit",
+            "adapters": {},
+            "source": {}
+          }
+        ],
+        "Overrides": null
+      },
+      "revision": "e3ec527c5219816c55722bc58599c7fb6e694be893c004dfdaf61da7dec4644b",
+      "list": [
+        {
+          "id": "synthetic",
+          "display_name": "explicit",
+          "enabled": true,
+          "origin": "user",
+          "revision": "e3ec527c5219816c55722bc58599c7fb6e694be893c004dfdaf61da7dec4644b",
+          "capabilities": {
+            "launch": true,
+            "models": false,
+            "effort": false,
+            "headless": false,
+            "approval": false,
+            "transcript": false,
+            "usage": false,
+            "subscription": false,
+            "permissions": false,
+            "subagents": false
+          }
+        }
+      ],
+      "definitions": [
+        {
+          "schema_version": 1,
+          "id": "synthetic",
+          "display_name": "explicit",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-cli",
+            "args": [
+              "--safe"
+            ]
+          },
+          "adapters": {
+            "launch": "launch:generic-v1"
+          },
+          "source": {},
+          "effective_source": {
+            "origin": "user"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "user"
+            },
+            "display_name": {
+              "origin": "user"
+            },
+            "id": {
+              "origin": "user"
+            },
+            "launch": {
+              "origin": "user"
+            },
+            "schema_version": {
+              "origin": "user"
+            },
+            "source": {
+              "origin": "user"
+            }
+          },
+          "revision": "e3ec527c5219816c55722bc58599c7fb6e694be893c004dfdaf61da7dec4644b",
+          "capabilities_summary": {
+            "launch": true,
+            "models": false,
+            "effort": false,
+            "headless": false,
+            "approval": false,
+            "transcript": false,
+            "usage": false,
+            "subscription": false,
+            "permissions": false,
+            "subagents": false
+          }
+        }
+      ],
+      "diagnostics": [
+        {
+          "code": "legacy_replaced",
+          "severity": "warning",
+          "field": "synthetic",
+          "message": "explicit user definition replaces the legacy definition"
+        }
+      ]
+    },
+    {
+      "name": "duplicate_missing",
+      "layers": {
+        "Embedded": null,
+        "AcceptedDistribution": null,
+        "Distribution": null,
+        "Legacy": null,
+        "User": [
+          {
+            "schema_version": 1,
+            "id": "synthetic",
+            "display_name": "日本語 \u0026 \u003cTest\u003e",
+            "launch": {
+              "executable": "synthetic-cli",
+              "args": [
+                "--safe"
+              ]
+            },
+            "adapters": {
+              "launch": "launch:generic-v1"
+            },
+            "source": {}
+          },
+          {
+            "schema_version": 1,
+            "id": "synthetic",
+            "display_name": "日本語 \u0026 \u003cTest\u003e",
+            "launch": {
+              "executable": "synthetic-cli",
+              "args": [
+                "--safe"
+              ]
+            },
+            "adapters": {
+              "launch": "launch:generic-v1"
+            },
+            "source": {}
+          },
+          {
+            "display_name": "missing",
+            "adapters": {},
+            "source": {}
+          }
+        ],
+        "Overrides": null
+      },
+      "revision": "f1a71f9621598d4d6475eff3a913d64415243d0d08a5615a49a62529fa3f9e83",
+      "list": [
+        {
+          "id": "synthetic",
+          "display_name": "日本語 \u0026 \u003cTest\u003e",
+          "enabled": true,
+          "origin": "user",
+          "revision": "f1a71f9621598d4d6475eff3a913d64415243d0d08a5615a49a62529fa3f9e83",
+          "capabilities": {
+            "launch": true,
+            "models": false,
+            "effort": false,
+            "headless": false,
+            "approval": false,
+            "transcript": false,
+            "usage": false,
+            "subscription": false,
+            "permissions": false,
+            "subagents": false
+          }
+        }
+      ],
+      "definitions": [
+        {
+          "schema_version": 1,
+          "id": "synthetic",
+          "display_name": "日本語 \u0026 \u003cTest\u003e",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-cli",
+            "args": [
+              "--safe"
+            ]
+          },
+          "adapters": {
+            "launch": "launch:generic-v1"
+          },
+          "source": {},
+          "effective_source": {
+            "origin": "user"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "user"
+            },
+            "display_name": {
+              "origin": "user"
+            },
+            "id": {
+              "origin": "user"
+            },
+            "launch": {
+              "origin": "user"
+            },
+            "schema_version": {
+              "origin": "user"
+            },
+            "source": {
+              "origin": "user"
+            }
+          },
+          "revision": "f1a71f9621598d4d6475eff3a913d64415243d0d08a5615a49a62529fa3f9e83",
+          "capabilities_summary": {
+            "launch": true,
+            "models": false,
+            "effort": false,
+            "headless": false,
+            "approval": false,
+            "transcript": false,
+            "usage": false,
+            "subscription": false,
+            "permissions": false,
+            "subagents": false
+          }
+        }
+      ],
+      "diagnostics": [
+        {
+          "code": "duplicate_id",
+          "severity": "error",
+          "field": "user[1].id",
+          "message": "provider id is duplicated in this layer"
+        },
+        {
+          "code": "missing_id",
+          "severity": "error",
+          "field": "user[2].id",
+          "message": "provider id is required"
+        }
+      ]
+    },
+    {
+      "name": "accepted_preferred",
+      "layers": {
+        "Embedded": [
+          {
+            "schema_version": 1,
+            "id": "claude",
+            "display_name": "Claude",
+            "description": "Claude Code command line interface",
+            "launch": {
+              "executable": "claude",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "effort_args": [
+                "--effort",
+                "{effort}"
+              ],
+              "effort_levels": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "headless": {
+                "args": [
+                  "-p",
+                  "--output-format",
+                  "stream-json",
+                  "--verbose"
+                ],
+                "format": "claude-stream-json",
+                "prompt_via": "stdin"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:claude-v1",
+              "transcript": "history:claude-v1",
+              "usage": "usage:claude-v1",
+              "subscription": "subscription:claude-v1",
+              "permissions": "permissions:generic-v1",
+              "subagents": "subagent:claude-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "codex",
+            "display_name": "Codex",
+            "description": "Codex command line interface",
+            "launch": {
+              "executable": "codex",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "effort_args": [
+                "-c",
+                "model_reasoning_effort=\"{effort}\""
+              ],
+              "effort_levels": [
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:codex-v1",
+              "transcript": "history:codex-v1",
+              "usage": "usage:codex-v1",
+              "subscription": "subscription:codex-v1",
+              "permissions": "permissions:generic-v1",
+              "subagents": "subagent:codex-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "copilot",
+            "display_name": "GitHub Copilot",
+            "description": "GitHub Copilot command line interface",
+            "launch": {
+              "executable_candidates": [
+                "copilot",
+                "gh"
+              ],
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "--output-format",
+                  "text",
+                  "-s",
+                  "-p"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:copilot-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "cursor-agent",
+            "display_name": "Cursor Agent",
+            "description": "Cursor Agent command line interface",
+            "launch": {
+              "executable": "cursor-agent",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "-p",
+                  "--output-format",
+                  "text"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:cursor-agent-v1",
+              "transcript": "history:cursor-agent-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": false,
+              "login_may_be_required": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "opencode",
+            "display_name": "OpenCode",
+            "description": "OpenCode command line interface",
+            "launch": {
+              "executable": "opencode",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "effort_args": [
+                "--variant",
+                "{effort}"
+              ],
+              "effort_levels": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "headless": {
+                "args": [
+                  "run",
+                  "--format",
+                  "default"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:opencode-v1",
+              "transcript": "history:opencode-v1",
+              "usage": "usage:opencode-v1",
+              "subscription": "subscription:opencode-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "upgrade"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "grok",
+            "display_name": "Grok Build",
+            "description": "Grok Build command line interface",
+            "launch": {
+              "executable": "grok",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "--output-format",
+                  "plain",
+                  "-p"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:grok-v1",
+              "usage": "usage:grok-v1",
+              "subscription": "subscription:grok-v1",
+              "permissions": "permissions:generic-v1",
+              "subagents": "subagent:grok-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": true
+            }
+          },
+          {
+            "schema_version": 1,
+            "id": "command-code",
+            "display_name": "Command Code",
+            "description": "Command Code command line interface",
+            "launch": {
+              "executable": "command-code",
+              "model_args": [
+                "--model",
+                "{model}"
+              ],
+              "headless": {
+                "args": [
+                  "--output-format",
+                  "text",
+                  "-p"
+                ],
+                "format": "text",
+                "prompt_via": "arg"
+              }
+            },
+            "models": {
+              "source": "remote"
+            },
+            "adapters": {
+              "approval": "approval:command-code-v1",
+              "transcript": "history:command-code-v1",
+              "permissions": "permissions:generic-v1"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "args": [
+                "update"
+              ],
+              "enabled": false,
+              "login_may_be_required": true
+            }
+          }
+        ],
+        "AcceptedDistribution": [
+          {
+            "id": "codex",
+            "display_name": "accepted",
+            "adapters": {},
+            "source": {}
+          }
+        ],
+        "Distribution": [
+          {
+            "id": "codex",
+            "display_name": "ignored",
+            "adapters": {},
+            "source": {}
+          }
+        ],
+        "Legacy": null,
+        "User": null,
+        "Overrides": null
+      },
+      "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+      "list": [
+        {
+          "id": "claude",
+          "display_name": "Claude",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "id": "codex",
+          "display_name": "accepted",
+          "enabled": true,
+          "origin": "distribution",
+          "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": false,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "id": "copilot",
+          "display_name": "GitHub Copilot",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "id": "cursor-agent",
+          "display_name": "Cursor Agent",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "id": "opencode",
+          "display_name": "OpenCode",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "id": "grok",
+          "display_name": "Grok Build",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "id": "command-code",
+          "display_name": "Command Code",
+          "enabled": true,
+          "origin": "embedded",
+          "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+          "capabilities": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        }
+      ],
+      "definitions": [
+        {
+          "schema_version": 1,
+          "id": "claude",
+          "display_name": "Claude",
+          "description": "Claude Code command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "claude",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "effort_args": [
+              "--effort",
+              "{effort}"
+            ],
+            "effort_levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "headless": {
+              "args": [
+                "-p",
+                "--output-format",
+                "stream-json",
+                "--verbose"
+              ],
+              "format": "claude-stream-json",
+              "prompt_via": "stdin"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:claude-v1",
+            "transcript": "history:claude-v1",
+            "usage": "usage:claude-v1",
+            "subscription": "subscription:claude-v1",
+            "permissions": "permissions:generic-v1",
+            "subagents": "subagent:claude-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "codex",
+          "display_name": "accepted",
+          "description": "Codex command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "codex",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "effort_args": [
+              "-c",
+              "model_reasoning_effort=\"{effort}\""
+            ],
+            "effort_levels": [
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:codex-v1",
+            "transcript": "history:codex-v1",
+            "usage": "usage:codex-v1",
+            "subscription": "subscription:codex-v1",
+            "permissions": "permissions:generic-v1",
+            "subagents": "subagent:codex-v1"
+          },
+          "source": {},
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "distribution"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "distribution"
+            },
+            "description": {
+              "origin": "distribution"
+            },
+            "display_name": {
+              "origin": "distribution"
+            },
+            "id": {
+              "origin": "distribution"
+            },
+            "launch": {
+              "origin": "distribution"
+            },
+            "models": {
+              "origin": "distribution"
+            },
+            "schema_version": {
+              "origin": "distribution"
+            },
+            "source": {
+              "origin": "distribution"
+            },
+            "update": {
+              "origin": "distribution"
+            }
+          },
+          "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": false,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "copilot",
+          "display_name": "GitHub Copilot",
+          "description": "GitHub Copilot command line interface",
+          "enabled": true,
+          "launch": {
+            "executable_candidates": [
+              "copilot",
+              "gh"
+            ],
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "--output-format",
+                "text",
+                "-s",
+                "-p"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:copilot-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "cursor-agent",
+          "display_name": "Cursor Agent",
+          "description": "Cursor Agent command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "cursor-agent",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "-p",
+                "--output-format",
+                "text"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:cursor-agent-v1",
+            "transcript": "history:cursor-agent-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": false,
+            "login_may_be_required": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "opencode",
+          "display_name": "OpenCode",
+          "description": "OpenCode command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "opencode",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "effort_args": [
+              "--variant",
+              "{effort}"
+            ],
+            "effort_levels": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "headless": {
+              "args": [
+                "run",
+                "--format",
+                "default"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:opencode-v1",
+            "transcript": "history:opencode-v1",
+            "usage": "usage:opencode-v1",
+            "subscription": "subscription:opencode-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "upgrade"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": true,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": false
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "grok",
+          "display_name": "Grok Build",
+          "description": "Grok Build command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "grok",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "--output-format",
+                "plain",
+                "-p"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:grok-v1",
+            "usage": "usage:grok-v1",
+            "subscription": "subscription:grok-v1",
+            "permissions": "permissions:generic-v1",
+            "subagents": "subagent:grok-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": false,
+            "usage": true,
+            "subscription": true,
+            "permissions": true,
+            "subagents": true
+          }
+        },
+        {
+          "schema_version": 1,
+          "id": "command-code",
+          "display_name": "Command Code",
+          "description": "Command Code command line interface",
+          "enabled": true,
+          "launch": {
+            "executable": "command-code",
+            "model_args": [
+              "--model",
+              "{model}"
+            ],
+            "headless": {
+              "args": [
+                "--output-format",
+                "text",
+                "-p"
+              ],
+              "format": "text",
+              "prompt_via": "arg"
+            }
+          },
+          "models": {
+            "source": "remote"
+          },
+          "adapters": {
+            "approval": "approval:command-code-v1",
+            "transcript": "history:command-code-v1",
+            "permissions": "permissions:generic-v1"
+          },
+          "source": {
+            "origin": "embedded"
+          },
+          "update": {
+            "args": [
+              "update"
+            ],
+            "enabled": false,
+            "login_may_be_required": true
+          },
+          "effective_source": {
+            "origin": "embedded"
+          },
+          "field_origins": {
+            "adapters": {
+              "origin": "embedded"
+            },
+            "description": {
+              "origin": "embedded"
+            },
+            "display_name": {
+              "origin": "embedded"
+            },
+            "id": {
+              "origin": "embedded"
+            },
+            "launch": {
+              "origin": "embedded"
+            },
+            "models": {
+              "origin": "embedded"
+            },
+            "schema_version": {
+              "origin": "embedded"
+            },
+            "source": {
+              "origin": "embedded"
+            },
+            "update": {
+              "origin": "embedded"
+            }
+          },
+          "revision": "435ae9a8c25ca6cfa06c437845aab9678deab860df47653db2b96a67697545c1",
+          "capabilities_summary": {
+            "launch": true,
+            "models": true,
+            "effort": false,
+            "headless": true,
+            "approval": true,
+            "transcript": true,
+            "usage": false,
+            "subscription": false,
+            "permissions": true,
+            "subagents": false
+          }
+        }
+      ],
+      "diagnostics": null
+    }
+  ],
+  "validation": [
+    {
+      "name": "a",
+      "raw": "{\"schema_version\":1,\"id\":\"synthetic\",\"display_name\":\"Synthetic\",\"launch\":{\"executable\":\"fake\"}}",
+      "diagnostics": null,
+      "rejected": false
+    },
+    {
+      "name": "b",
+      "raw": "{\"SCHEMA_VERSION\":1,\"ID\":\"synthetic\",\"display_name\":\"Synthetic\",\"launch\":{\"executable\":\"fake\"},\"unknown\":1e1000}",
+      "diagnostics": [
+        {
+          "code": "unknown_field",
+          "severity": "warning",
+          "field": "ID",
+          "message": "unknown field is ignored"
+        },
+        {
+          "code": "unknown_field",
+          "severity": "warning",
+          "field": "SCHEMA_VERSION",
+          "message": "unknown field is ignored"
+        },
+        {
+          "code": "unknown_field",
+          "severity": "warning",
+          "field": "unknown",
+          "message": "unknown field is ignored"
+        }
+      ],
+      "rejected": false
+    },
+    {
+      "name": "c",
+      "raw": "{\"schema_version\":1,\"id\":\"shell\",\"display_name\":\" \",\"launch\":{\"executable\":\"bad;run\",\"args\":[\"{bad}\"],\"model_args\":[\"{model}\"],\"allowed_env\":[\"A=bad\"]},\"presentation\":{\"icon_text\":\"abc\",\"color\":\"red\"},\"update\":{\"enabled\":true,\"timeout_seconds\":3601}}",
+      "diagnostics": [
+        {
+          "code": "invalid_display_name",
+          "severity": "error",
+          "field": "display_name",
+          "message": "display_name is required"
+        },
+        {
+          "code": "invalid_id",
+          "severity": "error",
+          "field": "id",
+          "message": "shell is a reserved launch identity"
+        },
+        {
+          "code": "invalid_env_name",
+          "severity": "error",
+          "field": "launch.allowed_env[0]",
+          "message": "environment entries must be variable names, not values"
+        },
+        {
+          "code": "unknown_placeholder",
+          "severity": "error",
+          "field": "launch.args[0]",
+          "message": "argv contains an unknown placeholder"
+        },
+        {
+          "code": "invalid_executable",
+          "severity": "error",
+          "field": "launch.executable[0]",
+          "message": "launch.executable[0] contains shell expansion syntax"
+        },
+        {
+          "code": "invalid_presentation",
+          "severity": "error",
+          "field": "presentation.color",
+          "message": "presentation.color must be a #RRGGBB hex color"
+        },
+        {
+          "code": "invalid_presentation",
+          "severity": "error",
+          "field": "presentation.icon_text",
+          "message": "presentation.icon_text must be 1 to 2 visible characters without surrounding whitespace"
+        },
+        {
+          "code": "update_enabled_without_args",
+          "severity": "error",
+          "field": "update.enabled",
+          "message": "update.enabled is true but update.args is empty"
+        },
+        {
+          "code": "invalid_update_timeout",
+          "severity": "error",
+          "field": "update.timeout_seconds",
+          "message": "update.timeout_seconds must be between 0 and 3600"
+        }
+      ],
+      "rejected": false
+    },
+    {
+      "name": "d",
+      "raw": "{\"schema_version\":1,\"id\":\"synthetic\",\"display_name\":\"Synthetic\",\"launch\":{\"executable\":\"fake\"},\"presentation\":{\"icon_text\":\"👩‍💻\",\"color\":\"#12aBcD\"}}",
+      "diagnostics": null,
+      "rejected": false
+    },
+    {
+      "name": "e",
+      "raw": "{\"schema_version\":1,\"id\":\"synthetic\",\"display_name\":\"Synthetic\",\"launch\":{\"executable\":\"fake\"},\"presentation\":{\"icon_text\":\"🇯🇵\",\"color\":\"\"}}",
+      "diagnostics": null,
+      "rejected": false
+    },
+    {
+      "name": "f",
+      "raw": "{\"schema_version\":1,\"id\":\"synthetic\",\"display_name\":\"Synthetic\",\"launch\":{\"executable\":\"fake\"},\"models\":{\"items\":[{\"id\":\"bad/id\",\"label\":\"\"},{\"id\":\"bad/id\",\"label\":\"Again\"}]},\"adapters\":{\"usage\":\"unknown\"},\"capabilities\":{\"arbitrary\":true}}",
+      "diagnostics": [
+        {
+          "code": "unknown_adapter",
+          "severity": "error",
+          "field": "adapters.usage",
+          "message": "adapter key is not registered"
+        },
+        {
+          "code": "unknown_capability",
+          "severity": "warning",
+          "field": "capabilities.arbitrary",
+          "message": "unknown capability is ignored"
+        },
+        {
+          "code": "invalid_model_id",
+          "severity": "error",
+          "field": "models.items[0].id",
+          "message": "id must be a lowercase slug of at most 64 characters"
+        },
+        {
+          "code": "invalid_model_label",
+          "severity": "error",
+          "field": "models.items[0].label",
+          "message": "models.items[0].label is required"
+        },
+        {
+          "code": "duplicate_model_id",
+          "severity": "error",
+          "field": "models.items[1].id",
+          "message": "model id is duplicated"
+        },
+        {
+          "code": "invalid_model_id",
+          "severity": "error",
+          "field": "models.items[1].id",
+          "message": "id must be a lowercase slug of at most 64 characters"
+        }
+      ],
+      "rejected": false
+    },
+    {
+      "name": "g",
+      "raw": "null",
+      "diagnostics": [
+        {
+          "code": "invalid_display_name",
+          "severity": "error",
+          "field": "display_name",
+          "message": "display_name is required"
+        },
+        {
+          "code": "invalid_id",
+          "severity": "error",
+          "field": "id",
+          "message": "id is required"
+        },
+        {
+          "code": "missing_launch",
+          "severity": "error",
+          "field": "launch",
+          "message": "launch is required"
+        },
+        {
+          "code": "unsupported_schema_version",
+          "severity": "error",
+          "field": "schema_version",
+          "message": "schema version must be 1"
+        }
+      ],
+      "rejected": false
+    },
+    {
+      "name": "h",
+      "raw": "{\"id\":12,\"id\":\"synthetic\"}",
+      "diagnostics": null,
+      "rejected": true
+    },
+    {
+      "name": "i",
+      "raw": "{\"id\":\"synthetic\"} {\"extra\":true}",
+      "diagnostics": null,
+      "rejected": true
+    }
+  ]
+}

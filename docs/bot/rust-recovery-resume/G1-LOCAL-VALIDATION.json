@@ -1,0 +1,191 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-10-06T14:40:35.764986+00:00",
+  "local_code_checkpoint": "097082c367aa9eef9cc549efbfb52054374b25d4",
+  "local_code_tree": "851d377fbcf500a77af55e549f417c7b4cd6718b",
+  "rust_src_tree": "04ffef9bfc7723f18ee73f9f51645e2b3bd2d110",
+  "baseline_public_head": "bec576445a7b74505ddcd95c68f7ad2aca41ff94",
+  "go_oracle": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "all_targets": {
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "rust/Cargo.toml",
+      "--locked",
+      "--offline",
+      "--all-targets",
+      "--no-fail-fast",
+      "--",
+      "--test-threads=8"
+    ],
+    "exit_code": 0,
+    "counts": [
+      1448,
+      0,
+      0
+    ],
+    "included_library": [
+      1136,
+      0,
+      0
+    ],
+    "summaries": 34,
+    "log_sha256": "2894380d058d6a60ded1fc3438033a9baece4ce03b25dc65e508584b60643cf5"
+  },
+  "checks": [
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "seconds": 44.342,
+      "log": "g1-clippy.log",
+      "log_sha256": "3f5f812f23d4eb474c2bd0e9c6cea3fc14e3dec003986dd97ffb13d9b5a3a17f"
+    },
+    {
+      "name": "doctests",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--doc"
+      ],
+      "exit_code": 0,
+      "seconds": 3.329,
+      "log": "g1-doctests.log",
+      "log_sha256": "f45fed05f7b305ad1e2132467d2feebd635109e7c6b4d87063ce9d7e074ee629",
+      "counts": [
+        3,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 1.884,
+      "log": "g1-fmt.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "packaging",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "rust/packaging",
+        "-p",
+        "test_*.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.468,
+      "log": "g1-packaging.log",
+      "log_sha256": "418c84eb71d0657425f8323977cf29cd128144d7611d9c404d02deb9aebfa7ff",
+      "tests": 47
+    },
+    {
+      "name": "instrumentation",
+      "command": [
+        "bun",
+        "scripts/check-instrumentation.mjs"
+      ],
+      "exit_code": 0,
+      "seconds": 0.222,
+      "log": "g1-instrumentation.log",
+      "log_sha256": "c54bcee9779815b0f31c1c2c70c5873510614865da2b36dd2d884bd9fa11734d"
+    }
+  ],
+  "new_regression_scopes": {
+    "git_lookup_backend_tests": 10,
+    "queue_owner_tests": 6,
+    "core_state_tests": 9,
+    "actual_normal_hub_git_websocket_test": {
+      "counts": [
+        1,
+        0,
+        0
+      ],
+      "command_scope": "included in final all-target aggregate",
+      "source_sha256": "3a4b3c2e05b583d56cce2dc25d13742f1daaa56792eba291efbe66c24de9cf73",
+      "uses_real_hub_git_websockets": true,
+      "provider_processes_and_accounts": false,
+      "cases": [
+        "initial branch and tracked/untracked counts",
+        "nested cwd project identity",
+        "linked worktree grouped with main root",
+        "periodic branch switch without explicit refresh or reconnect",
+        "non-Git checked empty state and later snapshot"
+      ]
+    }
+  },
+  "baseline_red": {
+    "baseline_source_sha": "bec576445a7b74505ddcd95c68f7ad2aca41ff94",
+    "baseline_binary_sha256": "53b1d8ee99ab25f9021b1a91988679ea8d0d2a587c1c64f4f40e57cba0486d05",
+    "new_test_code_checkpoint": "097082c367aa9eef9cc549efbfb52054374b25d4",
+    "test_source_sha256": "3a4b3c2e05b583d56cce2dc25d13742f1daaa56792eba291efbe66c24de9cf73",
+    "harness_compile_exit": 0,
+    "test_exit": 101,
+    "test_log_sha256": "c72cedeff5f1da18ba3ba632b0f43f5bff5d2f300d6f71731abe02366d583879",
+    "scope": "Final new native test source linked against existing locked test dependencies, with the Hub path bound at compilation to the verified published baseline Linux binary. Real normal-mode Hub, Git and WebSockets; no source rollback or mocked product."
+  },
+  "initial_validation_failure": {
+    "counts": [
+      1446,
+      1,
+      0
+    ],
+    "cause": "The new exact JSON expectation omitted token_statusbar:false, which Go Message intentionally serializes without omitempty. The expectation was corrected to the fixed Go tag; exact equality was retained.",
+    "log_sha256": "c00dc4fe509163ac1d8fd456398ebf0d5c3ccb8e74f2d1bf767a6fde99c6c888"
+  },
+  "parity": {
+    "lookup_budgets_ms": {
+      "branch": 250,
+      "changes": 250,
+      "project": 250
+    },
+    "each_helper_shares_its_budget_with_fallback_commands": true,
+    "tick_ms": 200,
+    "refresh_ms": 2000,
+    "workers": 4,
+    "pending_cwd_requests_deduplicated_and_drained": true,
+    "project_unknown_retries_definitive_empty_latches": true,
+    "terminal_sessions_refresh": true,
+    "application_guard": "session ID exists and exact current cwd matches; same-cwd reattach replacement may receive earlier result like Go",
+    "git_command_selection": "Display source resolves bare git via command PATH each call; existing selected Git API executable is unchanged.",
+    "ui_publication": "SessionCore routing handles priming and hidden probes; source refresh sends the fixed Go sparse packet."
+  },
+  "limits": [
+    "Linux local execution only; no Windows/macOS result inferred.",
+    "Native CI/artifacts and three consecutive Windows quick successes must bind the later published head.",
+    "Local commands bind these source bytes; pre-commit cached binary metadata is not relabeled as a new public SHA.",
+    "Ten-variant and session_update audit is baseline static evidence, not a new runtime acceptance or an implementation-complete statement.",
+    "Additional effort/subscription_name/conditional route/transcript gaps are report-only.",
+    "Formal new-change review waits until candidate CI is green.",
+    "Owner device observations used a debug build and isolated home/new DB; approval continuation, existing Go DB compatibility and rollback remain unverified.",
+    "No startup-speed work, real provider/account, workflow/scanner/exclusion/dependency/release changes."
+  ]
+}

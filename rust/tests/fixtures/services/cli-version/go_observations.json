@@ -1,0 +1,1879 @@
+{
+  "baseline": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "source_sha256": {
+    "internal/provider/schema.go": "90ec0701a67263fb7295d1e718d81fdbf6e3879c0e836f30a9578762d06f47dd",
+    "internal/provider/registry.go": "87dd3d72175c241353932016ac26ba5c3835bc97b323ec723643f3eb91fbcc32",
+    "internal/provider/update.go": "e33f51d4951be6e24b1a034df32df07d7d46dc096826f0c928ab5f32c9061f99",
+    "internal/execpath/execpath_other.go": "a65a38384ed04cfe56253097be6f407ee10bb6a508e6388a2710991407955edf",
+    "internal/hub/cli_version.go": "419aa2c0710af0d016107c6dae20a334cbd60ec3b6b81937f5c9ce8b54e74793",
+    "internal/hub/http_helpers.go": "6175da5759f10b3d17fb6c664ce38102a15ee9029658af6f05d6c1bc146be450"
+  },
+  "cases": [
+    {
+      "body": {
+        "checked_at": "",
+        "results": []
+      },
+      "cache_control": "no-store",
+      "cached": null,
+      "calls": [],
+      "name": "method-GET",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "method-PUT",
+      "status": 405
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "method-PATCH",
+      "status": 405
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "method-DELETE",
+      "status": 405
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "method-HEAD",
+      "status": 405
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "method-OPTIONS",
+      "status": 405
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "method-post",
+      "status": 405
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-empty",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-object",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-null",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "body-space",
+      "status": 400
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "body-missing-close",
+      "status": 400
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "body-string",
+      "status": 400
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "body-array",
+      "status": 400
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "body-number",
+      "status": 400
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "body-false",
+      "status": 400
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-unknown",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-null-providers",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-empty-providers",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "body-blank-providers",
+      "status": 400
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          },
+          {
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044",
+            "exit_code": 0,
+            "provider": "missing"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          },
+          {
+            "provider": "missing",
+            "exit_code": 0,
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044"
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-trim-dedupe",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044",
+            "exit_code": 0,
+            "provider": "ALPHA"
+          },
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "ALPHA",
+            "exit_code": 0,
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044"
+          },
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-case-sensitive",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-folded-key",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044",
+            "exit_code": 0,
+            "provider": "missing"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "missing",
+            "exit_code": 0,
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044"
+          }
+        ]
+      },
+      "calls": [],
+      "name": "body-long-s-key",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-null-element",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "body-wrong-element",
+      "status": 400
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "body-wrong-providers",
+      "status": 400
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-duplicate-last",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-duplicate-null",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-duplicate-reused-null",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-trailing-object",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-trailing-garbage",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "body-body-limit",
+      "status": 400
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "body-early-value-large-trailing",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "framing-empty-chunked",
+      "status": 400
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "framing-empty-chunked-before-registry",
+      "status": 400
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "framing-chunked-nonempty",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "framing-explicit-zero",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "framing-explicit-positive-eof",
+      "status": 400
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "framing-artificial-zero-ignores-body",
+      "status": 200
+    },
+    {
+      "body": {
+        "detail": "provider registry is unavailable",
+        "error": "provider_registry_unavailable",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "no-registry-''",
+      "status": 503
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "no-registry-'{bad'",
+      "status": 400
+    },
+    {
+      "body": {
+        "detail": "provider registry is unavailable",
+        "error": "provider_registry_unavailable",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "no-registry-'{}'",
+      "status": 503
+    },
+    {
+      "body": {
+        "detail": "provider registry is unavailable",
+        "error": "provider_registry_unavailable",
+        "ok": false
+      },
+      "cache_control": "",
+      "cached": null,
+      "calls": [],
+      "name": "no-registry-'null'",
+      "status": 503
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": []
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": []
+      },
+      "calls": [],
+      "name": "empty-registry",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044",
+            "exit_code": 0,
+            "provider": "claude"
+          },
+          {
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044",
+            "exit_code": 0,
+            "provider": "codex"
+          },
+          {
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044",
+            "exit_code": 0,
+            "provider": "zulu"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "claude",
+            "exit_code": 0,
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044"
+          },
+          {
+            "provider": "codex",
+            "exit_code": 0,
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044"
+          },
+          {
+            "provider": "zulu",
+            "exit_code": 0,
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044"
+          }
+        ]
+      },
+      "calls": [],
+      "name": "default-order-and-disabled",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "executable": "/synthetic/bin/alpha",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0,
+            "provider": "alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "alpha",
+            "executable": "/synthetic/bin/alpha",
+            "version_line": "synthetic v1.2.3",
+            "version_text": "synthetic v1.2.3\n",
+            "executable_modified_at": "2026-10-03T03:34:56Z",
+            "exit_code": 0
+          }
+        ]
+      },
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "explicit-disabled-runs",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044",
+            "exit_code": 0,
+            "provider": "zulu"
+          },
+          {
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044",
+            "exit_code": 0,
+            "provider": "alpha"
+          },
+          {
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044",
+            "exit_code": 0,
+            "provider": "missing"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "zulu",
+            "exit_code": 0,
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044"
+          },
+          {
+            "provider": "alpha",
+            "exit_code": 0,
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044"
+          },
+          {
+            "provider": "missing",
+            "exit_code": 0,
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044"
+          }
+        ]
+      },
+      "calls": [],
+      "name": "explicit-request-order",
+      "status": 200
+    },
+    {
+      "body": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044",
+            "exit_code": 0,
+            "provider": "missing"
+          }
+        ]
+      },
+      "cache_control": "no-store",
+      "cached": {
+        "checked_at": "2026-10-03T17:03:04Z",
+        "results": [
+          {
+            "provider": "missing",
+            "exit_code": 0,
+            "error": "\u898b\u3064\u304b\u3089\u306a\u3044"
+          }
+        ]
+      },
+      "calls": [],
+      "name": "unknown-preserves-old-shape",
+      "status": 200
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-normal",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "synthetic v1.2.3",
+        "version_text": "synthetic v1.2.3\n",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-multiline",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "synthetic v1",
+        "version_text": "\n\r\n  synthetic v1 \r\nbuild\n",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-stderr-only",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "warning v2",
+        "version_text": "warning v2\n",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-empty",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0,
+        "error": "\u51fa\u529b\u304c\u7a7a"
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-whitespace",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_text": " \r\n\t",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0,
+        "error": "\u51fa\u529b\u304c\u7a7a"
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-exit-one",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "synthetic boom",
+        "version_text": "synthetic boom\n",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 1,
+        "error": "\u7d42\u4e86\u30b3\u30fc\u30c9 1"
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-signal",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "partial",
+        "version_text": "partial",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": -1,
+        "error": "\u7d42\u4e86\u30b3\u30fc\u30c9 -1"
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-timeout",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "partial",
+        "version_text": "partial\n",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": -1,
+        "error": "\u6253\u3061\u5207\u308a"
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-timeout-exit-zero",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "complete",
+        "version_text": "complete",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0,
+        "error": "\u6253\u3061\u5207\u308a"
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-cap",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "version_text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-cap-empty-after",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_text": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0,
+        "error": "\u51fa\u529b\u304c\u7a7a"
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-cap-utf8",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\ufffd",
+        "version_text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\ufffd",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-invalid-utf8",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "\ufffd\ufffd\ufffd v2",
+        "version_text": "\ufffd\ufffd\ufffd v2\n",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-html",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "<v1>&",
+        "version_text": "<v1>&\u2028\n",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-unicode-space",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "\u65e5\u672c\u8a9e v3",
+        "version_text": "\u0085\u00a0\u2003\n\u3000 \u65e5\u672c\u8a9e v3 \u2009\n",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-start-failure",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0,
+        "error": "\u898b\u3064\u304b\u3089\u306a\u3044"
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-no-mtime",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "synthetic v1.2.3",
+        "version_text": "synthetic v1.2.3\n",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [],
+      "name": "one-no-launch",
+      "result": {
+        "provider": "alpha",
+        "exit_code": 0,
+        "error": "\u898b\u3064\u304b\u3089\u306a\u3044"
+      }
+    },
+    {
+      "calls": [],
+      "name": "one-no-hit",
+      "result": {
+        "provider": "alpha",
+        "exit_code": 0,
+        "error": "\u898b\u3064\u304b\u3089\u306a\u3044"
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-secondary-candidate",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "synthetic v1.2.3",
+        "version_text": "synthetic v1.2.3\n",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-first-hit-wins",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "synthetic v1.2.3",
+        "version_text": "synthetic v1.2.3\n",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-empty-executable",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "synthetic v1.2.3",
+        "version_text": "synthetic v1.2.3\n",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "version",
+            "--plain"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-version-args",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "synthetic v1.2.3",
+        "version_text": "synthetic v1.2.3\n",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            "--version"
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-empty-version-args",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "synthetic v1.2.3",
+        "version_text": "synthetic v1.2.3\n",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [
+        {
+          "args": [
+            ""
+          ],
+          "executable": "/synthetic/bin/alpha",
+          "output_cap": 8192,
+          "timeout_ms": 10000
+        }
+      ],
+      "name": "one-blank-version-arg",
+      "result": {
+        "provider": "alpha",
+        "executable": "/synthetic/bin/alpha",
+        "version_line": "synthetic v1.2.3",
+        "version_text": "synthetic v1.2.3\n",
+        "executable_modified_at": "2026-10-03T03:34:56Z",
+        "exit_code": 0
+      }
+    },
+    {
+      "calls": [],
+      "line": "",
+      "name": "line-0"
+    },
+    {
+      "calls": [],
+      "line": "",
+      "name": "line-1"
+    },
+    {
+      "calls": [],
+      "line": "",
+      "name": "line-2"
+    },
+    {
+      "calls": [],
+      "line": "a",
+      "name": "line-3"
+    },
+    {
+      "calls": [],
+      "line": "a\rb",
+      "name": "line-4"
+    },
+    {
+      "calls": [],
+      "line": "\u65e5\u672c\u8a9e",
+      "name": "line-5"
+    },
+    {
+      "calls": [],
+      "line": "\u001ccontrol",
+      "name": "line-6"
+    },
+    {
+      "calls": [],
+      "line": "\ufeffversion",
+      "name": "line-7"
+    },
+    {
+      "calls": [],
+      "line": "\u200bversion",
+      "name": "line-8"
+    },
+    {
+      "calls": [],
+      "ids": null,
+      "name": "normalize-0"
+    },
+    {
+      "calls": [],
+      "ids": [],
+      "name": "normalize-1"
+    },
+    {
+      "calls": [],
+      "ids": [],
+      "name": "normalize-2"
+    },
+    {
+      "calls": [],
+      "ids": [
+        "alpha",
+        "Alpha",
+        "beta"
+      ],
+      "name": "normalize-3"
+    },
+    {
+      "calls": [],
+      "ids": [
+        "alpha",
+        "\ufeffalpha",
+        "\u001calpha"
+      ],
+      "name": "normalize-4"
+    }
+  ]
+}

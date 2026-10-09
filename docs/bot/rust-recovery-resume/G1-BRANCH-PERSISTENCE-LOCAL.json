@@ -1,0 +1,172 @@
+{
+  "issue": "Resolved initial branch was omitted from persisted SessionStart",
+  "oracle": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+  "go_reference": "internal/hub/wrapper_loop.go:174 and537 explicitly pass Branch to attachStore",
+  "reviewed_base": "f4397e36684be4603228994b29db7fc1f624f00f",
+  "trigger": "log.session_enabled=false is the default; optional history does not repair metadata. Enabled history can also be delayed/lost.",
+  "regression_fixture_delta_sha256": "d0c205f88f091f530af0e0d41d7ec478df6c14ed9888600ff223b1f23b377a3c",
+  "red": {
+    "stage": "regression before product fix",
+    "production_base": "f4397e36684be4603228994b29db7fc1f624f00f",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--offline",
+      "--manifest-path",
+      "rust/Cargo.toml",
+      "--test",
+      "session_engine_contracts",
+      "branch_persistence",
+      "--",
+      "--test-threads=1"
+    ],
+    "exit_code": 101,
+    "elapsed_seconds": 2.531891345977783,
+    "log_sha256": "4b3dde26955b572a08b03d54fc31847a4a0b7dddd67d0002f158f75d6a6e2af9"
+  },
+  "red_scope": "Unchanged f439 production source plus only the new six integration regressions/fixture plumbing; compiled successfully and six runtime assertions failed with empty stored branch",
+  "focused_green": {
+    "stage": "focused regression after lifecycle fix",
+    "base_commit": "f4397e36684be4603228994b29db7fc1f624f00f",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--offline",
+      "--manifest-path",
+      "rust/Cargo.toml",
+      "--test",
+      "session_engine_contracts",
+      "branch_persistence",
+      "--",
+      "--test-threads=1"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 45.00859475135803,
+    "log_sha256": "02c0622fa79f504d824132a377feb0d349705a71eff33ea871c9623842454726",
+    "changed_production_sha256": "dd3779c86318aac6dd15747edc0161bffeea0dfed3687bd0239949afbb04c2fb"
+  },
+  "code_commits": [
+    "d65e54d1b30a52da941bcd3fd934831617c31033",
+    "659e11d27bf034f493beda672884faab0caa1b26"
+  ],
+  "intermediate_validation": "d65e54d all1455tests passed; strictClippy found one redundant struct-default update after the final field was supplied. The659e11d followup removes only that line.",
+  "final_local_checks": [
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--",
+        "--check"
+      ],
+      "source_sha": "659e11d27bf034f493beda672884faab0caa1b26",
+      "exit_code": 0,
+      "elapsed_seconds": 1.9385910034179688,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "source_sha": "659e11d27bf034f493beda672884faab0caa1b26",
+      "exit_code": 0,
+      "elapsed_seconds": 40.971277952194214,
+      "log_sha256": "bfb32a59053f69b75c4ca390e38abc0a5271d38bac651f95143302e886730c9f"
+    },
+    {
+      "name": "all-targets",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--all-targets",
+        "--no-fail-fast",
+        "--",
+        "--test-threads=8"
+      ],
+      "source_sha": "659e11d27bf034f493beda672884faab0caa1b26",
+      "exit_code": 0,
+      "elapsed_seconds": 121.72723984718323,
+      "log_sha256": "32d100c920e65dc83c8c99a7fc9b7be4596443cec028add66fc5ec8e6f281af7"
+    },
+    {
+      "name": "doctests",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--doc"
+      ],
+      "source_sha": "659e11d27bf034f493beda672884faab0caa1b26",
+      "exit_code": 0,
+      "elapsed_seconds": 3.2037765979766846,
+      "log_sha256": "daf1dc1ea9e7fdef0ee77ce8d3d0c9edd7245683e16bae20f773e1fccd6d5165"
+    },
+    {
+      "name": "instrumentation",
+      "command": [
+        "bun",
+        "scripts/check-instrumentation.mjs"
+      ],
+      "source_sha": "659e11d27bf034f493beda672884faab0caa1b26",
+      "exit_code": 0,
+      "elapsed_seconds": 0.13796710968017578,
+      "log_sha256": "8412c59dbc927823be661216cda83ce75f38df159678b2513c7829e76f74c16b"
+    }
+  ],
+  "all_targets": {
+    "passed": 1455,
+    "failed": 0,
+    "ignored": 0,
+    "library_included": 1137,
+    "summary_count": 34
+  },
+  "doctests_separate": {
+    "passed": 3,
+    "failed": 0,
+    "ignored": 0
+  },
+  "regression_cases": [
+    "registration with session logging disabled",
+    "registration with session logging enabled before optional history effects",
+    "warm reattach with session logging disabled, same DB row",
+    "warm reattach with session logging enabled before optional history effects, same DB row",
+    "cold reattach with session logging disabled",
+    "cold reattach with session logging enabled before optional history effects"
+  ],
+  "limits": [
+    "Only real SQLite/core behavior is asserted by these deterministic lookup fixtures; existing actual-Git/Hub native regressions remain unchanged",
+    "No new native result or independent fix re-review is claimed before the new candidate gate",
+    "No scanner, exclusions, workflow, dependency, real profile or installed-data changes",
+    "Startup-cwd finding remains unresolved: confirmed POSIX trigger, Windows alias/junction exposure unverified; no generic cwd/launcher change is included"
+  ],
+  "prepared_remote_code_commits": [
+    "baa4f11daffc2a3d5e5f594d3699d958a3d33114",
+    "17a824d20ac077189d4b14c96a52389b39d8cb41"
+  ],
+  "publication_scope": "Prepared commit objects with equivalent trees; final branch head/readback and new native acceptance recorded separately",
+  "reviews_at_f439": {
+    "g1": "two P2 findings; persistence fixed in current candidate, startup-cwd finding unresolved/report-only",
+    "v25_fixture_exceptions": "no findings in that scope; current fix not yet re-reviewed"
+  }
+}

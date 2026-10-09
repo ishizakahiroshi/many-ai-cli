@@ -1,0 +1,132 @@
+{
+  "oracle": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "status": "frozen Linux integration passed; independent and complete native acceptance pending",
+  "contracts": [
+    {
+      "go": [
+        "internal/wrapper/wrapper.go",
+        "internal/wrapper/pty_unix.go",
+        "internal/wrapper/pty_windows.go",
+        "internal/execpath/"
+      ],
+      "rust": [
+        "src/wrapper/launch.rs",
+        "src/wrapper/entry.rs",
+        "src/process/execpath.rs",
+        "src/process/pty.rs",
+        "src/process/pty_unix.rs",
+        "src/process/pty_windows.rs"
+      ],
+      "tests": [
+        "wrapper_native_pty_observes_env_cwd_argv_and_idempotent_wait",
+        "wrapper_native_pty_startup_size_resize_input_and_termination",
+        "wrapper_native_close_is_bounded_and_keeps_unrelated_child",
+        "process::pty_windows::tests::failed_job_attachment_cannot_execute_provider_code"
+      ]
+    },
+    {
+      "go": [
+        "internal/wrapper/input_seq_test.go",
+        "internal/wrapper/input_split_test.go",
+        "internal/wrapper/reconnect_supervisor_test.go",
+        "internal/wrapper/reattach_handshake_test.go",
+        "internal/wrapper/pty_replay.go"
+      ],
+      "rust": [
+        "src/wrapper/runtime.rs",
+        "src/wrapper/input.rs",
+        "src/wrapper/transport.rs",
+        "src/terminal/replay.rs"
+      ],
+      "tests": [
+        "wrapper_input_watermark_distinguishes_received_from_written",
+        "wrapper_input_preserves_utf8_chunks_clear_prefix_and_submit_delays",
+        "wrapper_actual_runtime_register_input_ack_reconnect_replay_and_dismiss",
+        "wrapper_short_writes_complete_before_ack_and_duplicates_do_not_rewrite",
+        "wrapper_failed_write_never_acks_and_keeps_session_until_explicit_dismissal",
+        "wrapper_output_backpressure_reconnects_even_with_live_hub_auto_shutdown",
+        "wrapper_explicit_hub_shutdown_keeps_provider_for_manual_restart"
+      ]
+    },
+    {
+      "go": [
+        "internal/wrapper/launch_prompt.go",
+        "internal/wrapper/env_color.go",
+        "internal/wrapper/claude_session.go",
+        "internal/shell/init.go"
+      ],
+      "rust": [
+        "src/wrapper/launch.rs",
+        "src/wrapper/shell.rs"
+      ],
+      "tests": [
+        "wrapper::launch::tests",
+        "wrapper::shell::tests"
+      ]
+    },
+    {
+      "go": [
+        "internal/wrapper/usage_hooks.go",
+        "internal/wrapper/delegation.go",
+        "internal/wrapper/opencode_config.go"
+      ],
+      "rust": [
+        "src/wrapper/hooks.rs"
+      ],
+      "tests": [
+        "wrapper::hooks::tests"
+      ]
+    },
+    {
+      "go": [
+        "internal/wrapper/output_encoding.go",
+        "internal/wrapper/output_encoding_windows.go",
+        "internal/subscription/login_complete.go"
+      ],
+      "rust": [
+        "src/wrapper/output.rs"
+      ],
+      "tests": [
+        "wrapper::output::tests",
+        "wrapper::output::login_tests"
+      ]
+    },
+    {
+      "go": [
+        "internal/wrapper/headless_session.go",
+        "internal/headless/runner.go"
+      ],
+      "rust": [
+        "src/wrapper/entry.rs",
+        "src/orchestration/headless.rs"
+      ],
+      "tests": [],
+      "remaining": "actual headless wrapper caller integration test and existing headless executor regression"
+    },
+    {
+      "contract": "internal one-use spawn correlation; not human approval",
+      "rust": [
+        "src/proto/core.rs",
+        "src/wrapper/runtime.rs",
+        "src/wrapper/transport.rs"
+      ],
+      "tests": [
+        "wrapper_lost_registration_ack_consumes_no_provider_and_never_retries_proof",
+        "wrapper_loopback_websocket_transmits_initial_proof_only_in_header"
+      ]
+    }
+  ],
+  "integration_receipts": {
+    "first_focused_run": "210 library +13 wrapper integration tests passed, including Linux native PTY and synthetic loopback; strict clippy subsequently passed after equivalent formatting/boxing corrections.",
+    "source_corrections": [
+      "sha2 0.11 digest hex formatting",
+      "explicit byte vector type in fixture",
+      "Go-compatible best-effort resize and failed-input no-ACK continuation"
+    ],
+    "new_tests": [
+      "wrapper_failed_native_resize_does_not_interrupt_subsequent_input"
+    ],
+    "native_scope": "Windows ConPTY and both macOS PTY execution remain pending. Linux process-group cleanup is not universal detached-descendant containment.",
+    "frozen_run": "477 total tests, fmt and strict all-targets clippy passed; actual Windows/macOS PTY acceptance has not run."
+  }
+}

@@ -1,0 +1,725 @@
+{
+  "schema_version": 1,
+  "source_sha": "9a214ceff60fd36b11d29ea084b5bc285b5185da",
+  "source_tree": "109fd97f17647a0333ffb38ab25c259aba0668c0",
+  "local_equivalent_sha": "6e6d6de9aa6adfb4254829a4f1192cbd7efaf35f",
+  "recorded_utc": "2026-10-06T02:31:41.918386+00:00",
+  "run_id": 37402281172,
+  "run_number": 25,
+  "attempt": 1,
+  "conclusion": "failure",
+  "targets": [
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "job_id": 112071909422,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37402281172/job/112071909422",
+      "conclusion": "failure",
+      "library": {
+        "passed": 1102,
+        "failed": 1,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1413,
+        "failed": 1,
+        "ignored": 0,
+        "summaries": 33
+      },
+      "failed_tests": [
+        "hub::cli_version::native::tests::owned_native_combined_output_null_stdin_exact_env_exit_and_cap"
+      ],
+      "doctests": {
+        "status": "not reached"
+      },
+      "release_build": "not reached",
+      "binaries": [],
+      "fmt": "passed",
+      "strict_clippy": "passed",
+      "artifact": {
+        "id": 11386156016,
+        "name": "rust-candidate-x86_64-unknown-linux-gnu-9a214ceff60fd36b11d29ea084b5bc285b5185da",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37402281172/artifacts/11386156016",
+        "bytes": 46177,
+        "sha256": "0f8cc4c28ba3ced17feec1cce62632f1c62dd22c42fad80d789811bea2e7fb50",
+        "zip_crc_verified": true,
+        "kind": "diagnostic-only"
+      },
+      "candidate_input": {
+        "source_sha": "9a214ceff60fd36b11d29ea084b5bc285b5185da",
+        "target": "x86_64-unknown-linux-gnu",
+        "status": "validation-started",
+        "review_head_sha": "9a214ceff60fd36b11d29ea084b5bc285b5185da",
+        "cargo_lock_sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12"
+      },
+      "commands": [
+        {
+          "command": [
+            "go",
+            "mod",
+            "download"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "python",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "rust/packaging",
+            "-p",
+            "test_*.py"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "install",
+            "--frozen-lockfile"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "build"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 101
+        }
+      ]
+    },
+    {
+      "target": "aarch64-apple-darwin",
+      "job_id": 112071909345,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37402281172/job/112071909345",
+      "conclusion": "failure",
+      "library": {
+        "passed": 1102,
+        "failed": 1,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1412,
+        "failed": 1,
+        "ignored": 0,
+        "summaries": 33
+      },
+      "failed_tests": [
+        "orchestration::relay::worktree::tests::prepare_preserves_existing_git_info_and_worktree_parent_modes"
+      ],
+      "doctests": {
+        "status": "not reached"
+      },
+      "release_build": "not reached",
+      "binaries": [],
+      "fmt": "passed",
+      "strict_clippy": "passed",
+      "artifact": {
+        "id": 11386031598,
+        "name": "rust-candidate-aarch64-apple-darwin-9a214ceff60fd36b11d29ea084b5bc285b5185da",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37402281172/artifacts/11386031598",
+        "bytes": 46424,
+        "sha256": "a56ddd1cdb390cba0687cdd2716692f9ff9c4c038c3ba754f038481c08840fb4",
+        "zip_crc_verified": true,
+        "kind": "diagnostic-only"
+      },
+      "candidate_input": {
+        "source_sha": "9a214ceff60fd36b11d29ea084b5bc285b5185da",
+        "target": "aarch64-apple-darwin",
+        "status": "validation-started",
+        "review_head_sha": "9a214ceff60fd36b11d29ea084b5bc285b5185da",
+        "cargo_lock_sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12"
+      },
+      "commands": [
+        {
+          "command": [
+            "go",
+            "mod",
+            "download"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "python",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "rust/packaging",
+            "-p",
+            "test_*.py"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "install",
+            "--frozen-lockfile"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "build"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "aarch64-apple-darwin",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "aarch64-apple-darwin",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 101
+        }
+      ]
+    },
+    {
+      "target": "x86_64-pc-windows-msvc",
+      "job_id": 112071909481,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37402281172/job/112071909481",
+      "conclusion": "failure",
+      "library": {
+        "passed": 1029,
+        "failed": 1,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1313,
+        "failed": 1,
+        "ignored": 0,
+        "summaries": 33
+      },
+      "failed_tests": [
+        "application::event_observer::tests::end_reservation_release_and_warm_reconnect_preserve_the_capture_incarnation"
+      ],
+      "doctests": {
+        "status": "not reached"
+      },
+      "release_build": "not reached",
+      "binaries": [],
+      "fmt": "passed",
+      "strict_clippy": "passed",
+      "artifact": {
+        "id": 11385513202,
+        "name": "rust-candidate-x86_64-pc-windows-msvc-9a214ceff60fd36b11d29ea084b5bc285b5185da",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37402281172/artifacts/11385513202",
+        "bytes": 45551,
+        "sha256": "b11166458b7b2c0a560fe2f7f2611c2a785f59e0dfecd484f8513c0a8ed08f83",
+        "zip_crc_verified": true,
+        "kind": "diagnostic-only"
+      },
+      "candidate_input": {
+        "source_sha": "9a214ceff60fd36b11d29ea084b5bc285b5185da",
+        "target": "x86_64-pc-windows-msvc",
+        "status": "validation-started",
+        "review_head_sha": "9a214ceff60fd36b11d29ea084b5bc285b5185da",
+        "cargo_lock_sha256": "90d6d2ebdf259ae214308ded77ac4156fffec2697a62fca16f1a60f06307d2ed"
+      },
+      "commands": [
+        {
+          "command": [
+            "go",
+            "mod",
+            "download"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            "rust/packaging/prepare_windows_runtime.ps1",
+            "-ReceiptPath",
+            ".rust-candidate-artifacts/windows-x64/WINDOWS-RUNTIME.json"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "python",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "rust/packaging",
+            "-p",
+            "test_*.py"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "install",
+            "--frozen-lockfile"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "build"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 101
+        }
+      ],
+      "a1_a2_native_tests_passed": [
+        "hub::transport::tests::transient_accept_failures_retry_without_losing_the_next_connection",
+        "actual_windows_spawn_waits_for_ui_input_and_delivers_pty_output_and_clean_end"
+      ],
+      "native_spawn_scope": "Actual Hub HTTP spawn, real wrapper and cmd.exe provider; READY/STDERR, standby input wait, UI hello roundtrip, quit, completed session_end and explicit persisted exit_code 0.",
+      "windows_runtime_acquisition": {
+        "schema_version": 1,
+        "source_sha": "9a214ceff60fd36b11d29ea084b5bc285b5185da",
+        "target": "x86_64-pc-windows-msvc",
+        "acquisition": "visual-studio-redist",
+        "selection": "Latest installed VC/Redist/MSVC x64 CRT/OpenMP; existing Go script; no System32",
+        "source_script": "internal/whisperruntime/fetch_windows_runtime.ps1",
+        "source_script_sha256": "3d6f059ab1b87c481888c6eca755b2fc23aea92aa5a52896f3ffac5ec1ce1642",
+        "version_policy": "Observed per build; not a fixed version or hash",
+        "licence_basis": "Existing Go Visual Studio VC/redist redistribution decision; Microsoft components, not MIT-licensed project code",
+        "licence_url": "https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution#visual-c-runtime-files",
+        "files": [
+          {
+            "name": "vcomp140.dll",
+            "file_version": "14.44.35211.0",
+            "bytes": 193152,
+            "sha256": "55aba23cdcd6484fbb06f4155b8ca75adfce7a881f10afd0c49457165e677164",
+            "signature_status": "Valid",
+            "microsoft_signer": true,
+            "pe_machine": "0x8664"
+          },
+          {
+            "name": "msvcp140.dll",
+            "file_version": "14.44.35211.0",
+            "bytes": 557728,
+            "sha256": "0f885b509a685d2bbfa652fed26b5fb31d88fbdab0a978c641d1c7b8aa460aa9",
+            "signature_status": "Valid",
+            "microsoft_signer": true,
+            "pe_machine": "0x8664"
+          },
+          {
+            "name": "vcruntime140.dll",
+            "file_version": "14.44.35211.0",
+            "bytes": 124544,
+            "sha256": "d5e4d9a3e835fa679450145d6a7d94e36573a509317111904d9b3712c30d9066",
+            "signature_status": "Valid",
+            "microsoft_signer": true,
+            "pe_machine": "0x8664"
+          },
+          {
+            "name": "vcruntime140_1.dll",
+            "file_version": "14.44.35211.0",
+            "bytes": 49792,
+            "sha256": "1f2d41c4aa5db0bc33ebf7b66d72943a817d7ce6cbe880502a9403823633093f",
+            "signature_status": "Valid",
+            "microsoft_signer": true,
+            "pe_machine": "0x8664"
+          }
+        ]
+      },
+      "windows_runtime_release_embedding": "not reached; no release binary in this artifact"
+    },
+    {
+      "target": "x86_64-apple-darwin",
+      "job_id": 112071909392,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37402281172/job/112071909392",
+      "conclusion": "failure",
+      "library": {
+        "passed": 1102,
+        "failed": 1,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1412,
+        "failed": 1,
+        "ignored": 0,
+        "summaries": 33
+      },
+      "failed_tests": [
+        "orchestration::relay::worktree::tests::prepare_preserves_existing_git_info_and_worktree_parent_modes"
+      ],
+      "doctests": {
+        "status": "not reached"
+      },
+      "release_build": "not reached",
+      "binaries": [],
+      "fmt": "passed",
+      "strict_clippy": "passed",
+      "artifact": {
+        "id": 11385543862,
+        "name": "rust-candidate-x86_64-apple-darwin-9a214ceff60fd36b11d29ea084b5bc285b5185da",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37402281172/artifacts/11385543862",
+        "bytes": 46129,
+        "sha256": "8e204d4cb88316995173ea92e15f8b9423528c0a1556db086a53afeb5a0092ad",
+        "zip_crc_verified": true,
+        "kind": "diagnostic-only"
+      },
+      "candidate_input": {
+        "source_sha": "9a214ceff60fd36b11d29ea084b5bc285b5185da",
+        "target": "x86_64-apple-darwin",
+        "status": "validation-started",
+        "review_head_sha": "9a214ceff60fd36b11d29ea084b5bc285b5185da",
+        "cargo_lock_sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12"
+      },
+      "commands": [
+        {
+          "command": [
+            "go",
+            "mod",
+            "download"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "python",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "rust/packaging",
+            "-p",
+            "test_*.py"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "install",
+            "--frozen-lockfile"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "build"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-apple-darwin",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-apple-darwin",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 101
+        }
+      ]
+    }
+  ],
+  "validate": {
+    "run_id": 37402281070,
+    "run_number": 338,
+    "attempt": 1,
+    "conclusion": "success",
+    "successful_jobs": 11,
+    "expected_skipped_job": "release-token-scopes"
+  },
+  "pr_checkout": {
+    "sha": "da10f1c8356cd8271497fa5c0ea4e52e6e2db7ad",
+    "tree": "109fd97f17647a0333ffb38ab25c259aba0668c0",
+    "scope": "Validate and PR secret scan use the merge checkout; Rust CANDIDATE-INPUT receipts bind actual head9a214cef."
+  },
+  "secret_scans": [
+    {
+      "event": "push",
+      "run_id": 37402276180,
+      "run_number": 426,
+      "attempt": 1,
+      "job_id": 112071894203,
+      "conclusion": "success",
+      "commits_scanned": 6,
+      "result": "no leaks found",
+      "range": "e4f88f950dd94bbfe56d7f37edcbdeef8598d715^..9a214ceff60fd36b11d29ea084b5bc285b5185da"
+    },
+    {
+      "event": "pull_request",
+      "run_id": 37402281054,
+      "run_number": 427,
+      "attempt": 1,
+      "job_id": 112071908346,
+      "conclusion": "success",
+      "commits_scanned": 30,
+      "result": "no leaks found",
+      "range": "6b0fb8e198750245ef8b4b475fbac9070db0ac3e^..401eff2b83712ca657b31b0baf63d9dadd38171e"
+    }
+  ],
+  "history_scan_scope": "59 PR commits have scan coverage through the prior38 union, prior15 push and latest6 push. The PR action alone scanned only the first30. The historical nonsecret Git-blob finding from2ef6d3c remains recorded and unwaived; latest success does not rewrite that failed scan.",
+  "historical_unwaived_finding": {
+    "run_id": 37396280688,
+    "job_id": 112052902343,
+    "fingerprint": "2ef6d3c8aa366bf86162cbf205598030f6750961:docs/bot/rust-recovery-resume/VALIDATION-4dc961ce.json:generic-api-key:1413",
+    "classification": "confirmed public workflow Git blob object ID, not a credential",
+    "exception_added": false
+  },
+  "acceptance": "Not accepted: all four Rust targets failed one test, no current release binaries, native device/product acceptance remains separate.",
+  "command_display": "Absolute hosted Python executable paths are displayed as python; the Windows preparation helper and receipt paths are displayed relative to the repository. Literal argv is preserved in each linked artifact VALIDATION-STEPS.json. No other arguments or exit codes are changed.",
+  "diagnostic_successor_local_validation": {
+    "local_code_sha": "d3340d612a5a4ea173ce0c513bd5a0de9fc1413d",
+    "local_code_tree": "c8e6808e4b672c059dbf931917d77d0bf5ba26ed",
+    "scope": "Working-source executions before/around local commit creation; these six final source/config blobs are byte-identical to the reviewed code checkpoint. Native CI and release artifact identity are pending. No source changes followed the final aggregate.",
+    "source_files": [
+      {
+        "path": "instrumentation.json",
+        "sha256": "804653d36fdaaacf75adf018eeb12e7f0b4f6bdfc345f70cf48fdfa0692f76bc"
+      },
+      {
+        "path": "rust/src/files/git.rs",
+        "sha256": "c754ffea7ea6c1969d13c25562a11f0d93a862e163febdf3a5b82ea1e264d8e0"
+      },
+      {
+        "path": "rust/src/files/git_turns.rs",
+        "sha256": "c30da2fa8fd116f0ecd2eba0627b37ab71dae2f8a0ae6b87025a69da31c58416"
+      },
+      {
+        "path": "rust/src/hub/cli_version/native.rs",
+        "sha256": "d2dec29062a51082de3f8a92234be26ab76d88afb7e0acc54fab373b70333cb5"
+      },
+      {
+        "path": "rust/src/hub/cli_version/native/tests.rs",
+        "sha256": "12ac2d3dd813f7a3c90c0bd9f29b90725ca92a32ec40eb6b2d88fc52de0cc9ca"
+      },
+      {
+        "path": "rust/src/orchestration/relay/worktree.rs",
+        "sha256": "e9ae5d074cf47a92c96a243d1c27fb184416db147adc93629bcf441071c4547b"
+      }
+    ],
+    "checks": [
+      {
+        "scope": "Linux all-targets",
+        "exit_code": 0,
+        "log_sha256": "a27ff14225efe8e59b00a317967b027793711eab1f4f7b32e46c822335f16398",
+        "log_name": "successor-9a-diagnostic-reviewed-all-targets.log",
+        "counts": {
+          "passed": 1414,
+          "failed": 0,
+          "ignored": 0
+        },
+        "summaries": 33
+      },
+      {
+        "scope": "Linux strict all-target Clippy",
+        "exit_code": 0,
+        "log_sha256": "6d17c840cc8b7e4fc7f67d650e3bd24037c3a5c1ee3062597c31143919f87fc7",
+        "log_name": "successor-9a-diagnostic-reviewed-clippy.log"
+      },
+      {
+        "scope": "Linux doctests",
+        "exit_code": 0,
+        "log_sha256": "3cdefc867f2585a71ca9d574ed2ca4e09c3778ad2aa511019f3ed72a5787730f",
+        "log_name": "successor-9a-diagnostic-reviewed-doctests.log",
+        "counts": {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        },
+        "summaries": 1
+      }
+    ],
+    "macos_new_control": "not compiled or executed locally; platform-gated native CI required",
+    "native_windows": "not executed locally",
+    "release_binaries": "not built locally"
+  }
+}

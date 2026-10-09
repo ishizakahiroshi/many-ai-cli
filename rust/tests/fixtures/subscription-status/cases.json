@@ -1,0 +1,152 @@
+[
+  {
+    "provider": "claude",
+    "output": "{}",
+    "code": 0
+  },
+  {
+    "provider": "claude",
+    "output": "null",
+    "code": 0
+  },
+  {
+    "provider": "claude",
+    "output": "{\"loggedIn\":false,\"email\":\"synthetic@example.com\"}",
+    "code": 0
+  },
+  {
+    "provider": "claude",
+    "output": "{\"loggedIn\":true,\"subscriptionType\":\"max\",\"authMethod\":\"oauth\",\"email\":\"synthetic@example.com\",\"orgId\":\"synthetic-only\"}",
+    "code": 0
+  },
+  {
+    "provider": "claude",
+    "output": "{\"loggedIn\":true,\"loggedIn\":null,\"subscriptionType\":null}",
+    "code": 0
+  },
+  {
+    "provider": "claude",
+    "output": "{\"LOGGEDIN\":true,\"AUTHMETHOD\":\"api-key\"}",
+    "code": 0
+  },
+  {
+    "provider": "claude",
+    "output": "{\"loggedIn\":true,\"loggedIn\":\"wrong\"}",
+    "code": 0
+  },
+  {
+    "provider": "claude",
+    "output": "invalid",
+    "code": 0
+  },
+  {
+    "provider": "claude",
+    "output": "{} {}",
+    "code": 0
+  },
+  {
+    "provider": "codex",
+    "output": "Not logged in",
+    "code": 1
+  },
+  {
+    "provider": "codex",
+    "output": "Logged in using ChatGPT",
+    "code": 0
+  },
+  {
+    "provider": "codex",
+    "output": "Logged in using API key: synthetic-secret-value",
+    "code": 0
+  },
+  {
+    "provider": "codex",
+    "output": "Logged in using api-key",
+    "code": 1
+  },
+  {
+    "provider": "codex",
+    "output": "",
+    "code": 0
+  },
+  {
+    "provider": "codex",
+    "output": "",
+    "code": 1
+  },
+  {
+    "provider": "codex",
+    "output": "NOT LOGGED IN using ChatGPT",
+    "code": 0
+  },
+  {
+    "provider": "grok",
+    "output": "You are not authenticated.",
+    "code": 0
+  },
+  {
+    "provider": "grok",
+    "output": "not logged in",
+    "code": 0
+  },
+  {
+    "provider": "grok",
+    "output": "Logged in with grok.com synthetic@example.com",
+    "code": 0
+  },
+  {
+    "provider": "grok",
+    "output": "authenticated with x.ai",
+    "code": 0
+  },
+  {
+    "provider": "grok",
+    "output": "logged in with synthetic-unlisted",
+    "code": 0
+  },
+  {
+    "provider": "grok",
+    "output": "unknown",
+    "code": 0
+  },
+  {
+    "provider": "opencode",
+    "output": "0 credentials",
+    "code": 0
+  },
+  {
+    "provider": "opencode",
+    "output": "1 credential",
+    "code": 0
+  },
+  {
+    "provider": "opencode",
+    "output": "2 credentials Opencode Go",
+    "code": 0
+  },
+  {
+    "provider": "opencode",
+    "output": "Credential listing",
+    "code": 0
+  },
+  {
+    "provider": "opencode",
+    "output": "unknown",
+    "code": 0
+  },
+  {
+    "provider": "opencode",
+    "output": "999999999999999999999999999 credentials",
+    "code": 0
+  },
+  {
+    "provider": "opencode",
+    "output": "credentials then 0 credentials",
+    "code": 0
+  },
+  {
+    "provider": "opencode",
+    "output": "1 credential",
+    "code": 0
+  }
+]

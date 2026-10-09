@@ -1,0 +1,2722 @@
+[
+  {
+    "name": "method-GET",
+    "kind": "http",
+    "method": "GET",
+    "body": "{bad",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    }
+  },
+  {
+    "name": "method-PUT",
+    "kind": "http",
+    "method": "PUT",
+    "body": "{bad",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    }
+  },
+  {
+    "name": "method-PATCH",
+    "kind": "http",
+    "method": "PATCH",
+    "body": "{bad",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    }
+  },
+  {
+    "name": "method-DELETE",
+    "kind": "http",
+    "method": "DELETE",
+    "body": "{bad",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    }
+  },
+  {
+    "name": "method-HEAD",
+    "kind": "http",
+    "method": "HEAD",
+    "body": "{bad",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    }
+  },
+  {
+    "name": "method-OPTIONS",
+    "kind": "http",
+    "method": "OPTIONS",
+    "body": "{bad",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    }
+  },
+  {
+    "name": "method-post",
+    "kind": "http",
+    "method": "post",
+    "body": "{bad",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    }
+  },
+  {
+    "name": "body-empty",
+    "kind": "http",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-object",
+    "kind": "http",
+    "method": "POST",
+    "body": "{}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-null",
+    "kind": "http",
+    "method": "POST",
+    "body": "null",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-space",
+    "kind": "http",
+    "method": "POST",
+    "body": " \t\n",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-missing-close",
+    "kind": "http",
+    "method": "POST",
+    "body": "{",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-string",
+    "kind": "http",
+    "method": "POST",
+    "body": "\"alpha\"",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-array",
+    "kind": "http",
+    "method": "POST",
+    "body": "[]",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-number",
+    "kind": "http",
+    "method": "POST",
+    "body": "3",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-false",
+    "kind": "http",
+    "method": "POST",
+    "body": "false",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-unknown",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"ignored\":true}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-null-providers",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":null}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-empty-providers",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":[]}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-blank-providers",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":[\" \",\"\t\"]}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-trim-dedupe",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":[\" alpha \",\"alpha\",\"missing\",\"missing\"]}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-case-sensitive",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":[\"ALPHA\",\"alpha\"]}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-folded-key",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"PrOvIdErS\":[\"alpha\"]}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-long-s-key",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"provider\u017f\":[\"missing\"]}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-null-element",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":[null,\"alpha\"]}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-wrong-element",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":[3]}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-wrong-providers",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":\"alpha\"}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-duplicate-last",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":[\"missing\"],\"providers\":[\"alpha\"]}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-duplicate-null",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":[\"missing\"],\"providers\":null}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-duplicate-reused-null",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":[\"alpha\"],\"providers\":[null]}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-trailing-object",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":[\"alpha\"]}{\"providers\":[\"missing\"]}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-trailing-garbage",
+    "kind": "http",
+    "method": "POST",
+    "body": "{} nope",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": ""
+  },
+  {
+    "name": "body-body-limit",
+    "kind": "http",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": "limit"
+  },
+  {
+    "name": "body-early-value-large-trailing",
+    "kind": "http",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "body_mode": "trailing"
+  },
+  {
+    "name": "framing-empty-chunked",
+    "kind": "http",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "chunked": true
+  },
+  {
+    "name": "framing-empty-chunked-before-registry",
+    "kind": "http",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "chunked": true,
+    "registry_missing": true
+  },
+  {
+    "name": "framing-chunked-nonempty",
+    "kind": "http",
+    "method": "POST",
+    "body": "{}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "chunked": true
+  },
+  {
+    "name": "framing-explicit-zero",
+    "kind": "http",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "content_length": 0
+  },
+  {
+    "name": "framing-explicit-positive-eof",
+    "kind": "http",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "content_length": 7
+  },
+  {
+    "name": "framing-artificial-zero-ignores-body",
+    "kind": "http",
+    "method": "POST",
+    "body": "{bad",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "content_length": 0
+  },
+  {
+    "name": "no-registry-''",
+    "kind": "http",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "registry_missing": true
+  },
+  {
+    "name": "no-registry-'{bad'",
+    "kind": "http",
+    "method": "POST",
+    "body": "{bad",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "registry_missing": true
+  },
+  {
+    "name": "no-registry-'{}'",
+    "kind": "http",
+    "method": "POST",
+    "body": "{}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "registry_missing": true
+  },
+  {
+    "name": "no-registry-'null'",
+    "kind": "http",
+    "method": "POST",
+    "body": "null",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "registry_missing": true
+  },
+  {
+    "name": "empty-registry",
+    "kind": "http",
+    "method": "POST",
+    "body": "",
+    "definitions": [],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    }
+  },
+  {
+    "name": "default-order-and-disabled",
+    "kind": "http",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "zulu",
+        "display_name": "Synthetic zulu",
+        "launch": {
+          "executable": "zulu"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "codex",
+        "display_name": "Synthetic codex",
+        "launch": {
+          "executable": "codex"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        },
+        "enabled": false
+      },
+      {
+        "schema_version": 1,
+        "id": "claude",
+        "display_name": "Synthetic claude",
+        "launch": {
+          "executable": "claude"
+        }
+      }
+    ],
+    "lookup": {},
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    }
+  },
+  {
+    "name": "explicit-disabled-runs",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":[\"alpha\"]}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        },
+        "enabled": false
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    }
+  },
+  {
+    "name": "explicit-request-order",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":[\"zulu\",\"alpha\",\"missing\"]}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "zulu",
+        "display_name": "Synthetic zulu",
+        "launch": {
+          "executable": "zulu"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {},
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    }
+  },
+  {
+    "name": "unknown-preserves-old-shape",
+    "kind": "http",
+    "method": "POST",
+    "body": "{\"providers\":[\"missing\"]}",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    }
+  },
+  {
+    "name": "one-normal",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo=",
+        "exit_code": 0,
+        "timed_out": false
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-multiline",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "Cg0KICBzeW50aGV0aWMgdjEgDQpidWlsZAo=",
+        "exit_code": 0,
+        "timed_out": false
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-stderr-only",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "d2FybmluZyB2Mgo=",
+        "exit_code": 0,
+        "timed_out": false
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-empty",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "",
+        "exit_code": 0,
+        "timed_out": false
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-whitespace",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "IA0KCQ==",
+        "exit_code": 0,
+        "timed_out": false
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-exit-one",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIGJvb20K",
+        "exit_code": 1,
+        "timed_out": false
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-signal",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "cGFydGlhbA==",
+        "exit_code": -1,
+        "timed_out": false
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-timeout",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "cGFydGlhbAo=",
+        "exit_code": -1,
+        "timed_out": true
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-timeout-exit-zero",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "Y29tcGxldGU=",
+        "exit_code": 0,
+        "timed_out": true
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-cap",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg=",
+        "exit_code": 0,
+        "timed_out": false
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-cap-empty-after",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICB2ZXJzaW9u",
+        "exit_code": 0,
+        "timed_out": false
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-cap-utf8",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eOOBgg==",
+        "exit_code": 0,
+        "timed_out": false
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-invalid-utf8",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "8J//IHYyCg==",
+        "exit_code": 0,
+        "timed_out": false
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-html",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "PHYxPibigKgK",
+        "exit_code": 0,
+        "timed_out": false
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-unicode-space",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "woXCoOKAgwrjgIAg5pel5pys6KqeIHYzIOKAiQo=",
+        "exit_code": 0,
+        "timed_out": false
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-start-failure",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "start_failed": true
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-no-mtime",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {},
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-no-launch",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": null
+    }
+  },
+  {
+    "name": "one-no-hit",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {},
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      }
+    }
+  },
+  {
+    "name": "one-secondary-candidate",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "absent",
+        "executable_candidates": [
+          "",
+          "alpha",
+          "other"
+        ]
+      }
+    }
+  },
+  {
+    "name": "one-first-hit-wins",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha",
+      "other": "/synthetic/bin/other"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha",
+        "executable_candidates": [
+          "other"
+        ]
+      }
+    }
+  },
+  {
+    "name": "one-empty-executable",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable_candidates": [
+          "alpha"
+        ]
+      }
+    }
+  },
+  {
+    "name": "one-version-args",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      },
+      "update": {
+        "version_args": [
+          "version",
+          "--plain"
+        ],
+        "args": [
+          "update"
+        ],
+        "executable": "updater",
+        "enabled": false,
+        "login_may_be_required": true,
+        "timeout_seconds": 99
+      }
+    }
+  },
+  {
+    "name": "one-empty-version-args",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      },
+      "update": {
+        "version_args": []
+      }
+    }
+  },
+  {
+    "name": "one-blank-version-arg",
+    "kind": "one",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "definition": {
+      "schema_version": 1,
+      "id": "alpha",
+      "display_name": "Synthetic alpha",
+      "launch": {
+        "executable": "alpha"
+      },
+      "update": {
+        "version_args": [
+          ""
+        ]
+      }
+    }
+  },
+  {
+    "name": "line-0",
+    "kind": "line",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "text": ""
+  },
+  {
+    "name": "line-1",
+    "kind": "line",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "text": "\r"
+  },
+  {
+    "name": "line-2",
+    "kind": "line",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "text": "\r\n"
+  },
+  {
+    "name": "line-3",
+    "kind": "line",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "text": "\n a\r\nb"
+  },
+  {
+    "name": "line-4",
+    "kind": "line",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "text": "\n a\rb"
+  },
+  {
+    "name": "line-5",
+    "kind": "line",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "text": "\u0085\u00a0\u2003\n\u65e5\u672c\u8a9e\u3000"
+  },
+  {
+    "name": "line-6",
+    "kind": "line",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "text": "\u001ccontrol"
+  },
+  {
+    "name": "line-7",
+    "kind": "line",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "text": "\ufeffversion"
+  },
+  {
+    "name": "line-8",
+    "kind": "line",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "text": "\u200bversion"
+  },
+  {
+    "name": "normalize-0",
+    "kind": "normalize",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "ids": []
+  },
+  {
+    "name": "normalize-1",
+    "kind": "normalize",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "ids": [
+      ""
+    ]
+  },
+  {
+    "name": "normalize-2",
+    "kind": "normalize",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "ids": [
+      " ",
+      "\t"
+    ]
+  },
+  {
+    "name": "normalize-3",
+    "kind": "normalize",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "ids": [
+      " alpha ",
+      "alpha",
+      "Alpha",
+      "beta",
+      "beta"
+    ]
+  },
+  {
+    "name": "normalize-4",
+    "kind": "normalize",
+    "method": "POST",
+    "body": "",
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "alpha",
+        "display_name": "Synthetic alpha",
+        "launch": {
+          "executable": "alpha"
+        }
+      }
+    ],
+    "lookup": {
+      "alpha": "/synthetic/bin/alpha"
+    },
+    "modified": {
+      "/synthetic/bin/alpha": "2026-10-03T12:34:56.987654321+09:00"
+    },
+    "processes": {
+      "/synthetic/bin/alpha": {
+        "output": "c3ludGhldGljIHYxLjIuMwo="
+      }
+    },
+    "ids": [
+      "\u0085alpha\u3000",
+      "\ufeffalpha",
+      "\u001calpha"
+    ]
+  }
+]

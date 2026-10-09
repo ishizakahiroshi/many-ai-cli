@@ -41,6 +41,130 @@
   ],
   "entries": [
     {
+      "id": "rust-git-turn-failure-test-diagnostic",
+      "status": "removed",
+      "purpose": "Identify the still-unresolved Windows post-reconnect Git-turn snapshot500 from the same failed operation, after Trace2 removal.",
+      "addedIn": "pending",
+      "gate": "cfg(test) only. Per-FilesService bounded in-memory recorder is inactive until the one synthetic reconnect fixture explicitly begins it. It records only existing error paths; no Git tracing, extra commands, file writes, successful-call records, raw paths, argv, stderr, environment values or work text. Assertion context is emitted only if the existing reservation assertion fails.",
+      "files": [
+        "rust/src/files/snapshot_diagnostic.rs"
+      ],
+      "sharedFiles": [
+        "rust/src/files/mod.rs",
+        "rust/src/files/git.rs",
+        "rust/src/files/git_turns.rs",
+        "rust/src/application/event_observer/tests.rs"
+      ],
+      "channels": [
+        "rust_git_turn_failure_test_diagnostic"
+      ],
+      "artifactNeedles": [
+        "rust_git_turn_failure_test_diagnostic"
+      ],
+      "removalCondition": "Mandatory removal before Rust acceptance and before release, even if cause remains unproven. Delete the dedicated module; manually remove the cfg(test) module/field/constructor registration, Git command and snapshot filesystem failure hooks, and fixture begin/take/assertion context and the temporary snapshot_failure_diagnostic_observes_actual_private_index_error_without_paths wiring test from all sharedFiles. Preserve all behavior assertions and production250ms/5s deadlines. The generic purge command removes the dedicated file only and cannot remove these shared Rust hooks automatically. Mark removed and prove fresh same-SHA native gates and three consecutive Windows quick successes after cleanup.",
+      "reason": "At41e4b8 quick attempt1, the existing reconnect regression failed with snapshot unavailable status500 while the same test passed in fullWindows. Current warnings discard typed command and cleanup causes; timeout, process failure and filesystem cleanup remain unseparated. This is temporary diagnosis, not an identified cause or repair. Recording occurs after failure and avoids Trace2 IO; possible observer effects still require diagnostic-free acceptance. Current instrumentation discovery scans Go/TypeScript and artifact-clean checks Go binaries; they do not prove Rust cfg(test) isolation or cleanup. Public diagnostic addition0e129be45ad953893dacfd47632b47b974a063b0 was exercised at4debe28. Both Windows lanes captured StageWorktree TimedOut, remaining budgets2212ms and26ms; previous budget consumers remain unseparated. The dedicated module, every shared hook/registration/assertion suffix, and all4 diagnostic-only tests were then removed before the next native candidate. Only a test-fixture admission semaphore is added; no production budget changes.",
+      "due": "2026-10-09",
+      "removedIn": "unreleased",
+      "removedOn": "2026-10-06"
+    },
+    {
+      "id": "rust-windows-appserver-phase-test-diagnostic",
+      "status": "removed",
+      "purpose": "Locate the recurring synthetic Windows app-server timeout across child cmdlets, RPC transport and owned cleanup without raw content or environment values.",
+      "addedIn": "pending",
+      "gate": "cfg(all(test, windows)); each original synthetic fixture scopes its own Tokio task-local recorder; bounded child trace stays inside its existing TempDir; after the timed call returns, the existing non-panicking logging::write_diagnostic sink emits one sanitized summary for every fixture outcome with an allowlisted chatgpt/api_key/other label; assertion context retains the same summary",
+      "files": [
+        "rust/src/application/subscriptions/appserver/phase_diagnostics.rs"
+      ],
+      "sharedFiles": [
+        "rust/src/application/subscriptions/appserver.rs",
+        "rust/src/application/subscriptions/appserver/tests.rs"
+      ],
+      "channels": [
+        "windows_appserver_phase_diagnostic"
+      ],
+      "artifactNeedles": [
+        "windows_appserver_phase_diagnostic ",
+        "rpc-phases.txt"
+      ],
+      "removalCondition": "Remove in a dedicated commit after classification and verification, or if the owner stops the unresolved investigation; always remove before an accepted final candidate or release. Removal of all temporary Rust diagnostics is mandatory before owner acceptance of a final candidate or release, including cfg(test) code and shared-file hooks. The source marker/endpoint scan in scripts/check-instrumentation.mjs covers only .go/.ts, and scripts/check-artifact-clean.mjs is currently invoked only on Go release artifacts; neither enforces Rust cfg(test) isolation. Manual Rust source/byte checks and independent review are separate required evidence, not implied by either script passing.",
+      "reason": "Run37413102214 consumes at least one stdin line but returns the inner 15-second timeout in both original fixtures. Fixed child stages and per-invocation native counts distinguish cmdlet progress, response emission, bytes received and matching, with cleanup observed without changing its error precedence. The original assertions, 15s/20s deadlines, Windows PowerShell host, wrapper, environment and spawn options stay intact. No factor substitution or functional fix is included.",
+      "removalProcedure": "Preserve sanitized failure evidence, then delete phase_diagnostics.rs. Manually remove its appserver module declaration, every cfg-gated event/cleanup call, the diagnostic Started match arm, and restore the original let _ = child.wait().await statement. In tests.rs remove phases path, Record-Phase function and calls, synthetic script phase fields, ACTIVE scope, Trace construction, summary calls, allowlisted case mapping and write_diagnostic emission, tuple diagnostic member and appended assertion text. Restore the original request-log read and panic ordering while preserving its failure condition. Restore the exact original fixture script and call structure while retaining all original assertions. --purge does not remove shared-file code. Verify no channel, sink needle, module reference or helper remains; mark this entry removed with the dedicated cleanup commit; rerun normal validation.",
+      "removedIn": "unreleased",
+      "removedOn": "2026-10-06"
+    },
+    {
+      "id": "rust-relay-prepare-resolution-test-diagnostic",
+      "status": "removed",
+      "purpose": "Classify prepare root-resolution failures before the fixed Go-compatible generic not_git mapping, without paths, argv, Git output, environment values, or arbitrary source-error text.",
+      "addedIn": "pending",
+      "gate": "Temporary observer and typed payload only: Rust cfg(test); failure observations only for rev-parse --show-toplevel; no production sink. The retained metadata_entry_label/metadata_io_error helpers are production error-context code, separately classified in note, not cfg(test)-only instrumentation.",
+      "files": [
+        "rust/src/orchestration/relay/worktree_diagnostic.rs"
+      ],
+      "sharedFiles": [
+        "rust/src/orchestration/relay/worktree.rs",
+        "rust/src/orchestration/relay/trial_git.rs"
+      ],
+      "channels": [
+        "relay_prepare_resolution_diagnostic"
+      ],
+      "artifactNeedles": [
+        "relay_prepare_resolution_diagnostic operation="
+      ],
+      "removalCondition": "Remove in a dedicated commit once classified and verified, or when the owner stops the unresolved investigation; always remove before an accepted final candidate or release. Removal of all temporary Rust diagnostics is mandatory before owner acceptance of a final candidate or release, including cfg(test) code and shared-file hooks. The source marker/endpoint scan in scripts/check-instrumentation.mjs covers only .go/.ts, and scripts/check-artifact-clean.mjs is currently invoked only on Go release artifacts; neither enforces Rust cfg(test) isolation. Manual Rust source/byte checks and independent review are separate required evidence, not implied by either script passing.",
+      "reason": "Run37413102214 ARM reports only generic not_git before cleanup. Run37419149510 observes objects/maintenance.lock ENOENT beside the other missing-worktree fixture, so each fixture now binds its own safe diagnostic to its panic; adjacency is not definitive attribution. Preserve the returned error, three-second timeout, process ownership, metadata rejection policy, and assertions. The removed test-only typed metadata payloads retained only the existing whitelisted labels, ErrorKind, and numeric OS code; fixture-local capture permitted deterministic forwarding/redaction checks.",
+      "removalProcedure": "Delete worktree_diagnostic.rs and its module declaration, RelayGit probe field/initialization, Context and all temporary diagnostic call sites, and the two forwarding tests; remove the cfg(test) MetadataDiagnostic payload, diagnostic_metadata accessor and their typed-payload test, restoring the pre-probe String wrapper. Retain production metadata_entry_label and metadata_io_error, their bounded/scan/scan_entries call sites, sanitized error text and permanent redaction/ErrorKind/optional-missing/strict-scan regression tests; these are outside the temporary removal boundary. Remove both missing-worktree fixture panic diagnostic arguments and Probe.last references, while preserving their not_git and applicable remove_root boolean context and unchanged failure predicates. Mark removed in the dedicated removal commit and validate. Purging the dedicated file does not remove shared-file hooks; the containing shared files and retained production helpers must remain.",
+      "removedIn": "unreleased",
+      "removedOn": "2026-10-06",
+      "note": "Permanent production error-context classification (retained; not a temporary observer): metadata_entry_label and metadata_io_error in rust/src/orchestration/relay/trial_git.rs were present at c4dcca95e0f466082163eecc9e77fbfbd7f3ca32, before the cfg(test) typed payload/observer added at ab32ecca0c58b68980d64aeb7b173c9af6aa1bb1. They remain after removal commit dcdb657f8474896e2e650bbc4057985518d07c02. io::Error::new(original.kind(), sanitized_string) preserves ErrorKind but changes the error text and makes raw_os_error() return None; the original numeric OS code is retained only in sanitized os_code text. inspect returns early outside trial mode. In trial mode, optional reads and ancestor .git lookup still use ErrorKind::NotFound; strict metadata scan failures still propagate. RelayGit::run and validate convert inspect errors to strings; prepare maps the initial rev-parse failure to the existing generic not_git error. These callers do not consume raw_os_error() from the wrapped error. The entry status=removed describes only the temporary observer/typed payload. This separate classification uses the existing note field because the current release check requires every instrumentation entry to be removed; no new permanent status, schema relaxation or scanner expansion is introduced."
+    },
+    {
+      "id": "rust-git-turn-snapshot-test-diagnostic",
+      "status": "removed",
+      "purpose": "Classify the intermittent Windows warm-reconnect Git snapshot failure without paths, argv, Git output, environment values, or work text.",
+      "addedIn": "pending",
+      "gate": "Rust cfg(test) only; no runtime gate or production sink",
+      "files": [],
+      "sharedFiles": [
+        "rust/src/files/git.rs",
+        "rust/src/files/git_turns.rs"
+      ],
+      "channels": [
+        "git_turn_snapshot_diagnostic"
+      ],
+      "artifactNeedles": [
+        "git_turn_snapshot_diagnostic case="
+      ],
+      "removalCondition": "Remove in a dedicated commit once classified and verified, or when the owner stops the unresolved investigation; always remove before an accepted final candidate or release. Removal of all temporary Rust diagnostics is mandatory before owner acceptance of a final candidate or release, including cfg(test) code and shared-file hooks. The source marker/endpoint scan in scripts/check-instrumentation.mjs covers only .go/.ts, and scripts/check-artifact-clean.mjs is currently invoked only on Go release artifacts; neither enforces Rust cfg(test) isolation. Manual Rust source/byte checks and independent review are separate required evidence, not implied by either script passing.",
+      "reason": "Run37402281172 reports only HTTP500 after warm reconnect. Fixed test-only stages and numeric outcomes preserve budgets, assertions and HTTP/public error strings. The non-panicking stderr sink adds only a fixed warm_reconnect/other case label, never a raw thread name.",
+      "removalProcedure": "After preserving sanitized evidence, manually remove snapshot_test_diagnostic, snapshot_test_io_failure and every diagnostic state/call site from both sharedFiles; --purge only marks this entry removed and does not remove shared-file code. Verify no channel or sink needle remains in Rust source, set removedIn to the dedicated removal commit, and rerun validation.",
+      "removedIn": "unreleased",
+      "removedOn": "2026-10-06"
+    },
+    {
+      "id": "rust-cli-version-process-test-diagnostic",
+      "status": "removed",
+      "purpose": "Distinguish a synthetic combined-output assertion failure from a pre-start process I/O failure without captured bytes or private paths.",
+      "addedIn": "pending",
+      "gate": "Rust cfg(test) only; fixed synthetic-case label, started flag and retained ErrorKind",
+      "files": [],
+      "sharedFiles": [
+        "rust/src/hub/cli_version/native.rs"
+      ],
+      "channels": [
+        "cli_version_process_diagnostic"
+      ],
+      "artifactNeedles": [
+        "cli_version_process_diagnostic suffix_case="
+      ],
+      "removalCondition": "Remove in a dedicated commit once classified and verified, or when the owner stops the unresolved investigation; always remove before an accepted final candidate or release. Removal of all temporary Rust diagnostics is mandatory before owner acceptance of a final candidate or release, including cfg(test) code and shared-file hooks. The source marker/endpoint scan in scripts/check-instrumentation.mjs covers only .go/.ts, and scripts/check-artifact-clean.mjs is currently invoked only on Go release artifacts; neither enforces Rust cfg(test) isolation. Manual Rust source/byte checks and independent review are separate required evidence, not implied by either script passing.",
+      "removalProcedure": "After preserving sanitized evidence, manually remove the cfg(test) error-diagnostic block from the shared file; --purge only marks this entry removed and preserves shared-file code. Verify no channel or sink needle remains in Rust source, set removedIn to the dedicated removal commit, and rerun validation.",
+      "reason": "Run37402281172 reports a suffix mismatch without the selected mode or process status. The permanent assertion context retains every predicate; this temporary non-panicking sink preserves only ErrorKind before the existing start_failed/ProcessUnavailable mapping. ManagedProcess already reconstructs cached I/O errors without raw_os_error, so no numeric OS code is claimed here.",
+      "removedIn": "unreleased",
+      "removedOn": "2026-10-06"
+    },
+    {
       "id": "debug-ui-log",
       "status": "removed",
       "purpose": "Codex ターミナルの空行蓄積と rows 発振で、どのレイアウト変化が pty_resize を誘発したかを Web 側から観測する",
@@ -308,6 +432,33 @@
       "removalCondition": "原因特定後、または次回リリース前の早い方で make debug-purge id=ui-freeze-recorder を実行。利用者の明示指示により、原因未確定でもリリース前の purge は必須。共有フックは残し sink と登録をパージする",
       "reason": "2026-09-27 新タブでも音声入力中に全操作が停止。停止後のブラウザ観測はタイムアウトし現行ログに証拠がない。1MB x3、認証必須、入力本文を受理しない固定スキーマ。\n2026-09-28 12:14 JSTにHubブラウザのフリーズが再発。現行Hubには診断sinkがなく今回の記録を取得できなかったため、次の自然な再発を記録するため復元。\n2026-09-28 18:41〜18:43 JSTに3タブで停止を記録（リンク検出の修正 812b184a を含む Hub）。3件とも terminal.links の begin だけが残り end が無いが、関数内のどこかは分からない。terminal.links の中に段階の記録点 links.expand / rows / url / winpath / unixpath / relpath / crunch / callback を追加した。size は begin が入力規模（バッファ行数・物理行数・結合文字数）、end が出力件数で、本文は含まない。共有フック probeSpan の終了関数は end 側の fields を受け取れるよう拡張した。",
       "due": "2026-10-12"
+    },
+    {
+      "id": "rust-windows-appserver-stdio",
+      "status": "removed",
+      "purpose": "PR #11 の Windows app-server 初回入力タイムアウトを、起動経路・stdio 条件を一要因ずつ変えて切り分ける",
+      "addedIn": "unreleased",
+      "gate": "cfg(all(test, windows))。保存は CI が MANY_AI_TEST_DIAGNOSTIC_DIR を明示した場合のみ。合成入力だけを使い、stage・bool・長さ・エラー分類のみを記録する",
+      "files": [
+        "rust/src/application/subscriptions/appserver/stdio_diagnostics.rs"
+      ],
+      "sharedFiles": [
+        "rust/src/application/subscriptions/appserver/tests.rs",
+        "rust/src/process/mod.rs",
+        "scripts/rust-candidate-ci.py",
+        "rust/packaging/test_candidate_ci.py",
+        "rust/src/application/main_program/context.rs"
+      ],
+      "channels": [
+        "rust-windows-appserver-stdio"
+      ],
+      "artifactNeedles": [
+        "windows-appserver-stdio.json"
+      ],
+      "removalCondition": "Windows runner で要因を特定して回帰テストへ固定後、診断専用 probe と flush hook を単独撤去 commit で除去する。リリース前に必ず撤去する",
+      "reason": "Rust 1.90 CI run 37342570450 は Windows のみ初回 stdin が観測できず 2/987 lib tests に失敗。原因は未確定であり、assertion・timeout・skip 条件は緩めない。次の比較は cmdlet と Windows host 環境変数を個別に絞り、本番の環境受渡し形も合成 CLI で検証する。期限延長はせず、調査後の単独 cleanup で sharedFiles の import/hook も明示撤去する。14 ケースの証跡を保存し、診断専用 file・sharedFiles の hook/import/helper と旧 fixture marker を単独 cleanup commit で撤去。恒久 fixture は既存の trial 環境構成を再利用し、全 assertion と deadline を保持する。",
+      "removedIn": "unreleased",
+      "removedOn": "2026-10-05"
     }
   ]
 }

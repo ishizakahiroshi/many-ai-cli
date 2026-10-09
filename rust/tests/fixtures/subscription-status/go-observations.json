@@ -1,0 +1,191 @@
+[
+  {
+    "error": "",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true,
+      "plan": "max",
+      "method": "oauth"
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true,
+      "method": "api-key"
+    }
+  },
+  {
+    "error": "could not read `claude auth status` output",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "could not read `claude auth status` output",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "could not read `claude auth status` output",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true,
+      "method": "chatgpt"
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true,
+      "method": "api-key"
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true,
+      "method": "api-key"
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true,
+      "method": "grok.com"
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true,
+      "method": "x.ai"
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true,
+      "plan": "go"
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": false
+    }
+  },
+  {
+    "error": "",
+    "status": {
+      "logged_in": true
+    }
+  }
+]

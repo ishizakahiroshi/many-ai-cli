@@ -1,0 +1,24 @@
+{
+  "dismissed": {
+    "type": "reattach_reject",
+    "session_id": 1,
+    "reason": "session dismissed",
+    "token_statusbar": false
+  },
+  "invalid_id": {
+    "type": "reattach_reject",
+    "reason": "invalid session_id",
+    "token_statusbar": false
+  },
+  "invalid_replay": {
+    "type": "reattach_reject",
+    "session_id": 1,
+    "reason": "invalid replay_b64",
+    "token_statusbar": false
+  },
+  "reattach_ack": {
+    "type": "reattach_ack",
+    "session_id": 1,
+    "token_statusbar": false
+  }
+}

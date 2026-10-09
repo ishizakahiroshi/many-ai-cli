@@ -1,0 +1,44 @@
+type input struct {
+ Name string `json:"name"`
+ Method string `json:"method"`
+ Body string `json:"body"`
+ Initial config.UserPrefs `json:"initial"`
+ Policy string `json:"policy"`
+ Version string `json:"version"`
+ Backends int `json:"backends"`
+ Push int `json:"push"`
+ FailSave bool `json:"fail_save"`
+}
+func main() {
+ raw,e:=os.ReadFile(os.Args[1]);must(e)
+ var cases []input;must(json.Unmarshal(raw,&cases)); rows:=[]any{}
+ for _,c:=range cases {
+  home,e:=os.MkdirTemp("", "user-preferences-owned-");must(e)
+  must(os.Setenv("HOME",home));must(os.Setenv("USERPROFILE",home))
+  root:=filepath.Join(home,".many-ai-cli");must(os.MkdirAll(root,0700))
+  encodedRoot,e:=json.Marshal(root);must(e);rootJSON:=string(encodedRoot[1:len(encodedRoot)-1])
+  expand:=func(text string)string{return strings.ReplaceAll(strings.ReplaceAll(text,`\u003croot\u003e`,rootJSON),"<root>",rootJSON)}
+  b,e:=json.Marshal(c.Initial);must(e);must(json.Unmarshal([]byte(expand(string(b))),&c.Initial))
+  cfg:=&config.Config{UserPrefs:c.Initial}
+  cfg.UserPrefs.UsageProbeModel=config.EffectiveUsageProbeModel(cfg.UserPrefs.UsageProbeModel)
+  for i:=0;i<c.Backends;i++ {cfg.Notify.Backends=append(cfg.Notify.Backends,config.NotifyBackendConfig{})}
+  s:=&Server{cfg:cfg,logger:slog.New(slog.NewTextHandler(io.Discard,nil))}
+  if c.Push>0 {s.push=&pushManager{c.Push}}
+  if c.FailSave {must(os.Mkdir(filepath.Join(root,"config.yaml"),0700))}
+  original:=userPrefsTemplateVersion(cfg.UserPrefs.Templates)
+  r:=httptest.NewRequest(c.Method,"http://127.0.0.1:49961/api/user-prefs",strings.NewReader(expand(c.Body)))
+  r.Header.Set("X-Template-Write",c.Policy)
+  version:=c.Version;if version=="current" {version=original};r.Header.Set("X-Template-Version",version)
+  w:=httptest.NewRecorder();s.handleUserPrefs(w,r)
+  normalize:=func(text string)string{return regexp.MustCompile(`config-[0-9]+\.yaml\.tmp`).ReplaceAllString(strings.ReplaceAll(text,rootJSON,"<root>"),"config-<temporary>.yaml.tmp")}
+  projected:=func(value any)any{bytes,e:=json.Marshal(value);must(e);var v any;d:=json.NewDecoder(strings.NewReader(normalize(string(bytes))));d.UseNumber();must(d.Decode(&v));return v}
+  var body any;decoder:=json.NewDecoder(strings.NewReader(w.Body.String()));decoder.UseNumber();must(decoder.Decode(&body));body=projected(body)
+  // Failure detail includes platform IO text. Keep the stable source error class.
+  if w.Code==500 {body.(map[string]any)["detail"]="save failed: <owned filesystem error>"}
+  var saved any
+  if bytes,e:=os.ReadFile(filepath.Join(root,"config.yaml"));e==nil {var loaded config.Config;must(yaml.Unmarshal(bytes,&loaded));saved=projected(loaded.UserPrefs)}
+  rows=append(rows,map[string]any{"name":c.Name,"status":w.Code,"body":body,"content_type":w.Header().Get("Content-Type"),"version":w.Header().Get("X-Template-Version"),"initial_version":original,"runtime":projected(s.cfg.UserPrefs),"saved":saved})
+  must(os.RemoveAll(home))
+ }
+ encoder:=json.NewEncoder(os.Stdout);encoder.SetIndent("","  ");must(encoder.Encode(rows))
+}

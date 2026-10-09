@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "local_code_checkpoint": "6e478f42bc81ef80d8cd60f54c9533a9e6634a55",
+  "code_tree": "21dc0413d1c92ccb45f5dbf1085d113fcc701dcc",
+  "fixture_commit": "8a5363627cec275c44ab8ec323d060634ba79f85",
+  "compiled_rust_src_tree": "c8a403ffdc64bca51e3e0b97f30b0f34ad4e7b8a",
+  "recorded_utc": "2026-10-06T09:16:37.988615+00:00",
+  "red_green": [
+    {
+      "phase": "red",
+      "exit_code": 101,
+      "log_sha256": "d7740ccb785c402e890373042130a69b439dbd1a3133f37f6e5890b75e7a3b6f",
+      "log": "event-maintenance-red.log",
+      "counts": [
+        "0",
+        "1",
+        "0"
+      ]
+    },
+    {
+      "phase": "green",
+      "exit_code": 0,
+      "log_sha256": "15a24597f613f674cc0ff0c694a5ea3ad165273fe1f2a478d7eea3a052ea0f5d",
+      "log": "event-maintenance-green.log",
+      "counts": [
+        "1",
+        "0",
+        "0"
+      ]
+    }
+  ],
+  "red_green_command": "cargo test --manifest-path rust/Cargo.toml --locked --offline --lib application::event_observer::tests::fixture_git_keeps_auto_maintenance_enabled_and_waits_for_completion -- --exact --nocapture",
+  "discriminator": "RED compiles then fails on actual[(detach=true,no_detach=false)] versus required[(false,true)]. GREEN selects enabled automatic foreground maintenance, complete trace, no maintenance.lock after commit and immediate real capture/reservation. This verifies fixture sequencing, not the cause of the historical Windows status500.",
+  "checks": [
+    {
+      "name": "all-targets",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--no-fail-fast",
+        "--",
+        "--test-threads=8"
+      ],
+      "exit_code": 0,
+      "seconds": 38.585,
+      "log": "event-maintenance-all-targets.log",
+      "log_sha256": "911caf807901636534456fe35991cde3c807a3da7bb84836b966054b9f3238fb",
+      "passed_failed_ignored": [
+        1423,
+        0,
+        0
+      ],
+      "summaries": 33,
+      "first_summary": [
+        1112,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "seconds": 42.734,
+      "log": "event-maintenance-clippy.log",
+      "log_sha256": "3d92acaeafe837743c9add09b1a5df33a35d582ff4a2bd5f0659ad0d9f61fdd6"
+    },
+    {
+      "name": "doctests",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--doc"
+      ],
+      "exit_code": 0,
+      "seconds": 3.282,
+      "log": "event-maintenance-doctests.log",
+      "log_sha256": "581101ab01e9d59f8e838faffced38c9098a5958423874fdfc385c1f7b0d577b",
+      "passed_failed_ignored": [
+        3,
+        0,
+        0
+      ],
+      "summaries": 1,
+      "first_summary": [
+        3,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 1.798,
+      "log": "event-maintenance-fmt.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "python",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "rust/packaging",
+        "-p",
+        "test_*.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.453,
+      "log": "event-maintenance-python.log",
+      "log_sha256": "255eacc857c83265bf15de7bb7f49232170f14daf5b5ca9728c08b56565cb999"
+    },
+    {
+      "name": "instrumentation",
+      "command": [
+        "bun",
+        "scripts/check-instrumentation.mjs"
+      ],
+      "exit_code": 0,
+      "seconds": 0.112,
+      "log": "event-maintenance-instrumentation.log",
+      "log_sha256": "c54bcee9779815b0f31c1c2c70c5873510614865da2b36dd2d884bd9fa11734d"
+    }
+  ],
+  "boundary": "Only owned synthetic event-observer Git repositories gain local maintenance.autoDetach=false. Automatic maintenance remains enabled. Production resolution/materialization5s budgets, safety checks, ProcessPlan limits and original capture/incarnation assertions are unchanged.",
+  "fixed_failure_context": "The owned regression trace emits only last32 allowlisted command categories with numeric exit/duration, under1MiB input; no raw argv/environment/SID/path. Missing exit data does not by itself prove a timeout. The redaction/size contract runs with the aggregate. No production observer or broad temporary phase recorder is restored.",
+  "scanner_change": {
+    "source_commit": "2be97163be9302563bc810c857760a52ddc90376",
+    "path": "rust/inventory/windows-check-timing-8530565.json",
+    "line": 305,
+    "reason": "Public JSON metadata identifier matched across prose and a following field; exactly one owner-approved historical exception. Existing ignore bytes preserved. Other historical findings are not accepted.",
+    "old_ignore_sha256": "3caeb372397cc40f41863987bdf2ccfb55472147814691f66db06ed928894139",
+    "new_ignore_sha256": "bc60b3a7785ce46e90cc2909b3e669d140f648361683dd1f34b1565fccafe072",
+    "rule": "generic-api-key"
+  },
+  "formal_review": "Not run while CI is red, at explicit owner direction. Local validation is not an independent code review.",
+  "pending": [
+    "Publish one combined append after current native jobs terminate and the35-minute hold",
+    "Three consecutive Windows confirmation passes at the resulting exact SHA",
+    "Same-head full-target, Validate and scoped scan results; artifacts and actual source read-back",
+    "Historical Windows snapshotstatus500 attribution, other known unaccepted scan findings, owner device/provider/signing/rollback acceptance"
+  ]
+}

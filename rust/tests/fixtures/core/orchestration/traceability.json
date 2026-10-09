@@ -1,0 +1,102 @@
+{
+  "oracle": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "status": "implementation_in_progress",
+  "implemented_components": [
+    {
+      "source": [
+        "internal/hub/child_permission.go",
+        "internal/hub/orchestration.go:childApprovalPreviewTiers"
+      ],
+      "rust": [
+        "rust/src/orchestration/child_options.rs"
+      ],
+      "fixture": "rust/tests/fixtures/core/orchestration/child-options-go-21d0bc7.json",
+      "generator": "rust/tests/fixtures/core/orchestration/generate_child_options.py",
+      "go_cases": 40,
+      "generator_exit_code": 0,
+      "tests": [
+        "child_permission_preparation_and_preview_match_fixed_go",
+        "confirmation_does_not_reclassify_an_autonomous_launch_as_direct_ui",
+        "bounded_tool_fill_retains_human_folder_trust_and_prior_internal_tools"
+      ],
+      "author_validation": {
+        "unit_passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "strict_lib_clippy_exit_code": 0
+      },
+      "provenance": "Direct verified UI launches use attended defaults when interactive. Human confirmation of an autonomous request retains autonomous execution/permission defaults. Configuration-sourced allowed tools fill only empty internal grants and preserve explicit human folder-trust decisions.",
+      "boundary": "Pure preparation/disclosure is paired with fixed-Go observations; this does not claim actual confirmation HTTP, child startup, profile write, native process, or provider acceptance."
+    },
+    {
+      "source": [
+        "internal/hub/orchestration.go:476-512,634-799 (capacity, registration, waiter and expiry)",
+        "internal/hub/orchestration.go:803-935 (decision validation and sole resolver)",
+        "internal/hub/orchestration.go:1675-1720 (shared requested-frame disclosure)",
+        "internal/hub/spawn_handler.go:489-501 (pre-decision launch-option validation)",
+        "internal/hub/ui_broadcast.go:295-309 (pending replay before approval snapshot)",
+        "internal/hub/orchestration_test.go:1840-2307 (source lifecycle/admission/dismiss regressions)"
+      ],
+      "rust": [
+        "rust/src/terminal/session/confirmations.rs",
+        "rust/src/terminal/session.rs",
+        "rust/src/terminal/session/lifecycle.rs:pending-confirmation dismiss guard",
+        "rust/src/terminal/session/ui.rs:pending-dialog replay"
+      ],
+      "tests": "rust/src/terminal/session/confirmations/tests.rs",
+      "source_evidence": "Fixed-Go implementation and test inspection; no newly executed Go lifecycle oracle is claimed by this slice.",
+      "author_validation": {
+        "initial_confirmation_tests_passed": 17,
+        "initial_session_engine_tests_passed": 37,
+        "initial_strict_lib_tests_clippy_exit_code": 0,
+        "final_confirmation_tests_passed": 23,
+        "failed": 0,
+        "ignored": 0,
+        "final_session_engine_tests_passed": 37,
+        "final_strict_lib_tests_clippy_exit_code": 0
+      },
+      "covered": [
+        "Unavailable executor/disclosure rejects before reservation or publication",
+        "Single admission owner, same-role replacement ordering, capacity and confirmation-ID exhaustion",
+        "Per-confirmation completion cells without a permanent outcome map",
+        "Waiter cancellation/drop remains distinct from accepted task lifetime",
+        "Matching decision-lease rollback and synchronous task handoff",
+        "Superseded/expired entries are never resurrected",
+        "Unpolled and active task drop release only their own admission and publish failure",
+        "Live presentation callback runs outside State and revalidates afterward",
+        "Ordinary authenticated confirmation epoch needs no active WebSocket membership",
+        "Warm reconnect preserves the parent-ID-based pending request and resolves current binding at handoff",
+        "Invalid approved options remain pending; refusal ignores invalid overrides",
+        "Best-effort refusal failure is reported, with one executor attempt",
+        "Fresh oldest-first dialog replay precedes approval_snapshot and preserves repeated priming drain",
+        "Pending shutdown produces HubStopped with no invented wire close reason; committed tasks remain owned separately"
+      ],
+      "boundary": "The engine implements SpawnConfirmations with an optional required ConfirmationExecutor. No production executor, successful synthetic child launch, actual board write, HTTP route/task-permit handoff or native acceptance is supplied or claimed. Tests use owned synthetic roots and explicit fake preparation failures/refusal callbacks. ConfirmationExecutor must be composed with real preparation/registration before the capability is available.",
+      "remaining_http_error_contract": "Current shared SessionError carries explicit InvalidRequest messages for missing/already-decided confirmation; source404/409 mapping must be specified before the real HTTP caller is accepted.",
+      "shutdown_owner_contract": "Stop admitting operations, drain accepted HTTP handoffs while the Hub task owner stays accepting, invoke shutdown_confirmations for pending cells, then cancel/drain committed tasks. An aborted task reports incomplete asynchronous cleanup rather than restoring an accepted decision."
+    }
+  ],
+  "pending": [
+    "Real confirmation HTTP error/status mapping and owned-task permit handoff; existing token/Host/Origin/PIN guard preserved",
+    "Real board/refusal/child preparation and worktree integration",
+    "Child registration metadata bound to existing spawn-attempt/proof owner before ACK",
+    "Initial prompt route and gate based on actual resolved launcher plan",
+    "Relay lifecycle/recovery and source-aligned notifications",
+    "Live application/HTTP/native acceptance"
+  ],
+  "verification_kind": "ordinary author tests; independent review remains separate",
+  "prepared_fixtures": [
+    {
+      "source": [
+        "internal/hub/orchestration.go:childLaunchPrompt/buildChildInitialPromptFor/sanitizeInjectText/childProgressPathFor",
+        "internal/headless/prompt.go:ExpandPrompt"
+      ],
+      "generator": "rust/tests/fixtures/core/orchestration/generate_child_prompts.py",
+      "fixture": "rust/tests/fixtures/core/orchestration/child-prompts-go-21d0bc7.json",
+      "go_cases": 24,
+      "generator_exit_code": 0,
+      "status": "Go observations only; Rust prompt builder and actual launch/injection caller remain pending",
+      "portability": "Relative board.md avoids host separator differences in this pure prompt corpus; native path acceptance remains separate."
+    }
+  ]
+}

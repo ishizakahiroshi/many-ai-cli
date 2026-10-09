@@ -1,0 +1,1933 @@
+{
+  "schema_version": 1,
+  "baseline": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "source": "internal/proto/messages.go",
+  "source_sha256": "2ce7013b9083f952deaf5be8157cea77ff33b95354e91d22bb1bb146f9df2193",
+  "structs": [
+    {
+      "name": "Message",
+      "fields": [
+        {
+          "go_name": "Type",
+          "go_type": "string",
+          "wire_name": "type",
+          "omitempty": false
+        },
+        {
+          "go_name": "Role",
+          "go_type": "string",
+          "wire_name": "role",
+          "omitempty": true
+        },
+        {
+          "go_name": "SessionID",
+          "go_type": "int",
+          "wire_name": "session_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "Provider",
+          "go_type": "string",
+          "wire_name": "provider",
+          "omitempty": true
+        },
+        {
+          "go_name": "ProviderRevision",
+          "go_type": "string",
+          "wire_name": "provider_revision",
+          "omitempty": true
+        },
+        {
+          "go_name": "Display",
+          "go_type": "string",
+          "wire_name": "display_name",
+          "omitempty": true
+        },
+        {
+          "go_name": "CWD",
+          "go_type": "string",
+          "wire_name": "cwd",
+          "omitempty": true
+        },
+        {
+          "go_name": "Branch",
+          "go_type": "string",
+          "wire_name": "branch",
+          "omitempty": true
+        },
+        {
+          "go_name": "ProjectID",
+          "go_type": "string",
+          "wire_name": "project_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "PID",
+          "go_type": "int",
+          "wire_name": "pid",
+          "omitempty": true
+        },
+        {
+          "go_name": "InputSeq",
+          "go_type": "int64",
+          "wire_name": "input_seq",
+          "omitempty": true
+        },
+        {
+          "go_name": "InputSeqHighWatermark",
+          "go_type": "int64",
+          "wire_name": "input_seq_high_watermark",
+          "omitempty": true
+        },
+        {
+          "go_name": "Shell",
+          "go_type": "string",
+          "wire_name": "shell",
+          "omitempty": true
+        },
+        {
+          "go_name": "Version",
+          "go_type": "string",
+          "wire_name": "version",
+          "omitempty": true
+        },
+        {
+          "go_name": "State",
+          "go_type": "string",
+          "wire_name": "state",
+          "omitempty": true
+        },
+        {
+          "go_name": "OutputIdle",
+          "go_type": "bool",
+          "wire_name": "output_idle",
+          "omitempty": true
+        },
+        {
+          "go_name": "WorkflowActive",
+          "go_type": "bool",
+          "wire_name": "workflow_active",
+          "omitempty": true
+        },
+        {
+          "go_name": "AwaitingUser",
+          "go_type": "bool",
+          "wire_name": "awaiting_user",
+          "omitempty": true
+        },
+        {
+          "go_name": "AwaitingApproval",
+          "go_type": "bool",
+          "wire_name": "awaiting_approval",
+          "omitempty": true
+        },
+        {
+          "go_name": "Activity",
+          "go_type": "*SessionActivity",
+          "wire_name": "activity",
+          "omitempty": true
+        },
+        {
+          "go_name": "WorkflowProgress",
+          "go_type": "*WorkflowProgress",
+          "wire_name": "workflow_progress",
+          "omitempty": true
+        },
+        {
+          "go_name": "SubagentTree",
+          "go_type": "*SubagentTree",
+          "wire_name": "subagent_tree",
+          "omitempty": true
+        },
+        {
+          "go_name": "ExitCode",
+          "go_type": "int",
+          "wire_name": "exit_code",
+          "omitempty": true
+        },
+        {
+          "go_name": "Signal",
+          "go_type": "string",
+          "wire_name": "signal",
+          "omitempty": true
+        },
+        {
+          "go_name": "Token",
+          "go_type": "string",
+          "wire_name": "token",
+          "omitempty": true
+        },
+        {
+          "go_name": "HomeDir",
+          "go_type": "string",
+          "wire_name": "home_dir",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexHome",
+          "go_type": "string",
+          "wire_name": "codex_home",
+          "omitempty": true
+        },
+        {
+          "go_name": "ClaudeDir",
+          "go_type": "string",
+          "wire_name": "claude_dir",
+          "omitempty": true
+        },
+        {
+          "go_name": "GrokHome",
+          "go_type": "string",
+          "wire_name": "grok_home",
+          "omitempty": true
+        },
+        {
+          "go_name": "AgentSessionID",
+          "go_type": "string",
+          "wire_name": "agent_session_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "SubscriptionID",
+          "go_type": "string",
+          "wire_name": "subscription_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "SubscriptionName",
+          "go_type": "string",
+          "wire_name": "subscription_name",
+          "omitempty": true
+        },
+        {
+          "go_name": "UsageProbe",
+          "go_type": "bool",
+          "wire_name": "usage_probe",
+          "omitempty": true
+        },
+        {
+          "go_name": "SubscriptionLogin",
+          "go_type": "bool",
+          "wire_name": "subscription_login",
+          "omitempty": true
+        },
+        {
+          "go_name": "Data",
+          "go_type": "[]byte",
+          "wire_name": "data",
+          "omitempty": true
+        },
+        {
+          "go_name": "Text",
+          "go_type": "string",
+          "wire_name": "text",
+          "omitempty": true
+        },
+        {
+          "go_name": "AgentChatMessages",
+          "go_type": "[]AgentChatMessage",
+          "wire_name": "messages",
+          "omitempty": true
+        },
+        {
+          "go_name": "Cols",
+          "go_type": "int",
+          "wire_name": "cols",
+          "omitempty": true
+        },
+        {
+          "go_name": "Rows",
+          "go_type": "int",
+          "wire_name": "rows",
+          "omitempty": true
+        },
+        {
+          "go_name": "LogPath",
+          "go_type": "string",
+          "wire_name": "log_path",
+          "omitempty": true
+        },
+        {
+          "go_name": "JSONLPath",
+          "go_type": "string",
+          "wire_name": "jsonl_path",
+          "omitempty": true
+        },
+        {
+          "go_name": "ReplayB64",
+          "go_type": "string",
+          "wire_name": "replay_b64",
+          "omitempty": true
+        },
+        {
+          "go_name": "Reason",
+          "go_type": "string",
+          "wire_name": "reason",
+          "omitempty": true
+        },
+        {
+          "go_name": "PTYBytes",
+          "go_type": "int64",
+          "wire_name": "pty_bytes",
+          "omitempty": true
+        },
+        {
+          "go_name": "Replay",
+          "go_type": "bool",
+          "wire_name": "replay",
+          "omitempty": true
+        },
+        {
+          "go_name": "ReplayEpoch",
+          "go_type": "uint64",
+          "wire_name": "replay_epoch",
+          "omitempty": true
+        },
+        {
+          "go_name": "ApprovalSourceEpoch",
+          "go_type": "uint64",
+          "wire_name": "approval_source_epoch",
+          "omitempty": true
+        },
+        {
+          "go_name": "TokenStatusbar",
+          "go_type": "bool",
+          "wire_name": "token_statusbar",
+          "omitempty": false
+        },
+        {
+          "go_name": "ApprovalSig",
+          "go_type": "string",
+          "wire_name": "approval_sig",
+          "omitempty": true
+        },
+        {
+          "go_name": "ApprovalSource",
+          "go_type": "string",
+          "wire_name": "approval_source",
+          "omitempty": true
+        },
+        {
+          "go_name": "ApprovalSummary",
+          "go_type": "*ApprovalSummary",
+          "wire_name": "approval_summary",
+          "omitempty": true
+        },
+        {
+          "go_name": "ApprovalCandidateKey",
+          "go_type": "string",
+          "wire_name": "approval_candidate_key",
+          "omitempty": true
+        },
+        {
+          "go_name": "ApprovalCandidateShape",
+          "go_type": "string",
+          "wire_name": "approval_candidate_shape",
+          "omitempty": true
+        },
+        {
+          "go_name": "ApprovalConsumed",
+          "go_type": "bool",
+          "wire_name": "approval_consumed",
+          "omitempty": true
+        },
+        {
+          "go_name": "ApprovalConsumedEpoch",
+          "go_type": "uint64",
+          "wire_name": "approval_consumed_epoch",
+          "omitempty": true
+        },
+        {
+          "go_name": "DoneSummary",
+          "go_type": "*DoneSummary",
+          "wire_name": "done_summary",
+          "omitempty": true
+        },
+        {
+          "go_name": "SentText",
+          "go_type": "string",
+          "wire_name": "sent_text",
+          "omitempty": true
+        },
+        {
+          "go_name": "DetectedAt",
+          "go_type": "string",
+          "wire_name": "detected_at",
+          "omitempty": true
+        },
+        {
+          "go_name": "ApprovalState",
+          "go_type": "*ApprovalState",
+          "wire_name": "approval_state",
+          "omitempty": true
+        },
+        {
+          "go_name": "ApprovalSnapshot",
+          "go_type": "[]ApprovalSessionState",
+          "wire_name": "approval_snapshot",
+          "omitempty": true
+        },
+        {
+          "go_name": "LastOutputAt",
+          "go_type": "string",
+          "wire_name": "last_output_at",
+          "omitempty": true
+        },
+        {
+          "go_name": "TranscriptGrewAt",
+          "go_type": "string",
+          "wire_name": "transcript_grew_at",
+          "omitempty": true
+        },
+        {
+          "go_name": "StartedAt",
+          "go_type": "string",
+          "wire_name": "started_at",
+          "omitempty": true
+        },
+        {
+          "go_name": "Label",
+          "go_type": "string",
+          "wire_name": "label",
+          "omitempty": true
+        },
+        {
+          "go_name": "LaunchLabel",
+          "go_type": "string",
+          "wire_name": "launch_label",
+          "omitempty": true
+        },
+        {
+          "go_name": "SessionMeta",
+          "go_type": "*SessionMeta",
+          "wire_name": "session_meta",
+          "omitempty": true
+        },
+        {
+          "go_name": "Model",
+          "go_type": "string",
+          "wire_name": "model",
+          "omitempty": true
+        },
+        {
+          "go_name": "Effort",
+          "go_type": "string",
+          "wire_name": "effort",
+          "omitempty": true
+        },
+        {
+          "go_name": "ExecutionMode",
+          "go_type": "string",
+          "wire_name": "execution_mode",
+          "omitempty": true
+        },
+        {
+          "go_name": "PermissionPreset",
+          "go_type": "string",
+          "wire_name": "permission_preset",
+          "omitempty": true
+        },
+        {
+          "go_name": "PermissionMode",
+          "go_type": "string",
+          "wire_name": "permission_mode",
+          "omitempty": true
+        },
+        {
+          "go_name": "Route",
+          "go_type": "string",
+          "wire_name": "route",
+          "omitempty": true
+        },
+        {
+          "go_name": "ParentSessionID",
+          "go_type": "int",
+          "wire_name": "parent_session_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "HandoffFrom",
+          "go_type": "int",
+          "wire_name": "handoff_from",
+          "omitempty": true
+        },
+        {
+          "go_name": "Auto",
+          "go_type": "bool",
+          "wire_name": "auto",
+          "omitempty": true
+        },
+        {
+          "go_name": "Depth",
+          "go_type": "int",
+          "wire_name": "depth",
+          "omitempty": true
+        },
+        {
+          "go_name": "OrchestrationID",
+          "go_type": "string",
+          "wire_name": "orchestration_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "BoardPath",
+          "go_type": "string",
+          "wire_name": "board_path",
+          "omitempty": true
+        },
+        {
+          "go_name": "WorktreeBranch",
+          "go_type": "string",
+          "wire_name": "worktree_branch",
+          "omitempty": true
+        },
+        {
+          "go_name": "BoardNotifyPending",
+          "go_type": "bool",
+          "wire_name": "board_notify_pending",
+          "omitempty": true
+        },
+        {
+          "go_name": "Relays",
+          "go_type": "[]RelayStatus",
+          "wire_name": "relays",
+          "omitempty": true
+        },
+        {
+          "go_name": "CrossSessionMessages",
+          "go_type": "[]CrossSessionMessage",
+          "wire_name": "cross_session_messages",
+          "omitempty": true
+        },
+        {
+          "go_name": "SpawnConfirmationID",
+          "go_type": "string",
+          "wire_name": "spawn_confirmation_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "InitialPrompt",
+          "go_type": "string",
+          "wire_name": "initial_prompt",
+          "omitempty": true
+        },
+        {
+          "go_name": "SpawnRequestedAtMs",
+          "go_type": "int64",
+          "wire_name": "spawn_requested_at_ms",
+          "omitempty": true
+        },
+        {
+          "go_name": "RememberPermission",
+          "go_type": "bool",
+          "wire_name": "remember_permission",
+          "omitempty": true
+        },
+        {
+          "go_name": "SpawnChildApproval",
+          "go_type": "map[string]map[string]ChildApproval",
+          "wire_name": "spawn_child_approval",
+          "omitempty": true
+        },
+        {
+          "go_name": "TrustGrantProviders",
+          "go_type": "[]string",
+          "wire_name": "trust_grant_providers",
+          "omitempty": true
+        },
+        {
+          "go_name": "SpawnChildSessionID",
+          "go_type": "int",
+          "wire_name": "spawn_child_session_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "FirstMessage",
+          "go_type": "string",
+          "wire_name": "first_message",
+          "omitempty": true
+        },
+        {
+          "go_name": "LastMessage",
+          "go_type": "string",
+          "wire_name": "last_message",
+          "omitempty": true
+        },
+        {
+          "go_name": "Inject",
+          "go_type": "string",
+          "wire_name": "inject",
+          "omitempty": true
+        },
+        {
+          "go_name": "ImageData",
+          "go_type": "string",
+          "wire_name": "image_data",
+          "omitempty": true
+        },
+        {
+          "go_name": "Filename",
+          "go_type": "string",
+          "wire_name": "filename",
+          "omitempty": true
+        },
+        {
+          "go_name": "Providers",
+          "go_type": "[]string",
+          "wire_name": "providers",
+          "omitempty": true
+        },
+        {
+          "go_name": "UIActiveSessionID",
+          "go_type": "int",
+          "wire_name": "ui_active_session_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "GitChecked",
+          "go_type": "bool",
+          "wire_name": "git_checked",
+          "omitempty": true
+        },
+        {
+          "go_name": "GitFiles",
+          "go_type": "int",
+          "wire_name": "git_files",
+          "omitempty": true
+        },
+        {
+          "go_name": "GitAdded",
+          "go_type": "int",
+          "wire_name": "git_added",
+          "omitempty": true
+        },
+        {
+          "go_name": "GitDeleted",
+          "go_type": "int",
+          "wire_name": "git_deleted",
+          "omitempty": true
+        },
+        {
+          "go_name": "CommitSubject",
+          "go_type": "string",
+          "wire_name": "commit_subject",
+          "omitempty": true
+        },
+        {
+          "go_name": "CommitBody",
+          "go_type": "string",
+          "wire_name": "commit_body",
+          "omitempty": true
+        },
+        {
+          "go_name": "CostUSD",
+          "go_type": "float64",
+          "wire_name": "cost_usd",
+          "omitempty": true
+        },
+        {
+          "go_name": "CostKnown",
+          "go_type": "bool",
+          "wire_name": "cost_known",
+          "omitempty": true
+        },
+        {
+          "go_name": "TokensIn",
+          "go_type": "int",
+          "wire_name": "tokens_in",
+          "omitempty": true
+        },
+        {
+          "go_name": "TokensOut",
+          "go_type": "int",
+          "wire_name": "tokens_out",
+          "omitempty": true
+        },
+        {
+          "go_name": "TokensCache",
+          "go_type": "int",
+          "wire_name": "tokens_cache",
+          "omitempty": true
+        },
+        {
+          "go_name": "TokensTotal",
+          "go_type": "int",
+          "wire_name": "tokens_total",
+          "omitempty": true
+        },
+        {
+          "go_name": "CtxWindow",
+          "go_type": "int",
+          "wire_name": "ctx_window",
+          "omitempty": true
+        },
+        {
+          "go_name": "CtxUsedPct",
+          "go_type": "float64",
+          "wire_name": "ctx_used_pct",
+          "omitempty": true
+        },
+        {
+          "go_name": "UsageModel",
+          "go_type": "string",
+          "wire_name": "usage_model",
+          "omitempty": true
+        },
+        {
+          "go_name": "UsageStartedAt",
+          "go_type": "string",
+          "wire_name": "usage_started_at",
+          "omitempty": true
+        },
+        {
+          "go_name": "RateLimit5hPct",
+          "go_type": "float64",
+          "wire_name": "rl_5h_pct",
+          "omitempty": true
+        },
+        {
+          "go_name": "RateLimit5hReset",
+          "go_type": "int64",
+          "wire_name": "rl_5h_reset",
+          "omitempty": true
+        },
+        {
+          "go_name": "RateLimit7dPct",
+          "go_type": "float64",
+          "wire_name": "rl_7d_pct",
+          "omitempty": true
+        },
+        {
+          "go_name": "RateLimit7dReset",
+          "go_type": "int64",
+          "wire_name": "rl_7d_reset",
+          "omitempty": true
+        },
+        {
+          "go_name": "ClaudeRateLimitsPresent",
+          "go_type": "bool",
+          "wire_name": "claude_rate_limits_present",
+          "omitempty": true
+        },
+        {
+          "go_name": "ClaudeFiveHourFieldPresent",
+          "go_type": "bool",
+          "wire_name": "claude_5h_field_present",
+          "omitempty": true
+        },
+        {
+          "go_name": "ClaudeFiveHourPresent",
+          "go_type": "bool",
+          "wire_name": "claude_5h_present",
+          "omitempty": true
+        },
+        {
+          "go_name": "ClaudeSevenDayFieldPresent",
+          "go_type": "bool",
+          "wire_name": "claude_7d_field_present",
+          "omitempty": true
+        },
+        {
+          "go_name": "ClaudeSevenDayPresent",
+          "go_type": "bool",
+          "wire_name": "claude_7d_present",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexRateLimitsPresent",
+          "go_type": "bool",
+          "wire_name": "codex_rate_limits_present",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexPrimaryPresent",
+          "go_type": "bool",
+          "wire_name": "codex_primary_present",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexPrimaryUsedPct",
+          "go_type": "float64",
+          "wire_name": "codex_primary_used_pct",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexPrimaryWindowMinutes",
+          "go_type": "int",
+          "wire_name": "codex_primary_window_minutes",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexPrimaryReset",
+          "go_type": "int64",
+          "wire_name": "codex_primary_reset",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexSecondaryUsedPct",
+          "go_type": "float64",
+          "wire_name": "codex_secondary_used_pct",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexSecondaryPresent",
+          "go_type": "bool",
+          "wire_name": "codex_secondary_present",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexSecondaryWindowMinutes",
+          "go_type": "int",
+          "wire_name": "codex_secondary_window_minutes",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexSecondaryReset",
+          "go_type": "int64",
+          "wire_name": "codex_secondary_reset",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexCreditsPresent",
+          "go_type": "bool",
+          "wire_name": "codex_credits_present",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexHasCredits",
+          "go_type": "bool",
+          "wire_name": "codex_has_credits",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexCreditsUnlimited",
+          "go_type": "bool",
+          "wire_name": "codex_credits_unlimited",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexCreditsBalance",
+          "go_type": "string",
+          "wire_name": "codex_credits_balance",
+          "omitempty": true
+        },
+        {
+          "go_name": "CodexPlanType",
+          "go_type": "string",
+          "wire_name": "codex_plan_type",
+          "omitempty": true
+        },
+        {
+          "go_name": "UsageObservedAt",
+          "go_type": "string",
+          "wire_name": "usage_observed_at",
+          "omitempty": true
+        },
+        {
+          "go_name": "LinesAdded",
+          "go_type": "int",
+          "wire_name": "lines_added",
+          "omitempty": true
+        },
+        {
+          "go_name": "LinesRemoved",
+          "go_type": "int",
+          "wire_name": "lines_removed",
+          "omitempty": true
+        },
+        {
+          "go_name": "EffortLevel",
+          "go_type": "string",
+          "wire_name": "effort_level",
+          "omitempty": true
+        },
+        {
+          "go_name": "Thinking",
+          "go_type": "bool",
+          "wire_name": "thinking",
+          "omitempty": true
+        },
+        {
+          "go_name": "Exceeds200k",
+          "go_type": "bool",
+          "wire_name": "exceeds_200k",
+          "omitempty": true
+        },
+        {
+          "go_name": "DurationMs",
+          "go_type": "int64",
+          "wire_name": "duration_ms",
+          "omitempty": true
+        },
+        {
+          "go_name": "APIDurationMs",
+          "go_type": "int64",
+          "wire_name": "api_duration_ms",
+          "omitempty": true
+        },
+        {
+          "go_name": "OutputStyle",
+          "go_type": "string",
+          "wire_name": "output_style",
+          "omitempty": true
+        },
+        {
+          "go_name": "VimMode",
+          "go_type": "string",
+          "wire_name": "vim_mode",
+          "omitempty": true
+        },
+        {
+          "go_name": "AgentName",
+          "go_type": "string",
+          "wire_name": "agent_name",
+          "omitempty": true
+        },
+        {
+          "go_name": "RepoHost",
+          "go_type": "string",
+          "wire_name": "repo_host",
+          "omitempty": true
+        },
+        {
+          "go_name": "RepoOwner",
+          "go_type": "string",
+          "wire_name": "repo_owner",
+          "omitempty": true
+        },
+        {
+          "go_name": "RepoName",
+          "go_type": "string",
+          "wire_name": "repo_name",
+          "omitempty": true
+        },
+        {
+          "go_name": "RemainingPct",
+          "go_type": "float64",
+          "wire_name": "remaining_pct",
+          "omitempty": true
+        },
+        {
+          "go_name": "ReasoningOut",
+          "go_type": "int",
+          "wire_name": "reasoning_output_tokens",
+          "omitempty": true
+        },
+        {
+          "go_name": "NoteOK",
+          "go_type": "bool",
+          "wire_name": "note_ok",
+          "omitempty": true
+        },
+        {
+          "go_name": "NotePath",
+          "go_type": "string",
+          "wire_name": "note_path",
+          "omitempty": true
+        },
+        {
+          "go_name": "BinaryStale",
+          "go_type": "*bool",
+          "wire_name": "binary_stale",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "CrossSessionMessage",
+      "fields": [
+        {
+          "go_name": "At",
+          "go_type": "string",
+          "wire_name": "at",
+          "omitempty": true
+        },
+        {
+          "go_name": "ReceiverSessionID",
+          "go_type": "int",
+          "wire_name": "receiver_session_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "ReceiverRole",
+          "go_type": "string",
+          "wire_name": "receiver_role",
+          "omitempty": true
+        },
+        {
+          "go_name": "Sender",
+          "go_type": "string",
+          "wire_name": "sender",
+          "omitempty": true
+        },
+        {
+          "go_name": "Text",
+          "go_type": "string",
+          "wire_name": "text",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "AgentChatMessage",
+      "fields": [
+        {
+          "go_name": "Role",
+          "go_type": "string",
+          "wire_name": "role",
+          "omitempty": false
+        },
+        {
+          "go_name": "Kind",
+          "go_type": "string",
+          "wire_name": "kind",
+          "omitempty": true
+        },
+        {
+          "go_name": "Text",
+          "go_type": "string",
+          "wire_name": "text",
+          "omitempty": true
+        },
+        {
+          "go_name": "Thinking",
+          "go_type": "[]string",
+          "wire_name": "thinking",
+          "omitempty": true
+        },
+        {
+          "go_name": "Tools",
+          "go_type": "[]AgentChatTool",
+          "wire_name": "tools",
+          "omitempty": true
+        },
+        {
+          "go_name": "TS",
+          "go_type": "string",
+          "wire_name": "ts",
+          "omitempty": true
+        },
+        {
+          "go_name": "MessageID",
+          "go_type": "string",
+          "wire_name": "message_id",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "AgentChatTool",
+      "fields": [
+        {
+          "go_name": "ID",
+          "go_type": "string",
+          "wire_name": "id",
+          "omitempty": true
+        },
+        {
+          "go_name": "Name",
+          "go_type": "string",
+          "wire_name": "name",
+          "omitempty": false
+        },
+        {
+          "go_name": "Input",
+          "go_type": "string",
+          "wire_name": "input",
+          "omitempty": true
+        },
+        {
+          "go_name": "Result",
+          "go_type": "string",
+          "wire_name": "result",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "SessionActivity",
+      "fields": [
+        {
+          "go_name": "OutputIdle",
+          "go_type": "bool",
+          "wire_name": "output_idle",
+          "omitempty": false
+        },
+        {
+          "go_name": "WorkflowActive",
+          "go_type": "bool",
+          "wire_name": "workflow_active",
+          "omitempty": false
+        },
+        {
+          "go_name": "AwaitingUser",
+          "go_type": "bool",
+          "wire_name": "awaiting_user",
+          "omitempty": false
+        },
+        {
+          "go_name": "AwaitingApproval",
+          "go_type": "bool",
+          "wire_name": "awaiting_approval",
+          "omitempty": false
+        }
+      ]
+    },
+    {
+      "name": "WorkflowProgress",
+      "fields": [
+        {
+          "go_name": "Detected",
+          "go_type": "bool",
+          "wire_name": "detected",
+          "omitempty": false
+        },
+        {
+          "go_name": "Source",
+          "go_type": "string",
+          "wire_name": "source",
+          "omitempty": true
+        },
+        {
+          "go_name": "Name",
+          "go_type": "string",
+          "wire_name": "name",
+          "omitempty": true
+        },
+        {
+          "go_name": "Done",
+          "go_type": "int",
+          "wire_name": "done",
+          "omitempty": false
+        },
+        {
+          "go_name": "Total",
+          "go_type": "int",
+          "wire_name": "total",
+          "omitempty": false
+        },
+        {
+          "go_name": "Running",
+          "go_type": "int",
+          "wire_name": "running",
+          "omitempty": false
+        },
+        {
+          "go_name": "Failed",
+          "go_type": "int",
+          "wire_name": "failed",
+          "omitempty": false
+        },
+        {
+          "go_name": "Pending",
+          "go_type": "int",
+          "wire_name": "pending",
+          "omitempty": false
+        },
+        {
+          "go_name": "WaitingDynamic",
+          "go_type": "int",
+          "wire_name": "waiting_dynamic",
+          "omitempty": false
+        },
+        {
+          "go_name": "Percent",
+          "go_type": "int",
+          "wire_name": "percent",
+          "omitempty": false
+        },
+        {
+          "go_name": "ElapsedSec",
+          "go_type": "int",
+          "wire_name": "elapsed_sec",
+          "omitempty": true
+        },
+        {
+          "go_name": "TokensRaw",
+          "go_type": "string",
+          "wire_name": "tokens_raw",
+          "omitempty": true
+        },
+        {
+          "go_name": "Phases",
+          "go_type": "[]WfPhase",
+          "wire_name": "phases",
+          "omitempty": true
+        },
+        {
+          "go_name": "Settled",
+          "go_type": "bool",
+          "wire_name": "settled",
+          "omitempty": false
+        },
+        {
+          "go_name": "SettledBy",
+          "go_type": "string",
+          "wire_name": "settled_by",
+          "omitempty": true
+        },
+        {
+          "go_name": "TaskDetailSource",
+          "go_type": "string",
+          "wire_name": "task_detail_source",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "WfPhase",
+      "fields": [
+        {
+          "go_name": "Title",
+          "go_type": "string",
+          "wire_name": "title",
+          "omitempty": false
+        },
+        {
+          "go_name": "Agents",
+          "go_type": "[]WfAgent",
+          "wire_name": "agents",
+          "omitempty": false
+        }
+      ]
+    },
+    {
+      "name": "WfAgent",
+      "fields": [
+        {
+          "go_name": "Label",
+          "go_type": "string",
+          "wire_name": "label",
+          "omitempty": false
+        },
+        {
+          "go_name": "State",
+          "go_type": "string",
+          "wire_name": "state",
+          "omitempty": false
+        },
+        {
+          "go_name": "Metrics",
+          "go_type": "string",
+          "wire_name": "metrics",
+          "omitempty": true
+        },
+        {
+          "go_name": "Detail",
+          "go_type": "*WfAgentDetail",
+          "wire_name": "detail",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "WfAgentDetail",
+      "fields": [
+        {
+          "go_name": "Model",
+          "go_type": "string",
+          "wire_name": "model",
+          "omitempty": true
+        },
+        {
+          "go_name": "StartedAt",
+          "go_type": "int64",
+          "wire_name": "started_at",
+          "omitempty": true
+        },
+        {
+          "go_name": "LastProgressAt",
+          "go_type": "int64",
+          "wire_name": "last_progress_at",
+          "omitempty": true
+        },
+        {
+          "go_name": "DurationMs",
+          "go_type": "int64",
+          "wire_name": "duration_ms",
+          "omitempty": true
+        },
+        {
+          "go_name": "Tokens",
+          "go_type": "int",
+          "wire_name": "tokens",
+          "omitempty": true
+        },
+        {
+          "go_name": "ToolCalls",
+          "go_type": "int",
+          "wire_name": "tool_calls",
+          "omitempty": true
+        },
+        {
+          "go_name": "LastToolName",
+          "go_type": "string",
+          "wire_name": "last_tool_name",
+          "omitempty": true
+        },
+        {
+          "go_name": "LastToolSummary",
+          "go_type": "string",
+          "wire_name": "last_tool_summary",
+          "omitempty": true
+        },
+        {
+          "go_name": "PromptPreview",
+          "go_type": "string",
+          "wire_name": "prompt_preview",
+          "omitempty": true
+        },
+        {
+          "go_name": "ResultPreview",
+          "go_type": "string",
+          "wire_name": "result_preview",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "SubagentTree",
+      "fields": [
+        {
+          "go_name": "Provider",
+          "go_type": "string",
+          "wire_name": "provider",
+          "omitempty": true
+        },
+        {
+          "go_name": "Nodes",
+          "go_type": "[]SubagentNode",
+          "wire_name": "nodes",
+          "omitempty": true
+        },
+        {
+          "go_name": "Omitted",
+          "go_type": "int",
+          "wire_name": "omitted",
+          "omitempty": true
+        },
+        {
+          "go_name": "UpdatedAt",
+          "go_type": "int64",
+          "wire_name": "updated_at",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "SubagentNode",
+      "fields": [
+        {
+          "go_name": "ID",
+          "go_type": "string",
+          "wire_name": "id",
+          "omitempty": false
+        },
+        {
+          "go_name": "ParentID",
+          "go_type": "string",
+          "wire_name": "parent_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "Depth",
+          "go_type": "int",
+          "wire_name": "depth",
+          "omitempty": false
+        },
+        {
+          "go_name": "Label",
+          "go_type": "string",
+          "wire_name": "label",
+          "omitempty": true
+        },
+        {
+          "go_name": "AgentType",
+          "go_type": "string",
+          "wire_name": "agent_type",
+          "omitempty": true
+        },
+        {
+          "go_name": "Model",
+          "go_type": "string",
+          "wire_name": "model",
+          "omitempty": true
+        },
+        {
+          "go_name": "State",
+          "go_type": "string",
+          "wire_name": "state",
+          "omitempty": false
+        },
+        {
+          "go_name": "StartedAt",
+          "go_type": "int64",
+          "wire_name": "started_at",
+          "omitempty": true
+        },
+        {
+          "go_name": "LastActivityAt",
+          "go_type": "int64",
+          "wire_name": "last_activity_at",
+          "omitempty": true
+        },
+        {
+          "go_name": "FinishedAt",
+          "go_type": "int64",
+          "wire_name": "finished_at",
+          "omitempty": true
+        },
+        {
+          "go_name": "ToolCalls",
+          "go_type": "int",
+          "wire_name": "tool_calls",
+          "omitempty": true
+        },
+        {
+          "go_name": "LastToolName",
+          "go_type": "string",
+          "wire_name": "last_tool_name",
+          "omitempty": true
+        },
+        {
+          "go_name": "LastToolSummary",
+          "go_type": "string",
+          "wire_name": "last_tool_summary",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "SessionMeta",
+      "fields": [
+        {
+          "go_name": "Label",
+          "go_type": "string",
+          "wire_name": "label",
+          "omitempty": false
+        },
+        {
+          "go_name": "Pinned",
+          "go_type": "bool",
+          "wire_name": "pinned",
+          "omitempty": false
+        },
+        {
+          "go_name": "Color",
+          "go_type": "string",
+          "wire_name": "color",
+          "omitempty": false
+        },
+        {
+          "go_name": "Note",
+          "go_type": "string",
+          "wire_name": "note",
+          "omitempty": false
+        },
+        {
+          "go_name": "AutoTitle",
+          "go_type": "string",
+          "wire_name": "auto_title",
+          "omitempty": false
+        }
+      ]
+    },
+    {
+      "name": "ApprovalSummary",
+      "fields": [
+        {
+          "go_name": "Command",
+          "go_type": "string",
+          "wire_name": "command",
+          "omitempty": true
+        },
+        {
+          "go_name": "Paths",
+          "go_type": "[]string",
+          "wire_name": "paths",
+          "omitempty": true
+        },
+        {
+          "go_name": "Risk",
+          "go_type": "ApprovalRiskTier",
+          "wire_name": "risk",
+          "omitempty": false
+        },
+        {
+          "go_name": "Raw",
+          "go_type": "string",
+          "wire_name": "raw",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "DoneSummary",
+      "fields": [
+        {
+          "go_name": "SessionID",
+          "go_type": "int",
+          "wire_name": "session_id",
+          "omitempty": false
+        },
+        {
+          "go_name": "Provider",
+          "go_type": "string",
+          "wire_name": "provider",
+          "omitempty": true
+        },
+        {
+          "go_name": "Title",
+          "go_type": "string",
+          "wire_name": "title",
+          "omitempty": true
+        },
+        {
+          "go_name": "Text",
+          "go_type": "string",
+          "wire_name": "text",
+          "omitempty": false
+        },
+        {
+          "go_name": "Kind",
+          "go_type": "string",
+          "wire_name": "kind",
+          "omitempty": false
+        },
+        {
+          "go_name": "At",
+          "go_type": "string",
+          "wire_name": "at",
+          "omitempty": false
+        },
+        {
+          "go_name": "Fallback",
+          "go_type": "bool",
+          "wire_name": "fallback",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "RelayStatus",
+      "fields": [
+        {
+          "go_name": "OrchestrationID",
+          "go_type": "string",
+          "wire_name": "orchestration_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "PlanPath",
+          "go_type": "string",
+          "wire_name": "plan_path",
+          "omitempty": true
+        },
+        {
+          "go_name": "Mode",
+          "go_type": "string",
+          "wire_name": "mode",
+          "omitempty": true
+        },
+        {
+          "go_name": "State",
+          "go_type": "string",
+          "wire_name": "state",
+          "omitempty": true
+        },
+        {
+          "go_name": "Reason",
+          "go_type": "string",
+          "wire_name": "reason",
+          "omitempty": true
+        },
+        {
+          "go_name": "CompletedCs",
+          "go_type": "int",
+          "wire_name": "completed_cs",
+          "omitempty": true
+        },
+        {
+          "go_name": "Round",
+          "go_type": "int",
+          "wire_name": "round",
+          "omitempty": true
+        },
+        {
+          "go_name": "MaxRounds",
+          "go_type": "int",
+          "wire_name": "max_rounds",
+          "omitempty": true
+        },
+        {
+          "go_name": "FinalSeen",
+          "go_type": "bool",
+          "wire_name": "final_seen",
+          "omitempty": true
+        },
+        {
+          "go_name": "ImplementationSessionID",
+          "go_type": "int",
+          "wire_name": "implementation_session_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "StrongSessionID",
+          "go_type": "int",
+          "wire_name": "strong_session_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "ActiveImplementer",
+          "go_type": "string",
+          "wire_name": "active_implementer",
+          "omitempty": true
+        },
+        {
+          "go_name": "EscalateAfter",
+          "go_type": "int",
+          "wire_name": "escalate_after",
+          "omitempty": true
+        },
+        {
+          "go_name": "ReviewSessionID",
+          "go_type": "int",
+          "wire_name": "review_session_id",
+          "omitempty": true
+        },
+        {
+          "go_name": "ReviewPath",
+          "go_type": "string",
+          "wire_name": "review_path",
+          "omitempty": true
+        },
+        {
+          "go_name": "WorktreePath",
+          "go_type": "string",
+          "wire_name": "worktree_path",
+          "omitempty": true
+        },
+        {
+          "go_name": "Branch",
+          "go_type": "string",
+          "wire_name": "branch",
+          "omitempty": true
+        },
+        {
+          "go_name": "BaseCommit",
+          "go_type": "string",
+          "wire_name": "base_commit",
+          "omitempty": true
+        },
+        {
+          "go_name": "UpdatedAt",
+          "go_type": "string",
+          "wire_name": "updated_at",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "RelayEvent",
+      "fields": [
+        {
+          "go_name": "At",
+          "go_type": "string",
+          "wire_name": "at",
+          "omitempty": true
+        },
+        {
+          "go_name": "Kind",
+          "go_type": "string",
+          "wire_name": "kind",
+          "omitempty": true
+        },
+        {
+          "go_name": "C",
+          "go_type": "int",
+          "wire_name": "c",
+          "omitempty": true
+        },
+        {
+          "go_name": "Round",
+          "go_type": "int",
+          "wire_name": "round",
+          "omitempty": true
+        },
+        {
+          "go_name": "Text",
+          "go_type": "string",
+          "wire_name": "text",
+          "omitempty": true
+        },
+        {
+          "go_name": "ReviewPath",
+          "go_type": "string",
+          "wire_name": "review_path",
+          "omitempty": true
+        },
+        {
+          "go_name": "Commit",
+          "go_type": "string",
+          "wire_name": "commit",
+          "omitempty": true
+        },
+        {
+          "go_name": "FilesChanged",
+          "go_type": "int",
+          "wire_name": "files_changed",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "ApprovalOption",
+      "fields": [
+        {
+          "go_name": "Num",
+          "go_type": "int",
+          "wire_name": "num",
+          "omitempty": false
+        },
+        {
+          "go_name": "Label",
+          "go_type": "string",
+          "wire_name": "label",
+          "omitempty": true
+        },
+        {
+          "go_name": "IsCurrent",
+          "go_type": "bool",
+          "wire_name": "is_current",
+          "omitempty": true
+        },
+        {
+          "go_name": "SendText",
+          "go_type": "string",
+          "wire_name": "send_text",
+          "omitempty": true
+        },
+        {
+          "go_name": "PreserveOrder",
+          "go_type": "bool",
+          "wire_name": "preserve_order",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "ApprovalRecord",
+      "fields": [
+        {
+          "go_name": "CandidateKey",
+          "go_type": "string",
+          "wire_name": "candidate_key",
+          "omitempty": false
+        },
+        {
+          "go_name": "CandidateShape",
+          "go_type": "string",
+          "wire_name": "candidate_shape",
+          "omitempty": true
+        },
+        {
+          "go_name": "SourceEpoch",
+          "go_type": "uint64",
+          "wire_name": "source_epoch",
+          "omitempty": false
+        },
+        {
+          "go_name": "Sig",
+          "go_type": "string",
+          "wire_name": "sig",
+          "omitempty": true
+        },
+        {
+          "go_name": "Origin",
+          "go_type": "string",
+          "wire_name": "origin",
+          "omitempty": false
+        },
+        {
+          "go_name": "Source",
+          "go_type": "string",
+          "wire_name": "source",
+          "omitempty": true
+        },
+        {
+          "go_name": "Kind",
+          "go_type": "string",
+          "wire_name": "kind",
+          "omitempty": true
+        },
+        {
+          "go_name": "Block",
+          "go_type": "string",
+          "wire_name": "block",
+          "omitempty": true
+        },
+        {
+          "go_name": "Question",
+          "go_type": "string",
+          "wire_name": "question",
+          "omitempty": true
+        },
+        {
+          "go_name": "Context",
+          "go_type": "string",
+          "wire_name": "context",
+          "omitempty": true
+        },
+        {
+          "go_name": "Options",
+          "go_type": "[]ApprovalOption",
+          "wire_name": "options",
+          "omitempty": true
+        },
+        {
+          "go_name": "Summary",
+          "go_type": "*ApprovalSummary",
+          "wire_name": "summary",
+          "omitempty": true
+        },
+        {
+          "go_name": "DetectedAt",
+          "go_type": "string",
+          "wire_name": "detected_at",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "ApprovalRecordClose",
+      "fields": [
+        {
+          "go_name": "CandidateKey",
+          "go_type": "string",
+          "wire_name": "candidate_key",
+          "omitempty": false
+        },
+        {
+          "go_name": "SourceEpoch",
+          "go_type": "uint64",
+          "wire_name": "source_epoch",
+          "omitempty": false
+        },
+        {
+          "go_name": "Sig",
+          "go_type": "string",
+          "wire_name": "sig",
+          "omitempty": true
+        },
+        {
+          "go_name": "Origin",
+          "go_type": "string",
+          "wire_name": "origin",
+          "omitempty": true
+        },
+        {
+          "go_name": "Reason",
+          "go_type": "string",
+          "wire_name": "reason",
+          "omitempty": false
+        }
+      ]
+    },
+    {
+      "name": "ApprovalState",
+      "fields": [
+        {
+          "go_name": "Version",
+          "go_type": "uint64",
+          "wire_name": "version",
+          "omitempty": false
+        },
+        {
+          "go_name": "Open",
+          "go_type": "*ApprovalRecord",
+          "wire_name": "open",
+          "omitempty": true
+        },
+        {
+          "go_name": "Close",
+          "go_type": "*ApprovalRecordClose",
+          "wire_name": "close",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "ApprovalSessionState",
+      "fields": [
+        {
+          "go_name": "SessionID",
+          "go_type": "int",
+          "wire_name": "session_id",
+          "omitempty": false
+        },
+        {
+          "go_name": "Version",
+          "go_type": "uint64",
+          "wire_name": "version",
+          "omitempty": false
+        },
+        {
+          "go_name": "Record",
+          "go_type": "*ApprovalRecord",
+          "wire_name": "record",
+          "omitempty": true
+        }
+      ]
+    },
+    {
+      "name": "ChildApproval",
+      "fields": [
+        {
+          "go_name": "PermissionMode",
+          "go_type": "string",
+          "wire_name": "permission_mode",
+          "omitempty": true
+        },
+        {
+          "go_name": "Sandbox",
+          "go_type": "string",
+          "wire_name": "sandbox",
+          "omitempty": true
+        },
+        {
+          "go_name": "AskForApproval",
+          "go_type": "string",
+          "wire_name": "ask_for_approval",
+          "omitempty": true
+        },
+        {
+          "go_name": "AllowedTools",
+          "go_type": "[]string",
+          "wire_name": "allowed_tools",
+          "omitempty": true
+        },
+        {
+          "go_name": "RiskConfirmed",
+          "go_type": "bool",
+          "wire_name": "risk_confirmed",
+          "omitempty": true
+        },
+        {
+          "go_name": "Tier",
+          "go_type": "string",
+          "wire_name": "tier",
+          "omitempty": true
+        },
+        {
+          "go_name": "FallbackFrom",
+          "go_type": "string",
+          "wire_name": "fallback_from",
+          "omitempty": true
+        }
+      ]
+    }
+  ],
+  "string_aliases": [
+    "ApprovalRiskTier"
+  ]
+}

@@ -1,0 +1,700 @@
+{
+  "schema_version": 1,
+  "source_sha": "2cba1550b3141849ff0afcac8ab3dfe9608a16e6",
+  "source_tree": "bbb9288d07381e19eaad7e24816517cfb72e7a6f",
+  "recorded_utc": "2026-10-06T04:50:09.796355+00:00",
+  "run_id": 37413102214,
+  "run_number": 27,
+  "attempt": 1,
+  "conclusion": "failure",
+  "pr_merge_checkout": "104b81e3a7769172b2a12b01d477f7a75101cca9",
+  "rust_build_source": "actual PR head, verified independently in each CANDIDATE-INPUT; merge checkout is not the Rust source identity",
+  "targets": [
+    {
+      "target": "x86_64-apple-darwin",
+      "job_id": 112105701217,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37413102214/job/112105701217",
+      "conclusion": "success",
+      "library": {
+        "passed": 1106,
+        "failed": 0,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1416,
+        "failed": 0,
+        "ignored": 0
+      },
+      "doctests": {
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0
+      },
+      "fmt": "passed",
+      "strict_clippy": "passed",
+      "artifact": {
+        "id": 11390533361,
+        "name": "rust-candidate-x86_64-apple-darwin-2cba1550b3141849ff0afcac8ab3dfe9608a16e6",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37413102214/artifacts/11390533361",
+        "bytes": 19951130,
+        "sha256": "7115423e11fe15712138beac007284e627e85100f5b00040e7feb85958b908d2",
+        "zip_crc_and_digest_verified": true,
+        "source_head_receipt_verified": true,
+        "kind": "native-build-only-unaccepted"
+      },
+      "binaries": [
+        {
+          "name": "many-ai-cli",
+          "bytes": 43518192,
+          "sha256": "ca30e789716916548662ba473b981bea783407e5a7586734ea390c534941dcc2",
+          "downloaded_bytes_rehashed": true,
+          "existing_temporary_sink_needles_absent": true
+        },
+        {
+          "name": "many-ai-cli-launcher",
+          "bytes": 11262488,
+          "sha256": "d8419ba1cf0c0713b5b72c616f575b1a3eebc03ea9f6d5d216059c14c8f5465d",
+          "downloaded_bytes_rehashed": true,
+          "existing_temporary_sink_needles_absent": true
+        }
+      ],
+      "test_log_receipts": [
+        {
+          "name": "08-cargo-test.log",
+          "sha256": "1848f7fd5806ce68663bd2dfcbc71d8e06e84d730597008d77044b719f84f167",
+          "summary_count": 33,
+          "totals": [
+            1416,
+            0,
+            0
+          ],
+          "first_summary": [
+            1106,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "09-cargo-test.log",
+          "sha256": "cc88e2c4e3379b35dc6e7d9c8c3fa885d7e914d51d047064891b1fc601888a0b",
+          "summary_count": 1,
+          "totals": [
+            3,
+            0,
+            0
+          ],
+          "first_summary": [
+            3,
+            0,
+            0
+          ]
+        }
+      ],
+      "cargo_commands": [
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 4.299
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-apple-darwin",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 240.992
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-apple-darwin",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 368.694
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-apple-darwin",
+            "--doc"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 6.199
+        },
+        {
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-apple-darwin",
+            "--release",
+            "--bins",
+            "--message-format=json"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 669.236
+        },
+        {
+          "command": [
+            "cargo",
+            "metadata",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--format-version",
+            "1",
+            "--filter-platform",
+            "x86_64-apple-darwin"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 0.335
+        }
+      ]
+    },
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "job_id": 112105701449,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37413102214/job/112105701449",
+      "conclusion": "success",
+      "library": {
+        "passed": 1105,
+        "failed": 0,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1416,
+        "failed": 0,
+        "ignored": 0
+      },
+      "doctests": {
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0
+      },
+      "fmt": "passed",
+      "strict_clippy": "passed",
+      "artifact": {
+        "id": 11390401846,
+        "name": "rust-candidate-x86_64-unknown-linux-gnu-2cba1550b3141849ff0afcac8ab3dfe9608a16e6",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37413102214/artifacts/11390401846",
+        "bytes": 21079159,
+        "sha256": "943bbfaef14dd44dae64186f3020f35eaa6e3398589940621bbbe211b5073b47",
+        "zip_crc_and_digest_verified": true,
+        "source_head_receipt_verified": true,
+        "kind": "native-build-only-unaccepted"
+      },
+      "binaries": [
+        {
+          "name": "many-ai-cli",
+          "bytes": 48365896,
+          "sha256": "b04ec2f2ac3c3fae765f0625cfcf70a7ea31f902734f347b48ca737f2ec59172",
+          "downloaded_bytes_rehashed": true,
+          "existing_temporary_sink_needles_absent": true
+        },
+        {
+          "name": "many-ai-cli-launcher",
+          "bytes": 14035552,
+          "sha256": "a3a77d1f08afdaa6fdb74458862a3b1797e5aeccaa3b7bb94e3009c07b931f8a",
+          "downloaded_bytes_rehashed": true,
+          "existing_temporary_sink_needles_absent": true
+        }
+      ],
+      "test_log_receipts": [
+        {
+          "name": "08-cargo-test.log",
+          "sha256": "c8a8dfd31c9866f78595a9a51135b063c5b35b6e489463fe72e6d8f9fa485b40",
+          "summary_count": 33,
+          "totals": [
+            1416,
+            0,
+            0
+          ],
+          "first_summary": [
+            1105,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "09-cargo-test.log",
+          "sha256": "89c2617cbb27ebcad67702048dbfcff0cac77d423ff9254ddf56633a8a277097",
+          "summary_count": 1,
+          "totals": [
+            3,
+            0,
+            0
+          ],
+          "first_summary": [
+            3,
+            0,
+            0
+          ]
+        }
+      ],
+      "cargo_commands": [
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 2.214
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 112.932
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 197.999
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--doc"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 3.386
+        },
+        {
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--release",
+            "--bins",
+            "--message-format=json"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 335.848
+        },
+        {
+          "command": [
+            "cargo",
+            "metadata",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--format-version",
+            "1",
+            "--filter-platform",
+            "x86_64-unknown-linux-gnu"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 0.169
+        }
+      ]
+    },
+    {
+      "target": "x86_64-pc-windows-msvc",
+      "job_id": 112105701424,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37413102214/job/112105701424",
+      "conclusion": "failure",
+      "library": {
+        "passed": 1030,
+        "failed": 2,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1314,
+        "failed": 2,
+        "ignored": 0
+      },
+      "doctests": "not run after all-target failure",
+      "fmt": "passed",
+      "strict_clippy": "passed",
+      "artifact": {
+        "id": 11390192124,
+        "name": "rust-candidate-x86_64-pc-windows-msvc-2cba1550b3141849ff0afcac8ab3dfe9608a16e6",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37413102214/artifacts/11390192124",
+        "bytes": 45878,
+        "sha256": "fb5d8d187fa4ab7a8fa26eabab0755c9a88a88ecf68067c1ebbfc65addf7e1f5",
+        "zip_crc_and_digest_verified": true,
+        "source_head_receipt_verified": true,
+        "kind": "diagnostic-only-no-release-binaries"
+      },
+      "binaries": [],
+      "test_log_receipts": [
+        {
+          "name": "09-cargo-test.log",
+          "sha256": "6bfb9d13e3ea2e6259f8dcf84a59f96a0178d659b4b192b74b315278ea1b0d1f",
+          "summary_count": 33,
+          "totals": [
+            1314,
+            2,
+            0
+          ],
+          "first_summary": [
+            1030,
+            2,
+            0
+          ]
+        }
+      ],
+      "cargo_commands": [
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 3.484
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 172.672
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 101,
+          "elapsed_seconds": 344.984
+        }
+      ]
+    },
+    {
+      "target": "aarch64-apple-darwin",
+      "job_id": 112105701425,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37413102214/job/112105701425",
+      "conclusion": "failure",
+      "library": {
+        "passed": 1105,
+        "failed": 1,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1415,
+        "failed": 1,
+        "ignored": 0
+      },
+      "doctests": "not run after all-target failure",
+      "fmt": "passed",
+      "strict_clippy": "passed",
+      "artifact": {
+        "id": 11390151803,
+        "name": "rust-candidate-aarch64-apple-darwin-2cba1550b3141849ff0afcac8ab3dfe9608a16e6",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37413102214/artifacts/11390151803",
+        "bytes": 46565,
+        "sha256": "c0eacaf9cf1683a751bb591f5e97cbf668904cec643aa272ac7b3677dacd86e3",
+        "zip_crc_and_digest_verified": true,
+        "source_head_receipt_verified": true,
+        "kind": "diagnostic-only-no-release-binaries"
+      },
+      "binaries": [],
+      "test_log_receipts": [
+        {
+          "name": "08-cargo-test.log",
+          "sha256": "12cac467974af763f31401d41a9763db6bde418c48f02f9fe0d2a1bccb1d34c8",
+          "summary_count": 33,
+          "totals": [
+            1415,
+            1,
+            0
+          ],
+          "first_summary": [
+            1105,
+            1,
+            0
+          ]
+        }
+      ],
+      "cargo_commands": [
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 1.712
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "aarch64-apple-darwin",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 118.362
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "aarch64-apple-darwin",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 101,
+          "elapsed_seconds": 196.574
+        }
+      ]
+    }
+  ],
+  "budget_fix_native_evidence": {
+    "new_actual_git_regressions": "both pass on all four targets",
+    "unchanged_warm_reconnect": "passes on all four targets",
+    "windows_transient_accept": "passes",
+    "windows_actual_hub_wrapper_conpty_echo_quit": "passes; no mock PTY or wrapper",
+    "causal_limit": "The independent five-second materialization context now matches fixed Go; the source of the previous runner delay remains unproven. Private-index reuse is separate deferred work."
+  },
+  "remaining_native_failures": [
+    {
+      "target": "aarch64-apple-darwin",
+      "test": "orchestration::relay::worktree::tests::missing_worktree_parent_or_root_is_pruned_without_losing_result_branch",
+      "observed": "prepare root resolution returns the existing generic not_git error before deletion; original lower-level error was discarded",
+      "cause": "unresolved; no flaky classification or metadata-policy relaxation"
+    },
+    {
+      "target": "x86_64-pc-windows-msvc",
+      "tests": [
+        "application::subscriptions::appserver::tests::api_key_account_stops_before_rate_limit_request",
+        "application::subscriptions::appserver::tests::native_interactive_rpc_waits_each_response_and_reaps_child"
+      ],
+      "observed": "inner 15-second timeout; outer 20-second assertion passes; request log exists after child entered its non-null ReadLine loop and Add-Content",
+      "cause": "unresolved; no assumption that Add-Content completed or that cleanup succeeded",
+      "runner_image": "windows-2022 20260927.320.1; provisioner 20260901.588, same metadata as c4"
+    }
+  ],
+  "validate": {
+    "run_id": 37413102233,
+    "conclusion": "success",
+    "successful_jobs": 11,
+    "expected_skipped_job": "release-token-scopes"
+  },
+  "scans": [
+    {
+      "event": "push",
+      "run_id": 37413096942,
+      "job_id": 112105684748,
+      "attempt": 1,
+      "conclusion": "success",
+      "commits_scanned": 2,
+      "result": "no leaks found",
+      "actual_range": "91b3939bc58d494a2f86bc48bca450cf91602cdc^..2cba1550b3141849ff0afcac8ab3dfe9608a16e6"
+    },
+    {
+      "event": "pull_request",
+      "run_id": 37413102362,
+      "job_id": 112105701409,
+      "attempt": 1,
+      "conclusion": "success",
+      "commits_scanned": 30,
+      "result": "no leaks found",
+      "actual_range": "6b0fb8e198750245ef8b4b475fbac9070db0ac3e^..401eff2b83712ca657b31b0baf63d9dadd38171e"
+    }
+  ],
+  "scan_scope_limit": "PR contains64 commits; PR action scans only first30. Earlier union receipts retain their own ranges. Historical scan37396280688 still has the known generated-source-blob false positive at commit2ef6d3c; the later record-format correction does not erase or waive that historical result. No scanner/allowlist changes.",
+  "review": {
+    "local_code_sha": "05757ef0355c9c38cc6188b932c20dff7ba4c070",
+    "public_code_sha": "91b3939bc58d494a2f86bc48bca450cf91602cdc",
+    "code_tree": "dead8307bfa64c419c8e15d89c84dac1b6f9a262",
+    "local_metadata_sha": "d98979dc9edb1a7a02baf9157eb8797fdc9c3119",
+    "public_metadata_head": "2cba1550b3141849ff0afcac8ab3dfe9608a16e6",
+    "independent_review": "separate non-author reviewer read all changed source and metadata lines and verified mapped public trees; no blocking source finding. This does not override native failures or owner acceptance."
+  },
+  "limitations": [
+    "Temporary test diagnostics remain and need a dedicated cleanup before final acceptance.",
+    "Windows and ARM release binaries, final Windows DLL retention and same-head four-target success remain unverified.",
+    "Native device/provider/account/installed-data acceptance, distribution/security gates, and Go cutover remain separate.",
+    "Windows raw Cargo.lock receipt hash differs under existing checkout line-ending behavior; unchanged deferred issue, not silently normalized."
+  ],
+  "next_diagnostic_checkpoint": {
+    "local_code_sha": "2326a548936dcdae18afd29dd6bda06ddbfd7698",
+    "code_tree": "82b9cb33bf29a0a4653baa8b2815e4f17e603094",
+    "source_files": [
+      {
+        "path": "instrumentation.json",
+        "sha256": "b7b1147c9e75ea0afcd0e53abbe807ea5f430ae5581775403e65a39689287a95"
+      },
+      {
+        "path": "rust/src/application/subscriptions/appserver.rs",
+        "sha256": "2f471c7ddd96ed174eb9c22aebc93df99243a627f44350c3e6332da3003e6987"
+      },
+      {
+        "path": "rust/src/application/subscriptions/appserver/phase_diagnostics.rs",
+        "sha256": "6293fd7500eb1f09cfa61d45623f42a1912da017d3ca6b36c852c98cd836e202"
+      },
+      {
+        "path": "rust/src/application/subscriptions/appserver/tests.rs",
+        "sha256": "db919ac1e4b45db717b4e541b4648581bbddf3d1ff3827d4f8eb1c0aa134af19"
+      },
+      {
+        "path": "rust/src/orchestration/relay/trial_git.rs",
+        "sha256": "e92f27a311a442da08fd7497c3975ba4b89754305d1ffde93de1075a1d46b659"
+      },
+      {
+        "path": "rust/src/orchestration/relay/worktree.rs",
+        "sha256": "e9eab8df51c023b06f2fcf4175f41414bbaef993c4b83b645bb1edaf040a5a37"
+      },
+      {
+        "path": "rust/src/orchestration/relay/worktree_diagnostic.rs",
+        "sha256": "c79dacc026f7047f73edf7701a6fd41aca46222ea20d9be315bf3b2f9e7841e5"
+      }
+    ],
+    "scope": "test-only, bounded failure observations; no production functional correction or relaxed assertion/deadline/error policy",
+    "local_validation_scope": "Linux working source before the source commit was created; source bytes match the listed blobs. Build metadata can retain the preceding head. Windows-specific code is not compiled or executed by Linux checks.",
+    "local_checks": [
+      {
+        "command": "cargo test --manifest-path rust/Cargo.toml --locked --lib orchestration::relay:: -- --test-threads=8",
+        "exit": 0,
+        "passed": 56,
+        "failed": 0,
+        "ignored": 0,
+        "log_sha256": "33ce7cb43a10126ee965672143fd1a8baba0ddb0f99b04196a3f0aef9fd5799f"
+      },
+      {
+        "command": "cargo test --manifest-path rust/Cargo.toml --locked --offline --all-targets --no-fail-fast -- --test-threads=8",
+        "exit": 0,
+        "passed": 1420,
+        "failed": 0,
+        "ignored": 0,
+        "summaries": 33,
+        "library_passed": 1109,
+        "log_sha256": "aa91b9f540fc7b0648748d96324acc4c6fb6a55094ce77b1c2ebf6303a51d8ad"
+      },
+      {
+        "command": "cargo clippy --manifest-path rust/Cargo.toml --locked --offline --all-targets -- -D warnings",
+        "exit": 0,
+        "log_sha256": "66752ca236cbde0c046eb07c6435f9fc04324eb6f038f8e94accf9e46b3448df"
+      },
+      {
+        "command": "cargo test --manifest-path rust/Cargo.toml --locked --offline --doc",
+        "exit": 0,
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "log_sha256": "bb18da64f828cd03cb8f1902ac76a79fcb6679f6e02088d6b7fc09bd1b7568d5"
+      },
+      {
+        "command": "cargo fmt --manifest-path rust/Cargo.toml --check",
+        "exit": 0
+      },
+      {
+        "command": "bun scripts/check-instrumentation.mjs",
+        "exit": 0
+      }
+    ],
+    "review": "Separate non-author reviewer read every proposal/ledger line, verified committed2326a548936dcdae18afd29dd6bda06ddbfd7698/tree82b9cb33bf29a0a4653baa8b2815e4f17e603094 bytes and exactly seven expected files, and independently counted preserved local logs. No blocking source finding; native Windows/ARM evidence remains pending.",
+    "native_status": "pending publication and fresh four-target CI; observed failures are not claimed fixed",
+    "instrumentation": "Two new Oct13 entries plus prior two temporary probes; dedicated shared-file cleanup is required before final acceptance. Added diagnostic I/O can perturb fixture timing; a passing diagnostic run does not establish causality."
+  }
+}

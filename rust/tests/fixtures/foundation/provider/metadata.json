@@ -1,0 +1,9 @@
+{
+  "catalog_keys": 26,
+  "generator": "rust/tests/fixtures/foundation/provider/oracle.go",
+  "go_baseline": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "legacy_cases": 9,
+  "network": false,
+  "provider_execution": false,
+  "wire_cases": 73
+}

@@ -1,0 +1,1548 @@
+{
+  "schema": 1,
+  "source_revision": "d6ca5824cb778e5477cab66946138a719c95b1a0",
+  "source_tree": "d83b1a1bed844d46017c79f8c2164aaa105a9b9b",
+  "status": "V01 native cases passed in both Windows jobs; overall Windows gate blocked by separate callback assertion",
+  "quick_successes": 1,
+  "quick_successes_required": 3,
+  "runs": [
+    {
+      "kind": "quick",
+      "run": 37592055746,
+      "attempt": 1,
+      "job": 112695648712,
+      "conclusion": "success",
+      "target": "x86_64-pc-windows-msvc",
+      "actual_checkout": {
+        "checkout_shas": [
+          "d6ca5824cb778e5477cab66946138a719c95b1a0"
+        ],
+        "job_head_commit": "d6ca5824cb778e5477cab66946138a719c95b1a0",
+        "decoded_persisted_log_sha256": "41f8ef82b0a29135b5bb5e10b4c21903b25918a730a1fce7d0703ad3bc668acf"
+      },
+      "artifact": {
+        "id": 11468404616,
+        "name": "rust-windows-check-d6ca5824cb778e5477cab66946138a719c95b1a0-37592055746-attempt-1",
+        "size_in_bytes": 170298,
+        "digest": "sha256:dfbf7ff68f44ae1075122db08a219b5b14e4d979290756d2a31e0be72bdd10a1"
+      },
+      "artifact_bytes_verified": true,
+      "commands": [
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 4.125
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 58.063
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--format=pretty",
+            "--color=never",
+            "--list"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 154.375
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--format=pretty",
+            "--color=never",
+            "--list",
+            "--ignored"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 0.953
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--doc",
+            "--no-fail-fast",
+            "--",
+            "--format=pretty",
+            "--color=never",
+            "--list"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 4.719
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--doc",
+            "--no-fail-fast",
+            "--",
+            "--format=pretty",
+            "--color=never",
+            "--list",
+            "--ignored"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 4.75
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--format=pretty",
+            "--color=never",
+            "--test-threads=8"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 134.719
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--doc",
+            "--no-fail-fast",
+            "--",
+            "--format=pretty",
+            "--color=never",
+            "--test-threads=8"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 4.796
+        }
+      ],
+      "tests": [
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--format=pretty",
+            "--color=never",
+            "--test-threads=8"
+          ],
+          "exit_code": 0,
+          "counts": [
+            1364,
+            0,
+            0
+          ],
+          "library_counts_included": [
+            1069,
+            0,
+            0
+          ],
+          "separate_doctests": false,
+          "failed_tests": []
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--doc",
+            "--no-fail-fast",
+            "--",
+            "--format=pretty",
+            "--color=never",
+            "--test-threads=8"
+          ],
+          "exit_code": 0,
+          "counts": [
+            3,
+            0,
+            0
+          ],
+          "library_counts_included": null,
+          "separate_doctests": true,
+          "failed_tests": []
+        }
+      ],
+      "binaries": [],
+      "supplemental_v01_marker_checks": null,
+      "v01_fully_verified": true,
+      "v01_receipts": [
+        {
+          "after_deadline_ms": 0,
+          "after_trigger_ms": 10,
+          "both_owned_handles_signaled": true,
+          "canceled": true,
+          "case": "cancel",
+          "deadline_ms": 0,
+          "direct_pid": 6900,
+          "exit_code": -1,
+          "grandchild_pid": 2752,
+          "os": {
+            "build": 20348,
+            "major": 10,
+            "minor": 0
+          },
+          "owned_job_empty_before_harness_cleanup": true,
+          "pipe_drain_ms": 250,
+          "pipes_forced_closed": false,
+          "ready_ms": 65,
+          "run_return_ms": 75,
+          "runtime_and_runner_exited": true,
+          "runtime_shutdown_ms": 0,
+          "stderr_ready": true,
+          "stdout_ready": true,
+          "timed_out": false
+        },
+        {
+          "attachment_calls": 1,
+          "attachment_fault_injected": true,
+          "case": "failed-attach",
+          "headless_error_kind": "PermissionDenied",
+          "injection_scope": "cfg(all(test, windows)); scoped real native assignment",
+          "native_assignment_calls": 1,
+          "native_attachment_error": 5,
+          "natural_windows_attachment_failure_proven": false,
+          "original_run_attach_error_directly_observed": true,
+          "os": {
+            "build": 20348,
+            "major": 10,
+            "minor": 0
+          },
+          "owned_child_handle_signaled": true,
+          "owned_child_pid": 984,
+          "owned_job_empty_before_harness_cleanup": true,
+          "provider_executed": false,
+          "run_return_ms": 8,
+          "runtime_and_runner_exited": true,
+          "runtime_shutdown_ms": 0
+        },
+        {
+          "after_deadline_ms": 0,
+          "after_trigger_ms": 549,
+          "both_owned_handles_signaled": true,
+          "canceled": false,
+          "case": "normal",
+          "deadline_ms": 0,
+          "direct_pid": 7780,
+          "exit_code": 0,
+          "grandchild_pid": 2692,
+          "os": {
+            "build": 20348,
+            "major": 10,
+            "minor": 0
+          },
+          "owned_job_empty_before_harness_cleanup": true,
+          "pipe_drain_ms": 250,
+          "pipes_forced_closed": true,
+          "ready_ms": 66,
+          "run_return_ms": 615,
+          "runtime_and_runner_exited": true,
+          "runtime_shutdown_ms": 2,
+          "stderr_ready": true,
+          "stdout_ready": true,
+          "timed_out": false
+        },
+        {
+          "after_deadline_ms": 26,
+          "after_trigger_ms": 4958,
+          "both_owned_handles_signaled": true,
+          "canceled": false,
+          "case": "deadline",
+          "deadline_ms": 5000,
+          "direct_pid": 1348,
+          "exit_code": -1,
+          "grandchild_pid": 7572,
+          "os": {
+            "build": 20348,
+            "major": 10,
+            "minor": 0
+          },
+          "owned_job_empty_before_harness_cleanup": true,
+          "pipe_drain_ms": 250,
+          "pipes_forced_closed": false,
+          "ready_ms": 68,
+          "run_return_ms": 5026,
+          "runtime_and_runner_exited": true,
+          "runtime_shutdown_ms": 0,
+          "stderr_ready": true,
+          "stdout_ready": true,
+          "timed_out": true
+        },
+        {
+          "after_deadline_return_ms": 0,
+          "assignment_variant": {
+            "original_path": "internal/headless/proc_windows.go",
+            "original_sha256": "de290713ffabbc43029e6684292c18a8ce4554d6dc1f74f6763b591fb1dd853b",
+            "replace_from": "windows.AssignProcessToJobObject(job, proc)",
+            "replace_to": "v01FaultAssignProcessToJobObject(job, proc)",
+            "replacement_count": 1,
+            "scope": "private comparison overlay only; repository and fixed oracle unchanged",
+            "variant_sha256": "94834488e70c871061667400eed5d52404642357d0e0693f77c14e9f2342faf4"
+          },
+          "baseline_cancellation_accepted": false,
+          "before_cleanup_ms": 274,
+          "blocked_observation_ms": 255,
+          "both_owned_handles_signaled": true,
+          "case": "go-cancel-failed-attachment-retained-pipes",
+          "cleanup_owner": "supervisor retained grandchild HANDLE; not Go product cleanup",
+          "direct_handle_signaled_before_probe": true,
+          "go_source_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+          "go_version": "go version go1.26.8 windows/amd64",
+          "grandchild_alive_after_direct_exit": true,
+          "natural_windows_attachment_failure_proven": false,
+          "os": {
+            "build": 20348,
+            "major": 10,
+            "minor": 0
+          },
+          "overlay_helper_sha256": "71e5a3f62477e4b05eb01f2986890d39b57667c370d0c2aafe164fc0b1b0f90b",
+          "owned_job_empty_before_harness_job_cleanup": true,
+          "ready": {
+            "attachment_calls": 1,
+            "attachment_fault_injected": true,
+            "case": "cancel",
+            "deadline_ms": 0,
+            "direct_pid": 2192,
+            "go_source_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+            "go_version": "go1.26.8",
+            "grandchild_pid": 7420,
+            "native_assignment_calls": 1,
+            "native_attachment_error": 5,
+            "original_run_attach_error_directly_observed": true,
+            "run_start_elapsed_ms": 26,
+            "schema": 1,
+            "stderr_ready": true,
+            "stdout_ready": true,
+            "variant": "private_go_attachment_fault_variant"
+          },
+          "result": {
+            "attachment_calls": 1,
+            "attachment_fault_injected": true,
+            "canceled": true,
+            "case": "cancel",
+            "cleanup_release_observed": true,
+            "direct_exited": true,
+            "error": "",
+            "exit_code": 1,
+            "go_source_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+            "go_version": "go1.26.8",
+            "grandchild_exited": true,
+            "native_assignment_calls": 1,
+            "native_attachment_error": 5,
+            "original_run_attach_error_directly_observed": true,
+            "run_return_ms": 306,
+            "schema": 1,
+            "state": "error",
+            "timed_out": false,
+            "variant": "private_go_attachment_fault_variant"
+          },
+          "run_pending_before_harness_cleanup": true,
+          "runtime_and_runner_exited": true,
+          "stderr_retained_probe_received": true,
+          "stdout_retained_probe_received": true,
+          "unchanged_go_failure_proven": false,
+          "verified_input_source_commit": "d6ca5824cb778e5477cab66946138a719c95b1a0",
+          "helper_byte_identity": {
+            "matches_LF": false,
+            "matches_CRLF_conversion": true
+          }
+        },
+        {
+          "after_deadline_return_ms": 272,
+          "assignment_variant": {
+            "original_path": "internal/headless/proc_windows.go",
+            "original_sha256": "de290713ffabbc43029e6684292c18a8ce4554d6dc1f74f6763b591fb1dd853b",
+            "replace_from": "windows.AssignProcessToJobObject(job, proc)",
+            "replace_to": "v01FaultAssignProcessToJobObject(job, proc)",
+            "replacement_count": 1,
+            "scope": "private comparison overlay only; repository and fixed oracle unchanged",
+            "variant_sha256": "94834488e70c871061667400eed5d52404642357d0e0693f77c14e9f2342faf4"
+          },
+          "baseline_cancellation_accepted": false,
+          "before_cleanup_ms": 5236,
+          "blocked_observation_ms": 254,
+          "both_owned_handles_signaled": true,
+          "case": "go-deadline-failed-attachment-retained-pipes",
+          "cleanup_owner": "supervisor retained grandchild HANDLE; not Go product cleanup",
+          "direct_handle_signaled_before_probe": true,
+          "go_source_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+          "go_version": "go version go1.26.8 windows/amd64",
+          "grandchild_alive_after_direct_exit": true,
+          "natural_windows_attachment_failure_proven": false,
+          "os": {
+            "build": 20348,
+            "major": 10,
+            "minor": 0
+          },
+          "overlay_helper_sha256": "71e5a3f62477e4b05eb01f2986890d39b57667c370d0c2aafe164fc0b1b0f90b",
+          "owned_job_empty_before_harness_job_cleanup": true,
+          "ready": {
+            "attachment_calls": 1,
+            "attachment_fault_injected": true,
+            "case": "deadline",
+            "deadline_ms": 5000,
+            "direct_pid": 6860,
+            "go_source_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+            "go_version": "go1.26.8",
+            "grandchild_pid": 5208,
+            "native_assignment_calls": 1,
+            "native_attachment_error": 5,
+            "original_run_attach_error_directly_observed": true,
+            "run_start_elapsed_ms": 25,
+            "schema": 1,
+            "stderr_ready": true,
+            "stdout_ready": true,
+            "variant": "private_go_attachment_fault_variant"
+          },
+          "result": {
+            "attachment_calls": 1,
+            "attachment_fault_injected": true,
+            "canceled": false,
+            "case": "deadline",
+            "cleanup_release_observed": true,
+            "direct_exited": true,
+            "error": "",
+            "exit_code": 1,
+            "go_source_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+            "go_version": "go1.26.8",
+            "grandchild_exited": true,
+            "native_assignment_calls": 1,
+            "native_attachment_error": 5,
+            "original_run_attach_error_directly_observed": true,
+            "run_return_ms": 5272,
+            "schema": 1,
+            "state": "error",
+            "timed_out": true,
+            "variant": "private_go_attachment_fault_variant"
+          },
+          "run_pending_before_harness_cleanup": true,
+          "runtime_and_runner_exited": true,
+          "stderr_retained_probe_received": true,
+          "stdout_retained_probe_received": true,
+          "unchanged_go_failure_proven": false,
+          "verified_input_source_commit": "d6ca5824cb778e5477cab66946138a719c95b1a0",
+          "helper_byte_identity": {
+            "matches_LF": false,
+            "matches_CRLF_conversion": true
+          }
+        }
+      ]
+    },
+    {
+      "kind": "native",
+      "run": 37592062167,
+      "attempt": 1,
+      "job": 112695669472,
+      "conclusion": "failure",
+      "target": "x86_64-pc-windows-msvc",
+      "actual_checkout": {
+        "checkout_shas": [
+          "d6ca5824cb778e5477cab66946138a719c95b1a0"
+        ],
+        "job_head_commit": "d6ca5824cb778e5477cab66946138a719c95b1a0",
+        "decoded_persisted_log_sha256": "3e47a93e6313d5e1e68703257ac52977922875bd58e99e45e5158c761e83634d"
+      },
+      "artifact": {
+        "id": 11469293591,
+        "name": "rust-candidate-x86_64-pc-windows-msvc-d6ca5824cb778e5477cab66946138a719c95b1a0-37592062167-attempt-1",
+        "size_in_bytes": 48529,
+        "digest": "sha256:e8b7a7fcf2b8c7b2de58d6d5bbbf713a458b7516fa833aef0a9714636ed494f7"
+      },
+      "artifact_bytes_verified": true,
+      "commands": [
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 4.422
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 186.219
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 101,
+          "elapsed_seconds": 344.547
+        }
+      ],
+      "tests": [
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 101,
+          "counts": [
+            1363,
+            1,
+            0
+          ],
+          "library_counts_included": [
+            1068,
+            1,
+            0
+          ],
+          "separate_doctests": false,
+          "failed_tests": [
+            "application::event_observer::tests::handoff_gate_is_independent_of_capture_and_summary_requires_both_gates"
+          ]
+        }
+      ],
+      "binaries": [],
+      "supplemental_v01_marker_checks": {
+        "checks": [],
+        "scope": "Exact ASCII/UTF-16 marker absence is supplemental only; test-only source cfg guards are verified separately, and neither is a general security review."
+      },
+      "v01_fully_verified": true,
+      "v01_receipts": [
+        {
+          "after_deadline_ms": 0,
+          "after_trigger_ms": 12,
+          "both_owned_handles_signaled": true,
+          "canceled": true,
+          "case": "cancel",
+          "deadline_ms": 0,
+          "direct_pid": 3620,
+          "exit_code": -1,
+          "grandchild_pid": 864,
+          "os": {
+            "build": 20348,
+            "major": 10,
+            "minor": 0
+          },
+          "owned_job_empty_before_harness_cleanup": true,
+          "pipe_drain_ms": 250,
+          "pipes_forced_closed": false,
+          "ready_ms": 79,
+          "run_return_ms": 91,
+          "runtime_and_runner_exited": true,
+          "runtime_shutdown_ms": 0,
+          "stderr_ready": true,
+          "stdout_ready": true,
+          "timed_out": false
+        },
+        {
+          "attachment_calls": 1,
+          "attachment_fault_injected": true,
+          "case": "failed-attach",
+          "headless_error_kind": "PermissionDenied",
+          "injection_scope": "cfg(all(test, windows)); scoped real native assignment",
+          "native_assignment_calls": 1,
+          "native_attachment_error": 5,
+          "natural_windows_attachment_failure_proven": false,
+          "original_run_attach_error_directly_observed": true,
+          "os": {
+            "build": 20348,
+            "major": 10,
+            "minor": 0
+          },
+          "owned_child_handle_signaled": true,
+          "owned_child_pid": 5524,
+          "owned_job_empty_before_harness_cleanup": true,
+          "provider_executed": false,
+          "run_return_ms": 5,
+          "runtime_and_runner_exited": true,
+          "runtime_shutdown_ms": 0
+        },
+        {
+          "after_deadline_ms": 0,
+          "after_trigger_ms": 264,
+          "both_owned_handles_signaled": true,
+          "canceled": false,
+          "case": "normal",
+          "deadline_ms": 0,
+          "direct_pid": 2964,
+          "exit_code": 0,
+          "grandchild_pid": 5864,
+          "os": {
+            "build": 20348,
+            "major": 10,
+            "minor": 0
+          },
+          "owned_job_empty_before_harness_cleanup": true,
+          "pipe_drain_ms": 250,
+          "pipes_forced_closed": true,
+          "ready_ms": 58,
+          "run_return_ms": 323,
+          "runtime_and_runner_exited": true,
+          "runtime_shutdown_ms": 1,
+          "stderr_ready": true,
+          "stdout_ready": true,
+          "timed_out": false
+        },
+        {
+          "after_deadline_ms": 40,
+          "after_trigger_ms": 4968,
+          "both_owned_handles_signaled": true,
+          "canceled": false,
+          "case": "deadline",
+          "deadline_ms": 5000,
+          "direct_pid": 5788,
+          "exit_code": -1,
+          "grandchild_pid": 1120,
+          "os": {
+            "build": 20348,
+            "major": 10,
+            "minor": 0
+          },
+          "owned_job_empty_before_harness_cleanup": true,
+          "pipe_drain_ms": 250,
+          "pipes_forced_closed": false,
+          "ready_ms": 71,
+          "run_return_ms": 5040,
+          "runtime_and_runner_exited": true,
+          "runtime_shutdown_ms": 0,
+          "stderr_ready": true,
+          "stdout_ready": true,
+          "timed_out": true
+        },
+        {
+          "after_deadline_return_ms": 0,
+          "assignment_variant": {
+            "original_path": "internal/headless/proc_windows.go",
+            "original_sha256": "de290713ffabbc43029e6684292c18a8ce4554d6dc1f74f6763b591fb1dd853b",
+            "replace_from": "windows.AssignProcessToJobObject(job, proc)",
+            "replace_to": "v01FaultAssignProcessToJobObject(job, proc)",
+            "replacement_count": 1,
+            "scope": "private comparison overlay only; repository and fixed oracle unchanged",
+            "variant_sha256": "94834488e70c871061667400eed5d52404642357d0e0693f77c14e9f2342faf4"
+          },
+          "baseline_cancellation_accepted": false,
+          "before_cleanup_ms": 273,
+          "blocked_observation_ms": 253,
+          "both_owned_handles_signaled": true,
+          "case": "go-cancel-failed-attachment-retained-pipes",
+          "cleanup_owner": "supervisor retained grandchild HANDLE; not Go product cleanup",
+          "direct_handle_signaled_before_probe": true,
+          "go_source_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+          "go_version": "go version go1.26.8 windows/amd64",
+          "grandchild_alive_after_direct_exit": true,
+          "natural_windows_attachment_failure_proven": false,
+          "os": {
+            "build": 20348,
+            "major": 10,
+            "minor": 0
+          },
+          "overlay_helper_sha256": "71e5a3f62477e4b05eb01f2986890d39b57667c370d0c2aafe164fc0b1b0f90b",
+          "owned_job_empty_before_harness_job_cleanup": true,
+          "ready": {
+            "attachment_calls": 1,
+            "attachment_fault_injected": true,
+            "case": "cancel",
+            "deadline_ms": 0,
+            "direct_pid": 5480,
+            "go_source_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+            "go_version": "go1.26.8",
+            "grandchild_pid": 3232,
+            "native_assignment_calls": 1,
+            "native_attachment_error": 5,
+            "original_run_attach_error_directly_observed": true,
+            "run_start_elapsed_ms": 21,
+            "schema": 1,
+            "stderr_ready": true,
+            "stdout_ready": true,
+            "variant": "private_go_attachment_fault_variant"
+          },
+          "result": {
+            "attachment_calls": 1,
+            "attachment_fault_injected": true,
+            "canceled": true,
+            "case": "cancel",
+            "cleanup_release_observed": true,
+            "direct_exited": true,
+            "error": "",
+            "exit_code": 1,
+            "go_source_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+            "go_version": "go1.26.8",
+            "grandchild_exited": true,
+            "native_assignment_calls": 1,
+            "native_attachment_error": 5,
+            "original_run_attach_error_directly_observed": true,
+            "run_return_ms": 303,
+            "schema": 1,
+            "state": "error",
+            "timed_out": false,
+            "variant": "private_go_attachment_fault_variant"
+          },
+          "run_pending_before_harness_cleanup": true,
+          "runtime_and_runner_exited": true,
+          "stderr_retained_probe_received": true,
+          "stdout_retained_probe_received": true,
+          "unchanged_go_failure_proven": false,
+          "verified_input_source_commit": "d6ca5824cb778e5477cab66946138a719c95b1a0",
+          "helper_byte_identity": {
+            "matches_LF": false,
+            "matches_CRLF_conversion": true
+          }
+        },
+        {
+          "after_deadline_return_ms": 274,
+          "assignment_variant": {
+            "original_path": "internal/headless/proc_windows.go",
+            "original_sha256": "de290713ffabbc43029e6684292c18a8ce4554d6dc1f74f6763b591fb1dd853b",
+            "replace_from": "windows.AssignProcessToJobObject(job, proc)",
+            "replace_to": "v01FaultAssignProcessToJobObject(job, proc)",
+            "replacement_count": 1,
+            "scope": "private comparison overlay only; repository and fixed oracle unchanged",
+            "variant_sha256": "94834488e70c871061667400eed5d52404642357d0e0693f77c14e9f2342faf4"
+          },
+          "baseline_cancellation_accepted": false,
+          "before_cleanup_ms": 5228,
+          "blocked_observation_ms": 255,
+          "both_owned_handles_signaled": true,
+          "case": "go-deadline-failed-attachment-retained-pipes",
+          "cleanup_owner": "supervisor retained grandchild HANDLE; not Go product cleanup",
+          "direct_handle_signaled_before_probe": true,
+          "go_source_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+          "go_version": "go version go1.26.8 windows/amd64",
+          "grandchild_alive_after_direct_exit": true,
+          "natural_windows_attachment_failure_proven": false,
+          "os": {
+            "build": 20348,
+            "major": 10,
+            "minor": 0
+          },
+          "overlay_helper_sha256": "71e5a3f62477e4b05eb01f2986890d39b57667c370d0c2aafe164fc0b1b0f90b",
+          "owned_job_empty_before_harness_job_cleanup": true,
+          "ready": {
+            "attachment_calls": 1,
+            "attachment_fault_injected": true,
+            "case": "deadline",
+            "deadline_ms": 5000,
+            "direct_pid": 1876,
+            "go_source_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+            "go_version": "go1.26.8",
+            "grandchild_pid": 6292,
+            "native_assignment_calls": 1,
+            "native_attachment_error": 5,
+            "original_run_attach_error_directly_observed": true,
+            "run_start_elapsed_ms": 27,
+            "schema": 1,
+            "stderr_ready": true,
+            "stdout_ready": true,
+            "variant": "private_go_attachment_fault_variant"
+          },
+          "result": {
+            "attachment_calls": 1,
+            "attachment_fault_injected": true,
+            "canceled": false,
+            "case": "deadline",
+            "cleanup_release_observed": true,
+            "direct_exited": true,
+            "error": "",
+            "exit_code": 1,
+            "go_source_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+            "go_version": "go1.26.8",
+            "grandchild_exited": true,
+            "native_assignment_calls": 1,
+            "native_attachment_error": 5,
+            "original_run_attach_error_directly_observed": true,
+            "run_return_ms": 5274,
+            "schema": 1,
+            "state": "error",
+            "timed_out": true,
+            "variant": "private_go_attachment_fault_variant"
+          },
+          "run_pending_before_harness_cleanup": true,
+          "runtime_and_runner_exited": true,
+          "stderr_retained_probe_received": true,
+          "stdout_retained_probe_received": true,
+          "unchanged_go_failure_proven": false,
+          "verified_input_source_commit": "d6ca5824cb778e5477cab66946138a719c95b1a0",
+          "helper_byte_identity": {
+            "matches_LF": false,
+            "matches_CRLF_conversion": true
+          }
+        }
+      ]
+    },
+    {
+      "kind": "native",
+      "run": 37592062167,
+      "attempt": 1,
+      "job": 112695669393,
+      "conclusion": "success",
+      "target": "x86_64-unknown-linux-gnu",
+      "actual_checkout": {
+        "checkout_shas": [
+          "d6ca5824cb778e5477cab66946138a719c95b1a0"
+        ],
+        "job_head_commit": "d6ca5824cb778e5477cab66946138a719c95b1a0",
+        "decoded_persisted_log_sha256": "6161936f37fe6e62e56a7a7e6766e8d9af1db519e1ee1b171137ead9e6e34cd2"
+      },
+      "artifact": {
+        "id": 11469454091,
+        "name": "rust-candidate-x86_64-unknown-linux-gnu-d6ca5824cb778e5477cab66946138a719c95b1a0-37592062167-attempt-1",
+        "size_in_bytes": 21099665,
+        "digest": "sha256:c6c4214ed06eca89975e81d8019ae789f13d97bf6a60d4a553719b5f19738bbb"
+      },
+      "artifact_bytes_verified": true,
+      "commands": [
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 2.378
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 119.859
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 210.397
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--doc"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 3.558
+        },
+        {
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--release",
+            "--bins",
+            "--message-format=json"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 357.787
+        },
+        {
+          "command": [
+            "cargo",
+            "metadata",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--format-version",
+            "1",
+            "--filter-platform",
+            "x86_64-unknown-linux-gnu"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 0.175
+        }
+      ],
+      "tests": [
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 0,
+          "counts": [
+            1463,
+            0,
+            0
+          ],
+          "library_counts_included": [
+            1141,
+            0,
+            0
+          ],
+          "separate_doctests": false,
+          "failed_tests": []
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--doc"
+          ],
+          "exit_code": 0,
+          "counts": [
+            3,
+            0,
+            0
+          ],
+          "library_counts_included": null,
+          "separate_doctests": true,
+          "failed_tests": []
+        }
+      ],
+      "binaries": [
+        {
+          "name": "many-ai-cli",
+          "bytes": 48186488,
+          "sha256": "1264cae5921bfae5fa555a092a60863f17f72dcb6e00820e8a8dd447da0cf138"
+        },
+        {
+          "name": "many-ai-cli-launcher",
+          "bytes": 14083936,
+          "sha256": "43d3ced03d9c3c0c06490466c20f4b9dc3a1ce1865fa612f6d1e38bfa7b9b1ba"
+        }
+      ],
+      "supplemental_v01_marker_checks": {
+        "checks": [
+          {
+            "name": "many-ai-cli",
+            "sha256": "1264cae5921bfae5fa555a092a60863f17f72dcb6e00820e8a8dd447da0cf138",
+            "exact_marker_occurrences": {
+              "windows_job::testing": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "with_job_assignment": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "V01_EVIDENCE": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "MANY_AI_V01_ROOT": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "v01FaultAssignProcessToJobObject": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "native_headless_fixture": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              }
+            }
+          },
+          {
+            "name": "many-ai-cli-launcher",
+            "sha256": "43d3ced03d9c3c0c06490466c20f4b9dc3a1ce1865fa612f6d1e38bfa7b9b1ba",
+            "exact_marker_occurrences": {
+              "windows_job::testing": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "with_job_assignment": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "V01_EVIDENCE": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "MANY_AI_V01_ROOT": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "v01FaultAssignProcessToJobObject": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "native_headless_fixture": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              }
+            }
+          }
+        ],
+        "scope": "Exact ASCII/UTF-16 marker absence is supplemental only; test-only source cfg guards are verified separately, and neither is a general security review."
+      },
+      "v01_fully_verified": false,
+      "v01_receipts": []
+    },
+    {
+      "kind": "native",
+      "run": 37592062167,
+      "attempt": 1,
+      "job": 112695669364,
+      "conclusion": "success",
+      "target": "aarch64-apple-darwin",
+      "actual_checkout": {
+        "checkout_shas": [
+          "d6ca5824cb778e5477cab66946138a719c95b1a0"
+        ],
+        "job_head_commit": "d6ca5824cb778e5477cab66946138a719c95b1a0",
+        "decoded_persisted_log_sha256": "29884a8d98161387fe65e69a9a5f41e00b61945a0eb7c2d835a0ec8e59c073be"
+      },
+      "artifact": {
+        "id": 11470460031,
+        "name": "rust-candidate-aarch64-apple-darwin-d6ca5824cb778e5477cab66946138a719c95b1a0-37592062167-attempt-1",
+        "size_in_bytes": 19387963,
+        "digest": "sha256:873e489cdb37573a9231dda90765231c1cd53f6312a9a626948bc0e4ff6c23b2"
+      },
+      "artifact_bytes_verified": true,
+      "commands": [
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 1.698
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "aarch64-apple-darwin",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 158.297
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "aarch64-apple-darwin",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 259.067
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "aarch64-apple-darwin",
+            "--doc"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 5.111
+        },
+        {
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "aarch64-apple-darwin",
+            "--release",
+            "--bins",
+            "--message-format=json"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 512.366
+        },
+        {
+          "command": [
+            "cargo",
+            "metadata",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--format-version",
+            "1",
+            "--filter-platform",
+            "aarch64-apple-darwin"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 0.811
+        }
+      ],
+      "tests": [
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "aarch64-apple-darwin",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 0,
+          "counts": [
+            1463,
+            0,
+            0
+          ],
+          "library_counts_included": [
+            1142,
+            0,
+            0
+          ],
+          "separate_doctests": false,
+          "failed_tests": []
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "aarch64-apple-darwin",
+            "--doc"
+          ],
+          "exit_code": 0,
+          "counts": [
+            3,
+            0,
+            0
+          ],
+          "library_counts_included": null,
+          "separate_doctests": true,
+          "failed_tests": []
+        }
+      ],
+      "binaries": [
+        {
+          "name": "many-ai-cli",
+          "bytes": 40718128,
+          "sha256": "f9420c38593faacf96215a3b48044bbab17b4357dee1dea62b00b41e95d0f973"
+        },
+        {
+          "name": "many-ai-cli-launcher",
+          "bytes": 10102800,
+          "sha256": "ea7a0d5283dba077c89ae68de9054e0d9a9817a6be92514f8deb2c7a955a7399"
+        }
+      ],
+      "supplemental_v01_marker_checks": {
+        "checks": [
+          {
+            "name": "many-ai-cli",
+            "sha256": "f9420c38593faacf96215a3b48044bbab17b4357dee1dea62b00b41e95d0f973",
+            "exact_marker_occurrences": {
+              "windows_job::testing": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "with_job_assignment": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "V01_EVIDENCE": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "MANY_AI_V01_ROOT": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "v01FaultAssignProcessToJobObject": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "native_headless_fixture": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              }
+            }
+          },
+          {
+            "name": "many-ai-cli-launcher",
+            "sha256": "ea7a0d5283dba077c89ae68de9054e0d9a9817a6be92514f8deb2c7a955a7399",
+            "exact_marker_occurrences": {
+              "windows_job::testing": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "with_job_assignment": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "V01_EVIDENCE": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "MANY_AI_V01_ROOT": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "v01FaultAssignProcessToJobObject": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              },
+              "native_headless_fixture": {
+                "utf-8": 0,
+                "utf-16le": 0,
+                "utf-16be": 0
+              }
+            }
+          }
+        ],
+        "scope": "Exact ASCII/UTF-16 marker absence is supplemental only; test-only source cfg guards are verified separately, and neither is a general security review."
+      },
+      "v01_fully_verified": false,
+      "v01_receipts": []
+    },
+    {
+      "kind": "native",
+      "run": 37592062167,
+      "attempt": 1,
+      "job": 112695669102,
+      "conclusion": "failure",
+      "target": "x86_64-apple-darwin",
+      "actual_checkout": {
+        "checkout_shas": [
+          "d6ca5824cb778e5477cab66946138a719c95b1a0"
+        ],
+        "job_head_commit": "d6ca5824cb778e5477cab66946138a719c95b1a0",
+        "decoded_persisted_log_sha256": "6339e93a0faf57f6003a432ff1c8bf8b86fa51bba8a039dec2f4a1872a6ef869"
+      },
+      "artifact": {
+        "id": 11470485520,
+        "name": "rust-candidate-x86_64-apple-darwin-d6ca5824cb778e5477cab66946138a719c95b1a0-37592062167-attempt-1",
+        "size_in_bytes": 47615,
+        "digest": "sha256:9e7a6e9f6271d9cc0e809912b9843663c0adb098a0c2cc3f85e0ed76719b1fc5"
+      },
+      "artifact_bytes_verified": true,
+      "commands": [
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 8.152
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-apple-darwin",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0,
+          "elapsed_seconds": 500.866
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-apple-darwin",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 101,
+          "elapsed_seconds": 515.224
+        }
+      ],
+      "tests": [
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-apple-darwin",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 101,
+          "counts": [
+            1462,
+            1,
+            0
+          ],
+          "library_counts_included": [
+            1141,
+            1,
+            0
+          ],
+          "separate_doctests": false,
+          "failed_tests": [
+            "application::main_program::ownership::tests::held_owner_inode_excludes_until_drop_without_replacing_it"
+          ]
+        }
+      ],
+      "binaries": [],
+      "supplemental_v01_marker_checks": {
+        "checks": [],
+        "scope": "Exact ASCII/UTF-16 marker absence is supplemental only; test-only source cfg guards are verified separately, and neither is a general security review."
+      },
+      "v01_fully_verified": false,
+      "v01_receipts": []
+    }
+  ],
+  "validate": {
+    "run": 37592062148,
+    "successful_jobs": 11,
+    "expected_skips": 1,
+    "actual_checkout_revisions": [
+      "58087b05e875280c3ee629c300e43ee2cea21f92"
+    ]
+  },
+  "scans": [
+    {
+      "run_id": 37592062166,
+      "event": "pull_request",
+      "conclusion": "success",
+      "artifact": {
+        "id": 11468647773,
+        "name": "gitleaks-results.sarif",
+        "size_in_bytes": 7032,
+        "digest": "sha256:8d7883296950d5bdfb82555495feead3c1c9f35cdc5d86cbcfce658f3852a9a8"
+      },
+      "sarif_results": 0,
+      "checkout_shas": [
+        "58087b05e875280c3ee629c300e43ee2cea21f92"
+      ],
+      "scan_ranges": [
+        "6b0fb8e198750245ef8b4b475fbac9070db0ac3e^..401eff2b83712ca657b31b0baf63d9dadd38171e"
+      ],
+      "commits_scanned": 30
+    },
+    {
+      "run_id": 37592055990,
+      "event": "push",
+      "conclusion": "success",
+      "artifact": {
+        "id": 11469057497,
+        "name": "gitleaks-results.sarif",
+        "size_in_bytes": 7032,
+        "digest": "sha256:be81df3433aceaf0a6b3eb4c8a077a4b07ae35e6390f250a5d10c719ad8a2015"
+      },
+      "sarif_results": 0,
+      "checkout_shas": [
+        "d6ca5824cb778e5477cab66946138a719c95b1a0"
+      ],
+      "scan_ranges": [
+        "5f1c586355913e577054a121d07c73584edd110c^..d6ca5824cb778e5477cab66946138a719c95b1a0"
+      ],
+      "commits_scanned": 2
+    }
+  ],
+  "limits": [
+    "Deliberate native Job-handle failure input; spontaneous Windows failure and unchanged-Go failure are not established.",
+    "Go retained descendant release belongs to the owned harness; successful reproduction does not accept Go cleanup.",
+    "Only Linux and ARM produced release binaries; Windows and Intel doctests/release builds were not reached.",
+    "One quick success is not the required three. No formal review has started.",
+    "PR scan remains the historical first30 range; old2ef and unexercised4de findings remain separately tracked."
+  ]
+}

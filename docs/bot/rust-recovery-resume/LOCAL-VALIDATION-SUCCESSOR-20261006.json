@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-10-06T01:52:06.668114+00:00",
+  "local_code_sha": "3726d55af931857a4b8122f135626bbc4a86639d",
+  "local_code_tree": "7f8657f81debc8a36e822e8f1bbfc60414d2adcc",
+  "public_predecessor": "646637281c1b9f90c43434f364da2c03d4ba2203",
+  "source_scope": "Working runtime/test bytes that became this code commit; commits were created after execution. This is not a published-head native receipt.",
+  "changed_code_files": [
+    {
+      "git_blob_oid": "4576fc001feb48afa5f41f81f51c6fed2f396963",
+      "sha256": "3efa20c913a47d9a310253fd812dc66b127100d8d05920a9c6814aadf6c43127",
+      "repository_path": "rust/src/application/diagnostics/bug_report.rs"
+    },
+    {
+      "git_blob_oid": "f52f1cb3072c864b26491ff0adb83925bb23af7d",
+      "sha256": "d128bdca99be48b5442a86d2734869fede77c76308f6c7eb86d765a3c103f415",
+      "repository_path": "rust/src/application/hub_runtime.rs"
+    },
+    {
+      "git_blob_oid": "de204cdecbe118623dbeeacbfdfc9facf0267760",
+      "sha256": "f2388112be5280b78e0b02127b4eb9fac4e571906971503a88fa1dced9ff2913",
+      "repository_path": "rust/src/application/issue_cli.rs"
+    },
+    {
+      "git_blob_oid": "33d50fb1fd6024a9f46831fec4c3af72c6723d08",
+      "sha256": "cfaa9ce59ad023a8c4a6b2849aea1822d3a8ad14035613327befe7e5783fadd4",
+      "repository_path": "rust/src/application/main_program/serve.rs"
+    },
+    {
+      "git_blob_oid": "c4d8ba66daaeb5cb6cc5a5f6b8c6f0f62e1ca1db",
+      "sha256": "d3a17882ffec65a8593362da7e5b0bd6c835d82a47cce2c5bacddc1e2d070a3c",
+      "repository_path": "rust/src/application/platform_cli/native.rs"
+    },
+    {
+      "git_blob_oid": "b70a913da2caff8e01f3c973eef1b2d0a0a13447",
+      "sha256": "cea941ed5716c23977d3cf38020de4e1df049f1cddef28225524c18cf2c56fe3",
+      "repository_path": "rust/src/application/platform_cli/tests.rs"
+    },
+    {
+      "git_blob_oid": "2074eedd320641f321ae8c369d7fd6388b97dab3",
+      "sha256": "fca654c65213411cd935dfbda30332532d35b2bfde644b0cd7b577c30ee4020c",
+      "repository_path": "rust/src/application/provider_assets.rs"
+    },
+    {
+      "git_blob_oid": "c9a6f150509aa08bd7faeafcee59208ef316ec7a",
+      "sha256": "b710e40b1a259999910b054f3a17047830dc188d1c4c3492b21579877600067f",
+      "repository_path": "rust/src/application/session_workers/handoff_hooks.rs"
+    },
+    {
+      "git_blob_oid": "109d8170d61e11952ce17ec81881709289f3465d",
+      "sha256": "772f89c554eccef427561a74a1940eebc15ac841bd070ec147488c50aef885d8",
+      "repository_path": "rust/src/application/spawn_policy/tests.rs"
+    },
+    {
+      "git_blob_oid": "e6b246fa17d341d998192b44c84dbf6d29df14cb",
+      "sha256": "a74f1603dc1f793dd2f9225081b23d52a35a04b9a42d284e0fbb657765be0b16",
+      "repository_path": "rust/src/application/spawn_policy/trust/codex.rs"
+    },
+    {
+      "git_blob_oid": "fb81249a71694f702c2c97199aa4b4414b87b4af",
+      "sha256": "867e8fa463d0dae99385f1772b9d73d4efb042434cdaaf986c3a12f0442cf184",
+      "repository_path": "rust/src/application/whisper.rs"
+    },
+    {
+      "git_blob_oid": "3fd1d6221ad764adeb292ca8449fa1684872429e",
+      "sha256": "dc6ffa0fa6483fdbd54a86ade4561686aaf9b5c11b43dc59e566a9c35f10edc2",
+      "repository_path": "rust/src/application/whisper/archive.rs"
+    },
+    {
+      "git_blob_oid": "c18c15a090f3605321e56579eb160f7af3df9fc2",
+      "sha256": "b87b4303062ba1a871a06b4d7504ac675cb0d7584b7cdcfd141d1421056a5086",
+      "repository_path": "rust/src/application/whisper/tests.rs"
+    },
+    {
+      "git_blob_oid": "fa4a27918635b4e2d8d05ddf0f8c4a864f9ca229",
+      "sha256": "4cb375f61f9d00762e4511d6cb6458544aa4d61a1db4f8c000697a5b6ee42d92",
+      "repository_path": "rust/src/application/wrapped_spawn/launch.rs"
+    },
+    {
+      "git_blob_oid": "ab0b91fcb08f3bdc2ee5b335085bf6bedc8fb7de",
+      "sha256": "7df2d3f8cbcda553c563945dfa9597570047f1b9a90816863e182e095e91dc30",
+      "repository_path": "rust/src/config/private_io.rs"
+    },
+    {
+      "git_blob_oid": "b402619b87deeb010c89a586cb1b5b722d6e5f20",
+      "sha256": "a277f5d2b55c0bf78f311e42273c71981b9400dd4dc510b9c08318b6aa26042f",
+      "repository_path": "rust/src/files/tests.rs"
+    },
+    {
+      "git_blob_oid": "552692cb940b4a33bd0e67d1f0bea527e6629d03",
+      "sha256": "a8c422eacfeae7f98de33a78da613bc4e7807bafd763de0096c82873d0e6ef38",
+      "repository_path": "rust/src/hub/handoff_routes.rs"
+    },
+    {
+      "git_blob_oid": "10638a1ea252bdc674f1a05ea8e8733056e3ce09",
+      "sha256": "9e3daab2a93ba4aa0e539367e9b2be8ae3d7aac69cef976ba27aac995c469a1c",
+      "repository_path": "rust/src/hub/router.rs"
+    },
+    {
+      "git_blob_oid": "965d7389beae2aab5a2dad2c7cccb8114a320906",
+      "sha256": "66e27768ca279c2431592e002479217685d11c3c99b6000abd728a3ab8536584",
+      "repository_path": "rust/src/hub/transport.rs"
+    },
+    {
+      "git_blob_oid": "aa0827ee9b3258eb3b6046ac01f33f296fd20c1e",
+      "sha256": "0e9dfd41e35cb0459b90a4e91d9f6f66ecab08d19732823e38bcb3c5a9fd0817",
+      "repository_path": "rust/src/launcher/persistence.rs"
+    },
+    {
+      "git_blob_oid": "7b758fc68e00ec6955ca0b727102db6800c730be",
+      "sha256": "8348ff04a294836e6afcec9e74f99b03cf0efef50d315a360d76cb162c584a20",
+      "repository_path": "rust/src/logging/diagnostic.rs"
+    },
+    {
+      "git_blob_oid": "445f27a156d8592f608f45c560c280c995fd6c90",
+      "sha256": "fc6faf6be77550faf30c112b632278ed2d4b4dc4a251ab3199de9e7dffbca80a",
+      "repository_path": "rust/src/logging/mod.rs"
+    },
+    {
+      "git_blob_oid": "443a03174301f00601d720c0d4c294e3d792f2ee",
+      "sha256": "54dfaf45b4845ae9dff503c5485605bb77ff0b0726ca31ccf52a3717b030ee04",
+      "repository_path": "rust/src/logging/tests.rs"
+    },
+    {
+      "git_blob_oid": "07eb959cac21ea0cdfb356ba4544d0f175e6084d",
+      "sha256": "ecc5a600f24e9c877318db846733acc9dc2d7e4f02a1b2efade6d29066bc8051",
+      "repository_path": "rust/src/orchestration/child_launch/board.rs"
+    },
+    {
+      "git_blob_oid": "28da266fdccd612d26c0c1cdb7bb9d8af30b1e36",
+      "sha256": "9af41ae448b2721d98e8154769306ebcfff69785166dba9d42dcc4fe1894f3ba",
+      "repository_path": "rust/src/orchestration/handoff.rs"
+    },
+    {
+      "git_blob_oid": "ab735631e8554d3f6a65fc44e2e0a284376802b4",
+      "sha256": "da09b3cbd8198253b2618dfb112675fa22131242629fc430e2b9a41e392f06f3",
+      "repository_path": "rust/src/orchestration/relay/store.rs"
+    },
+    {
+      "git_blob_oid": "22b08e9b97839d18c26e889d14894151200a52e8",
+      "sha256": "2bd1534c159a084dd9c2b2050aed6074538494acf8c5621ceacc33299d05c70d",
+      "repository_path": "rust/src/orchestration/relay/trial_git.rs"
+    },
+    {
+      "git_blob_oid": "32697fa4eb2c485f42b77190cf902d04a342b370",
+      "sha256": "f662d05a335251a874535694cb9e3d8880c0aaada0cccd5185e42b9c28a7ac18",
+      "repository_path": "rust/src/orchestration/relay/worktree.rs"
+    },
+    {
+      "git_blob_oid": "c3ba1571111f902d2075b63b25c2486a195210f3",
+      "sha256": "bf75e0222a70c468f6ceb5c298eba3bcde295aedcc3192072afd6bf820bab224",
+      "repository_path": "rust/src/profile/store.rs"
+    },
+    {
+      "git_blob_oid": "0d5d0286973a793b63f70fdfe66aa3364a6c88a6",
+      "sha256": "7ea708a0e79007689d0c0ca97463a6a98249bc125722a87ad9eb2536af70cd88",
+      "repository_path": "rust/src/storage/repository.rs"
+    },
+    {
+      "git_blob_oid": "fb3e5afe2b77d65236cd9d39ca19459976d3a965",
+      "sha256": "beb652227fac72ac71c7ab90978c8aac1bc45d7006a8cdd22408d7cae9895c97",
+      "repository_path": "rust/src/wrapper/hooks/codex.rs"
+    },
+    {
+      "git_blob_oid": "84c779fad458a0f6ed4df56923d1eac8ffe90f4f",
+      "sha256": "3698365d463cc06457184d798906993e39b1d06aac3537cef220f5b48e888aa6",
+      "repository_path": "rust/src/wrapper/launch.rs"
+    },
+    {
+      "git_blob_oid": "39fb67833c1a986bfeb639994df7d745e8fb321e",
+      "sha256": "06d966b85e3c0c0072c3f1aef23e76a32f9269e7b11fe89fd5d548caf7b63001",
+      "repository_path": "rust/tests/native_windows_spawn.rs"
+    }
+  ],
+  "all_targets": {
+    "log": "successor-final-all-targets.log",
+    "sha256": "186ea86fe986d1ca41775fcec4d9d39e3eb861c37d4757978aca10de7a7fa034",
+    "passed": 1414,
+    "failed": 0,
+    "ignored": 0,
+    "summaries": 33,
+    "command": "cargo test --manifest-path rust/Cargo.toml --locked --offline --all-targets --no-fail-fast -- --test-threads=8",
+    "exit": 0,
+    "library_passed": 1103
+  },
+  "clippy": {
+    "command": "cargo clippy --manifest-path rust/Cargo.toml --locked --offline --all-targets -- -D warnings",
+    "exit": 0,
+    "log_sha256": "6f4d4b0d2a840373ace4be23b4e0b5110fadee013feab8e7cf966fb79bfa0a62"
+  },
+  "doctests": {
+    "log": "successor-doctests.log",
+    "sha256": "daf1dc1ea9e7fdef0ee77ce8d3d0c9edd7245683e16bae20f773e1fccd6d5165",
+    "passed": 3,
+    "failed": 0,
+    "ignored": 0,
+    "summaries": 1,
+    "command": "cargo test --manifest-path rust/Cargo.toml --locked --offline --doc",
+    "exit": 0
+  },
+  "formatter": "passed",
+  "behavioral_red": [
+    {
+      "log": "successor-b1-red.log",
+      "sha256": "e78847aec525fe377e2eec5d15fb180076bce11fb09c1d486650b36beefebd9d",
+      "passed": 0,
+      "failed": 1,
+      "ignored": 0,
+      "summaries": 1,
+      "scope": "B1 staged writer seam preserves old panic behavior; this is runtime failure, not an untouched-base or compile-only claim"
+    },
+    {
+      "log": "successor-b2-b3-b4-red.log",
+      "sha256": "a50307741e674cb3462baa489a8c64f8dabed8acb80ca60ec4b5db2afec0f264",
+      "passed": 1089,
+      "failed": 9,
+      "ignored": 0,
+      "summaries": 1,
+      "scope": "B2/B3/B4 staged tests and compatibility seams, before the corresponding implementations; runtime failures compiled and executed"
+    }
+  ],
+  "correction_during_validation": "Strict Clippy rejected a cfg(test) callback type complexity; a type alias replaced the spelling, without a lint allowance. The final full aggregate above was rerun afterward.",
+  "native_windows": "A1 raw Winsock classifier and A2 actual Hub spawn round-trip require the forthcoming native job; host no-run typechecking is not Windows evidence.",
+  "a3": {
+    "cause": "unproven",
+    "local_git": "2.52.0",
+    "ci_git": "2.55.0",
+    "exact_repeats": 30,
+    "module_repeats_threads8": 20,
+    "parallel_exact_repeats": 800,
+    "local_failures": 0,
+    "scope": "Same compiled library test code; the later Windows-only integration-file edit does not enter this library binary.",
+    "ptrace": "sandbox denied before executing test; no setting changes",
+    "trace2": "detached maintenance observed, not proof of the missing CI entry",
+    "change": "sanitized operation/category/OS-code context only; fail-closed behavior and ErrorKind decisions retained"
+  },
+  "secret_scan": "Record shape changed; historical2ef6d3c finding remains. No exclusions or scanner settings changed.",
+  "pending": [
+    "Published-head four-target tests/artifacts and Windows runtime retention",
+    "A3 causal identification if the metadata failure recurs",
+    "Owner provider/device/installed-data acceptance, V03/V06 decisions and cutover"
+  ]
+}

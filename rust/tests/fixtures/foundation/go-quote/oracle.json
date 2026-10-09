@@ -1,0 +1,930 @@
+{
+  "baseline": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "go_version": "go1.26.8",
+  "unicode_version": "15.0.0",
+  "valid_scalar_count": 1112064,
+  "printable_scalar_count": 148998,
+  "all_scalar_quote_sha256": "a2094d1b9931beae7c277a835f74b96670d49c8654a66ddfc24199cb11f4956a",
+  "cases": [
+    {
+      "name": "empty",
+      "input": "",
+      "quote": "\"\""
+    },
+    {
+      "name": "quotes-backslash-single-quote-backtick",
+      "input": "\"\\'`",
+      "quote": "\"\\\"\\\\'`\""
+    },
+    {
+      "name": "ascii-control-U+0000",
+      "input": "\u0000",
+      "quote": "\"\\x00\""
+    },
+    {
+      "name": "ascii-control-U+0001",
+      "input": "\u0001",
+      "quote": "\"\\x01\""
+    },
+    {
+      "name": "ascii-control-U+0002",
+      "input": "\u0002",
+      "quote": "\"\\x02\""
+    },
+    {
+      "name": "ascii-control-U+0003",
+      "input": "\u0003",
+      "quote": "\"\\x03\""
+    },
+    {
+      "name": "ascii-control-U+0004",
+      "input": "\u0004",
+      "quote": "\"\\x04\""
+    },
+    {
+      "name": "ascii-control-U+0005",
+      "input": "\u0005",
+      "quote": "\"\\x05\""
+    },
+    {
+      "name": "ascii-control-U+0006",
+      "input": "\u0006",
+      "quote": "\"\\x06\""
+    },
+    {
+      "name": "ascii-control-U+0007",
+      "input": "\u0007",
+      "quote": "\"\\a\""
+    },
+    {
+      "name": "ascii-control-U+0008",
+      "input": "\b",
+      "quote": "\"\\b\""
+    },
+    {
+      "name": "ascii-control-U+0009",
+      "input": "\t",
+      "quote": "\"\\t\""
+    },
+    {
+      "name": "ascii-control-U+000A",
+      "input": "\n",
+      "quote": "\"\\n\""
+    },
+    {
+      "name": "ascii-control-U+000B",
+      "input": "\u000b",
+      "quote": "\"\\v\""
+    },
+    {
+      "name": "ascii-control-U+000C",
+      "input": "\f",
+      "quote": "\"\\f\""
+    },
+    {
+      "name": "ascii-control-U+000D",
+      "input": "\r",
+      "quote": "\"\\r\""
+    },
+    {
+      "name": "ascii-control-U+000E",
+      "input": "\u000e",
+      "quote": "\"\\x0e\""
+    },
+    {
+      "name": "ascii-control-U+000F",
+      "input": "\u000f",
+      "quote": "\"\\x0f\""
+    },
+    {
+      "name": "ascii-control-U+0010",
+      "input": "\u0010",
+      "quote": "\"\\x10\""
+    },
+    {
+      "name": "ascii-control-U+0011",
+      "input": "\u0011",
+      "quote": "\"\\x11\""
+    },
+    {
+      "name": "ascii-control-U+0012",
+      "input": "\u0012",
+      "quote": "\"\\x12\""
+    },
+    {
+      "name": "ascii-control-U+0013",
+      "input": "\u0013",
+      "quote": "\"\\x13\""
+    },
+    {
+      "name": "ascii-control-U+0014",
+      "input": "\u0014",
+      "quote": "\"\\x14\""
+    },
+    {
+      "name": "ascii-control-U+0015",
+      "input": "\u0015",
+      "quote": "\"\\x15\""
+    },
+    {
+      "name": "ascii-control-U+0016",
+      "input": "\u0016",
+      "quote": "\"\\x16\""
+    },
+    {
+      "name": "ascii-control-U+0017",
+      "input": "\u0017",
+      "quote": "\"\\x17\""
+    },
+    {
+      "name": "ascii-control-U+0018",
+      "input": "\u0018",
+      "quote": "\"\\x18\""
+    },
+    {
+      "name": "ascii-control-U+0019",
+      "input": "\u0019",
+      "quote": "\"\\x19\""
+    },
+    {
+      "name": "ascii-control-U+001A",
+      "input": "\u001a",
+      "quote": "\"\\x1a\""
+    },
+    {
+      "name": "ascii-control-U+001B",
+      "input": "\u001b",
+      "quote": "\"\\x1b\""
+    },
+    {
+      "name": "ascii-control-U+001C",
+      "input": "\u001c",
+      "quote": "\"\\x1c\""
+    },
+    {
+      "name": "ascii-control-U+001D",
+      "input": "\u001d",
+      "quote": "\"\\x1d\""
+    },
+    {
+      "name": "ascii-control-U+001E",
+      "input": "\u001e",
+      "quote": "\"\\x1e\""
+    },
+    {
+      "name": "ascii-control-U+001F",
+      "input": "\u001f",
+      "quote": "\"\\x1f\""
+    },
+    {
+      "name": "ascii-control-U+007F",
+      "input": "",
+      "quote": "\"\\x7f\""
+    },
+    {
+      "name": "c1-control-U+0080",
+      "input": "",
+      "quote": "\"\\u0080\""
+    },
+    {
+      "name": "c1-control-U+0081",
+      "input": "",
+      "quote": "\"\\u0081\""
+    },
+    {
+      "name": "c1-control-U+0082",
+      "input": "",
+      "quote": "\"\\u0082\""
+    },
+    {
+      "name": "c1-control-U+0083",
+      "input": "",
+      "quote": "\"\\u0083\""
+    },
+    {
+      "name": "c1-control-U+0084",
+      "input": "",
+      "quote": "\"\\u0084\""
+    },
+    {
+      "name": "c1-control-U+0085",
+      "input": "",
+      "quote": "\"\\u0085\""
+    },
+    {
+      "name": "c1-control-U+0086",
+      "input": "",
+      "quote": "\"\\u0086\""
+    },
+    {
+      "name": "c1-control-U+0087",
+      "input": "",
+      "quote": "\"\\u0087\""
+    },
+    {
+      "name": "c1-control-U+0088",
+      "input": "",
+      "quote": "\"\\u0088\""
+    },
+    {
+      "name": "c1-control-U+0089",
+      "input": "",
+      "quote": "\"\\u0089\""
+    },
+    {
+      "name": "c1-control-U+008A",
+      "input": "",
+      "quote": "\"\\u008a\""
+    },
+    {
+      "name": "c1-control-U+008B",
+      "input": "",
+      "quote": "\"\\u008b\""
+    },
+    {
+      "name": "c1-control-U+008C",
+      "input": "",
+      "quote": "\"\\u008c\""
+    },
+    {
+      "name": "c1-control-U+008D",
+      "input": "",
+      "quote": "\"\\u008d\""
+    },
+    {
+      "name": "c1-control-U+008E",
+      "input": "",
+      "quote": "\"\\u008e\""
+    },
+    {
+      "name": "c1-control-U+008F",
+      "input": "",
+      "quote": "\"\\u008f\""
+    },
+    {
+      "name": "c1-control-U+0090",
+      "input": "",
+      "quote": "\"\\u0090\""
+    },
+    {
+      "name": "c1-control-U+0091",
+      "input": "",
+      "quote": "\"\\u0091\""
+    },
+    {
+      "name": "c1-control-U+0092",
+      "input": "",
+      "quote": "\"\\u0092\""
+    },
+    {
+      "name": "c1-control-U+0093",
+      "input": "",
+      "quote": "\"\\u0093\""
+    },
+    {
+      "name": "c1-control-U+0094",
+      "input": "",
+      "quote": "\"\\u0094\""
+    },
+    {
+      "name": "c1-control-U+0095",
+      "input": "",
+      "quote": "\"\\u0095\""
+    },
+    {
+      "name": "c1-control-U+0096",
+      "input": "",
+      "quote": "\"\\u0096\""
+    },
+    {
+      "name": "c1-control-U+0097",
+      "input": "",
+      "quote": "\"\\u0097\""
+    },
+    {
+      "name": "c1-control-U+0098",
+      "input": "",
+      "quote": "\"\\u0098\""
+    },
+    {
+      "name": "c1-control-U+0099",
+      "input": "",
+      "quote": "\"\\u0099\""
+    },
+    {
+      "name": "c1-control-U+009A",
+      "input": "",
+      "quote": "\"\\u009a\""
+    },
+    {
+      "name": "c1-control-U+009B",
+      "input": "",
+      "quote": "\"\\u009b\""
+    },
+    {
+      "name": "c1-control-U+009C",
+      "input": "",
+      "quote": "\"\\u009c\""
+    },
+    {
+      "name": "c1-control-U+009D",
+      "input": "",
+      "quote": "\"\\u009d\""
+    },
+    {
+      "name": "c1-control-U+009E",
+      "input": "",
+      "quote": "\"\\u009e\""
+    },
+    {
+      "name": "c1-control-U+009F",
+      "input": "",
+      "quote": "\"\\u009f\""
+    },
+    {
+      "name": "all-ascii",
+      "input": "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
+      "quote": "\"\\x00\\x01\\x02\\x03\\x04\\x05\\x06\\a\\b\\t\\n\\v\\f\\r\\x0e\\x0f\\x10\\x11\\x12\\x13\\x14\\x15\\x16\\x17\\x18\\x19\\x1a\\x1b\\x1c\\x1d\\x1e\\x1f !\\\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\\x7f\""
+    },
+    {
+      "name": "all-c0-controls-and-del",
+      "input": "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f",
+      "quote": "\"\\x00\\x01\\x02\\x03\\x04\\x05\\x06\\a\\b\\t\\n\\v\\f\\r\\x0e\\x0f\\x10\\x11\\x12\\x13\\x14\\x15\\x16\\x17\\x18\\x19\\x1a\\x1b\\x1c\\x1d\\x1e\\x1f\\x7f\""
+    },
+    {
+      "name": "all-c1-controls",
+      "input": "",
+      "quote": "\"\\u0080\\u0081\\u0082\\u0083\\u0084\\u0085\\u0086\\u0087\\u0088\\u0089\\u008a\\u008b\\u008c\\u008d\\u008e\\u008f\\u0090\\u0091\\u0092\\u0093\\u0094\\u0095\\u0096\\u0097\\u0098\\u0099\\u009a\\u009b\\u009c\\u009d\\u009e\\u009f\""
+    },
+    {
+      "name": "unicode-U+0020",
+      "input": " ",
+      "quote": "\" \""
+    },
+    {
+      "name": "unicode-U+00A0",
+      "input": " ",
+      "quote": "\"\\u00a0\""
+    },
+    {
+      "name": "unicode-U+00AD",
+      "input": "­",
+      "quote": "\"\\u00ad\""
+    },
+    {
+      "name": "unicode-U+0300",
+      "input": "̀",
+      "quote": "\"̀\""
+    },
+    {
+      "name": "unicode-U+034F",
+      "input": "͏",
+      "quote": "\"͏\""
+    },
+    {
+      "name": "unicode-U+0378",
+      "input": "͸",
+      "quote": "\"\\u0378\""
+    },
+    {
+      "name": "unicode-U+0379",
+      "input": "͹",
+      "quote": "\"\\u0379\""
+    },
+    {
+      "name": "unicode-U+061C",
+      "input": "؜",
+      "quote": "\"\\u061c\""
+    },
+    {
+      "name": "unicode-U+0903",
+      "input": "ः",
+      "quote": "\"ः\""
+    },
+    {
+      "name": "unicode-U+1680",
+      "input": " ",
+      "quote": "\"\\u1680\""
+    },
+    {
+      "name": "unicode-U+180E",
+      "input": "᠎",
+      "quote": "\"\\u180e\""
+    },
+    {
+      "name": "unicode-U+2000",
+      "input": " ",
+      "quote": "\"\\u2000\""
+    },
+    {
+      "name": "unicode-U+2001",
+      "input": " ",
+      "quote": "\"\\u2001\""
+    },
+    {
+      "name": "unicode-U+2002",
+      "input": " ",
+      "quote": "\"\\u2002\""
+    },
+    {
+      "name": "unicode-U+2003",
+      "input": " ",
+      "quote": "\"\\u2003\""
+    },
+    {
+      "name": "unicode-U+2004",
+      "input": " ",
+      "quote": "\"\\u2004\""
+    },
+    {
+      "name": "unicode-U+2005",
+      "input": " ",
+      "quote": "\"\\u2005\""
+    },
+    {
+      "name": "unicode-U+2006",
+      "input": " ",
+      "quote": "\"\\u2006\""
+    },
+    {
+      "name": "unicode-U+2007",
+      "input": " ",
+      "quote": "\"\\u2007\""
+    },
+    {
+      "name": "unicode-U+2008",
+      "input": " ",
+      "quote": "\"\\u2008\""
+    },
+    {
+      "name": "unicode-U+2009",
+      "input": " ",
+      "quote": "\"\\u2009\""
+    },
+    {
+      "name": "unicode-U+200A",
+      "input": " ",
+      "quote": "\"\\u200a\""
+    },
+    {
+      "name": "unicode-U+200B",
+      "input": "​",
+      "quote": "\"\\u200b\""
+    },
+    {
+      "name": "unicode-U+200C",
+      "input": "‌",
+      "quote": "\"\\u200c\""
+    },
+    {
+      "name": "unicode-U+200D",
+      "input": "‍",
+      "quote": "\"\\u200d\""
+    },
+    {
+      "name": "unicode-U+200E",
+      "input": "‎",
+      "quote": "\"\\u200e\""
+    },
+    {
+      "name": "unicode-U+200F",
+      "input": "‏",
+      "quote": "\"\\u200f\""
+    },
+    {
+      "name": "unicode-U+2028",
+      "input": "\u2028",
+      "quote": "\"\\u2028\""
+    },
+    {
+      "name": "unicode-U+2029",
+      "input": "\u2029",
+      "quote": "\"\\u2029\""
+    },
+    {
+      "name": "unicode-U+202A",
+      "input": "‪",
+      "quote": "\"\\u202a\""
+    },
+    {
+      "name": "unicode-U+202B",
+      "input": "‫",
+      "quote": "\"\\u202b\""
+    },
+    {
+      "name": "unicode-U+202C",
+      "input": "‬",
+      "quote": "\"\\u202c\""
+    },
+    {
+      "name": "unicode-U+202D",
+      "input": "‭",
+      "quote": "\"\\u202d\""
+    },
+    {
+      "name": "unicode-U+202E",
+      "input": "‮",
+      "quote": "\"\\u202e\""
+    },
+    {
+      "name": "unicode-U+202F",
+      "input": " ",
+      "quote": "\"\\u202f\""
+    },
+    {
+      "name": "unicode-U+205F",
+      "input": " ",
+      "quote": "\"\\u205f\""
+    },
+    {
+      "name": "unicode-U+2060",
+      "input": "⁠",
+      "quote": "\"\\u2060\""
+    },
+    {
+      "name": "unicode-U+2061",
+      "input": "⁡",
+      "quote": "\"\\u2061\""
+    },
+    {
+      "name": "unicode-U+2062",
+      "input": "⁢",
+      "quote": "\"\\u2062\""
+    },
+    {
+      "name": "unicode-U+2063",
+      "input": "⁣",
+      "quote": "\"\\u2063\""
+    },
+    {
+      "name": "unicode-U+2064",
+      "input": "⁤",
+      "quote": "\"\\u2064\""
+    },
+    {
+      "name": "unicode-U+2065",
+      "input": "⁥",
+      "quote": "\"\\u2065\""
+    },
+    {
+      "name": "unicode-U+2066",
+      "input": "⁦",
+      "quote": "\"\\u2066\""
+    },
+    {
+      "name": "unicode-U+2067",
+      "input": "⁧",
+      "quote": "\"\\u2067\""
+    },
+    {
+      "name": "unicode-U+2068",
+      "input": "⁨",
+      "quote": "\"\\u2068\""
+    },
+    {
+      "name": "unicode-U+2069",
+      "input": "⁩",
+      "quote": "\"\\u2069\""
+    },
+    {
+      "name": "unicode-U+206A",
+      "input": "⁪",
+      "quote": "\"\\u206a\""
+    },
+    {
+      "name": "unicode-U+206F",
+      "input": "⁯",
+      "quote": "\"\\u206f\""
+    },
+    {
+      "name": "unicode-U+3000",
+      "input": "　",
+      "quote": "\"\\u3000\""
+    },
+    {
+      "name": "unicode-U+D7FF",
+      "input": "퟿",
+      "quote": "\"\\ud7ff\""
+    },
+    {
+      "name": "unicode-U+E000",
+      "input": "",
+      "quote": "\"\\ue000\""
+    },
+    {
+      "name": "unicode-U+F8FF",
+      "input": "",
+      "quote": "\"\\uf8ff\""
+    },
+    {
+      "name": "unicode-U+FDD0",
+      "input": "﷐",
+      "quote": "\"\\ufdd0\""
+    },
+    {
+      "name": "unicode-U+FDEF",
+      "input": "﷯",
+      "quote": "\"\\ufdef\""
+    },
+    {
+      "name": "unicode-U+FE00",
+      "input": "︀",
+      "quote": "\"︀\""
+    },
+    {
+      "name": "unicode-U+FE0F",
+      "input": "️",
+      "quote": "\"️\""
+    },
+    {
+      "name": "unicode-U+FEFF",
+      "input": "﻿",
+      "quote": "\"\\ufeff\""
+    },
+    {
+      "name": "unicode-U+FFF9",
+      "input": "￹",
+      "quote": "\"\\ufff9\""
+    },
+    {
+      "name": "unicode-U+FFFA",
+      "input": "￺",
+      "quote": "\"\\ufffa\""
+    },
+    {
+      "name": "unicode-U+FFFB",
+      "input": "￻",
+      "quote": "\"\\ufffb\""
+    },
+    {
+      "name": "unicode-U+FFFC",
+      "input": "￼",
+      "quote": "\"￼\""
+    },
+    {
+      "name": "unicode-U+FFFD",
+      "input": "�",
+      "quote": "\"�\""
+    },
+    {
+      "name": "unicode-U+FFFE",
+      "input": "￾",
+      "quote": "\"\\ufffe\""
+    },
+    {
+      "name": "unicode-U+FFFF",
+      "input": "￿",
+      "quote": "\"\\uffff\""
+    },
+    {
+      "name": "unicode-U+10000",
+      "input": "𐀀",
+      "quote": "\"𐀀\""
+    },
+    {
+      "name": "unicode-U+110BD",
+      "input": "𑂽",
+      "quote": "\"\\U000110bd\""
+    },
+    {
+      "name": "unicode-U+110CD",
+      "input": "𑃍",
+      "quote": "\"\\U000110cd\""
+    },
+    {
+      "name": "unicode-U+1D173",
+      "input": "𝅳",
+      "quote": "\"\\U0001d173\""
+    },
+    {
+      "name": "unicode-U+1D17A",
+      "input": "𝅺",
+      "quote": "\"\\U0001d17a\""
+    },
+    {
+      "name": "unicode-U+E0001",
+      "input": "󠀁",
+      "quote": "\"\\U000e0001\""
+    },
+    {
+      "name": "unicode-U+E0020",
+      "input": "󠀠",
+      "quote": "\"\\U000e0020\""
+    },
+    {
+      "name": "unicode-U+E007F",
+      "input": "󠁿",
+      "quote": "\"\\U000e007f\""
+    },
+    {
+      "name": "unicode-U+E0100",
+      "input": "󠄀",
+      "quote": "\"󠄀\""
+    },
+    {
+      "name": "unicode-U+E01EF",
+      "input": "󠇯",
+      "quote": "\"󠇯\""
+    },
+    {
+      "name": "unicode-U+F0000",
+      "input": "󰀀",
+      "quote": "\"\\U000f0000\""
+    },
+    {
+      "name": "unicode-U+FFFFD",
+      "input": "󿿽",
+      "quote": "\"\\U000ffffd\""
+    },
+    {
+      "name": "unicode-U+FFFFE",
+      "input": "󿿾",
+      "quote": "\"\\U000ffffe\""
+    },
+    {
+      "name": "unicode-U+FFFFF",
+      "input": "󿿿",
+      "quote": "\"\\U000fffff\""
+    },
+    {
+      "name": "unicode-U+100000",
+      "input": "􀀀",
+      "quote": "\"\\U00100000\""
+    },
+    {
+      "name": "unicode-U+10FFFD",
+      "input": "􏿽",
+      "quote": "\"\\U0010fffd\""
+    },
+    {
+      "name": "unicode-U+10FFFE",
+      "input": "􏿾",
+      "quote": "\"\\U0010fffe\""
+    },
+    {
+      "name": "unicode-U+10FFFF",
+      "input": "􏿿",
+      "quote": "\"\\U0010ffff\""
+    },
+    {
+      "name": "unicode-U+0CF3",
+      "input": "ೳ",
+      "quote": "\"ೳ\""
+    },
+    {
+      "name": "unicode-U+0ECE",
+      "input": "໎",
+      "quote": "\"໎\""
+    },
+    {
+      "name": "unicode-U+11F00",
+      "input": "𑼀",
+      "quote": "\"𑼀\""
+    },
+    {
+      "name": "unicode-U+11F02",
+      "input": "𑼂",
+      "quote": "\"𑼂\""
+    },
+    {
+      "name": "unicode-U+1E4D0",
+      "input": "𞓐",
+      "quote": "\"𞓐\""
+    },
+    {
+      "name": "unicode-U+1FAE8",
+      "input": "🫨",
+      "quote": "\"🫨\""
+    },
+    {
+      "name": "unicode-U+3134A",
+      "input": "𱍊",
+      "quote": "\"𱍊\""
+    },
+    {
+      "name": "unicode-U+3134B",
+      "input": "𱍋",
+      "quote": "\"\\U0003134b\""
+    },
+    {
+      "name": "unicode-U+31350",
+      "input": "𱍐",
+      "quote": "\"𱍐\""
+    },
+    {
+      "name": "unicode-U+323AF",
+      "input": "𲎯",
+      "quote": "\"𲎯\""
+    },
+    {
+      "name": "unicode-U+323B0",
+      "input": "𲎰",
+      "quote": "\"\\U000323b0\""
+    },
+    {
+      "name": "unicode-U+2EBF0",
+      "input": "𮯰",
+      "quote": "\"\\U0002ebf0\""
+    },
+    {
+      "name": "unicode-U+2EE5D",
+      "input": "𮹝",
+      "quote": "\"\\U0002ee5d\""
+    },
+    {
+      "name": "unicode-U+1C89",
+      "input": "Ᲊ",
+      "quote": "\"\\u1c89\""
+    },
+    {
+      "name": "unicode-U+1C8A",
+      "input": "ᲊ",
+      "quote": "\"\\u1c8a\""
+    },
+    {
+      "name": "unicode-U+105C0",
+      "input": "𐗀",
+      "quote": "\"\\U000105c0\""
+    },
+    {
+      "name": "unicode-U+11380",
+      "input": "𑎀",
+      "quote": "\"\\U00011380\""
+    },
+    {
+      "name": "unicode-U+1CC00",
+      "input": "𜰀",
+      "quote": "\"\\U0001cc00\""
+    },
+    {
+      "name": "unicode-U+1E5D0",
+      "input": "𞗐",
+      "quote": "\"\\U0001e5d0\""
+    },
+    {
+      "name": "unicode-U+1FAE9",
+      "input": "🫩",
+      "quote": "\"\\U0001fae9\""
+    },
+    {
+      "name": "unicode-U+1FAEA",
+      "input": "🫪",
+      "quote": "\"\\U0001faea\""
+    },
+    {
+      "name": "printable-multilingual",
+      "input": "café Ελληνικά 日本語 한글 😀 © €",
+      "quote": "\"café Ελληνικά 日本語 한글 😀 © €\""
+    },
+    {
+      "name": "combining-spacing-and-enclosing-marks",
+      "input": "é͏ कः x⃝",
+      "quote": "\"é͏ कः x⃝\""
+    },
+    {
+      "name": "emoji-sequence-with-joiner-and-variation",
+      "input": "👩‍💻 ✈️",
+      "quote": "\"👩\\u200d💻 ✈️\""
+    },
+    {
+      "name": "subscription-id-formatting",
+      "input": "work­‏⁦profile",
+      "quote": "\"work\\u00ad\\u200f\\u2066profile\""
+    },
+    {
+      "name": "subscription-id-private-unassigned",
+      "input": "work͸🫩",
+      "quote": "\"work\\ue000\\u0378\\U0001fae9\""
+    },
+    {
+      "name": "multiline-crlf-tab",
+      "input": "line one\r\n\tline two\nline three\r",
+      "quote": "\"line one\\r\\n\\tline two\\nline three\\r\""
+    },
+    {
+      "name": "error-detail",
+      "input": "invalid subscription \"synthetic\": field\tcontains\ncontrol\u0000bytes",
+      "quote": "\"invalid subscription \\\"synthetic\\\": field\\tcontains\\ncontrol\\x00bytes\""
+    },
+    {
+      "name": "profile-leading-dash",
+      "input": "-synthetic\n‎profile",
+      "quote": "\"-synthetic\\n\\u200eprofile\""
+    },
+    {
+      "name": "handoff-subject",
+      "input": "fix \"synthetic\" path C:\\work\\repo\n次の手順\u2028review",
+      "quote": "\"fix \\\"synthetic\\\" path C:\\\\work\\\\repo\\n次の手順\\u2028review\""
+    },
+    {
+      "name": "shell-looking-plain-text",
+      "input": "$(synthetic) `literal` ; & < > ' \" \\ \n",
+      "quote": "\"$(synthetic) `literal` ; & < > ' \\\" \\\\ \\n\""
+    },
+    {
+      "name": "literal-escape-text",
+      "input": "\\a\\b\\f\\n\\r\\t\\v\\x00\\u2028\\U0001fae9",
+      "quote": "\"\\\\a\\\\b\\\\f\\\\n\\\\r\\\\t\\\\v\\\\x00\\\\u2028\\\\U0001fae9\""
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "source_go_sha": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "scope": "Internal ordinary native Start receipt and shared pending ownership only; no HTTP route acceptance",
+  "source_entries": [
+    "internal/hub/spawn_handler.go:handleSpawn shell early path (1049)",
+    "internal/hub/spawn_handler.go:handleSpawn ordinary delegation environment (1290)",
+    "internal/hub/spawn_handler.go:handleSpawn native Start and setLastModel (1348-1371)",
+    "internal/hub/spawn_handler.go:handleSpawnGrid bare launch argv (1537)",
+    "internal/hub/spawn_handler.go:spawnWrappedSession/startWrapProcess registration wait remains separate"
+  ],
+  "implementation": [
+    "application/wrapped_spawn.rs",
+    "application/wrapped_spawn/launch.rs"
+  ],
+  "tests": [
+    "application::wrapped_spawn::tests::start_tests::ordinary_prepared_policy_is_used_once_and_delegation_overrides_both_values",
+    "application::wrapped_spawn::tests::start_tests::bare_keeps_only_shell_utf8_label_self_trial_proof_and_resolved_environment",
+    "application::wrapped_spawn::tests::start_tests::ordinary_start_precedes_registration_records_once_and_transfers_prompt",
+    "application::wrapped_spawn::tests::start_tests::fast_registration_retains_start_until_observer_polls_again",
+    "application::wrapped_spawn::tests::start_tests::cancelled_and_dropped_start_observers_leave_owned_startup_running",
+    "application::wrapped_spawn::tests::start_tests::native_failure_never_records_start_or_model_and_reclaims_prompt",
+    "application::wrapped_spawn::tests::start_tests::later_exit_task_cancel_and_hub_stop_cannot_overwrite_successful_start",
+    "application::wrapped_spawn::tests::start_tests::ordinary_ownership_has_no_registration_timeout_and_shares_capacity",
+    "application::wrapped_spawn::tests::start_tests::model_failure_or_panic_warns_once_without_undoing_start_or_recording_at_ack",
+    "application::wrapped_spawn::tests::start_tests::close_before_creation_wakes_start_observer_without_fake_success",
+    "application::wrapped_spawn::tests::start_tests::reentrant_close_and_model_panic_keep_real_start_and_reap_the_owner",
+    "application::wrapped_spawn::tests::start_tests::preparation_panic_wakes_start_observer_and_releases_once",
+    "application::wrapped_spawn::tests::start_tests::registration_can_ack_while_start_model_callback_is_inflight",
+    "application::wrapped_spawn::tests::start_tests::abandoned_runtime_before_native_creation_wakes_start_observer_without_success"
+  ],
+  "fixture": "../wrapped_spawn/owned-wrapper.sh (existing bounded, trial-owned shell helper)",
+  "retained_regressions": "application::wrapped_spawn::tests covers existing child/login deadlines, ACK/rejection/uncertain transfer, startup reaps and accepted-wrapper shutdown survival",
+  "pending": [
+    "Source-specific ordinary/grid/shell HTTP validation, resolution, routes and wire errors",
+    "Sequential grid partial-failure semantics",
+    "Conductor/worktree metadata and cleanup caller integration",
+    "Native Windows/macOS/operator and real-provider acceptance",
+    "Independent review remains blocked and was not retried"
+  ]
+}

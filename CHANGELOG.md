@@ -151,6 +151,11 @@ Release artifacts are published at
   leading symbols or tables (`internal/wrapper/approval_rules.go`).
 
 ### Fixed
+- Rust Hub attachment uploads now record history with the current session binding,
+  fixing HTTP 500 failures that prevented images and pasted text from reaching the
+  provider. WebSocket attachments also reject ended or stale session contexts.
+- Hide unfinished completion tags when a terminal redraw interrupts them, while
+  preserving cursor movement and the following output in the Rust trial UI.
 - **The Settings icon stays at the bottom while Settings is open.** The same
   Settings, Usage and Hub buttons remain available, and the settings list can
   scroll past them.

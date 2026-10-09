@@ -10,6 +10,7 @@ export type PathCandidate = {
 export type PathWrapRow = {
   text: string;
   isWrapped: boolean;
+  // 行頭から最後の空白でない文字までのセル幅。空白で埋めた行末は数えない。
   contentWidth: number;
 };
 
@@ -195,6 +196,15 @@ export function boundedRowGetter(
   return (index) => (index >= 0 && index < length ? read(index) : null);
 }
 
+// xterm の isWrapped は、文字が右端を越えて次の行へ送られた印。ところが文字が途中で終わった行の
+// 次の行にも付いた画面があり、リンクが次の行の文まで伸びた（2026-10-09。印が付いた経緯は未確認）。
+// 文字が右端に届いていない行は折り返していないので、印があってもつながない。
+// 右端 1 マスの空きは許す（全角 1 文字が入らずに折り返すと、右端が 1 マス空く）。
+function reachesRightEdge(row: PathWrapRow, cols?: number): boolean {
+  if (cols == null || cols <= 0) return true;
+  return row.contentWidth >= cols - 1;
+}
+
 // continues を差し替えると、パス以外（URL など）の折り返しも同じ手順で 1 本に戻せる。
 export function expandLogicalPathLine(
   getRow: (index: number) => PathWrapRow | null,
@@ -211,6 +221,7 @@ export function expandLogicalPathLine(
     const prev = getRow(start - 1);
     if (!cur || !prev) break;
     if (cur.isWrapped) {
+      if (!reachesRightEdge(prev, cols)) break;
       start -= 1;
       continue;
     }
@@ -230,6 +241,7 @@ export function expandLogicalPathLine(
     const next = getRow(end + 1);
     if (!cur || !next) break;
     if (next.isWrapped) {
+      if (!reachesRightEdge(cur, cols)) break;
       end += 1;
       continue;
     }

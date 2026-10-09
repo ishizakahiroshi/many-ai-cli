@@ -1,0 +1,137 @@
+[
+  {
+    "Name": "content-0-path-0",
+    "Content": "",
+    "Exe": "C:\\trial\\$portable\\ai\\many-ai-cli.exe"
+  },
+  {
+    "Name": "content-0-path-1",
+    "Content": "",
+    "Exe": "C:/trial/${portable}/ai's app/many-ai-cli.exe"
+  },
+  {
+    "Name": "content-0-path-2",
+    "Content": "",
+    "Exe": "C:/trial/‍/ai.exe"
+  },
+  {
+    "Name": "content-1-path-0",
+    "Content": "model=\"example\"",
+    "Exe": "C:\\trial\\$portable\\ai\\many-ai-cli.exe"
+  },
+  {
+    "Name": "content-1-path-1",
+    "Content": "model=\"example\"",
+    "Exe": "C:/trial/${portable}/ai's app/many-ai-cli.exe"
+  },
+  {
+    "Name": "content-1-path-2",
+    "Content": "model=\"example\"",
+    "Exe": "C:/trial/‍/ai.exe"
+  },
+  {
+    "Name": "content-2-path-0",
+    "Content": "model=\"example\"\n",
+    "Exe": "C:\\trial\\$portable\\ai\\many-ai-cli.exe"
+  },
+  {
+    "Name": "content-2-path-1",
+    "Content": "model=\"example\"\n",
+    "Exe": "C:/trial/${portable}/ai's app/many-ai-cli.exe"
+  },
+  {
+    "Name": "content-2-path-2",
+    "Content": "model=\"example\"\n",
+    "Exe": "C:/trial/‍/ai.exe"
+  },
+  {
+    "Name": "content-3-path-0",
+    "Content": "before\n# many-ai-cli:usage-hook-start\nold\n# many-ai-cli:usage-hook-end\nafter",
+    "Exe": "C:\\trial\\$portable\\ai\\many-ai-cli.exe"
+  },
+  {
+    "Name": "content-3-path-1",
+    "Content": "before\n# many-ai-cli:usage-hook-start\nold\n# many-ai-cli:usage-hook-end\nafter",
+    "Exe": "C:/trial/${portable}/ai's app/many-ai-cli.exe"
+  },
+  {
+    "Name": "content-3-path-2",
+    "Content": "before\n# many-ai-cli:usage-hook-start\nold\n# many-ai-cli:usage-hook-end\nafter",
+    "Exe": "C:/trial/‍/ai.exe"
+  },
+  {
+    "Name": "content-4-path-0",
+    "Content": "# many-ai-cli:usage-hook-start\nmalformed",
+    "Exe": "C:\\trial\\$portable\\ai\\many-ai-cli.exe"
+  },
+  {
+    "Name": "content-4-path-1",
+    "Content": "# many-ai-cli:usage-hook-start\nmalformed",
+    "Exe": "C:/trial/${portable}/ai's app/many-ai-cli.exe"
+  },
+  {
+    "Name": "content-4-path-2",
+    "Content": "# many-ai-cli:usage-hook-start\nmalformed",
+    "Exe": "C:/trial/‍/ai.exe"
+  },
+  {
+    "Name": "content-5-path-0",
+    "Content": "# many-ai-cli:usage-hook-end",
+    "Exe": "C:\\trial\\$portable\\ai\\many-ai-cli.exe"
+  },
+  {
+    "Name": "content-5-path-1",
+    "Content": "# many-ai-cli:usage-hook-end",
+    "Exe": "C:/trial/${portable}/ai's app/many-ai-cli.exe"
+  },
+  {
+    "Name": "content-5-path-2",
+    "Content": "# many-ai-cli:usage-hook-end",
+    "Exe": "C:/trial/‍/ai.exe"
+  },
+  {
+    "Name": "content-6-path-0",
+    "Content": "# any-ai-cli:usage-hook-start\nlegacy\n# any-ai-cli:usage-hook-end\n",
+    "Exe": "C:\\trial\\$portable\\ai\\many-ai-cli.exe"
+  },
+  {
+    "Name": "content-6-path-1",
+    "Content": "# any-ai-cli:usage-hook-start\nlegacy\n# any-ai-cli:usage-hook-end\n",
+    "Exe": "C:/trial/${portable}/ai's app/many-ai-cli.exe"
+  },
+  {
+    "Name": "content-6-path-2",
+    "Content": "# any-ai-cli:usage-hook-start\nlegacy\n# any-ai-cli:usage-hook-end\n",
+    "Exe": "C:/trial/‍/ai.exe"
+  },
+  {
+    "Name": "content-7-path-0",
+    "Content": "# many-ai-cli:usage-hook-start\r\nold\r\n# many-ai-cli:usage-hook-end\r\n",
+    "Exe": "C:\\trial\\$portable\\ai\\many-ai-cli.exe"
+  },
+  {
+    "Name": "content-7-path-1",
+    "Content": "# many-ai-cli:usage-hook-start\r\nold\r\n# many-ai-cli:usage-hook-end\r\n",
+    "Exe": "C:/trial/${portable}/ai's app/many-ai-cli.exe"
+  },
+  {
+    "Name": "content-7-path-2",
+    "Content": "# many-ai-cli:usage-hook-start\r\nold\r\n# many-ai-cli:usage-hook-end\r\n",
+    "Exe": "C:/trial/‍/ai.exe"
+  },
+  {
+    "Name": "content-8-path-0",
+    "Content": "# many-ai-cli:usage-hook-start\nx\n# many-ai-cli:usage-hook-end\n# many-ai-cli:usage-hook-start\ny\n# many-ai-cli:usage-hook-end\n",
+    "Exe": "C:\\trial\\$portable\\ai\\many-ai-cli.exe"
+  },
+  {
+    "Name": "content-8-path-1",
+    "Content": "# many-ai-cli:usage-hook-start\nx\n# many-ai-cli:usage-hook-end\n# many-ai-cli:usage-hook-start\ny\n# many-ai-cli:usage-hook-end\n",
+    "Exe": "C:/trial/${portable}/ai's app/many-ai-cli.exe"
+  },
+  {
+    "Name": "content-8-path-2",
+    "Content": "# many-ai-cli:usage-hook-start\nx\n# many-ai-cli:usage-hook-end\n# many-ai-cli:usage-hook-start\ny\n# many-ai-cli:usage-hook-end\n",
+    "Exe": "C:/trial/‍/ai.exe"
+  }
+]

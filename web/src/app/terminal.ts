@@ -269,12 +269,13 @@ export function ensureTerminal(id) {
           }
           return cm;
         };
+        // 空白で埋めた行末は数えない（行末まで空白を書いてから次の文を続けた行も、右端に届いた扱いにしない）
         const contentWidthOf = (line) => {
           let width = 0;
           for (let x = 0; x < line.length; x++) {
             const cell = line.getCell(x);
             if (!cell || cell.getWidth() === 0) continue;
-            if (typeof cell.getCode === 'function' && cell.getCode() === 0) continue;
+            if (typeof cell.getCode === 'function' && (cell.getCode() === 0 || cell.getCode() === 32)) continue;
             width = x + cell.getWidth();
           }
           return width;

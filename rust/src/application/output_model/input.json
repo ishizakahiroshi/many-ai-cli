@@ -1,0 +1,249 @@
+[
+  {
+    "provider": "claude",
+    "lines": [
+      "Claude Code v2.1.246",
+      "Opus 5 with high effort · Claude Pro"
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "claude",
+    "lines": [
+      "Claude Code v2.1.246",
+      "░▒▓ Opus 4.6 with xhigh effort"
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "claude",
+    "lines": [
+      "Claude Code v2.1.246",
+      "Opus 5 WITH high effort"
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "claude",
+    "lines": [
+      "Claude Code v2.1.246",
+      "·· unknown"
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "claude",
+    "lines": [
+      "Claude Code v2.1.246",
+      "   "
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "claude",
+    "lines": [
+      "Claude Code v3.0",
+      "",
+      "",
+      "too late"
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "codex",
+    "lines": [
+      "model: loading /model to change"
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "codex",
+    "lines": [
+      "model: LoAdInG /model to change"
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "codex",
+    "lines": [
+      "model: gpt-5.3 /model to change"
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "codex",
+    "lines": [
+      "model: gpt-5 · high /model to change"
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "codex",
+    "lines": [
+      "model: gpt-5 /model to change suffix"
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "codex",
+    "lines": [
+      "model:"
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "codex",
+    "lines": [
+      " "
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "codex",
+    "lines": [
+      "gpt-5 /model to change"
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "cursor-agent",
+    "lines": [
+      "Auto · 7.4%",
+      "",
+      "C:/trial · main"
+    ],
+    "cwd": "C:/trial"
+  },
+  {
+    "provider": "cursor-agent",
+    "lines": [
+      "GPT-5 · 10%",
+      "",
+      "C:/trial · main"
+    ],
+    "cwd": "C:/trial"
+  },
+  {
+    "provider": "cursor-agent",
+    "lines": [
+      "→ GPT-5",
+      "",
+      "C:/trial · main"
+    ],
+    "cwd": "C:/trial"
+  },
+  {
+    "provider": "cursor-agent",
+    "lines": [
+      "❯ Auto",
+      "",
+      "C:/trial · main"
+    ],
+    "cwd": "C:/trial"
+  },
+  {
+    "provider": "cursor-agent",
+    "lines": [
+      "Auto · 7.4% ",
+      "",
+      "C:/trial · main"
+    ],
+    "cwd": "C:/trial"
+  },
+  {
+    "provider": "cursor-agent",
+    "lines": [
+      "  Auto  ",
+      "",
+      "C:/trial · main"
+    ],
+    "cwd": "C:/trial"
+  },
+  {
+    "provider": "cursor-agent",
+    "lines": [
+      "Auto",
+      ""
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "grok",
+    "lines": [
+      "model: gpt-5 /model to change"
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "copilot",
+    "lines": [
+      "GPT-5.3",
+      "folder   GPT-5.3 · high",
+      ""
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "copilot",
+    "lines": [
+      "GPT-5.3",
+      "folder   Claude Sonnet 4.5",
+      ""
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "copilot",
+    "lines": [
+      "GPT-5.3",
+      "Auto",
+      ""
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "copilot",
+    "lines": [
+      "GPT-5.3",
+      "folder   Auto · xhigh",
+      ""
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "copilot",
+    "lines": [
+      "GPT-5.3",
+      "folder   Claude Sonnet",
+      ""
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "copilot",
+    "lines": [
+      "GPT-5.3",
+      "GPT-5.3",
+      ""
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "copilot",
+    "lines": [
+      "GPT-5.3",
+      "folder   GPT-5.3 · HIGH",
+      ""
+    ],
+    "cwd": ""
+  },
+  {
+    "provider": "copilot",
+    "lines": [
+      "GPT-5.3",
+      "folder   GPT-5.3",
+      ""
+    ],
+    "cwd": ""
+  }
+]

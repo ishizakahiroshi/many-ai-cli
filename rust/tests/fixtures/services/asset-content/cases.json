@@ -1,0 +1,5453 @@
+[
+  {
+    "name": "method-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [],
+    "compare_content": true
+  },
+  {
+    "name": "method-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [],
+    "compare_content": true
+  },
+  {
+    "name": "method-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [],
+    "compare_content": true
+  },
+  {
+    "name": "method-PUT",
+    "method": "PUT",
+    "path": "/asset.txt",
+    "headers": [],
+    "compare_content": true
+  },
+  {
+    "name": "method-DELETE",
+    "method": "DELETE",
+    "path": "/asset.txt",
+    "headers": [],
+    "compare_content": true
+  },
+  {
+    "name": "method-OPTIONS",
+    "method": "OPTIONS",
+    "path": "/asset.txt",
+    "headers": [],
+    "compare_content": true
+  },
+  {
+    "name": "method-PATCH",
+    "method": "PATCH",
+    "path": "/asset.txt",
+    "headers": [],
+    "compare_content": true
+  },
+  {
+    "name": "method-get",
+    "method": "get",
+    "path": "/asset.txt",
+    "headers": [],
+    "compare_content": true
+  },
+  {
+    "name": "binary-full-GET",
+    "method": "GET",
+    "path": "/binary.png",
+    "headers": [],
+    "compare_content": true
+  },
+  {
+    "name": "binary-single-GET",
+    "method": "GET",
+    "path": "/binary.png",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "binary-multipart-GET",
+    "method": "GET",
+    "path": "/binary.png",
+    "headers": [
+      [
+        "Range",
+        "bytes=1-3,250-255"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "binary-conditional-GET",
+    "method": "GET",
+    "path": "/binary.png",
+    "headers": [
+      [
+        "If-None-Match",
+        "*"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "binary-full-HEAD",
+    "method": "HEAD",
+    "path": "/binary.png",
+    "headers": [],
+    "compare_content": true
+  },
+  {
+    "name": "binary-single-HEAD",
+    "method": "HEAD",
+    "path": "/binary.png",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "binary-multipart-HEAD",
+    "method": "HEAD",
+    "path": "/binary.png",
+    "headers": [
+      [
+        "Range",
+        "bytes=1-3,250-255"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "binary-conditional-HEAD",
+    "method": "HEAD",
+    "path": "/binary.png",
+    "headers": [
+      [
+        "If-None-Match",
+        "*"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "binary-full-POST",
+    "method": "POST",
+    "path": "/binary.png",
+    "headers": [],
+    "compare_content": true
+  },
+  {
+    "name": "binary-single-POST",
+    "method": "POST",
+    "path": "/binary.png",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "binary-multipart-POST",
+    "method": "POST",
+    "path": "/binary.png",
+    "headers": [
+      [
+        "Range",
+        "bytes=1-3,250-255"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "binary-conditional-POST",
+    "method": "POST",
+    "path": "/binary.png",
+    "headers": [
+      [
+        "If-None-Match",
+        "*"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-single-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-5"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-single-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-5"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-open-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=7-"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-open-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=7-"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-suffix-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-suffix-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-clip-end-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=7-99"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-clip-end-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=7-99"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-clip-suffix-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-99"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-clip-suffix-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-99"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-zero-suffix-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-zero-suffix-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-full-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-9"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-full-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-9"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-all-empty-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=, ,\t,"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-all-empty-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=, ,\t,"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-empty-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes="
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-empty-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes="
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-double-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-1,8-9"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-double-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-1,8-9"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-triple-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-0,4-4,9-9"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-triple-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-0,4-4,9-9"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-reverse-order-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=8-9,0-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-reverse-order-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=8-9,0-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-overlap-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-2,2-4"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-overlap-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-2,2-4"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-repeat-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=1-2,1-2"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-repeat-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=1-2,1-2"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-excessive-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-9,0-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-excessive-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-9,0-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-excessive-suffix-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-9,-9"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-excessive-suffix-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-9,-9"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-mixed-overlap-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=90-99,2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-mixed-overlap-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=90-99,2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-mixed-malformed-end-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=90-bad,2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-mixed-malformed-end-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=90-bad,2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-all-unsatisfiable-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=90-99,30-40"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-all-unsatisfiable-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=90-99,30-40"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-unsatisfiable-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=10-20"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-unsatisfiable-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=10-20"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-unsatisfiable-bad-end-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=10-bad"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-unsatisfiable-bad-end-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=10-bad"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-unsatisfiable-reversed-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=10-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-unsatisfiable-reversed-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=10-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-bad-then-unsatisfiable-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=oops,10-20"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-bad-then-unsatisfiable-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=oops,10-20"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-valid-then-bad-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-1,garbage"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-valid-then-bad-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-1,garbage"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-decreasing-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=5-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-decreasing-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=5-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-zero-suffix-multi-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-0,0-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-zero-suffix-multi-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-0,0-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-zero-suffix-duplicates-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-0,-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-zero-suffix-duplicates-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-0,-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-zero-suffix-unsatisfiable-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=99-bad,-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-zero-suffix-unsatisfiable-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=99-bad,-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-plus-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=+2-+4"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-plus-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=+2-+4"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-plus-suffix-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-+3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-plus-suffix-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-+3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-negative-suffix-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=--3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-negative-suffix-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=--3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-whitespace-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes= \t2 \t- \t4 \t"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-whitespace-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes= \t2 \t- \t4 \t"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-crlf-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=\r\n2-4\r\n"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-crlf-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=\r\n2-4\r\n"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-vertical-tab-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=\u000b2-4"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-vertical-tab-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=\u000b2-4"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-form-feed-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-4\f"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-form-feed-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-4\f"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-nbsp-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=\u00a02-4"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-nbsp-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=\u00a02-4"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-spaced-unit-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes =0-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-spaced-unit-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes =0-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-upper-unit-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "Bytes=0-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-upper-unit-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "Bytes=0-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-unknown-unit-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "items=0-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-unknown-unit-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "items=0-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-leading-space-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        " bytes=0-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-leading-space-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        " bytes=0-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-dash-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-dash-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-no-dash-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=12"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-no-dash-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=12"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-extra-dash-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-1-2"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-extra-dash-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-1-2"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-hex-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0x0-0x1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-hex-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0x0-0x1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-underscore-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0_1-2"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-underscore-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0_1-2"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-unicode-digits-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=\uff11-\uff12"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-unicode-digits-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=\uff11-\uff12"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-max-int-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=9223372036854775807-"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-max-int-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=9223372036854775807-"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-overflow-start-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=9223372036854775808-"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-overflow-start-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=9223372036854775808-"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-overflow-end-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-9223372036854775808"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-overflow-end-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-9223372036854775808"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-overflow-suffix-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-9223372036854775808"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-overflow-suffix-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-9223372036854775808"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-long-leading-zero-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0000000000000000000000000000000000000002-4"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-long-leading-zero-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0000000000000000000000000000000000000002-4"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-negative-zero-suffix-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=--0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-negative-zero-suffix-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=--0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-missing-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        ""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-missing-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        ""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-only-spaces-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        " "
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "range-only-spaces-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        " "
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=0-0-GET",
+    "method": "GET",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=0-0-HEAD",
+    "method": "HEAD",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=0-bad-GET",
+    "method": "GET",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-bad"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=0-bad-HEAD",
+    "method": "HEAD",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-bad"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=99-1-GET",
+    "method": "GET",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=99-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=99-1-HEAD",
+    "method": "HEAD",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=99-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=-0-GET",
+    "method": "GET",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=-0-HEAD",
+    "method": "HEAD",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=-1-GET",
+    "method": "GET",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=-1-HEAD",
+    "method": "HEAD",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-1"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=-GET",
+    "method": "GET",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes="
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=-HEAD",
+    "method": "HEAD",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes="
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=,-GET",
+    "method": "GET",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=,"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=,-HEAD",
+    "method": "HEAD",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=,"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=-0,-0-GET",
+    "method": "GET",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-0,-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=-0,-0-HEAD",
+    "method": "HEAD",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=-0,-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=0-0,-0-GET",
+    "method": "GET",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-0,-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=0-0,-0-HEAD",
+    "method": "HEAD",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=0-0,-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=bad-GET",
+    "method": "GET",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=bad"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-bytes=bad-HEAD",
+    "method": "HEAD",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=bad"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-items=0-0-GET",
+    "method": "GET",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "items=0-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "empty-items=0-0-HEAD",
+    "method": "HEAD",
+    "path": "/empty.txt",
+    "headers": [
+      [
+        "Range",
+        "items=0-0"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-star-junk-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "*garbage"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-star-junk-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "*garbage"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-star-junk-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "*garbage"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-leading-comma-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        ",, \t*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-leading-comma-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        ",, \t*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-leading-comma-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        ",, \t*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-empty-tag-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-empty-tag-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-empty-tag-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-tag-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"abc\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-tag-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"abc\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-tag-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"abc\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-weak-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "W/\"abc\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-weak-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "W/\"abc\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-weak-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "W/\"abc\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-tag-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"abc\", *"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-tag-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"abc\", *"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-tag-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"abc\", *"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-weak-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "W/\"abc\", *"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-weak-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "W/\"abc\", *"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-weak-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "W/\"abc\", *"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-missing-comma-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"abc\"*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-missing-comma-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"abc\"*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-missing-comma-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"abc\"*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-tag-adjacent-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a\"W/\"b\"*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-tag-adjacent-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a\"W/\"b\"*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-tag-adjacent-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a\"W/\"b\"*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-malformed-before-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "broken,*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-malformed-before-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "broken,*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-malformed-before-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "broken,*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-lowercase-weak-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "w/\"abc\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-lowercase-weak-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "w/\"abc\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-lowercase-weak-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "w/\"abc\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-space-tag-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a b\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-space-tag-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a b\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-space-tag-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a b\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-tab-tag-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a\tb\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-tab-tag-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a\tb\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-tab-tag-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a\tb\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-del-tag-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a\u007fb\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-del-tag-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a\u007fb\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-del-tag-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a\u007fb\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-unicode-tag-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"\u00e9\u96ea\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-unicode-tag-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"\u00e9\u96ea\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-unicode-tag-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"\u00e9\u96ea\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-backslash-tag-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a\\b\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-backslash-tag-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a\\b\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-backslash-tag-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a\\b\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-empty-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        ""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-empty-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        ""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-empty-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        ""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-whitespace-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        " \t"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-whitespace-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        " \t"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-whitespace-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        " \t"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-commas-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        ",,"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-commas-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        ",,"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-commas-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        ",,"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-unclosed-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a,*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-unclosed-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a,*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-unclosed-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"a,*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-crlf-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\r\n*\r\n"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-crlf-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\r\n*\r\n"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-crlf-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\r\n*\r\n"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-vertical-tab-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\u000b*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-vertical-tab-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\u000b*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-vertical-tab-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\u000b*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-nbsp-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\u00a0*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-nbsp-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\u00a0*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Match-nbsp-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\u00a0*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-star-junk-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "*garbage"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-star-junk-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "*garbage"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-star-junk-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "*garbage"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-leading-comma-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        ",, \t*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-leading-comma-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        ",, \t*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-leading-comma-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        ",, \t*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-empty-tag-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-empty-tag-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-empty-tag-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-tag-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"abc\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-tag-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"abc\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-tag-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"abc\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-weak-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "W/\"abc\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-weak-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "W/\"abc\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-weak-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "W/\"abc\""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-tag-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"abc\", *"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-tag-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"abc\", *"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-tag-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"abc\", *"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-weak-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "W/\"abc\", *"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-weak-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "W/\"abc\", *"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-weak-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "W/\"abc\", *"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-missing-comma-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"abc\"*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-missing-comma-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"abc\"*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-missing-comma-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"abc\"*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-tag-adjacent-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a\"W/\"b\"*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-tag-adjacent-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a\"W/\"b\"*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-tag-adjacent-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a\"W/\"b\"*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-malformed-before-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "broken,*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-malformed-before-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "broken,*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-malformed-before-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "broken,*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-lowercase-weak-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "w/\"abc\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-lowercase-weak-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "w/\"abc\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-lowercase-weak-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "w/\"abc\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-space-tag-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a b\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-space-tag-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a b\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-space-tag-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a b\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-tab-tag-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a\tb\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-tab-tag-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a\tb\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-tab-tag-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a\tb\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-del-tag-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a\u007fb\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-del-tag-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a\u007fb\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-del-tag-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a\u007fb\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-unicode-tag-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"\u00e9\u96ea\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-unicode-tag-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"\u00e9\u96ea\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-unicode-tag-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"\u00e9\u96ea\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-backslash-tag-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a\\b\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-backslash-tag-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a\\b\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-backslash-tag-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a\\b\",*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-empty-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        ""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-empty-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        ""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-empty-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        ""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-whitespace-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        " \t"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-whitespace-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        " \t"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-whitespace-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        " \t"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-commas-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        ",,"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-commas-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        ",,"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-commas-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        ",,"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-unclosed-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a,*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-unclosed-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a,*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-unclosed-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"a,*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-crlf-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\r\n*\r\n"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-crlf-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\r\n*\r\n"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-crlf-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\r\n*\r\n"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-vertical-tab-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\u000b*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-vertical-tab-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\u000b*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-vertical-tab-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\u000b*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-nbsp-star-GET",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\u00a0*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-nbsp-star-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\u00a0*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-None-Match-nbsp-star-POST",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\u00a0*"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Modified-Since-old",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Modified-Since",
+        "Mon, 01 Jan 0001 00:00:00 GMT"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Modified-Since-past",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Modified-Since",
+        "Thu, 01 Jan 1970 00:00:00 GMT"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Modified-Since-future",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Modified-Since",
+        "Fri, 31 Dec 9999 23:59:59 GMT"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Modified-Since-bad",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Modified-Since",
+        "garbage"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Modified-Since-empty",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Modified-Since",
+        ""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Unmodified-Since-old",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Unmodified-Since",
+        "Mon, 01 Jan 0001 00:00:00 GMT"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Unmodified-Since-past",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Unmodified-Since",
+        "Thu, 01 Jan 1970 00:00:00 GMT"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Unmodified-Since-future",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Unmodified-Since",
+        "Fri, 31 Dec 9999 23:59:59 GMT"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Unmodified-Since-bad",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Unmodified-Since",
+        "garbage"
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Unmodified-Since-empty",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Unmodified-Since",
+        ""
+      ],
+      [
+        "Range",
+        "bytes=2-3"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-tag-GET-valid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "\"abc\""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-tag-GET-invalid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "\"abc\""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-tag-HEAD-valid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "\"abc\""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-tag-HEAD-invalid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "\"abc\""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-tag-POST-valid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "\"abc\""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-tag-POST-invalid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "\"abc\""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-weak-GET-valid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "W/\"abc\""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-weak-GET-invalid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "W/\"abc\""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-weak-HEAD-valid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "W/\"abc\""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-weak-HEAD-invalid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "W/\"abc\""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-weak-POST-valid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "W/\"abc\""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-weak-POST-invalid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "W/\"abc\""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-star-GET-valid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "*"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-star-GET-invalid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "*"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-star-HEAD-valid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "*"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-star-HEAD-invalid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "*"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-star-POST-valid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "*"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-star-POST-invalid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "*"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-zero-date-GET-valid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "Mon, 01 Jan 0001 00:00:00 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-zero-date-GET-invalid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "Mon, 01 Jan 0001 00:00:00 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-zero-date-HEAD-valid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "Mon, 01 Jan 0001 00:00:00 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-zero-date-HEAD-invalid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "Mon, 01 Jan 0001 00:00:00 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-zero-date-POST-valid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "Mon, 01 Jan 0001 00:00:00 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-zero-date-POST-invalid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "Mon, 01 Jan 0001 00:00:00 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-epoch-GET-valid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "Thu, 01 Jan 1970 00:00:00 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-epoch-GET-invalid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "Thu, 01 Jan 1970 00:00:00 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-epoch-HEAD-valid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "Thu, 01 Jan 1970 00:00:00 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-epoch-HEAD-invalid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "Thu, 01 Jan 1970 00:00:00 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-epoch-POST-valid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "Thu, 01 Jan 1970 00:00:00 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-epoch-POST-invalid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "Thu, 01 Jan 1970 00:00:00 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-future-GET-valid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "Fri, 31 Dec 9999 23:59:59 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-future-GET-invalid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "Fri, 31 Dec 9999 23:59:59 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-future-HEAD-valid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "Fri, 31 Dec 9999 23:59:59 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-future-HEAD-invalid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "Fri, 31 Dec 9999 23:59:59 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-future-POST-valid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "Fri, 31 Dec 9999 23:59:59 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-future-POST-invalid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "Fri, 31 Dec 9999 23:59:59 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-bad-GET-valid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "not-a-date"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-bad-GET-invalid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "not-a-date"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-bad-HEAD-valid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "not-a-date"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-bad-HEAD-invalid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "not-a-date"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-bad-POST-valid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        "not-a-date"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-bad-POST-invalid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        "not-a-date"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-spaces-GET-valid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        " \t"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-spaces-GET-invalid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        " \t"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-spaces-HEAD-valid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        " \t"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-spaces-HEAD-invalid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        " \t"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-spaces-POST-valid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        " \t"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-spaces-POST-invalid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        " \t"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-empty-GET-valid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        ""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-empty-GET-invalid",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        ""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-empty-HEAD-valid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        ""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-empty-HEAD-invalid",
+    "method": "HEAD",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        ""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-empty-POST-valid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "If-Range",
+        ""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "If-Range-empty-POST-invalid",
+    "method": "POST",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "not-a-range"
+      ],
+      [
+        "If-Range",
+        ""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "precondition-order",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"bad\""
+      ],
+      [
+        "If-None-Match",
+        "*"
+      ],
+      [
+        "Range",
+        "bad"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "match-star-none-star",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "*"
+      ],
+      [
+        "If-None-Match",
+        "*"
+      ],
+      [
+        "Range",
+        "bad"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "none-before-range",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "*"
+      ],
+      [
+        "Range",
+        "bad"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "match-before-range",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"bad\""
+      ],
+      [
+        "Range",
+        "bad"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "dates-ignored",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Modified-Since",
+        "Fri, 31 Dec 9999 23:59:59 GMT"
+      ],
+      [
+        "If-Unmodified-Since",
+        "Thu, 01 Jan 1970 00:00:00 GMT"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "duplicate-range-first",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        "bytes=2-3"
+      ],
+      [
+        "Range",
+        "bytes=7-8"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "duplicate-match-first",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-Match",
+        "\"bad\""
+      ],
+      [
+        "If-Match",
+        "*"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "duplicate-none-first",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "If-None-Match",
+        "\"bad\""
+      ],
+      [
+        "If-None-Match",
+        "*"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "duplicate-empty-first",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "Range",
+        ""
+      ],
+      [
+        "Range",
+        "bad"
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "header-case",
+    "method": "GET",
+    "path": "/asset.txt",
+    "headers": [
+      [
+        "rAnGe",
+        "bytes=2-3"
+      ],
+      [
+        "iF-rAnGe",
+        ""
+      ]
+    ],
+    "compare_content": true
+  },
+  {
+    "name": "fileserver-only-index-redirect-GET",
+    "method": "GET",
+    "path": "/app/index.html?x=1",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-index-redirect-HEAD",
+    "method": "HEAD",
+    "path": "/app/index.html?x=1",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-index-redirect-POST",
+    "method": "POST",
+    "path": "/app/index.html?x=1",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-directory-redirect-GET",
+    "method": "GET",
+    "path": "/app?x=1",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-directory-redirect-HEAD",
+    "method": "HEAD",
+    "path": "/app?x=1",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-directory-redirect-POST",
+    "method": "POST",
+    "path": "/app?x=1",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-directory-index-GET",
+    "method": "GET",
+    "path": "/app/",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-directory-index-HEAD",
+    "method": "HEAD",
+    "path": "/app/",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-directory-index-POST",
+    "method": "POST",
+    "path": "/app/",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-file-slash-GET",
+    "method": "GET",
+    "path": "/asset.txt/?x=1",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-file-slash-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt/?x=1",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-file-slash-POST",
+    "method": "POST",
+    "path": "/asset.txt/?x=1",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-clean-dot-GET",
+    "method": "GET",
+    "path": "/app/../asset.txt",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-clean-dot-HEAD",
+    "method": "HEAD",
+    "path": "/app/../asset.txt",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-clean-dot-POST",
+    "method": "POST",
+    "path": "/app/../asset.txt",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-clean-double-GET",
+    "method": "GET",
+    "path": "//asset.txt",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-clean-double-HEAD",
+    "method": "HEAD",
+    "path": "//asset.txt",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-clean-double-POST",
+    "method": "POST",
+    "path": "//asset.txt",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-missing-GET",
+    "method": "GET",
+    "path": "/missing.txt",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-missing-HEAD",
+    "method": "HEAD",
+    "path": "/missing.txt",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-missing-POST",
+    "method": "POST",
+    "path": "/missing.txt",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-listing-GET",
+    "method": "GET",
+    "path": "/",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-listing-HEAD",
+    "method": "HEAD",
+    "path": "/",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-listing-POST",
+    "method": "POST",
+    "path": "/",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-dotfile-listing-GET",
+    "method": "GET",
+    "path": "/empty-dir/",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-dotfile-listing-HEAD",
+    "method": "HEAD",
+    "path": "/empty-dir/",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-dotfile-listing-POST",
+    "method": "POST",
+    "path": "/empty-dir/",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-file-child-GET",
+    "method": "GET",
+    "path": "/asset.txt/child",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-file-child-HEAD",
+    "method": "HEAD",
+    "path": "/asset.txt/child",
+    "headers": [],
+    "compare_content": false
+  },
+  {
+    "name": "fileserver-only-file-child-POST",
+    "method": "POST",
+    "path": "/asset.txt/child",
+    "headers": [],
+    "compare_content": false
+  }
+]

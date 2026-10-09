@@ -1,0 +1,149 @@
+{
+  "scope": "local Linux validation and Go Windows cross-compilation; V01 native execution pending",
+  "base_commit": "3077609a5b6241af8781cbcb72ff946a230b9b90",
+  "local_code_commit": "98176e00f3e8bc19bbb8aeb64cd757ed832c8204",
+  "tree": "05dd91e8022c2fd05aab8a43a0d2e2bca0e1dec4",
+  "go_oracle_commit": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+  "pinned_source_embed_inputs": 57,
+  "production_files_changed": 0,
+  "windows_test_cases": {
+    "rust_behavior_cases": 4,
+    "go_compound_test_covering_cancel_and_deadline": 1,
+    "self_fixture_entry": 1,
+    "executed_locally": 0
+  },
+  "linux": {
+    "all_target_passed": 1463,
+    "library_included": 1141,
+    "failed": 0,
+    "ignored": 0,
+    "doctests_separate": 3,
+    "new_windows_target_reports_zero_tests": true
+  },
+  "commands": [
+    {
+      "label": "go-windows-cross-compile-final",
+      "source_commit": "98176e00f3e8bc19bbb8aeb64cd757ed832c8204",
+      "command": [
+        "go",
+        "test",
+        "-c",
+        "-mod=readonly",
+        "-buildvcs=false",
+        "-tags=many_ai_v01_oracle",
+        "-overlay=<TOOLS>/v01-native-stage/overlay.json",
+        "-o",
+        "<TOOLS>/v01-native-stage/headless-v01.exe",
+        "./internal/headless"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.489,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "go-windows-default-discovery",
+      "source_commit": "98176e00f3e8bc19bbb8aeb64cd757ed832c8204",
+      "command": [
+        "go",
+        "list",
+        "-test",
+        "-mod=readonly",
+        "./..."
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.296,
+      "log_sha256": "afa78120bd1368a4ab7d0e0a489ae715c90867bc893bb6aa541ddf59c954d8bc"
+    },
+    {
+      "label": "fmt",
+      "source_commit": "98176e00f3e8bc19bbb8aeb64cd757ed832c8204",
+      "command": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.83,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "clippy",
+      "source_commit": "98176e00f3e8bc19bbb8aeb64cd757ed832c8204",
+      "command": [
+        "cargo",
+        "clippy",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.371,
+      "log_sha256": "58a3333fb6b99bd98701145004f41ce03ad904b6baf915ec3057ba03d656ea56"
+    },
+    {
+      "label": "all-targets",
+      "source_commit": "98176e00f3e8bc19bbb8aeb64cd757ed832c8204",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--",
+        "--test-threads=8"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 44.264,
+      "log_sha256": "892918359a83ff5a42f6e0e0568c5df9937bbedc30f010b0ecb4010ce3706656"
+    },
+    {
+      "label": "doctests",
+      "source_commit": "98176e00f3e8bc19bbb8aeb64cd757ed832c8204",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--doc"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 3.356,
+      "log_sha256": "bb18da64f828cd03cb8f1902ac76a79fcb6679f6e02088d6b7fc09bd1b7568d5"
+    },
+    {
+      "label": "instrumentation",
+      "source_commit": "98176e00f3e8bc19bbb8aeb64cd757ed832c8204",
+      "command": [
+        "node",
+        "scripts/check-instrumentation.mjs"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.21,
+      "log_sha256": "8412c59dbc927823be661216cda83ce75f38df159678b2513c7829e76f74c16b"
+    }
+  ],
+  "local_staticcheck": {
+    "status": "not run",
+    "version": "v0.7.0",
+    "reason": "declared checker and cache unavailable; existing recovery CI fallback, no new install or check/exclusion change"
+  },
+  "native_limits": [
+    "Native Windows Rust compilation/execution and private Job setup have not run locally.",
+    "A private UI-limited Job incompatible with inherited host containment is an explicit setup failure; no breakaway or policy bypass.",
+    "The added Go test probes a second native attachment; the original ignored error remains an explicitly source-based inference.",
+    "Go baseline blocked return is unaccepted behavior; releasing the descendant is harness cleanup, not Go cleanup.",
+    "Permanent regression fixtures only; no temporary product instrumentation."
+  ]
+}
