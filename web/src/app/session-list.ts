@@ -1,3 +1,5 @@
+import { initializeSessionListTabs, renderSessionListTabs, isSessionInSelectedListTab, preserveSessionListSelection, visibleSessionListTree, revealSessionListOwner, sessionListScrollBeforeRender, sessionListScrollAfterRender } from './session-list-tabs.js';
+import { isApprovalPending } from './approval-store.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { apiFetch, escapeHtml, ti18n } from './util.js';
@@ -150,6 +152,7 @@ function appendSessionColorFilters(root: HTMLElement): void {
 }
 
 export function updateSessionListActiveCard(id) {
+  revealSessionListOwner(id);
   const root = document.getElementById('sessions');
   if (!root) return;
   root.querySelectorAll('.card').forEach(card => {
@@ -837,15 +840,18 @@ export function maybeRestoreLastOpenProject(): void {
   const key = readOpenProjectKey();
   if (!key) return;
   if (sessionIdsInProject(key).length === 0) return;
-  openProjectBox(key, { fromRestore: true });
+  preserveSessionListSelection(() => openProjectBox(key, { fromRestore: true }));
 }
 
 export function renderSessionList() {
+  initializeSessionListTabs({ sessions: () => Array.from(sessions.values()), render: renderSessionList,
+    cardMenu: openCardCtxMenu, resetDrag: () => { set_dragSrcId(null); set_dragSrcGroupKey(null); }, pending: id => isApprovalPending(id) || pendingSpawnConfirmationCount(id) > 0 });
+  renderSessionListTabs();
   const root = document.getElementById('sessions');
-  const scrollEl = document.getElementById('session-list');
+  const scrollEl = document.getElementById('sessions');
   // innerHTML クリアで scrollTop が 0 に戻るのを防ぐ。経過時間更新の 1Hz 再描画や
   // session_update 受信のたびにユーザのスクロール位置がトップへ吹き飛ぶのを避ける。
-  const prevScrollTop = scrollEl ? scrollEl.scrollTop : 0;
+  const prevScrollTop = sessionListScrollBeforeRender(scrollEl);
   if (!_sessionListClickDelegated) {
     _sessionListClickDelegated = true;
     root.addEventListener('pointerdown', (e) => {
@@ -930,7 +936,7 @@ export function renderSessionList() {
       const id = parseInt(card.dataset.sessionId, 10);
       if (isNaN(id)) return;
       e.preventDefault();
-      openCardCtxMenu(e.clientX, e.clientY, id);
+      openCardCtxMenu(e.clientX, e.clientY, id, card as HTMLElement);
     });
   }
   root.innerHTML = '';
@@ -940,6 +946,7 @@ export function renderSessionList() {
     p.className = 'no-sessions';
     p.textContent = t('no_sessions');
     root.appendChild(p);
+    sessionListScrollAfterRender(scrollEl, prevScrollTop);
     return;
   }
 
@@ -949,7 +956,7 @@ export function renderSessionList() {
   // project_id から決まり、親子は parent_session_id から決まる。ここで状態（承認待ち等）や
   // provider による並べ替えを足してはいけない。足すと sessionOrder が毎レンダー上書きされ、
   // D&D の結果が画面へ反映されなくなる。規則は sidebar-tree-fixtures.ts が固定している。
-  const tree = buildSidebarTree({
+  const fullTree = buildSidebarTree({
     sessions: Array.from(sessions.values()) as any[],
     order: sessionOrder,
     groupOrder,
@@ -962,7 +969,7 @@ export function renderSessionList() {
   // あるプロジェクトの先頭セッションを ✕ で削除した瞬間に他プロジェクトのグループが
   // 上下にジャンプする（削除で並び順が変わって見える）。
   let _groupOrderChanged = false;
-  for (const project of tree) {
+  for (const project of fullTree) {
     if (!groupOrder.includes(project.key)) {
       groupOrder.push(project.key);
       _groupOrderChanged = true;
@@ -970,6 +977,11 @@ export function renderSessionList() {
   }
   if (_groupOrderChanged) saveGroupOrder();
 
+  const tree = visibleSessionListTree(fullTree, Array.from(sessions.values()));
+  if (!tree.length) {
+    const empty = document.createElement('div'); empty.className = 'no-sessions';
+    empty.textContent = t('session_list_tab_empty'); root.append(empty);
+  }
   tree.forEach(project => {
     const key = project.key;
     // 状態チップ・⊞・✕ は畳んでいる子も含めた全件を対象にする。
@@ -1519,10 +1531,7 @@ export function renderSessionList() {
     root.appendChild(groupEl);
   });
 
-  if (scrollEl) {
-    const max = scrollEl.scrollHeight - scrollEl.clientHeight;
-    scrollEl.scrollTop = Math.max(0, Math.min(prevScrollTop, max));
-  }
+  sessionListScrollAfterRender(scrollEl, prevScrollTop);
 
   updateMainTabStatus();
   // 帯はここで作り直さない。renderSessionStrip は中身が変わったときだけ DOM に触る
@@ -1690,6 +1699,7 @@ export function updateSummaryCompactMode() {
 }
 
 export function renderSummaryAndNotifications() {
+  renderSessionListTabs();
   const stateCounts = { running: 0, waiting: 0, standby: 0 };
   // groupKey -> { provider, model, localRoute, count }
   // Local backend (Ollama / LM Studio) sessions are split per-model so each model gets its own chip.
@@ -1772,7 +1782,7 @@ export function updateProjectGroupStatusChipsForSession(s) {
   const header = root.querySelector(`.project-group-header[data-project="${CSS.escape(key)}"]`);
   const chipsEl = header ? header.querySelector('.group-status-chips') : null;
   if (!chipsEl) return false;
-  const groupSessions = getOrderedSessions().filter(sess => sessionProjectKey(sess) === key);
+  const groupSessions = getOrderedSessions().filter(sess => sessionProjectKey(sess) === key && isSessionInSelectedListTab(sess.id));
   const counts = { running: 0, waiting: 0, standby: 0 };
   groupSessions.forEach(sess => {
     const state = sess.state || 'standby';
@@ -1843,7 +1853,7 @@ export function render() {
   // renderSessionList() は呼ばない（フル描画は次の render() 呼び出しで追従する）。
   // activateSession() は render() を再帰呼び出ししない（DOM を直接更新する）点に注意。
   if (activeSessionId === null && sessions.size > 0) {
-    activateSession(sessions.keys().next().value);
+    preserveSessionListSelection(() => activateSession(sessions.keys().next().value));
     return;
   }
   renderSessionList();

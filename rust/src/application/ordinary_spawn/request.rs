@@ -5,6 +5,7 @@ use serde::Deserialize;
 #[derive(Default, Deserialize)]
 #[serde(default)]
 pub struct OrdinarySpawnRequest {
+    pub client_request_id: String,
     pub provider: String,
     pub cwd: String,
     pub model: String,
@@ -34,6 +35,10 @@ impl GoWire for OrdinarySpawnRequest {
         Schema {
             name: "OrdinarySpawnRequest",
             fields: &[
+                Field {
+                    name: "client_request_id",
+                    kind: "string",
+                },
                 Field {
                     name: "provider",
                     kind: "string",
@@ -167,6 +172,9 @@ pub struct RoleAssignment {
 }
 impl OrdinarySpawnRequest {
     pub(super) fn validate(&self) -> Result<(), SpawnError> {
+        if !valid_client_request_id(&self.client_request_id) {
+            return Err(SpawnError::bad("invalid client_request_id"));
+        }
         if ![
             "",
             "default",
@@ -225,7 +233,10 @@ impl OrdinarySpawnRequest {
         grants: InternalSpawnGrants,
     ) -> WrappedSpawnSpec {
         WrappedSpawnSpec {
-            registration_metadata: SpawnRegistrationMetadata::default(),
+            registration_metadata: SpawnRegistrationMetadata {
+                client_request_id: self.client_request_id.clone(),
+                ..Default::default()
+            },
             spawn_attempt: Some(attempt),
             registration_proof: None,
             provider: self.provider.clone(),

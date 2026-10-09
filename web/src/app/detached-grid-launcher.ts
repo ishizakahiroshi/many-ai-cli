@@ -1,3 +1,4 @@
+import { beginTrackedSpawn, captureSpawnTab, waitForTrackedSpawn } from './session-spawn-tracker.js';
 // detached-grid-launcher.ts — C5: Detached Grid プリセットと枚数指定
 //
 // プリセット → session 起動 / URL 生成ロジックを集約する。
@@ -109,71 +110,27 @@ export function buildDetachedGridUrl(sessionIds: number[], layout?: string): str
  * WS で session id が揃い次第 Detached Grid を開く。
  */
 export async function spawnGridAndOpen(opts: {
-  preset: 'shell' | 'ai+shell';
-  layout: string;
-  count: number;
-  cwd: string;
-  labelPrefix?: string;
-  provider?: string;
+  preset: 'shell' | 'ai+shell'; layout: string; count: number; cwd: string;
+  labelPrefix?: string; provider?: string; sourceTabId?: string;
 }): Promise<void> {
-  const prevMax = sessions.size > 0 ? Math.max(...Array.from(sessions.keys())) : 0;
-
-  const res = await apiFetch('/api/spawn-grid', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      preset: opts.preset,
-      layout: opts.layout,
-      count: opts.count,
-      cwd: opts.cwd,
-      label_prefix: opts.labelPrefix || 'grid',
-      provider: opts.provider || '',
-    }),
+  const requestId = beginTrackedSpawn(opts.count, opts.sourceTabId || captureSpawnTab());
+  // Observation starts before HTTP: lost/failed responses may still have accepted starts.
+  void waitForTrackedSpawn(requestId).then(ids => {
+    if (ids.length) window.open(buildDetachedGridUrl(ids, opts.layout), '_blank');
+    if (ids.length < opts.count) (window as any).showToast?.((window as any).t?.('spawn_correlation_unavailable') || 'Some requested sessions could not be confirmed.');
   });
-  if (!res.ok) {
-    const msg = await res.text().catch(() => '');
-    throw new Error(`spawn-grid failed: ${msg}`);
-  }
-  const data = await res.json();
-  const expectedCount: number = typeof data.count === 'number' ? data.count : opts.count;
-  const layout: string = data.layout || opts.layout;
-
-  // WS で session が expectedCount 個登録されるのを待ってから別窓を開く
-  _waitForNewSessionsAndOpen(prevMax, expectedCount, layout);
-}
-
-const SPAWN_GRID_TIMEOUT_MS = 15000;
-const SPAWN_GRID_POLL_MS = 300;
-
-function _waitForNewSessionsAndOpen(prevMax: number, expectedCount: number, layout: string): void {
-  const deadline = Date.now() + SPAWN_GRID_TIMEOUT_MS;
-
-  function poll() {
-    const allIds = Array.from(sessions.keys());
-    const newIds = allIds.filter(id => id > prevMax);
-    if (newIds.length >= expectedCount) {
-      const sortedIds = newIds.sort((a, b) => a - b);
-      const url = buildDetachedGridUrl(sortedIds, layout);
-      window.open(url, '_blank');
-      return;
-    }
-    if (Date.now() < deadline) {
-      setTimeout(poll, SPAWN_GRID_POLL_MS);
-    } else {
-      // タイムアウト: 取れた分だけ開く
-      const newIds2 = Array.from(sessions.keys()).filter(id => id > prevMax).sort((a, b) => a - b);
-      if (newIds2.length > 0) {
-        const url = buildDetachedGridUrl(newIds2, layout);
-        window.open(url, '_blank');
-      }
-    }
-  }
-  setTimeout(poll, SPAWN_GRID_POLL_MS);
+  const res = await apiFetch('/api/spawn-grid', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ preset: opts.preset, layout: opts.layout, count: opts.count, cwd: opts.cwd,
+      label_prefix: opts.labelPrefix || 'grid', provider: opts.provider || '', client_request_id: requestId }),
+  });
+  if (!res.ok) throw new Error(`spawn-grid failed: ${await res.text().catch(() => '')}`);
 }
 
 // ─── プリセット実行 ───────────────────────────────────────────────────────────
 
 export interface LaunchPresetOptions {
+  sourceTabId?: string;
   presetId: DetachedPresetId;
   layout?: string;
   count?: number;
@@ -237,6 +194,7 @@ export async function launchDetachedPreset(opts: LaunchPresetOptions): Promise<v
         layout,
         count,
         cwd: opts.cwd || '',
+        sourceTabId: opts.sourceTabId,
         labelPrefix: `${provider}-shell`,
         provider,
       });
@@ -249,6 +207,7 @@ export async function launchDetachedPreset(opts: LaunchPresetOptions): Promise<v
         layout: opts.layout || '2x2',
         count: opts.count ?? 4,
         cwd: opts.cwd || '',
+        sourceTabId: opts.sourceTabId,
         labelPrefix: 'shell',
       });
       break;
@@ -260,6 +219,7 @@ export async function launchDetachedPreset(opts: LaunchPresetOptions): Promise<v
         layout: opts.layout || '3x3',
         count: opts.count ?? 9,
         cwd: opts.cwd || '',
+        sourceTabId: opts.sourceTabId,
         labelPrefix: 'shell',
       });
       break;
@@ -282,6 +242,7 @@ export async function launchDetachedPreset(opts: LaunchPresetOptions): Promise<v
         layout,
         count,
         cwd: opts.cwd || '',
+        sourceTabId: opts.sourceTabId,
         labelPrefix: 'grid',
       });
       break;
@@ -308,6 +269,7 @@ export async function launchDetachedPreset(opts: LaunchPresetOptions): Promise<v
  * opts.selectedIds / opts.projectKey が渡された場合は対応プリセットを強調する。
  */
 export function openDetachedGridLauncher(opts?: {
+  sourceTabId?: string;
   selectedIds?: number[];
   projectKey?: string;
   cwd?: string;
@@ -391,6 +353,7 @@ export function openDetachedGridLauncher(opts?: {
           layout,
           count,
           cwd,
+          sourceTabId: opts?.sourceTabId || captureSpawnTab(),
           selectedIds: opts?.selectedIds,
           projectKey: opts?.projectKey,
         });

@@ -15,6 +15,7 @@ use std::{path::PathBuf, sync::Arc};
 #[derive(Default, Deserialize)]
 #[serde(default)]
 pub struct GridRequest {
+    pub client_request_id: String,
     pub preset: String,
     pub layout: String,
     pub count: i64,
@@ -27,6 +28,10 @@ impl GoWire for GridRequest {
     const SCHEMAS: &'static [Schema] = &[Schema {
         name: "GridRequest",
         fields: &[
+            Field {
+                name: "client_request_id",
+                kind: "string",
+            },
             Field {
                 name: "preset",
                 kind: "string",
@@ -71,6 +76,7 @@ pub struct GridResult {
     pub count: usize,
 }
 struct Plan {
+    client_request_id: String,
     layout: String,
     cwd: PathBuf,
     specs: Vec<(String, String)>,
@@ -103,6 +109,9 @@ impl GridRequest {
         home: &std::path::Path,
         provider_valid: impl FnOnce(&str) -> Result<bool, SpawnError>,
     ) -> Result<Plan, SpawnError> {
+        if !valid_client_request_id(&self.client_request_id) {
+            return Err(bad("invalid client_request_id"));
+        }
         if !matches!(self.preset.as_str(), "shell" | "ai+shell") {
             return Err(bad("invalid preset"));
         }
@@ -171,7 +180,12 @@ impl GridRequest {
                 }
             })
             .collect();
-        Ok(Plan { layout, cwd, specs })
+        Ok(Plan {
+            layout,
+            cwd,
+            specs,
+            client_request_id: self.client_request_id.clone(),
+        })
     }
 }
 impl GridSpawn {
@@ -234,7 +248,10 @@ impl GridSpawn {
                     provider,
                     label,
                     cwd: plan.cwd.clone(),
-                    registration_metadata: SpawnRegistrationMetadata::default(),
+                    registration_metadata: SpawnRegistrationMetadata {
+                        client_request_id: plan.client_request_id.clone(),
+                        ..Default::default()
+                    },
                     spawn_attempt: None,
                     registration_proof: None,
                     model: String::new(),

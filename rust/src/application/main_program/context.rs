@@ -25,6 +25,7 @@ impl MainContext {
     pub fn load(trial: Option<&TrialOptions>) -> io::Result<Self> {
         let application_home = runtime_context::user_home()?;
         let paths = runtime_context::runtime_paths(trial, &application_home)?;
+        crate::logging::input_probe::init(&paths.resource(crate::config::Resource::Logs));
         let cwd = std::env::current_dir()?;
         if paths.is_trial() {
             crate::profile::subscriptions::check_path(&paths, &cwd)?;

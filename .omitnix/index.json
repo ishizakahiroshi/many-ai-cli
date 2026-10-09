@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "e74ae6a8b330fca465d15f1644a18f4f1d6798c4",
+    "commit": "a114727651bdca2884c3d4b92262bbae240f6b2c",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1945,
-    "analyzed": 1510,
+    "discovered": 1966,
+    "analyzed": 1526,
     "unresolved": 9,
     "unknown": 1,
-    "unclaimed": 425,
+    "unclaimed": 430,
     "skipped_by_config": 0
   },
   "files": [
@@ -1396,6 +1396,74 @@
         },
         "screen_to_api": {
           "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "docs/bot/session-list-tabs/FACTS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/session-list-tabs/PROGRESS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/session-list-tabs/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/session-list-tabs/REVIEW.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/session-list-tabs/SPAWN-CORRELATION.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/session-list-tabs/mock.html",
+      "adapter": "html",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "セッション一覧を分けるタブ — many-ai-cli"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
         }
       },
       "unresolved": []
@@ -31744,6 +31812,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/logging/input_probe.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "一時観測 `rust-input-probe`（instrumentation.json に登録）。原因が確定したら撤去する。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/logging/mod.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -40326,6 +40423,60 @@
       "unresolved": []
     },
     {
+      "path": "scripts/rust-local-source.ps1",
+      "adapter": "powershell",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Resolve the daily repair source without fetching, checking out, or discarding local edits."
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "scripts/rust-local.ps1",
+      "adapter": "powershell",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "many-ai-cli の Rust 候補を、手元でワンコマンドでビルドし、隔離（trial）で起動する。"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "scripts/rust-windows-check-ci.py",
       "adapter": "python",
       "status": "analyzed",
@@ -40350,6 +40501,66 @@
         },
         "screen_to_api": {
           "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "scripts/secrets-scan.baseline.mjs",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "A one-line edit must not turn unchanged minified content into a new secret."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "scripts/secrets-scan.baseline.test.mjs",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
         }
       },
       "unresolved": []
@@ -40508,6 +40719,33 @@
         "screen_to_api": {
           "state": "none_observed",
           "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "scripts/test-rust-local-source.ps1",
+      "adapter": "powershell",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Source-selection regression checks. No application build, Hub operation, or Git mutation."
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
         }
       },
       "unresolved": []
@@ -41831,8 +42069,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "派生起動ダイアログ（種別 = 引き継ぎ / 子）。"
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -41861,8 +42099,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "detached-grid-launcher.ts — C5: Detached Grid プリセットと枚数指定"
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -42941,8 +43179,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "mobile-home.ts"
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -44046,13 +44284,103 @@
       "unresolved": []
     },
     {
-      "path": "web/src/app/session-list.ts",
+      "path": "web/src/app/session-list-tab-fixtures.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/session-list-tab-state.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
-          "value": "--- ESM imports (generated) ---"
+          "value": "Browser-local sidebar buckets. Never add these fields to user-prefs' full-snapshot PUT."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/session-list-tabs.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "The sidebar UI has one lazy owner; callbacks avoid importing state/settings and their cycles."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/session-list.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -44083,6 +44411,96 @@
         "summary": {
           "state": "value",
           "value": "P-11: Ctrl+K で開くセッション横断検索パレット。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/session-spawn-fixtures.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/session-spawn-state.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Bounded, per-browser-tab correlation. These identities are not authorization or idempotency tokens."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/session-spawn-tracker.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -44291,8 +44709,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "--- ESM imports (generated) ---"
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -44591,8 +45009,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "--- ESM imports (generated) ---"
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -45676,8 +46094,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "--- ESM imports (generated) ---"
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -46580,6 +46998,32 @@
       "unresolved": []
     },
     {
+      "path": "web/src/styles/session-list-tabs.css",
+      "adapter": "css",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "out_of_scope"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/styles/session-search-palette.css",
       "adapter": "css",
       "status": "analyzed",
@@ -46961,7 +47405,7 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "TypeScript mirror for internal/proto/messages.go."
+          "value": "Legacy wire mirror with explicit additive Rust-only extensions."
         },
         "authentication": {
           "state": "not_configured"
@@ -47466,6 +47910,66 @@
     },
     {
       "path": "web/tests/routines-model.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/session-list-tabs-dom.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/session-spawn-caller.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

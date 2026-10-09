@@ -459,6 +459,33 @@
       "reason": "Rust 1.90 CI run 37342570450 は Windows のみ初回 stdin が観測できず 2/987 lib tests に失敗。原因は未確定であり、assertion・timeout・skip 条件は緩めない。次の比較は cmdlet と Windows host 環境変数を個別に絞り、本番の環境受渡し形も合成 CLI で検証する。期限延長はせず、調査後の単独 cleanup で sharedFiles の import/hook も明示撤去する。14 ケースの証跡を保存し、診断専用 file・sharedFiles の hook/import/helper と旧 fixture marker を単独 cleanup commit で撤去。恒久 fixture は既存の trial 環境構成を再利用し、全 assertion と deadline を保持する。",
       "removedIn": "unreleased",
       "removedOn": "2026-10-05"
+    },
+    {
+      "id": "rust-input-probe",
+      "status": "active",
+      "purpose": "Rust 版で Codex へ画像だけを送ると Enter で送信されず、後から送信したターンもすぐ op: Interrupt で中断される件（2026-10-09）を、Hub が送った入力とラッパーが PTY へ書いた時刻で切り分ける",
+      "addedIn": "unreleased",
+      "gate": "Rust cfg(debug_assertions) のビルドだけに本体を組み込み、--release の成果物は空実装になる。debug ビルドでは既定で記録し、MANY_AI_CLI_INPUT_PROBE=0 で止まる。テスト（cfg(test)）では書かない。本文とパスは保存せず、時刻・送り元の種類・バイト数・制御文字の名前・text(文字数)／atpath(文字数) だけを残す",
+      "due": "2026-10-23",
+      "files": [
+        "rust/src/logging/input_probe.rs"
+      ],
+      "sharedFiles": [
+        "rust/src/logging/mod.rs",
+        "rust/src/application/main_program/context.rs",
+        "rust/src/terminal/session/input.rs",
+        "rust/src/wrapper/runtime.rs",
+        "rust/src/wrapper/input.rs"
+      ],
+      "channels": [
+        "logs/input-probe/<日付>_<pid>.jsonl"
+      ],
+      "artifactNeedles": [
+        "MANY_AI_CLI_INPUT_PROBE",
+        "input-probe"
+      ],
+      "removalCondition": "再発時の記録と Codex の logs_2.sqlite を突き合わせて、Enter が改行として吸われた経路と中断のキーの出どころを確定し、修正と回帰テストを入れた後に、files を消し sharedFiles の空実装と input_probe:: の呼び出し点 5 か所を単独の撤去 commit で除去する。リリース前に必ず撤去する",
+      "reason": "Codex 0.161.0 の会話ログ・history.jsonl・logs_2.sqlite で、19:04:58 に入力欄が @パス を貼り付けとして受け取り、7 秒後の 19:05:05 に送信、19:05:06.685 に op: Interrupt が出たことは確認した。一方 Rust 版 Hub は PTY 入力を記録しておらず、180ms 遅らせた Enter がいつ書かれたか、中断のキーがどこから来たかを観測できない。利用者が普段使う中で再発を待つため、debug ビルドで既定記録とし、保存は 7 日・合計 20MB・1 ファイル 4MB で自動的に消す"
     }
   ]
 }

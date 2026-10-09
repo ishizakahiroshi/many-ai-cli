@@ -80,6 +80,12 @@ impl SessionEngine {
             engine: self,
             reservation: Some(reservation),
         };
+        crate::logging::input_probe::hub_input(
+            binding.session.0,
+            frame.seq.0,
+            authority,
+            &frame.bytes,
+        );
         let result = self
             .transport
             .send(

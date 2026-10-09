@@ -206,6 +206,7 @@ struct UiState {
 enum UiFrame {
     Message(Box<proto::Message>),
     GitTurn(GitTurnNotification),
+    SpawnCorrelation(SpawnCorrelationNotification),
 }
 struct ConfirmationEntry {
     pending: PendingSpawnConfirmation,
@@ -488,6 +489,26 @@ impl State {
                             ui.queued.push(UiFrame::GitTurn(event.clone()));
                         } else {
                             out.push(CoreEffect::SendUiGitTurn {
+                                binding: ui.binding,
+                                event: event.clone(),
+                                best_effort: true,
+                            });
+                        }
+                    }
+                }
+                CoreEffect::BroadcastSpawnCorrelation(event) => {
+                    if self
+                        .sessions
+                        .get(&LiveSessionId(event.session_id))
+                        .is_some_and(|s| s.usage_probe)
+                    {
+                        continue;
+                    }
+                    for ui in self.uis.values_mut() {
+                        if ui.priming {
+                            ui.queued.push(UiFrame::SpawnCorrelation(event.clone()));
+                        } else {
+                            out.push(CoreEffect::SendUiSpawnCorrelation {
                                 binding: ui.binding,
                                 event: event.clone(),
                                 best_effort: true,

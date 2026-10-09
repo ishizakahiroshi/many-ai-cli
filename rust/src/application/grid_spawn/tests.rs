@@ -259,3 +259,169 @@ async fn native_start_only_partial_failure_retains_exact_pending_proof() {
     tasks.stop_requests();
     tasks.drain_requests().await;
 }
+
+#[tokio::test]
+async fn spawn_correlation_grid_partial_failure_retains_all_accepted_starts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cwd = tmp.path().join("project");
+    let home = tmp.path().join("home");
+    let trial = tmp.path().join("trial");
+    let installed = tmp.path().join("installed");
+    for path in [&cwd, &home, &trial, &installed] {
+        std::fs::create_dir(path).unwrap();
+    }
+    let paths = RuntimePaths::trial(&trial, 49182, &installed).unwrap();
+    let capture = Arc::new(Capture {
+        requests: Mutex::new(vec![]),
+        fail_at: 3,
+    });
+    let core = Arc::new(SessionEngine::new(
+        EngineOptions::default(),
+        Arc::new(SessionJournal::new(
+            paths,
+            None,
+            JournalOptions {
+                session_enabled: false,
+                max_bytes: 0,
+            },
+        )),
+        Arc::new(Boundary),
+        Arc::new(Boundary),
+        capture.clone(),
+        CoreEventBus::new(16).unwrap(),
+    ));
+    let registry = Registry::build(
+        Layers {
+            embedded: Some(embedded_definitions().unwrap()),
+            ..Default::default()
+        },
+        &default_adapters(),
+    );
+    let tasks = crate::hub::task_owner::HubTaskOwner::new(tokio::runtime::Handle::current());
+    let service = Arc::new(GridSpawn::new(Dependencies {
+        core: core.clone(),
+        registry: Arc::new(move || Ok(registry.clone())),
+        hub_cwd: cwd.clone(),
+        home,
+        environment: vec!["SYNTHETIC_GRID=1".into()],
+        tasks: tasks.handle(),
+    }));
+    let body = GridRequest {
+        client_request_id: "request_grid-1".into(),
+        preset: "ai+shell".into(),
+        provider: "codex".into(),
+        count: 3,
+        ..Default::default()
+    };
+    let result = service
+        .spawn(
+            body,
+            &VerifiedConfirmationRequest::after_server_authentication(core.auth_epoch()),
+        )
+        .await;
+    assert_eq!(result.err().unwrap().code, "spawn_error");
+    {
+        let requests = capture.requests.lock().unwrap();
+        assert_eq!(requests.len(), 3);
+        assert!(
+            requests
+                .iter()
+                .all(|r| r.spec.registration_metadata.client_request_id == "request_grid-1")
+        );
+        let first = &requests[0];
+        let second = &requests[1];
+        assert_eq!(first.kind, WrappedStartKind::Grid);
+        assert_eq!(first.spec.provider, "codex");
+        assert_eq!(second.spec.provider, "shell");
+        assert!(first.spec.registration_proof.is_some());
+        assert_ne!(first.spec.spawn_attempt, second.spec.spawn_attempt);
+        assert_eq!(first.policy.base_environment, vec!["SYNTHETIC_GRID=1"]);
+        assert!(first.policy.resolved_model.is_empty());
+        assert!(first.spec.permission_mode.is_empty());
+        assert!(
+            core.peek_spawn_metadata(first.spec.spawn_attempt.unwrap(), "codex")
+                .is_some()
+        );
+        assert_eq!(
+            core.peek_spawn_metadata(first.spec.spawn_attempt.unwrap(), "codex")
+                .unwrap()
+                .client_request_id,
+            "request_grid-1"
+        );
+        assert!(core.begin_provider_update("codex").is_err());
+        assert!(core.registered_session_ids().is_empty());
+    }
+    let registrations: Vec<_> = {
+        let requests = capture.requests.lock().unwrap();
+        requests
+            .iter()
+            .take(2)
+            .enumerate()
+            .map(|(index, request)| RegisterRequest {
+                message: proto::Message {
+                    provider: request.spec.provider.clone(),
+                    cwd: request.spec.cwd.to_string_lossy().into_owned(),
+                    label: request.spec.label.clone(),
+                    pid: 51 + index as i64,
+                    cols: 120,
+                    rows: 30,
+                    ..Default::default()
+                },
+                spawn_proof: request
+                    .spec
+                    .registration_proof
+                    .as_ref()
+                    .map(|proof| proof.as_header_value().to_owned()),
+            })
+            .collect()
+    };
+    for (index, registration) in registrations.into_iter().enumerate() {
+        let registered = core
+            .register(
+                registration,
+                WrapperConnectionId(index as u64 + 1),
+                crate::proto::time::UNIX_EPOCH + Duration::from_secs(1767323045),
+            )
+            .await
+            .unwrap();
+        assert_eq!(registered.snapshot.client_request_id, "request_grid-1");
+        assert!(!registered.snapshot.started_at.is_empty());
+    }
+    let snapshots = core.snapshots();
+    assert_eq!(snapshots.len(), 2);
+    assert!(
+        snapshots
+            .iter()
+            .all(|snapshot| snapshot.client_request_id == "request_grid-1")
+    );
+    tasks.stop_requests();
+    tasks.drain_requests().await;
+}
+
+#[test]
+fn spawn_correlation_grid_schema_and_validation_precede_registry() {
+    let valid: GridRequest = crate::proto::decode_http_json(
+        br#"{"preset":"shell","count":2,"client_request_id":"grid-1"}"#,
+    )
+    .unwrap();
+    assert_eq!(valid.client_request_id, "grid-1");
+    let old: GridRequest =
+        crate::proto::decode_http_json(br#"{"preset":"shell","count":2}"#).unwrap();
+    assert!(old.client_request_id.is_empty());
+    let invalid = GridRequest {
+        client_request_id: "bad request".into(),
+        ..Default::default()
+    };
+    assert_eq!(
+        invalid
+            .plan(
+                std::path::Path::new("missing"),
+                std::path::Path::new("missing"),
+                |_| panic!("must validate first")
+            )
+            .err()
+            .unwrap()
+            .detail,
+        "invalid client_request_id"
+    );
+}

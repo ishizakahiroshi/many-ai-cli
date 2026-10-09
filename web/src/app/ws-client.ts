@@ -1,3 +1,5 @@
+import { noteSpawnCorrelation, noteSpawnDisconnected, noteSpawnSessions, noteSpawnSnapshot } from './session-spawn-tracker.js';
+import { preserveSessionListSelection } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
@@ -62,6 +64,7 @@ export function wsConnectionState(): 'open' | 'connecting' | 'closed' {
 // 同じ番号の別セッションに旧セッションのチャット・バッファが混入する。
 let _hubInstance = null;
 let _pendingOpenSessionId = parseInt(new URLSearchParams(location.search).get('session_id') || '0', 10) || 0;
+let pendingOpenFromReconnect = false;
 
 const REGISTER_DEFAULT_COLS = 200;
 const REGISTER_DEFAULT_ROWS = 50;
@@ -78,6 +81,7 @@ function openSessionFromNotification(sessionId) {
     return;
   }
   _pendingOpenSessionId = id;
+  pendingOpenFromReconnect = false;
 }
 
 if ('serviceWorker' in navigator) {
@@ -236,6 +240,7 @@ export function _connectWs() {
     if (_elapsedTimerInterval) { clearInterval(_elapsedTimerInterval); set__elapsedTimerInterval(null); }
     if (activeSessionId !== null) _lastActiveSessionIdBeforeDisconnect = activeSessionId;
     sessions.clear();
+    noteSpawnDisconnected();
     resetUsageCache();
     autoDismissTimers.forEach(t => clearTimeout(t));
     autoDismissTimers.clear();
@@ -284,6 +289,7 @@ export function _connectWs() {
     document.getElementById('reconnect-btn').hidden = true;
     if (!_pendingOpenSessionId && _lastActiveSessionIdBeforeDisconnect) {
       _pendingOpenSessionId = _lastActiveSessionIdBeforeDisconnect;
+      pendingOpenFromReconnect = true;
     }
     // Hub は UI 接続ごとに ptyBuf を履歴リプレイする。同じ Hub への再接続では
     // 既存 xterm/chat バッファを先に空にしないと、履歴が末尾へ追記されて二重表示になる。
@@ -546,6 +552,15 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'session_spawn_correlated') {
+    noteSpawnCorrelation({ client_request_id: String(m.client_request_id || ''), session_id: Number(m.session_id),
+      started_at: String(m.started_at || ''), hub_instance: String(m.hub_instance || '') }, Array.from(sessions.values()));
+    renderSessionList();
+    // A delayed correlation can change the visible bucket after the update render.
+    (window as any).renderMobileSessionDrawer?.();
+    return;
+  }
+
   if (m.type === 'snapshot') {
     let arr;
     try {
@@ -579,6 +594,7 @@ export function _connectWs() {
       sessions.set(s.id, s);
       addToSessionOrder(s.id);
     });
+    noteSpawnSnapshot(inst, Array.from(sessions.values()));
     document.dispatchEvent(new Event('session-usage-target-changed'));
     // The full snapshot is the first safe point to discard saved placements
     // for sessions that no longer exist. During reconnect, the map can be
@@ -591,7 +607,10 @@ export function _connectWs() {
     if (_pendingOpenSessionId && sessions.has(_pendingOpenSessionId)) {
       const id = _pendingOpenSessionId;
       _pendingOpenSessionId = 0;
-      activateSession(id);
+      const reconnectRestore = pendingOpenFromReconnect;
+      pendingOpenFromReconnect = false;
+      if (reconnectRestore) preserveSessionListSelection(() => activateSession(id));
+      else activateSession(id);
     }
     checkApprovalOnStartup();
     syncElapsedTimer();
@@ -707,6 +726,7 @@ export function _connectWs() {
       cur.git_deleted = m.git_deleted ?? 0;
     }
     sessions.set(m.session_id, cur);
+    noteSpawnSessions(Array.from(sessions.values()));
     if (m.session_id === activeSessionId && previousSubscriptionID !== cur.subscription_profile_id) {
       document.dispatchEvent(new Event('session-usage-target-changed'));
     }

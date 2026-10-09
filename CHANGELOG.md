@@ -11,6 +11,19 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Browser-local session-list tabs.** Group multiple
+  session cards into tabs, add and rename tabs, reorder by drag or keyboard menu,
+  and move root families using drag/drop or a destination chooser. Safe tab deletion
+  preserves sessions and history. Names, order, lifecycle identities, selection and
+  scroll offsets are stored separately from synchronized preferences. Inactive tabs
+  show live waiting/approval counts; touch holds and keyboard menus provide movement
+  alternatives. Missing ancestors defer a family move until reconnect resolves it.
+  Rust ordinary/grid/orchestration launches now carry an optional bounded request
+  correlation value through trusted registration and ordered live/snapshot updates.
+  The Web assigns only confirmed lifecycles to the tab captured at launch, preserves
+  manual moves on reconnect, and opens grids only for matching accepted starts.
+  Legacy callers can omit the field; Go and the frozen generated Rust message are unchanged.
+  Product/Windows UI acceptance remains a separate gate for this draft.
 - **Place input controls independently where you need them.** Send, microphone,
   clear input, templates, quick commands and the other input toolbar buttons each
   have a small grip. Drag it with a mouse or touch to move that control anywhere
@@ -131,6 +144,9 @@ Release artifacts are published at
   open memo count.
 
 ### Changed
+- **Daily local Rust builds use the repair worktree, including uncommitted Web
+  and Rust changes.** The local build helper no longer fetches an older trial copy
+  by default. Explicit source or branch selection remains available for candidate checks.
 - **The Settings, Usage and Hub buttons moved from the top-right header to a footer fixed at the bottom of the left panel.** Usage and Hub menus now open upward. The footer is hidden at 720 px and below (use the drawer buttons as before) and in detached windows.
 - **Settings is now a full-screen screen with a left nav and a right pane, and the Basic/All switch is gone.** Pick one of the 24 items in the nav (grouped as General / Connections & plans / Input / Approvals & notifications / Maintenance, with current values and a search box) and only that item shows on the right. Close it with the Close button or Esc; at 720 px and below it becomes a list screen followed by a detail screen with a Back button. The last selected item is remembered.
 - **The header's Usage button now shows a single gauge icon** instead of a row of nine AI-colored icons, so the button stays narrow and does not grow as AIs are added. It keeps a translated accessible name and tooltip at narrow widths.
@@ -151,6 +167,16 @@ Release artifacts are published at
   leading symbols or tables (`internal/wrapper/approval_rules.go`).
 
 ### Fixed
+- **Editing a minified dependency no longer marks its unchanged text as a new
+  secret.** Staged scans retain the baseline only for occurrences entirely in
+  identical parts of a single-line replacement; new occurrences still block.
+- **Terminal text no longer blurs at browser zoom levels other than 100%.** At
+  zoom levels such as 90%, the terminal could draw every row slightly stretched,
+  so text looked smeared until the layout changed again (for example when a bar
+  above or below the terminal appeared or disappeared). The bundled xterm.js
+  WebGL addon (0.19.0) now carries the upstream fix
+  ([xtermjs/xterm.js#5607](https://github.com/xtermjs/xterm.js/pull/5607)), so
+  rows are always drawn at their exact pixel height.
 - Rust Hub attachment uploads now record history with the current session binding,
   fixing HTTP 500 failures that prevented images and pasted text from reaching the
   provider. WebSocket attachments also reject ended or stale session contexts.

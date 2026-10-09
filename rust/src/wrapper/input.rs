@@ -116,7 +116,10 @@ pub async fn write_all(pty: &dyn PtySession, mut bytes: &[u8]) -> io::Result<()>
 pub async fn write_input(pty: &dyn PtySession, provider: &str, bytes: &[u8]) -> io::Result<()> {
     for step in input_steps(provider, bytes) {
         match step {
-            InputStep::Bytes(bytes) => write_all(pty, &bytes).await?,
+            InputStep::Bytes(bytes) => {
+                write_all(pty, &bytes).await?;
+                crate::logging::input_probe::wrapper_write(provider, &bytes);
+            }
             InputStep::Pause(delay) => tokio::time::sleep(delay).await,
         }
     }

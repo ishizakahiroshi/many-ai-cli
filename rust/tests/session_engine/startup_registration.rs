@@ -278,3 +278,101 @@ async fn conductor_mark_is_idempotent_and_keeps_the_same_parent_on_warm_reconnec
         Err(SessionError::StaleBinding)
     ));
 }
+
+#[tokio::test]
+async fn spawn_correlation_trusted_live_priming_snapshot_and_warm_reattach() {
+    let capture = Arc::new(CapturedSpawn::default());
+    let f = fixture_with_spawner(capture.clone());
+    let binding = UiBinding {
+        connection: UiConnectionId(901),
+        auth_epoch: f.engine.auth_epoch(),
+    };
+    f.engine.attach_ui(binding, None, None).unwrap();
+    let launch = pending(
+        &f,
+        &capture,
+        SpawnRegistrationMetadata {
+            client_request_id: "request_owner-1".into(),
+            ..Default::default()
+        },
+    )
+    .await;
+    let mut reg = f
+        .engine
+        .register(request(&launch, 7), WrapperConnectionId(1), now())
+        .await
+        .unwrap();
+    assert_eq!(reg.snapshot.client_request_id, "request_owner-1");
+    let original_start = reg.snapshot.started_at.clone();
+    // Live registration was queued behind the initial snapshot, with no socket shortcut.
+    let drained = f.engine.finish_ui_priming(binding).unwrap();
+    let update = drained.0.iter().position(|effect| matches!(effect, CoreEffect::SendUi { message, .. } if message.r#type == "session_update")).unwrap();
+    let correlated = drained
+        .0
+        .iter()
+        .position(|effect| matches!(effect, CoreEffect::SendUiSpawnCorrelation { .. }))
+        .unwrap();
+    assert!(update < correlated);
+    if let CoreEffect::SendUiSpawnCorrelation {
+        event, best_effort, ..
+    } = &drained.0[correlated]
+    {
+        assert!(!best_effort);
+        assert_eq!(event.session_id, reg.binding.session.0);
+        assert_eq!(event.started_at, original_start);
+        let json = serde_json::to_value(event).unwrap();
+        assert_eq!(json["type"], "session_spawn_correlated");
+        assert_eq!(json["client_request_id"], "request_owner-1");
+        assert_eq!(json.as_object().unwrap().len(), 5); // no proof/attempt/lease leak
+    }
+    assert!(f.engine.finish_ui_priming(binding).unwrap().0.is_empty());
+    f.sink
+        .apply(std::mem::take(&mut reg.after_registered))
+        .await
+        .unwrap();
+    let warm = reattach(&f, reg.binding, b"", 0, 2, 0).await;
+    assert_eq!(warm.binding.session, reg.binding.session);
+    assert_eq!(warm.binding.incarnation, reg.binding.incarnation);
+    assert_eq!(warm.snapshot.client_request_id, "request_owner-1");
+    assert_eq!(warm.snapshot.started_at, original_start);
+    let snapshot = f
+        .engine
+        .attach_ui(
+            UiBinding {
+                connection: UiConnectionId(902),
+                auth_epoch: f.engine.auth_epoch(),
+            },
+            None,
+            None,
+        )
+        .unwrap();
+    assert_eq!(snapshot.sessions[0].client_request_id, "request_owner-1");
+    assert_eq!(snapshot.sessions[0].started_at, original_start);
+}
+
+#[tokio::test]
+async fn spawn_correlation_manual_wrapper_claim_is_not_trusted() {
+    let f = fixture();
+    let message: proto::Message = serde_json::from_value(serde_json::json!({
+        "type":"register", "provider":"copilot", "cwd":"/fixture/project", "pid":41,
+        "client_request_id":"forged_owner", "cols":120, "rows":30
+    }))
+    .unwrap();
+    let reg = f
+        .engine
+        .register(
+            RegisterRequest {
+                message,
+                spawn_proof: None,
+            },
+            WrapperConnectionId(1),
+            now(),
+        )
+        .await
+        .unwrap();
+    assert!(reg.snapshot.client_request_id.is_empty());
+    assert!(!reg.after_registered.0.iter().any(|effect| matches!(
+        effect,
+        CoreEffect::SendUiSpawnCorrelation { .. } | CoreEffect::BroadcastSpawnCorrelation(_)
+    )));
+}

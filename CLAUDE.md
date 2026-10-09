@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-10-08(木) 22:56:53 — Rust移行の固定看板と作業台帳への入口を追加
+> 最終更新: 2026-10-09(金) 19:36:22 — 全修正の普段のビルド元への反映を明文化
 > 2026-09-29(火) 21:14:45 — prompt-audit の指摘で、古くなった版数の段落を削り、サブコマンド表を現行の分岐に合わせ、`internal/` の列挙を索引への参照に替えた
 > 2026-09-28(月) 19:34:08 — 設計原則の索引「引き継ぎ看板と…」の行に、作業メモ（`memo_store.go`）に書かれたパスも `isPathMentionedInMemos` 経由で読み取り専用に開ける旨を追記（plan_memo-panel.md C4）
 > 2026-09-26(土) 01:08:47 — 引き継ぎメモの表示を、記録済みパスに対する明示的な Markdown プレビューとして設計原則の索引へ反映。索引化の経緯（2026-08-19）: 常時ロード分が 5 週間で 129 → 269 行に倍増したため「制定」節の本文を正本へ移した。再肥大は `scripts/check-claude-md.mjs` が CI で止める
@@ -17,7 +17,7 @@
 
 ## プロジェクト概要
 
-**今後の開発方針（2026-10-08 利用者指定）:** ソース改修・不具合修正はRust版を対象とし、Rust版をv1.0.0でリリースする予定。Go版は現状のまま使う退役予定の版で、ソース改修・追加調査・回帰確認は行わない。以下のGo構成の記述は既存版の説明であり、Go版の改修・確認を指示するものではない。
+**今後の開発方針（2026-10-09 利用者指定）:** ソース改修・不具合修正はRust版を対象とし、Rust版をv1.0.0でリリースする予定。全ての修正は普段のビルド元への反映まで行う（`CLAUDE/development.md`）。Go版は現状のまま使う退役予定の版で、ソース改修・追加調査・回帰確認は行わない。以下のGo構成の記述は既存版の説明であり、Go版の改修・確認を指示するものではない。
 
 **many-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI など。対応一覧は下の用語表の Provider 行）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / TypeScript）。
 
@@ -139,7 +139,7 @@ docs/local/               設計書・plan 等（非公開）
 | 実装・コーディング（Go / TypeScript） | `CLAUDE/coding.md` |
 | Rust版のローカルビルド・起動・停止（手元の手順） | [reference_rust-local-build.md](docs/local/reference/reference_rust-local-build.md)（ローカルに存在する場合） |
 | ビルド・配布・クロスコンパイル | `CLAUDE/deployment.md` |
-| context分割・docs命名・AI作業モデル・plan自走/停止条件 | `CLAUDE/development.md` |
+| 全修正のビルド元への反映・context分割・docs命名・AI作業モデル・plan自走/停止条件 | `CLAUDE/development.md` |
 | Git・コミット・出力ルール | `CLAUDE/operations.md` |
 | Windows 開発環境固有設定 | `CLAUDE/windows_setup.md` |
 

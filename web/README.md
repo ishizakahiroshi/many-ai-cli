@@ -38,3 +38,9 @@
 | xterm.js 系 | 6.0.0 + addons | https://github.com/xtermjs/xterm.js/ |
 
 CVE が出た場合はここを手動照合する。将来的に `package.json` の devDependencies に取り込んで `npm audit` / Dependabot の可視範囲に入れる案は `docs/local/plan_audit_score_s_promotion_2026-07-05.md` の C3 段階 2 参照。
+
+### 手で当てている upstream 修正（正式版待ち）
+
+- `xterm-addon-webgl.min.js`（0.19.0）: upstream の [PR #5607](https://github.com/xtermjs/xterm.js/pull/5607)（[#5606](https://github.com/xtermjs/xterm.js/issues/5606) の修正。2026-01-13 マージで、2025-12-22 公開の 0.19.0 には入っていない）を同じ形で当てている。`GlyphRenderer.handleResize` の `viewport` と `u_resolution` を、キャンバスの実画素数（`e.canvas.width/height`）から `this._dimensions.device.canvas.width/height`（行数 × セル高さ）に変える 2 行。ページ拡大率が 100% 以外のとき、ブラウザが割り当てる画素数が行数 × セル高さから 1 ずれると、全行が引き伸ばされて端末の文字が縦に滲む。
+- 当たっているかは `this._dimensions.device.canvas.width,this._dimensions.device.canvas.height),e.uniform2f` を検索して 1 件あることで確かめる。0.19.0 のまま vendor を取り直したときは当て直す。
+- `@xterm/addon-webgl` を 0.20.0 以降の正式版へ上げたら当て物は不要（upstream に含まれる）。上げるときに外す。

@@ -674,3 +674,88 @@ async fn conductor_invalid_role_after_worktree_preparation_rolls_back_before_res
     assert!(trees.is_dir());
     assert_eq!(std::fs::read_dir(trees).unwrap().count(), 0);
 }
+
+#[test]
+fn spawn_correlation_schema_validation_and_legacy_compatibility() {
+    for raw in [
+        br#"{}"#.as_slice(),
+        br#"{"client_request_id":null}"#,
+        br#"{"client_request_id":""}"#,
+    ] {
+        let body: OrdinarySpawnRequest = crate::proto::decode_http_json(raw).unwrap();
+        assert!(body.client_request_id.is_empty());
+        assert!(body.validate().is_ok());
+    }
+    let body: OrdinarySpawnRequest =
+        crate::proto::decode_http_json(br#"{"client_request_id":"browser_a-123"}"#).unwrap();
+    assert_eq!(body.client_request_id, "browser_a-123");
+    assert!(body.validate().is_ok());
+    for id in [
+        "x".repeat(129),
+        "bad space".into(),
+        "非ASCII".into(),
+        "bad\nvalue".into(),
+    ] {
+        let body = OrdinarySpawnRequest {
+            client_request_id: id,
+            ..Default::default()
+        };
+        assert_eq!(
+            body.validate().unwrap_err().detail,
+            "invalid client_request_id"
+        );
+    }
+    assert!(
+        crate::proto::decode_http_json::<OrdinarySpawnRequest>(br#"{"client_request_id":true}"#)
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn spawn_correlation_ordinary_cancellation_and_invalid_input_before_side_effects() {
+    for outcome in [
+        SpawnStartOutcome::Started { pid: 42 },
+        SpawnStartOutcome::WaiterCancelled,
+    ] {
+        let f = Fixture::new(outcome);
+        let mut body = f.body();
+        body.client_request_id = "request_ordinary-1".into();
+        let _ = f.spawn(body).await;
+        let request = f.capture.requests.lock().unwrap().pop().unwrap();
+        assert_eq!(
+            request.spec.registration_metadata.client_request_id,
+            "request_ordinary-1"
+        );
+        assert_eq!(
+            f.service
+                .core
+                .peek_spawn_metadata(request.spec.spawn_attempt.unwrap(), "copilot")
+                .unwrap()
+                .client_request_id,
+            "request_ordinary-1"
+        );
+    }
+    let f = Fixture::new(SpawnStartOutcome::Started { pid: 42 });
+    let mut body = f.body();
+    body.client_request_id = "invalid value".into();
+    assert_eq!(f.spawn(body).await.unwrap_err().status, 400);
+    assert!(f.capture.requests.lock().unwrap().is_empty());
+    assert_eq!(f.policy.0.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn spawn_correlation_orchestration_keeps_authenticated_request_metadata() {
+    let f = conductor_fixture(SpawnStartOutcome::Started { pid: 42 });
+    let mut body = f.body();
+    body.provider = "claude".into();
+    body.execution_mode = "headless".into();
+    body.orchestration = true;
+    body.client_request_id = "request_conductor-1".into();
+    let id = f.spawn(body).await.unwrap().unwrap();
+    let request = f.capture.requests.lock().unwrap().pop().unwrap();
+    assert_eq!(request.spec.registration_metadata.orchestration, id);
+    assert_eq!(
+        request.spec.registration_metadata.client_request_id,
+        "request_conductor-1"
+    );
+}
