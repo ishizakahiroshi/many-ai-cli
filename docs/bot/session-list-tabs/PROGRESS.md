@@ -9,7 +9,7 @@ last_reviewed: 2026-10-09
 
 # Progress board — #P-20261008-007 many-ai-cli
 
-> 最終更新: 2026-10-09(金) JST — combined requirement-11 candidate recovered; final publication/review/product acceptance pending
+> 最終更新: 2026-10-09(金) JST — requirement 11 published and independently reviewed; native input/product acceptance remains partial
 
 Updated: 2026-10-09. This folder is public and may be read by the delegated implementation/review workers.
 
@@ -26,15 +26,31 @@ Draft PR: https://github.com/ishizakahiroshi/many-ai-cli/pull/13
 
 Rust checkpoint 2, the exclusively transferred registration-test corrections and
 Web checkpoints 1/2 have been recovered and verified locally. Requirement 11 is
-implemented in this unpublished candidate; final acceptance is pending.
-The current code SHA and independently reviewed SHA are not fixed yet. Local
-checks include Rust correlation tests (7), session engine contracts (63), affected
-Rust formatting and Clippy, plus Bun/TypeScript 6 checking and caller/DOM tests
-(27). Earlier Web checkpoint 1 also passed 368 unit tests and 421 fixtures; final
-combined build and product/browser acceptance will be recorded separately.
-The earlier frontend-only candidate was built and checked in an isolated Windows
-Hub with synthetic sessions; those observations do not prove the new correlation
-candidate or native drag/touch acceptance. No production Hub was operated.
+implemented in published code `26f7679f388dc42db2a7dd0b3b51ba547c4deab5`.
+The independently reviewed SHA is the same; the [final review receipt](https://github.com/ishizakahiroshi/many-ai-cli/issues/12#issuecomment-6072095713)
+records zero additional P1/P2 findings across all 34 changed paths.
+Local checks passed: Rust correlation tests (7), full session engine contracts (63),
+affected formatting and Clippy, Bun 1.3.14/TypeScript 6 checking, caller/DOM tests (27),
+all Web unit tests (372), fixtures (421), and final Rust/Web embedded build.
+Final Web source hash is `6687480088fa` with instrumentation disabled.
+[Exact-code Validate](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37867116145)
+passed web-check and the other active jobs except govulncheck. The same Go vulnerability
+failure exists at the preceding docs-only instruction commit; overall CI remains failed.
+Both exact-code secret scans passed. No Go source, dependency or workflow was changed.
+
+An isolated Windows Hub built from the final code was checked with synthetic local
+command sessions. Two ordinary launches entered their initiating bucket; switching
+buckets preserved the selected conversation identifier. Manual card movement,
+renaming, occupied-tab migration/deletion, and reload persistence worked. Deletion
+retained both sessions. Native tab/card drag-and-drop, actual touch/scroll gestures,
+approval badge lifecycle and the full live family/reconnect matrix remain
+unaccepted; synthetic listener and contract tests do not replace those gates.
+Two Shell grid batches (four sessions each) entered the initiating bucket despite
+an intervening tab switch. The 2x2 popup displayed exactly the four confirmed IDs
+of its batch; reload retained membership. An authenticated external synthetic
+launch with a request unknown to this browser entered the default bucket.
+No production Hub was operated. PR remains Draft; merge/release/deploy are pending
+separate authorization. Historical observations below are not current acceptance.
 
 ## Historical frontend-only publication (requirement 11 excluded)
 
