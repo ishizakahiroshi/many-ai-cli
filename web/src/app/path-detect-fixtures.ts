@@ -191,6 +191,24 @@ test('expandLogicalPathLine: xterm isWrapped はハイフン無しでも結合�
   assert.equal(combined, 'D:\\src\\github\\public\\many-ai-cli\\docs\\local\\reference\\filename.md');
 });
 
+test('expandLogicalPathLine: 右端に届いていない行の次は isWrapped でも結合しない', () => {
+  // 2026-10-09: 途中で終わった行の次の行に折り返しの印が付き、リンクが次の行の文まで伸びた
+  const rows = [
+    row('  資料: D:\\dev\\kobo\\docs\\local\\design_2026-10-09.html', { width: 53 }),
+    row('  S2 [AI][依頼] (次回) まとめる', { wrapped: true, width: 33 }),
+  ];
+  assert.deepEqual(expandLogicalPathLine(getter(rows), 0, 80), { start: 0, end: 0 });
+  assert.deepEqual(expandLogicalPathLine(getter(rows), 1, 80), { start: 1, end: 1 });
+});
+
+test('expandLogicalPathLine: 全角 1 文字が入らず右端が 1 マス空いた折り返しは結合する', () => {
+  const rows = [
+    row('D:\\src\\資料', { width: 79 }),
+    row('\\a.md', { wrapped: true, width: 5 }),
+  ];
+  assert.deepEqual(expandLogicalPathLine(getter(rows), 1, 80), { start: 0, end: 1 });
+});
+
 test('expandLogicalPathLine: 行幅いっぱいの途中折れはハイフン無しでも結合する', () => {
   const head = 'D:\\src\\github\\public\\many-ai-cli\\docs\\local\\reference\\fi';
   const rows = [
@@ -234,7 +252,8 @@ test('boundedRowGetter: 範囲外で先頭へ巻き戻るバッファでも全�
   const cyclicRead = (_index: number) => {
     reads++;
     if (reads > 10_000) throw new Error('row reader did not terminate');
-    return row('x'.repeat(10), { wrapped: true, width: 10 });
+    // 本物の折り返し行と同じく右端（cols = 80）まで埋める。届いていない行は isWrapped でもつながない
+    return row('x'.repeat(80), { wrapped: true, width: 80 });
   };
   assert.equal(cyclicRead(length + 3).isWrapped, true);
   const getRow = boundedRowGetter(length, (i) => cyclicRead(i % length));
