@@ -1,6 +1,6 @@
-// TypeScript mirror for internal/proto/messages.go.
-// Go side is the source of truth; update this file when JSON fields or message
-// type values change in internal/proto/messages.go.
+// Legacy wire mirror with explicit additive Rust-only extensions.
+// The optional spawn correlation event/snapshot field is defined in rust/src/proto/core.rs;
+// it does not change the frozen generated Rust message or the legacy Go contract.
 
 export type ProviderID = 'claude' | 'codex' | 'copilot' | 'cursor-agent' | 'opencode' | 'grok' | 'command-code' | 'common' | string;
 
@@ -29,6 +29,7 @@ export type MessageType =
   | 'reattach_reject'
   | 'snapshot'
   | 'session_update'
+  | 'session_spawn_correlated'
   | 'session_end'
   | 'session_removed'
   | 'session_dismiss'
@@ -324,6 +325,8 @@ export interface CrossSessionMessage {
 }
 
 export interface Message {
+  /** Additive Rust-only trusted registration notification; not an authorization token. */
+  client_request_id?: string;
   type: MessageType;
   role?: string;
   session_id?: number;
@@ -531,6 +534,8 @@ export interface Message {
 }
 
 export interface SessionSnapshot {
+  /** Additive Rust-only request correlation, populated by trusted spawn metadata. */
+  client_request_id?: string;
   id: number;
   provider?: ProviderID;
   display_name?: string;

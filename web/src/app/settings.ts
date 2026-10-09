@@ -1,3 +1,4 @@
+import { openSessionListMoveDialog, sessionListMoveLabel, sessionListCanMove, wireSessionListMenu, restoreSessionListFocus, sessionListCardElement } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { getNotificationVolume, setNotificationVolume, STORAGE_NOTIFY_SOUND_VOLUME_KEY } from './notification-volume.js';
@@ -3431,12 +3432,15 @@ function _ensureMultiDetachBtn(): void {
 // ─── カード右クリックメニュー (Open Git / Files / Activate / Copy ID) ───
 export let _cardCtxMenuEl = null;
 export let _cardCtxSid    = null;
-export function openCardCtxMenu(x, y, sid) {
+let cardCtxReturnFocus: HTMLElement | null = null;
+export function openCardCtxMenu(x, y, sid, origin: HTMLElement | null = null) {
   closeCardCtxMenu();
   _cardCtxSid = sid;
+  cardCtxReturnFocus = origin || sessionListCardElement(Number(sid));
   const menu = document.createElement('div');
   menu.className = 'card-ctx-menu open';
   menu.id = 'card-ctx-menu';
+  menu.setAttribute('data-wheel-native', '');
   const labelOpenGit        = ti18n('ctx_open_git',              'Open Git View');
   const labelOpenFiles      = ti18n('ctx_open_files',            'Open Files Tab');
   const labelActivate       = ti18n('ctx_activate',              'Activate Session');
@@ -3461,7 +3465,12 @@ export function openCardCtxMenu(x, y, sid) {
     `<div class="card-ctx-sep"></div>` +
     `<button type="button" data-action="activate"><span class="ico">→</span><span>${escapeHtml(labelActivate)}</span></button>` +
     `<button type="button" data-action="copy-id"><span class="ico">#</span><span>${escapeHtml(labelCopyId)}</span></button>`;
+  const moveTab = document.createElement('button');
+  moveTab.type = 'button'; moveTab.dataset.action = 'move-list-tab';
+  moveTab.textContent = sessionListMoveLabel(sid); moveTab.disabled = !sessionListCanMove(sid);
+  menu.append(moveTab);
   document.body.appendChild(menu);
+  wireSessionListMenu(menu, () => closeCardCtxMenu(true));
   const r = menu.getBoundingClientRect();
   const px = Math.min(x, window.innerWidth  - r.width  - 4);
   const py = Math.min(y, window.innerHeight - r.height - 4);
@@ -3472,10 +3481,13 @@ export function openCardCtxMenu(x, y, sid) {
     b.addEventListener('click', () => {
       const action = b.dataset.action;
       const id = _cardCtxSid;
+      const origin = cardCtxReturnFocus;
       closeCardCtxMenu();
       const sess = sessions.get(id);
       if (!sess) return;
-      if (action === 'open-git') {
+      if (action === 'move-list-tab') {
+        openSessionListMoveDialog(id, origin);
+      } else if (action === 'open-git') {
         const gr = String(sess.git_root || sess.cwd || '');
         if (!gr) return;
         FilesTabManager.openGitTab(id, gr, sess.branch || '');
@@ -3585,9 +3597,13 @@ export function openLabelRenameDialog(id: number): void {
 function sessForMetaLabel(id) {
   return sessions.get(id) as any;
 }
-export function closeCardCtxMenu() {
+export function closeCardCtxMenu(restoreFocus = false) {
+  const hadMenu = !!_cardCtxMenuEl;
+  const origin = cardCtxReturnFocus;
+  cardCtxReturnFocus = null;
   if (_cardCtxMenuEl) { try { _cardCtxMenuEl.remove(); } catch (_) {} _cardCtxMenuEl = null; }
   _cardCtxSid = null;
+  if (hadMenu && restoreFocus && origin) restoreSessionListFocus(origin);
 }
 document.addEventListener('mousedown', (e) => {
   if (_cardCtxMenuEl && !e.target.closest('#card-ctx-menu')) {
@@ -3596,9 +3612,12 @@ document.addEventListener('mousedown', (e) => {
 });
 window.addEventListener('blur', () => closeCardCtxMenu());
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && _cardCtxMenuEl) closeCardCtxMenu();
+  if (e.key === 'Escape' && _cardCtxMenuEl) closeCardCtxMenu(true);
 });
-document.addEventListener('scroll', () => closeCardCtxMenu(), true);
+document.addEventListener('scroll', (event) => {
+  if (_cardCtxMenuEl?.contains(event.target as Node)) return;
+  closeCardCtxMenu();
+}, true);
 
 // ─── Ctrl+Shift+G / Ctrl+Shift+F グローバルショートカット ──────────────
 document.addEventListener('keydown', (e) => {

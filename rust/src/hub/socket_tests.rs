@@ -592,3 +592,43 @@ async fn failed_best_effort_resize_preserves_ui_and_history_while_input_stays_st
     assert_eq!(failure.index, 0);
     assert_eq!(*dependencies.log.lock().unwrap(), ["persist"]);
 }
+
+#[tokio::test]
+async fn spawn_correlation_typed_live_json_uses_best_effort_writer() {
+    let registry = registry();
+    let recording = Recording::default();
+    registry
+        .insert_ui(ui(), Box::new(recording.clone()))
+        .unwrap();
+    let dependencies = Arc::new(Dependencies::default());
+    let driver = EffectDriver::new(
+        registry,
+        dependencies.clone(),
+        dependencies.clone(),
+        dependencies,
+    );
+    driver
+        .apply(CoreEffects(vec![CoreEffect::SendUiSpawnCorrelation {
+            binding: ui(),
+            best_effort: true,
+            event: SpawnCorrelationNotification {
+                hub_instance: "synthetic-hub".into(),
+                session_id: 7,
+                started_at: "2026-01-02T00:00:00Z".into(),
+                client_request_id: "request-1".into(),
+                ..Default::default()
+            },
+        }]))
+        .await
+        .unwrap();
+    let frames = recording.frames.lock().unwrap();
+    let WireFrame::Text(text) = &frames[0] else {
+        panic!("expected correlation frame")
+    };
+    let event: serde_json::Value = serde_json::from_str(text).unwrap();
+    assert_eq!(
+        event,
+        serde_json::json!({"type":"session_spawn_correlated","hub_instance":"synthetic-hub",
+        "session_id":7,"started_at":"2026-01-02T00:00:00Z","client_request_id":"request-1"})
+    );
+}

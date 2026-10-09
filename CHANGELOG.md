@@ -11,6 +11,19 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Browser-local session-list tabs.** Group multiple
+  session cards into tabs, add and rename tabs, reorder by drag or keyboard menu,
+  and move root families using drag/drop or a destination chooser. Safe tab deletion
+  preserves sessions and history. Names, order, lifecycle identities, selection and
+  scroll offsets are stored separately from synchronized preferences. Inactive tabs
+  show live waiting/approval counts; touch holds and keyboard menus provide movement
+  alternatives. Missing ancestors defer a family move until reconnect resolves it.
+  Rust ordinary/grid/orchestration launches now carry an optional bounded request
+  correlation value through trusted registration and ordered live/snapshot updates.
+  The Web assigns only confirmed lifecycles to the tab captured at launch, preserves
+  manual moves on reconnect, and opens grids only for matching accepted starts.
+  Legacy callers can omit the field; Go and the frozen generated Rust message are unchanged.
+  Product/Windows UI acceptance remains a separate gate for this draft.
 - **Place input controls independently where you need them.** Send, microphone,
   clear input, templates, quick commands and the other input toolbar buttons each
   have a small grip. Drag it with a mouse or touch to move that control anywhere

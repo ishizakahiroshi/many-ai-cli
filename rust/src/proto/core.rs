@@ -298,6 +298,13 @@ pub struct SessionSnapshot {
         skip_serializing_if = "String::is_empty"
     )]
     pub started_at: String,
+    /// Rust-only browser correlation. Only trusted spawn metadata populates this field.
+    #[serde(
+        default,
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub client_request_id: String,
     #[serde(
         rename = "first_message",
         deserialize_with = "null_default",
@@ -1463,6 +1470,28 @@ pub struct GitTurnNotification {
     pub added: i64,
     pub removed: i64,
 }
+/// Additive Rust-only notification; generated Message remains frozen.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub enum SpawnCorrelationType {
+    #[default]
+    #[serde(rename = "session_spawn_correlated")]
+    Correlated,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct SpawnCorrelationNotification {
+    pub r#type: SpawnCorrelationType,
+    pub hub_instance: String,
+    pub session_id: i64,
+    pub started_at: String,
+    pub client_request_id: String,
+}
+/// Correlation is not a credential or an idempotency key. Empty preserves old clients.
+pub fn valid_client_request_id(value: &str) -> bool {
+    value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+}
 pub struct UiPriming {
     pub hub_instance: String,
     pub sessions: Vec<SessionSnapshot>,
@@ -1937,6 +1966,12 @@ pub enum CoreEffect {
     },
     Broadcast(super::Message),
     BroadcastGitTurn(GitTurnNotification),
+    BroadcastSpawnCorrelation(SpawnCorrelationNotification),
+    SendUiSpawnCorrelation {
+        binding: UiBinding,
+        event: SpawnCorrelationNotification,
+        best_effort: bool,
+    },
     SendUiGitTurn {
         binding: UiBinding,
         event: GitTurnNotification,
@@ -2393,6 +2428,7 @@ pub enum ProviderCommandPurpose {
 /// or deserialized from wrapper/browser input. Prompt text is not persisted here.
 #[derive(Clone, Default)]
 pub struct SpawnRegistrationMetadata {
+    pub client_request_id: String,
     pub parent: LiveSessionId,
     pub role: String,
     pub auto: bool,

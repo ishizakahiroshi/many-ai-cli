@@ -258,19 +258,13 @@ impl ApprovalActions for SessionEngine {
             // candidate's unflushed open; retain all earlier ledger closures
             // and every unrelated session/event in the priming queue.
             for ui in state.uis.values_mut() {
-                ui.queued.retain(|frame| match frame {
-                    UiFrame::Message(message) => {
-                        !(message.session_id == action.binding.session.session.0
-                            && message
-                                .approval_state
-                                .as_ref()
-                                .and_then(|state| state.open.as_ref())
-                                .is_some_and(|open| {
-                                    open.candidate_key == action.binding.candidate_key
-                                        && open.source_epoch == action.binding.source_epoch.0
-                                }))
-                    }
-                    UiFrame::GitTurn(_) => true,
+                ui.queued.retain(|frame| {
+                    keep_queued_after_automatic_approval(
+                        frame,
+                        action.binding.session.session.0,
+                        &action.binding.candidate_key,
+                        action.binding.source_epoch.0,
+                    )
                 });
             }
         }
@@ -283,5 +277,48 @@ impl ApprovalActions for SessionEngine {
         {
             s.approval_reservation = None;
         }
+    }
+}
+
+fn keep_queued_after_automatic_approval(
+    frame: &UiFrame,
+    session: i64,
+    candidate: &str,
+    epoch: u64,
+) -> bool {
+    match frame {
+        UiFrame::Message(message) => {
+            !(message.session_id == session
+                && message
+                    .approval_state
+                    .as_ref()
+                    .and_then(|state| state.open.as_ref())
+                    .is_some_and(|open| {
+                        open.candidate_key == candidate && open.source_epoch == epoch
+                    }))
+        }
+        UiFrame::GitTurn(_) | UiFrame::SpawnCorrelation(_) => true,
+    }
+}
+#[cfg(test)]
+mod spawn_correlation_tests {
+    use super::*;
+    #[test]
+    fn spawn_correlation_survives_automatic_approval_priming_cleanup() {
+        let mut queued = vec![
+            UiFrame::SpawnCorrelation(SpawnCorrelationNotification {
+                session_id: 7,
+                client_request_id: "request-1".into(),
+                ..Default::default()
+            }),
+            UiFrame::Message(Box::new(proto::Message {
+                r#type: "session_update".into(),
+                session_id: 7,
+                ..Default::default()
+            })),
+        ];
+        queued.retain(|frame| keep_queued_after_automatic_approval(frame, 7, "candidate", 1));
+        assert_eq!(queued.len(), 2);
+        assert!(matches!(queued[0], UiFrame::SpawnCorrelation(_)));
     }
 }

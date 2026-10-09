@@ -22,6 +22,7 @@ export type DeriveKind = 'handoff' | 'child';
 export const DERIVE_ORIGIN_UI = 'ui';
 
 export interface DeriveSelection {
+  clientRequestId?: string;
   kind: DeriveKind;
   /** 起点セッション。引き継ぎでは前任、子では親。 */
   sourceSessionID: number;
@@ -83,6 +84,7 @@ export function buildDeriveBody(
   const body: Record<string, unknown> = { provider };
 
   if (selection.kind === 'handoff') {
+    if (selection.clientRequestId) body.client_request_id = selection.clientRequestId;
     body.cwd = trimmed(selection.cwd);
     body.initial_prompt = prompt;
     body.handoff_from = Number(selection.sourceSessionID) || 0;

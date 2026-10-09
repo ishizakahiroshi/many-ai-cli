@@ -1,5 +1,18 @@
 use super::*;
 impl Session {
+    fn spawn_correlation(&self, hub_instance: &str) -> Option<SpawnCorrelationNotification> {
+        if self.snapshot.client_request_id.is_empty() || self.usage_probe {
+            return None;
+        }
+        Some(SpawnCorrelationNotification {
+            hub_instance: hub_instance.into(),
+            session_id: self.binding.session.0,
+            started_at: self.snapshot.started_at.clone(),
+            client_request_id: self.snapshot.client_request_id.clone(),
+            ..Default::default()
+        })
+    }
+
     /// Go finalizeWorkflowOnSessionEnd publishes the timeout frame while
     /// deliberately consuming completion without sending a completion push.
     fn finalize_workflow(&mut self, effects: &mut CoreEffects) {
@@ -149,6 +162,9 @@ impl SessionEngine {
         announce.log_path = snapshot.log_path.clone();
         announce.jsonl_path = snapshot.jsonl_path.clone();
         effects.0.push(CoreEffect::Broadcast(announce));
+        if let Some(event) = session.spawn_correlation(&self.options.hub_instance) {
+            effects.0.push(CoreEffect::BroadcastSpawnCorrelation(event));
+        }
         if !session.usage_probe {
             effects.0.push(history(binding.session,now,"session_start",object(serde_json::json!({"provider":m.provider,"cwd":m.cwd,"branch":session.snapshot.branch,"label":m.label,"model":m.model,"shell":m.shell,"pid":m.pid,"parent_session_id":metadata.parent.0,"role":metadata.role,"auto":metadata.auto,"orchestration_id":metadata.orchestration.0,"board_path":metadata.board_path,"subscription_profile_id":session.snapshot.subscription_profile_id})))?);
         }
@@ -274,6 +290,7 @@ impl SessionEngine {
             },
             state: if append { "running" } else { "standby" }.into(),
             started_at: started_text.into(),
+            client_request_id: metadata.client_request_id.clone(),
             subscription_profile_id: subscription_id,
             subscription_profile_name: subscription_name,
             log_path: paths.raw.to_string_lossy().into_owned(),
@@ -451,6 +468,7 @@ impl SessionEngine {
                 .sessions
                 .get(&binding.session)
                 .map(|old| SpawnRegistrationMetadata {
+                    client_request_id: old.snapshot.client_request_id.clone(),
                     parent: old.snapshot.parent_session_id,
                     role: old.snapshot.role.clone(),
                     auto: old.snapshot.auto,
@@ -593,6 +611,9 @@ impl SessionEngine {
         announce.log_path = snapshot.log_path.clone();
         announce.jsonl_path = snapshot.jsonl_path.clone();
         effects.0.push(CoreEffect::Broadcast(announce));
+        if let Some(event) = session.spawn_correlation(&self.options.hub_instance) {
+            effects.0.push(CoreEffect::BroadcastSpawnCorrelation(event));
+        }
         if !gap.is_empty() {
             effects.0.push(CoreEffect::Broadcast(proto::Message {
                 r#type: "pty_data".into(),
@@ -898,6 +919,7 @@ fn reattach_gap(replay: &[u8], total: i64, seen: i64) -> &[u8] {
 /// activity across a socket replacement. The constructor's running connection
 /// state and freshly resolved wire metadata are deliberately left alone.
 fn preserve_warm_conversation(dst: &mut SessionSnapshot, old: &SessionSnapshot) {
+    dst.client_request_id.clone_from(&old.client_request_id);
     dst.parent_session_id = old.parent_session_id;
     dst.handoff_from = old.handoff_from;
     dst.project_id.clone_from(&old.project_id);

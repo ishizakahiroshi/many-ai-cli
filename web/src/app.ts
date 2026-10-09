@@ -1,3 +1,5 @@
+import { noteSpawnSessions } from './app/session-spawn-tracker.js';
+import { restoreSessionListDrawerScroll } from './app/session-list-tabs.js';
 import { probeSpan } from './debug/probe.js';
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
@@ -1294,6 +1296,7 @@ export function openMobileSessionDrawer() {
   // force: まだ mobile-drawer-open が付く前に中身を描く
   (window as any).renderMobileSessionDrawer?.(true);
   document.body.classList.add('mobile-drawer-open');
+  restoreSessionListDrawerScroll();
   const btn = document.getElementById('mobile-menu-btn');
   const titleBtn = document.getElementById('mobile-session-title-btn');
   const backdrop = document.getElementById('mobile-drawer-backdrop');
@@ -1715,6 +1718,7 @@ export function removeLocalSession(id) {
   try { if (typeof sessionViewMode !== 'undefined') sessionViewMode.delete(id); } catch (_) {}
   try { if (typeof sessionLazyLoaded !== 'undefined') sessionLazyLoaded.delete(id); } catch (_) {}
   sessions.delete(id);
+  noteSpawnSessions(Array.from(sessions.values()));
   removeFromSessionOrder(id);
   const t = terminals.get(id);
   if (t) { try { t.term.dispose(); } catch (_) {} terminals.delete(id); }
