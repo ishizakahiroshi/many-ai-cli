@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "e7eea35dc5c31f7f17a92bf0175cc7960e86d520",
+    "commit": "add50391876467cb08ecbdb2d15e7449933af1e1",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1955,
-    "analyzed": 1516,
+    "discovered": 1960,
+    "analyzed": 1520,
     "unresolved": 9,
     "unknown": 1,
-    "unclaimed": 429,
+    "unclaimed": 430,
     "skipped_by_config": 0
   },
   "files": [
@@ -1426,6 +1426,14 @@
     },
     {
       "path": "docs/bot/session-list-tabs/REVIEW.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/session-list-tabs/SPAWN-CORRELATION.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -41891,8 +41899,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "派生起動ダイアログ（種別 = 引き継ぎ / 子）。"
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -41921,8 +41929,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "detached-grid-launcher.ts — C5: Detached Grid プリセットと枚数指定"
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -44256,6 +44264,96 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/session-spawn-fixtures.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/session-spawn-state.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Bounded, per-browser-tab correlation. These identities are not authorization or idempotency tokens."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/session-spawn-tracker.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/session-strip-branch.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -44741,8 +44839,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "--- ESM imports (generated) ---"
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -47137,7 +47235,7 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "TypeScript mirror for internal/proto/messages.go."
+          "value": "Legacy wire mirror with explicit additive Rust-only extensions."
         },
         "authentication": {
           "state": "not_configured"
@@ -47672,6 +47770,36 @@
     },
     {
       "path": "web/tests/session-list-tabs-dom.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/session-spawn-caller.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

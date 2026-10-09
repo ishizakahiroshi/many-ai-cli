@@ -2335,5 +2335,8 @@
   "session_list_tab_waiting": "{count} waiting for a response",
   "session_list_tab_empty": "This tab is empty. Move a session here from another tab.",
   "session_list_tabs_storage_error": "Tab changes could not be saved. They remain available in this window.",
-  "session_list_tab_incomplete": "Wait for the parent session before moving this family"
+  "session_list_tab_incomplete": "Wait for the parent session before moving this family",
+  "spawn_correlation_unavailable": "Some requested sessions could not be confirmed yet. Check the session list; no unrelated session was selected.",
+  "spawn_correlation_capacity": "Too many session starts are still being tracked. Wait before starting another.",
+  "spawn_correlation_storage": "Pending starts cannot be saved in this browser tab. Keep this page open until they appear."
 }

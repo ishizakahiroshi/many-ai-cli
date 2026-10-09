@@ -176,3 +176,21 @@ test('C3-R1: a reused session ID during a hold cannot open the replacement menu 
   f.sessions[2].started_at='replacement-during-hold';f.render();f.hold();
   assert.equal(f.menus,0);f.cards.children[2].emit('pointerup',{pointerType:'touch'});f.cards.children[2].click();assert.equal(f.active,1);
 });
+
+test('actual tab drag listeners reorder tabs with feedback without emitting a pane payload',()=>{
+ const f=fixture();f.flush();f.add.click();f.add.click();const before=f.strip.children.map(el=>el.dataset.sessionListTab);
+ const data=new Map<string,string>();const transfer={get types(){return [...data.keys()];},setData:(k:string,v:string)=>data.set(k,v)};
+ f.strip.children[2].emit('dragstart',{dataTransfer:transfer});assert.equal(data.has('application/x-many-ai-cli-pane'),false);
+ f.strip.children[0].emit('dragover',{dataTransfer:transfer,clientX:239});assert.equal(f.strip.children[0].classList.contains('drop-after'),true);
+ f.strip.children[0].emit('drop',{dataTransfer:transfer,clientX:239});f.flush();
+ assert.deepEqual(f.strip.children.map(el=>el.dataset.sessionListTab),[before[0],before[2],before[1]]);assert.equal(f.active,1);
+});
+test('actual existing card drag listener keeps its pane payload alongside membership movement',()=>{
+ const f=fixture();f.flush();const c=f.cards.children[2];const s=f.sessions[2];const text=readFileSync(new URL('../src/app/session-list.ts',import.meta.url),'utf8');
+ const start=text.indexOf("      c.addEventListener('dragstart'"),end=text.indexOf("      c.addEventListener('dragend'",start);
+ Object.assign(f.ctx,{c,s,set_dragSrcId:()=>{},set_dragSrcGroupKey:()=>{}});
+ runInNewContext(new Bun.Transpiler({loader:'ts'}).transformSync(text.slice(start,end)),f.ctx);
+ const data=new Map<string,string>();const transfer={get types(){return [...data.keys()];},setData:(k:string,v:string)=>data.set(k,v)};
+ c.emit('dragstart',{dataTransfer:transfer});assert.equal(data.has(model.SESSION_LIST_CARD_DRAG),true);
+ assert.deepEqual(JSON.parse(data.get('application/x-many-ai-cli-pane')!),{kind:'session',sessionId:s.id});
+});

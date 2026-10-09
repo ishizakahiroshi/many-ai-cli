@@ -2335,5 +2335,8 @@
   "session_list_tab_waiting": "{count} phiên đang chờ phản hồi",
   "session_list_tab_empty": "Tab này trống. Bạn có thể chuyển phiên từ tab khác vào đây.",
   "session_list_tabs_storage_error": "Không thể lưu thay đổi tab. Bạn vẫn có thể tiếp tục trong cửa sổ này.",
-  "session_list_tab_incomplete": "Chờ thông tin phiên cha trước khi di chuyển nhóm phiên này"
+  "session_list_tab_incomplete": "Chờ thông tin phiên cha trước khi di chuyển nhóm phiên này",
+  "spawn_correlation_unavailable": "Chưa xác nhận được một số phiên đã yêu cầu. Hãy kiểm tra danh sách phiên; không chọn phiên không liên quan.",
+  "spawn_correlation_capacity": "Có quá nhiều yêu cầu khởi động đang được theo dõi. Vui lòng chờ trước khi mở thêm phiên.",
+  "spawn_correlation_storage": "Không thể lưu thông tin phiên đang khởi động trong tab này. Hãy giữ trang mở cho đến khi các phiên xuất hiện."
 }

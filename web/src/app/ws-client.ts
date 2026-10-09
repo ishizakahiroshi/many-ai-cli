@@ -1,3 +1,4 @@
+import { noteSpawnCorrelation, noteSpawnDisconnected, noteSpawnSessions, noteSpawnSnapshot } from './session-spawn-tracker.js';
 import { preserveSessionListSelection } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
@@ -239,6 +240,7 @@ export function _connectWs() {
     if (_elapsedTimerInterval) { clearInterval(_elapsedTimerInterval); set__elapsedTimerInterval(null); }
     if (activeSessionId !== null) _lastActiveSessionIdBeforeDisconnect = activeSessionId;
     sessions.clear();
+    noteSpawnDisconnected();
     resetUsageCache();
     autoDismissTimers.forEach(t => clearTimeout(t));
     autoDismissTimers.clear();
@@ -550,6 +552,15 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'session_spawn_correlated') {
+    noteSpawnCorrelation({ client_request_id: String(m.client_request_id || ''), session_id: Number(m.session_id),
+      started_at: String(m.started_at || ''), hub_instance: String(m.hub_instance || '') }, Array.from(sessions.values()));
+    renderSessionList();
+    // A delayed correlation can change the visible bucket after the update render.
+    (window as any).renderMobileSessionDrawer?.();
+    return;
+  }
+
   if (m.type === 'snapshot') {
     let arr;
     try {
@@ -583,6 +594,7 @@ export function _connectWs() {
       sessions.set(s.id, s);
       addToSessionOrder(s.id);
     });
+    noteSpawnSnapshot(inst, Array.from(sessions.values()));
     document.dispatchEvent(new Event('session-usage-target-changed'));
     // The full snapshot is the first safe point to discard saved placements
     // for sessions that no longer exist. During reconnect, the map can be
@@ -714,6 +726,7 @@ export function _connectWs() {
       cur.git_deleted = m.git_deleted ?? 0;
     }
     sessions.set(m.session_id, cur);
+    noteSpawnSessions(Array.from(sessions.values()));
     if (m.session_id === activeSessionId && previousSubscriptionID !== cur.subscription_profile_id) {
       document.dispatchEvent(new Event('session-usage-target-changed'));
     }

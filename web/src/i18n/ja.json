@@ -2335,5 +2335,8 @@
   "session_list_tab_waiting": "返答待ち {count} 件",
   "session_list_tab_empty": "このタブは空です。別のタブからセッションを移動できます。",
   "session_list_tabs_storage_error": "タブの変更を保存できませんでした。この画面内では操作を続けられます。",
-  "session_list_tab_incomplete": "親セッションの情報が揃ってから移動できます"
+  "session_list_tab_incomplete": "親セッションの情報が揃ってから移動できます",
+  "spawn_correlation_unavailable": "起動を依頼した一部のセッションをまだ確認できません。一覧を確認してください。別のセッションは選択していません。",
+  "spawn_correlation_capacity": "追跡中の起動要求が多いため、次の起動までしばらくお待ちください。",
+  "spawn_correlation_storage": "このブラウザタブに起動待ちの情報を保存できません。セッションが表示されるまでこのページを開いたままにしてください。"
 }

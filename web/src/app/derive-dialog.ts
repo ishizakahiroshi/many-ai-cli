@@ -1,3 +1,4 @@
+import { beginTrackedSpawn, captureSpawnTab, waitForTrackedSpawn } from './session-spawn-tracker.js';
 // 派生起動ダイアログ（種別 = 引き継ぎ / 子）。
 //
 // 既存セッションを起点に新しいセッションを 1 本立てる操作を 1 つの入口にまとめる
@@ -177,7 +178,7 @@ function optionsHtml(values: readonly { value: string; label: string; disabled?:
 // 起動できた新しいセッションへ画面を切り替える。spawn-child の応答は子が register
 // し終えてから返るが、UI 側の一覧（sessions）は WS の配信で埋まるので、応答の直後は
 // まだ無いことがある。一覧に現れるまで短く待ち、現れなければ諦める（一覧には出るので
-// 人が押せる）。/api/spawn（引き継ぎ種別）は session_id を返さないのでここは通らない。
+// 人が押せる）。引き継ぎ種別は、応答とは別の信頼済み起動相関から確認した ID を使う。
 const FOCUS_NEW_SESSION_RETRY_MS = 150;
 const FOCUS_NEW_SESSION_MAX_TRIES = 10;
 function focusNewSession(id: number, attempt = 0): void {
@@ -578,20 +579,24 @@ function renderDeriveForm(
   // /api/spawn は permission_preset を埋めた結果が高リスクなら 400
   // risk_confirmation_required を返す。New Session フォームと同じく、人に 1 度
   // 聞いてから risk_confirmed を付けて送り直す（近道で自動的に通さない）。
-  async function submit(riskConfirmed: boolean): Promise<void> {
+  async function submit(riskConfirmed: boolean, originalRequest = '', originalTab = captureSpawnTab()): Promise<void> {
     const selection = currentSelection(riskConfirmed);
+    const requestId = selection.kind === 'handoff' ? originalRequest || beginTrackedSpawn(1, originalTab) : '';
     const response = await apiFetch(deriveRequestPath(selection), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildDeriveBody(selection, getCachedSpawnModelGroups())),
+      body: JSON.stringify(buildDeriveBody({ ...selection, clientRequestId: requestId }, getCachedSpawnModelGroups())),
     });
     const data = await response.json().catch(() => ({}));
     if (response.ok) {
       close();
       showToast(tx('handoff_dialog_started', '新しいセッションを起動しました'));
       // 子種別だけ応答に session_id が載る（spawn-child）。引き継ぎ種別の /api/spawn は
-      // ok と orchestration_id しか返さないので、そちらは一覧に出るのを待つだけ。
-      focusNewSession(Number(data?.session_id || 0));
+      // ok と orchestration_id しか返さないので、trusted WS correlation で実 lifecycle を確定する。
+      if (requestId) void waitForTrackedSpawn(requestId).then(ids => {
+        if (ids.length) focusNewSession(ids[0]); else showToast(t('spawn_correlation_unavailable'));
+      });
+      else focusNewSession(Number(data?.session_id || 0));
       return;
     }
     if (!riskConfirmed && selection.kind === 'handoff' && String(data?.error || '') === 'risk_confirmation_required') {
@@ -603,7 +608,7 @@ function renderDeriveForm(
         kind: 'danger',
       });
       if (!agreed) return;
-      await submit(true);
+      await submit(true, requestId, originalTab);
       return;
     }
     setError(String(data?.detail || data?.error || `HTTP ${response.status}`));

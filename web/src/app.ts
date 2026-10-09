@@ -1,3 +1,4 @@
+import { noteSpawnSessions } from './app/session-spawn-tracker.js';
 import { restoreSessionListDrawerScroll } from './app/session-list-tabs.js';
 import { probeSpan } from './debug/probe.js';
 // --- ESM imports (generated) ---
@@ -1717,6 +1718,7 @@ export function removeLocalSession(id) {
   try { if (typeof sessionViewMode !== 'undefined') sessionViewMode.delete(id); } catch (_) {}
   try { if (typeof sessionLazyLoaded !== 'undefined') sessionLazyLoaded.delete(id); } catch (_) {}
   sessions.delete(id);
+  noteSpawnSessions(Array.from(sessions.values()));
   removeFromSessionOrder(id);
   const t = terminals.get(id);
   if (t) { try { t.term.dispose(); } catch (_) {} terminals.delete(id); }

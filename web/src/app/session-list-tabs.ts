@@ -106,6 +106,25 @@ function select(id: string, focus = false): void {
   persist();
   if (focus) focusSelected();
 }
+
+/** Capture synchronously at the user's launch click, before risk/model dialogs or preference saves. */
+export function captureSessionListTab(): string { return state().selectedId; }
+/** Apply one server-confirmed lifecycle only; never replay over an existing/manual root membership. */
+export function assignCorrelatedSessionListSpawn(id: number, startedAt: string, tabId: string, sessions: SessionSnapshot[]): boolean {
+  const session = sessions.find(item => item.id === id && item.started_at === startedAt);
+  if (!session || !canMoveSessionListFamily(sessions, id)) return false;
+  const family = sessionListFamilies(sessions).get(id);
+  if (!family) return false;
+  // A child always inherits its real root, even if its own launch was requested elsewhere.
+  if (family[0] !== id) return true;
+  const key = sessionListIdentity(session);
+  if (!key) return false;
+  if (Object.prototype.hasOwnProperty.call(state().memberships, key)) return true;
+  const target = state().tabs.some(tab => tab.id === tabId) ? tabId : state().defaultId;
+  if (!moveSessionListFamily(state(), sessions, id, target)) return false;
+  persist(); return true;
+}
+
 export function isSessionInSelectedListTab(id: number): boolean {
   return sessionListOwners(state(), all()).get(id) === state().selectedId;
 }

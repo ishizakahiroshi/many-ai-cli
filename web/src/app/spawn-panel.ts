@@ -1,9 +1,10 @@
+import { beginTrackedSpawn, captureSpawnTab, waitForTrackedSpawn } from './session-spawn-tracker.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { apiFetch, escapeHtml, showToast, token } from './util.js';
 import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, STORAGE_SPAWN_KEY, flushUserPrefsPut, setUserPref } from './user-prefs.js';
-import { set_pendingAutoSwitch, sessions } from './state.js';
-import { providerIconHtml } from './session-list.js';
+import { sessions } from './state.js';
+import { activateSession, providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 import { hasProviderCapability, loadProviderSummaries } from './provider-store.js';
@@ -1435,38 +1436,11 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
     window.open(url, '_blank');
   }
 
-  // C2: spawn 後に新しいセッションが WS 経由で登録されるのを待って別窓を開く。
-  // /api/spawn レスポンスには session_id が含まれないため、spawn 前の最大 ID を
-  // 記録しておき、その後に登録された最新 ID を検出する。
-  function _waitForNewSessionAndOpenGrid(layout: string): void {
-    const prevMax = sessions.size > 0
-      ? Math.max(...Array.from(sessions.keys()))
-      : 0;
-    const TIMEOUT_MS = 8000;
-    const POLL_MS = 200;
-    const deadline = Date.now() + TIMEOUT_MS;
-
-    function poll() {
-      if (sessions.size > 0) {
-        const allIds = Array.from(sessions.keys());
-        const newIds = allIds.filter(id => id > prevMax);
-        if (newIds.length > 0) {
-          const latestId = Math.max(...newIds);
-          openDetachedGrid(latestId, layout);
-          return;
-        }
-      }
-      if (Date.now() < deadline) {
-        setTimeout(poll, POLL_MS);
-      } else {
-        // タイムアウト: 最後に登録されたセッションを使う
-        if (sessions.size > 0) {
-          const latestId = Math.max(...Array.from(sessions.keys()));
-          openDetachedGrid(latestId, layout);
-        }
-      }
-    }
-    setTimeout(poll, POLL_MS);
+  function _waitForNewSessionAndOpenGrid(layout: string, requestId: string): void {
+    void waitForTrackedSpawn(requestId).then(ids => {
+      if (ids.length) openDetachedGrid(ids[0], layout);
+      else showToast(t('spawn_correlation_unavailable'));
+    });
   }
 
   // localStorage に非配列 JSON（null/数値/object）が紛れ込んでも .filter / .unshift が
@@ -2797,6 +2771,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
   }
 
   async function spawnSession() {
+    const spawnTabId = captureSpawnTab();
     const provider = document.getElementById('spawn-provider').value;
     const cwd = spawnCwdInput.value.trim();
     const blocked = spawnLaunchBlockReason({
@@ -2966,10 +2941,11 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
         const { roles, count } = collectOrchestrationRoles();
         if (count > 0) bodyObj.orchestration_roles = roles;
       }
+      const spawnRequest = beginTrackedSpawn(1, spawnTabId);
       const res = await apiFetch('/api/spawn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bodyObj),
+        body: JSON.stringify({ ...bodyObj, client_request_id: spawnRequest }),
       });
       if (res.ok) {
         saveCwdHistory(cwd);
@@ -3026,7 +3002,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
           if (detachedPreset === 'project') {
             // project プリセット: 現在の provider のプロジェクトグループのセッションを別窓表示
             if (typeof (window as any).openDetachedGridLauncher === 'function') {
-              (window as any).openDetachedGridLauncher({ cwd });
+              (window as any).openDetachedGridLauncher({ cwd, sourceTabId: spawnTabId });
             }
           } else if (detachedPreset === 'multi') {
             // multi プリセット: 現在の Multi layout のセッションを別窓へ切り出す
@@ -3041,6 +3017,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
                 layout: gridLayout,
                 count: 4,
                 cwd,
+                sourceTabId: spawnTabId,
                 provider,
               }).catch(() => {});
             }
@@ -3051,6 +3028,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
                 layout: '2x2',
                 count: 4,
                 cwd,
+                sourceTabId: spawnTabId,
               }).catch(() => {});
             }
           } else if (detachedPreset === 'shell-3x3') {
@@ -3060,20 +3038,24 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
                 layout: '3x3',
                 count: 9,
                 cwd,
+                sourceTabId: spawnTabId,
               }).catch(() => {});
             }
           } else if (detachedPreset === 'advanced') {
             // advanced: Launcher ダイアログを開く
             if (typeof (window as any).openDetachedGridLauncher === 'function') {
-              (window as any).openDetachedGridLauncher({ cwd });
+              (window as any).openDetachedGridLauncher({ cwd, sourceTabId: spawnTabId });
             }
           } else {
             // single (デフォルト): 新しいセッションを別窓 1x1 で表示
-            _waitForNewSessionAndOpenGrid(gridLayout);
+            _waitForNewSessionAndOpenGrid(gridLayout, spawnRequest);
           }
-          set_pendingAutoSwitch(false);
+
         } else {
-          set_pendingAutoSwitch(true);
+          void waitForTrackedSpawn(spawnRequest).then(ids => {
+            if (ids.length) activateSession(ids[0]);
+            else showToast(t('spawn_correlation_unavailable'));
+          });
         }
       } else {
         alert(t('spawn_failed') + await spawnErrorMessage(res));
