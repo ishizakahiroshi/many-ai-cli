@@ -33,6 +33,7 @@ pub mod board_input;
 mod branch;
 pub mod completion;
 pub mod confirmations;
+pub mod external_notice;
 mod input;
 mod lane;
 mod lifecycle;

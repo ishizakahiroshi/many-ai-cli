@@ -3,6 +3,7 @@
 //! must never be read as a claim that the application is implemented.
 pub mod assets;
 pub mod auth;
+pub mod external_notice;
 pub mod http;
 pub mod network;
 pub mod pin;

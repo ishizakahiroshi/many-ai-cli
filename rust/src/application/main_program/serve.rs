@@ -1112,6 +1112,20 @@ impl HubComposition {
                 })
             },
         );
+        // Opt-in is a host process setting, never a browser/API-supplied path.
+        // No directory or receipt database is touched in the default-off mode.
+        let external_notice = match super::context::environment_value(
+            &context.environment,
+            "MANY_AI_CLI_EXTERNAL_NOTICE_STATE",
+        ) {
+            Some(directory) if !directory.is_empty() => Some(Arc::new(
+                crate::hub::external_notice::ExternalNoticeHttp::open(
+                    core.clone(),
+                    std::path::Path::new(directory),
+                )?,
+            )),
+            _ => None,
+        };
         let mut services = ServiceRouter::new(
             context.config.clone(),
             paths.clone(),
@@ -1290,6 +1304,9 @@ impl HubComposition {
             Arc::new(crate::hub::spawn_routes::SpawnHttp::new(ordinary.clone())),
             Arc::new(|| chrono::Local::now().offset().local_minus_utc()),
         );
+        if let Some(owner) = external_notice {
+            services = services.with_external_notices(owner);
+        }
         let ledger = RuntimeLedger::open(&paths)?;
         if options.dev {
             services = services.with_assets(Arc::new(super::dev_assets::DevAssets::new(

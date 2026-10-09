@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "e74ae6a8b330fca465d15f1644a18f4f1d6798c4",
+    "commit": "841aaee14f2784f02cdd6dbb491c5beb860d4db0",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1945,
-    "analyzed": 1510,
+    "discovered": 1948,
+    "analyzed": 1512,
     "unresolved": 9,
     "unknown": 1,
-    "unclaimed": 425,
+    "unclaimed": 426,
     "skipped_by_config": 0
   },
   "files": [
@@ -21227,6 +21227,14 @@
       "reason": "no adapter claims '.toml'"
     },
     {
+      "path": "rust/EXTERNAL_NOTICE_CANDIDATE.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
       "path": "rust/README.md",
       "adapter": null,
       "status": "unclaimed",
@@ -29523,6 +29531,39 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/hub/external_notice.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Explicit opt-in external notice adapter with durable technical receipts."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "value",
+          "value": [
+            "notice_receipts"
+          ]
+        },
+        "writes": {
+          "state": "value",
+          "value": [
+            "notice_receipts"
+          ]
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/hub/grid_spawn_routes.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -34785,6 +34826,35 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/terminal/session/external_notice.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Conditional external notices. Admission and frame reservation happen under"
         },
         "authentication": {
           "state": "not_configured"
@@ -48030,6 +48100,17 @@
         "rust/src/storage/repository.rs",
         "rust/tests/storage_contracts.rs"
       ]
+    },
+    {
+      "name": "notice_receipts",
+      "read_by": [
+        "rust/src/hub/external_notice.rs"
+      ],
+      "written_by": [
+        "rust/src/hub/external_notice.rs"
+      ],
+      "in_schema_snapshot": false,
+      "unresolved_in": []
     },
     {
       "name": "sessions",

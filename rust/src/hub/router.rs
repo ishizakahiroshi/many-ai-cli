@@ -26,6 +26,7 @@ pub struct ServiceRouter {
     confirmations: Option<Arc<super::confirmations::ConfirmationHttp>>,
     children: Option<Arc<super::child_routes::ChildHttp>>,
     child_controls: Option<Arc<super::child_control::ChildControl>>,
+    external_notices: Option<Arc<super::external_notice::ExternalNoticeHttp>>,
     relay: Option<Arc<super::relay_routes::RelayHttp>>,
     auto_approval: Option<Arc<super::auto_approval::AutoApprovalHttp>>,
     handoff: Option<Arc<super::handoff_routes::HandoffHttp>>,
@@ -208,6 +209,7 @@ impl ServiceRouter {
             confirmations: None,
             children: None,
             child_controls: None,
+            external_notices: None,
             relay: None,
             auto_approval: None,
             handoff: None,
@@ -484,6 +486,14 @@ impl ServiceRouter {
         self.routines = Some(routines);
         self
     }
+    /// Explicit trusted composition opt-in; no store is created by default.
+    pub fn with_external_notices(
+        mut self,
+        owner: Arc<super::external_notice::ExternalNoticeHttp>,
+    ) -> Self {
+        self.external_notices = Some(owner);
+        self
+    }
     pub(crate) fn owned_request_permit(
         &self,
     ) -> Result<super::task_owner::OwnedTaskPermit, crate::proto::core::SessionError> {
@@ -506,6 +516,16 @@ impl ServiceRouter {
             .as_secs() as i64;
         if let Err(error) = self.preflight(request, now) {
             return Dispatch::response(error);
+        }
+        if super::external_notice::methods(&request.path).is_some() {
+            let Some(owner) = &self.external_notices else {
+                return Dispatch::response(Response::error(
+                    503,
+                    "external_notice_unavailable",
+                    "external notices are not enabled",
+                ));
+            };
+            return Dispatch::response(owner.handle_authenticated(request, cancellation).await);
         }
         if super::approval_pattern_routes::is_route(&request.path) {
             let Some(owner) = self.patterns.clone() else {
@@ -1075,6 +1095,7 @@ impl ServiceRouter {
             children: None,
             child_controls: None,
             relay: None,
+            external_notices: None,
             auto_approval: None,
             handoff: None,
             tasks: None,
@@ -1562,6 +1583,9 @@ fn validate_bound_port(paths: &RuntimePaths, port: u16) -> std::io::Result<()> {
     Ok(())
 }
 pub(crate) fn needs_owned_request(path: &str) -> bool {
+    if super::external_notice::methods(path).is_some() {
+        return true;
+    }
     super::diagnostic_routes::DiagnosticHttp::methods(path).is_some()
         || super::agent_history_routes::methods(path).is_some()
         || super::approval_pattern_routes::is_route(path)
@@ -1641,6 +1665,9 @@ fn provider_early_response(request: &Request) -> Option<Response> {
     }
 }
 fn guard_methods(path: &str) -> &'static [&'static str] {
+    if let Some(methods) = super::external_notice::methods(path) {
+        return methods;
+    }
     match path {
         p if super::approval_status_routes::methods(p).is_some() => {
             super::approval_status_routes::methods(p).unwrap()
