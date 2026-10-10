@@ -2333,6 +2333,7 @@
   "session_list_tab_delete_help": "すべてのセッションを選んだタブへ移してから、このタブを削除します。セッション・プロセス・履歴は残ります。",
   "session_list_tab_invalid": "名前を入力するか、有効な移動先を選んでください。",
   "session_list_tab_waiting": "返答待ち {count} 件",
+  "session_list_tab_stopped": "新しく止まった {count} 件",
   "session_list_tab_empty": "このタブは空です。別のタブからセッションを移動できます。",
   "session_list_tabs_storage_error": "タブの変更を保存できませんでした。この画面内では操作を続けられます。",
   "session_list_tab_incomplete": "親セッションの情報が揃ってから移動できます",

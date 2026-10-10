@@ -171,15 +171,69 @@ export function filterSessionListTree(tree: SidebarProjectNode[], owners: Map<nu
     .map(root => ({ ...root, children: root.children.filter(child => owners.get(child.id) === tabId) })) }))
     .filter(project => project.children.length > 0);
 }
+function sessionListWaiting(session: SessionSnapshot, pending: (id: number) => boolean): boolean {
+  return !!(session.awaiting_user || session.awaiting_approval || session.activity?.awaiting_user ||
+    session.activity?.awaiting_approval || session.state === 'waiting' || pending(session.id));
+}
 export function sessionListWaitingCounts(state: SessionListTabState, sessions: SessionSnapshot[], pending: (id: number) => boolean = () => false): Map<string, number> {
   const counts = new Map(state.tabs.map(tab => [tab.id, 0]));
   const owners = sessionListOwners(state, sessions);
   for (const session of sessions) {
-    if (session.awaiting_user || session.awaiting_approval || session.activity?.awaiting_user ||
-        session.activity?.awaiting_approval || session.state === 'waiting' || pending(session.id)) {
+    if (sessionListWaiting(session, pending)) {
       const owner = owners.get(session.id) || state.defaultId;
       counts.set(owner, (counts.get(owner) || 0) + 1);
     }
   }
   return counts;
+}
+
+// Turns that ended while their tab was not shown ("newly stopped"). Browser-local like the tabs,
+// keyed by lifecycle identity so a reused numeric ID never inherits a mark.
+export const SESSION_LIST_STOPPED_KEY = 'many-ai-cli-session-list-stopped-v1';
+const STOPPED_LIMIT = 200;
+export function loadSessionListStopped(storage: StorageLike): Set<string> {
+  try {
+    const raw = JSON.parse(storage.getItem(SESSION_LIST_STOPPED_KEY) || 'null');
+    const keys = (Array.isArray(raw) ? raw : []).filter((key): key is string => typeof key === 'string' && validIdentity(key));
+    return new Set(keys.slice(-STOPPED_LIMIT));
+  } catch { return new Set(); }
+}
+export function saveSessionListStopped(storage: StorageLike, unseen: Set<string>): boolean {
+  try { storage.setItem(SESSION_LIST_STOPPED_KEY, JSON.stringify([...unseen])); return true; }
+  catch { return false; }
+}
+/** Record one observed turn end. The selected tab is already in view, so it never collects a mark. */
+export function noteSessionListStopped(state: SessionListTabState, sessions: SessionSnapshot[], unseen: Set<string>, id: number): boolean {
+  const key = sessionListIdentity(sessions.find(session => session.id === id));
+  if (!key) return false;
+  if ((sessionListOwners(state, sessions).get(id) || state.defaultId) === state.selectedId) return false;
+  unseen.delete(key);
+  unseen.add(key);
+  while (unseen.size > STOPPED_LIMIT) unseen.delete(unseen.values().next().value!);
+  return true;
+}
+/**
+ * One pass per render: a mark ends when its tab is selected (seen), the session leaves plain standby
+ * (running again or waiting on the user), or its ID is reused. Absent sessions keep their mark,
+ * like memberships, because startup/reconnect maps can be incomplete.
+ */
+export function settleSessionListStopped(state: SessionListTabState, sessions: SessionSnapshot[], unseen: Set<string>,
+    pending: (id: number) => boolean = () => false): { counts: Map<string, number>; changed: boolean } {
+  const counts = new Map(state.tabs.map(tab => [tab.id, 0]));
+  const owners = sessionListOwners(state, sessions);
+  const live = new Map(sessions.map(session => [session.id, session]));
+  let changed = false;
+  for (const key of [...unseen]) {
+    const session = live.get(Number(key.split(':')[1]));
+    if (!session) continue;
+    const owner = owners.get(session.id) || state.defaultId;
+    if (sessionListIdentity(session) !== key || (session.state || 'standby') !== 'standby' ||
+        sessionListWaiting(session, pending) || owner === state.selectedId) {
+      unseen.delete(key);
+      changed = true;
+      continue;
+    }
+    counts.set(owner, (counts.get(owner) || 0) + 1);
+  }
+  return { counts, changed };
 }

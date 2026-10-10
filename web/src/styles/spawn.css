@@ -15,6 +15,14 @@
   container-type: inline-size;
   --nsb-size: clamp(18px, calc((100cqw - 24px) / 7), 32px);
 }
+/* マウス操作の PC では、下のタブ行が増えたぶんカードの見える範囲を空けるため一回り詰める
+   （上限 28px でも押せる大きさの最低基準 24px は満たす）。スマホ幅・タッチ操作は指で押しやすい 32px のまま。 */
+@media (min-width: 721px) and (not (pointer: coarse)) {
+  #new-session-bar {
+    padding: 4px 4px 3px;
+    --nsb-size: clamp(18px, calc((100cqw - 24px) / 7), 28px);
+  }
+}
 
 #new-session-btn.new-session-sidebar-btn {
   display: inline-flex;

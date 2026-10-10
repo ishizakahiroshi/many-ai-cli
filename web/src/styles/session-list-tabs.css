@@ -10,6 +10,8 @@
 .session-list-tab[aria-selected="true"] { border-bottom-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); }
 .session-list-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-list-tab-waiting { flex-shrink: 0; min-width: 15px; padding: 0 3px; border-radius: 4px; color: var(--warning, #efc66d); background: color-mix(in srgb, var(--warning, #efc66d) 15%, transparent); font-size: 10px; }
+/* Same color as the project header's standby chip; outlined so it differs from the waiting badge by shape too. */
+.session-list-tab-stopped { flex-shrink: 0; min-width: 15px; padding: 0 2px; border-radius: 4px; color: var(--badge-standby-text, #cbd5e1); border: 1px solid color-mix(in srgb, var(--badge-standby-text, #cbd5e1) 70%, transparent); font-size: 10px; line-height: 11px; text-align: center; }
 #session-list-tab-add { flex: 0 0 32px; width: 32px; border: 0; background: transparent; color: var(--accent-text); border-radius: var(--radius-md); cursor: pointer; }
 #session-list-tab-add:hover { background: var(--accent-soft); }
 #session-list-tab-add svg { width: 21px; height: 21px; vertical-align: middle; }
@@ -27,6 +29,13 @@ dialog.session-list-tab-dialog:not([open]) { display: none; }
 .session-list-tab-dialog label { display: block; margin: 8px 0; font-size: var(--fs-small, 12px); }
 .session-list-tab-dialog .spawn-input { width: 100%; }
 .session-list-tab-error { min-height: 18px; color: var(--danger, #f5a399); font-size: var(--fs-small, 12px); }
+/* Mouse-driven desktop only: a thinner strip leaves more room for cards. Touch and phone widths keep the taller targets.
+   24px is a minimum, not a fixed height, so larger text grows the tab instead of clipping it. */
+@media (min-width: 721px) and (not (pointer: coarse)) {
+  #session-list-tab-bar { margin: 0 0 3px; }
+  .session-list-tab { min-height: 24px; padding: 2px 8px; }
+  #session-list-tab-add svg { width: 18px; height: 18px; }
+}
 @media (max-width: 720px) {
   body.mobile-drawer-open #new-session-bar { display: flex; order: -3; }
   body.mobile-drawer-open #session-list-tab-bar { order: -2; }

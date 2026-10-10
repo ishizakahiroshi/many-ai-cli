@@ -2333,6 +2333,7 @@
   "session_list_tab_delete_help": "Chuyển tất cả phiên sang tab đã chọn rồi xóa tab này. Các phiên, tiến trình và lịch sử vẫn được giữ lại.",
   "session_list_tab_invalid": "Nhập tên hoặc chọn một tab đích hợp lệ.",
   "session_list_tab_waiting": "{count} phiên đang chờ phản hồi",
+  "session_list_tab_stopped": "{count} phiên vừa dừng",
   "session_list_tab_empty": "Tab này trống. Bạn có thể chuyển phiên từ tab khác vào đây.",
   "session_list_tabs_storage_error": "Không thể lưu thay đổi tab. Bạn vẫn có thể tiếp tục trong cửa sổ này.",
   "session_list_tab_incomplete": "Chờ thông tin phiên cha trước khi di chuyển nhóm phiên này",

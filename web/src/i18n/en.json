@@ -2333,6 +2333,7 @@
   "session_list_tab_delete_help": "Move all sessions to the selected tab, then delete this tab. Sessions, processes and history are kept.",
   "session_list_tab_invalid": "Enter a name or choose a valid destination.",
   "session_list_tab_waiting": "{count} waiting for a response",
+  "session_list_tab_stopped": "{count} newly stopped",
   "session_list_tab_empty": "This tab is empty. Move a session here from another tab.",
   "session_list_tabs_storage_error": "Tab changes could not be saved. They remain available in this window.",
   "session_list_tab_incomplete": "Wait for the parent session before moving this family",

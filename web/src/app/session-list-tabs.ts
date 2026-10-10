@@ -6,7 +6,8 @@ import { SESSION_LIST_TAB_DRAG, SESSION_LIST_CARD_DRAG, SESSION_LIST_TABS_KEY,
   loadSessionListTabs, normalizeSessionListTabs, saveSessionListTabs, addSessionListTab,
   renameSessionListTab, deleteSessionListTab, reorderSessionListTab, reconcileSessionListTabs,
   sessionListIdentity, sessionListFamilies, sessionListOwners, canMoveSessionListFamily, moveSessionListFamily,
-  filterSessionListTree, sessionListWaitingCounts, type SessionListTabState } from './session-list-tab-state.js';
+  filterSessionListTree, sessionListWaitingCounts, loadSessionListStopped, saveSessionListStopped,
+  noteSessionListStopped, settleSessionListStopped, type SessionListTabState } from './session-list-tab-state.js';
 
 interface Callbacks {
   sessions: () => SessionSnapshot[];
@@ -33,6 +34,7 @@ let touchTimer: ReturnType<typeof setTimeout> | null = null;
 let touch: { x: number; y: number; pointerId: number; origin: HTMLElement; identity: string | null; fired: boolean } | null = null;
 let storageFailed = false;
 let preserveSelectionDepth = 0;
+let stopped: Set<string> | null = null;
 
 function tx(key: string, fallback: string, vars?: Record<string, unknown>): string {
   const translated = t(key, vars);
@@ -61,6 +63,21 @@ function persist(): void {
     notice.hidden = !storageFailed;
     notice.textContent = tx('session_list_tabs_storage_error', 'Tab changes could not be saved. They remain available in this window.');
   }
+}
+function unseenStopped(): Set<string> {
+  if (!stopped) {
+    try { stopped = loadSessionListStopped(localStorage); }
+    catch { stopped = new Set(); }
+  }
+  return stopped;
+}
+// A failed save only loses the marks on reload; the badges keep working in this window.
+function persistStopped(): void {
+  try { saveSessionListStopped(localStorage, unseenStopped()); } catch { /* storage denied */ }
+}
+/** Called by ws-client for an observed running→standby turn end the user is not looking at. */
+export function noteSessionListTurnEnd(id: number): void {
+  if (noteSessionListStopped(state(), all(), unseenStopped(), id)) persistStopped();
 }
 function rememberScroll(): void {
   const element = scrollElement();
@@ -265,7 +282,10 @@ export function renderSessionListTabs(): void {
   if (!parent || !callbacks) return;
   if (reconcileSessionListTabs(state(), all())) persist();
   const counts = sessionListWaitingCounts(state(), all(), callbacks.pending);
-  const signature = JSON.stringify([state().tabs, state().selectedId, [...counts]]);
+  const settled = settleSessionListStopped(state(), all(), unseenStopped(), callbacks.pending);
+  if (settled.changed) persistStopped();
+  const stoppedCounts = settled.counts;
+  const signature = JSON.stringify([state().tabs, state().selectedId, [...counts], [...stoppedCounts]]);
   if (signature === tabsSignature || drag) return;
   tabsSignature = signature;
   const focused = parent.contains(document.activeElement);
@@ -285,6 +305,13 @@ export function renderSessionListTabs(): void {
     if (count && !selected) {
       const badge = document.createElement('span'); badge.className = 'session-list-tab-waiting'; badge.textContent = String(count);
       const label = tx('session_list_tab_waiting', '{count} waiting for a response', { count });
+      badge.setAttribute('aria-label', label); button.title += ` · ${label}`; button.append(badge);
+    }
+    // Outlined, unlike the tinted waiting badge, so the two stay distinct without relying on color.
+    const stoppedCount = stoppedCounts.get(tab.id) || 0;
+    if (stoppedCount && !selected) {
+      const badge = document.createElement('span'); badge.className = 'session-list-tab-stopped'; badge.textContent = String(stoppedCount);
+      const label = tx('session_list_tab_stopped', '{count} newly stopped', { count: stoppedCount });
       badge.setAttribute('aria-label', label); button.title += ` · ${label}`; button.append(badge);
     }
     parent.append(button);
