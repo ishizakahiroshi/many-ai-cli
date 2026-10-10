@@ -545,6 +545,20 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 }
 
 .new-session-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
+/* 起動フォームは器の高さで切られて中がスクロールする（session-list-tabs.css の max-height）。
+   起動・キャンセルをスクロールせずに押せるよう、パネルの下端に留める。
+   -8px は #new-session-panel の padding ぶん。sticky の位置はスクロール容器の padding の
+   内側で決まるため、打ち消さないと下に隙間ができて項目が透ける（.cwd-dropdown-chips の
+   top: -2px と同じ作法）。margin で打ち消すのは、収まっているときに下の余白が倍にならないため。 */
+#new-session-panel .new-session-actions {
+  position: sticky;
+  bottom: -8px;
+  z-index: 1;
+  margin-bottom: -8px;
+  padding: 6px 0 8px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+}
 
 /* Spawn buttons */
 .spawn-btn-cancel {
