@@ -193,6 +193,15 @@ if ($Real) {
     Step "通常モード用の home を用意する（$FakeHome。実際の home は読むだけ）"
     New-PrivateDir $FakeHome
     New-PrivateDir $AppHome
+    # git は仮 home の .gitconfig を見る。無いと、仮 home から起動した AI のセッションの git commit が
+    # 「Author identity unknown」で止まる（2026-10-10）。実際の home の .gitconfig を include で読むだけにし、書き換えない。
+    $fakeGitConfig = Join-Path $FakeHome '.gitconfig'
+    $realGitConfig = Join-Path $RealUserHome '.gitconfig'
+    if (-not (Test-Path -LiteralPath $fakeGitConfig) -and (Test-Path -LiteralPath $realGitConfig)) {
+        $includePath = $realGitConfig -replace '\\', '/'
+        [IO.File]::WriteAllText($fakeGitConfig, "[include]`n`tpath = $includePath`n", (New-Object System.Text.UTF8Encoding($false)))
+        Write-Host "git の設定は、実際の home の .gitconfig を読み込むようにしました（読むだけ）: $fakeGitConfig"
+    }
     $realApp = Join-Path $RealUserHome '.many-ai-cli'
     $dstCfg = Join-Path $AppHome 'config.yaml'
     if ($CopySettings -or -not (Test-Path -LiteralPath $dstCfg)) {
