@@ -1049,7 +1049,7 @@ export function renderSessionList() {
       const runningSessionsInGroup = groupSessions.filter(s => s.state === 'running' || s.state === 'waiting' || (s.state || 'standby') === 'standby');
       if (runningSessionsInGroup.length > 0) {
         gridBtn = document.createElement('button');
-        gridBtn.className = 'project-group-grid-btn';
+      gridBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon project-group-grid-btn';
         gridBtn.textContent = '⊞';
         gridBtn.title = t('ctx_open_project_in_grid');
         gridBtn.setAttribute('aria-label', t('ctx_open_project_in_grid'));
@@ -1094,7 +1094,7 @@ export function renderSessionList() {
       projActions.appendChild(projStarBtn);
 
       const projXBtn = document.createElement('button');
-      projXBtn.className = 'dismiss-btn';
+      projXBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon dismiss-btn';
       projXBtn.textContent = t('remove');
       // C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): グループ内に
       // 子起動の確認待ちを抱えたセッションが 1 件でもあれば、グループ ✕ ごと無効化する。
@@ -1315,7 +1315,7 @@ export function renderSessionList() {
       // 以前の 📌 は所属を書き換えて Pinned という別の箱へ移していたが、★ と同じ
       // 「器の中で先頭へ」に揃えた。セッションの属性（pinned 列）はもう書かない。
       const frontBtn = document.createElement('button');
-      frontBtn.className = 'session-front-btn';
+      frontBtn.className = 'ui-button ui-button--secondary ui-button--regular session-front-btn';
       frontBtn.textContent = '⇧';
       frontBtn.title = ti18n('session_move_front', 'このセッションを先頭へ');
       frontBtn.setAttribute('aria-label', frontBtn.title);
@@ -1326,7 +1326,7 @@ export function renderSessionList() {
       actions.appendChild(frontBtn);
 
       const metaBtn = document.createElement('button');
-      metaBtn.className = 'session-meta-btn';
+      metaBtn.className = 'ui-button ui-button--secondary ui-button--regular session-meta-btn';
       metaBtn.textContent = '⋯';
       metaBtn.title = ti18n('session_edit_meta', 'Edit session details');
       metaBtn.setAttribute('aria-label', metaBtn.title);
@@ -1339,7 +1339,7 @@ export function renderSessionList() {
 
 
       const resetBtn = document.createElement('button');
-      resetBtn.className = 'session-history-reset-btn';
+      resetBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon session-history-reset-btn';
       resetBtn.textContent = '↺';
       resetBtn.title = t('session_history_reset_tooltip');
       resetBtn.onclick = (e) => {
@@ -1351,7 +1351,7 @@ export function renderSessionList() {
       // conductor カード（orchestration_id あり・子ではない）にのみ「board を開く」ボタンを出す
       if (s.orchestration_id && !s.parent_session_id && s.board_path) {
         const boardBtn = document.createElement('button');
-        boardBtn.className = 'session-board-open-btn';
+      boardBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon session-board-open-btn';
         boardBtn.textContent = '📋';
         boardBtn.title = t('card_board_button_tooltip');
         boardBtn.onclick = (e) => {
@@ -1366,7 +1366,7 @@ export function renderSessionList() {
       // の有無にかかわらず、追加の relay を開けるようにする。
       if (!s.parent_session_id && isAIOrCustomProvider(String(s.provider || ''))) {
         const relayBtn = document.createElement('button');
-        relayBtn.className = 'session-relay-open-btn';
+      relayBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon session-relay-open-btn';
         relayBtn.textContent = '🔁';
         relayBtn.title = t('relay_start');
         relayBtn.setAttribute('aria-label', relayBtn.title);
@@ -1382,7 +1382,7 @@ export function renderSessionList() {
       // （子 plan: docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C3）。
       if (isAIOrCustomProvider(String(s.provider || ''))) {
         const deriveBtn = document.createElement('button');
-        deriveBtn.className = 'session-derive-open-btn';
+      deriveBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon session-derive-open-btn';
         deriveBtn.textContent = '🌱';
         deriveBtn.title = t('derive_button_title');
         deriveBtn.setAttribute('aria-label', deriveBtn.title);
@@ -1398,7 +1398,7 @@ export function renderSessionList() {
       // （子 plan: plan_ux-notify-palette-review_c1_notify.md 内部 C2）。
       if (isAIOrCustomProvider(String(s.provider || ''))) {
         const bellBtn = document.createElement('button');
-        bellBtn.className = 'session-turn-end-bell-btn';
+      bellBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon session-turn-end-bell-btn';
         const applyBellState = (muted: boolean) => {
           bellBtn.textContent = muted ? '🔕' : '🔔';
           bellBtn.classList.toggle('muted', muted);
@@ -1417,7 +1417,7 @@ export function renderSessionList() {
       }
 
       const xBtn = document.createElement('button');
-      xBtn.className = 'dismiss-btn';
+      xBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon dismiss-btn';
       xBtn.textContent = t('remove');
       // C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): 子起動の
       // 確認待ちを抱えている親は × を無効化する。requestSessionDismiss 側にも同じガードが

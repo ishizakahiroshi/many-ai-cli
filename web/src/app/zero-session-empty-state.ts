@@ -76,7 +76,7 @@ function renderUsageGuide(unsorted: CliInstallStatus[] | null): void {
       <div class="zero-session-body">
         ${collapsible ? `<div class="zero-session-status">${renderInstallStatusList(statuses!)}</div>` : ''}
         <div class="zero-session-guide">
-          ${collapsible ? `<button type="button" class="zero-session-steps-toggle" data-zero-steps-toggle aria-expanded="false">${t('zero_session_steps_show')}</button>` : ''}
+          ${collapsible ? `<button type="button" class="ui-button ui-button--secondary ui-button--regular zero-session-steps-toggle" data-zero-steps-toggle aria-expanded="false">${t('zero_session_steps_show')}</button>` : ''}
           <ol class="zero-session-steps">
             <li><div><strong>${t('zero_session_install_title')}</strong><span>${t('zero_session_install_body')}</span></div></li>
             <li><div><strong>${t('zero_session_step1_title')}</strong><span>${t('zero_session_step1_body')}</span></div></li>
@@ -84,7 +84,7 @@ function renderUsageGuide(unsorted: CliInstallStatus[] | null): void {
             <li><div><strong>${t('zero_session_step3_title')}</strong><span>${t('zero_session_step3_body')}</span></div></li>
           </ol>
         </div>
-        <div class="zero-session-footer"><button type="button" data-zero-tour>${t('zero_session_tour')}</button><span>·</span><button type="button" data-zero-docs>${t('zero_session_docs')}</button><span>·</span><button type="button" data-zero-wiring>${t('zero_session_wiring')}</button></div>
+        <div class="zero-session-footer"><button class="ui-button ui-button--secondary ui-button--regular" type="button" data-zero-tour>${t('zero_session_tour')}</button><span>·</span><button class="ui-button ui-button--secondary ui-button--regular" type="button" data-zero-docs>${t('zero_session_docs')}</button><span>·</span><button class="ui-button ui-button--secondary ui-button--regular" type="button" data-zero-wiring>${t('zero_session_wiring')}</button></div>
       </div>
     </section>`;
   bindUsageGuideButtons();
@@ -131,7 +131,7 @@ function renderMissingGuide(entries: CliInstallStatus[]): void {
       `<li class="zero-session-cli-item">` +
       providerIconHtml(entry.id, 16) +
       `<span class="zero-session-cli-label">${escapeHtml(entry.displayName)}</span>` +
-      `<button type="button" class="zero-session-cli-copy" data-copy="${escapeHtml(entry.id)}">${escapeHtml(entry.id)}</button>` +
+      `<button type="button" class="ui-button ui-button--quiet ui-button--compact zero-session-cli-copy" data-copy="${escapeHtml(entry.id)}">${escapeHtml(entry.id)}</button>` +
       link +
       `</li>`
     );
@@ -150,9 +150,9 @@ function renderMissingGuide(entries: CliInstallStatus[]): void {
       <p class="zero-session-cli-hint">${t('zero_session_missing_copy_hint')}</p>
       ${still}
       <div class="zero-session-footer">
-        <button type="button" class="zero-session-recheck" data-zero-recheck>${t('zero_session_missing_recheck')}</button>
+        <button type="button" class="ui-button ui-button--secondary ui-button--regular zero-session-recheck" data-zero-recheck>${t('zero_session_missing_recheck')}</button>
         <span>·</span>
-        <button type="button" data-zero-docs>${t('zero_session_docs')}</button>
+        <button class="ui-button ui-button--secondary ui-button--regular" type="button" data-zero-docs>${t('zero_session_docs')}</button>
       </div>
     </section>`;
   root.querySelector('[data-zero-docs]')?.addEventListener('click', () => window.open('https://github.com/ishizakahiroshi/many-ai-cli#readme', '_blank', 'noopener'));

@@ -159,7 +159,7 @@ function qrBlock(data: string, caption: string, secret: boolean): HTMLElement {
 
   if (secret && !state.reveal) {
     qrBox.classList.add('mc-qr-blur');
-    const hint = el('button', { class: 'mc-reveal-hint', text: t('mobile_connect_reveal_hint'), attrs: { type: 'button' } });
+    const hint = el('button', { class: 'ui-button ui-button--secondary ui-button--regular mc-reveal-hint', text: t('mobile_connect_reveal_hint'), attrs: { type: 'button' } });
     const doReveal = () => { state.reveal = true; armRevealTimer(); render(); };
     qrBox.addEventListener('click', doReveal);
     hint.addEventListener('click', (e) => { e.stopPropagation(); doReveal(); });
@@ -198,7 +198,7 @@ function copyCmd(text: string, anchor?: Element): void {
 function cmdRow(text: string): HTMLElement {
   const row = el('div', { class: 'mc-cmd' });
   row.appendChild(el('span', { class: 'mc-cmd-text', text }));
-  const btn = el('button', { class: 'mc-cmd-copy', text: t('mobile_connect_copy'), attrs: { type: 'button' } });
+  const btn = el('button', { class: 'ui-button ui-button--quiet ui-button--compact mc-cmd-copy', text: t('mobile_connect_copy'), attrs: { type: 'button' } });
   btn.addEventListener('click', () => copyCmd(text, btn));
   row.appendChild(btn);
   return row;
@@ -238,7 +238,7 @@ function stepDots(active: number): HTMLElement {
 }
 
 function choiceBtn(icon: string, name: string, desc: string, badge: { text: string; cls: string } | null, onClick: () => void, opts?: { recommend?: boolean; note?: string }): HTMLElement {
-  const btn = el('button', { class: 'mc-choice', attrs: { type: 'button' } });
+  const btn = el('button', { class: 'ui-button ui-button--secondary ui-button--regular mc-choice', attrs: { type: 'button' } });
   btn.appendChild(el('span', { class: 'mc-choice-ico', text: icon }));
   const tcol = el('span', { class: 'mc-choice-t' });
   tcol.appendChild(el('span', { class: 'mc-choice-nm', text: name }));
@@ -256,14 +256,14 @@ function choiceBtn(icon: string, name: string, desc: string, badge: { text: stri
 function navRow(opts: { back?: () => void; primary?: { text: string; onClick: () => void }; backText?: string }): HTMLElement {
   const nav = el('div', { class: 'mc-nav' });
   if (opts.back) {
-    const b = el('button', { class: 'mc-nav-btn', text: opts.backText || t('mobile_connect_back'), attrs: { type: 'button' } });
+    const b = el('button', { class: 'ui-button ui-button--secondary ui-button--regular mc-nav-btn', text: opts.backText || t('mobile_connect_back'), attrs: { type: 'button' } });
     b.addEventListener('click', opts.back);
     nav.appendChild(b);
   } else {
     nav.appendChild(el('span'));
   }
   if (opts.primary) {
-    const p = el('button', { class: 'mc-nav-btn mc-nav-primary', text: opts.primary.text, attrs: { type: 'button' } });
+    const p = el('button', { class: 'ui-button ui-button--primary ui-button--regular mc-nav-btn mc-nav-primary', text: opts.primary.text, attrs: { type: 'button' } });
     p.addEventListener('click', opts.primary.onClick);
     nav.appendChild(p);
   } else {
@@ -334,7 +334,7 @@ function renderConsent(body: HTMLElement): void {
   label.append(chk, el('span', { text: t('mobile_connect_consent_agree') }));
   body.appendChild(label);
 
-  const goBtn = el('button', { class: 'mc-nav-btn mc-nav-primary', text: t('mobile_connect_consent_proceed'), attrs: { type: 'button' } }) as HTMLButtonElement;
+  const goBtn = el('button', { class: 'ui-button ui-button--primary ui-button--regular mc-nav-btn mc-nav-primary', text: t('mobile_connect_consent_proceed'), attrs: { type: 'button' } }) as HTMLButtonElement;
   goBtn.disabled = true;
   chk.addEventListener('change', () => { goBtn.disabled = !chk.checked; });
   goBtn.addEventListener('click', () => {
@@ -383,7 +383,7 @@ function renderSetupWizard(body: HTMLElement): void {
 
 function appendSetupBack(body: HTMLElement): void {
   if (state.setupStep <= 1) return;
-  const back = el('button', { class: 'mc-link mc-setup-back', text: t('mobile_connect_back'), attrs: { type: 'button' } });
+  const back = el('button', { class: 'ui-button ui-button--quiet ui-button--compact mc-link mc-setup-back', text: t('mobile_connect_back'), attrs: { type: 'button' } });
   back.addEventListener('click', () => setSetupStep((state.setupStep - 1) as 1 | 2 | 3));
   body.appendChild(back);
 }
@@ -403,7 +403,7 @@ function renderSetupTailscale(body: HTMLElement): void {
   } else {
     body.appendChild(el('div', { class: 'mc-ctx-note mc-ctx-ok', text: t('mobile_setup_tailscale_ready') }));
   }
-  const refresh = el('button', { class: 'mc-link', text: t('mobile_connect_ts_refresh'), attrs: { type: 'button' } });
+  const refresh = el('button', { class: 'ui-button ui-button--quiet ui-button--compact mc-link', text: t('mobile_connect_ts_refresh'), attrs: { type: 'button' } });
   refresh.addEventListener('click', () => { void loadTailscale(true); });
   body.appendChild(refresh);
   body.appendChild(navRow({ primary: { text: t('mobile_setup_next'), onClick: () => setSetupStep(2) } }));
@@ -430,7 +430,7 @@ function renderSetupServe(body: HTMLElement): void {
   } else {
     body.appendChild(el('div', { class: 'mc-ctx-note mc-ctx-ng', text: t('mobile_setup_serve_blocked') }));
   }
-  const refresh = el('button', { class: 'mc-link', text: t('mobile_connect_ts_refresh'), attrs: { type: 'button' } });
+  const refresh = el('button', { class: 'ui-button ui-button--quiet ui-button--compact mc-link', text: t('mobile_connect_ts_refresh'), attrs: { type: 'button' } });
   refresh.addEventListener('click', () => { void loadTailscale(true); });
   body.appendChild(refresh);
 }
@@ -460,7 +460,7 @@ function renderSetupTestApproval(body: HTMLElement): void {
   if (state.testApproval === 'pending') {
     const actions = el('div', { class: 'mc-test-approval-actions' });
     (['approved', 'rejected'] as const).forEach((result) => {
-      const btn = el('button', { class: 'mc-nav-btn ' + (result === 'approved' ? 'mc-nav-primary' : ''), text: result === 'approved' ? t('mobile_setup_test_approve') : t('mobile_setup_test_reject'), attrs: { type: 'button' } });
+      const btn = el('button', { class: 'ui-button ui-button--regular ' + (result === 'approved' ? 'ui-button--primary mc-nav-btn mc-nav-primary' : 'ui-button--secondary mc-nav-btn'), text: result === 'approved' ? t('mobile_setup_test_approve') : t('mobile_setup_test_reject'), attrs: { type: 'button' } });
       btn.addEventListener('click', () => { state.testApproval = result; lsSet(LS_TEST_APPROVAL, result); render(); });
       actions.appendChild(btn);
     });
@@ -469,7 +469,7 @@ function renderSetupTestApproval(body: HTMLElement): void {
   body.appendChild(card);
   if (state.testApproval !== 'pending') {
     body.appendChild(el('div', { class: 'mc-ctx-note mc-ctx-ok', text: t('mobile_setup_complete') }));
-    const reset = el('button', { class: 'mc-link', text: t('mobile_setup_test_again'), attrs: { type: 'button' } });
+    const reset = el('button', { class: 'ui-button ui-button--quiet ui-button--compact mc-link', text: t('mobile_setup_test_again'), attrs: { type: 'button' } });
     reset.addEventListener('click', () => { state.testApproval = 'pending'; lsSet(LS_TEST_APPROVAL, 'pending'); render(); });
     body.appendChild(reset);
   }
@@ -505,7 +505,7 @@ function renderPattern(body: HTMLElement): void {
   body.appendChild(stepDots(1));
   const qRow = el('div', { class: 'mc-q mc-q-row' });
   qRow.appendChild(el('span', { text: t('mobile_connect_q1') }));
-  const helpBtn = el('button', { class: 'mc-link', text: t('mobile_connect_which'), attrs: { type: 'button' } });
+  const helpBtn = el('button', { class: 'ui-button ui-button--quiet ui-button--compact mc-link', text: t('mobile_connect_which'), attrs: { type: 'button' } });
   helpBtn.addEventListener('click', () => { state.help = true; render(); });
   qRow.appendChild(helpBtn);
   body.appendChild(qRow);
@@ -590,7 +590,7 @@ function renderAppInstall(body: HTMLElement): void {
 function appendThirdPartyNote(body: HTMLElement): void {
   const note = el('div', { class: 'mc-thirdparty-note' });
   note.appendChild(el('span', { class: 'mc-thirdparty-text', text: t('mobile_connect_thirdparty_note') }));
-  const link = el('button', { class: 'mc-link', text: t('mobile_connect_thirdparty_details'), attrs: { type: 'button' } });
+  const link = el('button', { class: 'ui-button ui-button--quiet ui-button--compact mc-link', text: t('mobile_connect_thirdparty_details'), attrs: { type: 'button' } });
   link.addEventListener('click', () => {
     // About パネル（z-index 2000）はウィザード（2100）より下なので、ウィザードを閉じてから開く。
     closeModal();
@@ -776,7 +776,7 @@ function renderConnectTailscale(body: HTMLElement): void {
 function buildEnableServeButton(): HTMLElement {
   const wrap = el('div', { class: 'mc-ts-enable' });
   const btn = el('button', {
-    class: 'mc-nav-btn mc-nav-primary mc-ts-enable-btn',
+    class: 'ui-button ui-button--primary ui-button--regular mc-nav-btn mc-nav-primary mc-ts-enable-btn',
     text: tsEnabling ? t('mobile_connect_ts_enable_busy') : t('mobile_connect_ts_enable_btn'),
     attrs: { type: 'button' },
   }) as HTMLButtonElement;
@@ -835,7 +835,7 @@ function appendTailscaleAppLink(body: HTMLElement): void {
 
 function appendSwitchToSshLink(body: HTMLElement): void {
   const row = el('div', { class: 'mc-notify-test' });
-  const btn = el('button', { class: 'mc-link', text: t('mobile_connect_ts_switch_ssh'), attrs: { type: 'button' } });
+  const btn = el('button', { class: 'ui-button ui-button--quiet ui-button--compact mc-link', text: t('mobile_connect_ts_switch_ssh'), attrs: { type: 'button' } });
   btn.addEventListener('click', () => { state.pattern = 'ssh'; state.reveal = false; lsSet(LS_PATTERN, 'ssh'); render(); });
   row.appendChild(btn);
   body.appendChild(row);
@@ -843,7 +843,7 @@ function appendSwitchToSshLink(body: HTMLElement): void {
 
 function appendTailscaleRefreshBtn(body: HTMLElement): void {
   const row = el('div', { class: 'mc-notify-test' });
-  const btn = el('button', { class: 'mc-link', text: t('mobile_connect_ts_refresh'), attrs: { type: 'button' } });
+  const btn = el('button', { class: 'ui-button ui-button--quiet ui-button--compact mc-link', text: t('mobile_connect_ts_refresh'), attrs: { type: 'button' } });
   btn.addEventListener('click', () => { void loadTailscale(true); });
   row.appendChild(btn);
   body.appendChild(row);
@@ -874,7 +874,7 @@ function renderConnectWireguard(body: HTMLElement): void {
 
   // D4: ダミー URL 撤廃。WG サーバ IP をユーザーが入力して本物 URL を組み立てる。
   const ipInput = el('input', {
-    class: 'mc-input',
+    class: 'ui-input mc-input',
     attrs: { type: 'text', placeholder: t('mobile_connect_wg_ip_placeholder'), value: state.wgServerIp },
   }) as HTMLInputElement;
   ipInput.addEventListener('input', () => { state.wgServerIp = ipInput.value.trim(); state.reveal = false; refreshWgUrlQr(); });
@@ -937,7 +937,7 @@ function extractTokenQuery(): string {
 // UX-C: 通知テスト。push 購読状態を案内する簡易導線。
 function appendNotifyTest(body: HTMLElement): void {
   const row = el('div', { class: 'mc-notify-test' });
-  const btn = el('button', { class: 'mc-link', text: t('mobile_connect_notify_test'), attrs: { type: 'button' } });
+  const btn = el('button', { class: 'ui-button ui-button--quiet ui-button--compact mc-link', text: t('mobile_connect_notify_test'), attrs: { type: 'button' } });
   btn.addEventListener('click', async () => {
     try {
       if (!('Notification' in window)) {
@@ -1150,15 +1150,15 @@ function ensureModal(): void {
   const modal = el('div', { class: 'aac-wheel-overlay', attrs: { id: 'mobile-connect-modal' } });
   modal.hidden = true;
 
-  const box = el('div', { class: 'mc-box', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'mobile-connect-title' } });
+  const box = el('div', { class: 'ui-modal ui-modal--md mc-box', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'mobile-connect-title' } });
 
   const head = el('div', { class: 'mc-head' });
   head.appendChild(el('span', { class: 'mc-head-icon', text: '📱' }));
   head.appendChild(el('span', { class: 'mc-head-title', text: t('mobile_connect_title'), attrs: { id: 'mobile-connect-title' } }));
-  const reShow = el('button', { class: 'mc-link mc-head-reshow', text: t('mobile_connect_show_risk'), attrs: { type: 'button' } });
+  const reShow = el('button', { class: 'ui-button ui-button--quiet ui-button--compact mc-link mc-head-reshow', text: t('mobile_connect_show_risk'), attrs: { type: 'button' } });
   reShow.addEventListener('click', () => { state.consented = false; state.help = false; render(); });
   head.appendChild(reShow);
-  const closeBtn = el('button', { class: 'mc-modal-close', text: '✕', attrs: { type: 'button', 'aria-label': t('settings_close') } });
+  const closeBtn = el('button', { class: 'ui-button ui-button--quiet ui-button--compact ui-button--icon mc-modal-close', text: '✕', attrs: { type: 'button', 'aria-label': t('settings_close') } });
   closeBtn.addEventListener('click', () => closeModal());
   head.appendChild(closeBtn);
   box.appendChild(head);

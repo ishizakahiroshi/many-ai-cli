@@ -2,6 +2,7 @@
 // 非モーダル: showModal() は使わず、開いたままターミナルを操作できる（data-wheel-native）。
 // グループ化・並び順・件数の純粋ロジックは memo-model.ts にある。
 import { t } from '../i18n.js';
+import { uiButtonClass, uiIconHtml } from './ui-components.js';
 import { apiFetch } from './util.js';
 import { openLightbox } from './lightbox.js';
 import { activeSessionId, sessions } from './state.js';
@@ -57,7 +58,7 @@ function memoImageUrl(name: string): string {
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, text = '', className = ''): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
   el.textContent = text;
-  el.className = className;
+  el.className = tag === 'button' ? `${uiButtonClass(className.includes('delete') ? 'danger' : className.includes('launch') ? 'primary' : 'quiet', 'compact', { icon: !className.includes('launch') })} ${className}` : className;
   return el;
 }
 
@@ -278,7 +279,7 @@ async function removeMemo(memo: Memo): Promise<void> {
 function beginEdit(memo: Memo, rowBody: HTMLElement, textEl: HTMLElement): void {
   if (rowBody.querySelector('textarea')) return;
   const textarea = document.createElement('textarea');
-  textarea.className = 'memo-row-edit';
+  textarea.className = 'ui-input memo-row-edit';
   textarea.value = memo.text;
   textEl.hidden = true;
   rowBody.appendChild(textarea);
@@ -345,6 +346,9 @@ function buildMemoRow(memo: Memo, project: string): HTMLElement {
   });
   const del = node('button', t('memo_delete'), 'memo-row-delete');
   del.type = 'button';
+  del.title = t('memo_delete');
+  del.setAttribute('aria-label', t('memo_delete'));
+  del.innerHTML = uiIconHtml('delete');
   // ブラウザ標準の確認ダイアログは使わない（画面の隅に出て、押した場所から遠い）。
   // 1 回目の押下でボタン自身が「本当に削除」に変わり、同じ位置をもう一度押すと消える。
   // 3 秒放置・フォーカス移動・マウスが離れたら元に戻す。
@@ -352,7 +356,7 @@ function buildMemoRow(memo: Memo, project: string): HTMLElement {
   const disarm = (): void => {
     window.clearTimeout(armTimer);
     del.classList.remove('memo-row-delete-armed');
-    del.textContent = t('memo_delete');
+    del.innerHTML = uiIconHtml('delete');
   };
   del.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -526,7 +530,7 @@ function ensureDrawer(): HTMLElement {
 
   const inputWrap = node('div', '', 'memo-input-wrap');
   inputEl = document.createElement('textarea');
-  inputEl.className = 'memo-input';
+  inputEl.className = 'ui-input memo-input';
   inputEl.rows = 2;
   inputEl.placeholder = t('memo_input_placeholder');
   inputEl.addEventListener('keydown', (e) => {

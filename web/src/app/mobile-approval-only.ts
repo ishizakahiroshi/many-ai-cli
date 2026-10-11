@@ -44,7 +44,7 @@ function selectOptions(id: number): { approve: any | null; reject: any | null } 
 function optionButton(text: string, className: string, onClick: () => void): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = className;
+  button.className = `ui-button ui-button--secondary ui-button--regular ui-button--touch ${className}`;
   button.textContent = text;
   button.addEventListener('click', onClick);
   return button;

@@ -31,6 +31,9 @@
 #unified-tab-bar .view-tab[data-tab="approval"].has-pending {
   color: var(--warn-text);
 }
+#unified-tab-bar .view-tab[data-tab="approval"].has-pending.ui-button {
+  --ui-button-fg: var(--warn-text);
+}
 @media (prefers-reduced-motion: no-preference) {
   #unified-tab-bar .view-tab[data-tab="approval"].has-pending #approval-tab-badge {
     animation: aqt-badge-pulse 1.4s ease-in-out infinite;
@@ -80,14 +83,10 @@
   font-size: var(--fs-md);
 }
 .aqt-batch-controls span { font-weight: 700; margin-right: auto; }
-.aqt-batch-controls button, .aqt-deny-rest-btn {
-  border: 1px solid var(--line, #c9d1db);
-  border-radius: var(--radius-sm);
-  background: var(--bg, #fff);
-  padding: 4px 8px;
-  cursor: pointer;
+
+.aqt-deny-rest-btn {
+  align-self: flex-end;
 }
-.aqt-deny-rest-btn { align-self: flex-end; color: var(--danger, #b42318); font-size: var(--fs-sm); }
 
 /* 承認カード */
 .aqt-card {
@@ -119,6 +118,8 @@
   gap: var(--space-2);
   flex: 1;
   min-width: 0;
+}
+.aqt-card-title:where(:not(.ui-modal__title)) {
   font-size: var(--fs-md);
 }
 .aqt-provider-dot {
@@ -145,18 +146,7 @@
 /* ターミナルで見るボタン */
 .aqt-go-terminal-btn {
   flex-shrink: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-soft);
-  color: var(--muted);
-  padding: 3px 8px;
-  font-size: var(--fs-sm);
-  cursor: pointer;
   white-space: nowrap;
-}
-.aqt-go-terminal-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
 }
 
 /* 質問文 */
@@ -198,13 +188,7 @@
 }
 .aqt-question-toggle {
   margin-top: 2px;
-  background: none;
-  border: none;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 0.8em;
-  padding: 2px 0;
-  min-height: 32px;
+  min-height: var(--ui-control-size, var(--ui-control-regular));
 }
 .aqt-question-toggle[hidden] {
   display: none !important;
@@ -228,40 +212,25 @@
 }
 
 .aqt-option-btn {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-elev2);
-  color: var(--text-soft);
-  padding: 10px 16px;
-  font-size: var(--fs-md);
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
   min-height: 44px;   /* タッチターゲット 44px 以上（モバイル要件） */
-  line-height: 1.2;
   text-align: left;
   word-break: break-word;
 }
+
 /* 既定（PC）は従来の「N. label」テキスト表示を span 構造で再現する。
    スマホでは mobile-home.css 側で丸バッジに override する（Q1 番号併記の視覚スタイル）。 */
 .aqt-option-btn .aqt-option-num::after { content: ". "; white-space: pre; }
-.aqt-option-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  border-color: var(--accent);
-  color: var(--text);
+.aqt-option-btn.is-current.ui-button {
+  --ui-button-border: color-mix(in srgb, var(--warn) 60%, transparent);
+  --ui-button-bg: color-mix(in srgb, var(--warn-bg) 25%, transparent);
+  --ui-button-hover: var(--ui-button-bg);
+  --ui-button-fg: var(--warn-text);
 }
-.aqt-option-btn.is-current {
-  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
-  background: color-mix(in srgb, var(--warn-bg) 25%, transparent);
-  color: var(--warn-text);
-}
-.aqt-option-btn.chosen {
-  border-color: var(--green);
-  background: color-mix(in srgb, var(--green) 12%, transparent);
-  color: var(--green);
-}
-.aqt-option-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+.aqt-option-btn.chosen.ui-button {
+  --ui-button-border: var(--green);
+  --ui-button-bg: color-mix(in srgb, var(--green) 12%, transparent);
+  --ui-button-hover: var(--ui-button-bg);
+  --ui-button-fg: var(--green);
 }
 
 /* ── C4: スワイプ承認 ── */
@@ -307,18 +276,8 @@
 .aqt-undo-toast-btn {
   display: inline-block;
   margin-left: 10px;
-  background: none;
-  border: 1px solid currentColor;
-  border-radius: var(--radius-sm);
-  color: inherit;
-  font-size: var(--fs-sm);
-  padding: 2px 8px;
-  cursor: pointer;
   vertical-align: middle;
   pointer-events: auto; /* #toast は pointer-events:none のため Undo ボタンだけクリック可能に戻す */
-}
-.aqt-undo-toast-btn:hover {
-  background: rgba(255,255,255,0.15);
 }
 
 /* ── モバイル最適化 (720px 以下) ── */
@@ -335,16 +294,14 @@
     font-size: var(--fs-md);
   }
   .aqt-option-btn {
-    width: 100%;
+  width: 100%;
     min-height: 48px; /* モバイル 48px 以上 */
-    padding: 12px 14px;
-    font-size: var(--fs-body);
-  }
+}
+
   .aqt-go-terminal-btn {
-    min-height: 48px; /* モバイル 48px 以上（タッチターゲット） */
-    padding: 10px 14px;
-    font-size: var(--fs-md);
-  }
+  min-height: 48px; /* モバイル 48px 以上（タッチターゲット） */
+}
+
   .aqt-options {
     flex-direction: column;
   }

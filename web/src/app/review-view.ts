@@ -143,26 +143,26 @@ import { probe } from '../debug/probe.js';
       // （将来の埋め込み利用）では死にボタンにならないようボタン自体を出さない。
       const closeLabel = _gt('review_view_close', 'Close review and return to the terminal');
       const closeBtnHtml = typeof this.opts.onClose === 'function'
-        ? `<button class="git-icon-btn review-close-btn" data-close title="${_esc(closeLabel)}" aria-label="${_esc(closeLabel)}">✕</button>`
+        ? `<button class="ui-button ui-button--quiet ui-button--compact ui-button--icon git-icon-btn review-close-btn" data-close title="${_esc(closeLabel)}" aria-label="${_esc(closeLabel)}">✕</button>`
         : '';
       root.innerHTML = `
         <div class="review-header">
           <div class="review-title">± Review</div>
           <label class="review-scope-label">
             <span>${_esc(_gt('review_scope_label', 'Scope'))}</span>
-            <select data-scope></select>
+            <select class="ui-input" data-scope></select>
           </label>
           <div class="review-repo" data-repo>${_esc(this.gitRoot)}</div>
           <span class="review-branch" data-branch></span>
           <div class="review-spacer"></div>
           <div class="review-stat" data-stat>—</div>
           <div class="review-mode-group">
-            <button class="git-icon-btn" data-mode="inline">${_esc(_gt('review_view_inline', 'Inline'))}</button>
-            <button class="git-icon-btn" data-mode="sbs">${_esc(_gt('review_view_sbs', 'Side by side'))}</button>
+            <button class="ui-button ui-button--quiet ui-button--compact git-icon-btn" data-mode="inline">${_esc(_gt('review_view_inline', 'Inline'))}</button>
+            <button class="ui-button ui-button--quiet ui-button--compact git-icon-btn" data-mode="sbs">${_esc(_gt('review_view_sbs', 'Side by side'))}</button>
           </div>
-          <button class="git-icon-btn" data-refresh title="${_esc(_gt('review_view_refresh', 'Refresh'))}">↻</button>
-          <button class="git-icon-btn" data-push-btn title="${_esc(_gt('git_view_push', 'Push'))}" disabled>↥ push</button>
-          <button class="git-commit-all-btn" data-commit-all-btn disabled>${_esc(_gt('git_commit_all', 'Commit all'))}</button>
+          <button class="ui-button ui-button--quiet ui-button--compact ui-button--icon git-icon-btn" data-refresh title="${_esc(_gt('review_view_refresh', 'Refresh'))}">↻</button>
+          <button class="ui-button ui-button--quiet ui-button--compact git-icon-btn" data-push-btn title="${_esc(_gt('git_view_push', 'Push'))}" disabled>↥ push</button>
+          <button class="ui-button ui-button--secondary ui-button--regular git-commit-all-btn" data-commit-all-btn disabled>${_esc(_gt('git_commit_all', 'Commit all'))}</button>
           ${closeBtnHtml}
         </div>
         <div class="review-body">
@@ -170,7 +170,7 @@ import { probe } from '../debug/probe.js';
             <div class="review-message">${_esc(_gt('review_view_loading', 'Loading...'))}</div>
           </div>
           <div class="review-tree-pane">
-            <input type="search" data-filter placeholder="${_esc(_gt('review_view_filter_placeholder', 'Filter files...'))}">
+            <input class="ui-input" type="search" data-filter placeholder="${_esc(_gt('review_view_filter_placeholder', 'Filter files...'))}">
             <div class="review-tree" data-tree></div>
           </div>
         </div>
@@ -595,8 +595,8 @@ import { probe } from '../debug/probe.js';
         <span class="file-stat-del" data-turn-removed></span>
       </div>
       <div class="git-turn-card-actions">
-        <button type="button" class="git-turn-review-btn" data-turn-review></button>
-        <button type="button" class="git-turn-close-btn" data-turn-close>✕</button>
+        <button type="button" class="ui-button ui-button--secondary ui-button--regular git-turn-review-btn" data-turn-review></button>
+        <button type="button" class="ui-button ui-button--quiet ui-button--compact ui-button--icon git-turn-close-btn" data-turn-close>✕</button>
       </div>
     `;
     card.querySelector('[data-turn-review]')?.addEventListener('click', () => {

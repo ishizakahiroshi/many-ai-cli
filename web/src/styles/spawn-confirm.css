@@ -14,17 +14,10 @@
   margin: auto;
   z-index: 12100;
   box-sizing: border-box;
-  width: min(620px, calc(100vw - 32px));
-  max-width: calc(100vw - 32px);
   max-height: min(84dvh, 760px);
-  padding: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--bg-elev);
-  color: var(--text);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
 }
+
 .spawn-confirm-dialog::backdrop { background: rgba(0, 0, 0, 0.62); }
 
 .spawn-confirm-form {
@@ -49,12 +42,10 @@
 }
 .spawn-confirm-title {
   margin: 0;
-  font-size: var(--fs-lg);
-  font-weight: 700;
-  color: var(--text);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
+
 .spawn-confirm-parent {
   font-size: var(--fs-xs);
   color: var(--muted);
@@ -252,7 +243,7 @@
   font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   font-size: var(--fs-sm);
   line-height: 1.55;
-  /* 折り返さないと長い 1 行（絶対パス等）が右へ突き抜けて読めなくなる。 */
+  /* 折り返さないと長い 1 行（絶対パス等）が右へ突き抜けて読めなくなる。 */;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -288,37 +279,18 @@
   background: var(--bg-elev);
 }
 .spawn-confirm-btn {
-  min-height: var(--control-h-sm);
-  padding: 6px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--muted);
-  font-family: inherit;
-  font-size: var(--fs-md);
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  min-height: var(--ui-control-size, var(--ui-control-compact));
 }
-.spawn-confirm-btn:hover { color: var(--text); border-color: var(--line-soft); }
-.spawn-confirm-btn:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-glow);
-}
-.spawn-confirm-btn.is-primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
-  font-weight: 600;
-}
-.spawn-confirm-btn.is-primary:hover { filter: brightness(1.08); color: #fff; }
 
 @media (max-width: 520px) {
   .spawn-confirm-dialog {
-    width: calc(100vw - 16px);
-    max-height: min(90dvh, 760px);
-  }
+  max-height: min(90dvh, 760px);
+}
+
   .spawn-confirm-fields { grid-template-columns: minmax(0, 1fr); }
   .spawn-confirm-actions { padding: 10px 12px 12px; }
   .spawn-confirm-btn { flex: 1; }
 }
+
+/* The existing header/body own padding and scrolling for these shells. */
+.spawn-confirm-dialog.ui-modal { padding: 0; }

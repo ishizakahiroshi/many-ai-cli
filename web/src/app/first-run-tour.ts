@@ -49,7 +49,7 @@ async function saveTourState(next: TourState): Promise<void> {
 function makeButton(label: string, className: string): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = className;
+  button.className = `ui-button ui-button--${className.includes('next') ? 'primary' : 'secondary'} ui-button--regular ${className}`;
   button.textContent = label;
   return button;
 }
@@ -91,7 +91,7 @@ export function initFirstRunTour(): void {
       const slide = slides[slideIndex];
       overlay.innerHTML = '';
       const dialog = document.createElement('section');
-      dialog.className = 'first-run-tour-dialog';
+      dialog.className = 'ui-modal ui-modal--md first-run-tour-dialog';
       dialog.setAttribute('role', 'dialog');
       dialog.setAttribute('aria-modal', 'true');
       dialog.setAttribute('aria-labelledby', 'first-run-tour-title');

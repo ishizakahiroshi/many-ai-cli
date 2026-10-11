@@ -131,7 +131,7 @@ export function initInputIconPositions(): void {
     control.setAttribute('aria-keyshortcuts', 'Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown');
     const grip = document.createElement('button');
     grip.type = 'button';
-    grip.className = 'input-icon-grip';
+    grip.className = 'ui-button ui-button--quiet ui-button--compact input-icon-grip';
     grip.textContent = '⠿';
     grip.title = '↔ ↕ · Alt + ← ↑ → ↓';
     grip.hidden = true;

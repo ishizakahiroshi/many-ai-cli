@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "a114727651bdca2884c3d4b92262bbae240f6b2c",
+    "commit": "e1ab622aa7708ae883a3cdd83d042fbf2cf31e38",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1966,
-    "analyzed": 1526,
+    "discovered": 1974,
+    "analyzed": 1533,
     "unresolved": 9,
-    "unknown": 1,
-    "unclaimed": 430,
+    "unknown": 0,
+    "unclaimed": 432,
     "skipped_by_config": 0
   },
   "files": [
@@ -1558,6 +1558,14 @@
     },
     {
       "path": "docs/manual_whisper.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/ui-components.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -40056,6 +40064,66 @@
       "unresolved": []
     },
     {
+      "path": "scripts/check-ui-components.mjs",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "UI appearance belongs to ui-components.css; inherited exceptions have exact,"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "scripts/check-ui-components.test.mjs",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "scripts/check-version-sources.mjs",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -40778,6 +40846,14 @@
       "unresolved": []
     },
     {
+      "path": "scripts/ui-components-exceptions.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
       "path": "unblock-windows.cmd",
       "adapter": null,
       "status": "unclaimed",
@@ -41398,10 +41474,32 @@
     {
       "path": "web/src/app/approval-queue-tab.ts",
       "adapter": "tsjs",
-      "status": "unknown",
-      "fields": {},
-      "unresolved": [],
-      "reason": "tree-sitter reported a syntax error, so the file was not analyzed. Anything read from a partial parse would be a guess."
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "approval-queue-tab.ts"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
     },
     {
       "path": "web/src/app/approval-store-fixtures.ts",
@@ -41801,6 +41899,36 @@
         "summary": {
           "state": "value",
           "value": "command-palette-store.ts — Ctrl+K パレットに乗せる「コマンド」の定義・絞り込み・"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/confirmation-labels.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -45514,6 +45642,36 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/ui-components.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Appearance only: callers retain events, focus, cleanup and return values."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/ui-side.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -47284,6 +47442,32 @@
       "unresolved": []
     },
     {
+      "path": "web/src/styles/ui-components.css",
+      "adapter": "css",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "out_of_scope"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/styles/voice.css",
       "adapter": "css",
       "status": "analyzed",
@@ -48270,6 +48454,36 @@
     },
     {
       "path": "web/tests/turn-end-notify-store.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/ui-components.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

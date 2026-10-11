@@ -33,30 +33,30 @@
     <span id="runtime-badge" class="runtime-badge" hidden></span>
     <div class="header-sep"></div>
     <div id="summary" data-i18n="loading">...</div>
-    <button id="reconnect-btn" hidden>↺ <span data-i18n="reconnect">reconnect</span></button>
-    <button id="global-wakeword-btn" hidden>🎧</button>
+    <button class="ui-button ui-button--primary ui-button--regular" id="reconnect-btn" hidden>↺ <span data-i18n="reconnect">reconnect</span></button>
+    <button class="ui-button ui-button--secondary ui-button--regular ui-button--icon" id="global-wakeword-btn" hidden>🎧</button>
     <span id="mic-status-chip" class="status-chip" hidden></span>
   </header>
 
   <div id="settings-panel" class="aac-wheel-overlay" hidden>
     <div class="settings-header">
-      <button id="settings-back-btn" type="button" class="settings-header-btn settings-back-btn" data-i18n="settings_back">← 戻る</button>
+      <button id="settings-back-btn" type="button" class="ui-button ui-button--secondary ui-button--compact settings-header-btn settings-back-btn" data-i18n="settings_back">← 戻る</button>
       <img src="/icon.svg" class="settings-app-icon" alt="">
       <div>
         <div class="settings-app-name">MANY-AI-CLI</div>
         <div class="settings-app-version"></div>
       </div>
       <div class="settings-header-actions">
-        <button id="settings-reset-btn" class="settings-header-btn" data-i18n="settings_reset">リセット</button>
-        <button id="settings-save-btn" class="settings-header-btn" data-i18n="settings_save">保存</button>
-        <button id="settings-close-btn" class="settings-header-btn settings-header-btn-close" data-i18n="settings_close" data-i18n-tooltip="settings_close">✕</button>
+        <button id="settings-reset-btn" class="ui-button ui-button--secondary ui-button--compact settings-header-btn" data-i18n="settings_reset">リセット</button>
+        <button id="settings-save-btn" class="ui-button ui-button--primary ui-button--compact settings-header-btn" data-i18n="settings_save">保存</button>
+        <button id="settings-close-btn" class="ui-button ui-button--quiet ui-button--compact ui-button--icon settings-header-btn settings-header-btn-close" data-i18n="settings_close" data-i18n-tooltip="settings_close">✕</button>
       </div>
     </div>
     <div class="settings-layout">
     <nav id="settings-nav" class="settings-nav" aria-label="Settings sections">
       <div class="settings-ia-toolbar" role="search">
         <label class="settings-ia-search-label" for="settings-search-input" data-i18n="settings_search_label">設定を検索</label>
-        <input id="settings-search-input" class="settings-ia-search" type="search" data-i18n-placeholder="settings_search_placeholder" placeholder="項目名・現在値・説明を検索" autocomplete="off">
+        <input id="settings-search-input" class="ui-input settings-ia-search" type="search" data-i18n-placeholder="settings_search_placeholder" placeholder="項目名・現在値・説明を検索" autocomplete="off">
         <p id="settings-search-status" class="settings-search-status" aria-live="polite"></p>
       </div>
       <div id="settings-nav-list" class="settings-nav-list"></div>
@@ -67,7 +67,7 @@
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_language">Language</span>
-            <select id="lang-select" class="settings-select">
+            <select id="lang-select" class="ui-input settings-select">
               <option value="ja">日本語</option>
               <option value="en">English</option>
               <option value="vi">Tiếng Việt</option>
@@ -76,18 +76,18 @@
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_theme">Theme</span>
             <span class="settings-row-actions">
-              <select id="theme-select" class="settings-select">
+            <select id="theme-select" class="ui-input settings-select">
                 <option value="light">Light</option>
                 <option value="dark">Dark</option>
               </select>
-              <button type="button" id="theme-add-btn" class="settings-inline-btn" data-i18n="settings_theme_add">追加</button>
+              <button type="button" id="theme-add-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_theme_add">追加</button>
             </span>
           </div>
           <div class="settings-note" id="theme-hint" data-i18n="settings_theme_hint">Light と Dark は出荷の色です。自分のテーマを足すと色味と濃淡を動かせます。</div>
           <div id="custom-theme-editor" hidden>
             <div class="settings-row">
               <span class="settings-label" data-i18n="settings_theme_name">名前</span>
-              <input type="text" id="custom-theme-name" class="settings-input-text" maxlength="16" autocomplete="off">
+              <input type="text" id="custom-theme-name" class="ui-input settings-input-text" maxlength="16" autocomplete="off">
             </div>
             <div class="settings-row settings-row--theme-knob">
               <span class="settings-label"><span data-i18n="settings_theme_hue">色味</span> <span id="custom-theme-hue-label" class="theme-knob-value"></span></span>
@@ -105,17 +105,17 @@
             </div>
             <div class="settings-row">
               <span class="settings-label" data-i18n="settings_theme_this">このテーマ</span>
-              <button type="button" id="theme-delete-btn" class="settings-inline-btn settings-inline-btn-danger" data-i18n="settings_theme_delete">削除</button>
+              <button type="button" id="theme-delete-btn" class="ui-button ui-button--danger ui-button--compact settings-inline-btn settings-inline-btn-danger" data-i18n="settings_theme_delete">削除</button>
             </div>
           </div>
           <div id="custom-theme-add" hidden>
             <div class="settings-row">
               <span class="settings-label" data-i18n="settings_theme_name">名前</span>
-              <input type="text" id="new-theme-name" class="settings-input-text" maxlength="16" autocomplete="off" data-i18n-placeholder="settings_theme_name_placeholder" placeholder="例: 濃い">
+              <input type="text" id="new-theme-name" class="ui-input settings-input-text" maxlength="16" autocomplete="off" data-i18n-placeholder="settings_theme_name_placeholder" placeholder="例: 濃い">
             </div>
             <div class="settings-row">
               <span class="settings-label" data-i18n="settings_theme_base">土台</span>
-              <select id="new-theme-base" class="settings-select">
+            <select id="new-theme-base" class="ui-input settings-select">
                 <option value="dark">Dark</option>
                 <option value="light">Light</option>
               </select>
@@ -137,14 +137,14 @@
             <div class="settings-row">
               <span class="settings-label"></span>
               <span class="settings-row-actions">
-                <button type="button" id="theme-save-btn" class="settings-inline-btn" data-i18n="settings_theme_save">この名前で追加</button>
-                <button type="button" id="theme-cancel-btn" class="settings-inline-btn" data-i18n="settings_theme_cancel">やめる</button>
+                <button type="button" id="theme-save-btn" class="ui-button ui-button--primary ui-button--compact settings-inline-btn" data-i18n="settings_theme_save">この名前で追加</button>
+                <button type="button" id="theme-cancel-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_theme_cancel">やめる</button>
               </span>
             </div>
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_fontsize">Font size</span>
-            <select id="fontsize-select" class="settings-select">
+            <select id="fontsize-select" class="ui-input settings-select">
               <option value="large" data-i18n="fontsize_large">Large</option>
               <option value="medium" data-i18n="fontsize_medium">Medium</option>
               <option value="small" data-i18n="fontsize_small">Small</option>
@@ -152,7 +152,7 @@
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_locked_mode_label">表示モードを固定</span>
-            <select id="locked-mode-select" class="settings-select">
+            <select id="locked-mode-select" class="ui-input settings-select">
               <option value="" data-i18n="settings_locked_mode_none">自由切替</option>
               <option value="terminal" data-i18n="settings_locked_mode_terminal">ターミナル</option>
               <option value="chat" data-i18n="settings_locked_mode_chat">チャット</option>
@@ -161,22 +161,22 @@
           <div class="settings-note" data-i18n="settings_locked_mode_desc">新規セッション/リロード時に選択したモードで開きます。途中で切替えることは可能です。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_tab_order_label">タブの並び順</span>
-            <button type="button" id="tab-order-reset-btn" class="settings-inline-btn" data-i18n="settings_tab_order_reset">既定に戻す</button>
+            <button type="button" id="tab-order-reset-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_tab_order_reset">既定に戻す</button>
           </div>
           <div class="settings-note" data-i18n="settings_tab_order_desc">タブバーのタブはドラッグで並べ替えできます。使わないタブは右端へ寄せてください。並び順はこのブラウザにのみ保存されます。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_input_tools_order_label">入力欄ボタンの並び順</span>
-            <button type="button" id="input-tools-order-reset-btn" class="settings-inline-btn" data-i18n="settings_input_tools_order_reset">既定に戻す</button>
+            <button type="button" id="input-tools-order-reset-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_input_tools_order_reset">既定に戻す</button>
           </div>
           <div class="settings-note" data-i18n="settings_input_tools_order_desc">入力欄の下のボタン（停止・マイク・クイックコマンド等）はドラッグで並べ替えできます（PC のみ）。並び順はこのブラウザにのみ保存されます。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_provider_order_label">新規セッションの並び順</span>
-            <button type="button" id="provider-order-reset-btn" class="settings-inline-btn" data-i18n="settings_provider_order_reset">既定に戻す</button>
+            <button type="button" id="provider-order-reset-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_provider_order_reset">既定に戻す</button>
           </div>
           <div class="settings-note" data-i18n="settings_provider_order_desc">新規セッションの provider はドラッグで並べ替えできます。並び順はこのブラウザにのみ保存されます。タッチ端末では並べ替えできません。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_ui_side_cards_label">操作系の左右: セッションカード</span>
-            <select id="ui-side-cards-select" class="settings-select">
+            <select id="ui-side-cards-select" class="ui-input settings-select">
               <option value="" data-i18n="settings_ui_side_opt_default">既定（従来どおり）</option>
               <option value="left" data-i18n="settings_ui_side_opt_left">左に置く</option>
               <option value="right" data-i18n="settings_ui_side_opt_right">右に置く</option>
@@ -184,7 +184,7 @@
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_ui_side_tools_label">操作系の左右: 入力欄のツール群</span>
-            <select id="ui-side-tools-select" class="settings-select">
+            <select id="ui-side-tools-select" class="ui-input settings-select">
               <option value="" data-i18n="settings_ui_side_opt_default">既定（従来どおり）</option>
               <option value="left" data-i18n="settings_ui_side_opt_left">左に置く</option>
               <option value="right" data-i18n="settings_ui_side_opt_right">右に置く</option>
@@ -192,7 +192,7 @@
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_ui_side_close_label">操作系の左右: 開閉・閉じるボタン</span>
-            <select id="ui-side-close-select" class="settings-select">
+            <select id="ui-side-close-select" class="ui-input settings-select">
               <option value="" data-i18n="settings_ui_side_opt_default">既定（従来どおり）</option>
               <option value="left" data-i18n="settings_ui_side_opt_left">左に置く</option>
               <option value="right" data-i18n="settings_ui_side_opt_right">右に置く</option>
@@ -200,7 +200,7 @@
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_ui_side_approval_label">確認ポップアップの位置</span>
-            <select id="ui-side-approval-select" class="settings-select">
+            <select id="ui-side-approval-select" class="ui-input settings-select">
               <option value="" data-i18n="settings_ui_side_approval_default">下（従来どおり）</option>
               <option value="right" data-i18n="settings_ui_side_approval_right">右カラム</option>
               <option value="left" data-i18n="settings_ui_side_approval_left">左カラム</option>
@@ -218,18 +218,18 @@
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_display_name">表示名</span>
-            <input type="text" id="display-name-input" class="settings-input-text">
+            <input type="text" id="display-name-input" class="ui-input settings-input-text">
           </div>
           <div class="settings-note" data-i18n="settings_display_name_desc">未入力時はシステムのユーザー名から自動取得します。イニシャル丸のテキストに反映されます。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_avatar_url">アイコン画像</span>
-            <input type="text" id="avatar-url-input" class="settings-input-text settings-avatar-url-input">
-            <button id="avatar-url-apply-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_avatar_apply">適用</button>
+            <input type="text" id="avatar-url-input" class="ui-input settings-input-text settings-avatar-url-input">
+            <button id="avatar-url-apply-btn" class="ui-button ui-button--secondary ui-button--compact settings-link-btn settings-inline-btn" data-i18n="settings_avatar_apply">適用</button>
           </div>
           <div class="settings-note" data-i18n="settings_avatar_url_desc">ローカルパスまたは URL。未設定・読み込み失敗時はイニシャル丸を表示します。</div>
           <div class="settings-row">
-            <button id="avatar-file-btn" class="settings-inline-btn" data-i18n="settings_avatar_file_select">ファイルを選択</button>
-            <button id="avatar-clear-btn" class="settings-inline-btn" data-i18n="settings_avatar_clear">クリア</button>
+            <button id="avatar-file-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_avatar_file_select">ファイルを選択</button>
+            <button id="avatar-clear-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_avatar_clear">クリア</button>
             <input type="file" id="avatar-file-input" accept="image/png,image/jpeg,image/webp" style="display:none">
           </div>
         </div>
@@ -254,7 +254,7 @@
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_terminal_color">Terminal colors</span>
-            <select id="terminal-color" class="settings-select">
+            <select id="terminal-color" class="ui-input settings-select">
               <option value="force" data-i18n="settings_terminal_color_force">Always show colors (recommended)</option>
               <option value="inherit" data-i18n="settings_terminal_color_inherit">Follow the launch environment</option>
               <option value="off" data-i18n="settings_terminal_color_off">No colors</option>
@@ -263,7 +263,7 @@
           <div class="settings-note" data-i18n="settings_terminal_color_desc">Applies to newly started sessions. "Follow the launch environment" honors NO_COLOR from the shell that started the Hub; "No colors" turns colors off even if that shell asks for them.</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_handoff_intent_mode">Handoff recording</span>
-            <select id="handoff-intent-mode" class="settings-select">
+            <select id="handoff-intent-mode" class="ui-input settings-select">
               <option value="done-only" data-i18n="settings_handoff_intent_mode_done_only">Completion summaries only (recommended)</option>
               <option value="turn-summary" data-i18n="settings_handoff_intent_mode_turn_summary">Also record a summary of every turn</option>
             </select>
@@ -271,17 +271,17 @@
           <div class="settings-note" data-i18n="settings_handoff_intent_mode_desc">"Also record a summary of every turn" asks the AI for a one-line summary after each turn and uses more of the session's own tokens. Off by default; turn on only if you have tokens to spare.</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_idle_timeout">Idle timeout (min)</span>
-            <input type="number" id="idle-timeout-min" min="0" max="1440" value="60" class="settings-input-number">
+            <input type="number" id="idle-timeout-min" min="0" max="1440" value="60" class="ui-input settings-input-number">
           </div>
           <div class="settings-note" data-i18n="settings_idle_timeout_desc">0 = never. AI sessions are terminated after this many minutes with no browser connected.</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_reconnect_grace">Hub crash grace (min)</span>
-            <input type="number" id="reconnect-grace-min" min="0" max="1440" value="60" class="settings-input-number">
+            <input type="number" id="reconnect-grace-min" min="0" max="1440" value="60" class="ui-input settings-input-number">
           </div>
           <div class="settings-note" data-i18n="settings_reconnect_grace_desc">0 = disable reconnect. How long wrappers wait for the Hub to come back after a crash before terminating their PTY. Applies to NEW sessions only — running sessions keep the value at the time they were spawned.</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_board_notify_mode">Progress update notification</span>
-            <select id="board-notify-mode" class="settings-select">
+            <select id="board-notify-mode" class="ui-input settings-select">
               <option value="soft-notify" data-i18n="settings_board_notify_soft">Badge only (recommended)</option>
               <option value="queue-until-idle" data-i18n="settings_board_notify_queue">Queue until conductor is idle</option>
               <option value="interrupt" data-i18n="settings_board_notify_interrupt">Interrupt immediately</option>
@@ -290,7 +290,7 @@
           <div class="settings-note" data-i18n="settings_board_notify_mode_desc">Controls routine progress only. Completion, failure, questions, stalls, and delayed spawn results are always queued and delivered when the conductor's main composer is safe.</div>
           <div class="settings-row">
             <span class="settings-label">Child spawn confirmation</span>
-            <select id="spawn-confirm-mode" class="settings-select">
+            <select id="spawn-confirm-mode" class="ui-input settings-select">
               <option value="on">Always ask (recommended)</option>
               <option value="off">Never ask</option>
               <option value="providers">Only these providers</option>
@@ -298,17 +298,17 @@
           </div>
           <div class="settings-row" id="spawn-confirm-providers-row">
             <span class="settings-label">Providers</span>
-            <input id="spawn-confirm-providers" class="settings-input" placeholder="codex, claude">
+            <input id="spawn-confirm-providers" class="ui-input settings-input" placeholder="codex, claude">
           </div>
           <div class="settings-note">Before an orchestration child starts, approve it, adjust its provider/model, or refuse it. Refusals are written to the orchestration board.</div>
           <div class="settings-row">
             <label class="settings-label" for="orchestration-max-children" data-i18n="settings_auto_child_limit">Automatic children per parent</label>
-            <input id="orchestration-max-children" type="number" min="1" max="256" step="1" class="settings-input-number" value="10">
+            <input id="orchestration-max-children" type="number" min="1" max="256" step="1" class="ui-input settings-input-number" value="10">
           </div>
           <div class="settings-note" data-i18n="settings_auto_child_limit_desc">Default 10, adjustable from 1 to 256. Children approved individually or launched from the UI allow up to 256 per parent. Counts include open children and reserved slots.</div>
           <div class="settings-row">
             <span class="settings-label">Child timeout (seconds)</span>
-            <input id="orchestration-child-timeout" type="number" min="60" max="86400" class="settings-input-number" value="900">
+            <input id="orchestration-child-timeout" type="number" min="60" max="86400" class="ui-input settings-input-number" value="900">
             <label><input id="orchestration-timeout-respawn" type="checkbox"> Retry once</label>
           </div>
         </div>
@@ -320,7 +320,7 @@
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_server_manage_label">接続プロファイル</span>
             <div class="settings-row-actions">
-              <button id="server-manage-btn" class="settings-inline-btn" data-i18n="settings_server_manage_btn" aria-haspopup="dialog">管理を開く</button>
+              <button id="server-manage-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_server_manage_btn" aria-haspopup="dialog">管理を開く</button>
             </div>
           </div>
           <div class="settings-note" data-i18n="settings_server_manage_desc">SSH / WSL 先の Hub への接続プロファイルの追加・接続・切断を行います。</div>
@@ -344,7 +344,7 @@
           <div id="cli-maintenance-missing"></div>
           <div id="provider-manager-list" class="provider-manager-list" aria-live="polite"></div>
           <div class="settings-row-actions provider-manager-toolbar">
-            <button id="provider-add-btn" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_add">Add AI CLI</button>
+            <button id="provider-add-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" type="button" data-i18n="settings_ai_providers_add">Add AI CLI</button>
             <span id="provider-manager-status" class="settings-note" aria-live="polite"></span>
           </div>
         </div>
@@ -358,7 +358,7 @@
           <label class="settings-row"><input id="nvidia-nim-enabled" type="checkbox"><span data-i18n="settings_nim_enable">Enable NVIDIA NIM for OpenCode</span></label>
           <div class="settings-row">
             <label class="settings-label" for="nvidia-nim-api-key" data-i18n="settings_nim_api_key">NVIDIA API key</label>
-            <input id="nvidia-nim-api-key" class="settings-input-url" type="password" autocomplete="new-password" data-i18n-placeholder="settings_nim_api_key_placeholder" placeholder="Enter a key to save or replace it">
+            <input id="nvidia-nim-api-key" class="ui-input settings-input-url" type="password" autocomplete="new-password" data-i18n-placeholder="settings_nim_api_key_placeholder" placeholder="Enter a key to save or replace it">
           </div>
           <div class="settings-note" id="nvidia-nim-key-state" role="status" aria-live="polite" data-i18n="settings_nim_key_loading">Checking key status…</div>
           <div class="settings-note" id="nvidia-nim-env-note" data-i18n="settings_nim_env_managed" hidden>NVIDIA_API_KEY is managed by the Hub environment. Change it there; the Settings page cannot replace or delete it.</div>
@@ -367,9 +367,9 @@
             <code>https://integrate.api.nvidia.com/v1</code>
           </div>
           <div class="settings-row-actions">
-            <button id="nvidia-nim-save" class="settings-inline-btn" type="button" data-i18n="settings_nim_save">Save settings</button>
-            <button id="nvidia-nim-test" class="settings-inline-btn" type="button" data-i18n="settings_nim_test">Test connection</button>
-            <button id="nvidia-nim-delete-key" class="settings-inline-btn danger" type="button" data-i18n="settings_nim_delete_key">Delete saved key</button>
+            <button id="nvidia-nim-save" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" type="button" data-i18n="settings_nim_save">Save settings</button>
+            <button id="nvidia-nim-test" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" type="button" data-i18n="settings_nim_test">Test connection</button>
+            <button id="nvidia-nim-delete-key" class="ui-button ui-button--danger ui-button--compact settings-inline-btn danger" type="button" data-i18n="settings_nim_delete_key">Delete saved key</button>
           </div>
           <div class="settings-note" id="nvidia-nim-test-result" role="status" aria-live="polite" hidden></div>
         </div>
@@ -381,9 +381,9 @@
           <div class="settings-note" data-i18n="settings_jev_key">Set TYPESAFE_API_KEY in the Hub process environment. The key stays on the Hub.</div>
           <label class="settings-row jev-opt-in-row"><input id="jev-opt-in" type="checkbox"><span data-i18n="settings_jev_opt_in">Enable manual Jev evaluation on this browser</span></label>
           <label class="settings-label" for="jev-text" data-i18n="settings_jev_text_label">Text to evaluate</label>
-          <textarea id="jev-text" class="jev-text" maxlength="4096" rows="4" data-i18n-placeholder="settings_jev_placeholder" placeholder="Enter only the text you want to send"></textarea>
+          <textarea id="jev-text" class="ui-input jev-text" maxlength="4096" rows="4" data-i18n-placeholder="settings_jev_placeholder" placeholder="Enter only the text you want to send"></textarea>
           <div class="settings-note settings-note-warn" data-i18n="settings_jev_notice">Pressing Evaluate sends the text above to TypeSafe and may incur usage charges. Do not enter secrets.</div>
-          <div class="settings-row-actions"><button id="jev-evaluate" class="settings-inline-btn" type="button" disabled data-i18n="settings_jev_evaluate">Evaluate with Jev</button></div>
+          <div class="settings-row-actions"><button id="jev-evaluate" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" type="button" disabled data-i18n="settings_jev_evaluate">Evaluate with Jev</button></div>
           <div id="jev-result" class="settings-note" role="status" aria-live="polite"></div>
         </div>
       </details>
@@ -393,7 +393,7 @@
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_revoke_all">全アクセスを失効</span>
             <div class="settings-row-actions">
-              <button id="revoke-all-btn" class="settings-inline-btn danger" data-i18n="settings_revoke_all_btn">失効する</button>
+              <button id="revoke-all-btn" class="ui-button ui-button--danger ui-button--compact settings-inline-btn danger" data-i18n="settings_revoke_all_btn">失効する</button>
             </div>
           </div>
           <div class="settings-note settings-note-warn" data-i18n="settings_revoke_all_desc">Hub の token と認証 cookie を再生成し、紛失端末を含む全デバイスを弾きます。このPCも新しいURLで再ログインが必要になります。SSH/VPN の鍵失効は別途必要です（紛失時プレイブック参照）。</div>
@@ -404,9 +404,9 @@
             </div>
           </div>
           <div class="settings-row">
-            <input type="password" inputmode="numeric" pattern="[0-9]*" id="remote-pin-input" class="settings-input-text" placeholder="6+ digits" autocomplete="off">
-            <button id="remote-pin-set-btn" class="settings-inline-btn" data-i18n="settings_remote_pin_set">設定</button>
-            <button id="remote-pin-clear-btn" class="settings-inline-btn danger" data-i18n="settings_remote_pin_clear" hidden>解除</button>
+            <input type="password" inputmode="numeric" pattern="[0-9]*" id="remote-pin-input" class="ui-input settings-input-text" placeholder="6+ digits" autocomplete="off">
+            <button id="remote-pin-set-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_remote_pin_set">設定</button>
+            <button id="remote-pin-clear-btn" class="ui-button ui-button--danger ui-button--compact settings-inline-btn danger" data-i18n="settings_remote_pin_clear" hidden>解除</button>
           </div>
           <div class="settings-note" data-i18n="settings_remote_pin_desc">既定 OFF。設定すると非 loopback（スマホ/VPN）からのアクセス時に PIN ログインを要求します。loopback（このPC）は従来どおり token のみで通ります。VPN 専用で SSH を置かない運用の追加の鍵向けです。</div>
           <div id="remote-pin-exposed-hint" class="settings-note settings-note-warn" data-i18n="settings_remote_pin_exposed_hint" hidden>allowed_hosts / trusted_networks が設定されていますが PIN は未設定です。遠隔経路は token だけで通ります。</div>
@@ -417,14 +417,14 @@
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_doctor_label">many-ai-cli doctor</span>
-            <button id="doctor-run-btn" type="button" class="settings-inline-btn" data-i18n="settings_doctor_run">診断を実行</button>
+            <button id="doctor-run-btn" type="button" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_doctor_run">診断を実行</button>
           </div>
           <div id="doctor-result" class="doctor-result" hidden aria-live="polite"></div>
           <div class="settings-note" data-i18n="settings_doctor_desc">この端末だけを確認します。トークンや個人情報は表示・送信しません。</div>
         </div>
       </details>
       <details class="settings-section" data-section="log" data-group="maint">
-        <summary class="settings-section-title"><span data-i18n="settings_log">Log Settings</span><button id="log-dir-btn" class="log-dir-btn" data-i18n-tooltip="loading">📁</button><a id="log-dir-path" class="log-dir-path"></a><span class="settings-section-current" data-section="log"></span></summary>
+        <summary class="settings-section-title"><span data-i18n="settings_log">Log Settings</span><button id="log-dir-btn" class="ui-button ui-button--secondary ui-button--regular log-dir-btn" data-i18n-tooltip="loading">📁</button><a id="log-dir-path" class="log-dir-path"></a><span class="settings-section-current" data-section="log"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_file_log">File log</span>
@@ -432,11 +432,11 @@
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_max_size">Max (MB)</span>
-            <input type="number" id="log-max-size" min="1" max="1000" class="settings-input-number">
+            <input type="number" id="log-max-size" min="1" max="1000" class="ui-input settings-input-number">
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_max_backups">Backups</span>
-            <input type="number" id="log-max-backups" min="0" max="100" class="settings-input-number">
+            <input type="number" id="log-max-backups" min="0" max="100" class="ui-input settings-input-number">
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_session_log">Session log</span>
@@ -445,23 +445,23 @@
           <div class="settings-note settings-note-warn" data-i18n="settings_session_log_desc">OFF by default. The raw .log keeps API keys, tokens, and passwords UNMASKED — enable only if you understand the risk.</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_session_retention">Session retention (days)</span>
-            <input type="number" id="log-session-retention-days" min="0" max="365" class="settings-input-number">
+            <input type="number" id="log-session-retention-days" min="0" max="365" class="ui-input settings-input-number">
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_session_max_size">Session log max size (MB)</span>
-            <input type="number" id="log-session-max-size" min="0" max="10000" class="settings-input-number">
+            <input type="number" id="log-session-max-size" min="0" max="10000" class="ui-input settings-input-number">
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_attach_folder">Attach folder</span>
-            <button id="attach-dir-btn" class="log-dir-btn" data-i18n-tooltip="loading">📁</button>
+            <button id="attach-dir-btn" class="ui-button ui-button--secondary ui-button--regular log-dir-btn" data-i18n-tooltip="loading">📁</button>
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_attach_retention">Attachment retention (days)</span>
-            <input type="number" id="attach-retention-days" min="0" max="365" class="settings-input-number">
+            <input type="number" id="attach-retention-days" min="0" max="365" class="ui-input settings-input-number">
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_attach_max_size">Attachment max total (MB)</span>
-            <input type="number" id="attach-max-total-mb" min="0" max="100000" class="settings-input-number">
+            <input type="number" id="attach-max-total-mb" min="0" max="100000" class="ui-input settings-input-number">
           </div>
           <div class="settings-note" data-i18n="settings_attach_cleanup_desc">Old attachments are deleted by retention days; total size is capped (0 disables). Cleaned at startup and every 6 hours.</div>
           <div class="settings-note" data-i18n="settings_applies_on_restart">Applied on next start</div>
@@ -473,22 +473,22 @@
           <p class="settings-danger-intro">復元できない操作です。実行前に対象の確認と操作名の入力が必要です。</p>
           <div class="settings-row">
             <span class="settings-label">実行中の全セッションを終了</span>
-            <button id="settings-kill-all-btn" class="settings-inline-btn settings-danger-btn">すべて終了</button>
+            <button id="settings-kill-all-btn" class="ui-button ui-button--danger ui-button--compact settings-inline-btn settings-danger-btn">すべて終了</button>
           </div>
           <div class="settings-note">すべての AI CLI セッションを直ちに終了します。保存されていない作業が失われる場合があります。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_saved_history">Saved session history</span>
-            <button id="session-store-reset-btn" class="settings-inline-btn settings-danger-btn" data-i18n="settings_history_reset">Delete history</button>
+            <button id="session-store-reset-btn" class="ui-button ui-button--danger ui-button--compact settings-inline-btn settings-danger-btn" data-i18n="settings_history_reset">Delete history</button>
           </div>
           <div class="settings-note" data-i18n="settings_history_reset_desc">Deletes saved SQLite search/chat history. Running sessions continue.</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_logs_purge_label">All logs</span>
-            <button id="logs-purge-btn" class="settings-inline-btn settings-danger-btn" data-i18n="settings_logs_purge">Delete all logs</button>
+            <button id="logs-purge-btn" class="ui-button ui-button--danger ui-button--compact settings-inline-btn settings-danger-btn" data-i18n="settings_logs_purge">Delete all logs</button>
           </div>
           <div class="settings-note" data-i18n="settings_logs_purge_desc">Deletes all session logs (.log/.jsonl/.txt), spawn logs, and SQLite history. Running sessions are kept.</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_attachments_purge_label">All attachments</span>
-            <button id="attachments-purge-btn" class="settings-inline-btn settings-danger-btn" data-i18n="settings_attachments_purge">Delete all attachments</button>
+            <button id="attachments-purge-btn" class="ui-button ui-button--danger ui-button--compact settings-inline-btn settings-danger-btn" data-i18n="settings_attachments_purge">Delete all attachments</button>
           </div>
           <div class="settings-note" data-i18n="settings_attachments_purge_desc">Deletes all saved attachment folders. Folders of running sessions are kept.</div>
         </div>
@@ -521,14 +521,14 @@
           <div class="settings-note">low リスクかつ <code>~/.many-ai-cli/auto-approval.yaml</code> のホワイトリストに一致する承認だけを処理します。破壊操作・外部送信は常に手動確認です。</div>
           <div class="settings-row">
             <label class="settings-label" for="approval-high-risk-mode">高リスク承認</label>
-            <select id="approval-high-risk-mode" class="settings-select">
+            <select id="approval-high-risk-mode" class="ui-input settings-select">
               <option value="hold">1.2秒長押し（推奨）</option>
               <option value="dialog">確認ダイアログ</option>
             </select>
           </div>
           <div class="settings-note">HIGH の実行許可だけを二段階にします。拒否はすぐに実行できます。</div>
           <div class="settings-row">
-            <button type="button" id="auto-approval-simulate-btn" class="settings-link-btn">過去100件で試す</button>
+            <button type="button" id="auto-approval-simulate-btn" class="ui-button ui-button--quiet ui-button--compact settings-link-btn">過去100件で試す</button>
             <span id="auto-approval-simulate-result" class="settings-note"></span>
           </div>
           <div class="settings-note" data-i18n="settings_approval_hub_desc">AI の承認を画面のボタンで操作できます。</div>
@@ -540,7 +540,7 @@
           <div class="settings-note" data-i18n="settings_approval_patterns_desc">承認 UI を検出するための文言。CLI のメッセージが変わったり、誤検出する場合に調整できます。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_approval_patterns_provider">対象</span>
-            <select id="approval-patterns-provider" class="settings-select">
+            <select id="approval-patterns-provider" class="ui-input settings-select">
               <option value="claude" data-i18n="settings_approval_patterns_claude">Claude Code</option>
               <option value="codex" data-i18n="settings_approval_patterns_codex">Codex</option>
               <option value="copilot" data-i18n="settings_approval_patterns_copilot">GitHub Copilot</option>
@@ -553,7 +553,7 @@
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_approval_patterns_profile">プロファイル</span>
-            <select id="approval-patterns-profile" class="settings-select">
+            <select id="approval-patterns-profile" class="ui-input settings-select">
               <option value="official" data-i18n="settings_approval_patterns_profile_official">公式</option>
               <option value="custom" data-i18n="settings_approval_patterns_profile_custom">カスタム</option>
             </select>
@@ -561,11 +561,11 @@
           <div class="settings-note approval-patterns-readonly-note" id="approval-patterns-readonly-note" data-i18n="settings_approval_patterns_official_readonly">公式プロファイルは読み取り専用です。</div>
           <ul id="approval-patterns-list" class="approval-patterns-list"></ul>
           <div class="approval-patterns-add-row">
-            <input type="text" id="approval-patterns-input" class="settings-input-text" data-i18n-placeholder="settings_approval_patterns_add_placeholder" placeholder="新しい文言">
-            <button id="approval-patterns-add-btn" class="settings-link-btn" data-i18n="settings_approval_patterns_add">追加</button>
+            <input type="text" id="approval-patterns-input" class="ui-input settings-input-text" data-i18n-placeholder="settings_approval_patterns_add_placeholder" placeholder="新しい文言">
+            <button id="approval-patterns-add-btn" class="ui-button ui-button--quiet ui-button--compact settings-link-btn" data-i18n="settings_approval_patterns_add">追加</button>
           </div>
           <div class="settings-row">
-            <button id="approval-patterns-copy-official-btn" class="settings-link-btn" data-i18n="settings_approval_patterns_copy_official">公式からコピー</button>
+            <button id="approval-patterns-copy-official-btn" class="ui-button ui-button--quiet ui-button--compact settings-link-btn" data-i18n="settings_approval_patterns_copy_official">公式からコピー</button>
           </div>
         </div>
       </details>
@@ -584,7 +584,7 @@
           <div id="voice-browser-unavailable-note" class="settings-note settings-note-warn" hidden data-i18n="settings_voice_browser_unavailable">この端末ではブラウザ内蔵認識を利用できません。Whisper または OFF を選択してください。</div>
           <div class="settings-row" id="voice-grace-row">
             <span class="settings-label" data-i18n="settings_voice_grace">終了検知の待ち時間</span>
-            <select id="voice-grace-select" class="settings-select">
+            <select id="voice-grace-select" class="ui-input settings-select">
               <option value="0">0</option>
               <option value="1">1</option>
               <option value="2">2</option>
@@ -608,16 +608,16 @@
               </div>
               <div class="settings-row">
                 <span class="settings-label" data-i18n="settings_voice_whisper_model">モデル</span>
-                <select id="voice-whisper-model-select" class="settings-select"></select>
+            <select id="voice-whisper-model-select" class="ui-input settings-select"></select>
               </div>
               <div class="whisper-install-progress" id="voice-whisper-install-progress" hidden>
                 <div class="whisper-install-progress-bar" id="voice-whisper-install-progress-bar"></div>
               </div>
               <div class="settings-row settings-row-actions">
-                <button type="button" id="voice-whisper-install-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_voice_whisper_install">インストール</button>
-                <button type="button" id="voice-whisper-start-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_voice_whisper_start">起動</button>
-                <button type="button" id="voice-whisper-stop-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_voice_whisper_stop">停止</button>
-                <button type="button" id="voice-whisper-uninstall-btn" class="settings-link-btn settings-inline-btn danger" data-i18n="settings_voice_whisper_uninstall">削除</button>
+                <button type="button" id="voice-whisper-install-btn" class="ui-button ui-button--secondary ui-button--compact settings-link-btn settings-inline-btn" data-i18n="settings_voice_whisper_install">インストール</button>
+                <button type="button" id="voice-whisper-start-btn" class="ui-button ui-button--secondary ui-button--compact settings-link-btn settings-inline-btn" data-i18n="settings_voice_whisper_start">起動</button>
+                <button type="button" id="voice-whisper-stop-btn" class="ui-button ui-button--danger ui-button--compact settings-link-btn settings-inline-btn" data-i18n="settings_voice_whisper_stop">停止</button>
+                <button type="button" id="voice-whisper-uninstall-btn" class="ui-button ui-button--danger ui-button--compact settings-link-btn settings-inline-btn danger" data-i18n="settings_voice_whisper_uninstall">削除</button>
               </div>
               <div id="voice-whisper-managed-note" class="settings-note"></div>
             </div>
@@ -639,16 +639,16 @@
             <div class="settings-note settings-note-warn" data-i18n="settings_voice_whisper_auto_submit_desc">Whisper は無音や短い音でも誤認識することがあります。誤送信を避けるため、既定では認識結果を入力欄に挿入するだけです。</div>
             <div class="settings-note" data-i18n="settings_voice_whisper_external_desc">外部 API URL を設定した場合、音声データはその外部サービスへ送信されます。</div>
             <div class="settings-row">
-              <a class="settings-link-btn settings-inline-btn" href="https://github.com/ishizakahiroshi/many-ai-cli/blob/main/docs/manual_whisper.md" target="_blank" rel="noopener noreferrer" data-i18n="settings_voice_whisper_setup_link">セットアップ手順を開く</a>
+              <a class="ui-button ui-button--quiet ui-button--compact settings-link-btn settings-inline-btn" href="https://github.com/ishizakahiroshi/many-ai-cli/blob/main/docs/manual_whisper.md" target="_blank" rel="noopener noreferrer" data-i18n="settings_voice_whisper_setup_link">セットアップ手順を開く</a>
             </div>
           </div>
           <div class="voice-diagnostics-panel" id="voice-diagnostics-panel">
             <div class="voice-diagnostics-head">
               <span class="settings-label" data-i18n="voice_diag_title">音声入力診断</span>
               <div class="voice-diagnostics-actions">
-                <button id="voice-diagnostic-run-btn" class="settings-link-btn settings-inline-btn" data-i18n="voice_diag_run">診断</button>
-                <button id="voice-diagnostic-profile-specific-btn" class="settings-link-btn settings-inline-btn" data-i18n="voice_diag_profile_specific">シークレット/新規プロファイルでは動いた</button>
-                <button id="voice-diagnostic-copy-btn" class="settings-link-btn settings-inline-btn" data-i18n="voice_diag_copy">ログをコピー</button>
+                <button id="voice-diagnostic-run-btn" class="ui-button ui-button--secondary ui-button--compact settings-link-btn settings-inline-btn" data-i18n="voice_diag_run">診断</button>
+                <button id="voice-diagnostic-profile-specific-btn" class="ui-button ui-button--secondary ui-button--compact settings-link-btn settings-inline-btn" data-i18n="voice_diag_profile_specific">シークレット/新規プロファイルでは動いた</button>
+                <button id="voice-diagnostic-copy-btn" class="ui-button ui-button--quiet ui-button--compact settings-link-btn settings-inline-btn" data-i18n="voice_diag_copy">ログをコピー</button>
               </div>
             </div>
             <div id="voice-diagnostic-status" class="voice-diagnostic-status" data-i18n="voice_diag_idle">未実行</div>
@@ -666,7 +666,7 @@
             </div>
             <div class="settings-row" id="wakeword-phrase-row">
               <span class="settings-label" data-i18n="settings_voice_wakeword_phrase">ウェイクワード</span>
-              <input type="text" id="wakeword-phrase-input" class="settings-input-text">
+              <input type="text" id="wakeword-phrase-input" class="ui-input settings-input-text">
             </div>
             <div class="settings-note" data-i18n="settings_voice_wakeword_desc">マイクを常時待機させ、このフレーズを発話したときだけ音声入力を開始します。</div>
           </div>
@@ -684,7 +684,7 @@
           </div>
           <div class="settings-row" id="trigger-phrase-row">
             <span class="settings-label" data-i18n="settings_trigger_phrase">フレーズ</span>
-            <input type="text" id="trigger-phrase-input" class="settings-input-text">
+            <input type="text" id="trigger-phrase-input" class="ui-input settings-input-text">
           </div>
         </div>
       </details>
@@ -696,8 +696,8 @@
             <span class="settings-label" data-i18n="settings_terminal_app">ターミナルアプリ</span>
           </div>
           <div class="settings-input-row">
-            <input id="settings-terminal-app" type="text" class="settings-input-url" data-i18n-placeholder="settings_terminal_app_placeholder">
-            <button id="settings-terminal-app-browse" class="settings-link-btn" data-i18n="settings_terminal_app_browse">参照...</button>
+            <input id="settings-terminal-app" type="text" class="ui-input settings-input-url" data-i18n-placeholder="settings_terminal_app_placeholder">
+            <button id="settings-terminal-app-browse" class="ui-button ui-button--quiet ui-button--compact settings-link-btn" data-i18n="settings_terminal_app_browse">参照...</button>
           </div>
           <div class="settings-note" data-i18n="settings_terminal_app_desc">空欄 = OS デフォルト（Win: Windows Terminal → PowerShell）</div>
           <div id="settings-terminal-app-effective" class="settings-effective-command"></div>
@@ -742,23 +742,23 @@
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_ntfy_notify">ntfy / webhook 通知</span>
             <div class="settings-row-actions">
-              <button id="ntfy-settings-toggle-btn" class="settings-link-btn" data-i18n="settings_ntfy_configure">設定...</button>
+              <button id="ntfy-settings-toggle-btn" class="ui-button ui-button--quiet ui-button--compact settings-link-btn" data-i18n="settings_ntfy_configure">設定...</button>
             </div>
           </div>
           <div id="ntfy-settings-block" hidden>
             <div id="ntfy-backends-list"></div>
             <div class="settings-row" style="margin-top:4px">
-              <button id="ntfy-add-ntfy-btn" class="settings-link-btn" data-i18n="settings_ntfy_add_ntfy">+ ntfy を追加</button>
-              <button id="ntfy-add-webhook-btn" class="settings-link-btn" data-i18n="settings_ntfy_add_webhook">+ webhook を追加</button>
+              <button id="ntfy-add-ntfy-btn" class="ui-button ui-button--quiet ui-button--compact settings-link-btn" data-i18n="settings_ntfy_add_ntfy">+ ntfy を追加</button>
+              <button id="ntfy-add-webhook-btn" class="ui-button ui-button--quiet ui-button--compact settings-link-btn" data-i18n="settings_ntfy_add_webhook">+ webhook を追加</button>
             </div>
             <div class="settings-row" style="margin-top:4px">
               <span class="settings-label" data-i18n="settings_ntfy_events">通知イベント</span>
               <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">
-                <label style="display:flex;align-items:center;gap:4px;font-size:0.85em">
+              <label style="display:flex;align-items:center;gap:4px;font-size:var(--fs-xs)">
                   <input type="checkbox" id="ntfy-event-approval" checked>
                   <span data-i18n="settings_ntfy_event_approval">承認待ち</span>
                 </label>
-                <label style="display:flex;align-items:center;gap:4px;font-size:0.85em">
+              <label style="display:flex;align-items:center;gap:4px;font-size:var(--fs-xs)">
                   <input type="checkbox" id="ntfy-event-done">
                   <span data-i18n="settings_ntfy_event_done">タスク完了</span>
                 </label>
@@ -766,14 +766,14 @@
             </div>
             <div class="settings-row" style="margin-top:4px">
               <span class="settings-label" data-i18n="settings_ntfy_include_body">通知本文</span>
-              <label style="display:flex;align-items:center;gap:4px;font-size:0.85em">
+              <label style="display:flex;align-items:center;gap:4px;font-size:var(--fs-xs)">
                 <input type="checkbox" id="ntfy-include-body">
                 <span data-i18n="settings_ntfy_include_body_label">本文を含める</span>
               </label>
             </div>
             <div class="settings-note" data-i18n="settings_ntfy_include_body_note">既定では件名のみ送ります。有効にすると承認質問文・完了サマリーが外部サービスへ送られます（送信前にシークレットはマスクされます）。</div>
             <div class="settings-row" style="margin-top:6px">
-              <button id="ntfy-save-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_ntfy_save">保存</button>
+              <button id="ntfy-save-btn" class="ui-button ui-button--primary ui-button--compact settings-link-btn settings-inline-btn" data-i18n="settings_ntfy_save">保存</button>
               <span id="ntfy-save-status" class="settings-note" style="margin-left:6px"></span>
             </div>
           </div>
@@ -792,7 +792,7 @@
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_notify_sound_toggle">通知音</span>
             <div class="settings-row-actions notify-sound-actions">
-              <button id="notify-sound-test-btn" class="settings-link-btn settings-inline-btn" data-i18n="settings_notify_sound_test">テスト再生</button>
+              <button id="notify-sound-test-btn" class="ui-button ui-button--secondary ui-button--compact settings-link-btn settings-inline-btn" data-i18n="settings_notify_sound_test">テスト再生</button>
               <label class="approval-toggle">
                 <input type="checkbox" id="notify-sound-enabled">
                 <span class="approval-toggle-slider"></span>
@@ -809,14 +809,14 @@
           <div class="settings-note" id="notify-sound-volume-desc" data-i18n="settings_notify_sound_volume_desc">このブラウザの通知音だけを調整します（0: 無音、100: 最大）。PC・端末の音量は変わりません。</div>
           <div class="settings-row" id="notify-sound-type-row">
             <span class="settings-label" data-i18n="settings_notify_sound_type">音源</span>
-            <select id="notify-sound-type" class="settings-select">
+            <select id="notify-sound-type" class="ui-input settings-select">
               <option value="default" data-i18n="settings_notify_sound_default">デフォルト (beep)</option>
               <option value="custom" data-i18n="settings_notify_sound_custom">カスタム</option>
             </select>
           </div>
           <div class="settings-row" id="notify-sound-custom-row">
             <span class="settings-label" data-i18n="settings_notify_sound_file">ファイル</span>
-            <button id="notify-sound-browse-btn" class="settings-link-btn" data-i18n="settings_notify_sound_browse">選択...</button>
+            <button id="notify-sound-browse-btn" class="ui-button ui-button--quiet ui-button--compact settings-link-btn" data-i18n="settings_notify_sound_browse">選択...</button>
             <span id="notify-sound-filename" class="settings-note"></span>
             <input type="file" id="notify-sound-file" accept="audio/*" style="display:none">
           </div>
@@ -837,7 +837,7 @@
           </datalist>
           <div class="settings-row quick-cmd-row">
             <span class="settings-label" data-i18n="settings_quick_cmd_1">コマンド 1</span>
-            <input type="text" id="quick-cmd-1" class="settings-input-text quick-cmd-input" list="quick-cmd-presets"
+            <input type="text" id="quick-cmd-1" class="ui-input settings-input-text quick-cmd-input" list="quick-cmd-presets"
                    maxlength="200" autocomplete="off"
                    data-i18n-placeholder="settings_quick_cmd_placeholder"
                    placeholder="例: bugfix 作って / スラッシュコマンド">
@@ -848,7 +848,7 @@
           </div>
           <div class="settings-row quick-cmd-row">
             <span class="settings-label" data-i18n="settings_quick_cmd_2">コマンド 2</span>
-            <input type="text" id="quick-cmd-2" class="settings-input-text quick-cmd-input" list="quick-cmd-presets"
+            <input type="text" id="quick-cmd-2" class="ui-input settings-input-text quick-cmd-input" list="quick-cmd-presets"
                    maxlength="200" autocomplete="off"
                    data-i18n-placeholder="settings_quick_cmd_placeholder"
                    placeholder="例: plan md 作って / スラッシュコマンド">
@@ -859,7 +859,7 @@
           </div>
           <div class="settings-row quick-cmd-row">
             <span class="settings-label" data-i18n="settings_quick_cmd_3">コマンド 3</span>
-            <input type="text" id="quick-cmd-3" class="settings-input-text quick-cmd-input" list="quick-cmd-presets"
+            <input type="text" id="quick-cmd-3" class="ui-input settings-input-text quick-cmd-input" list="quick-cmd-presets"
                    maxlength="200" autocomplete="off"
                    data-i18n-placeholder="settings_quick_cmd_placeholder"
                    placeholder="例: bugfix 作って / スラッシュコマンド">
@@ -870,7 +870,7 @@
           </div>
           <div class="settings-row quick-cmd-row">
             <span class="settings-label" data-i18n="settings_quick_cmd_4">コマンド 4</span>
-            <input type="text" id="quick-cmd-4" class="settings-input-text quick-cmd-input" list="quick-cmd-presets"
+            <input type="text" id="quick-cmd-4" class="ui-input settings-input-text quick-cmd-input" list="quick-cmd-presets"
                    maxlength="200" autocomplete="off"
                    data-i18n-placeholder="settings_quick_cmd_placeholder"
                    placeholder="例: bugfix 作って / スラッシュコマンド">
@@ -881,7 +881,7 @@
           </div>
           <div class="settings-row quick-cmd-row">
             <span class="settings-label" data-i18n="settings_quick_cmd_5">コマンド 5</span>
-            <input type="text" id="quick-cmd-5" class="settings-input-text quick-cmd-input" list="quick-cmd-presets"
+            <input type="text" id="quick-cmd-5" class="ui-input settings-input-text quick-cmd-input" list="quick-cmd-presets"
                    maxlength="200" autocomplete="off"
                    data-i18n-placeholder="settings_quick_cmd_placeholder"
                    placeholder="例: bugfix 作って / スラッシュコマンド">
@@ -915,7 +915,7 @@
         <div class="settings-section-body">
           <div class="settings-row">
             <label class="settings-label" for="deferred-enter-ms">確定 Enter の最低待機</label>
-            <select id="deferred-enter-ms" class="settings-input-text">
+            <select id="deferred-enter-ms" class="ui-input settings-input-text">
               <option value="0">プロバイダー推奨（既定）</option>
               <option value="120">120 ms</option>
               <option value="300">300 ms</option>
@@ -934,47 +934,47 @@
           <div class="settings-note" data-i18n="settings_usage_links_desc">Header usage links. Leave blank to use the default URL.</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_usage_probe_model_label">Usage probe model</span>
-            <input type="text" id="usage-probe-model" class="settings-input-text" data-i18n-placeholder="settings_usage_probe_model_placeholder" placeholder="Default: claude-haiku-4-5">
+            <input type="text" id="usage-probe-model" class="ui-input settings-input-text" data-i18n-placeholder="settings_usage_probe_model_placeholder" placeholder="Default: claude-haiku-4-5">
           </div>
           <div class="settings-note" data-i18n="settings_usage_probe_model_desc">Only the one-turn Claude usage check uses this model; ordinary sessions are unchanged.</div>
           <div class="settings-row">
             <span class="settings-label">Claude</span>
-            <input type="text" id="usage-link-claude-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_claude_placeholder" placeholder="Default Claude usage URL">
+            <input type="text" id="usage-link-claude-url" class="ui-input settings-input-url" data-i18n-placeholder="settings_usage_links_claude_placeholder" placeholder="Default Claude usage URL">
           </div>
           <div class="settings-row">
             <span class="settings-label">Codex</span>
-            <input type="text" id="usage-link-codex-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_codex_placeholder" placeholder="Default Codex usage URL">
+            <input type="text" id="usage-link-codex-url" class="ui-input settings-input-url" data-i18n-placeholder="settings_usage_links_codex_placeholder" placeholder="Default Codex usage URL">
           </div>
           <div class="settings-row">
             <span class="settings-label">Copilot</span>
-            <input type="text" id="usage-link-copilot-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_copilot_placeholder" placeholder="Default Copilot usage URL">
+            <input type="text" id="usage-link-copilot-url" class="ui-input settings-input-url" data-i18n-placeholder="settings_usage_links_copilot_placeholder" placeholder="Default Copilot usage URL">
           </div>
           <div class="settings-row">
             <span class="settings-label">Cursor Agent</span>
-            <input type="text" id="usage-link-cursor-agent-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_cursor_agent_placeholder" placeholder="Default Cursor Agent usage URL">
+            <input type="text" id="usage-link-cursor-agent-url" class="ui-input settings-input-url" data-i18n-placeholder="settings_usage_links_cursor_agent_placeholder" placeholder="Default Cursor Agent usage URL">
           </div>
           <div class="settings-row" hidden>
             <span class="settings-label">OpenCode</span>
-            <input type="text" id="usage-link-opencode-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_opencode_placeholder" placeholder="OpenCode URL">
+            <input type="text" id="usage-link-opencode-url" class="ui-input settings-input-url" data-i18n-placeholder="settings_usage_links_opencode_placeholder" placeholder="OpenCode URL">
           </div>
           <div class="settings-row">
             <span class="settings-label">Grok Build</span>
-            <input type="text" id="usage-link-grok-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_grok_placeholder" placeholder="Default: https://grok.com/?_s=usage">
+            <input type="text" id="usage-link-grok-url" class="ui-input settings-input-url" data-i18n-placeholder="settings_usage_links_grok_placeholder" placeholder="Default: https://grok.com/?_s=usage">
           </div>
           <div class="settings-row">
             <span class="settings-label">Command Code</span>
-            <input type="text" id="usage-link-command-code-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_command_code_placeholder" placeholder="Default: https://commandcode.ai/usage">
+            <input type="text" id="usage-link-command-code-url" class="ui-input settings-input-url" data-i18n-placeholder="settings_usage_links_command_code_placeholder" placeholder="Default: https://commandcode.ai/usage">
           </div>
           <div class="settings-row">
             <span class="settings-label">Ollama</span>
-            <input type="text" id="usage-link-ollama-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_ollama_placeholder" placeholder="Default: http://localhost:11434">
+            <input type="text" id="usage-link-ollama-url" class="ui-input settings-input-url" data-i18n-placeholder="settings_usage_links_ollama_placeholder" placeholder="Default: http://localhost:11434">
           </div>
           <div class="settings-row">
             <span class="settings-label">LM Studio</span>
-            <input type="text" id="usage-link-lm-studio-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_lm_studio_placeholder" placeholder="Default: http://localhost:1234">
+            <input type="text" id="usage-link-lm-studio-url" class="ui-input settings-input-url" data-i18n-placeholder="settings_usage_links_lm_studio_placeholder" placeholder="Default: http://localhost:1234">
           </div>
           <div class="settings-row">
-            <button id="usage-links-reset-btn" class="slash-src-save-btn" data-i18n="settings_usage_links_reset">デフォルトに戻す</button>
+            <button id="usage-links-reset-btn" class="ui-button ui-button--primary ui-button--regular slash-src-save-btn" data-i18n="settings_usage_links_reset">デフォルトに戻す</button>
           </div>
         </div>
       </details>
@@ -984,63 +984,63 @@
           <div class="settings-note" data-i18n="settings_slash_src_note">公式ドキュメントから自動取得します。必要な場合だけ URL を上書きしてください。</div>
           <div class="settings-row">
             <span class="settings-label">Claude Code</span>
-            <input type="text" id="slash-src-claude" class="settings-input-url" placeholder="Default official source">
+            <input type="text" id="slash-src-claude" class="ui-input settings-input-url" placeholder="Default official source">
           </div>
           <div class="settings-row">
             <span class="settings-label">Codex CLI</span>
-            <input type="text" id="slash-src-codex" class="settings-input-url" placeholder="Default official source">
+            <input type="text" id="slash-src-codex" class="ui-input settings-input-url" placeholder="Default official source">
           </div>
           <div class="settings-row">
             <span class="settings-label">GitHub Copilot</span>
-            <input type="text" id="slash-src-copilot" class="settings-input-url" placeholder="Default official source">
+            <input type="text" id="slash-src-copilot" class="ui-input settings-input-url" placeholder="Default official source">
           </div>
           <div class="settings-row">
             <span class="settings-label">Cursor Agent</span>
-            <input type="text" id="slash-src-cursor-agent" class="settings-input-url" placeholder="Default official source">
+            <input type="text" id="slash-src-cursor-agent" class="ui-input settings-input-url" placeholder="Default official source">
           </div>
           <div class="settings-row">
             <span class="settings-label">OpenCode</span>
-            <input type="text" id="slash-src-opencode" class="settings-input-url" placeholder="Default official source">
+            <input type="text" id="slash-src-opencode" class="ui-input settings-input-url" placeholder="Default official source">
           </div>
           <div class="settings-row">
             <span class="settings-label">Grok Build</span>
-            <input type="text" id="slash-src-grok" class="settings-input-url" placeholder="Default official source">
+            <input type="text" id="slash-src-grok" class="ui-input settings-input-url" placeholder="Default official source">
           </div>
           <div class="settings-row">
             <span class="settings-label">Command Code</span>
-            <input type="text" id="slash-src-command-code" class="settings-input-url" placeholder="Default official source">
+            <input type="text" id="slash-src-command-code" class="ui-input settings-input-url" placeholder="Default official source">
           </div>
           <div class="settings-row">
-            <button id="slash-src-save-btn" class="slash-src-save-btn" data-i18n="settings_slash_src_save">保存</button>
+            <button id="slash-src-save-btn" class="ui-button ui-button--primary ui-button--regular slash-src-save-btn" data-i18n="settings_slash_src_save">保存</button>
           </div>
         </div>
       </details>
       <div class="settings-footer">
         <!-- ツアー起動ボタン。id は first-run-tour.ts / zero-session-empty-state.ts が参照するため変更不可 -->
-        <button class="settings-link-btn" id="first-run-tour-btn" data-i18n="first_run_tour_settings_btn">60 秒ツアー</button>
-        <button class="settings-link-btn" id="settings-readme-btn" data-i18n="settings_readme_btn">README</button>
-        <button class="settings-link-btn" id="settings-licenses-btn" data-i18n="settings_about_btn">About &amp; Licenses</button>
+        <button class="ui-button ui-button--quiet ui-button--compact settings-link-btn" id="first-run-tour-btn" data-i18n="first_run_tour_settings_btn">60 秒ツアー</button>
+        <button class="ui-button ui-button--quiet ui-button--compact settings-link-btn" id="settings-readme-btn" data-i18n="settings_readme_btn">README</button>
+        <button class="ui-button ui-button--quiet ui-button--compact settings-link-btn" id="settings-licenses-btn" data-i18n="settings_about_btn">About &amp; Licenses</button>
       </div>
     </div>
     </div>
   </div>
   <div id="provider-enrollment-overlay" class="provider-enrollment-overlay aac-wheel-overlay" hidden>
-    <form id="provider-enrollment-form" class="provider-enrollment-form" role="dialog" aria-modal="true" aria-labelledby="provider-enrollment-title">
+    <form id="provider-enrollment-form" class="ui-modal ui-modal--md provider-enrollment-form" role="dialog" aria-modal="true" aria-labelledby="provider-enrollment-title">
       <div class="provider-enrollment-header">
-        <h2 id="provider-enrollment-title" data-i18n="settings_ai_providers_title_add">Add AI CLI</h2>
-        <button id="provider-enrollment-close" class="provider-enrollment-close" type="button" aria-label="Close">✕</button>
+        <h2 class="ui-modal__title" id="provider-enrollment-title" data-i18n="settings_ai_providers_title_add">Add AI CLI</h2>
+        <button id="provider-enrollment-close" class="ui-button ui-button--quiet ui-button--compact ui-button--icon provider-enrollment-close" type="button" aria-label="Close">✕</button>
       </div>
       <div class="settings-row">
         <label class="settings-label" for="provider-enrollment-id" data-i18n="settings_ai_providers_id">ID</label>
-        <input id="provider-enrollment-id" class="settings-input-text" autocomplete="off" required>
+        <input id="provider-enrollment-id" class="ui-input settings-input-text" autocomplete="off" required>
       </div>
       <div class="settings-row">
         <label class="settings-label" for="provider-enrollment-label" data-i18n="settings_ai_providers_label">Display name</label>
-        <input id="provider-enrollment-label" class="settings-input-text" autocomplete="off" required>
+        <input id="provider-enrollment-label" class="ui-input settings-input-text" autocomplete="off" required>
       </div>
       <div class="settings-row">
         <label class="settings-label" for="provider-enrollment-executable" data-i18n="settings_ai_providers_executable">Executable or path</label>
-        <input id="provider-enrollment-executable" class="settings-input-text" autocomplete="off" required>
+        <input id="provider-enrollment-executable" class="ui-input settings-input-text" autocomplete="off" required>
       </div>
       <div class="provider-enrollment-icon">
         <h3 data-i18n="settings_ai_providers_icon_heading">Icon</h3>
@@ -1048,17 +1048,17 @@
         <div class="settings-row provider-enrollment-icon-row">
           <span id="provider-enrollment-icon-preview" class="provider-enrollment-icon-preview" aria-hidden="true"></span>
           <label class="settings-label" for="provider-enrollment-icon-text" data-i18n="settings_ai_providers_icon_text">Icon letters (1-2 characters)</label>
-          <input id="provider-enrollment-icon-text" class="settings-input-text provider-enrollment-icon-text" autocomplete="off" maxlength="8">
+          <input id="provider-enrollment-icon-text" class="ui-input settings-input-text provider-enrollment-icon-text" autocomplete="off" maxlength="8">
         </div>
         <div class="settings-row provider-enrollment-icon-row">
           <label class="settings-label" for="provider-enrollment-icon-color" data-i18n="settings_ai_providers_icon_color">Icon color</label>
           <input id="provider-enrollment-icon-color" class="provider-enrollment-icon-color" type="color" value="#6b7280">
-          <button id="provider-enrollment-icon-reset" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_icon_reset">Use the default icon</button>
+          <button id="provider-enrollment-icon-reset" class="ui-button ui-button--quiet ui-button--compact settings-inline-btn" type="button" data-i18n="settings_ai_providers_icon_reset">Use the default icon</button>
         </div>
         <div class="settings-row provider-enrollment-icon-row">
           <span class="settings-label" data-i18n="settings_ai_providers_icon_image">Icon image</span>
-          <button id="provider-enrollment-icon-image-pick" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_icon_image_pick">Choose an image</button>
-          <button id="provider-enrollment-icon-image-remove" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_icon_image_remove">Remove the image</button>
+          <button id="provider-enrollment-icon-image-pick" class="ui-button ui-button--quiet ui-button--compact settings-inline-btn" type="button" data-i18n="settings_ai_providers_icon_image_pick">Choose an image</button>
+          <button id="provider-enrollment-icon-image-remove" class="ui-button ui-button--quiet ui-button--compact settings-inline-btn" type="button" data-i18n="settings_ai_providers_icon_image_remove">Remove the image</button>
           <input id="provider-enrollment-icon-image-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
         </div>
         <div class="settings-note" data-i18n="settings_ai_providers_icon_image_hint">PNG, JPEG, GIF or WebP, up to 512 KB (SVG cannot be used). The image is cut to the icon's shape and replaces the letters. It is saved when you save this AI.</div>
@@ -1078,20 +1078,20 @@
         <div id="provider-enrollment-update-args-required-note" class="settings-note" data-i18n="settings_ai_providers_update_args_required" hidden>Enter an update command to turn this on.</div>
         <div class="settings-row">
           <label class="settings-label" for="provider-enrollment-update-version-args" data-i18n="settings_ai_providers_update_version_args">Version check arguments</label>
-          <input id="provider-enrollment-update-version-args" class="settings-input-text" autocomplete="off">
+          <input id="provider-enrollment-update-version-args" class="ui-input settings-input-text" autocomplete="off">
         </div>
         <div class="settings-row">
           <label class="settings-label" for="provider-enrollment-update-executable" data-i18n="settings_ai_providers_update_executable">Executable for update</label>
-          <input id="provider-enrollment-update-executable" class="settings-input-text" autocomplete="off">
+          <input id="provider-enrollment-update-executable" class="ui-input settings-input-text" autocomplete="off">
         </div>
         <div class="settings-row">
           <label class="settings-label" for="provider-enrollment-update-args" data-i18n="settings_ai_providers_update_args">Update arguments</label>
-          <input id="provider-enrollment-update-args" class="settings-input-text" autocomplete="off">
+          <input id="provider-enrollment-update-args" class="ui-input settings-input-text" autocomplete="off">
         </div>
         <div class="settings-note" data-i18n="settings_ai_providers_update_args_hint">One line, space-separated. An argument containing whitespace needs the advanced JSON editor below.</div>
         <div class="settings-row">
           <label class="settings-label" for="provider-enrollment-update-timeout" data-i18n="settings_ai_providers_update_timeout">Timeout (seconds)</label>
-          <input id="provider-enrollment-update-timeout" class="settings-input-text" type="number" min="0" max="3600" step="1" autocomplete="off">
+          <input id="provider-enrollment-update-timeout" class="ui-input settings-input-text" type="number" min="0" max="3600" step="1" autocomplete="off">
         </div>
         <div class="settings-note" data-i18n="settings_ai_providers_update_timeout_hint">Blank uses the default (300 seconds). 0-3600.</div>
         <div id="provider-enrollment-update-status" class="settings-note" aria-live="polite" hidden></div>
@@ -1099,26 +1099,26 @@
       <details class="settings-row provider-enrollment-advanced">
         <summary data-i18n="settings_ai_providers_advanced_toggle">Advanced (JSON)</summary>
         <label class="settings-label" for="provider-enrollment-advanced" data-i18n="settings_ai_providers_advanced_label">Full definition (JSON)</label>
-        <textarea id="provider-enrollment-advanced" class="settings-input-text provider-enrollment-advanced-textarea" rows="10" spellcheck="false"></textarea>
+        <textarea id="provider-enrollment-advanced" class="ui-input settings-input-text provider-enrollment-advanced-textarea" rows="10" spellcheck="false"></textarea>
         <span class="settings-note" data-i18n="settings_ai_providers_advanced_hint">Optional. Advanced fields are preserved; a non-empty executable above takes precedence over launch.executable in JSON.</span>
       </details>
       <div class="settings-row-actions">
-        <button id="provider-enrollment-validate" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_validate">Validate</button>
-        <button id="provider-enrollment-save" class="settings-inline-btn" type="submit" data-i18n="settings_ai_providers_save">Save provider</button>
-        <button id="provider-enrollment-cancel" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_cancel">Cancel</button>
+        <button id="provider-enrollment-validate" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" type="button" data-i18n="settings_ai_providers_validate">Validate</button>
+        <button id="provider-enrollment-save" class="ui-button ui-button--primary ui-button--compact settings-inline-btn" type="submit" data-i18n="settings_ai_providers_save">Save provider</button>
+        <button id="provider-enrollment-cancel" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" type="button" data-i18n="settings_ai_providers_cancel">Cancel</button>
       </div>
       <div id="provider-enrollment-result" class="settings-note" aria-live="polite" tabindex="-1"></div>
     </form>
   </div>
   <div id="provider-history-overlay" class="provider-enrollment-overlay aac-wheel-overlay" hidden>
-    <div id="provider-history-panel" class="provider-enrollment-form provider-history-panel" role="dialog" aria-modal="true" aria-labelledby="provider-history-title" tabindex="-1">
+    <div id="provider-history-panel" class="ui-modal ui-modal--md provider-enrollment-form provider-history-panel" role="dialog" aria-modal="true" aria-labelledby="provider-history-title" tabindex="-1">
       <div class="provider-enrollment-header">
-        <h2 id="provider-history-title" data-i18n="settings_ai_providers_history_title">History</h2>
-        <button id="provider-history-close" class="provider-enrollment-close" type="button" aria-label="Close">✕</button>
+        <h2 class="ui-modal__title" id="provider-history-title" data-i18n="settings_ai_providers_history_title">History</h2>
+        <button id="provider-history-close" class="ui-button ui-button--quiet ui-button--compact ui-button--icon provider-enrollment-close" type="button" aria-label="Close">✕</button>
       </div>
       <div id="provider-history-status" class="settings-note" aria-live="polite"></div>
       <div class="settings-row-actions">
-        <button id="provider-history-reset" class="settings-inline-btn danger" type="button" data-i18n="settings_ai_providers_history_reset">Reset to distributed default</button>
+        <button id="provider-history-reset" class="ui-button ui-button--danger ui-button--compact settings-inline-btn danger" type="button" data-i18n="settings_ai_providers_history_reset">Reset to distributed default</button>
       </div>
       <div class="provider-history-section">
         <h3 data-i18n="settings_ai_providers_history_revisions">Revisions</h3>
@@ -1133,13 +1133,13 @@
   <!-- 🖥 Server モーダル（内蔵リモート接続）。設計は settings-panel / workflow-modal に準拠。
        一覧（接続/切断/Open）はサーバから取得して server-modal.ts が動的描画。追加フォームは静的。 -->
   <div id="server-modal" class="aac-wheel-overlay" hidden>
-    <div class="server-modal-box" role="dialog" aria-modal="true" aria-labelledby="server-modal-title">
-      <div class="server-modal-header">
-        <span class="server-modal-title" id="server-modal-title" data-i18n="server_modal_title">Servers / Remote Connections</span>
-        <button id="server-modal-refresh" class="server-modal-icon-btn" type="button" data-i18n-tooltip="server_refresh_tooltip" aria-label="Refresh">↻</button>
-        <button id="server-modal-close" class="server-modal-close" type="button" data-i18n-tooltip="settings_close" aria-label="Close">✕</button>
+    <div class="ui-modal ui-modal--md server-modal-box" role="dialog" aria-modal="true" aria-labelledby="server-modal-title">
+      <div class="ui-modal__header server-modal-header">
+        <span class="ui-modal__title server-modal-title" id="server-modal-title" data-i18n="server_modal_title">Servers / Remote Connections</span>
+        <button id="server-modal-refresh" class="ui-button ui-button--quiet ui-button--compact ui-button--icon server-modal-icon-btn" type="button" data-i18n-tooltip="server_refresh_tooltip" aria-label="Refresh">↻</button>
+        <button id="server-modal-close" class="ui-button ui-button--quiet ui-button--compact ui-button--icon server-modal-close" type="button" data-i18n-tooltip="settings_close" aria-label="Close">✕</button>
       </div>
-      <div class="server-modal-body">
+      <div class="ui-modal__body server-modal-body">
         <div id="server-modal-status" class="server-modal-status" hidden></div>
         <ul id="server-profile-list" class="server-profile-list"></ul>
         <div id="server-profile-empty" class="server-modal-empty" data-i18n="server_no_profiles" hidden>No connection profiles yet. Add one below.</div>
@@ -1148,11 +1148,11 @@
           <div class="server-add-form">
             <label class="server-field">
               <span class="server-field-label" data-i18n="server_field_name">Name</span>
-              <input type="text" id="server-add-name" class="server-input" autocomplete="off">
+              <input type="text" id="server-add-name" class="ui-input server-input" autocomplete="off">
             </label>
             <label class="server-field">
               <span class="server-field-label" data-i18n="server_field_type">Type</span>
-              <select id="server-add-type" class="server-select">
+              <select id="server-add-type" class="ui-input server-select">
                 <option value="ssh">SSH</option>
                 <option value="wsl">WSL</option>
               </select>
@@ -1160,59 +1160,59 @@
             <div class="server-field server-field-ssh server-fetch-box">
               <div class="server-fetch-title" data-i18n="server_fetch_title">Auto-fill from remote (SSH)</div>
               <div class="server-fetch-hint" data-i18n="server_fetch_hint">Enter host / user / key, then pull the remote's own info over SSH to fill the form.</div>
-              <button id="server-fetch-btn" class="server-btn-secondary" type="button" data-i18n="server_fetch_btn">Fetch from remote</button>
+              <button id="server-fetch-btn" class="ui-button ui-button--secondary ui-button--regular server-btn-secondary" type="button" data-i18n="server_fetch_btn">Fetch from remote</button>
               <label class="server-field server-fetch-candidate" id="server-fetch-candidate-wrap" hidden>
                 <span class="server-field-label" data-i18n="server_fetch_host_candidate">Reachable host</span>
-                <select id="server-fetch-candidate" class="server-select"></select>
+              <select id="server-fetch-candidate" class="ui-input server-select"></select>
               </label>
             </div>
             <label class="server-field server-field-ssh">
               <span class="server-field-label" data-i18n="server_field_mode">Mode</span>
-              <select id="server-add-mode" class="server-select">
+              <select id="server-add-mode" class="ui-input server-select">
                 <option value="serve" data-i18n="server_mode_serve">serve (start Hub on remote)</option>
                 <option value="tunnel" data-i18n="server_mode_tunnel">tunnel (forward to running Hub)</option>
               </select>
             </label>
             <label class="server-field server-field-ssh">
               <span class="server-field-label" data-i18n="server_field_host">Host</span>
-              <input type="text" id="server-add-host" class="server-input" autocomplete="off" placeholder="user@host or host">
+              <input type="text" id="server-add-host" class="ui-input server-input" autocomplete="off" placeholder="user@host or host">
             </label>
             <label class="server-field server-field-ssh">
               <span class="server-field-label" data-i18n="server_field_user">User</span>
-              <input type="text" id="server-add-user" class="server-input" autocomplete="off">
+              <input type="text" id="server-add-user" class="ui-input server-input" autocomplete="off">
             </label>
             <label class="server-field server-field-ssh">
               <span class="server-field-label" data-i18n="server_field_ssh_port">SSH port</span>
-              <input type="number" id="server-add-ssh-port" class="server-input" min="0" max="65535" placeholder="22">
+              <input type="number" id="server-add-ssh-port" class="ui-input server-input" min="0" max="65535" placeholder="22">
             </label>
             <label class="server-field server-field-ssh">
               <span class="server-field-label" data-i18n="server_field_identity">Identity file</span>
-              <input type="text" id="server-add-identity" class="server-input" autocomplete="off" placeholder="~/.ssh/id_ed25519">
+              <input type="text" id="server-add-identity" class="ui-input server-input" autocomplete="off" placeholder="~/.ssh/id_ed25519">
             </label>
             <label class="server-field server-field-tunnel">
               <span class="server-field-label" data-i18n="server_field_token_command">Token command</span>
-              <input type="text" id="server-add-token-command" class="server-input" autocomplete="off">
+              <input type="text" id="server-add-token-command" class="ui-input server-input" autocomplete="off">
             </label>
             <label class="server-field server-field-wsl">
               <span class="server-field-label" data-i18n="server_field_distro">Distro</span>
-              <input type="text" id="server-add-distro" class="server-input" autocomplete="off" placeholder="(default distro)">
+              <input type="text" id="server-add-distro" class="ui-input server-input" autocomplete="off" placeholder="(default distro)">
             </label>
             <label class="server-field">
               <span class="server-field-label" data-i18n="server_field_binary">Binary</span>
-              <input type="text" id="server-add-binary" class="server-input" autocomplete="off" placeholder="many-ai-cli">
+              <input type="text" id="server-add-binary" class="ui-input server-input" autocomplete="off" placeholder="many-ai-cli">
             </label>
             <label class="server-field">
               <span class="server-field-label" data-i18n="server_field_cwd">Working dir</span>
-              <input type="text" id="server-add-cwd" class="server-input" autocomplete="off">
+              <input type="text" id="server-add-cwd" class="ui-input server-input" autocomplete="off">
             </label>
             <label class="server-field">
               <span class="server-field-label" data-i18n="server_field_hub_port">Hub port</span>
-              <input type="number" id="server-add-hub-port" class="server-input" min="0" max="65535" placeholder="0 = auto">
+              <input type="number" id="server-add-hub-port" class="ui-input server-input" min="0" max="65535" placeholder="0 = auto">
             </label>
             <div class="server-add-error" id="server-add-error" hidden></div>
             <div class="server-add-actions">
-              <button id="server-add-cancel" class="server-btn-secondary" type="button" data-i18n="server_add_cancel">Cancel</button>
-              <button id="server-add-save" class="server-btn-primary" type="button" data-i18n="server_add_save">Save</button>
+              <button id="server-add-cancel" class="ui-button ui-button--secondary ui-button--regular server-btn-secondary" type="button" data-i18n="server_add_cancel">Cancel</button>
+              <button id="server-add-save" class="ui-button ui-button--primary ui-button--regular server-btn-primary" type="button" data-i18n="server_add_save">Save</button>
             </div>
           </div>
         </details>
@@ -1220,29 +1220,29 @@
     </div>
   </div>
   <div id="app">
-    <button id="mobile-menu-btn" type="button" aria-label="Sessions" aria-expanded="false">☰<span class="mobile-badge" hidden></span></button>
-    <button id="mobile-session-title-btn" type="button" hidden aria-haspopup="true" aria-expanded="false"></button>
+    <button class="ui-button ui-button--secondary ui-button--regular" id="mobile-menu-btn" type="button" aria-label="Sessions" aria-expanded="false">☰<span class="mobile-badge" hidden></span></button>
+    <button class="ui-button ui-button--secondary ui-button--regular" id="mobile-session-title-btn" type="button" hidden aria-haspopup="true" aria-expanded="false"></button>
     <div id="mobile-drawer-backdrop" hidden></div>
-    <button id="mobile-spawn-btn" type="button" aria-label="New Session" data-i18n="mobile_new_session">＋ 新規</button>
+    <button class="ui-button ui-button--secondary ui-button--regular" id="mobile-spawn-btn" type="button" aria-label="New Session" data-i18n="mobile_new_session">＋ 新規</button>
     <section id="mobile-home" hidden aria-label="All sessions"></section>
     <aside id="session-list">
       <div id="mobile-drawer-content" hidden>
         <div class="mobile-drawer-topbar">
           <div id="mobile-drawer-summary" data-i18n="loading">...</div>
-          <button id="mobile-log-btn" type="button" hidden aria-label="Raw log">⛶</button>
+          <button class="ui-button ui-button--secondary ui-button--regular" id="mobile-log-btn" type="button" hidden aria-label="Raw log">⛶</button>
         </div>
       </div>
       <div id="new-session-bar">
-        <button id="kill-all-btn" data-i18n-tooltip="kill_all_tooltip" aria-label="Terminate all sessions">
+        <button class="ui-button ui-button--danger ui-button--regular" id="kill-all-btn" data-i18n-tooltip="kill_all_tooltip" aria-label="Terminate all sessions">
           <svg class="kill-all-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
             <rect x="9" y="9" width="6" height="6" rx="1.2" fill="currentColor"/>
           </svg>
         </button>
-        <button id="detached-grid-launcher-btn" class="detached-grid-launcher-sidebar-btn" data-i18n-tooltip="dgl_sidebar_btn_tooltip" aria-label="Open Detached Grid Launcher" title="Open Detached Grid">⊞</button>
+        <button id="detached-grid-launcher-btn" class="ui-button ui-button--primary ui-button--regular detached-grid-launcher-sidebar-btn" data-i18n-tooltip="dgl_sidebar_btn_tooltip" aria-label="Open Detached Grid Launcher" title="Open Detached Grid">⊞</button>
         <!-- C1: plan_orchestration-spawn-ui-exposure.md — 停止/gridと同じ丸アイコンボタンで
              オーケストレーション導線を追加。クリックで通常の起動フォームを開く（spawn-panel.ts）。 -->
-        <button id="orchestration-btn" class="orchestration-sidebar-btn" data-i18n-tooltip="orchestration_tooltip" aria-label="Start orchestration conductor session">
+        <button id="orchestration-btn" class="ui-button ui-button--secondary ui-button--regular orchestration-sidebar-btn" data-i18n-tooltip="orchestration_tooltip" aria-label="Start orchestration conductor session">
           <svg class="orchestration-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
             <circle cx="12" cy="5" r="2.4"></circle>
             <circle cx="5" cy="19" r="2.4"></circle>
@@ -1252,8 +1252,8 @@
         </button>
         <!-- C5: plan_session-handoff-board_c5_handoff-md.md — 経路2「一覧のボタンから」の
              入口。看板ディレクトリを直接読むので、Hub 再起動後・セッション終了後も開ける。 -->
-        <button id="handoff-list-btn" class="detached-grid-launcher-sidebar-btn" data-i18n-tooltip="handoff_list_button" aria-label="Open handoff list" title="引き継ぎ一覧">↪</button>
-        <button type="button" class="detached-grid-launcher-sidebar-btn" data-open-routines data-i18n-tooltip="routines_title" aria-label="Routines">
+        <button id="handoff-list-btn" class="ui-button ui-button--primary ui-button--regular detached-grid-launcher-sidebar-btn" data-i18n-tooltip="handoff_list_button" aria-label="Open handoff list" title="引き継ぎ一覧">↪</button>
+        <button type="button" class="ui-button ui-button--primary ui-button--regular detached-grid-launcher-sidebar-btn" data-open-routines data-i18n-tooltip="routines_title" aria-label="Routines">
           <svg class="routine-sidebar-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20 8a8 8 0 1 0 1 6"/>
             <path d="M20 4v4h-4"/>
@@ -1262,13 +1262,13 @@
         </button>
         <!-- C3: plan_memo-panel.md — 自分用の作業メモ（プロジェクトに紐づく）。
              AI がセッション単位で書く引き継ぎ看板とは別物。ルーティンと新規セッションの間に置く。 -->
-        <button type="button" class="detached-grid-launcher-sidebar-btn" data-open-memo data-i18n-tooltip="memo_button_tooltip" aria-label="Memo">
+        <button type="button" class="ui-button ui-button--primary ui-button--regular detached-grid-launcher-sidebar-btn" data-open-memo data-i18n-tooltip="memo_button_tooltip" aria-label="Memo">
           <svg class="memo-sidebar-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M6 3h9l3 3v15H6z"/>
             <path d="M9 10h6M9 14h6M9 18h3"/>
           </svg>
         </button>
-        <button id="new-session-btn" class="new-session-sidebar-btn" data-i18n-tooltip="new_session" aria-labelledby="new-session-btn-label">
+        <button id="new-session-btn" class="ui-button ui-button--secondary ui-button--regular new-session-sidebar-btn" data-i18n-tooltip="new_session" aria-labelledby="new-session-btn-label">
           <svg class="new-session-sidebar-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
             <path d="M12 18H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5M10 8h6M5 12h8M18 14v8M14 18h8"/><circle cx="6" cy="8" r="1"/>
           </svg>
@@ -1277,7 +1277,7 @@
       </div>
       <div id="session-list-tab-bar">
         <div id="session-list-tabs" role="tablist" aria-label="Session list tabs"></div>
-        <button id="session-list-tab-add" type="button" title="Add tab" aria-label="Add tab">
+        <button class="ui-button ui-button--secondary ui-button--regular" id="session-list-tab-add" type="button" title="Add tab" aria-label="Add tab">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 18V8h3l2-4h7l2 4h4v3M2 18h10M2 8h18M18 14v8M14 18h8"/></svg>
         </button>
       </div>
@@ -1285,7 +1285,7 @@
       <div id="new-session-panel" class="aac-wheel-overlay" hidden>
         <div class="new-session-form">
           <div class="spawn-provider-row">
-            <select id="spawn-provider" class="spawn-select spawn-provider-native" aria-hidden="true" tabindex="-1">
+            <select id="spawn-provider" class="ui-input spawn-select spawn-provider-native" aria-hidden="true" tabindex="-1">
               <option value="claude">Claude Code</option>
               <option value="codex">Codex CLI</option>
               <option value="grok">Grok Build</option>
@@ -1316,16 +1316,16 @@
           <p id="spawn-cli-missing-note" class="settings-note spawn-cli-missing-note" hidden></p>
           <div class="spawn-cwd-row">
             <div class="cwd-combobox">
-              <input type="text" id="spawn-cwd" class="spawn-input" data-i18n-placeholder="spawn_cwd_placeholder" autocomplete="off">
+              <input type="text" id="spawn-cwd" class="ui-input spawn-input" data-i18n-placeholder="spawn_cwd_placeholder" autocomplete="off">
               <ul id="spawn-cwd-dropdown" class="cwd-dropdown" hidden></ul>
             </div>
-            <button id="spawn-cwd-browse" class="spawn-btn-browse" type="button" data-i18n-tooltip="spawn_cwd_browse_tooltip">📁</button>
+            <button id="spawn-cwd-browse" class="ui-button ui-button--secondary ui-button--regular spawn-btn-browse" type="button" data-i18n-tooltip="spawn_cwd_browse_tooltip">📁</button>
           </div>
           <!-- label input (optional) -->
-          <input type="text" id="spawn-label" class="spawn-input" data-i18n-placeholder="spawn_label_placeholder">
+          <input type="text" id="spawn-label" class="ui-input spawn-input" data-i18n-placeholder="spawn_label_placeholder">
           <!-- model input (shared between providers) -->
           <div class="spawn-model-row">
-            <input type="text" id="spawn-model" class="spawn-input"
+            <input type="text" id="spawn-model" class="ui-input spawn-input"
                    list="spawn-model-datalist"
                    data-i18n-placeholder="spawn_model_placeholder"
                    autocomplete="off">
@@ -1345,7 +1345,7 @@
           <!-- subscription selector: profile が 2 件以上ある provider でのみ出す。
                0〜1 件のときは行ごと隠し、送信 JSON も従来と同一に保つ。 -->
           <div class="spawn-subscription-row" id="spawn-subscription-row" hidden>
-            <select id="spawn-subscription" class="spawn-select"></select>
+            <select id="spawn-subscription" class="ui-input spawn-select"></select>
           </div>
 
           <!-- effort: /api/info の effort_levels に写像がある provider でのみ出す。
@@ -1353,15 +1353,15 @@
                （docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C5）。
                option は spawn-panel.ts が provider ごとに組む（subscription と同じ作法）。 -->
           <div class="spawn-subscription-row" id="spawn-effort-row" hidden>
-            <select id="spawn-effort" class="spawn-select"></select>
+            <select id="spawn-effort" class="ui-input spawn-select"></select>
           </div>
 
           <!-- Claude-only: /model picker. Permission select is shared with grok / copilot / cursor-agent / command-code. -->
           <div id="spawn-claude-opts">
-            <button id="spawn-claude-model-btn" class="spawn-btn-browse" type="button" data-i18n="spawn_claude_model_btn">Claude /model</button>
+            <button id="spawn-claude-model-btn" class="ui-button ui-button--secondary ui-button--regular spawn-btn-browse" type="button" data-i18n="spawn_claude_model_btn">Claude /model</button>
           </div>
           <div id="spawn-permission-opts">
-            <select id="spawn-permission-mode" class="spawn-select">
+            <select id="spawn-permission-mode" class="ui-input spawn-select">
               <option value="default" data-i18n="spawn_permission_default">Approval mode: Default</option>
               <option value="plan" data-i18n="spawn_permission_plan">plan (confirm before changes)</option>
               <option value="acceptEdits" data-i18n="spawn_permission_accept_edits">acceptEdits (auto-allow edits only)</option>
@@ -1372,13 +1372,13 @@
 
           <!-- Codex-only options -->
           <div id="spawn-codex-opts" hidden>
-            <button id="spawn-codex-model-btn" class="spawn-btn-browse" type="button" data-i18n="spawn_codex_model_btn">Codex /model</button>
-            <select id="spawn-sandbox" class="spawn-select">
+            <button id="spawn-codex-model-btn" class="ui-button ui-button--secondary ui-button--regular spawn-btn-browse" type="button" data-i18n="spawn_codex_model_btn">Codex /model</button>
+            <select id="spawn-sandbox" class="ui-input spawn-select">
               <option value="workspace-write" data-i18n="spawn_sandbox_workspace">sandbox: workspace-write (default)</option>
               <option value="read-only" data-i18n="spawn_sandbox_readonly">read-only (read only)</option>
               <option value="danger-full-access" data-i18n="spawn_sandbox_full">⚠ Full access (danger-full-access)</option>
             </select>
-            <select id="spawn-ask-approval" class="spawn-select">
+            <select id="spawn-ask-approval" class="ui-input spawn-select">
               <option value="on-request" data-i18n="spawn_approval_on_request">approval: on-request (default)</option>
               <option value="untrusted" data-i18n="spawn_approval_untrusted">untrusted (confirm untrusted only)</option>
               <option value="never" data-i18n="spawn_approval_never">⚠ Skip approvals (never)</option>
@@ -1437,7 +1437,7 @@
                この欄を看板 md で埋めて開く専用画面を作らず、この欄をそのまま共用する。 -->
           <div class="spawn-initial-prompt-row">
             <label for="spawn-initial-prompt" class="spawn-field-label" data-i18n="spawn_initial_prompt_label">Initial instruction (optional)</label>
-            <textarea id="spawn-initial-prompt" class="spawn-input spawn-textarea" rows="3"
+            <textarea id="spawn-initial-prompt" class="ui-input spawn-input spawn-textarea" rows="3"
                       data-i18n-placeholder="spawn_initial_prompt_placeholder"
                       placeholder="e.g. &lt;path to plan.md&gt; do this"></textarea>
           </div>
@@ -1491,7 +1491,7 @@
               </div>
               <div class="spawn-detached-row">
                 <span class="spawn-detached-label" data-i18n="spawn_preset_label">Preset</span>
-                <select id="spawn-detached-preset" class="spawn-select spawn-preset-select">
+                <select id="spawn-detached-preset" class="ui-input spawn-select spawn-preset-select">
                   <option value="single" data-i18n="spawn_preset_single">Single large pane</option>
                   <option value="claude-shell-2x2" data-i18n="spawn_preset_claude_shell">Claude + Shell 2×2</option>
                   <option value="shell-2x2" data-i18n="spawn_preset_shell_2x2">Shell 2×2</option>
@@ -1537,26 +1537,26 @@
           </details>
 
           <div class="new-session-actions">
-            <button id="spawn-cancel-btn" class="spawn-btn-cancel" data-i18n="spawn_cancel">Cancel</button>
-            <button id="spawn-launch-btn" class="spawn-btn-launch" data-i18n="spawn_launch">Launch</button>
+            <button id="spawn-cancel-btn" class="ui-button ui-button--secondary ui-button--regular spawn-btn-cancel" data-i18n="spawn_cancel">Cancel</button>
+            <button id="spawn-launch-btn" class="ui-button ui-button--primary ui-button--regular spawn-btn-launch" data-i18n="spawn_launch">Launch</button>
           </div>
         </div>
       </div>
       <div id="relay-dialog" class="aac-wheel-overlay" hidden>
-        <section class="relay-dialog-box" role="dialog" aria-modal="true" aria-labelledby="relay-dialog-title">
-          <div class="relay-dialog-header">
-            <h2 id="relay-dialog-title" data-i18n="relay_dialog_title">Start relay</h2>
-            <button id="relay-dialog-close" class="relay-dialog-close" type="button" data-i18n-tooltip="settings_close" aria-label="Close">✕</button>
+        <section class="ui-modal ui-modal--lg relay-dialog-box" role="dialog" aria-modal="true" aria-labelledby="relay-dialog-title">
+          <div class="ui-modal__header relay-dialog-header">
+            <h2 class="ui-modal__title" id="relay-dialog-title" data-i18n="relay_dialog_title">Start relay</h2>
+            <button id="relay-dialog-close" class="ui-button ui-button--quiet ui-button--compact ui-button--icon relay-dialog-close" type="button" data-i18n-tooltip="settings_close" aria-label="Close">✕</button>
           </div>
           <div class="relay-dialog-target"><span data-i18n="relay_target_session">Target session</span><strong id="relay-target-session"></strong></div>
 
           <div class="relay-dialog-field">
             <label for="relay-plan-path" data-i18n="relay_plan_path">Plan path</label>
-            <input id="relay-plan-path" type="text" autocomplete="off" data-i18n-placeholder="relay_plan_path_placeholder" placeholder="docs/local/plan_...md">
+            <input class="ui-input" id="relay-plan-path" type="text" autocomplete="off" data-i18n-placeholder="relay_plan_path_placeholder" placeholder="docs/local/plan_...md">
           </div>
           <div class="relay-dialog-field relay-dialog-candidates">
             <label for="relay-plan-candidates" data-i18n="relay_plan_candidates">Plan candidates</label>
-            <select id="relay-plan-candidates"><option value="" data-i18n="relay_plan_candidates_empty">Select a plan file…</option></select>
+            <select id="relay-plan-candidates" class="ui-input"><option value="" data-i18n="relay_plan_candidates_empty">Select a plan file…</option></select>
           </div>
 
           <div class="relay-dialog-section-title" data-i18n="spawn_orchestration_roles_title">Roles</div>
@@ -1575,10 +1575,10 @@
           <div class="settings-note relay-strong-note" data-i18n="relay_strong_note">The strong implementer only takes over C items that keep failing review or are marked [strong] in the plan.</div>
 
           <div class="relay-dialog-options">
-            <label class="relay-dialog-field"><span data-i18n="relay_max_rounds">Max rounds</span><select id="relay-max-rounds">
+            <label class="relay-dialog-field"><span data-i18n="relay_max_rounds">Max rounds</span><select id="relay-max-rounds" class="ui-input">
               <option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option>
             </select></label>
-            <label class="relay-dialog-field"><span data-i18n="relay_escalate_after">Hand off after</span><select id="relay-escalate-after">
+            <label class="relay-dialog-field"><span data-i18n="relay_escalate_after">Hand off after</span><select id="relay-escalate-after" class="ui-input">
               <option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
             </select></label>
           </div>
@@ -1593,25 +1593,25 @@
 
           <div class="relay-dialog-field">
             <label for="relay-extra-impl" data-i18n="relay_extra_impl">Extra implementation instructions</label>
-            <textarea id="relay-extra-impl" rows="2"></textarea>
+            <textarea class="ui-input" id="relay-extra-impl" rows="2"></textarea>
           </div>
           <div class="relay-dialog-field">
             <label for="relay-extra-review" data-i18n="relay_extra_review">Extra review instructions</label>
-            <textarea id="relay-extra-review" rows="2"></textarea>
+            <textarea class="ui-input" id="relay-extra-review" rows="2"></textarea>
           </div>
           <div class="settings-note" data-i18n="spawn_orchestration_bypass_note">⚠ Orchestration child sessions launch with approvals skipped (full access). Control comes from worktree isolation and your instructions.</div>
           <div id="relay-dialog-error" class="settings-note settings-note-warn" hidden></div>
           <div class="settings-note relay-full-bypass-note" data-i18n="relay_full_bypass_note">Starting a relay acknowledges that unattended children default to full permission bypass unless you set a safer orchestration.child_permission_default or per-role permission.</div>
 
-          <div class="relay-dialog-actions">
-            <button id="relay-cancel" class="spawn-btn-cancel" type="button" data-i18n="spawn_cancel">Cancel</button>
-            <button id="relay-start" class="spawn-btn-launch" type="button" data-i18n="relay_start" disabled>Start relay</button>
+          <div class="ui-modal__actions relay-dialog-actions">
+            <button id="relay-cancel" class="ui-button ui-button--secondary ui-button--regular spawn-btn-cancel" type="button" data-i18n="spawn_cancel">Cancel</button>
+            <button id="relay-start" class="ui-button ui-button--primary ui-button--regular spawn-btn-launch" type="button" data-i18n="relay_start" disabled>Start relay</button>
           </div>
         </section>
       </div>
       <div id="sessions" role="tabpanel"></div>
       <div id="session-footer" class="session-footer">
-      <button id="settings-btn" data-i18n-tooltip="settings" aria-expanded="false" aria-controls="settings-panel">
+      <button class="ui-button ui-button--secondary ui-button--regular" id="settings-btn" data-i18n-tooltip="settings" aria-expanded="false" aria-controls="settings-panel">
         <svg class="footer-action-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         <span data-i18n="settings">Settings</span>
         <svg class="settings-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1619,7 +1619,7 @@
       <div class="usage-menu" id="usage-menu">
         <!-- aria-labelledby: 720px 以下では文字（span）を display:none にするため、隠れていても名前を引ける参照で付ける。
              data-i18n-tooltip は既存キー usage_menu_btn を流用（Hub メニューと同じ作法）。 -->
-        <button class="usage-menu-btn" id="usage-menu-btn" data-i18n-tooltip="usage_menu_btn" aria-labelledby="usage-menu-label" aria-haspopup="true" aria-expanded="false">
+        <button class="ui-button ui-button--secondary ui-button--regular usage-menu-btn" id="usage-menu-btn" data-i18n-tooltip="usage_menu_btn" aria-labelledby="usage-menu-label" aria-haspopup="true" aria-expanded="false">
           <svg class="usage-menu-icon footer-action-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M5.6 18.4a9 9 0 1 1 12.8 0"/>
@@ -1634,7 +1634,7 @@
         <div class="usage-dropdown" id="usage-dropdown" data-wheel-native hidden>
           <div class="usage-dropdown-header">
             <span data-i18n="usage_dropdown_header">AI Usage Links</span>
-            <button id="usage-dropdown-close" class="usage-dropdown-close" type="button" data-i18n-tooltip="settings_close" aria-label="Close">✕</button>
+            <button id="usage-dropdown-close" class="ui-button ui-button--quiet ui-button--compact ui-button--icon usage-dropdown-close" type="button" data-i18n-tooltip="settings_close" aria-label="Close">✕</button>
           </div>
           <!-- 広幅（900px 以上）のみ .usage-dropdown-columns を左右 2 カラムに割る。左=契約の残量、
                右=取得不可 provider とローカル実行。狭幅はこの順で縦に積む。プロファイル行は
@@ -1664,35 +1664,35 @@
             <span class="usage-item-icon" data-provider-icon="copilot" aria-hidden="true"></span>
             <span class="usage-item-name">Copilot</span>
             <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="ui-button ui-button--secondary ui-button--regular usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
           </div>
           <div class="usage-dropdown-unavailable-row">
           <a id="usage-link-cursor-agent" class="usage-dropdown-item" href="https://cursor.com/dashboard" target="_blank" rel="noopener noreferrer">
             <span class="usage-item-icon" data-provider-icon="cursor-agent" aria-hidden="true"></span>
             <span class="usage-item-name">Cursor Agent</span>
             <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="ui-button ui-button--secondary ui-button--regular usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
           </div>
           <div class="usage-dropdown-unavailable-row">
           <a id="usage-link-opencode" class="usage-dropdown-item" href="https://opencode.ai/go" target="_blank" rel="noopener noreferrer">
             <span class="usage-item-icon" data-provider-icon="opencode" aria-hidden="true"></span>
             <span class="usage-item-name">OpenCode</span>
             <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="ui-button ui-button--secondary ui-button--regular usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
           </div>
           <div class="usage-dropdown-unavailable-row">
           <a id="usage-link-command-code" class="usage-dropdown-item" href="https://commandcode.ai/usage" target="_blank" rel="noopener noreferrer">
             <span class="usage-item-icon" data-provider-icon="command-code" aria-hidden="true"></span>
             <span class="usage-item-name">Command Code</span>
             <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="ui-button ui-button--secondary ui-button--regular usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
           </div>
           <div class="usage-dropdown-unavailable-row">
           <a id="usage-link-ollama" class="usage-dropdown-item" href="https://ollama.com/settings" target="_blank" rel="noopener noreferrer">
             <span class="usage-item-icon" data-provider-icon="ollama" aria-hidden="true"></span>
             <span class="usage-item-name">Ollama</span>
             <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="ui-button ui-button--secondary ui-button--regular usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
           </div>
           <div class="usage-dropdown-section-title" data-i18n="usage_local_group">ローカル実行 — 上限が無いので数字は出ない</div>
           <a id="usage-link-lm-studio" class="usage-dropdown-item" href="http://localhost:1234" target="_blank" rel="noopener noreferrer">
@@ -1705,7 +1705,7 @@
         </div>
       </div>
       <div id="web-menu" class="web-menu">
-        <button class="web-menu-btn" id="web-menu-btn" data-i18n-tooltip="web_menu_tooltip" aria-haspopup="true" aria-expanded="false" aria-controls="web-menu-dropdown">
+        <button class="ui-button ui-button--secondary ui-button--regular web-menu-btn" id="web-menu-btn" data-i18n-tooltip="web_menu_tooltip" aria-haspopup="true" aria-expanded="false" aria-controls="web-menu-dropdown">
           <svg class="web-menu-icon footer-action-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
             <rect x="2" y="2"  width="20" height="8" rx="2"/>
@@ -1718,23 +1718,23 @@
         </button>
         <div class="web-menu-dropdown" id="web-menu-dropdown" data-wheel-native hidden role="menu" aria-labelledby="web-menu-btn">
           <!-- 🌐 外部公開（Tailscale serve）トグル＋状態ドット。bind は 127.0.0.1 不変。 -->
-          <button id="expose-btn" class="web-menu-item" type="button" aria-haspopup="dialog" aria-pressed="false" role="menuitem">
+          <button id="expose-btn" class="ui-button ui-button--quiet ui-button--compact web-menu-item" type="button" aria-haspopup="dialog" aria-pressed="false" role="menuitem">
             <span class="web-menu-item-icon" aria-hidden="true">🌐</span>
             <span class="web-menu-item-label" data-i18n="expose_btn">外部公開</span>
             <span id="expose-state" class="web-menu-item-state"></span>
             <span id="expose-dot" class="expose-dot expose-dot-off" aria-hidden="true"></span>
           </button>
           <!-- 📱 モバイル接続（QR ウィザード）。bind は 127.0.0.1 不変。 -->
-          <button id="mobile-connect-btn" class="web-menu-item" type="button" data-i18n-tooltip="mobile_connect_tooltip" aria-haspopup="dialog" aria-expanded="false" role="menuitem">
+          <button id="mobile-connect-btn" class="ui-button ui-button--primary ui-button--compact web-menu-item" type="button" data-i18n-tooltip="mobile_connect_tooltip" aria-haspopup="dialog" aria-expanded="false" role="menuitem">
             <span class="web-menu-item-icon" aria-hidden="true">📱</span>
             <span class="web-menu-item-label" data-i18n="mobile_connect_tooltip">スマホで接続（QR）</span>
           </button>
-          <button id="shutdown-btn" class="web-menu-item" type="button" data-i18n-tooltip="shutdown_tooltip" role="menuitem">
+          <button id="shutdown-btn" class="ui-button ui-button--quiet ui-button--compact web-menu-item" type="button" data-i18n-tooltip="shutdown_tooltip" role="menuitem">
             <span class="web-menu-item-icon" aria-hidden="true">⏻</span>
             <span class="web-menu-item-label" data-i18n="shutdown_tooltip">Hub を停止</span>
           </button>
           <div class="web-menu-divider" role="separator"></div>
-          <button id="bug-report-btn" class="web-menu-item" type="button" data-i18n-tooltip="bug_report_tooltip" aria-haspopup="dialog" role="menuitem">
+          <button id="bug-report-btn" class="ui-button ui-button--quiet ui-button--compact web-menu-item" type="button" data-i18n-tooltip="bug_report_tooltip" aria-haspopup="dialog" role="menuitem">
             <span class="web-menu-item-icon" aria-hidden="true">🐞</span>
             <span class="web-menu-item-label" data-i18n="bug_report_button">バグ報告</span>
           </button>
@@ -1748,15 +1748,15 @@
     <div id="unified-tab-bar">
       <!-- D11: セッション情報チップ (セッションカードと同じ provider chip + model + status) -->
       <span class="session-info-chip" id="session-info-chip" hidden></span>
-      <button class="view-tab active" data-tab="terminal" type="button"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg></span><span data-i18n="tab_terminal">ターミナル</span></button>
-      <button class="view-tab" data-tab="multi" id="tab-multi" type="button"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span data-i18n="tab_multi">マルチ</span><span class="multi-layout-badge" id="multi-tab-layout-badge">2×2</span></button>
-      <button class="view-tab" data-tab="chat" type="button"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 8 8 0 0 1-3.4-.8L4 20l1.8-5.1a8 8 0 0 1-.8-3.4A7.5 7.5 0 0 1 12.5 4 7.5 7.5 0 0 1 20 11.5Z"/></svg></span><span data-i18n="tab_chat">チャット</span><span class="badge" id="chat-count-badge">0</span></button>
-      <button class="view-tab lazy" data-tab="files" type="button" data-i18n-tooltip="tab_files_lazy_tooltip"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></span><span data-i18n="tab_files">Files</span></button>
-      <button class="view-tab lazy" data-tab="git" type="button" data-i18n-tooltip="tab_git_lazy_tooltip"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="4" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="20" r="2"/><path d="M6 6v12M18 8v3a7 7 0 0 1-7 7H8"/></svg></span><span data-i18n="tab_git">Git</span></button>
-      <button class="view-tab lazy" data-tab="review" type="button" data-i18n-tooltip="tab_review_lazy_tooltip"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 7h10M10 2v10M14 17h7M3 17h6"/></svg></span><span data-i18n="tab_review">Review</span></button>
-      <button class="view-tab" data-tab="orchestration" type="button" data-i18n-tooltip="orchestration_tooltip" aria-label="Orchestration"><svg class="orchestration-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="5" r="2.4"></circle><circle cx="5" cy="19" r="2.4"></circle><circle cx="19" cy="19" r="2.4"></circle><path d="M12 7.4V12M12 12L6.6 17M12 12L17.4 17"></path></svg></button>
-      <button class="view-tab" data-tab="approval" type="button" id="approval-tab-btn"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m13 2-9 11h7l-1 9 10-12h-7Z"/></svg></span><span data-i18n="tab_approval">承認</span><span id="approval-tab-badge" hidden>0</span></button>
-      <button class="view-tab" data-tab="history" type="button" id="history-tab-btn"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/></svg></span><span>履歴</span></button>
+      <button class="ui-button ui-button--secondary ui-button--regular view-tab active" data-tab="terminal" type="button"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg></span><span data-i18n="tab_terminal">ターミナル</span></button>
+      <button class="ui-button ui-button--secondary ui-button--regular view-tab" data-tab="multi" id="tab-multi" type="button"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span data-i18n="tab_multi">マルチ</span><span class="multi-layout-badge" id="multi-tab-layout-badge">2×2</span></button>
+      <button class="ui-button ui-button--secondary ui-button--regular view-tab" data-tab="chat" type="button"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 8 8 0 0 1-3.4-.8L4 20l1.8-5.1a8 8 0 0 1-.8-3.4A7.5 7.5 0 0 1 12.5 4 7.5 7.5 0 0 1 20 11.5Z"/></svg></span><span data-i18n="tab_chat">チャット</span><span class="badge" id="chat-count-badge">0</span></button>
+      <button class="ui-button ui-button--secondary ui-button--regular view-tab lazy" data-tab="files" type="button" data-i18n-tooltip="tab_files_lazy_tooltip"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></span><span data-i18n="tab_files">Files</span></button>
+      <button class="ui-button ui-button--secondary ui-button--regular view-tab lazy" data-tab="git" type="button" data-i18n-tooltip="tab_git_lazy_tooltip"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="4" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="20" r="2"/><path d="M6 6v12M18 8v3a7 7 0 0 1-7 7H8"/></svg></span><span data-i18n="tab_git">Git</span></button>
+      <button class="ui-button ui-button--secondary ui-button--regular view-tab lazy" data-tab="review" type="button" data-i18n-tooltip="tab_review_lazy_tooltip"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 7h10M10 2v10M14 17h7M3 17h6"/></svg></span><span data-i18n="tab_review">Review</span></button>
+      <button class="ui-button ui-button--secondary ui-button--regular view-tab" data-tab="orchestration" type="button" data-i18n-tooltip="orchestration_tooltip" aria-label="Orchestration"><svg class="orchestration-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="5" r="2.4"></circle><circle cx="5" cy="19" r="2.4"></circle><circle cx="19" cy="19" r="2.4"></circle><path d="M12 7.4V12M12 12L6.6 17M12 12L17.4 17"></path></svg></button>
+      <button class="ui-button ui-button--secondary ui-button--regular view-tab" data-tab="approval" type="button" id="approval-tab-btn"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m13 2-9 11h7l-1 9 10-12h-7Z"/></svg></span><span data-i18n="tab_approval">承認</span><span id="approval-tab-badge" hidden>0</span></button>
+      <button class="ui-button ui-button--secondary ui-button--regular view-tab" data-tab="history" type="button" id="history-tab-btn"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/></svg></span><span>履歴</span></button>
 
       <!-- 旧 #main-tab-bar / #main-tab-list: FilesTabManager の DOM 状態保持用に残置(非表示) -->
       <div id="main-tab-bar" hidden><div id="main-tab-list"></div></div>
@@ -1777,7 +1777,7 @@
          承認バーと違ってフローに置いてよい（そのドラッグ中だけ PTY リサイズを抑える。
          session-strip.ts を参照）。中身は session-strip.ts が描く。 -->
     <div id="session-strip" hidden>
-      <button id="session-strip-project" class="session-strip-project" type="button" hidden></button>
+      <button id="session-strip-project" class="ui-button ui-button--secondary ui-button--regular session-strip-project" type="button" hidden></button>
       <div id="session-strip-items" class="session-strip-items"></div>
       <!-- multi タブのときはセッション一覧の代わりにここへ範囲トグルを出す。
            段を 2 本に分けない＝タブを往復しても端末の高さが動かない。 -->
@@ -1796,12 +1796,12 @@
         <div id="swipe-session-handle" aria-hidden="true"></div>
         <div id="terminal-area"></div>
         <div id="terminal-readonly-badge"><span data-i18n="terminal_output">Terminal Output</span><span id="terminal-shell-info"></span></div>
-        <button id="scroll-to-top-btn" data-i18n-tooltip="scroll_to_top_tooltip" data-i18n="scroll_to_top" hidden>↑ up</button>
-        <button id="scroll-to-bottom-btn" data-i18n-tooltip="scroll_to_bottom_tooltip" data-i18n="scroll_to_bottom" hidden>↓ down</button>
+        <button class="ui-button ui-button--secondary ui-button--regular" id="scroll-to-top-btn" data-i18n-tooltip="scroll_to_top_tooltip" data-i18n="scroll_to_top" hidden>↑ up</button>
+        <button class="ui-button ui-button--secondary ui-button--regular" id="scroll-to-bottom-btn" data-i18n-tooltip="scroll_to_bottom_tooltip" data-i18n="scroll_to_bottom" hidden>↓ down</button>
         <!-- 承認ポップアップを 1 行の帯に畳む（↓ down の下。パネルが開いている間だけ出す。
              出し入れは approval.ts の syncApprovalRecallBar） -->
         <div id="approval-recall-bar" hidden>
-          <button id="approval-dismiss-btn" type="button" data-i18n-tooltip="approval_dismiss_tooltip" data-i18n="approval_dismiss">✕ 承認</button>
+          <button class="ui-button ui-button--secondary ui-button--regular" id="approval-dismiss-btn" type="button" data-i18n-tooltip="approval_dismiss_tooltip" data-i18n="approval_dismiss">✕ 承認</button>
         </div>
       </div>
     </div>
@@ -1848,15 +1848,15 @@
     <div id="approval-suppressed-banner" hidden></div>
     <div id="mobile-keyboard-panel" hidden>
       <div id="mobile-key-row" aria-label="Terminal keys">
-        <button type="button" data-mobile-key="esc">Esc</button>
-        <button type="button" data-mobile-key="ctrl" aria-pressed="false">Ctrl</button>
-        <button type="button" data-mobile-key="tab">Tab</button>
-        <button type="button" data-mobile-key="up">↑</button>
-        <button type="button" data-mobile-key="down">↓</button>
-        <button type="button" data-mobile-key="left">←</button>
-        <button type="button" data-mobile-key="right">→</button>
-        <button type="button" data-mobile-key="ctrl-o">^O</button>
-        <button type="button" data-mobile-key="ctrl-c">^C</button>
+        <button class="ui-button ui-button--secondary ui-button--regular" type="button" data-mobile-key="esc">Esc</button>
+        <button class="ui-button ui-button--secondary ui-button--regular" type="button" data-mobile-key="ctrl" aria-pressed="false">Ctrl</button>
+        <button class="ui-button ui-button--secondary ui-button--regular" type="button" data-mobile-key="tab">Tab</button>
+        <button class="ui-button ui-button--secondary ui-button--regular" type="button" data-mobile-key="up">↑</button>
+        <button class="ui-button ui-button--secondary ui-button--regular" type="button" data-mobile-key="down">↓</button>
+        <button class="ui-button ui-button--secondary ui-button--regular" type="button" data-mobile-key="left">←</button>
+        <button class="ui-button ui-button--secondary ui-button--regular" type="button" data-mobile-key="right">→</button>
+        <button class="ui-button ui-button--secondary ui-button--regular" type="button" data-mobile-key="ctrl-o">^O</button>
+        <button class="ui-button ui-button--secondary ui-button--regular" type="button" data-mobile-key="ctrl-c">^C</button>
       </div>
     </div>
     <div id="input-bar-outer">
@@ -1865,16 +1865,16 @@
           <div class="slash-picker-header">
             <span id="slash-picker-title" class="slash-picker-provider-name"></span>
             <span id="slash-picker-time" class="slash-picker-time"></span>
-            <button id="slash-picker-refresh" class="slash-picker-icon-btn" data-i18n-tooltip="slash_picker_refresh_tooltip">↻</button>
-            <button id="slash-picker-close" class="slash-picker-icon-btn">✕</button>
+            <button id="slash-picker-refresh" class="ui-button ui-button--quiet ui-button--compact ui-button--icon slash-picker-icon-btn" data-i18n-tooltip="slash_picker_refresh_tooltip">↻</button>
+            <button id="slash-picker-close" class="ui-button ui-button--quiet ui-button--compact ui-button--icon slash-picker-icon-btn">✕</button>
           </div>
-          <input type="text" id="slash-picker-search" class="slash-picker-search" data-i18n-placeholder="slash_picker_search_placeholder">
+          <input type="text" id="slash-picker-search" class="ui-input slash-picker-search" data-i18n-placeholder="slash_picker_search_placeholder">
           <div id="slash-picker-list" class="slash-picker-list"></div>
         </div>
         <div id="voice-bar" hidden>
           <canvas id="voice-waveform" class="voice-waveform"></canvas>
-          <button id="voice-cancel-btn" class="voice-action-btn voice-cancel-btn" data-i18n-tooltip="voice_cancel_tooltip">✕</button>
-          <button id="voice-confirm-btn" class="voice-action-btn voice-confirm-btn" data-i18n-tooltip="voice_confirm_tooltip">✓</button>
+          <button id="voice-cancel-btn" class="ui-button ui-button--secondary ui-button--regular ui-button--icon voice-action-btn voice-cancel-btn" data-i18n-tooltip="voice_cancel_tooltip">✕</button>
+          <button id="voice-confirm-btn" class="ui-button ui-button--secondary ui-button--regular ui-button--icon voice-action-btn voice-confirm-btn" data-i18n-tooltip="voice_confirm_tooltip">✓</button>
         </div>
         <!-- ライブ進捗ピル（旧 #terminal-area 内 absolute から入力欄直上へ移設）。
              CLI のステータス更新を抽出して表示し、稼働中は状態記号が回る。更新が途切れると
@@ -1885,31 +1885,31 @@
         <div id="terminal-live-status" hidden><span class="live-status-state" aria-hidden="true"></span><span class="live-status-text"></span><span class="live-compact-bar" aria-hidden="true" hidden></span></div>
         <div id="mobile-nudge-panel" aria-label="Short instructions">
           <div id="mobile-nudge-chips" aria-label="Quick instructions"></div>
-          <button id="mobile-nudge-voice-btn" type="button" aria-label="Hold to speak">押して話す</button>
+          <button class="ui-button ui-button--secondary ui-button--regular" id="mobile-nudge-voice-btn" type="button" aria-label="Hold to speak">押して話す</button>
           <div id="mobile-nudge-history" aria-label="Recent short instructions" hidden></div>
         </div>
         <div id="input-bar">
           <div id="input-wrap">
-            <button id="tools-flip-btn" class="quick-cmd-btn" data-i18n-tooltip="tools_flip_tooltip" aria-label="Toggle control side">⇄</button>
-            <button id="mobile-composer-attach-btn" class="quick-cmd-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-tooltip="mobile_composer_attach_tooltip" aria-label="Add attachment">＋</button>
+            <button id="tools-flip-btn" class="ui-button ui-button--secondary ui-button--regular ui-button--icon quick-cmd-btn" data-i18n-tooltip="tools_flip_tooltip" aria-label="Toggle control side">⇄</button>
+            <button id="mobile-composer-attach-btn" class="ui-button ui-button--secondary ui-button--regular ui-button--icon quick-cmd-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-tooltip="mobile_composer_attach_tooltip" aria-label="Add attachment">＋</button>
             <div id="input-area">
               <div id="paste-chips"></div>
               <textarea id="input" rows="1" data-i18n-placeholder="input_placeholder"></textarea>
             </div>
-            <button id="mobile-keyboard-toggle" class="quick-cmd-btn" type="button" aria-expanded="false" data-i18n-tooltip="mobile_keyboard_toggle_tooltip">⌨</button>
-            <button id="input-clear-btn" class="quick-cmd-btn" data-i18n-tooltip="input_clear_tooltip" aria-label="Clear input">
+            <button id="mobile-keyboard-toggle" class="ui-button ui-button--secondary ui-button--regular ui-button--icon quick-cmd-btn" type="button" aria-expanded="false" data-i18n-tooltip="mobile_keyboard_toggle_tooltip">⌨</button>
+            <button id="input-clear-btn" class="ui-button ui-button--secondary ui-button--regular ui-button--icon quick-cmd-btn" data-i18n-tooltip="input_clear_tooltip" aria-label="Clear input">
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 13 13" fill="none"
                    stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <line x1="2" y1="2" x2="11" y2="11"/>
                 <line x1="11" y1="2" x2="2" y2="11"/>
               </svg>
             </button>
-            <button id="send-btn" title="Send" aria-label="Send">➤</button>
-            <button id="voice-btn" hidden>🎤</button>
+            <button class="ui-button ui-button--primary ui-button--regular" id="send-btn" title="Send" aria-label="Send">➤</button>
+            <button class="ui-button ui-button--secondary ui-button--regular ui-button--icon" id="voice-btn" hidden>🎤</button>
             <div id="prompt-template-wrap">
-              <button id="prompt-template-toggle" class="quick-cmd-btn" type="button" aria-label="Prompt templates" aria-haspopup="true" aria-expanded="false">▤</button>
+              <button id="prompt-template-toggle" class="ui-button ui-button--secondary ui-button--regular ui-button--icon quick-cmd-btn" type="button" aria-label="Prompt templates" aria-haspopup="true" aria-expanded="false">▤</button>
               <div id="prompt-template-palette" data-wheel-native hidden>
-                <input id="prompt-template-search" type="search" data-i18n-placeholder="template_search_placeholder" aria-label="Prompt templates">
+                <input class="ui-input" id="prompt-template-search" type="search" data-i18n-placeholder="template_search_placeholder" aria-label="Prompt templates">
                 <div class="prompt-template-mode">
                   <span class="prompt-template-mode-label" data-i18n="template_send_immediate">選んだら即送信</span>
                   <label class="approval-toggle">
@@ -1922,28 +1922,28 @@
               </div>
             </div>
             <div id="deferred-send-status" hidden role="status" aria-live="polite">
-              <span class="deferred-send-label"></span><span class="deferred-send-track"><span class="deferred-send-progress"></span></span><button id="deferred-send-cancel" type="button">キャンセル</button>
+              <span class="deferred-send-label"></span><span class="deferred-send-track"><span class="deferred-send-progress"></span></span><button class="ui-button ui-button--secondary ui-button--compact" id="deferred-send-cancel" type="button">キャンセル</button>
             </div>
             <div id="input-tools">
-              <button id="voice-wakeword-btn" hidden>🎧</button>
-              <button id="quick-clear-btn" class="quick-cmd-btn quick-cmd-btn--text" hidden></button>
-              <button id="quick-model-btn" class="quick-cmd-btn quick-cmd-btn--text" hidden></button>
-              <button id="quick-cmd-btn-3" class="quick-cmd-btn quick-cmd-btn--text" hidden></button>
-              <button id="quick-cmd-btn-4" class="quick-cmd-btn quick-cmd-btn--text" hidden></button>
-              <button id="quick-cmd-btn-5" class="quick-cmd-btn quick-cmd-btn--text" hidden></button>
-              <button id="slash-picker-btn" class="quick-cmd-btn" data-i18n-tooltip="slash_picker_tooltip">/ ▾</button>
-              <button id="buf-clear-btn" class="quick-cmd-btn" data-i18n-tooltip="buf_clear_tooltip">⌫</button>
+              <button class="ui-button ui-button--secondary ui-button--regular ui-button--icon" id="voice-wakeword-btn" hidden>🎧</button>
+              <button id="quick-clear-btn" class="ui-button ui-button--secondary ui-button--regular quick-cmd-btn quick-cmd-btn--text" hidden></button>
+              <button id="quick-model-btn" class="ui-button ui-button--secondary ui-button--regular quick-cmd-btn quick-cmd-btn--text" hidden></button>
+              <button id="quick-cmd-btn-3" class="ui-button ui-button--secondary ui-button--regular quick-cmd-btn quick-cmd-btn--text" hidden></button>
+              <button id="quick-cmd-btn-4" class="ui-button ui-button--secondary ui-button--regular quick-cmd-btn quick-cmd-btn--text" hidden></button>
+              <button id="quick-cmd-btn-5" class="ui-button ui-button--secondary ui-button--regular quick-cmd-btn quick-cmd-btn--text" hidden></button>
+              <button id="slash-picker-btn" class="ui-button ui-button--secondary ui-button--regular ui-button--icon quick-cmd-btn" data-i18n-tooltip="slash_picker_tooltip">/ ▾</button>
+              <button id="buf-clear-btn" class="ui-button ui-button--secondary ui-button--regular ui-button--icon quick-cmd-btn" data-i18n-tooltip="buf_clear_tooltip">⌫</button>
             </div>
           </div>
           <div id="mobile-composer-attach-menu" hidden>
-            <button id="mobile-composer-file-btn" type="button"><span aria-hidden="true">📎</span><span data-i18n="mobile_composer_attach_file">File</span></button>
-            <button id="mobile-composer-camera-btn" type="button"><span aria-hidden="true">📷</span><span data-i18n="mobile_composer_attach_camera">Camera</span></button>
+            <button class="ui-button ui-button--secondary ui-button--regular" id="mobile-composer-file-btn" type="button"><span aria-hidden="true">📎</span><span data-i18n="mobile_composer_attach_file">File</span></button>
+            <button class="ui-button ui-button--secondary ui-button--regular" id="mobile-composer-camera-btn" type="button"><span aria-hidden="true">📷</span><span data-i18n="mobile_composer_attach_camera">Camera</span></button>
           </div>
         </div>
         <div id="attach-panel">
           <div id="attach-tray">
             <div id="attach-thumbnails"></div>
-            <button id="attach-clear-btn" data-i18n-tooltip="attach_clear_tooltip" hidden>✕</button>
+            <button class="ui-button ui-button--secondary ui-button--regular" id="attach-clear-btn" data-i18n-tooltip="attach_clear_tooltip" hidden>✕</button>
           </div>
           <div id="attach-bar">
             <div id="attach-drop-zone" data-i18n-tooltip="attach_sub">
@@ -1956,20 +1956,20 @@
                  iOS Safari / Android Chrome ともにカメラ起動を優先させる。
                  PC では非表示（mobile-home.css の @media クエリで attach-camera-btn のみ表示する）。 -->
             <input type="file" id="attach-camera-input" accept="image/*" capture="environment" style="display:none">
-            <button id="attach-camera-btn" type="button" data-i18n-tooltip="attach_camera_tooltip" aria-label="Camera">📷</button>
+            <button class="ui-button ui-button--secondary ui-button--regular" id="attach-camera-btn" type="button" data-i18n-tooltip="attach_camera_tooltip" aria-label="Camera">📷</button>
             <div id="session-inline-usage" role="status" aria-live="polite"></div>
-            <button id="agent-log-btn" type="button" data-i18n="agent_log_button" data-i18n-tooltip="agent_log_tooltip" aria-haspopup="dialog" aria-expanded="false">📄 Raw log</button>
-            <button id="attach-copy-cwd-btn" type="button" data-i18n-tooltip="attach_copy_cwd_tooltip" aria-label="Copy working directory path">📁</button>
+            <button class="ui-button ui-button--secondary ui-button--regular" id="agent-log-btn" type="button" data-i18n="agent_log_button" data-i18n-tooltip="agent_log_tooltip" aria-haspopup="dialog" aria-expanded="false">📄 Raw log</button>
+            <button class="ui-button ui-button--quiet ui-button--compact" id="attach-copy-cwd-btn" type="button" data-i18n-tooltip="attach_copy_cwd_tooltip" aria-label="Copy working directory path">📁</button>
           </div>
         </div>
       </div>
     </div><!-- /#terminal-column -->
   </div>
   <div id="about-panel" class="aac-wheel-overlay" hidden>
-    <div class="about-dialog">
+    <div class="ui-modal ui-modal--md about-dialog">
       <div class="about-title-bar">
         <span class="about-title" data-i18n="about_title">About this app</span>
-        <button id="about-close-btn" class="about-x-btn">✕</button>
+        <button id="about-close-btn" class="ui-button ui-button--quiet ui-button--compact ui-button--icon about-x-btn">✕</button>
       </div>
       <div class="about-content">
         <section class="about-section">
@@ -2131,8 +2131,8 @@
         <section class="about-section">
           <h3 class="about-heading" data-i18n="about_github">GitHub</h3>
           <div class="about-github-btns">
-            <a href="https://github.com/ishizakahiroshi/many-ai-cli" target="_blank" rel="noopener noreferrer" class="about-gh-btn" data-i18n="about_repo">Repository</a>
-            <a href="https://github.com/ishizakahiroshi/many-ai-cli/releases" target="_blank" rel="noopener noreferrer" class="about-gh-btn" data-i18n="about_releases">Releases</a>
+            <a href="https://github.com/ishizakahiroshi/many-ai-cli" target="_blank" rel="noopener noreferrer" class="ui-button ui-button--quiet ui-button--compact about-gh-btn" data-i18n="about_repo">Repository</a>
+            <a href="https://github.com/ishizakahiroshi/many-ai-cli/releases" target="_blank" rel="noopener noreferrer" class="ui-button ui-button--quiet ui-button--compact about-gh-btn" data-i18n="about_releases">Releases</a>
           </div>
         </section>
       </div>

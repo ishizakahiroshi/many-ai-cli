@@ -54,7 +54,7 @@ function ensureOverlay(): HTMLElement {
   root.addEventListener('mousedown', (event) => { if (event.target === root) closeShortcutHelp(); });
 
   const dialog = document.createElement('section');
-  dialog.className = 'shortcut-help-dialog';
+  dialog.className = 'ui-modal ui-modal--md shortcut-help-dialog';
 
   const header = document.createElement('div');
   header.className = 'shortcut-help-header';
@@ -62,7 +62,7 @@ function ensureOverlay(): HTMLElement {
   title.textContent = t('shortcut_help_title');
   const close = document.createElement('button');
   close.type = 'button';
-  close.className = 'shortcut-help-close';
+  close.className = 'ui-button ui-button--quiet ui-button--compact shortcut-help-close';
   close.textContent = 'Esc';
   close.addEventListener('click', closeShortcutHelp);
   header.append(title, close);

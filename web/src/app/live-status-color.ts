@@ -93,7 +93,7 @@ function buildUI(): void {
 
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'live-status-palette-btn';
+  btn.className = 'ui-button ui-button--secondary ui-button--regular live-status-palette-btn';
   btn.textContent = '🎨';
   btn.setAttribute('aria-label', ti18n('live_status_palette_tooltip'));
   btn.title = ti18n('live_status_palette_tooltip');
@@ -121,7 +121,7 @@ function buildUI(): void {
 
   const resetBtn = document.createElement('button');
   resetBtn.type = 'button';
-  resetBtn.className = 'live-status-palette-reset';
+  resetBtn.className = 'ui-button ui-button--secondary ui-button--regular live-status-palette-reset';
   resetBtn.textContent = ti18n('live_status_palette_reset');
 
   pop.append(bgRow, fgRow, resetBtn);

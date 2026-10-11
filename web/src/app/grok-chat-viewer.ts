@@ -40,7 +40,7 @@ function ensureViewer() {
   range.className = 'gcv-range';
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
-  closeBtn.className = 'gcv-btn gcv-close';
+  closeBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon gcv-btn gcv-close';
   closeBtn.addEventListener('click', closeGrokChatViewer);
   header.appendChild(title);
   header.appendChild(range);
@@ -50,7 +50,7 @@ function ensureViewer() {
   body.className = 'gcv-body';
   const olderBtn = document.createElement('button');
   olderBtn.type = 'button';
-  olderBtn.className = 'gcv-btn gcv-older';
+  olderBtn.className = 'ui-button ui-button--secondary ui-button--regular gcv-btn gcv-older';
   olderBtn.hidden = true;
   olderBtn.addEventListener('click', gcvLoadOlder);
   const list = document.createElement('div');
@@ -113,7 +113,7 @@ function gcvRenderMessage(msg: { role: string; text: string }, sessionId: number
     : gcvLabel('gcv_role_assistant', 'Grok');
   const copyBtn = document.createElement('button');
   copyBtn.type = 'button';
-  copyBtn.className = 'gcv-btn gcv-msg-copy';
+  copyBtn.className = 'ui-button ui-button--quiet ui-button--compact gcv-btn gcv-msg-copy';
   copyBtn.textContent = '📋';
   copyBtn.title = gcvLabel('gcv_copy', 'コピー');
   copyBtn.setAttribute('aria-label', gcvLabel('gcv_copy', 'コピー'));

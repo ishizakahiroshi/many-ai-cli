@@ -107,7 +107,7 @@ function showHandoffNotifyBanner(
   el.className = 'handoff-notify-banner';
   el.setAttribute('role', 'status');
   const noteButton = action === 'button'
-    ? `<button type="button" class="handoff-notify-note">${escapeHtml(tx('handoff_notify_note', '引き継ぎメモを書かせる'))}</button>`
+    ? `<button type="button" class="ui-button ui-button--secondary ui-button--regular handoff-notify-note">${escapeHtml(tx('handoff_notify_note', '引き継ぎメモを書かせる'))}</button>`
     : '';
   el.innerHTML = `<div class="handoff-notify-body">${escapeHtml(tx('handoff_notify_body', 'Session #{id} ({provider}) — {window}: {remaining}% remaining.', {
     id: sessionID,
@@ -117,9 +117,9 @@ function showHandoffNotifyBanner(
   }))}</div>
     <div class="handoff-notify-status" data-handoff-note-status hidden></div>
     <div class="handoff-notify-actions">
-      <button type="button" class="handoff-notify-action">${escapeHtml(tx('handoff_notify_action', '引き継ぎを準備'))}</button>
+      <button type="button" class="ui-button ui-button--secondary ui-button--regular handoff-notify-action">${escapeHtml(tx('handoff_notify_action', '引き継ぎを準備'))}</button>
       ${noteButton}
-      <button type="button" class="handoff-notify-dismiss" aria-label="${escapeHtml(tx('handoff_notify_dismiss', '閉じる'))}">✕</button>
+      <button type="button" class="ui-button ui-button--secondary ui-button--regular handoff-notify-dismiss" aria-label="${escapeHtml(tx('handoff_notify_dismiss', '閉じる'))}">✕</button>
     </div>`;
   document.body.appendChild(el);
   noteBanners.set(sessionID, el);
@@ -185,12 +185,12 @@ export function handleHandoffNoteMessage(m: Message): void {
 function buildDialogShell(titleKey: string, titleFallback: string, extraClass = ''): { backdrop: HTMLElement; close: () => void } {
   const backdrop = document.createElement('div');
   backdrop.className = `handoff-dialog-backdrop aac-wheel-overlay${extraClass ? ` ${extraClass}` : ''}`;
-  backdrop.innerHTML = `<div class="handoff-dialog" role="dialog" aria-modal="true" aria-labelledby="handoff-dialog-title">
-    <div class="handoff-dialog-header">
-      <h2 id="handoff-dialog-title">${escapeHtml(tx(titleKey, titleFallback))}</h2>
-      <button class="handoff-dialog-close" type="button" data-handoff-close aria-label="${escapeHtml(tx('settings_close', '閉じる'))}">✕</button>
+  backdrop.innerHTML = `<div class="ui-modal ui-modal--md handoff-dialog" role="dialog" aria-modal="true" aria-labelledby="handoff-dialog-title">
+    <div class="ui-modal__header handoff-dialog-header">
+      <h2 class="ui-modal__title" id="handoff-dialog-title">${escapeHtml(tx(titleKey, titleFallback))}</h2>
+      <button class="ui-button ui-button--quiet ui-button--compact ui-button--icon handoff-dialog-close" type="button" data-handoff-close aria-label="${escapeHtml(tx('settings_close', '閉じる'))}">✕</button>
     </div>
-    <div class="handoff-dialog-body"><p>${escapeHtml(tx('handoff_dialog_loading', '読み込み中…'))}</p></div>
+    <div class="ui-modal__body handoff-dialog-body"><p>${escapeHtml(tx('handoff_dialog_loading', '読み込み中…'))}</p></div>
   </div>`;
   document.body.appendChild(backdrop);
   const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
@@ -266,7 +266,7 @@ export async function openHandoffListDialog(): Promise<void> {
     searchBar.className = 'handoff-list-search-bar';
     const search = document.createElement('input');
     search.type = 'search';
-    search.className = 'handoff-list-search';
+    search.className = 'ui-input handoff-list-search';
     const searchLabel = tx('handoff_list_search', '番号、CLI名、フォルダ');
     search.placeholder = searchLabel;
     search.setAttribute('aria-label', searchLabel);
@@ -318,7 +318,7 @@ export async function openHandoffListDialog(): Promise<void> {
         `<span class="handoff-list-row-cwd" title="${escapeHtml(String(entry.cwd || ''))}">${escapeHtml(String(entry.cwd || ''))}</span>`;
       const previewBtn = document.createElement('button');
       previewBtn.type = 'button';
-      previewBtn.className = 'handoff-list-row-preview';
+      previewBtn.className = 'ui-button ui-button--secondary ui-button--regular handoff-list-row-preview';
       previewBtn.textContent = tx('handoff_list_preview', 'プレビュー');
       previewBtn.addEventListener('click', () => {
         close();

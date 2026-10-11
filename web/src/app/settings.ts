@@ -1,6 +1,8 @@
 import { openSessionListMoveDialog, sessionListMoveLabel, sessionListCanMove, wireSessionListMenu, restoreSessionListFocus, sessionListCardElement } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
+import { confirmationLabels, type ConfirmationAction } from './confirmation-labels.js';
+import { uiButtonClass, uiIconHtml, uiModalClass } from './ui-components.js';
 import { getNotificationVolume, setNotificationVolume, STORAGE_NOTIFY_SOUND_VOLUME_KEY } from './notification-volume.js';
 import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
 import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
@@ -79,7 +81,7 @@ export function showApprovalToast() {
   actions.className = 'approval-toast-actions';
 
   const yesBtn = document.createElement('button');
-  yesBtn.className = 'approval-toast-btn';
+  yesBtn.className = `approval-toast-btn ${uiButtonClass('primary', 'compact')}`;
   yesBtn.textContent = t('approval_toast_yes');
   yesBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
@@ -93,7 +95,7 @@ export function showApprovalToast() {
   });
 
   const noBtn = document.createElement('button');
-  noBtn.className = 'approval-toast-btn-dismiss';
+  noBtn.className = `approval-toast-btn-dismiss ${uiButtonClass('quiet', 'compact')}`;
   noBtn.textContent = t('approval_toast_later');
   noBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
@@ -653,7 +655,11 @@ export function initUsageDropdown() {
   });
 }
 
-export function appConfirm({ title, message, confirmText, cancelText, kind = 'default' }): Promise<boolean> {
+export function appConfirm({ title, message, confirmText, cancelText, kind = 'default', action }: { title?: string; message: string; confirmText?: string; cancelText?: string; kind?: string; action?: ConfirmationAction }): Promise<boolean> {
+  const labels = action ? confirmationLabels(action) : null;
+  const heading = title ?? labels?.question ?? '';
+  const decline = cancelText || labels?.decline || t('confirm_cancel');
+  const accept = confirmText || labels?.accept || t('confirm_ok');
   return new Promise<boolean>((resolve) => {
     const overlay = document.getElementById('model-picker-overlay');
     if (!overlay) { resolve(window.confirm(message)); return; }
@@ -681,16 +687,16 @@ export function appConfirm({ title, message, confirmText, cancelText, kind = 'de
     overlay.hidden = false;
 
     const dialog = document.createElement('div');
-    dialog.className = `confirm-dialog confirm-dialog--${kind}`;
+    dialog.className = `confirm-dialog confirm-dialog--${kind} ${uiModalClass('sm')}`;
     dialog.innerHTML = `
       <div class="confirm-icon" aria-hidden="true">!</div>
-      <div class="confirm-body">
-        <div class="confirm-title">${escapeHtml(title)}</div>
+      <div class="confirm-body ui-modal__body">
+        <div class="confirm-title ui-modal__title">${escapeHtml(heading)}</div>
         <div class="confirm-message">${escapeHtml(message)}</div>
       </div>
-      <div class="confirm-actions">
-        <button class="confirm-btn" id="app-confirm-cancel">${escapeHtml(cancelText || t('confirm_cancel'))}</button>
-        <button class="confirm-btn primary" id="app-confirm-ok">${escapeHtml(confirmText || t('confirm_ok'))}</button>
+      <div class="confirm-actions ui-modal__actions">
+        <button class="${uiButtonClass('secondary')}" id="app-confirm-cancel">${escapeHtml(decline)}</button>
+        <button class="${uiButtonClass(kind === 'danger' ? 'danger' : kind === 'warn' ? 'warn' : 'primary')}" id="app-confirm-ok">${escapeHtml(accept)}</button>
       </div>
     `;
     overlay.appendChild(dialog);
@@ -728,18 +734,18 @@ export function appLegacyResetNotice(): Promise<{ deleteLogs: boolean; deleteAtt
 
     const rowStyle = 'display:flex;align-items:center;gap:8px;margin-top:10px;text-align:left;cursor:pointer';
     const dialog = document.createElement('div');
-    dialog.className = 'confirm-dialog confirm-dialog--danger';
+    dialog.className = `confirm-dialog confirm-dialog--danger ${uiModalClass('sm')}`;
     dialog.innerHTML = `
       <div class="confirm-icon" aria-hidden="true">!</div>
-      <div class="confirm-body">
-        <div class="confirm-title">${escapeHtml(t('legacy_logs_notice_title'))}</div>
+      <div class="confirm-body ui-modal__body">
+        <div class="confirm-title ui-modal__title">${escapeHtml(t('legacy_logs_notice_title'))}</div>
         <div class="confirm-message">${escapeHtml(t('legacy_logs_notice_message'))}</div>
         <label style="${rowStyle}"><input type="checkbox" id="legacy-del-logs" checked> <span>${escapeHtml(t('legacy_logs_notice_opt_logs'))}</span></label>
         <label style="${rowStyle}"><input type="checkbox" id="legacy-del-attach" checked> <span>${escapeHtml(t('legacy_logs_notice_opt_attach'))}</span></label>
         <label style="${rowStyle}"><input type="checkbox" id="legacy-enable-logging"> <span>${escapeHtml(t('legacy_logs_notice_opt_enable'))}</span></label>
       </div>
-      <div class="confirm-actions">
-        <button class="confirm-btn primary" id="legacy-exec">${escapeHtml(t('legacy_logs_notice_exec'))}</button>
+      <div class="confirm-actions ui-modal__actions">
+        <button class="${uiButtonClass('danger')}" id="legacy-exec">${escapeHtml(t('legacy_logs_notice_exec'))}</button>
       </div>
     `;
     overlay.appendChild(dialog);
@@ -788,16 +794,16 @@ export function appConfirmOllamaEncoding() {
     overlay.hidden = false;
 
     const dialog = document.createElement('div');
-    dialog.className = 'confirm-dialog confirm-dialog--warn';
+    dialog.className = `confirm-dialog confirm-dialog--warn ${uiModalClass('sm')}`;
     dialog.innerHTML = `
       <div class="confirm-icon" aria-hidden="true">⚠</div>
-      <div class="confirm-body">
-        <div class="confirm-title">${escapeHtml(t('ollama_encoding_warn_title'))}</div>
+      <div class="confirm-body ui-modal__body">
+        <div class="confirm-title ui-modal__title">${escapeHtml(t('ollama_encoding_warn_title'))}</div>
         <div class="confirm-message">${escapeHtml(t('ollama_encoding_warn_message'))}</div>
       </div>
-      <div class="confirm-actions ollama-encoding-actions">
-        <button class="confirm-btn" id="ollama-enc-continue">${escapeHtml(t('ollama_encoding_continue'))}</button>
-        <button class="confirm-btn primary" id="ollama-enc-utf8">${escapeHtml(t('ollama_encoding_utf8_session'))}</button>
+      <div class="confirm-actions ui-modal__actions ollama-encoding-actions">
+        <button class="${uiButtonClass('secondary')}" id="ollama-enc-continue">${escapeHtml(t('ollama_encoding_continue'))}</button>
+        <button class="${uiButtonClass('warn')}" id="ollama-enc-utf8">${escapeHtml(t('ollama_encoding_utf8_session'))}</button>
       </div>
     `;
     overlay.appendChild(dialog);
@@ -854,17 +860,17 @@ export function appConfirmShutdown(opts) {
         </label>` : '';
 
     const dialog = document.createElement('div');
-    dialog.className = 'confirm-dialog confirm-dialog--danger';
+    dialog.className = `confirm-dialog confirm-dialog--danger ${uiModalClass('sm')}`;
     dialog.innerHTML = `
       <div class="confirm-icon" aria-hidden="true">!</div>
-      <div class="confirm-body">
-        <div class="confirm-title">${escapeHtml(t('shutdown_confirm_title'))}</div>
+      <div class="confirm-body ui-modal__body">
+        <div class="confirm-title ui-modal__title">${escapeHtml(t('shutdown_confirm_title'))}</div>
         <div class="confirm-message">${escapeHtml(t('shutdown_confirm'))}</div>${exposeRow}
       </div>
-      <div class="confirm-actions">
-        <button class="confirm-btn" id="app-confirm-cancel">${escapeHtml(t('spawn_cancel'))}</button>
-        <button class="confirm-btn primary" id="app-confirm-sessions">${escapeHtml(t('shutdown_sessions_only'))}</button>
-        <button class="confirm-btn primary" id="app-confirm-ok">${escapeHtml(t('shutdown_confirm_run'))}</button>
+      <div class="confirm-actions ui-modal__actions">
+        <button class="${uiButtonClass('secondary')}" id="app-confirm-cancel">${escapeHtml(confirmationLabels('stop').decline)}</button>
+        <button class="${uiButtonClass('danger')}" id="app-confirm-sessions">${escapeHtml(confirmationLabels('stopAll').accept)}</button>
+        <button class="${uiButtonClass('danger')}" id="app-confirm-ok">${escapeHtml(confirmationLabels('stopHub').accept)}</button>
       </div>
     `;
     overlay.appendChild(dialog);
@@ -1406,8 +1412,7 @@ function syncSettingsPanelButton(): void {
       const ok = await appConfirm({
         title: t('settings_reset_confirm_title'),
         message: t('settings_reset_confirm_message'),
-        confirmText: t('settings_reset'),
-        cancelText: t('cancel'),
+        action: 'reset',
         kind: 'warn',
       });
       if (!ok) return;
@@ -1678,19 +1683,19 @@ export function appConfirmTypedDanger(opts: { title: string; message: string; co
     overlay.innerHTML = '';
     overlay.hidden = false;
     const dialog = document.createElement('div');
-    dialog.className = 'confirm-dialog confirm-dialog--danger';
+    dialog.className = `confirm-dialog confirm-dialog--danger ${uiModalClass('sm')}`;
     dialog.innerHTML = `
       <div class="confirm-icon" aria-hidden="true">!</div>
-      <div class="confirm-body">
-        <div class="confirm-title">${escapeHtml(opts.title)}</div>
+      <div class="confirm-body ui-modal__body">
+        <div class="confirm-title ui-modal__title">${escapeHtml(opts.title)}</div>
         <div class="confirm-message">${escapeHtml(opts.message)}</div>
         <label class="confirm-type-label">確認のため <code>${escapeHtml(opts.phrase)}</code> と入力
-          <input id="app-confirm-type-input" class="settings-input-text" autocomplete="off" spellcheck="false">
+          <input id="app-confirm-type-input" class="settings-input-text ui-input" autocomplete="off" spellcheck="false">
         </label>
       </div>
-      <div class="confirm-actions">
-        <button class="confirm-btn" id="app-confirm-type-cancel">${escapeHtml(opts.cancelText)}</button>
-        <button class="confirm-btn primary" id="app-confirm-type-ok" disabled>${escapeHtml(opts.confirmText)}</button>
+      <div class="confirm-actions ui-modal__actions">
+        <button class="${uiButtonClass('secondary')}" id="app-confirm-type-cancel">${escapeHtml(opts.cancelText)}</button>
+        <button class="${uiButtonClass('danger')}" id="app-confirm-type-ok" disabled>${escapeHtml(opts.confirmText)}</button>
       </div>`;
     overlay.appendChild(dialog);
     const input = document.getElementById('app-confirm-type-input') as HTMLInputElement;
@@ -2713,7 +2718,7 @@ window.approvalPatternsUI = (function () {
       li.appendChild(span);
       if (!readonly) {
         const rm = document.createElement('button');
-        rm.className = 'pattern-remove';
+        rm.className = `pattern-remove ${uiButtonClass('quiet', 'compact', { icon: true })}`;
         rm.textContent = '✕';
         rm.title = t('settings_approval_patterns_remove');
         rm.addEventListener('click', () => removeAt(i));
@@ -3410,7 +3415,7 @@ function _ensureMultiDetachBtn(): void {
   if (btn) return; // 既存
   btn = document.createElement('button');
   btn.id = 'multi-detach-btn';
-  btn.className = 'multi-detach-btn view-tab-util';
+  btn.className = `multi-detach-btn view-tab-util ${uiButtonClass('quiet', 'compact', { icon: true })}`;
   btn.type = 'button';
   btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="9" width="10" height="11" rx="1"/><path d="M12 4h9v9M21 4l-9 9"/></svg>';
   btn.title = ti18n('multi_detach_current_grid', 'Detach current grid');
@@ -3452,19 +3457,19 @@ export function openCardCtxMenu(x, y, sid, origin: HTMLElement | null = null) {
   const labelColor          = ti18n('session_set_color',          'Set color');
   const labelNote           = ti18n('session_edit_note',          'Edit note');
   menu.innerHTML =
-    `<button type="button" data-action="open-git"><span class="ico">⎇</span><span>${escapeHtml(labelOpenGit)}</span><span class="kbd">Ctrl+Shift+G</span></button>` +
-    `<button type="button" data-action="open-files"><span class="ico">📁</span><span>${escapeHtml(labelOpenFiles)}</span><span class="kbd">Ctrl+Shift+F</span></button>` +
+    `<button type="button" class="${uiButtonClass('quiet', 'compact')}" data-action="open-git"><span class="ico">⎇</span><span>${escapeHtml(labelOpenGit)}</span><span class="kbd">Ctrl+Shift+G</span></button>` +
+    `<button type="button" class="${uiButtonClass('quiet', 'compact')}" data-action="open-files"><span class="ico">📁</span><span>${escapeHtml(labelOpenFiles)}</span><span class="kbd">Ctrl+Shift+F</span></button>` +
     `<div class="card-ctx-sep"></div>` +
-    `<button type="button" data-action="open-in-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenInGrid)}</span></button>` +
-    `<button type="button" data-action="open-project-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenProjectGrid)}</span></button>` +
+    `<button type="button" class="${uiButtonClass('quiet', 'compact')}" data-action="open-in-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenInGrid)}</span></button>` +
+    `<button type="button" class="${uiButtonClass('quiet', 'compact')}" data-action="open-project-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenProjectGrid)}</span></button>` +
     `<div class="card-ctx-sep"></div>` +
-    `<button type="button" data-action="rename"><span class="ico">✏️</span><span>${escapeHtml(labelRename)}</span></button>` +
-    `<button type="button" data-action="move-front"><span class="ico">⇧</span><span>${escapeHtml(labelMoveFront)}</span></button>` +
-    `<button type="button" data-action="color"><span class="ico">●</span><span>${escapeHtml(labelColor)}</span></button>` +
-    `<button type="button" data-action="note"><span class="ico">☰</span><span>${escapeHtml(labelNote)}</span></button>` +
+    `<button type="button" class="${uiButtonClass('quiet', 'compact')}" data-action="rename"><span class="ico">${uiIconHtml('edit')}</span><span>${escapeHtml(labelRename)}</span></button>` +
+    `<button type="button" class="${uiButtonClass('quiet', 'compact')}" data-action="move-front"><span class="ico">⇧</span><span>${escapeHtml(labelMoveFront)}</span></button>` +
+    `<button type="button" class="${uiButtonClass('quiet', 'compact')}" data-action="color"><span class="ico">●</span><span>${escapeHtml(labelColor)}</span></button>` +
+    `<button type="button" class="${uiButtonClass('quiet', 'compact')}" data-action="note"><span class="ico">☰</span><span>${escapeHtml(labelNote)}</span></button>` +
     `<div class="card-ctx-sep"></div>` +
-    `<button type="button" data-action="activate"><span class="ico">→</span><span>${escapeHtml(labelActivate)}</span></button>` +
-    `<button type="button" data-action="copy-id"><span class="ico">#</span><span>${escapeHtml(labelCopyId)}</span></button>`;
+    `<button type="button" class="${uiButtonClass('quiet', 'compact')}" data-action="activate"><span class="ico">→</span><span>${escapeHtml(labelActivate)}</span></button>` +
+    `<button type="button" class="${uiButtonClass('quiet', 'compact')}" data-action="copy-id"><span class="ico">${uiIconHtml('copy')}</span><span>${escapeHtml(labelCopyId)}</span></button>`;
   const moveTab = document.createElement('button');
   moveTab.type = 'button'; moveTab.dataset.action = 'move-list-tab';
   moveTab.textContent = sessionListMoveLabel(sid); moveTab.disabled = !sessionListCanMove(sid);
@@ -3545,14 +3550,14 @@ export function openLabelRenameDialog(id: number): void {
   const placeholder = ti18n('spawn_label_placeholder', 'ラベル（省略可）例: dev改修作業');
   const saveText = ti18n('settings_save', '保存');
   const cancelText = ti18n('handoff_dialog_cancel', 'キャンセル');
-  backdrop.innerHTML = `<div class="label-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="label-rename-dialog-title">
-    <h2 id="label-rename-dialog-title">${escapeHtml(titleText)}</h2>
-    <input type="text" class="spawn-input label-rename-dialog-input" placeholder="${escapeHtml(placeholder)}" autocomplete="off" spellcheck="false">
+  backdrop.innerHTML = `<div class="label-rename-dialog ${uiModalClass('sm')}" role="dialog" aria-modal="true" aria-labelledby="label-rename-dialog-title">
+    <h2 id="label-rename-dialog-title" class="ui-modal__title">${escapeHtml(titleText)}</h2>
+    <input type="text" class="spawn-input label-rename-dialog-input ui-input" placeholder="${escapeHtml(placeholder)}" autocomplete="off" spellcheck="false">
     <p class="label-rename-dialog-hint">${escapeHtml(hintText)}</p>
     <p class="label-rename-dialog-error" data-label-rename-error hidden></p>
-    <div class="label-rename-dialog-actions">
-      <button type="button" data-label-rename-cancel>${escapeHtml(cancelText)}</button>
-      <button type="button" class="primary" data-label-rename-save>${escapeHtml(saveText)}</button>
+    <div class="label-rename-dialog-actions ui-modal__actions">
+      <button type="button" class="${uiButtonClass('secondary')}" data-label-rename-cancel>${escapeHtml(cancelText)}</button>
+      <button type="button" class="primary ${uiButtonClass('primary')}" data-label-rename-save>${escapeHtml(saveText)}</button>
     </div>
   </div>`;
   document.body.appendChild(backdrop);
@@ -3709,18 +3714,19 @@ window.addEventListener('files-tab-state-changed', () => {
     backends.forEach((b, i) => {
       const row = document.createElement('div');
       row.className = 'ntfy-backend-row';
-      row.style.cssText = 'display:flex;flex-direction:column;gap:4px;border:1px solid var(--border-color,#ccc);border-radius:4px;padding:6px 8px;margin-bottom:6px';
+      row.style.cssText = 'display:flex;flex-direction:column;gap:var(--space-1);border:1px solid var(--line);border-radius:var(--radius-sm);padding:6px var(--space-2);margin-bottom:6px';
 
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;align-items:center;gap:6px;';
       const typeBadge = document.createElement('span');
       typeBadge.textContent = b.type.toUpperCase();
-      typeBadge.style.cssText = 'font-size:0.75em;background:var(--accent-bg,#e0e0e0);padding:1px 6px;border-radius:3px;';
+      typeBadge.style.cssText = 'font-size:var(--fs-xs);background:var(--accent-soft);padding:1px 6px;border-radius:var(--radius-sm);';
       const removeBtn = document.createElement('button');
-      removeBtn.className = 'settings-link-btn';
+      removeBtn.className = `settings-link-btn ${uiButtonClass('danger', 'compact')}`;
       removeBtn.textContent = '✕';
-      removeBtn.style.cssText = 'margin-left:auto;color:var(--danger-color,#c00);';
+      removeBtn.style.cssText = 'margin-left:auto;';
       removeBtn.title = t('settings_ntfy_remove_backend') || 'Remove';
+      removeBtn.setAttribute('aria-label', removeBtn.title);
       removeBtn.addEventListener('click', () => { backends.splice(i, 1); renderBackends(); });
       header.appendChild(typeBadge);
       header.appendChild(removeBtn);
@@ -3729,13 +3735,13 @@ window.addEventListener('files-tab-state-changed', () => {
       urlRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
       const urlLabel = document.createElement('span');
       urlLabel.textContent = 'URL';
-      urlLabel.style.cssText = 'font-size:0.82em;min-width:52px;';
+      urlLabel.style.cssText = 'font-size:var(--fs-sm);min-width:52px;';
       const urlInput = document.createElement('input');
       urlInput.type = 'url';
       urlInput.value = b.url;
       urlInput.placeholder = b.type === 'ntfy' ? 'https://ntfy.sh' : 'https://...';
-      urlInput.className = 'settings-input-url';
-      urlInput.style.cssText = 'flex:1;font-size:0.85em;';
+      urlInput.className = 'settings-input-url ui-input';
+      urlInput.style.cssText = 'flex:1;';
       urlInput.addEventListener('input', () => { backends[i].url = urlInput.value; });
       urlRow.appendChild(urlLabel);
       urlRow.appendChild(urlInput);
@@ -3748,16 +3754,16 @@ window.addEventListener('files-tab-state-changed', () => {
         topicRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
         const topicLabel = document.createElement('span');
         topicLabel.textContent = t('settings_ntfy_topic') || 'Topic';
-        topicLabel.style.cssText = 'font-size:0.82em;min-width:52px;';
+        topicLabel.style.cssText = 'font-size:var(--fs-sm);min-width:52px;';
         const topicInput = document.createElement('input');
         topicInput.type = 'text';
         topicInput.value = b.topic || '';
         topicInput.placeholder = 'anyaicli-xxxx';
-        topicInput.className = 'settings-input-url';
-        topicInput.style.cssText = 'flex:1;font-size:0.85em;';
+        topicInput.className = 'settings-input-url ui-input';
+        topicInput.style.cssText = 'flex:1;';
         topicInput.addEventListener('input', () => { backends[i].topic = topicInput.value; });
         const genBtn = document.createElement('button');
-        genBtn.className = 'settings-link-btn';
+        genBtn.className = `settings-link-btn ${uiButtonClass('secondary', 'compact')}`;
         genBtn.textContent = t('settings_ntfy_generate_topic') || '自動生成';
         genBtn.addEventListener('click', async () => {
           try {
@@ -3777,7 +3783,7 @@ window.addEventListener('files-tab-state-changed', () => {
       const testRow = document.createElement('div');
       testRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:2px;';
       const testBtn = document.createElement('button');
-      testBtn.className = 'settings-link-btn';
+      testBtn.className = `settings-link-btn ${uiButtonClass('secondary', 'compact')}`;
       testBtn.textContent = t('settings_ntfy_test_send') || 'テスト送信';
       testBtn.addEventListener('click', async () => {
         testBtn.disabled = true;
@@ -4279,8 +4285,7 @@ export function attachSummaryToggleListeners(): void {
     const confirmed = await appConfirm({
       title: t('settings_nim_delete_confirm_title'),
       message: t('settings_nim_delete_confirm_message'),
-      confirmText: t('settings_nim_delete_key'),
-      cancelText: t('cancel'),
+      action: 'delete',
       kind: 'warn',
     });
     if (!confirmed) return;

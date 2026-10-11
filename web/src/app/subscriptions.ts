@@ -1,5 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
+import { confirmationLabels } from './confirmation-labels.js';
 import { apiFetch, escapeHtml, showToast } from './util.js';
 import { appConfirm } from './settings.js';
 
@@ -153,17 +154,17 @@ function renderList(): void {
       // 「これは保存先の名前で、表示名とは別物」と分かる形にしている。
       return (
         `<div class="subs-row${disabledCls}${issueCls}" data-provider="${escapeHtml(entry.provider)}" data-id="${escapeHtml(p.id)}">` +
-        `<input class="subs-name settings-input-text" type="text" value="${escapeHtml(p.name || '')}" ` +
+        `<input class="ui-input subs-name settings-input-text" type="text" value="${escapeHtml(p.name || '')}" ` +
         `placeholder="${escapeHtml(t('subs_name_placeholder'))}" aria-label="${escapeHtml(t('subs_name_placeholder'))}">` +
         `<span class="subs-id" data-tooltip="${escapeHtml(t('subs_id_tooltip'))}">` +
         `<span class="subs-id-label">${escapeHtml(t('subs_id_label'))}</span>` +
         `<span class="subs-id-value">${escapeHtml(p.id)}</span></span>` +
         `<span class="subs-status">${escapeHtml(statusText(p))}</span>` +
         `<div class="subs-actions">` +
-        `<button type="button" class="settings-inline-btn subs-login">${escapeHtml(t('subs_login'))}</button>` +
-        `<button type="button" class="settings-inline-btn subs-test">${escapeHtml(t('subs_test'))}</button>` +
-        `<button type="button" class="settings-inline-btn subs-toggle">${escapeHtml(p.enabled ? t('subs_disable') : t('subs_enable'))}</button>` +
-        `<button type="button" class="settings-inline-btn danger subs-remove">${escapeHtml(t('subs_remove'))}</button>` +
+        `<button type="button" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn subs-login">${escapeHtml(t('subs_login'))}</button>` +
+        `<button type="button" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn subs-test">${escapeHtml(t('subs_test'))}</button>` +
+        `<button type="button" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn subs-toggle">${escapeHtml(p.enabled ? t('subs_disable') : t('subs_enable'))}</button>` +
+        `<button type="button" class="ui-button ui-button--danger ui-button--compact settings-inline-btn danger subs-remove">${escapeHtml(t('subs_remove'))}</button>` +
         `</div></div>`
       );
     }).join('');
@@ -175,9 +176,9 @@ function renderList(): void {
       : `<div class="settings-note settings-note-warn">${escapeHtml(t('subs_provider_unsupported'))}</div>`;
     const addRow = entry.supported
       ? `<div class="subs-add" data-provider="${escapeHtml(entry.provider)}">` +
-        `<input class="subs-add-name settings-input-text" type="text" placeholder="${escapeHtml(t('subs_add_placeholder'))}" ` +
+        `<input class="ui-input subs-add-name settings-input-text" type="text" placeholder="${escapeHtml(t('subs_add_placeholder'))}" ` +
         `aria-label="${escapeHtml(t('subs_add_placeholder'))}">` +
-        `<button type="button" class="settings-inline-btn subs-add-btn">${escapeHtml(t('subs_add'))}</button>` +
+        `<button type="button" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn subs-add-btn">${escapeHtml(t('subs_add'))}</button>` +
         `</div>`
       : '';
     return (
@@ -273,11 +274,11 @@ function confirmStackingConsent(): Promise<boolean> {
     overlay.hidden = false;
 
     const dialog = document.createElement('div');
-    dialog.className = 'confirm-dialog confirm-dialog--warn subs-consent-dialog';
+    dialog.className = 'ui-modal ui-modal--sm confirm-dialog confirm-dialog--warn subs-consent-dialog';
     dialog.innerHTML =
       `<div class="confirm-icon" aria-hidden="true">!</div>` +
-      `<div class="confirm-body">` +
-      `<div class="confirm-title">${escapeHtml(t('subs_consent_title'))}</div>` +
+      `<div class="ui-modal__body confirm-body">` +
+      `<div class="ui-modal__title confirm-title">${escapeHtml(t('subs_consent_title'))}</div>` +
       `<div class="confirm-message">${t('subs_consent_body')}</div>` +
       `<div class="subs-consent-link">` +
       `<a href="${escapeHtml(readmeSecurityUrl())}" target="_blank" rel="noopener noreferrer">` +
@@ -286,9 +287,9 @@ function confirmStackingConsent(): Promise<boolean> {
       `<input type="checkbox" id="subs-consent-agree">` +
       `<span>${escapeHtml(t('subs_consent_agree'))}</span></label>` +
       `</div>` +
-      `<div class="confirm-actions">` +
-      `<button class="confirm-btn" id="subs-consent-cancel">${escapeHtml(t('confirm_cancel'))}</button>` +
-      `<button class="confirm-btn primary" id="subs-consent-ok">${escapeHtml(t('subs_consent_proceed'))}</button>` +
+      `<div class="ui-modal__actions confirm-actions">` +
+      `<button class="ui-button ui-button--secondary ui-button--regular confirm-btn" id="subs-consent-cancel">${escapeHtml(confirmationLabels('add').decline)}</button>` +
+      `<button class="ui-button ui-button--primary ui-button--regular confirm-btn primary" id="subs-consent-ok">${escapeHtml(confirmationLabels('add').accept)}</button>` +
       `</div>`;
     overlay.appendChild(dialog);
 
@@ -346,10 +347,8 @@ async function removeProfile(btn: HTMLElement): Promise<void> {
   // 既定は many-ai-cli の登録解除のみ。vendor CLI の認証ファイル削除は
   // 2 段目の確認を通ったときだけ行う（誤操作で再ログインを強いられないように）。
   const ok = await appConfirm({
-    title: t('subs_remove_confirm_title'),
+    action: 'remove',
     message: t('subs_remove_confirm_message'),
-    confirmText: t('subs_remove'),
-    cancelText: t('cancel'),
     kind: 'warn',
   });
   if (!ok) return;

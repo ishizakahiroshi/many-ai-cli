@@ -29,26 +29,11 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 3px 6px 3px 11px;
-  background: transparent;
-  border: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
 }
 .wf-pill-open::before { content: "⚙"; font-size: var(--fs-md); }
 .wf-pill-dismiss {
-  padding: 0 8px;
-  background: transparent;
-  border: none;
   border-left: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  color: inherit;
-  font: inherit;
-  font-size: var(--fs-xs);
-  opacity: 0.55;
-  cursor: pointer;
 }
-.wf-pill-dismiss:hover { opacity: 1; color: var(--danger); }
 
 /* 完了状態: 走行終了。スピナーを止めグリーン寄りに。 */
 #workflow-progress-pill.wf-done {
@@ -74,14 +59,9 @@
 #workflow-modal[hidden] { display: none !important; }
 
 .wf-modal-box {
-  width: min(560px, 92vw);
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
   overflow: hidden;
 }
 
@@ -93,7 +73,7 @@
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
-.wf-modal-title { font-size: var(--fs-body); font-weight: 700; color: var(--text); }
+
 .wf-modal-title::before { content: "⚙ "; }
 .wf-modal-counts { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
 /* .wf-modal-close の見た目と margin-left:auto は /styles/close-button.css にある。 */
@@ -159,12 +139,14 @@
 .wf-phase { margin-bottom: 12px; }
 .wf-phase:last-child { margin-bottom: 0; }
 .wf-phase-title {
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 5px;
+}
+.wf-phase-title:where(:not(.ui-modal__title)) {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--muted);
 }
 .wf-agent-list { display: flex; flex-direction: column; gap: 3px; }
 .wf-agent-row {
@@ -256,6 +238,8 @@
 }
 .wf-completed-title {
   margin-bottom: 6px;
+}
+.wf-completed-title:where(:not(.ui-modal__title)) {
   color: var(--muted);
   font-size: var(--fs-xs);
   font-weight: 700;

@@ -18,6 +18,7 @@ import { FilesTabManager } from './files-view.js';
 import { showPathPopup } from './path-links.js';
 import { _chatPaneMountedSid, isTranscriptBackedSession, mountChatPaneForSession, restoreChatHistoryFromStore } from './chat-history.js';
 import { sentHistoryModalOwnerMatches, type SentHistoryModalOwner } from './token-statusbar-owner.js';
+import { uiIconHtml } from './ui-components.js';
 
 // セッション単位の usage データキャッシュ。
 interface UsageCacheEntry {
@@ -767,7 +768,8 @@ function openDetailModal(): void {
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'tsb-detail-close';
-  closeBtn.textContent = '✕';
+  closeBtn.innerHTML = uiIconHtml('close');
+  closeBtn.setAttribute('aria-label', t('settings_close'));
   closeBtn.addEventListener('click', closeDetailModal);
   header.appendChild(closeBtn);
   box.appendChild(header);
@@ -1136,7 +1138,7 @@ function openSentHistoryModal(): void {
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'tsb-sent-close';
-  closeBtn.textContent = '✕';
+  closeBtn.innerHTML = uiIconHtml('close');
   closeBtn.setAttribute('aria-label', t('settings_close'));
   closeBtn.addEventListener('click', closeSentHistoryModal);
   header.appendChild(closeBtn);

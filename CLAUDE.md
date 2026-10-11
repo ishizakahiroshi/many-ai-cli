@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-10-09(金) 19:36:22 — 全修正の普段のビルド元への反映を明文化
+> 最終更新: 2026-10-11(日) 20:36:31 — 共通UI部品・確認文言と機械検査の索引を追加
 > 2026-09-29(火) 21:14:45 — prompt-audit の指摘で、古くなった版数の段落を削り、サブコマンド表を現行の分岐に合わせ、`internal/` の列挙を索引への参照に替えた
 > 2026-09-28(月) 19:34:08 — 設計原則の索引「引き継ぎ看板と…」の行に、作業メモ（`memo_store.go`）に書かれたパスも `isPathMentionedInMemos` 経由で読み取り専用に開ける旨を追記（plan_memo-panel.md C4）
 > 2026-09-26(土) 01:08:47 — 引き継ぎメモの表示を、記録済みパスに対する明示的な Markdown プレビューとして設計原則の索引へ反映。索引化の経緯（2026-08-19）: 常時ロード分が 5 週間で 129 → 269 行に倍増したため「制定」節の本文を正本へ移した。再肥大は `scripts/check-claude-md.mjs` が CI で止める
@@ -136,7 +136,7 @@ docs/local/               設計書・plan 等（非公開）
 |---|---|
 | 調査・読み取り・質問応答 | （本ファイルのみ。`CLAUDE/*` は読まない） |
 | Rust移行の看板・現在地・次の1個・再開 | [マスター計画](docs/local/plan_rust-migration-execution.md#看板の現在地) → [台帳・看板運用](docs/local/reference/manual_rust-migration-board.md)（ローカル資料） |
-| 実装・コーディング（Go / TypeScript） | `CLAUDE/coding.md` |
+| 実装・コーディング（Go / TypeScript）、共通UI部品・確認文言 | `CLAUDE/coding.md` / [docs/ui-components.md](docs/ui-components.md) / `scripts/check-ui-components.mjs`（Validate CI） |
 | Rust版のローカルビルド・起動・停止（手元の手順） | [reference_rust-local-build.md](docs/local/reference/reference_rust-local-build.md)（ローカルに存在する場合） |
 | ビルド・配布・クロスコンパイル | `CLAUDE/deployment.md` |
 | 全修正のビルド元への反映・context分割・docs命名・AI作業モデル・plan自走/停止条件 | `CLAUDE/development.md` |

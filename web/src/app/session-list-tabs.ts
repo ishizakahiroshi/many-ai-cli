@@ -310,7 +310,7 @@ function openFor(origin: HTMLElement, x: number, y: number): void {
   menu.setAttribute('data-wheel-native', '');
   const id = origin.dataset.sessionListTab, index = state().tabs.findIndex(tab => tab.id === id);
   const item = (key: string, fallback: string, action: () => void, disabled = false) => {
-    const button = document.createElement('button'); button.type = 'button'; button.textContent = tx(key, fallback); button.disabled = disabled;
+    const button = document.createElement('button'); button.className = 'ui-button ui-button--quiet ui-button--compact'; button.type = 'button'; button.textContent = tx(key, fallback); button.disabled = disabled;
     button.onclick = () => { closeMenu(false); action(); }; menu!.append(button);
   };
   item('session_list_tab_rename', 'Rename tab', () => renameDialog(id, origin));
@@ -341,17 +341,17 @@ export function wireSessionListMenu(element: HTMLElement, close: () => void): vo
 function openDialog(title: string, message: string, label: string, field: HTMLInputElement | HTMLSelectElement,
     action: () => boolean, origin: HTMLElement | null, submitText: string): void {
   if (dialog) return;
-  dialog = document.createElement('dialog'); dialog.className = 'session-list-tab-dialog confirm-dialog aac-wheel-overlay';
+  dialog = document.createElement('dialog'); dialog.className = 'ui-modal ui-modal--sm session-list-tab-dialog confirm-dialog aac-wheel-overlay';
   dialog.setAttribute('aria-labelledby', 'session-list-tab-dialog-title');
   const form = document.createElement('form');
-  const heading = document.createElement('h2'); heading.className = 'confirm-title'; heading.id = 'session-list-tab-dialog-title'; heading.textContent = title;
+  const heading = document.createElement('h2'); heading.className = 'ui-modal__title confirm-title'; heading.id = 'session-list-tab-dialog-title'; heading.textContent = title;
   const description = document.createElement('p'); description.className = 'confirm-message'; description.textContent = message;
   const fieldLabel = document.createElement('label'); fieldLabel.textContent = label; fieldLabel.htmlFor = 'session-list-tab-dialog-value';
-  field.id = fieldLabel.htmlFor; field.className = 'spawn-input';
+  field.id = fieldLabel.htmlFor; field.className = 'ui-input spawn-input';
   const error = document.createElement('p'); error.className = 'session-list-tab-error'; error.setAttribute('aria-live', 'polite');
-  const actions = document.createElement('div'); actions.className = 'confirm-actions';
-  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'confirm-btn'; cancel.textContent = tx('confirm_cancel', 'Cancel');
-  const submit = document.createElement('button'); submit.type = 'submit'; submit.className = 'confirm-btn primary'; submit.textContent = submitText;
+  const actions = document.createElement('div'); actions.className = 'ui-modal__actions confirm-actions';
+  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'ui-button ui-button--secondary ui-button--regular confirm-btn'; cancel.textContent = tx('confirm_cancel', 'Cancel');
+  const submit = document.createElement('button'); submit.type = 'submit'; submit.className = 'ui-button ui-button--primary ui-button--regular confirm-btn primary'; submit.textContent = submitText;
   actions.append(cancel, submit); form.append(heading, description, fieldLabel, field, error, actions); dialog.append(form);
   const current = dialog;
   cancel.onclick = () => current.close();

@@ -375,7 +375,7 @@ function syncFoldedBand(id, folded) {
   band.innerHTML = '';
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'approval-fold-band-btn';
+  btn.className = 'ui-button ui-button--secondary ui-button--regular approval-fold-band-btn';
   btn.title = t('approval_band_open_tooltip');
   btn.setAttribute('aria-expanded', 'false');
   btn.setAttribute('aria-controls', 'action-bar');
@@ -728,7 +728,7 @@ function syncActionBarCollapseToggle(bar) {
 function appendCollapseToggle(bar, sessionId) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'action-collapse-btn';
+  btn.className = 'ui-button ui-button--secondary ui-button--regular action-collapse-btn';
   syncCollapseToggleButton(btn);
   btn.onclick = (e) => {
     e.preventDefault();
@@ -900,7 +900,7 @@ function appendApprovalPreamble(bar, preamble) {
   wrap.className = 'action-preamble';
   const head = document.createElement('button');
   head.type = 'button';
-  head.className = 'action-preamble-head';
+  head.className = 'ui-button ui-button--secondary ui-button--regular action-preamble-head';
   head.textContent = t('approval_preamble_label');
   const body = document.createElement('div');
   body.className = 'action-preamble-body';
@@ -1047,7 +1047,7 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
     const btn = document.createElement('button');
     const isPermanent = /don[''']t ask again/i.test(opt.label);
     const isSessionAllow = isSessionAllowLabel(opt.label);
-    let cls = 'action-btn';
+    let cls = 'ui-button ui-button--secondary ui-button--regular action-btn';
     if (isSessionAllow) cls += ' session-allow';
     else if (isRecommendedOpt(opt)) cls += ' current';
     if (isPermanent) cls += ' permanent';
@@ -1066,7 +1066,7 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   // 自由入力肢（あれば）。クリックで入力欄を開き、入力後 Enter で即送信する。
   if (allowFree) {
     const fbtn = document.createElement('button');
-    fbtn.className = 'action-btn' + (freeActive ? ' current' : '');
+    fbtn.className = 'ui-button ui-button--secondary ui-button--regular action-btn' + (freeActive ? ' current' : '');
     fbtn.textContent = `N. ${t('approval_free_input')}`;
     fbtn.title = t('approval_free_input');
     fbtn.onclick = (e) => { e.stopPropagation(); activateSingleFree(sessionId); };
@@ -1079,7 +1079,7 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   // pane 下へ縦積みすると余分な行高が増えるため、横並びで高さを抑える。
   if (freeActive) {
     const inp = document.createElement('input');
-    inp.className = 'action-qfreein action-qfreein-inline';
+    inp.className = 'ui-input action-qfreein action-qfreein-inline';
     inp.type = 'text';
     inp.placeholder = t('approval_free_input_placeholder');
     inp.value = singleFreeText.get(sessionId) || '';
@@ -1101,7 +1101,7 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
 
   // ✕: 1 行の帯に畳む（端末右下の「✕ 承認」と同じ foldApprovalPanel）。
   const closeBtn = document.createElement('button');
-  closeBtn.className = 'action-dismiss-btn';
+  closeBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon action-dismiss-btn';
   closeBtn.textContent = '✕';
   closeBtn.title = t('dismiss_title');
   closeBtn.setAttribute('aria-label', t('dismiss_title'));
@@ -1184,10 +1184,8 @@ async function requestHighRiskConfirmation(sessionId, targetNum) {
   highRiskConfirmationInFlight.add(sessionId);
   try {
     const ok = await appConfirm({
-      title: 'High-risk approval',
+      action: 'approve',
       message: 'This approval can run a destructive or externally visible operation. Continue only if you have checked the command and target paths.',
-      confirmText: 'Approve',
-      cancelText: 'Cancel',
       kind: 'danger',
     });
     if (ok) sendChoice(sessionId, targetNum, true);
@@ -1367,7 +1365,7 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   optsEl.className = 'action-qopts';
   choices.forEach((opt) => {
     const btn = document.createElement('button');
-    let cls = 'action-btn batch-option action-qopt';
+    let cls = 'ui-button ui-button--secondary ui-button--regular action-btn batch-option action-qopt';
     if (opt.isCurrent) cls += ' current';
     if (selections[activeQ] === opt.num) cls += ' selected';
     btn.className = cls;
@@ -1406,7 +1404,7 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
         detail.appendChild(body);
       } else {
         const inp = document.createElement('input');
-        inp.className = 'action-qfreein';
+        inp.className = 'ui-input action-qfreein';
         inp.type = 'text';
         inp.placeholder = t('approval_free_input_placeholder');
         inp.value = freeTexts[activeQ] || '';
@@ -1447,13 +1445,13 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   actionBtns.className = 'action-qdetail-btns';
 
   const clearBtn = document.createElement('button');
-  clearBtn.className = 'action-clear-btn';
+  clearBtn.className = 'ui-button ui-button--secondary ui-button--regular action-clear-btn';
   clearBtn.textContent = t('approval_batch_clear');
   clearBtn.onclick = (e) => { e.stopPropagation(); clearBatchSelections(sessionId); };
   actionBtns.appendChild(clearBtn);
 
   const submitBtn = document.createElement('button');
-  submitBtn.className = 'action-submit-btn';
+  submitBtn.className = 'ui-button ui-button--primary ui-button--regular action-submit-btn';
   submitBtn.textContent = t('approval_batch_confirm');
   submitBtn.onclick = (e) => { e.stopPropagation(); openBatchConfirm(sessionId); };
   actionBtns.appendChild(submitBtn);
@@ -1467,7 +1465,7 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   // 畳む（✕）は position:absolute なので bar 直下に置けば右上に固定表示される。
   // 端末右下の「✕ 承認」と同じ foldApprovalPanel。
   const closeBatchBtn = document.createElement('button');
-  closeBatchBtn.className = 'action-dismiss-btn';
+  closeBatchBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon action-dismiss-btn';
   closeBatchBtn.textContent = '✕';
   closeBatchBtn.title = t('dismiss_title');
   closeBatchBtn.setAttribute('aria-label', t('dismiss_title'));
@@ -1585,7 +1583,7 @@ export function openBatchConfirm(sessionId) {
   mask.className = 'action-confirm-mask aac-wheel-overlay';
   mask.id = 'action-confirm-mask';
   const modal = document.createElement('div');
-  modal.className = 'action-confirm-modal';
+  modal.className = 'ui-modal ui-modal--sm action-confirm-modal';
 
   const h = document.createElement('h3');
   h.textContent = t('approval_confirm_title');
@@ -1610,11 +1608,11 @@ export function openBatchConfirm(sessionId) {
   const row = document.createElement('div');
   row.className = 'action-confirm-row';
   const back = document.createElement('button');
-  back.className = 'action-confirm-back';
+  back.className = 'ui-button ui-button--secondary ui-button--regular action-confirm-back';
   back.textContent = t('approval_confirm_back');
   back.onclick = (e) => { e.stopPropagation(); removeBatchConfirmModal(); setTimeout(() => inputEl.focus(), 0); };
   const go = document.createElement('button');
-  go.className = 'action-confirm-go';
+  go.className = 'ui-button ui-button--primary ui-button--regular action-confirm-go';
   go.textContent = t('approval_confirm_send');
   go.onclick = (e) => {
     e.stopPropagation();
@@ -1728,7 +1726,7 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   btnRow.className = 'action-section-buttons';
   options.forEach((opt, idx) => {
     const btn = document.createElement('button');
-    let cls = 'action-btn multi-option';
+    let cls = 'ui-button ui-button--secondary ui-button--regular action-btn multi-option';
     const checked = selected.has(opt.num);
     if (checked) cls += ' selected';
     if (idx === multiSelectFocusIdx) cls += ' kbd-focus';
@@ -1753,7 +1751,7 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   footer.appendChild(progress);
 
   const selectAllBtn = document.createElement('button');
-  selectAllBtn.className = 'action-clear-btn';
+  selectAllBtn.className = 'ui-button ui-button--secondary ui-button--regular action-clear-btn';
   selectAllBtn.textContent = t('approval_multi_select_all');
   selectAllBtn.disabled = selected.size === options.length;
   selectAllBtn.onclick = (e) => {
@@ -1763,7 +1761,7 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   footer.appendChild(selectAllBtn);
 
   const clearBtn = document.createElement('button');
-  clearBtn.className = 'action-clear-btn';
+  clearBtn.className = 'ui-button ui-button--secondary ui-button--regular action-clear-btn';
   clearBtn.textContent = t('approval_batch_clear');
   clearBtn.disabled = selected.size === 0;
   clearBtn.onclick = (e) => {
@@ -1773,7 +1771,7 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   footer.appendChild(clearBtn);
 
   const submitBtn = document.createElement('button');
-  submitBtn.className = 'action-submit-btn';
+  submitBtn.className = 'ui-button ui-button--primary ui-button--regular action-submit-btn';
   submitBtn.textContent = t('approval_batch_submit');
   submitBtn.disabled = selected.size === 0;
   submitBtn.onclick = (e) => {
@@ -1784,7 +1782,7 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
 
   // 端末右下の「✕ 承認」と同じ foldApprovalPanel（1 行の帯に畳む）。
   const closeMultiBtn = document.createElement('button');
-  closeMultiBtn.className = 'action-dismiss-btn';
+  closeMultiBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon action-dismiss-btn';
   closeMultiBtn.textContent = '✕';
   closeMultiBtn.title = t('dismiss_title');
   closeMultiBtn.setAttribute('aria-label', t('dismiss_title'));

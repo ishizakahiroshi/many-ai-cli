@@ -11,6 +11,7 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- Shared Web UI buttons, modal frames, focus styles and general SVG icons now reuse the existing themes. Hub confirmation actions use shared localized labels such as "更新しない / 更新する"; shutdown keeps its distinct choices and the token footer keeps its dedicated palette. A CI guard prevents new appearance and confirmation-label duplication.
 - **Browser-local session-list tabs.** Group multiple
   session cards into tabs, add and rename tabs, reorder by drag or keyboard menu,
   and move root families using drag/drop or a destination chooser. Safe tab deletion

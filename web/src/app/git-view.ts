@@ -115,23 +115,23 @@ export class GitCommitModal {
     wrap.className = 'git-commit-modal-backdrop aac-wheel-overlay';
     wrap.hidden = true;
     wrap.innerHTML = `
-      <div class="git-commit-modal" role="dialog" aria-modal="true">
-        <div class="git-commit-modal-head">
+      <div class="ui-modal ui-modal--lg git-commit-modal" role="dialog" aria-modal="true">
+        <div class="ui-modal__header git-commit-modal-head">
           <div>
-            <div class="git-commit-modal-title">${_esc(_gt('git_commit_all', 'Commit all'))}</div>
+            <div class="ui-modal__title git-commit-modal-title">${_esc(_gt('git_commit_all', 'Commit all'))}</div>
             <div class="git-commit-modal-sub" data-commit-summary>—</div>
           </div>
-          <button class="git-commit-close" data-commit-close title="${_esc(_gt('git_view_detail_close', 'Close'))}">✕</button>
+          <button class="ui-button ui-button--quiet ui-button--compact ui-button--icon git-commit-close" data-commit-close title="${_esc(_gt('git_view_detail_close', 'Close'))}">✕</button>
         </div>
         <div class="git-commit-warning">${_esc(_gt('git_commit_no_push_warning', 'Only git add -A and git commit are run. Push is not run.'))}</div>
         <div class="git-commit-generate-note">${_esc(_gt('git_commit_generate_note', 'Generate has many-ai-cli analyze the diff and fill in a draft commit message. This is a lightweight heuristic, so accuracy is limited. Review it before committing.'))}</div>
         <label class="git-commit-field">
           <span>${_esc(_gt('git_commit_subject', 'Commit message subject'))}</span>
-          <input type="text" data-commit-subject maxlength="200">
+          <input class="ui-input" type="text" data-commit-subject maxlength="200">
         </label>
         <label class="git-commit-field">
           <span>${_esc(_gt('git_commit_body', 'Optional body'))}</span>
-          <textarea data-commit-body rows="6"></textarea>
+          <textarea class="ui-input" data-commit-body rows="6"></textarea>
         </label>
         <div class="git-commit-review" data-commit-review-box hidden>
           ${_esc(_gt('git_commit_review_ready', 'Review complete. Commit will include all current working tree changes.'))}
@@ -139,12 +139,12 @@ export class GitCommitModal {
         <div class="git-commit-hint" data-commit-hint hidden></div>
         <div class="git-commit-error" data-commit-error hidden></div>
         <div class="git-commit-actions">
-          <button class="git-secondary-btn" data-commit-generate>${_esc(_gt('git_commit_generate_message', 'Generate'))}</button>
-          <button class="git-secondary-btn" data-commit-ai hidden title="${_esc(_gt('git_commit_ai_note', 'Ask the connected AI agent to read the diff and draft a commit message. Review it before committing.'))}">${_esc(_gt('git_commit_ai_message', 'Ask AI'))}</button>
+          <button class="ui-button ui-button--secondary ui-button--regular git-secondary-btn" data-commit-generate>${_esc(_gt('git_commit_generate_message', 'Generate'))}</button>
+          <button class="ui-button ui-button--secondary ui-button--regular git-secondary-btn" data-commit-ai hidden title="${_esc(_gt('git_commit_ai_note', 'Ask the connected AI agent to read the diff and draft a commit message. Review it before committing.'))}">${_esc(_gt('git_commit_ai_message', 'Ask AI'))}</button>
           <div class="git-commit-action-spacer"></div>
-          <button class="git-secondary-btn" data-commit-cancel>${_esc(_gt('confirm_cancel', 'Cancel'))}</button>
-          <button class="git-secondary-btn" data-commit-review>${_esc(_gt('git_commit_review', 'Review'))}</button>
-          <button class="git-commit-run-btn" data-commit-run disabled>${_esc(_gt('git_commit_commit', 'Commit'))}</button>
+          <button class="ui-button ui-button--secondary ui-button--regular git-secondary-btn" data-commit-cancel>${_esc(_gt('confirm_cancel', 'Cancel'))}</button>
+          <button class="ui-button ui-button--secondary ui-button--regular git-secondary-btn" data-commit-review>${_esc(_gt('git_commit_review', 'Review'))}</button>
+          <button class="ui-button ui-button--secondary ui-button--regular git-commit-run-btn" data-commit-run disabled>${_esc(_gt('git_commit_commit', 'Commit'))}</button>
         </div>
       </div>
     `;
@@ -444,10 +444,8 @@ export async function runGitPush(opts) {
     .replace('{branch}', branch)
     .replace('{ahead}', String(ahead));
   const ok = await appConfirm({
-    title: _gt('git_push_confirm_title', 'Push commits'),
+    action: 'push',
     message,
-    confirmText: _gt('git_push_confirm_run', 'Push'),
-    cancelText: _gt('spawn_cancel', 'Cancel'),
     kind: 'danger',
   });
   if (!ok) return false;
@@ -725,14 +723,14 @@ export function updatePushButtonLabel(btn, wt) {
     m.className = 'git-ctx-menu';
     m.innerHTML = `
       <div class="ctx-header" data-ctx-header>commit</div>
-      <button data-action="copy-short"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_short', 'Copy short hash'))}</span><span class="ctx-hint" data-hint-short></span></button>
-      <button data-action="copy-full"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_full', 'Copy full hash'))}</span><span class="ctx-hint" data-hint-full></span></button>
+      <button class="ui-button ui-button--quiet ui-button--compact" data-action="copy-short"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_short', 'Copy short hash'))}</span><span class="ctx-hint" data-hint-short></span></button>
+      <button class="ui-button ui-button--quiet ui-button--compact" data-action="copy-full"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_full', 'Copy full hash'))}</span><span class="ctx-hint" data-hint-full></span></button>
       <div class="ctx-sep"></div>
-      <button data-action="copy-subject"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_subject', 'Copy subject'))}</span></button>
-      <button data-action="copy-message"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_message', 'Copy message (subject + body)'))}</span></button>
-      <button data-action="copy-hash-subject"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_hash_subject', 'Copy hash + subject'))}</span></button>
+      <button class="ui-button ui-button--quiet ui-button--compact" data-action="copy-subject"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_subject', 'Copy subject'))}</span></button>
+      <button class="ui-button ui-button--quiet ui-button--compact" data-action="copy-message"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_message', 'Copy message (subject + body)'))}</span></button>
+      <button class="ui-button ui-button--quiet ui-button--compact" data-action="copy-hash-subject"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_hash_subject', 'Copy hash + subject'))}</span></button>
       <div class="ctx-sep"></div>
-      <button data-action="copy-github-url" data-ctx-gh><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_github', 'Copy GitHub link'))}</span><span class="ctx-hint" data-hint-gh></span></button>
+      <button class="ui-button ui-button--quiet ui-button--compact" data-action="copy-github-url" data-ctx-gh><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_github', 'Copy GitHub link'))}</span><span class="ctx-hint" data-hint-gh></span></button>
     `;
     document.body.appendChild(m);
     m.addEventListener('click', (e) => {
@@ -881,7 +879,7 @@ export function updatePushButtonLabel(btn, wt) {
         <div class="git-graph-header">
           <div class="git-graph-title">⎇ Git</div>
           <div class="git-graph-repo" data-repo>${_esc(this.gitRoot)}</div>
-          <button class="view-ref-btn" data-view-ref-btn>
+          <button class="ui-button ui-button--secondary ui-button--regular view-ref-btn" data-view-ref-btn>
             <span data-view-ref-label>${_esc(this.viewRef || 'HEAD')}</span>
             <span class="chev">▾</span>
           </button>
@@ -889,19 +887,19 @@ export function updatePushButtonLabel(btn, wt) {
           <div class="git-graph-spacer"></div>
           <div class="git-working-count" data-working-count>—</div>
           <div class="git-graph-count" data-count>${_esc(_gt('git_view_loading', 'loading...'))}</div>
-          <button class="git-icon-btn" data-fetch-btn title="${_esc(_gt('git_view_fetch', 'Fetch'))}">↓ fetch</button>
-          <button class="git-icon-btn" data-pull-btn title="${_esc(_gt('git_view_pull', 'Pull (fast-forward)'))}" disabled>↧ pull</button>
-          <button class="git-icon-btn" data-push-btn title="${_esc(_gt('git_view_push', 'Push'))}" disabled>↥ push</button>
-          <button class="git-icon-btn" data-refresh-btn title="${_esc(_gt('git_view_refresh', 'Refresh'))}">↻</button>
-          <button class="git-icon-btn" data-loadmore-btn title="${_esc(_gt('git_view_load_more', 'Load 100 more'))}">+${PAGE_LIMIT}</button>
-          <button class="git-commit-all-btn" data-commit-all-btn disabled>${_esc(_gt('git_commit_all', 'Commit all'))}</button>
+          <button class="ui-button ui-button--quiet ui-button--compact git-icon-btn" data-fetch-btn title="${_esc(_gt('git_view_fetch', 'Fetch'))}">↓ fetch</button>
+          <button class="ui-button ui-button--quiet ui-button--compact git-icon-btn" data-pull-btn title="${_esc(_gt('git_view_pull', 'Pull (fast-forward)'))}" disabled>↧ pull</button>
+          <button class="ui-button ui-button--quiet ui-button--compact git-icon-btn" data-push-btn title="${_esc(_gt('git_view_push', 'Push'))}" disabled>↥ push</button>
+          <button class="ui-button ui-button--quiet ui-button--compact ui-button--icon git-icon-btn" data-refresh-btn title="${_esc(_gt('git_view_refresh', 'Refresh'))}">↻</button>
+          <button class="ui-button ui-button--quiet ui-button--compact git-icon-btn" data-loadmore-btn title="${_esc(_gt('git_view_load_more', 'Load 100 more'))}">+${PAGE_LIMIT}</button>
+          <button class="ui-button ui-button--secondary ui-button--regular git-commit-all-btn" data-commit-all-btn disabled>${_esc(_gt('git_commit_all', 'Commit all'))}</button>
         </div>
 
         <div class="git-graph-toolbar">
-          <input type="search" data-filter placeholder="${_esc(_gt('git_view_filter_placeholder', 'subject / author / hash filter'))}">
+          <input class="ui-input" type="search" data-filter placeholder="${_esc(_gt('git_view_filter_placeholder', 'subject / author / hash filter'))}">
           <div class="filter-group">
-            <button class="git-icon-btn" data-toggle="HEAD" title="HEAD">HEAD</button>
-            <button class="git-icon-btn" data-toggle="--all" title="--all">all</button>
+            <button class="ui-button ui-button--quiet ui-button--compact git-icon-btn" data-toggle="HEAD" title="HEAD">HEAD</button>
+            <button class="ui-button ui-button--quiet ui-button--compact git-icon-btn" data-toggle="--all" title="--all">all</button>
           </div>
         </div>
 
@@ -914,12 +912,12 @@ export function updatePushButtonLabel(btn, wt) {
           <div class="split-divider" data-divider title="${_esc(_gt('git_view_divider_tip', 'Drag to resize'))}"></div>
           <div class="detail-panel" data-detail-panel>
             <div class="detail-tabbar">
-              <button class="detail-tab active" data-tab="info">${_esc(_gt('git_view_tab_info', 'INFORMATION'))}</button>
-              <button class="detail-tab" data-tab="changes">${_esc(_gt('git_view_tab_changes', 'CHANGES'))}</button>
-              <button class="detail-tab" data-tab="files">${_esc(_gt('git_view_tab_files', 'FILES'))}</button>
+              <button class="ui-button ui-button--secondary ui-button--regular detail-tab active" data-tab="info">${_esc(_gt('git_view_tab_info', 'INFORMATION'))}</button>
+              <button class="ui-button ui-button--secondary ui-button--regular detail-tab" data-tab="changes">${_esc(_gt('git_view_tab_changes', 'CHANGES'))}</button>
+              <button class="ui-button ui-button--secondary ui-button--regular detail-tab" data-tab="files">${_esc(_gt('git_view_tab_files', 'FILES'))}</button>
               <div class="detail-tab-spacer"></div>
               <div class="detail-tab-meta" data-detail-meta>—</div>
-              <button class="detail-close" data-detail-close title="${_esc(_gt('git_view_detail_close', 'Close'))}">✕</button>
+              <button class="ui-button ui-button--quiet ui-button--compact ui-button--icon detail-close" data-detail-close title="${_esc(_gt('git_view_detail_close', 'Close'))}">✕</button>
             </div>
             <div class="detail-content" data-detail-content>
               <div class="detail-empty">${_esc(_gt('git_view_select_row_hint', 'Click a row to see commit detail'))}</div>
@@ -929,7 +927,7 @@ export function updatePushButtonLabel(btn, wt) {
 
         <div class="ref-dropdown" data-ref-dropdown data-wheel-native>
           <div class="ref-dropdown-search">
-            <input type="search" data-ref-filter placeholder="${_esc(_gt('git_view_ref_filter_placeholder', 'Search branches / tags...'))}">
+            <input class="ui-input" type="search" data-ref-filter placeholder="${_esc(_gt('git_view_ref_filter_placeholder', 'Search branches / tags...'))}">
           </div>
           <div class="ref-list" data-ref-list></div>
         </div>
@@ -1293,10 +1291,8 @@ export function updatePushButtonLabel(btn, wt) {
       if (!btn || btn.disabled) return;
       // pull は working tree を書き換える操作のため、実行前に確認を挟む
       const ok = await appConfirm({
-        title: _gt('git_pull_confirm_title', 'Pull remote changes'),
+        action: 'pull',
         message: _gt('git_pull_confirm_message', 'Pull (fast-forward) from upstream and update the working tree. Continue?'),
-        confirmText: _gt('git_pull_confirm_run', 'Pull'),
-        cancelText: _gt('spawn_cancel', 'Cancel'),
         kind: 'default',
       });
       if (!ok) return;
@@ -1508,7 +1504,7 @@ export function updatePushButtonLabel(btn, wt) {
       const refs = c.refs || [];
       const refsHtml = refs.length
         ? renderRefsInline(refs, this.headHash, c.hash)
-        : `<span style="color:var(--muted);font-size:11.5px">—</span>`;
+        : `<span style="color:var(--muted);font-size:var(--fs-xs)">—</span>`;
       const files = Array.isArray(c.files) ? c.files : [];
       const filesSection = files.length
         ? `<div class="info-label">FILES</div><div class="info-value">${files.map(f => `
@@ -1518,12 +1514,12 @@ export function updatePushButtonLabel(btn, wt) {
               <span class="file-stat-add">+${f.added || 0}</span>
               <span class="file-stat-del">-${f.removed || 0}</span>
             </div>`).join('')}</div>`
-        : `<div class="info-label">FILES</div><div class="info-value" style="color:var(--muted);font-size:11.5px">—</div>`;
+        : `<div class="info-label">FILES</div><div class="info-value" style="color:var(--muted);font-size:var(--fs-xs)">—</div>`;
 
       const ghDisabled = this.githubUrl ? '' : 'disabled';
       const bodyHtml = c.body
         ? _esc(c.body)
-        : `<span style="color:var(--muted);font-size:11.5px">${_esc(_gt('git_view_no_body', '(no body)'))}</span>`;
+        : `<span style="color:var(--muted);font-size:var(--fs-xs)">${_esc(_gt('git_view_no_body', '(no body)'))}</span>`;
 
       return `
         <div class="info-grid">
@@ -1539,14 +1535,14 @@ export function updatePushButtonLabel(btn, wt) {
           <div class="info-label">SHA</div>
           <div class="info-value info-sha">
             <span class="info-sha-value">${_esc(c.hash || '')}</span>
-            <button class="info-mini-btn" data-action="copy-full" title="Copy">📋</button>
-            <button class="info-mini-btn" data-action="copy-github-url" ${ghDisabled}>📋 GH</button>
+            <button class="ui-button ui-button--quiet ui-button--compact info-mini-btn" data-action="copy-full" title="Copy">📋</button>
+            <button class="ui-button ui-button--quiet ui-button--compact info-mini-btn" data-action="copy-github-url" ${ghDisabled}>📋 GH</button>
           </div>
 
           <div class="info-label">PARENTS</div>
           <div class="info-value">${parents.length
             ? parents.map(p => `<span class="info-parent-link" data-parent="${_esc(p)}">${_esc(_shortHash(p))}</span>`).join('')
-            : `<span style="color:var(--muted);font-size:11.5px">(root commit)</span>`}</div>
+            : `<span style="color:var(--muted);font-size:var(--fs-xs)">(root commit)</span>`}</div>
 
           <div class="info-label">REFS</div>
           <div class="info-value">${refsHtml}</div>

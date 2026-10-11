@@ -196,7 +196,7 @@ function renderBoardPanel(conductor: any): HTMLElement {
   if (filePath) {
     const open = document.createElement('button');
     open.type = 'button';
-    open.className = 'orchestration-board-action';
+    open.className = 'ui-button ui-button--secondary ui-button--regular orchestration-board-action';
     open.textContent = 'Files で開く';
     open.title = filePath;
     open.addEventListener('click', (event) => {
@@ -207,7 +207,7 @@ function renderBoardPanel(conductor: any): HTMLElement {
 
     const refresh = document.createElement('button');
     refresh.type = 'button';
-    refresh.className = 'orchestration-board-action';
+    refresh.className = 'ui-button ui-button--quiet ui-button--compact orchestration-board-action';
     refresh.textContent = '更新';
     refresh.disabled = boardPreviewLoading;
     refresh.addEventListener('click', (event) => {
@@ -287,7 +287,7 @@ function renderCrossSessionMessages(conductor: any): HTMLElement {
     if (receiverID > 0) {
       const receiver = document.createElement('button');
       receiver.type = 'button';
-      receiver.className = 'orchestration-cross-session-message-session';
+      receiver.className = 'ui-button ui-button--secondary ui-button--regular orchestration-cross-session-message-session';
       receiver.textContent = `#${receiverID}${event.receiver_role ? ` ${String(event.receiver_role)}` : ''}`;
       receiver.title = '受信セッションを開く';
       receiver.addEventListener('click', (clickEvent) => {
@@ -332,7 +332,7 @@ function appendSessionRole(container: HTMLElement, role: string, labelKey: strin
   if (sessionID > 0) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `orchestration-relay-session${active ? ' active' : ''}`;
+    button.className = `ui-button ui-button--secondary ui-button--regular orchestration-relay-session${active ? ' active' : ''}`;
     button.textContent = `#${sessionID}`;
     button.title = i18n('relay_active_implementer', 'Active implementer');
     button.addEventListener('click', (event) => {
@@ -352,7 +352,7 @@ function appendSessionRole(container: HTMLElement, role: string, labelKey: strin
 function appendRelayActionButton(container: HTMLElement, conductor: any, relay: RelayStatus, action: 'relay-stop' | 'relay-resume' | 'relay-cleanup', labelKey: string): void {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = 'orchestration-relay-action';
+  button.className = 'ui-button ui-button--secondary ui-button--regular orchestration-relay-action';
   button.textContent = i18n(labelKey, action);
   button.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -434,7 +434,7 @@ function renderRelayCard(conductor: any, relay: RelayStatus): HTMLElement {
     const branchCell = appendField(meta, i18n('relay_branch', 'Branch'), '');
     const branchButton = document.createElement('button');
     branchButton.type = 'button';
-    branchButton.className = 'orchestration-relay-branch';
+    branchButton.className = 'ui-button ui-button--secondary ui-button--regular orchestration-relay-branch';
     branchButton.textContent = String(relay.branch);
     branchButton.title = `git merge ${String(relay.branch)}`;
     branchButton.addEventListener('click', (event) => {
@@ -461,7 +461,7 @@ function renderRelayCard(conductor: any, relay: RelayStatus): HTMLElement {
   if (relay.review_path) {
     const review = document.createElement('button');
     review.type = 'button';
-    review.className = 'orchestration-relay-review-link';
+    review.className = 'ui-button ui-button--secondary ui-button--regular orchestration-relay-review-link';
     review.textContent = `${i18n('relay_open_review', 'Open latest review')}: ${basename(String(relay.review_path))}`;
     review.title = String(relay.review_path);
     review.addEventListener('click', (event) => {
@@ -535,7 +535,7 @@ function renderRelayEventRow(conductor: any, event: RelayEvent): HTMLElement {
   if (event.review_path) {
     const review = document.createElement('button');
     review.type = 'button';
-    review.className = 'relay-event-review';
+    review.className = 'ui-button ui-button--secondary ui-button--regular relay-event-review';
     review.textContent = basename(String(event.review_path));
     review.title = String(event.review_path);
     review.addEventListener('click', (clickEvent) => {
@@ -547,7 +547,7 @@ function renderRelayEventRow(conductor: any, event: RelayEvent): HTMLElement {
   if (event.commit) {
     const commit = document.createElement('button');
     commit.type = 'button';
-    commit.className = 'relay-event-commit';
+    commit.className = 'ui-button ui-button--secondary ui-button--regular relay-event-commit';
     commit.textContent = String(event.commit).slice(0, 7);
     commit.title = String(event.commit);
     commit.addEventListener('click', (clickEvent) => {
@@ -580,7 +580,7 @@ export function renderRelayTimeline(conductor: any, relay: RelayStatus, events: 
   if (ordered.length > 20) {
     const showAll = document.createElement('button');
     showAll.type = 'button';
-    showAll.className = 'orchestration-relay-timeline-more';
+    showAll.className = 'ui-button ui-button--secondary ui-button--regular orchestration-relay-timeline-more';
     showAll.textContent = i18n('relay_timeline_show_all', 'Show all');
     let expanded = false;
     showAll.addEventListener('click', (event) => {
@@ -690,7 +690,7 @@ export function renderOrchestrationDashboard(fetchTimeline = true): void {
   detail.innerHTML = `<span class="orchestration-detail-role">conductor #${escapeHtml(String(conductor.id))}</span><span>${escapeHtml(String(conductor.provider || 'unknown'))}</span><span>${escapeHtml(stateLabel(String(conductor.state || 'standby')))}</span><span title="${escapeHtml(String(conductor.board_path || ''))}">${escapeHtml(String(conductor.board_path || 'board 未作成'))}</span>`;
   const startRelayButton = document.createElement('button');
   startRelayButton.type = 'button';
-  startRelayButton.className = 'relay-start-button';
+  startRelayButton.className = 'ui-button ui-button--secondary ui-button--regular relay-start-button';
   startRelayButton.textContent = i18n('relay_start', 'Start relay');
   startRelayButton.addEventListener('click', () => openRelayDialog(Number(conductor.id)));
   detail.appendChild(startRelayButton);
@@ -722,7 +722,7 @@ export function renderOrchestrationDashboard(fetchTimeline = true): void {
     const done = doneFor(child);
     const card = document.createElement('button');
     card.type = 'button';
-    card.className = `orchestration-child-card state-${relayStateClass(String(child.state || 'standby'))}${done ? ' done' : ''}`;
+    card.className = `ui-button ui-button--secondary ui-button--regular orchestration-child-card state-${relayStateClass(String(child.state || 'standby'))}${done ? ' done' : ''}`;
     card.innerHTML = `<div class="orchestration-child-card-head"><strong>${escapeHtml(String(child.role || 'child'))}</strong><span class="orchestration-done-badge ${done ? 'done' : 'pending'}">${done ? 'DONE' : '作業中'}</span></div><dl><div><dt>状態</dt><dd>${escapeHtml(stateLabel(String(child.state || 'standby')))}</dd></div><div><dt>Provider</dt><dd>${escapeHtml(String(child.provider || 'unknown'))}</dd></div><div><dt>Worktree</dt><dd title="${escapeHtml(worktreeLabel(child))}">${escapeHtml(worktreeLabel(child))}</dd></div></dl>`;
     const childHead = card.querySelector('.orchestration-child-card-head');
     if (childHead instanceof HTMLElement) appendChildRelayBadges(childHead, child, relays);
