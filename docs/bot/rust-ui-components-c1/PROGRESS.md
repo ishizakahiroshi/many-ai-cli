@@ -10,7 +10,7 @@ last_reviewed: 2026-10-11
 
 # #P-20261011-005 many-ai-cli：C1資料の入口
 
-> 最終更新: 2026-10-11(日) 19:34:54 JST
+> 最終更新: 2026-10-11(日) 19:38:10 JST
 
 管理Issue: [#16](https://github.com/ishizakahiroshi/many-ai-cli/issues/16)。送信・受付・調査提出・独立レビュー・手元検収の状態遷移は、このIssueのコメントに集約する。
 
@@ -46,3 +46,5 @@ last_reviewed: 2026-10-11
 C1提出は親計画の完了ではなく、C2仕様確認前にC3以降へ進めない。
 
 - 指定base向けDraft PR: [#17](https://github.com/ishizakahiroshi/many-ai-cli/pull/17)。61daa7fのsecret-scan成功、Validateは別途実runを照合。CI結果の正本はIssue16。
+
+- 第2巡7f80b94では状態SVG共有helperの名簿、launcherのclose/launch順、shortcut helpの閉じ方を補正。計数/source不変、新SHA再レビュー待ち。7f80b94のValidateにはgovulncheck失敗・release-token-scopes skipあり（残ジョブ進行中時点）。成功扱いしない。

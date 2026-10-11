@@ -10,7 +10,7 @@ last_reviewed: 2026-10-11
 
 # #P-20261011-005 many-ai-cli：C1独立レビュー手順
 
-> 最終更新: 2026-10-11(日) 19:34:54 JST
+> 最終更新: 2026-10-11(日) 19:38:10 JST
 
 実施記録は末尾。前半のレビュー手順を保持する。
 
@@ -54,3 +54,20 @@ findingごとに重要度、ファイル・行、根拠、満たしていない�
 独立実行結果: script self-check6成功/0失敗/0skip、固定source218件のmanifest全行・CSS4種類の全値一覧/計数が再集計と一致。差分範囲は許可folderのみ、whitespaceエラーなし。既存共通部品/停止契約に修正必須指摘なし。source git.cssのEOF未閉鎖warning2件も独立確認。
 
 未確認: 修正候補の新成果SHAでの再レビュー、Windows/実画面/手元追加差分。修正済みという調査担当の記述だけで合格へ変更しない。再レビュー対象SHAと結論は次の巡およびIssue16へ追記する。
+
+## 第2巡の指摘と修正
+
+対象成果SHA: 7f80b94fee3cd6fb46b839dc3fa9e27b6a76fd1a。同じ独立担当が4blobとローカルhash一致、修正diffとsourceを直接確認。self-check6成功、誤refをexit1で拒否する合成確認も期待一致。
+
+|重要度|対象と根拠|指摘/修正|
+|---|---|---|
+|P2|第1巡 INVENTORY S17/§3.3/§3.5、settings.ts:52–112/711–754、subscriptions.ts:251–303|特殊close/checkbox/Enter契約の欠落。特殊subcase＋補助名簿に追記済み|
+|P2|第1巡 INVENTORY S25/B07/B08/S38/P07|主要CSS参照の誤りをsettings.css/tabs.css/pane-placement.css/mobile-home.cssへ修正済み|
+|P2|第1巡 INVENTORY P03/B08、spawn-confirm.css:317–323、styles.css:1305–1314|狭幅max-width残留/coarse min-heightの条件を追記済み|
+|P2|第1巡 INVENTORY §3.3|CSS再集計でJS閉じ方を確認したかのような記述を訂正、21行source操作補助名簿と未検証を分離|
+|P3|第1巡 INVENTORY S41|Markdown表の途中空行を削除済み。slash-pickerはS05子面へ追記|
+|P2|第2巡 INVENTORY §3.4/§3.5、session-list.ts:371–389|既存stateIconSvgHtml共有7種が未記載。provider spriteと別の共有helper/利用元を追記|
+|P2|第2巡 INVENTORY close補助S40、detached-grid-launcher.ts:338–351|起動後ではなくclose後に起動処理。外側イベントもmousedownへ訂正|
+|P3|第2巡 INVENTORY close補助S33、shortcut-help.ts:54/66|close表示文字はEsc、外側mousedownもあり。B07 paneは常時表示と明確化|
+
+全指摘は文書のみ修正。修正した新SHAは独立再レビュー待ち（この時点で合格とはしない）。計数scriptおよびsourceは不変。

@@ -10,7 +10,7 @@ last_reviewed: 2026-10-11
 
 # #P-20261011-005 many-ai-cli：Rust UI C1 source棚卸し
 
-> 最終更新: 2026-10-11(日) 19:34:54 JST
+> 最終更新: 2026-10-11(日) 19:38:10 JST
 
 **実画面は未確認。これは固定公開sourceの棚卸しであり、見た目の乱れ・動作合格・C2仕様決定ではない。**
 
@@ -118,7 +118,7 @@ general、appearance、token-statusbar、session、server-connections、subscrip
 |B04 通常起動|spawn.css:562 launch accent系、spawn-confirm.css:308 is-primary accent/#fff、hover brightness1.08|B02と同じprimary語でも役割/値が違う|
 |B05 起動副操作|spawn-confirm.css:290: minheight control-h-sm、6px14px、muted、fs-md、focus ring box-shadow|B01と余白/文字/高さ/focusが異なる|
 |B06 単独閉じる|close-button.css:24–94: transparent/none/muted、radius-sm、.9rem、2px6px、hover danger-bg/danger|17selector共有。寸法変数の個別overrideあり|
-|B07 tab/pane内閉じる|styles.css:2607 `.main-tab-close`、tabs.css:114–122 `.ph-close`＋pane-placement.css:81–105（後者は常時opacity1等を上書き）|隣のtab/hover出現に従う。B06対象外|
+|B07 tab/pane内閉じる|styles.css:2607 `.main-tab-close`、tabs.css:114–122 `.ph-close`＋pane-placement.css:81–105（後者は常時opacity1等を上書き）|tab内とpane内の別寸法/文脈。paneは後続CSSで常時opacity1。B06対象外|
 |B08 mobile閉じる/選択|mobile-home.css `.mtl-detail-close`、mobile-home.css:540–625 `.mas-close`|mtl height36px/mas height44pxのsource指定。coarseではstyles.css:1305–1314 min-height44pxも適用されるためmtl実tap領域を36px固定とはしない|
 |B09 設定header列|settings.css:38 `.settings-header-btn`、:53 close|隣接列の枠/余白を共有、closeだけB06へ剥がさない|
 |B10 action確認|approval.css:713–723 back/go: transparent/line/muted-2 と accent/#fff|承認payload表示と実行契約を維持|
@@ -155,16 +155,17 @@ server/bug-report/handoff/routine/relay/files/lightbox/shortcut/help等の個別
 
 - index.html:1751–1759 view-tab SVGは24×24 viewBoxの図形。新規/メモ/ルーチンsidebarは同:1257–1272でstroke1.8、orchestration:1757はstroke2。線幅差はsource上の事実、画面で気になるか未確認。
 - provider-icon.ts:48の定義表、:171 symbol生成、:222 sprite、:311 presentation、:372 providerIconHtmlを既存共有部品として再利用候補にする。画像/テキスト/色カスタム、動的CSS変数、ロード結果でfallbackが変わる。
+- 状態SVGはsession-list.ts:371–389の7種辞書とstateIconSvgHtmlで既に共有済み（terminal/session-strip/workflow/CLI保守）。SVG literal1個にテンプレートで各図形を差すため、字句SVG候補37を全アイコン種類数とは読まない。
 - `✕`の単独close、`↪`引継ぎ、`⊞`分離grid、`!`危険、emoji `📁`など。字形・色emojiはOS/fontによって違う。Unicode生文字計数はコメント内の矢印等も含むためアイコン実個数にはしない。
 - CSSでdot/pseudo-elementや`currentColor`を使う場合、hex0件でも無色ではない。SVGのpath/url画像を画面未確認のまま「重複icon削除」対象にしない。
 
 ### 3.5 流用の仕組み
 
-既存流用機構は7群（R1トークン/別名、R2close共通selector、R3provider sprite/helper、R4確認関数群、R5wheel除外契約、R6既存view DOMの移設、R7状態/設定の共通store）。欠如ではなく適用範囲を調べる段階。
+既存流用機構は7群（R1トークン/別名、R2close共通selector、R3provider sprite/状態SVG helper、R4確認関数群、R5wheel除外契約、R6既存view DOMの移設、R7状態/設定の共通store）。欠如ではなく適用範囲を調べる段階。
 
 - R1 styles.css:47–223、theme-tokens.ts:224、custom-themes.ts。root inline setPropertyがstylesheetより優先する。varの近似置換案は推論であり採用ではない。
 - R2 close-button.cssの17共通selector、寸法2変数override、body.close-left。除外: ph/main-tab、mas/mtl、cwd-dropdown、wf-pill-dismiss、枠付きbutton列、tsb。about/handoff-notifyはstyles.css本体の後続個別ルールが残る。
-- R3 provider-icon.tsのsymbol/use、provider色変数。静的SVGの共有化案は未知の利用者画像を壊さないことが条件。
+- R3 provider-icon.tsのsymbol/use、provider色変数、およびsession-list.ts:371–389のSTATE_ICON_SVG/stateIconSvgHtml。状態SVGは16×16 viewBox・14×14出力の7種（flag/keyboard/dot/ring/cross/check/spawnPending、未知kindはdot）、provider spriteと別の既存共用helper。terminal.ts:52/2098、session-strip.ts:30/201、workflow-modal.ts:23/541/564、cli-maintenance.ts:27/334が使う。静的SVGの共有化案は未知の利用者画像を壊さないことが条件。
 - R4 settings.tsのappConfirm/appConfirmTypedDanger/appConfirmShutdown/encoding確認。native spawn-confirmと同じAPIではない。
 - R5 terminal.ts:159 `isModalOverlayOpen`と:1192 data-wheel-native。scripts/check-wheel-overlays.mjsはviewport fixed単純selectorを検査し、mobile sheet/部分popover/複合selectorには限界がある。
 - R6 flexible-pane-views.ts:14/40のsingleRootsとFilesTabManager.mountPaneContent、detached表示。DOM IDを複製せずstate契約を保つ。
@@ -190,12 +191,12 @@ CSS再集計はJSの閉じ方を出力しない。以下は別途sourceを読ん
 |S29 routines.ts:52–69|native dialog.close、close eventでgeneration進行/timer停止/opener.focus。showModal、browserのEscと外側クリックは同一仕様ではない|
 |S30 memo-panel.ts:300–301/483–506|drawer closeはhidden、入力focus。本文編集Escはfinish(false)で編集中止。非modal、画面全体のEscで他UIと同じ閉鎖を保証しない|
 |S32 session-search-palette.ts:513/526–539/599–611|外側mousedown/Escでclose、検索input focus、↑↓で候補移動、Enterは選択実行または検索。Ctrl/Cmd+Kでopen|
-|S33 shortcut-help.ts:48–67/94–117|✕/`?`再入力でhidden。typing targetや他overlay表示中は起動抑制。Esc汎用閉鎖を仮定しない|
+|S33 shortcut-help.ts:48–67/94–117|表示文字Escのclose button/外側mousedown/`?`再入力でhidden。typing targetや他overlay表示中は起動抑制。Esc汎用閉鎖を仮定しない|
 |S33 first-run-tour.ts:73–151|✕/Esc/外側はcomplete、laterは別処理。keydown除去、opener focus、次へbutton focus。閉じると後で見るを混同しない|
 |S34 bug-report-modal.ts:76–95/337–393|✕/cancel/外側/keydown handler、DOM/参照/body class等を後始末、symptom focus。submit disableには未入力/log preview待ち条件、送信未実施|
 |S35 lightbox.ts:22–29|Esc/外側でDOM/key listener除去。画像内部clickは同一ではない|
 |S35 path-links.ts:228–327|✕/外側/Esc capture、file modal DOMとkey handler除去。pop-outは別操作|
-|S40 detached-grid-launcher.ts:335–349|✕/overlay自身click/起動完了でremove。共通Esc実装を想定しない|
+|S40 detached-grid-launcher.ts:335–349|✕/overlay自身mousedownでremove。起動button押下はclose()→await launchDetachedPresetの順で、起動処理に先行してremove。共通Esc実装を想定しない|
 
 未確認として残す細部: 各状態の実focus順・focus復帰/連打/既定Enterとclickの競合、provider画像dialog・Git/files子popup・footer詳細・mobile sheet全状態のイベント全組合せ。上表と停止契約以外の閉じ方を「すべて確認済み」としない。C2で共通部品へ移す際は、変更対象ごとにこの残りの契約を確定してから実装へ進む。
 
