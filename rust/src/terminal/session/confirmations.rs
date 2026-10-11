@@ -15,6 +15,7 @@ pub struct ConfirmedChildRequest {
     pub admission: AdmissionId,
 }
 pub struct ConfirmationPresentation {
+    pub billing_profiles: Vec<config::headless_billing::BillingProfileSummary>,
     pub config: config::Config,
     pub trust_grant_providers: Vec<String>,
 }
@@ -22,6 +23,23 @@ pub struct ConfirmationPresentation {
 /// No default implementation: unavailable preparation/board ownership cannot
 /// turn into a successful placeholder launch or an incomplete disclosure.
 pub trait ConfirmationExecutor: Send + Sync {
+    fn prepare_billing(
+        &self,
+        body: ResolvedChildSpawn,
+    ) -> Result<ResolvedChildSpawn, SessionError> {
+        if body.request().billing_mode == config::headless_billing::API_KEY {
+            return Err(SessionError::InvalidRequest(
+                "billing profile resolution unavailable".into(),
+            ));
+        }
+        Ok(body)
+    }
+    fn refresh_billing(
+        &self,
+        body: ResolvedChildSpawn,
+    ) -> Result<ResolvedChildSpawn, SessionError> {
+        self.prepare_billing(body)
+    }
     fn presentation(&self) -> Result<ConfirmationPresentation, SessionError>;
     fn spawn<'a>(
         &'a self,
@@ -126,7 +144,7 @@ impl SpawnConfirmations for SessionEngine {
     }
     fn register(
         &self,
-        request: ConfirmationRequest,
+        mut request: ConfirmationRequest,
     ) -> Result<ConfirmationRegistration, AdmissionError> {
         if lock(&self.state).confirmations_stopped {
             return Err(AdmissionError::Unavailable);
@@ -137,6 +155,10 @@ impl SpawnConfirmations for SessionEngine {
             self.warn("confirmation disclosure unavailable", &error);
             AdmissionError::Unavailable
         })?;
+        request.body = self
+            .confirmation_executor()
+            .and_then(|executor| executor.prepare_billing(request.body))
+            .map_err(|_| AdmissionError::Unavailable)?;
         let mut message = requested_message(
             request.parent,
             &request.body,
@@ -243,11 +265,38 @@ impl SpawnConfirmations for SessionEngine {
         };
         // Snapshot/validation can call application code. Revalidate the exact
         // entry after returning so replacement or auth rotation cannot be lost.
-        executor.presentation()?;
+        let mut disclosure = executor.presentation()?;
+        let original_request = body.request().clone();
+        let original_billing = body.billing().cloned();
+        let mut refresh = false;
         let body = if response.approved {
             let mut body = body.approve(&response, proof.clone())?;
             validate_launch_options(&mut body)?;
-            Some(body)
+            let prepared = match executor.prepare_billing(body.clone()) {
+                Ok(body) => body,
+                Err(SessionError::InvalidRequest(detail))
+                    if detail
+                        == config::headless_billing::BillingError::RevisionChanged.to_string() =>
+                {
+                    refresh = true;
+                    executor.refresh_billing(body)?
+                }
+                Err(error) => return Err(error),
+            };
+            if let Some(billing) = prepared.billing().filter(|billing| billing.is_api()) {
+                // A different profile needs its own disclosure even when both
+                // recipes share the same configuration-file revision hash.
+                refresh |= response.billing_revision.as_deref() != Some(billing.revision.as_str())
+                    || original_billing.as_ref().is_none_or(|previous| {
+                        !previous.is_api() || previous.profile_id != billing.profile_id
+                    });
+            }
+            if refresh {
+                // Fetch fresh display metadata outside State. A failed read
+                // neither changes the pending request nor acquires a decision.
+                disclosure = executor.presentation()?;
+            }
+            Some(prepared)
         } else {
             None
         };
@@ -265,6 +314,21 @@ impl SpawnConfirmations for SessionEngine {
             .ok_or_else(no_longer_pending)?;
         if entry.decision.is_some() {
             return Err(already_decided());
+        }
+        if entry.pending.body.request() != &original_request
+            || entry.pending.body.billing() != original_billing.as_ref()
+        {
+            // Another authenticated browser refreshed this exact entry while
+            // application callbacks ran. Never overwrite or approve its state.
+            return Err(billing_changed(&entry.pending, &disclosure));
+        }
+        if refresh {
+            let entry = state
+                .confirmations
+                .get_mut(&response.confirmation_id)
+                .expect("validated entry");
+            entry.pending.body = body.expect("only approvals refresh billing");
+            return Err(billing_changed(&entry.pending, &disclosure));
         }
         let lease = state
             .next_confirmation_decision
@@ -351,8 +415,31 @@ fn requested_message(
     disclosure: &ConfirmationPresentation,
 ) -> proto::Message {
     let body = resolved.request();
+    let mut billing_profiles = disclosure.billing_profiles.clone();
+    if let Some(billing) = resolved.billing().filter(|billing| billing.is_api()) {
+        // Pending metadata is authoritative for the selected recipe. A second
+        // browser may have refreshed it after the presentation callback.
+        let selected = config::headless_billing::BillingProfileSummary {
+            id: billing.profile_id.clone(),
+            display_name: billing.display_name.clone(),
+            provider: billing.provider.clone(),
+        };
+        if let Some(profile) = billing_profiles.iter_mut().find(|p| p.id == selected.id) {
+            *profile = selected;
+        } else {
+            billing_profiles.push(selected);
+        }
+    }
     proto::Message {
         r#type: "spawn_confirmation_requested".into(),
+        data: serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "billing_mode": resolved.billing().map(|billing| billing.mode.as_str()).unwrap_or(config::headless_billing::PLAN_LOGIN),
+            "billing_profile": body.billing_profile,
+            "max_budget_usd": body.max_budget_usd,
+            "billing_profiles": billing_profiles,
+            "billing": resolved.billing(),
+        })).expect("finite validated billing disclosure"),
         session_id: parent.0,
         role: body.role.clone(),
         provider: body.provider.clone(),
@@ -403,6 +490,21 @@ impl State {
                 message
             })
             .collect()
+    }
+}
+fn billing_changed(
+    pending: &PendingSpawnConfirmation,
+    disclosure: &ConfirmationPresentation,
+) -> SessionError {
+    let mut message = requested_message(
+        pending.parent,
+        &pending.body,
+        pending.requested_at,
+        disclosure,
+    );
+    message.spawn_confirmation_id.clone_from(&pending.id.0);
+    SessionError::BillingProfileChanged {
+        disclosure: serde_json::to_value(message).expect("validated public confirmation message"),
     }
 }
 fn closed_message(

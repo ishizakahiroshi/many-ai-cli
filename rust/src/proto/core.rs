@@ -188,6 +188,8 @@ pub struct SessionSnapshot {
         skip_serializing_if = "String::is_empty"
     )]
     pub execution_mode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub headless_progress: Option<crate::orchestration::headless_progress::HeadlessProgress>,
     #[serde(
         rename = "permission_mode",
         deserialize_with = "null_default",
@@ -1177,6 +1179,10 @@ pub enum SessionError {
     AuthenticationExpired,
     ConfirmationMissing,
     ConfirmationDecided,
+    /// Fresh public confirmation disclosure after a billing revision mismatch.
+    BillingProfileChanged {
+        disclosure: serde_json::Value,
+    },
     ChildLaunch {
         status: u16,
         code: String,
@@ -1340,6 +1346,11 @@ pub trait SessionCore:
         binding: SessionBinding,
         observation: SessionObservation,
         now: Timestamp,
+    ) -> Result<CoreEffects, SessionError>;
+    fn observe_headless_progress(
+        &self,
+        binding: SessionBinding,
+        progress: crate::orchestration::headless_progress::HeadlessProgress,
     ) -> Result<CoreEffects, SessionError>;
     fn observe_output(
         &self,
@@ -1943,6 +1954,13 @@ pub trait CoreEventSubscription: Send {
     fn next<'a>(&'a mut self, cancel: &'a HubShutdownCancellation)
     -> CoreFuture<'a, CoreEventPoll>;
 }
+#[derive(Clone, Serialize)]
+pub struct HeadlessProgressNotification {
+    pub r#type: String,
+    pub session_id: i64,
+    pub headless_progress: crate::orchestration::headless_progress::HeadlessProgress,
+}
+
 pub enum CoreEffect {
     SendWrapper {
         binding: SessionBinding,
@@ -1967,6 +1985,12 @@ pub enum CoreEffect {
     Broadcast(super::Message),
     BroadcastGitTurn(GitTurnNotification),
     BroadcastSpawnCorrelation(SpawnCorrelationNotification),
+    BroadcastHeadlessProgress(HeadlessProgressNotification),
+    SendUiHeadlessProgress {
+        binding: UiBinding,
+        event: HeadlessProgressNotification,
+        best_effort: bool,
+    },
     SendUiSpawnCorrelation {
         binding: UiBinding,
         event: SpawnCorrelationNotification,
@@ -2096,6 +2120,18 @@ pub struct ChildSpawnRequest {
     pub effort: String,
     #[serde(rename = "execution_mode", deserialize_with = "null_default")]
     pub execution_mode: String,
+    #[serde(
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub billing_mode: String,
+    #[serde(
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub billing_profile: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_budget_usd: Option<f64>,
     #[serde(rename = "permission_preset", deserialize_with = "null_default")]
     pub permission_preset: String,
     #[serde(rename = "origin", deserialize_with = "null_default")]
@@ -2120,6 +2156,15 @@ pub struct SpawnConfirmationResponse {
     pub effort: Option<String>,
     #[serde(rename = "execution_mode")]
     pub execution_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub billing_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub billing_profile: Option<String>,
+    /// Confirmation-only proof of the recipe revision the human reviewed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub billing_revision: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_budget_usd: Option<f64>,
     #[serde(rename = "permission_preset")]
     pub permission_preset: Option<String>,
     #[serde(rename = "remember_permission")]
@@ -2214,6 +2259,19 @@ impl ChildSpawnRequest {
         if let Some(value) = &decision.execution_mode {
             self.execution_mode = value.trim().to_owned();
         }
+        if let Some(value) = &decision.billing_mode {
+            self.billing_mode = value.trim().to_owned();
+            if value.trim() == "plan-login" {
+                self.billing_profile.clear();
+                self.max_budget_usd = None;
+            }
+        }
+        if let Some(value) = &decision.billing_profile {
+            self.billing_profile = value.trim().to_owned();
+        }
+        if let Some(value) = decision.max_budget_usd {
+            self.max_budget_usd = Some(value);
+        }
         if let Some(value) = &decision.permission_preset {
             self.permission_preset = value.trim().to_owned();
         }
@@ -2257,6 +2315,7 @@ pub struct ResolvedChildSpawn {
     request: ChildSpawnRequest,
     origin: VerifiedSpawnOrigin,
     grants: InternalSpawnGrants,
+    billing: Option<crate::config::headless_billing::ResolvedBilling>,
 }
 impl ResolvedChildSpawn {
     /// Request claims are resolved against server-issued proof before any human
@@ -2274,7 +2333,17 @@ impl ResolvedChildSpawn {
             request,
             origin,
             grants,
+            billing: None,
         })
+    }
+    pub fn billing(&self) -> Option<&crate::config::headless_billing::ResolvedBilling> {
+        self.billing.as_ref()
+    }
+    pub(crate) fn set_billing(
+        &mut self,
+        billing: crate::config::headless_billing::ResolvedBilling,
+    ) {
+        self.billing = Some(billing);
     }
     pub fn request(&self) -> &ChildSpawnRequest {
         &self.request
@@ -2307,7 +2376,16 @@ impl ResolvedChildSpawn {
                 "refused confirmation is not an approval".into(),
             ));
         }
+        let previous = self.request.clone();
         self.request.apply_human_decision(decision, &proof);
+        if previous.provider != self.request.provider
+            || previous.execution_mode != self.request.execution_mode
+            || previous.billing_mode != self.request.billing_mode
+            || previous.billing_profile != self.request.billing_profile
+            || previous.max_budget_usd != self.request.max_budget_usd
+        {
+            self.billing = None;
+        }
         self.grants = self.grants.with_human_folder_trust(decision, &proof);
         self.origin = VerifiedSpawnOrigin::HumanConfirmation {
             request: proof,
@@ -2428,6 +2506,7 @@ pub enum ProviderCommandPurpose {
 /// or deserialized from wrapper/browser input. Prompt text is not persisted here.
 #[derive(Clone, Default)]
 pub struct SpawnRegistrationMetadata {
+    pub headless_billing: Option<crate::config::headless_billing::ResolvedBilling>,
     pub client_request_id: String,
     pub parent: LiveSessionId,
     pub role: String,

@@ -226,6 +226,32 @@ fn fill_request(body: &mut ChildSpawnRequest, permission: &ChildApproval) {
     body.risk_confirmed |= permission.risk_confirmed;
 }
 
+/// Resolve billing without mutating permission fields before a human chooses a
+/// tier. The ordinary launch preparation remains the sole permission owner.
+pub fn billing_selection(
+    body: &ResolvedChildSpawn,
+    cfg: &Config,
+) -> Result<config::headless_billing::ResolvedBilling, ConfigError> {
+    let mode = execution_mode(body.request(), body.origin(), cfg)?;
+    let request = body.request();
+    if request.billing_mode == config::headless_billing::API_KEY
+        && !request.subscription_profile_id.is_empty()
+    {
+        return Err(ConfigError::invalid(
+            "API billing cannot select a subscription profile",
+        ));
+    }
+    config::headless_billing::validate_selection(
+        &request.provider,
+        &mode,
+        &request.billing_mode,
+        &request.billing_profile,
+        request.max_budget_usd,
+        &request.route,
+    )
+    .map_err(|error| ConfigError::invalid(error.to_string()))
+}
+
 /// Only server-resolved provenance can reach the actual launch preparation.
 /// Configuration adds bounded tools through the internal grant field; request
 /// JSON cannot manufacture that list or a folder-trust grant.
@@ -235,6 +261,23 @@ pub fn prepare(
 ) -> Result<ResolvedChildSpawn, ConfigError> {
     let mode = execution_mode(body.request(), body.origin(), cfg)?;
     body.request_mut().execution_mode = mode;
+    let request = body.request();
+    config::headless_billing::validate_selection(
+        &request.provider,
+        &request.execution_mode,
+        &request.billing_mode,
+        &request.billing_profile,
+        request.max_budget_usd,
+        &request.route,
+    )
+    .map_err(|error| ConfigError::invalid(error.to_string()))?;
+    if body.request().billing_mode == config::headless_billing::API_KEY
+        && !body.request().subscription_profile_id.is_empty()
+    {
+        return Err(ConfigError::invalid(
+            "API billing cannot select a subscription profile",
+        ));
+    }
     let permission = resolve_permission(
         &body.request().provider,
         &body.request().permission_preset,

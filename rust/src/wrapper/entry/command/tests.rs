@@ -206,6 +206,13 @@ mod native {
                     serde_json::to_string(&Message {
                         r#type: "registered".into(),
                         session_id: 17,
+                        // Mirror the Hub's trusted per-incarnation ACK for
+                        // headless runs; interactive ACKs still carry no data.
+                        data: if registration.execution_mode == "headless" {
+                            br#"{"headless_run_id":"17:1"}"#.to_vec()
+                        } else {
+                            vec![]
+                        },
                         ..Default::default()
                     })
                     .unwrap()

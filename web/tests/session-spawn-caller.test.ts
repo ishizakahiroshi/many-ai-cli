@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+import { receiveHeadlessProgress, setHeadlessConnected } from '../src/app/headless-progress.js';
 import * as tracking from '../src/app/session-spawn-state.js';
 import * as tabs from '../src/app/session-list-tab-state.js';
 import { buildDeriveBody } from '../src/app/derive-dialog-store.js';
@@ -96,7 +97,7 @@ test('actual grid caller opens only its correlated identities, including after H
 test('actual snapshot caller builds the FULL session map before family correlation',()=>{
  const text=source('ws-client.ts'),start=text.indexOf("  if (m.type === 'snapshot') {"),end=text.indexOf("  } else if (m.type === 'session_update')",start);
  const sessions=new Map();let seen:number[]=[];
- const noop=()=>{};const ctx:any={sessions,_hubInstance:'',_pendingOpenSessionId:0,pendingOpenFromReconnect:false,
+ const noop=()=>{};const ctx:any={receiveHeadlessProgress,setHeadlessConnected,sessions,_hubInstance:'',_pendingOpenSessionId:0,pendingOpenFromReconnect:false,
   purgeLocalStateForHubRestart:noop,setApprovalFoldScope:noop,requestSessionDismiss:noop,deriveProjectKeyFromCwd:()=> 'example',addToSessionOrder:noop,
   noteSpawnSnapshot:(_instance:string,all:any[])=>{seen=all.map(s=>s.id);assert.equal(all.find(s=>s.id===2).parent_session_id,1);},
   document:{dispatchEvent:noop,getElementById:()=>({textContent:''})},Event:class{},window:{},t:(key:string)=>key,
@@ -139,4 +140,23 @@ test('delayed actual correlation WS branch refreshes the open mobile drawer afte
  runInNewContext(compile('function apply(m:any) {\n'+text.slice(start,end)+'\n}\nglobalThis.apply=apply;'),ctx);
  ctx.apply({type:'session_spawn_correlated',client_request_id:request,session_id:1,started_at:'start-1',hub_instance:'hub-A'});
  assert.equal(calls,1);assert.deepEqual(drawerIds,[1]);
+});
+
+test('actual headless progress caller preserves disabled input and blocks all text sends',()=>{
+ const text=source('ws-client.ts'),start=text.indexOf("  if (m.type === 'headless_progress') {"),end=text.indexOf("  if (m.type === 'session_spawn_correlated')",start);
+ const row:any={id:17,execution_mode:'headless',state:'running'};
+ const input:any={value:'synthetic pasted text',disabled:false};let sends=0,refreshes=0;
+ const ctx:any={sessions:new Map([[17,row]]),activeSessionId:17,receiveHeadlessProgress,inputEl:input,
+  refreshHeadlessProgress:()=>{refreshes++;},isActiveSessionRunning:()=>true,stopKeyForActiveSession:()=> '\x1b',
+  t:(key:string)=>key,pastedTexts:[],pendingAttachFiles:[],document:{getElementById:()=>null},showToast:()=>{},
+  isWebSocketSendReady:()=>true,ws:{send:()=>{sends++;}},notifySendFailure:()=>{}};
+ const app=readFileSync(new URL('../src/app.ts',import.meta.url),'utf8');
+ const section=(name:string,next:string)=>app.slice(app.indexOf('export function '+name),app.indexOf('export function '+next));
+ runInNewContext(compile(section('isSessionHeadless','stopKeyForActiveSession')+section('updateInputAffordance','renderPasteChips')+section('sendText','requestSessionDismiss'))+'\nglobalThis.update=updateInputAffordance; globalThis.send=sendText;',ctx);
+ runInNewContext(compile('function apply(m:any) {\n'+text.slice(start,end)+'\n}\nglobalThis.apply=apply;'),ctx);
+ ctx.update();assert.equal(input.disabled,true);
+ ctx.apply({type:'headless_progress',session_id:17,headless_progress:{version:1,run_id:'17:1',sequence:1,billing_mode:'api-key',observed_turns:1,result_turns:null,active_tools:[],started_at_ms:1,elapsed_ms:2,ended_at_ms:null,cost:{amount_usd:null,currency:'USD',kind:'unavailable',coverage:'unavailable'},last_assistant:'safe',state:'running',data_incomplete:false,final_cost_missing:false}});
+ ctx.update();assert.equal(refreshes,1);assert.equal(input.disabled,true);
+ for(const value of ['typed text','pasted text','\x03'])assert.equal(ctx.send(17,value),false);
+ assert.equal(sends,0);
 });

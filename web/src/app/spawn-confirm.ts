@@ -26,6 +26,7 @@ import {
   closeSpawnConfirmation,
   isDialogControllerOpen,
   noteSpawnConfirmationRequested,
+  refreshSpawnConfirmationDisclosure,
   pendingSpawnConfirmationCount,
   registerDialogController,
   selectOldestPendingConfirmationFor,
@@ -317,6 +318,19 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_confirm_permission_preset'))}</span>
         <select name="permission_preset" class="spawn-select">${permissionPresetOptionsHtml(record.permissionPreset)}</select>
       </label>
+      <label class="spawn-confirm-field">
+        <span class="spawn-confirm-field-label">${escapeHtml(t('headless_billing_label'))}</span>
+        <select name="billing_mode" class="spawn-select"><option value="plan-login"${record.billingMode !== 'api-key' ? ' selected' : ''}>${escapeHtml(t('headless_plan'))}</option><option value="api-key"${record.billingMode === 'api-key' ? ' selected' : ''}>${escapeHtml(t('headless_api'))}</option></select>
+      </label>
+      <label class="spawn-confirm-field" data-billing-api>
+        <span class="spawn-confirm-field-label">${escapeHtml(t('headless_profile_label'))}</span>
+        <select name="billing_profile" class="spawn-select"><option value="">${escapeHtml(t('headless_profile_choose'))}</option>${(record.billingProfiles || []).map(p => `<option value="${escapeHtml(p.id)}"${p.id === record.billingProfile ? ' selected' : ''}>${escapeHtml(p.display_name)} (${escapeHtml(p.provider)})</option>`).join('')}</select>
+      </label>
+      <label class="spawn-confirm-field" data-billing-api>
+        <span class="spawn-confirm-field-label">${escapeHtml(t('headless_budget_label'))}</span>
+        <input name="max_budget_usd" type="number" min="0.000001" step="any" autocomplete="off" value="${record.maxBudgetUsd ?? ''}">
+      </label>
+      <p data-billing-api>${escapeHtml(t('headless_api_notice'))}</p>
       <label class="spawn-confirm-remember">
         <input type="checkbox" name="remember_permission"${record.rememberPermission ? ' checked' : ''}>
         <span>${escapeHtml(t('spawn_confirm_remember_permission'))}</span>
@@ -353,6 +367,15 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   const effortSelect = dialog.querySelector('[data-spawn-confirm-effort]') as HTMLSelectElement | null;
   const presetSelect = dialog.querySelector('[name=permission_preset]') as HTMLSelectElement | null;
   const executionSelect = dialog.querySelector('[name=execution_mode]') as HTMLSelectElement | null;
+  const billingSelect = dialog.querySelector('[name=billing_mode]') as HTMLSelectElement;
+  const billingProfile = dialog.querySelector('[name=billing_profile]') as HTMLSelectElement;
+  const billingBudget = dialog.querySelector('[name=max_budget_usd]') as HTMLInputElement;
+  const refreshBilling = () => {
+    const api = billingSelect.value === 'api-key';
+    dialog.querySelectorAll<HTMLElement>('[data-billing-api]').forEach(el => { el.hidden = !api; });
+  };
+  billingSelect.addEventListener('change', refreshBilling);
+  refreshBilling();
   const rememberInput = dialog.querySelector('[name=remember_permission]') as HTMLInputElement | null;
   const trustField = dialog.querySelector('[data-spawn-confirm-trust]') as HTMLElement | null;
   const trustText = dialog.querySelector('[data-spawn-confirm-trust-text]') as HTMLElement | null;
@@ -502,7 +525,14 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       showStatus(t('spawn_model_provider_mismatch'));
       return;
     }
+    const apiBilling = billingSelect.value === 'api-key';
+    const budget = Number(billingBudget.value);
+    if (approved && apiBilling && (providerVal !== 'claude' || executionSelect?.value !== 'headless'
+        || !billingProfile.value || !Number.isFinite(budget) || budget <= 0)) {
+      showStatus(t('headless_billing_invalid')); return;
+    }
     state = 'deciding';
+    billingSelect.disabled = true; billingProfile.disabled = true; billingBudget.disabled = true;
     if (providerSelect) providerSelect.disabled = true;
     if (modelInput) modelInput.disabled = true;
     for (const name of ['effort', 'execution_mode', 'permission_preset']) {
@@ -535,7 +565,16 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       execution_mode: executionModeVal,
       permission_preset: permissionPresetVal,
     };
-    if (approved) payload.remember_permission = !!rememberInput?.checked;
+    if (approved) {
+      payload.remember_permission = !!rememberInput?.checked;
+      payload.billing_mode = apiBilling ? 'api-key' : 'plan-login';
+      // Billing is only in this decision. Never put it into role/local storage.
+      payload.billing_profile = apiBilling ? billingProfile.value : '';
+      if (apiBilling) {
+        payload.max_budget_usd = budget;
+        payload.billing_revision = record.billingRevision || '';
+      }
+    }
     // 信頼の登録は、チェックボックスを出しているときに承認した場合だけ送る。
     const grantFolderTrust = folderTrustDecision(!!trustField && !trustField.hidden, !!trustInput?.checked, approved);
     if (grantFolderTrust !== undefined) payload.grant_folder_trust = grantFolderTrust;
@@ -546,6 +585,14 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
         body: JSON.stringify(payload),
       });
       if (state !== 'deciding') return; // 既に broadcast 経由で terminal 済み。
+      const responseBody = !res.ok ? await res.json().catch(() => ({})) : {};
+      if (responseBody.error === 'billing_profile_changed') {
+        state = 'terminal';
+        const refreshed = refreshSpawnConfirmationDisclosure(record.id, record.parentId, responseBody.confirmation);
+        showStatus(t(refreshed ? 'headless_profile_changed' : 'spawn_confirm_submit_failed'));
+        setActionsToClose();
+        return;
+      }
       const decision = spawnConfirmDecisionFromHttp(res.ok, res.status);
       if (decision.waitForCloseBroadcast) {
         // Hub accepted the decision. Wait briefly for spawn_confirmation_closed,

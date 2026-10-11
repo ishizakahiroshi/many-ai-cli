@@ -1,3 +1,5 @@
+import { receiveHeadlessProgress, setHeadlessConnected } from './headless-progress.js';
+import { refreshHeadlessProgress } from './headless-progress-dom.js';
 import { noteSpawnCorrelation, noteSpawnDisconnected, noteSpawnSessions, noteSpawnSnapshot } from './session-spawn-tracker.js';
 import { preserveSessionListSelection } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
@@ -239,7 +241,9 @@ export function _connectWs() {
     if (_wsWatchdog) { clearInterval(_wsWatchdog); _wsWatchdog = null; }
     if (_elapsedTimerInterval) { clearInterval(_elapsedTimerInterval); set__elapsedTimerInterval(null); }
     if (activeSessionId !== null) _lastActiveSessionIdBeforeDisconnect = activeSessionId;
+    setHeadlessConnected(false);
     sessions.clear();
+    refreshHeadlessProgress();
     noteSpawnDisconnected();
     resetUsageCache();
     autoDismissTimers.forEach(t => clearTimeout(t));
@@ -552,6 +556,14 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'headless_progress') {
+    const session = sessions.get(Number(m.session_id));
+    if (!session || session.execution_mode !== 'headless') return;
+    const progress = receiveHeadlessProgress(m.headless_progress, session.headless_progress);
+    if (progress) { session.headless_progress = progress; refreshHeadlessProgress(); }
+    return;
+  }
+
   if (m.type === 'session_spawn_correlated') {
     noteSpawnCorrelation({ client_request_id: String(m.client_request_id || ''), session_id: Number(m.session_id),
       started_at: String(m.started_at || ''), hub_instance: String(m.hub_instance || '') }, Array.from(sessions.values()));
@@ -578,8 +590,9 @@ export function _connectWs() {
     // 承認の畳み状態は Hub の起動ごとに分ける（セッション番号が振り直されるため）。
     // Hub はこの snapshot の後に approval_snapshot を送るので、まとめの適用より先に渡る。
     if (inst) setApprovalFoldScope(inst);
+    setHeadlessConnected(true);
     (arr || []).forEach(s => {
-      if (s.state === 'completed') {
+      if (s.state === 'completed' && s.execution_mode !== 'headless') {
         requestSessionDismiss(s.id);
         return;
       }
@@ -590,6 +603,7 @@ export function _connectWs() {
 			s.awaiting_user = s.activity.awaiting_user;
 			s.awaiting_approval = s.activity.awaiting_approval;
 		}
+      if (s.execution_mode === "headless") s.headless_progress = receiveHeadlessProgress(s.headless_progress);
       s.project = deriveProjectKeyFromCwd(s.cwd);
       sessions.set(s.id, s);
       addToSessionOrder(s.id);
@@ -615,7 +629,7 @@ export function _connectWs() {
     checkApprovalOnStartup();
     syncElapsedTimer();
   } else if (m.type === 'session_update') {
-    if (m.state === 'completed') {
+    if (m.state === 'completed' && m.execution_mode !== 'headless' && sessions.get(m.session_id)?.execution_mode !== 'headless') {
       requestSessionDismiss(m.session_id);
       removeLocalSession(m.session_id);
       return;
@@ -697,6 +711,7 @@ export function _connectWs() {
     if (m.jsonl_path)      cur.jsonl_path      = m.jsonl_path;
     if (m.model !== undefined) cur.model       = m.model;
     if (m.effort !== undefined) cur.effort      = m.effort;
+    if (m.execution_mode !== undefined) cur.execution_mode = m.execution_mode;
     // 起動時の権限モード。register 直後の announce で 1 度だけ届く値なので、
     // ここで拾わないとカードのチップは再接続（snapshot）まで出ない。
     if (m.permission_mode !== undefined) cur.permission_mode = m.permission_mode;
@@ -767,8 +782,8 @@ export function _connectWs() {
       activateSession(m.session_id);
     }
   } else if (m.type === 'session_end') {
-    window.multiPaneManager?.onSessionEnded?.(m.session_id);
-    if ((m.state || 'disconnected') === 'completed') {
+    if (sessions.get(m.session_id)?.execution_mode !== 'headless') window.multiPaneManager?.onSessionEnded?.(m.session_id);
+    if ((m.state || 'disconnected') === 'completed' && sessions.get(m.session_id)?.execution_mode !== 'headless') {
       requestSessionDismiss(m.session_id);
       removeLocalSession(m.session_id);
       return;
@@ -788,7 +803,7 @@ export function _connectWs() {
     // (docs/local/bugfix_session-silent-auto-dismiss_2026-07-21.md) を受け、
     // 元の 5s から 24h へ延長。実質「席を戻したときはまだ残っている」を確保しつつ、
     // 何日も放置した死セッションは翌日には自動で片付く。
-    if (deadStates.includes(m.state) && !autoDismissTimers.has(m.session_id)) {
+    if (s?.execution_mode !== 'headless' && deadStates.includes(m.state) && !autoDismissTimers.has(m.session_id)) {
       const timer = setTimeout(() => {
         autoDismissTimers.delete(m.session_id);
         dismissSession(m.session_id);

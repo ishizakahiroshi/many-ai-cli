@@ -115,8 +115,50 @@ impl SessionHooks {
         hub_token: &str,
         native_windows: bool,
     ) -> io::Result<Vec<String>> {
+        self.claude_settings_inner(
+            paths,
+            registered,
+            executable,
+            hub_port,
+            hub_token,
+            native_windows,
+            None,
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn claude_billing_settings(
+        &mut self,
+        paths: &RuntimePaths,
+        registered: &Message,
+        executable: &Path,
+        hub_port: u16,
+        hub_token: &str,
+        native_windows: bool,
+        recipe: &crate::config::headless_billing::PrivateRecipe,
+    ) -> io::Result<Vec<String>> {
+        self.claude_settings_inner(
+            paths,
+            registered,
+            executable,
+            hub_port,
+            hub_token,
+            native_windows,
+            Some(recipe),
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn claude_settings_inner(
+        &mut self,
+        paths: &RuntimePaths,
+        registered: &Message,
+        executable: &Path,
+        hub_port: u16,
+        hub_token: &str,
+        native_windows: bool,
+        recipe: Option<&crate::config::headless_billing::PrivateRecipe>,
+    ) -> io::Result<Vec<String>> {
         let cross = !native_windows && registered.auto && !registered.orchestration_id.is_empty();
-        if !registered.token_statusbar && !cross {
+        if !registered.token_statusbar && !cross && recipe.is_none() {
             return Ok(vec![]);
         }
         let mut doc = serde_json::Map::new();
@@ -135,7 +177,11 @@ impl SessionHooks {
         if cross {
             doc.insert("crossSessionInbound".into(), Value::String("accept".into()));
         }
-        let mut bytes = serde_json::to_vec_pretty(&doc).map_err(io::Error::other)?;
+        if let Some(recipe) = recipe {
+            recipe.insert_settings(&mut doc);
+        }
+        let mut bytes = serde_json::to_vec_pretty(&doc)
+            .map_err(|_| io::Error::other("Claude private settings encoding failed"))?;
         bytes.push(b'\n');
         let path = self.write(
             paths,

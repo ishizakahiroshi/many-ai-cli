@@ -4,6 +4,7 @@
 //! The runtime resolves executables, satisfies the listed hooks, registers the
 //! session, then prepends the prepared prompt after its last argument addition.
 use crate::config::{self, Config, HeadlessDef, Resource, RuntimePaths};
+pub mod billing;
 use crate::files::safe_fs::Dir;
 use crate::profile::registry::{self, Registry};
 use crate::proto::provider::{EffectiveDefinition, LaunchRequest, Layers};
@@ -34,6 +35,10 @@ pub struct WrapperArgs {
     pub subscription_login: bool,
     pub headless: bool,
     pub prompt_file: String,
+    pub billing_mode: String,
+    pub billing_profile: String,
+    pub billing_revision: String,
+    pub max_budget_usd: String,
     pub provider_args: Vec<String>,
     pub parse_error: Option<String>,
 }
@@ -91,6 +96,10 @@ impl WrapperArgs {
                 "sandbox" => Some(&mut parsed.sandbox),
                 "ask-for-approval" => Some(&mut parsed.ask_for_approval),
                 "prompt-file" => Some(&mut parsed.prompt_file),
+                "billing-mode" => Some(&mut parsed.billing_mode),
+                "billing-profile" => Some(&mut parsed.billing_profile),
+                "billing-revision" => Some(&mut parsed.billing_revision),
+                "max-budget-usd" => Some(&mut parsed.max_budget_usd),
                 _ => None,
             };
             let Some(target) = target else {
@@ -166,6 +175,7 @@ impl LaunchHook {
 /// Provider arguments exclude the prompt body and later session-owned hooks.
 /// No Debug implementation: arbitrary custom arguments may carry credentials.
 pub struct LaunchPlan {
+    pub billing: config::headless_billing::ResolvedBilling,
     pub provider: String,
     pub args: WrapperArgs,
     pub provider_args: Vec<String>,
@@ -222,6 +232,47 @@ pub fn prepare_launch_with_definition(
     let custom = config::effective_custom_providers(&cfg.custom_providers)
         .into_iter()
         .find(|p| p.id == provider);
+    let budget = if args.max_budget_usd.is_empty() {
+        None
+    } else {
+        Some(
+            args.max_budget_usd
+                .parse::<f64>()
+                .map_err(|_| LaunchError("invalid headless billing budget".into()))?,
+        )
+    };
+    let mut billing = config::headless_billing::validate_selection(
+        provider,
+        if args.headless {
+            "headless"
+        } else {
+            "interactive"
+        },
+        &args.billing_mode,
+        &args.billing_profile,
+        budget,
+        "",
+    )
+    .map_err(|error| LaunchError(error.to_string()))?;
+    if !billing.is_api() && !args.billing_revision.is_empty() {
+        return Err(LaunchError(
+            "plan-login cannot include API billing configuration".into(),
+        ));
+    }
+    billing.revision.clone_from(&args.billing_revision);
+    if billing.is_api()
+        && (args.subscription_login
+            || billing.revision.len() != 64
+            || !billing.revision.bytes().all(|c| c.is_ascii_hexdigit()))
+    {
+        return Err(LaunchError(
+            "API billing requires a confirmed profile revision".into(),
+        ));
+    }
+    if args.headless && provider == "claude" {
+        billing::validate_provider_args(&args.provider_args, billing.is_api())
+            .map_err(|error| LaunchError(error.to_string()))?;
+    }
     let login_mode = args.subscription_login;
     if login_mode && args.headless {
         return Err(LaunchError(
@@ -398,6 +449,7 @@ pub fn prepare_launch_with_definition(
         required_hooks.push(LaunchHook::Utf8Console);
     }
     Ok(LaunchPlan {
+        billing,
         provider: provider.into(),
         label: args.label.clone(),
         model: args.model.clone(),

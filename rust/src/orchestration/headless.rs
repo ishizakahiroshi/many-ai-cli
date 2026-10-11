@@ -286,3 +286,441 @@ impl LineFramer {
 pub fn raw_log_path(paths: &RuntimePaths, relative: &Path) -> io::Result<PathBuf> {
     paths.checked_child(Resource::Logs, relative)
 }
+
+/// Structured Claude execution uses a bounded allowlist parser for every public
+/// output. API billing also disables raw files and process capture, defensively
+/// here as well as at the wrapper boundary. The legacy runner remains available
+/// for the unchanged Go-oracle contract; production headless uses this entry.
+pub async fn run_with_progress(
+    mut spec: Spec,
+    run_id: String,
+    strict_api: bool,
+    cancel: &Cancellation,
+    mut emit: impl FnMut(&[u8]),
+    mut progress: impl FnMut(super::headless_progress::HeadlessProgress),
+) -> io::Result<RunResult> {
+    use super::headless_progress::{ProgressParser, ProgressState, StrictLineFramer};
+    use std::time::{Duration, Instant};
+    let format = parser_for(&spec.format).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "headless output format unsupported",
+        )
+    })?;
+    let structured = format == Parser::ClaudeStreamJson;
+    if strict_api && !structured {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "API billing requires structured output",
+        ));
+    }
+    if strict_api {
+        spec.raw_logs = None;
+        spec.process.output_cap = 0;
+    }
+    spec.process.stdin = if normalize_headless_prompt_via(&spec.prompt_via) == "stdin" {
+        spec.prompt.into_bytes()
+    } else {
+        vec![]
+    };
+    let now = chrono::Utc::now().timestamp_millis();
+    let mut tracker = ProgressParser::new(run_id.clone(), now);
+    // Trusted run IDs, never a provider's session/response ID.
+    super::headless_progress::HeadlessProgress::new(run_id.clone(), now)
+        .validate()
+        .map_err(io::Error::other)?;
+    if cancel.is_cancelled() {
+        let output = ProcessOutput {
+            stdout: vec![],
+            stderr: vec![],
+            stdout_truncated: false,
+            stderr_truncated: false,
+            pipes_forced_closed: false,
+            outcome: ExitOutcome::Cancelled,
+        };
+        progress(tracker.finish(&output, 0, 0));
+        return Ok(RunResult::from_output(output, 0, vec![]));
+    }
+    let (mut raw_out, mut raw_err, mut raw_errors) = open_raw_logs(spec.raw_logs.as_ref());
+    let (mut process, mut receiver) =
+        ManagedProcess::spawn_owned(spec.process, spec.event_capacity.max(1));
+    let mut strict_stdout = StrictLineFramer::default();
+    let mut stdout = LineFramer::default();
+    let mut stderr = LineFramer::default();
+    let mut started = None;
+    let mut dropped = 0u64;
+    let mut canceled = false;
+    let mut lost = false;
+    let mut ticker = tokio::time::interval(Duration::from_millis(250));
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut last_heartbeat = 0;
+    let mut last_terminal = None;
+    loop {
+        tokio::select! {
+            biased;
+            _ = cancel.cancelled(), if !canceled => { process.close(); canceled = true; },
+            _ = ticker.tick(), if started.is_some() => {
+                let elapsed = started.map(|at: Instant| at.elapsed().as_millis() as u64).unwrap_or(0);
+                let heartbeat = elapsed.saturating_sub(last_heartbeat) >= 1000;
+                if heartbeat { tracker.heartbeat(); last_heartbeat = elapsed; }
+                if let Some(snapshot) = tracker.snapshot(elapsed) {
+                    // Heartbeats advance clocks without filling terminal history
+                    // with repeated copies of the same completed utterance.
+                    let key = (snapshot.state, snapshot.observed_turns, snapshot.result_turns, snapshot.active_tools.clone(), snapshot.cost.clone(), snapshot.last_assistant.clone(), snapshot.data_incomplete);
+                    if structured && last_terminal.as_ref() != Some(&key) { emit(snapshot.terminal_line().as_bytes()); last_terminal = Some(key); }
+                    progress(snapshot);
+                }
+            },
+            event = receiver.recv() => match event {
+                Ok(ProcessEvent::Started { .. }) => {
+                    started = Some(Instant::now());
+                    tracker = ProgressParser::new(run_id.clone(), chrono::Utc::now().timestamp_millis());
+                    if let Some(snapshot) = tracker.snapshot(0) { progress(snapshot); }
+                },
+                Ok(ProcessEvent::Output { stream, bytes }) if !lost => {
+                    if structured {
+                        if !strict_api {
+                            // Plan-mode raw logging remains an explicit existing
+                            // opt-in. It is never a source for public projection.
+                            let raw = if stream == OutputStream::Stdout { &mut raw_out } else { &mut raw_err };
+                            if let Some(file) = raw && file.write_all(&bytes).is_err() { raw_errors.push("headless raw log write failed".into()); *raw = None; }
+                        }
+                        if stream == OutputStream::Stdout {
+                            strict_stdout.push(&bytes, |line| match line { Some(line) => tracker.observe(line), None => tracker.mark_incomplete() });
+                            if tracker.has_incomplete_data() { process.close(); lost = true; strict_stdout.clear(); }
+                        }
+                        // stderr never becomes public text, including auth errors.
+                    } else {
+                        let (framer, raw) = if stream == OutputStream::Stdout { (&mut stdout, &mut raw_out) } else { (&mut stderr, &mut raw_err) };
+                        framer.push(&bytes, |line| deliver(line, stream, format, raw, &mut raw_errors, &mut emit));
+                    }
+                },
+                Ok(ProcessEvent::Output { .. }) => {},
+                Err(RecvError::Closed) => break,
+                Err(RecvError::Lagged(count)) => {
+                    dropped = dropped.saturating_add(count);
+                    lost = true;
+                    strict_stdout.clear(); stdout.clear(); stderr.clear();
+                    tracker.mark_incomplete(); process.close();
+                },
+            }
+        }
+    }
+    if !lost {
+        if structured {
+            strict_stdout.finish(|line| match line {
+                Some(line) => tracker.observe(line),
+                None => tracker.mark_incomplete(),
+            });
+        } else {
+            stdout.finish(|line| {
+                deliver(
+                    line,
+                    OutputStream::Stdout,
+                    format,
+                    &mut raw_out,
+                    &mut raw_errors,
+                    &mut emit,
+                )
+            });
+            stderr.finish(|line| {
+                deliver(
+                    line,
+                    OutputStream::Stderr,
+                    format,
+                    &mut raw_err,
+                    &mut raw_errors,
+                    &mut emit,
+                )
+            });
+        }
+    }
+    let output = loop {
+        tokio::select! {
+            result = process.wait() => break match result {
+                Ok(output) => output,
+                Err(error) => {
+                    let output = ProcessOutput { stdout: vec![], stderr: vec![], stdout_truncated: false, stderr_truncated: false, pipes_forced_closed: false, outcome: ExitOutcome::Exited { code: Some(-1), signal: None } };
+                    let elapsed = started.map(|at| at.elapsed().as_millis() as u64).unwrap_or(0);
+                    let final_progress = tracker.finish(&output, dropped, elapsed);
+                    if structured { emit(final_progress.terminal_line().as_bytes()); }
+                    progress(final_progress);
+                    return Err(if strict_api { io::Error::new(error.kind(), "headless provider execution failed") } else { error });
+                }
+            },
+            _ = cancel.cancelled(), if !canceled => { process.close(); canceled = true; }
+        }
+    };
+    let elapsed = started
+        .map(|at| at.elapsed().as_millis() as u64)
+        .unwrap_or(0);
+    let final_progress = tracker.finish(&output, dropped, elapsed);
+    let failed = final_progress.state != ProgressState::Completed;
+    if structured {
+        emit(final_progress.terminal_line().as_bytes());
+    }
+    progress(final_progress);
+    let mut result = RunResult::from_output(output, dropped, raw_errors);
+    if failed {
+        result.state = "error".into();
+    }
+    Ok(result)
+}
+
+#[cfg(test)]
+mod progress_contracts {
+    use super::*;
+    use crate::orchestration::headless_progress::{CostKind, ProgressState};
+    use std::{collections::BTreeMap, time::Duration};
+
+    fn fixture(mode: &str, dir: &Path) -> Spec {
+        let records = [
+            r#"{"type":"system","subtype":"init","auth":"PRIVATE_INIT_SENTINEL"}"#,
+            r#"{"type":"system","subtype":"permission_denied","message":"PRIVATE_SYSTEM_SENTINEL","tool_name":"Bash","tool_use_id":"tool_zero"}"#,
+            r#"{"type":"user","message":{"role":"user","content":"PRIVATE_USER_SENTINEL"}}"#,
+            r#"{"type":"stream_event","event":{"type":"message_start","message":{"id":"msg_one","model":"claude-sonnet-4-5-20250929","usage":{"input_tokens":1000}}}}"#,
+            r#"{"type":"stream_event","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}"#,
+            r#"{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"PRIVATE_PARTIAL_SENTINEL"}}}"#,
+            r#"{"type":"assistant","uuid":"text-zero","message":{"id":"msg_one","content":[{"type":"text","text":"Ready sk-ant-"}]}}"#,
+            r#"{"type":"stream_event","event":{"type":"content_block_stop","index":0}}"#,
+            r#"{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}}"#,
+            r#"{"type":"assistant","uuid":"text-one","message":{"id":"msg_one","content":[{"type":"text","text":"SYNTHETIC_ONLY_NOT_A_REAL_KEY_1234567890"}]}}"#,
+            r#"{"type":"stream_event","event":{"type":"content_block_stop","index":1}}"#,
+            r#"{"type":"stream_event","event":{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"tool_1","name":"Read","input":{"command":"PRIVATE_ARGUMENT_SENTINEL"}}}}"#,
+            r#"{"type":"assistant","uuid":"tool-two","message":{"id":"msg_one","content":[{"type":"tool_use","id":"tool_1","name":"Read","input":{"command":"PRIVATE_ARGUMENT_SENTINEL"}}]}}"#,
+            r#"{"type":"stream_event","event":{"type":"content_block_stop","index":2}}"#,
+            r#"{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":30}}}"#,
+            r#"{"type":"stream_event","event":{"type":"message_stop"}}"#,
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tool_1","content":"PRIVATE_RESULT_SENTINEL"}]}}"#,
+            r#"{"type":"result","subtype":"success","num_turns":2,"total_cost_usd":0.123,"result":"PRIVATE_RESULT_TEXT_SENTINEL"}"#,
+        ];
+        // A fixed synthetic file avoids libtest's stdout preamble. No provider,
+        // credential or user configuration is touched by these child processes.
+        let body = match mode {
+            "safe" | "bad_exit" | "split_records" => records.join("\n"), // final record has no LF
+            "api_error" => [
+                r#"{"type":"assistant","is_api_error_message":true,"error":"authentication_failed","message":{"id":"error","content":[{"type":"text","text":"API Error: PRIVATE_ERROR_SENTINEL"}]}}"#,
+                r#"{"type":"result","subtype":"error_during_execution","is_error":true,"total_cost_usd":0.01}"#,
+            ].join("\n"),
+            "malformed" => "PRIVATE_BAD_JSON_SENTINEL\n".into(),
+            "sleep" => String::new(),
+            "burst" => "{\"type\":\"system\"}\n".repeat(100_000),
+            _ => panic!("unknown synthetic mode"),
+        };
+        std::fs::write(dir.join("synthetic-progress.jsonl"), body).unwrap();
+        let exit = if mode == "bad_exit" { 7 } else { 0 };
+        #[cfg(unix)]
+        let (executable, args) = (
+            "/bin/sh",
+            vec![
+                "-c".into(),
+                if mode == "sleep" {
+                    "sleep 2".into()
+                } else if mode == "split_records" {
+                    "while IFS= read -r line || [ -n \"$line\" ]; do printf '%s\\n' \"$line\"; sleep 0.08; done < synthetic-progress.jsonl".into()
+                } else {
+                    format!("printf '%s\\n' 'PRIVATE_STDERR_SENTINEL' >&2; cat synthetic-progress.jsonl; exit {exit}").into()
+                },
+            ],
+        );
+        #[cfg(windows)]
+        let (executable, args) = (
+            "pwsh",
+            vec![
+                "-NoProfile".into(),
+                "-Command".into(),
+                if mode == "sleep" {
+                    "Start-Sleep -Seconds 2".into()
+                } else if mode == "split_records" {
+                    "Get-Content synthetic-progress.jsonl | ForEach-Object { [Console]::Out.WriteLine($_); [Console]::Out.Flush(); Start-Sleep -Milliseconds 80 }".into()
+                } else {
+                    format!("[Console]::Error.WriteLine('PRIVATE_STDERR_SENTINEL'); $b=[IO.File]::ReadAllBytes((Join-Path (Get-Location) 'synthetic-progress.jsonl')); [Console]::OpenStandardOutput().Write($b,0,$b.Length); exit {exit}").into()
+                },
+            ],
+        );
+        Spec {
+            process: ProcessPlan {
+                executable: executable.into(),
+                args,
+                cwd: dir.into(),
+                env: BTreeMap::new(),
+                stdin: vec![],
+                timeout: Duration::from_secs(5),
+                output_cap: 4096,
+                pipe_drain_timeout: Duration::from_millis(100),
+            },
+            prompt: String::new(),
+            prompt_via: "stdin".into(),
+            format: "claude-stream-json".into(),
+            raw_logs: None,
+            event_capacity: 1024,
+        }
+    }
+    #[tokio::test]
+    async fn api_projection_drops_raw_logs_capture_and_sentinel_bodies() {
+        let root = tempfile::tempdir().unwrap();
+        let installed = tempfile::tempdir().unwrap();
+        let paths = RuntimePaths::trial(root.path(), 49331, installed.path()).unwrap();
+        let mut spec = fixture("safe", root.path());
+        spec.raw_logs = Some(RawLogs {
+            paths: paths.clone(),
+            prefix: "should-not-exist".into(),
+        });
+        let mut terminal = vec![];
+        let mut snapshots = vec![];
+        let result = run_with_progress(
+            spec,
+            "1:2".into(),
+            true,
+            &Cancellation::default(),
+            |b| terminal.extend_from_slice(b),
+            |p| snapshots.push(p),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.state, "completed");
+        assert!(result.process_output.stdout.is_empty());
+        assert!(result.process_output.stderr.is_empty());
+        assert!(!paths.resource(Resource::Logs).exists());
+        let wire = serde_json::to_string(&snapshots).unwrap();
+        let terminal = String::from_utf8(terminal).unwrap();
+        assert!(!wire.contains("SENTINEL"));
+        assert!(!terminal.contains("SENTINEL"));
+        assert!(!wire.contains("SYNTHETIC_ONLY"));
+        assert!(!terminal.contains("SYNTHETIC_ONLY"));
+        let last = snapshots.last().unwrap();
+        assert_eq!(last.last_assistant, "Ready ***");
+        assert_eq!(last.cost.amount_usd, Some(0.123));
+        assert_eq!(last.result_turns, Some(2));
+        assert!(last.active_tools.is_empty());
+        assert_eq!(last.state, ProgressState::Completed);
+        last.validate().unwrap();
+        assert!(snapshots.windows(2).all(|s| s[0].sequence < s[1].sequence));
+    }
+    #[tokio::test]
+    async fn malformed_record_and_nonzero_exit_cannot_be_success() {
+        let root = tempfile::tempdir().unwrap();
+        for mode in ["malformed", "bad_exit"] {
+            let mut snapshots = vec![];
+            let mut terminal = vec![];
+            let result = run_with_progress(
+                fixture(mode, root.path()),
+                "1:2".into(),
+                true,
+                &Cancellation::default(),
+                |b| terminal.extend_from_slice(b),
+                |p| snapshots.push(p),
+            )
+            .await
+            .unwrap();
+            assert_eq!(result.state, "error");
+            assert_eq!(snapshots.last().unwrap().state, ProgressState::Failed);
+            assert!(!String::from_utf8(terminal).unwrap().contains("SENTINEL"));
+            if mode == "bad_exit" {
+                assert_eq!(snapshots.last().unwrap().cost.kind, CostKind::Result);
+            } else {
+                assert!(snapshots.last().unwrap().data_incomplete);
+            }
+        }
+    }
+    #[tokio::test]
+    async fn silent_run_has_monotonic_heartbeat_and_cancellation_freezes_final() {
+        let root = tempfile::tempdir().unwrap();
+        let cancel = Cancellation::default();
+        let child = cancel.clone();
+        // Cancel only after a real running heartbeat, rather than racing a
+        // timer started before the owned process has emitted Started. The
+        // fixture's process timeout still bounds a missing-heartbeat failure.
+        let mut snapshots = vec![];
+        run_with_progress(
+            fixture("sleep", root.path()),
+            "1:2".into(),
+            true,
+            &cancel,
+            |_| {},
+            |p| {
+                if p.state == ProgressState::Running && p.elapsed_ms >= 900 {
+                    child.cancel();
+                }
+                snapshots.push(p);
+            },
+        )
+        .await
+        .unwrap();
+        assert!(
+            snapshots
+                .iter()
+                .any(|p| p.state == ProgressState::Running && p.elapsed_ms >= 900)
+        );
+        assert_eq!(snapshots.last().unwrap().state, ProgressState::Canceled);
+        assert!(
+            snapshots
+                .windows(2)
+                .all(|s| s[0].elapsed_ms <= s[1].elapsed_ms)
+        );
+        assert!(snapshots.last().unwrap().ended_at_ms.is_some());
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn lag_marks_incomplete_and_stops_owned_provider() {
+        let root = tempfile::tempdir().unwrap();
+        let mut spec = fixture("burst", root.path());
+        spec.event_capacity = 1;
+        let mut snapshots = vec![];
+        let result = run_with_progress(
+            spec,
+            "1:2".into(),
+            true,
+            &Cancellation::default(),
+            |_| {},
+            |p| {
+                if snapshots.is_empty() {
+                    std::thread::sleep(Duration::from_millis(150));
+                }
+                snapshots.push(p);
+            },
+        )
+        .await
+        .unwrap();
+        assert!(result.dropped_chunks > 0);
+        assert_eq!(result.state, "error");
+        let last = snapshots.last().unwrap();
+        assert_eq!(last.state, ProgressState::Failed);
+        assert!(last.data_incomplete);
+    }
+    #[tokio::test]
+    async fn separated_record_process_never_emits_unmasked_fragments_or_error_bodies() {
+        let root = tempfile::tempdir().unwrap();
+        for mode in ["split_records", "api_error"] {
+            let mut snapshots = vec![];
+            let mut terminal = vec![];
+            let result = run_with_progress(
+                fixture(mode, root.path()),
+                "1:2".into(),
+                true,
+                &Cancellation::default(),
+                |b| terminal.extend_from_slice(b),
+                |p| snapshots.push(p),
+            )
+            .await
+            .unwrap();
+            let serialized = serde_json::to_string(&snapshots).unwrap();
+            let terminal = String::from_utf8(terminal).unwrap();
+            for forbidden in ["sk-ant-", "SYNTHETIC_ONLY", "PRIVATE_"] {
+                assert!(!serialized.contains(forbidden));
+                assert!(!terminal.contains(forbidden));
+            }
+            if mode == "split_records" {
+                assert_eq!(result.state, "completed");
+                assert!(snapshots.iter().any(|p| p.state == ProgressState::Running
+                    && p.elapsed_ms > 200
+                    && p.last_assistant.is_empty()));
+                assert_eq!(snapshots.last().unwrap().last_assistant, "Ready ***");
+                assert!(!snapshots.last().unwrap().data_incomplete);
+            } else {
+                assert_eq!(result.state, "error");
+                assert!(snapshots.iter().all(|p| p.last_assistant.is_empty()));
+                assert_eq!(snapshots.last().unwrap().state, ProgressState::Failed);
+            }
+        }
+    }
+}

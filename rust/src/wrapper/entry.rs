@@ -8,7 +8,10 @@ use super::{
 };
 use crate::{
     config::{Config, RuntimePaths},
-    orchestration::headless,
+    orchestration::{
+        headless,
+        headless_progress::{HeadlessProgress, ProgressState},
+    },
     process::{
         Cancellation, ProcessPlan,
         pty::{NativePtyFactory, PtyExit},
@@ -242,6 +245,7 @@ pub async fn run_cli(
     super::startup::strip_provider_environment(&mut process);
     let proof = env(context.environment, SPAWN_PROOF_ENV).map(str::to_owned);
     if launch.headless {
+        let strict_api = launch.billing.is_api();
         return run_headless(
             context,
             launch,
@@ -253,7 +257,14 @@ pub async fn run_cli(
             &connector,
             cancel,
         )
-        .await;
+        .await
+        .map_err(|error| {
+            if strict_api {
+                io::Error::new(error.kind(), "headless API launch failed")
+            } else {
+                error
+            }
+        });
     }
     let mut hooks = SessionHooks::default();
     let mut prompt: Option<PreparedLaunchPrompt> = None;
@@ -335,6 +346,7 @@ async fn run_headless(
     let (socket, registered) =
         register(connector, &registration, proof.as_deref(), timeout, cancel).await?;
     proof.take();
+    let run_id = registered_run_id(&registered)?;
     let mut hooks = SessionHooks::default();
     let mut args = launch.provider_args.clone();
     apply_hooks(&context, &launch, &registered, port, &mut hooks, &mut args)?;
@@ -344,6 +356,42 @@ async fn run_headless(
     );
     args = headless::build_argv(def, &args, &prompt);
     let resolver = CommandResolver::new(context.paths, context.environment, context.cwd);
+    if launch.provider == "claude" {
+        let probe = |flags: &[&str]| -> io::Result<ProcessPlan> {
+            let flags = flags.iter().map(|v| (*v).to_owned()).collect::<Vec<_>>();
+            let command = resolver.resolve_provider("claude", None, &flags)?;
+            let mut probe = process.clone();
+            probe.executable = command.executable.into();
+            probe.args = command.args.into_iter().map(Into::into).collect();
+            probe.stdin.clear();
+            Ok(probe)
+        };
+        let version_probe = probe(&["--version"])?;
+        let auth_probe = if launch.billing.is_api() {
+            None
+        } else {
+            Some(probe(&["auth", "status"])?)
+        };
+        launch::billing::prepare(
+            launch::billing::BillingContext {
+                paths: context.paths,
+                home_dir: context.home_dir,
+                cwd: context.cwd,
+                environment: context.environment,
+                launch: &launch,
+                registered: &registered,
+                executable: context.executable,
+                hub_port: port,
+                hub_token: &context.config.token,
+            },
+            &mut hooks,
+            &mut args,
+            Some(&version_probe),
+            auth_probe.as_ref(),
+            cancel,
+        )
+        .await?;
+    }
     let command =
         resolver.resolve_provider(&launch.provider, launch.custom_argv.as_deref(), &args)?;
     process.executable = command.executable.into();
@@ -356,75 +404,88 @@ async fn run_headless(
         "MANY_AI_CLI_HUB_TOKEN".into(),
         Some(context.config.token.clone().into()),
     );
+    let strict_api = launch.billing.is_api();
+    if strict_api {
+        process.output_cap = 0;
+    }
     let child_cancel = Cancellation::default();
     let output_cancel = child_cancel.clone();
+    let output_lost = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let lost_callback = output_lost.clone();
+    let lost_progress = output_lost.clone();
     let (tx, mut outputs) = tokio::sync::mpsc::channel::<Vec<u8>>(1024);
+    // Intentionally coalesce progress, never raw provider bytes. A final snapshot
+    // remains available even when execution wins select before the receiver.
+    let (progress_tx, mut latest) = tokio::sync::watch::channel::<Option<HeadlessProgress>>(None);
     let spec = headless::Spec {
         process,
         prompt,
         prompt_via: def.prompt_via.clone(),
         format: def.format.clone(),
-        raw_logs: context
-            .config
-            .log
-            .session_enabled
-            .then(|| headless::RawLogs {
-                paths: context.paths.clone(),
-                prefix: std::path::PathBuf::from("headless").join(format!(
-                    "{}_{}",
-                    launch.provider.replace(['/', '\\'], "_"),
-                    chrono::Local::now().format("%Y%m%d-%H%M%S.%3f")
-                )),
-            }),
+        raw_logs: (context.config.log.session_enabled && !strict_api).then(|| headless::RawLogs {
+            paths: context.paths.clone(),
+            prefix: std::path::PathBuf::from("headless").join(format!(
+                "{}_{}",
+                launch.provider.replace(['/', '\\'], "_"),
+                chrono::Local::now().format("%Y%m%d-%H%M%S.%3f")
+            )),
+        }),
         event_capacity: 1024,
     };
-    let execution = headless::run(spec, &child_cancel, move |bytes| {
-        if tx.try_send(bytes.to_vec()).is_err() {
-            output_cancel.cancel();
-        }
-    });
+    let execution = headless::run_with_progress(
+        spec,
+        run_id,
+        strict_api,
+        &child_cancel,
+        move |bytes| {
+            if tx.try_send(bytes.to_vec()).is_err() {
+                lost_callback.store(true, std::sync::atomic::Ordering::Relaxed);
+                output_cancel.cancel();
+            }
+        },
+        move |mut snapshot| {
+            if lost_progress.load(std::sync::atomic::Ordering::Relaxed) {
+                snapshot.data_incomplete = true;
+                if snapshot.state.is_terminal() {
+                    snapshot.state = ProgressState::Failed;
+                }
+            }
+            progress_tx.send_replace(Some(snapshot));
+        },
+    );
     tokio::pin!(execution);
     let mut socket = Some(socket);
     let mut total = 0i64;
     let mut cancel_seen = false;
     let mut output_open = true;
+    let mut progress_open = true;
+    let mut last_sequence = 0;
     let result = loop {
         enum Event {
             Output(Option<Vec<u8>>),
+            Progress(Result<(), tokio::sync::watch::error::RecvError>),
             Frame(io::Result<Box<Message>>),
             Done(io::Result<headless::RunResult>),
             Cancel,
         }
         let event = if let Some(socket) = socket.as_mut() {
             tokio::select! {
-                result=&mut execution=>Event::Done(result),_ = cancel.cancelled(), if !cancel_seen =>Event::Cancel,
-                bytes=outputs.recv(), if output_open =>Event::Output(bytes),frame=socket.receive()=>Event::Frame(frame.map(Box::new)),
+                result = &mut execution => Event::Done(result),
+                _ = cancel.cancelled(), if !cancel_seen => Event::Cancel,
+                bytes = outputs.recv(), if output_open => Event::Output(bytes),
+                changed = latest.changed(), if progress_open => Event::Progress(changed),
+                frame = socket.receive() => Event::Frame(frame.map(Box::new)),
             }
         } else {
-            tokio::select! {result=&mut execution=>Event::Done(result),_=cancel.cancelled(), if !cancel_seen =>Event::Cancel,bytes=outputs.recv(), if output_open =>Event::Output(bytes)}
+            tokio::select! {
+                result = &mut execution => Event::Done(result),
+                _ = cancel.cancelled(), if !cancel_seen => Event::Cancel,
+                bytes = outputs.recv(), if output_open => Event::Output(bytes),
+                changed = latest.changed(), if progress_open => Event::Progress(changed),
+            }
         };
         match event {
-            Event::Done(result) => match result {
-                Ok(result) => break result,
-                Err(error) => {
-                    if let Some(socket) = socket.as_mut() {
-                        let frame = Message {
-                            r#type: "session_end".into(),
-                            session_id: registered.session_id,
-                            state: "error".into(),
-                            exit_code: 1,
-                            reason: if error.kind() == io::ErrorKind::NotFound {
-                                "exec_not_found".into()
-                            } else {
-                                String::new()
-                            },
-                            ..Default::default()
-                        };
-                        let _ = tokio::time::timeout(timeout, socket.send(&frame)).await;
-                    }
-                    return Err(error);
-                }
-            },
+            Event::Done(result) => break result,
             Event::Cancel => {
                 cancel_seen = true;
                 child_cancel.cancel();
@@ -432,72 +493,89 @@ async fn run_headless(
             Event::Frame(Ok(frame)) if frame.r#type == "session_dismissed" => child_cancel.cancel(),
             Event::Frame(Ok(frame)) if frame.r#type == "hub_shutdown" => {
                 socket.take();
+                child_cancel.cancel();
             }
             Event::Frame(Err(_)) => {
                 socket.take();
+                child_cancel.cancel();
             }
             Event::Frame(Ok(_)) => {}
             Event::Output(Some(bytes)) => {
                 total += bytes.len() as i64;
-                if let Some(current) = socket.as_mut() {
-                    let frame = Message {
-                        r#type: "pty_data".into(),
-                        session_id: registered.session_id,
-                        data: bytes,
-                        ..Default::default()
-                    };
-                    if tokio::time::timeout(timeout, current.send(&frame))
-                        .await
-                        .map_or(true, |r| r.is_err())
-                    {
-                        socket.take();
-                    }
-                }
-            }
-            Event::Output(None) => {
-                output_open = false;
-            }
-        }
-    };
-    if let Some(mut socket) = socket {
-        while let Ok(bytes) = outputs.try_recv() {
-            total += bytes.len() as i64;
-            let _ = tokio::time::timeout(
-                timeout,
-                socket.send(&Message {
+                let frame = Message {
                     r#type: "pty_data".into(),
                     session_id: registered.session_id,
                     data: bytes,
                     ..Default::default()
-                }),
-            )
-            .await;
+                };
+                if !send_headless_frame(&mut socket, timeout, &frame).await {
+                    child_cancel.cancel();
+                }
+            }
+            Event::Output(None) => output_open = false,
+            Event::Progress(Ok(())) => {
+                let value = latest.borrow_and_update().clone();
+                if let Some(value) = value
+                    && value.sequence > last_sequence
+                {
+                    last_sequence = value.sequence;
+                    let frame = headless_progress_frame(registered.session_id, &value)?;
+                    if !send_headless_frame(&mut socket, timeout, &frame).await {
+                        child_cancel.cancel();
+                    }
+                }
+            }
+            Event::Progress(Err(_)) => progress_open = false,
         }
-        let final_text = if result.timed_out {
-            "[error] run timed out\r\n".into()
-        } else if result.canceled {
-            "[error] run was stopped\r\n".into()
-        } else {
-            format!("[result] exit={}\r\n", result.exit_code)
-        };
-        let final_frame = Message {
+    };
+    let mut result = result;
+    if output_lost.load(std::sync::atomic::Ordering::Relaxed)
+        && let Ok(result) = &mut result
+    {
+        result.state = "error".into();
+    }
+    // Every buffered projection and the latest terminal snapshot precede end.
+    while let Ok(bytes) = outputs.try_recv() {
+        total += bytes.len() as i64;
+        let frame = Message {
             r#type: "pty_data".into(),
             session_id: registered.session_id,
-            data: final_text.as_bytes().to_vec(),
+            data: bytes,
             ..Default::default()
         };
-        total += final_frame.data.len() as i64;
-        let _ = tokio::time::timeout(timeout, socket.send(&final_frame)).await;
-        let frame = Message {
-            r#type: "session_end".into(),
-            session_id: registered.session_id,
-            state: result.state.clone(),
-            exit_code: i64::from(result.exit_code),
-            ..Default::default()
-        };
-        let _ = tokio::time::timeout(timeout, socket.send(&frame)).await;
+        send_headless_frame(&mut socket, timeout, &frame).await;
     }
-    hooks.finish()?;
+    let final_progress = latest.borrow_and_update().clone();
+    if let Some(value) = final_progress
+        && value.sequence > last_sequence
+    {
+        let frame = headless_progress_frame(registered.session_id, &value)?;
+        send_headless_frame(&mut socket, timeout, &frame).await;
+    }
+    let (state, exit_code, reason) = match &result {
+        Ok(result) => (result.state.clone(), result.exit_code, String::new()),
+        Err(error) => (
+            "error".into(),
+            1,
+            if error.kind() == io::ErrorKind::NotFound {
+                "exec_not_found".into()
+            } else {
+                String::new()
+            },
+        ),
+    };
+    let end = Message {
+        r#type: "session_end".into(),
+        session_id: registered.session_id,
+        state,
+        exit_code: i64::from(exit_code),
+        reason,
+        ..Default::default()
+    };
+    send_headless_frame(&mut socket, timeout, &end).await;
+    let cleanup = hooks.finish();
+    let result = result?;
+    cleanup?;
     Ok(WrapperResult {
         session_id: registered.session_id,
         exit: PtyExit {
@@ -508,4 +586,93 @@ async fn run_headless(
         reconnects: 0,
         output_bytes: total,
     })
+}
+
+fn registered_run_id(registered: &Message) -> io::Result<String> {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct RegistrationData {
+        headless_run_id: String,
+    }
+    if registered.data.len() > 1024 {
+        return Err(io::Error::other(
+            "headless registration missing trusted run ID",
+        ));
+    }
+    let data: RegistrationData = serde_json::from_slice(&registered.data)
+        .map_err(|_| io::Error::other("headless registration missing trusted run ID"))?;
+    HeadlessProgress::new(data.headless_run_id.clone(), 0)
+        .validate()
+        .map_err(io::Error::other)?;
+    Ok(data.headless_run_id)
+}
+fn headless_progress_frame(session_id: i64, value: &HeadlessProgress) -> io::Result<Message> {
+    value.validate().map_err(io::Error::other)?;
+    let data = serde_json::to_vec(value)
+        .map_err(|_| io::Error::other("headless progress encoding failed"))?;
+    if data.len() > crate::orchestration::headless_progress::MAX_PROGRESS_BYTES {
+        return Err(io::Error::other("headless progress too large"));
+    }
+    Ok(Message {
+        r#type: "headless_progress".into(),
+        session_id,
+        data,
+        ..Default::default()
+    })
+}
+async fn send_headless_frame(
+    socket: &mut Option<Box<dyn super::transport::HubSocket>>,
+    timeout: Duration,
+    frame: &Message,
+) -> bool {
+    let Some(current) = socket.as_mut() else {
+        return false;
+    };
+    if tokio::time::timeout(timeout, current.send(frame))
+        .await
+        .map_or(true, |r| r.is_err())
+    {
+        socket.take();
+        return false;
+    }
+    true
+}
+
+#[cfg(test)]
+mod progress_boundary_tests {
+    use super::*;
+    #[test]
+    fn registration_requires_hub_run_id_and_progress_uses_existing_byte_contract() {
+        let mut registered = Message {
+            session_id: 12,
+            ..Default::default()
+        };
+        assert!(registered_run_id(&registered).is_err());
+        registered.data = br#"{"headless_run_id":"12:8"}"#.to_vec();
+        assert_eq!(registered_run_id(&registered).unwrap(), "12:8");
+        let mut progress = HeadlessProgress::new("12:8".into(), 1);
+        progress.sequence = 1;
+        progress.last_assistant = crate::orchestration::headless_progress::safe_excerpt(
+            "API_KEY=synthetic_secret_123456",
+            512,
+        );
+        let frame = headless_progress_frame(12, &progress).unwrap();
+        let serialized = serde_json::to_value(&frame).unwrap();
+        assert_eq!(serialized["type"], "headless_progress");
+        assert!(serialized["data"].is_string()); // generated Message retains base64
+        let restored =
+            crate::proto::decode_wire::<Message>(&serde_json::to_vec(&frame).unwrap()).unwrap();
+        assert_eq!(restored.data, frame.data);
+        assert_eq!(
+            crate::orchestration::headless_progress::decode_progress(&restored.data).unwrap(),
+            progress
+        );
+        assert!(
+            !String::from_utf8(restored.data)
+                .unwrap()
+                .contains("synthetic_secret")
+        );
+        registered.data = br#"{"headless_run_id":"12:8","api_key":"PRIVATE_SENTINEL"}"#.to_vec();
+        assert!(registered_run_id(&registered).is_err());
+    }
 }

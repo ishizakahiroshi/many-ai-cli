@@ -172,6 +172,29 @@ impl SpawnLaunchPolicy for ConfigSpawnLaunchPolicy {
         base_environment: &[String],
     ) -> io::Result<ResolvedSpawnPolicy> {
         let cfg = self.config.snapshot().map_err(config_error)?.config;
+        let billing = spec.registration_metadata.headless_billing.as_ref();
+        if let Some(billing) = billing {
+            config::headless_billing::validate_selection(
+                &spec.provider,
+                &spec.execution_mode,
+                &billing.mode,
+                &billing.profile_id,
+                billing.max_budget_usd,
+                &spec.route,
+            )?;
+            config::headless_billing::verify_revision(&self.paths, billing)?;
+        }
+        let api_billing = billing.is_some_and(|billing| billing.is_api());
+        if api_billing && !spec.subscription_profile_id.is_empty() {
+            return Err(invalid("API billing cannot select a subscription profile"));
+        }
+        if spec.provider == "claude"
+            && config::is_headless_execution_mode(&spec.execution_mode)
+            && (config::headless_billing::auth_environment_conflicts(base_environment)
+                || !matches!(spec.route.as_str(), "" | "default"))
+        {
+            return Err(config::headless_billing::BillingError::AuthConflict.into());
+        }
         let registry = (self.dependencies.registry)()?;
         let definition = registry.lookup(&spec.provider);
         if spec.provider != "shell"
@@ -194,15 +217,18 @@ impl SpawnLaunchPolicy for ConfigSpawnLaunchPolicy {
         // Source order: profile choice/seed occurs once, before login's early
         // return and before route environment construction. Never repeat this in
         // folder_trust or substitute another account after an error.
-        let (subscription_environment, notice) = self
-            .subscriptions
-            .launch(
-                &cfg,
-                &spec.provider,
-                &spec.subscription_profile_id,
-                base_environment,
-            )
-            .map_err(|error| policy_failure(PolicyFailureStage::Subscription, error))?;
+        let (subscription_environment, notice) = if api_billing {
+            (Vec::new(), None)
+        } else {
+            self.subscriptions
+                .launch(
+                    &cfg,
+                    &spec.provider,
+                    &spec.subscription_profile_id,
+                    base_environment,
+                )
+                .map_err(|error| policy_failure(PolicyFailureStage::Subscription, error))?
+        };
         if let Some(notice) = notice {
             (self.dependencies.seeded)(&notice);
         }
@@ -278,6 +304,12 @@ impl SpawnLaunchPolicy for ConfigSpawnLaunchPolicy {
             .path_environment
             .sanitize(base_environment)?;
         let route_cfg = self.config.snapshot().map_err(config_error)?.config;
+        if spec.provider == "claude"
+            && config::is_headless_execution_mode(&spec.execution_mode)
+            && !matches!(effective_route.as_str(), "" | "default")
+        {
+            return Err(config::headless_billing::BillingError::AuthConflict.into());
+        }
         let route_environment = routes::environment(
             &self.paths,
             &route_cfg,

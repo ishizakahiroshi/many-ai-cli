@@ -1,0 +1,7 @@
+.headless-progress { display:flex; flex-wrap:wrap; gap:.2rem .7rem; min-width:0; padding:.35rem .5rem; font-size:.78rem; line-height:1.4; border-top:1px solid var(--border-color, #555); }
+.headless-progress[hidden] { display:none; }
+.headless-progress-metric { overflow-wrap:anywhere; min-width:0; }
+.headless-progress-last { flex-basis:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.card .headless-progress { padding:.25rem 0 0; }
+.pane-slot > .headless-progress { flex:none; max-height:9rem; overflow:auto; }
+#active-headless-progress { flex:none; max-height:9rem; overflow:auto; }

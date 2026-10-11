@@ -1,3 +1,4 @@
+import { createHeadlessProgressElement } from './headless-progress-dom.js';
 // --- ESM imports (generated) ---
 import { inputEl } from '../app.js';
 import { canPageAltBuffer, disableWebglRenderer, enableWebglRenderer, releaseHiddenWebglRenderers, scrollAltBufferPage, termArea } from './terminal.js';
@@ -374,6 +375,7 @@ export class MultiPaneManager {
 
     const header = this._buildHeader(idx, session);
     el.appendChild(header);
+    if (session.execution_mode === "headless") el.appendChild(createHeadlessProgressElement(session.id));
 
     this._wireDropTarget(el, idx);
 
@@ -1208,7 +1210,7 @@ export class MultiPaneManager {
         const owner = layout.slots.find(slot => slot?.kind === 'session');
         const liveOwner = owner && live.get(owner.sessionId);
         if (!owner || !liveOwner || String(liveOwner.started_at || '') !== owner.startedAt ||
-            ['completed', 'error', 'disconnected'].includes(liveOwner.state)) {
+            (liveOwner.execution_mode !== 'headless' && ['completed', 'error', 'disconnected'].includes(liveOwner.state))) {
           delete this.customLayouts[key];
           changed = true;
           continue;
@@ -1219,7 +1221,7 @@ export class MultiPaneManager {
         if (!content || content.sessionId === null) continue;
         const session = live.get(content.sessionId);
         if (!session || String(session.started_at || '') !== content.startedAt ||
-            ['completed', 'error', 'disconnected'].includes(session.state)) {
+            (session.execution_mode !== 'headless' && ['completed', 'error', 'disconnected'].includes(session.state))) {
           layout.slots[i] = null;
           changed = true;
         }

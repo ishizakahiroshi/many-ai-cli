@@ -3,6 +3,7 @@ pub mod child_options;
 pub mod handoff;
 pub mod headless;
 pub mod headless_formats;
+pub mod headless_progress;
 pub mod subagent;
 
 pub mod child_launch;

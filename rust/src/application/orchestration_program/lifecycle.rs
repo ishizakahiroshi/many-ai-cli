@@ -82,7 +82,16 @@ impl OrchestrationProgram {
             let Some(child) = board.children.get_mut(&session) else {
                 return Ok(());
             };
-            if child.retries >= max || child.registration.restart_spec.provider.is_empty() {
+            if child.retries >= max
+                || child.registration.restart_spec.provider.is_empty()
+                || child
+                    .registration
+                    .restart_spec
+                    .registration_metadata
+                    .headless_billing
+                    .as_ref()
+                    .is_some_and(|billing| billing.is_api())
+            {
                 return Ok(());
             }
             let retries = child.retries + 1;

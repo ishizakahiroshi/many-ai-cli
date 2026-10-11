@@ -1,3 +1,4 @@
+import { createHeadlessProgressElement, refreshHeadlessProgress } from './headless-progress-dom.js';
 import { initializeSessionListTabs, renderSessionListTabs, isSessionInSelectedListTab, preserveSessionListSelection, visibleSessionListTree, revealSessionListOwner, sessionListScrollBeforeRender, sessionListScrollAfterRender } from './session-list-tabs.js';
 import { isApprovalPending } from './approval-store.js';
 // --- ESM imports (generated) ---
@@ -1274,6 +1275,7 @@ export function renderSessionList() {
 		`<div class="card-title-row">${statePillHtml} <b>#${s.id}</b> ${cardProviderModelHtml(s)}${taskTitleHtml}${cardMemoBadgeHtml(s)}</div>` +
 	        metaRow;
 
+      if (s.execution_mode === 'headless') c.appendChild(createHeadlessProgressElement(s.id));
       const childToggleEl = c.querySelector('.card-children-toggle') as HTMLElement | null;
       if (childToggleEl) {
         const toggleChildren = (e: Event) => {
@@ -1544,6 +1546,7 @@ export function renderSessionList() {
 
 
 export function updateMainTabStatus() {
+  refreshHeadlessProgress();
   // D11: セッション情報チップも同タイミングで更新 (state badge を反映)
   if (typeof renderSessionInfoChip === 'function') renderSessionInfoChip();
   // カードのライブ情報（ctx% / 応答経過 / 長時間バッジ）も毎秒・state 変化時に追従させる。

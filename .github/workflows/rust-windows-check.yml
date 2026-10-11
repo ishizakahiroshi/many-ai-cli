@@ -2,7 +2,7 @@ name: Rust Windows check
 
 on:
   push:
-    branches: ['dots/rust-recovery-resume-3']
+    branches: ['dots/rust-recovery-resume-3', 'dots/P-20261010-003-headless-billing-progress']
     paths:
       - 'rust/**'
       - 'web/**'
@@ -34,7 +34,7 @@ concurrency:
 
 jobs:
   windows-check:
-    if: github.ref == 'refs/heads/dots/rust-recovery-resume-3'
+    if: github.ref == 'refs/heads/dots/rust-recovery-resume-3' || github.ref == 'refs/heads/dots/P-20261010-003-headless-billing-progress'
     runs-on: windows-2022
     timeout-minutes: 45
     env:
