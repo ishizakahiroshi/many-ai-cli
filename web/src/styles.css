@@ -1220,6 +1220,12 @@ header {
     z-index: 1001;
     bottom: 0;
   }
+  /* サイドバーは 220〜520px で可変だが、設定画面の左ナビは 260px 固定（settings.css の .settings-layout）。
+     フッターがナビより広いと右ペインへ食い込むので、左配置ではナビの幅までに収める。 */
+  body:not(.sidebar-right):has(#settings-panel:not([hidden])) .session-footer {
+    max-width: 260px;
+    margin-right: auto;
+  }
 }
 .session-footer > .usage-menu,
 .session-footer > .web-menu { flex: 1 1 0; min-width: 0; margin-left: 0; display: flex; }
