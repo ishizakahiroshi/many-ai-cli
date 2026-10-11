@@ -565,6 +565,19 @@ impl WebSocketService {
                 incoming = receive(reader, &self.shutdown) => match incoming? { Some(message) => message, None => return Ok(()) },
             };
             let effects = match message.r#type.as_str() {
+                "headless_progress" => {
+                    if message.session_id != 0 && message.session_id != binding.session.0 {
+                        return Err(SessionError::InvalidRequest(
+                            "invalid headless progress identity".into(),
+                        ));
+                    }
+                    let progress =
+                        crate::orchestration::headless_progress::decode_progress(&message.data)
+                            .map_err(|_| {
+                                SessionError::InvalidRequest("invalid headless progress".into())
+                            })?;
+                    self.core.observe_headless_progress(binding, progress)?
+                }
                 "pty_data" => self.core.observe_output(
                     binding,
                     OutputChunk {

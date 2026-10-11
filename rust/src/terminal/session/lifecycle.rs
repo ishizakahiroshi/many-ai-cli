@@ -154,6 +154,14 @@ impl SessionEngine {
             orchestration_id: metadata.orchestration.0.clone(),
             auto: metadata.auto,
             board_path: metadata.board_path.clone(),
+            data: snapshot
+                .headless_progress
+                .as_ref()
+                .map(|p| {
+                    serde_json::to_vec(&serde_json::json!({"headless_run_id": p.run_id}))
+                        .expect("fixed headless registration JSON")
+                })
+                .unwrap_or_default(),
             ..Default::default()
         };
         let mut effects = CoreEffects::default();
@@ -162,6 +170,15 @@ impl SessionEngine {
         announce.log_path = snapshot.log_path.clone();
         announce.jsonl_path = snapshot.jsonl_path.clone();
         effects.0.push(CoreEffect::Broadcast(announce));
+        if let Some(progress) = &session.snapshot.headless_progress {
+            effects.0.push(CoreEffect::BroadcastHeadlessProgress(
+                HeadlessProgressNotification {
+                    r#type: "headless_progress".into(),
+                    session_id: binding.session.0,
+                    headless_progress: progress.clone(),
+                },
+            ));
+        }
         if let Some(event) = session.spawn_correlation(&self.options.hub_instance) {
             effects.0.push(CoreEffect::BroadcastSpawnCorrelation(event));
         }
@@ -265,6 +282,28 @@ impl SessionEngine {
             append,
             !m.usage_probe,
         )?;
+        let headless_progress = (m.execution_mode == "headless").then(|| {
+            let mut progress = crate::orchestration::headless_progress::HeadlessProgress::new(
+                format!("{}:{}", binding.session.0, binding.incarnation.0),
+                started
+                    .unix_seconds()
+                    .saturating_mul(1000)
+                    .saturating_add(i64::from(started.subsec_nanos() / 1_000_000)),
+            );
+            // Only Claude has a verified billing adapter in this increment.
+            // Other existing headless providers retain launch behavior, not an
+            // unverified assertion about their authentication/payment route.
+            progress.billing_mode = if m.provider == "claude" {
+                metadata
+                    .headless_billing
+                    .as_ref()
+                    .map(|billing| billing.mode.clone())
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            };
+            progress
+        });
         let snapshot = SessionSnapshot {
             id: binding.session,
             provider: m.provider.clone(),
@@ -281,6 +320,7 @@ impl SessionEngine {
             model: m.model.clone(),
             effort: m.effort.clone(),
             execution_mode: m.execution_mode.clone(),
+            headless_progress,
             permission_mode: m.permission_mode.clone(),
             route: m.route.trim().into(),
             shell: m.shell.clone(),
@@ -370,6 +410,16 @@ impl SessionEngine {
         connection: WrapperConnectionId,
         now: Timestamp,
     ) -> Result<Reattachment, SessionError> {
+        if request.message.execution_mode == "headless"
+            || lock(&self.state)
+                .sessions
+                .get(&LiveSessionId(request.message.session_id))
+                .is_some_and(|session| session.snapshot.execution_mode == "headless")
+        {
+            return Err(SessionError::InvalidRequest(
+                "headless runs cannot be reattached".into(),
+            ));
+        }
         // Reject already-revoked immutable labels before waiting for registration
         // or ordered persistence. Terminal/skipped relays may supply no metadata.
         if lock(&self.state)
@@ -666,6 +716,7 @@ impl SessionEngine {
                 s.snapshot.end_reason = end.reason.clone();
             }
         }
+        s.finalize_headless(false, Some(&end), &mut effects);
         s.ended = Some(end.clone());
         s.finalize_workflow(&mut effects);
         effects
@@ -702,6 +753,7 @@ impl SessionEngine {
         }
         let mut effects = s.approval.close(ApprovalCloseReason::SessionEnd, "", now);
         s.finalize_workflow(&mut effects);
+        s.finalize_headless(true, None, &mut effects);
         s.approval_reservation = None;
         effects
             .0

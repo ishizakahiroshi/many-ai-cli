@@ -57,6 +57,7 @@ pub(crate) fn equivalent_root_prefix(path: &Path) -> PathBuf {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Resource {
     Config,
+    HeadlessBilling,
     Database,
     Logs,
     Token,
@@ -310,6 +311,7 @@ impl RuntimePaths {
         }
         let name = match resource {
             Resource::Config => "config.yaml",
+            Resource::HeadlessBilling => "headless-billing.json",
             Resource::Database => "any-ai-cli.db",
             Resource::Logs => "logs",
             Resource::Token => "config.yaml",

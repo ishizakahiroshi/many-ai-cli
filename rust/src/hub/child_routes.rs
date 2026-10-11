@@ -88,6 +88,18 @@ impl GoWire for ChildSpawnRequest {
                 kind: "string",
             },
             Field {
+                name: "billing_mode",
+                kind: "string",
+            },
+            Field {
+                name: "billing_profile",
+                kind: "string",
+            },
+            Field {
+                name: "max_budget_usd",
+                kind: "*float64",
+            },
+            Field {
                 name: "execution_mode",
                 kind: "string",
             },
@@ -211,20 +223,23 @@ impl ChildHttp {
             Ok(cfg) => cfg.config,
             Err(_) => return Response::error(500, "internal", "configuration unavailable"),
         };
-        let confirmation = !body.origin().is_human()
-            && match config::effective_spawn_confirm_mode(&cfg.orchestration.spawn_confirm_mode) {
-                "off" => false,
-                "providers" => cfg
-                    .orchestration
-                    .spawn_confirm_providers
-                    .iter()
-                    .any(|provider| {
-                        provider
-                            .trim()
-                            .eq_ignore_ascii_case(&body.request().provider)
-                    }),
-                _ => true,
-            };
+        let confirmation = body.request().billing_mode.trim() == "api-key"
+            || (!body.origin().is_human()
+                && match config::effective_spawn_confirm_mode(&cfg.orchestration.spawn_confirm_mode)
+                {
+                    "off" => false,
+                    "providers" => {
+                        cfg.orchestration
+                            .spawn_confirm_providers
+                            .iter()
+                            .any(|provider| {
+                                provider
+                                    .trim()
+                                    .eq_ignore_ascii_case(&body.request().provider)
+                            })
+                    }
+                    _ => true,
+                });
         if confirmation {
             let registration = match SpawnConfirmations::register(
                 self.core.as_ref(),

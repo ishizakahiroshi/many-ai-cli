@@ -1,3 +1,4 @@
+import type { HeadlessProgress } from "../app/headless-progress.js";
 // Legacy wire mirror with explicit additive Rust-only extensions.
 // The optional spawn correlation event/snapshot field is defined in rust/src/proto/core.rs;
 // it does not change the frozen generated Rust message or the legacy Go contract.
@@ -413,6 +414,7 @@ export interface Message {
   effort?: string;
   /** 起動要求に添えられた実行モード（auto / interactive / headless）。空は指定なし。 */
   execution_mode?: string;
+  headless_progress?: HeadlessProgress;
   /** 起動要求に添えられた権限段（attended / bounded / full）。空は指定なし。 */
   permission_preset?: string;
   /**
@@ -557,6 +559,7 @@ export interface SessionSnapshot {
   effort?: string;
   /** wrapper が申告した実行モード（"headless" のみ。空＝対話）。 */
   execution_mode?: string;
+  headless_progress?: HeadlessProgress;
   /**
    * wrapper が申告した「起動時に実際に付けた権限モード」。空は指定なしで、
    * カードには何も出さない（「不明」を出さない）。ライブ値ではない。

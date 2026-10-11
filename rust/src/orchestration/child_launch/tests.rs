@@ -995,3 +995,51 @@ async fn confirmation_changes_record_original_resolved_provider_on_the_real_boar
     let notes = f.services.notices.lock().unwrap();
     assert!(notes[0].contains("permission_preset: requested=\"full\" decided=\"attended\""));
 }
+
+#[tokio::test]
+async fn billing_selection_is_ephemeral_pinned_and_reconfirmable() {
+    use crate::config::{Resource, headless_billing as billing, private_io};
+    let f = executor_fixture().await;
+    let path = f.paths.resource(Resource::HeadlessBilling);
+    let save = |command: &str| {
+        private_io::write_atomic(&path, serde_json::to_vec(&serde_json::json!({"version":1,"profiles":[{"id":"synthetic","display_name":"Synthetic billing","provider":"claude","command":command}]})).unwrap().as_slice()).unwrap();
+    };
+    save("synthetic-resolver-never-executed");
+    let request = launch_request(
+        &f,
+        ChildSpawnRequest {
+            provider: "claude".into(),
+            execution_mode: "headless".into(),
+            billing_mode: billing::API_KEY.into(),
+            billing_profile: "synthetic".into(),
+            max_budget_usd: Some(0.5),
+            ..Default::default()
+        },
+    );
+    let pinned = f.executor.prepare_billing(request.body).unwrap();
+    assert!(pinned.billing().unwrap().is_api());
+    let revision = pinned.billing().unwrap().revision.clone();
+    save("changed-synthetic-resolver-never-executed");
+    assert!(
+        matches!(f.executor.prepare_billing(pinned.clone()), Err(SessionError::InvalidRequest(detail)) if detail == billing::BillingError::RevisionChanged.to_string())
+    );
+    let refreshed = f.executor.refresh_billing(pinned).unwrap();
+    assert_ne!(refreshed.billing().unwrap().revision, revision);
+    let new_request = launch_request(
+        &f,
+        ChildSpawnRequest {
+            provider: "claude".into(),
+            execution_mode: "headless".into(),
+            ..Default::default()
+        },
+    );
+    let defaulted = f.executor.prepare_billing(new_request.body).unwrap();
+    assert_eq!(defaulted.billing().unwrap().mode, billing::PLAN_LOGIN);
+    assert!(defaulted.billing().unwrap().profile_id.is_empty());
+    assert_eq!(f.spawner.starts.load(Ordering::SeqCst), 0);
+    assert!(
+        !serde_json::to_string(&f.config.snapshot().unwrap().config.public_json())
+            .unwrap()
+            .contains("synthetic-resolver")
+    );
+}

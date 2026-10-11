@@ -330,6 +330,24 @@ fn prepare_resolved(
         }
         if config::is_headless_execution_mode(&spec.execution_mode) {
             args.push("--headless".into());
+            if let Some(billing) = &spec.registration_metadata.headless_billing {
+                crate::config::headless_billing::verify_revision(&options.paths, billing)?;
+                args.extend(["--billing-mode".into(), billing.mode.clone().into()]);
+                if billing.is_api() {
+                    args.extend([
+                        "--billing-profile".into(),
+                        billing.profile_id.clone().into(),
+                        "--billing-revision".into(),
+                        billing.revision.clone().into(),
+                        "--max-budget-usd".into(),
+                        billing
+                            .max_budget_usd
+                            .ok_or_else(|| invalid("API budget required"))?
+                            .to_string()
+                            .into(),
+                    ]);
+                }
+            }
         }
         prompt = self::prompt(&options.paths, &spec.initial_prompt)?;
         if let Some(prompt) = &prompt {
@@ -432,18 +450,31 @@ fn prepare_resolved(
             .child_dir("spawn", true)?
             .open_append(&filename)
     };
-    let stdout = match log() {
-        Ok(file) => file,
-        Err(_) if kind == Some(WrappedStartKind::Grid) => {
-            // Go leaves nil stdout/stderr when optional grid logging fails;
-            // exec maps nil output to the native null device.
-            #[cfg(windows)]
-            let null = "NUL";
-            #[cfg(not(windows))]
-            let null = "/dev/null";
-            std::fs::OpenOptions::new().write(true).open(null)?
+    let api_billing = spec
+        .registration_metadata
+        .headless_billing
+        .as_ref()
+        .is_some_and(|billing| billing.is_api());
+    let stdout = if api_billing {
+        #[cfg(windows)]
+        let null = "NUL";
+        #[cfg(not(windows))]
+        let null = "/dev/null";
+        std::fs::OpenOptions::new().write(true).open(null)?
+    } else {
+        match log() {
+            Ok(file) => file,
+            Err(_) if kind == Some(WrappedStartKind::Grid) => {
+                // Go leaves nil stdout/stderr when optional grid logging fails;
+                // exec maps nil output to the native null device.
+                #[cfg(windows)]
+                let null = "NUL";
+                #[cfg(not(windows))]
+                let null = "/dev/null";
+                std::fs::OpenOptions::new().write(true).open(null)?
+            }
+            Err(error) => return Err(error),
         }
-        Err(error) => return Err(error),
     };
     let stderr = stdout.try_clone()?;
     if !bare

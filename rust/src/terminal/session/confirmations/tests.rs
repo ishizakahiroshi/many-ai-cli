@@ -10,21 +10,53 @@ struct Executor {
     forget_permission: AtomicBool,
     pause_spawn: AtomicBool,
     snapshots: AtomicUsize,
+    snapshot_fail_at: AtomicUsize,
     spawns: AtomicUsize,
     refusals: AtomicUsize,
     notifications: AtomicUsize,
     entered: Notify,
     parent_seen: Mutex<Option<SessionBinding>>,
     snapshot_hook: Mutex<Option<SnapshotHook>>,
+    billing: Mutex<Option<config::headless_billing::ResolvedBilling>>,
 }
 impl ConfirmationExecutor for Executor {
+    fn prepare_billing(
+        &self,
+        body: ResolvedChildSpawn,
+    ) -> Result<ResolvedChildSpawn, SessionError> {
+        if body.request().billing_mode != config::headless_billing::API_KEY {
+            return Ok(body);
+        }
+        if let Some(previous) = body.billing()
+            && lock(&self.billing)
+                .as_ref()
+                .is_none_or(|current| current.revision != previous.revision)
+        {
+            return Err(SessionError::InvalidRequest(
+                config::headless_billing::BillingError::RevisionChanged.to_string(),
+            ));
+        }
+        self.refresh_billing(body)
+    }
+    fn refresh_billing(
+        &self,
+        mut body: ResolvedChildSpawn,
+    ) -> Result<ResolvedChildSpawn, SessionError> {
+        let mut billing = lock(&self.billing).clone().ok_or(SessionError::Shutdown)?;
+        billing.profile_id = body.request().billing_profile.clone();
+        billing.max_budget_usd = body.request().max_budget_usd;
+        body.set_billing(billing);
+        Ok(body)
+    }
     fn presentation(&self) -> Result<ConfirmationPresentation, SessionError> {
-        self.snapshots.fetch_add(1, Ordering::SeqCst);
+        let snapshot_number = self.snapshots.fetch_add(1, Ordering::SeqCst) + 1;
         let hook = lock(&self.snapshot_hook).take();
         if let Some(hook) = hook {
             hook();
         }
-        if self.snapshot_fails.load(Ordering::SeqCst) {
+        if self.snapshot_fails.load(Ordering::SeqCst)
+            || self.snapshot_fail_at.load(Ordering::SeqCst) == snapshot_number
+        {
             return Err(SessionError::Transport(
                 "synthetic snapshot unavailable".into(),
             ));
@@ -39,6 +71,14 @@ impl ConfirmationExecutor for Executor {
             config.user_prefs.spawn.role_permission.clear();
         }
         Ok(ConfirmationPresentation {
+            billing_profiles: lock(&self.billing)
+                .iter()
+                .map(|billing| config::headless_billing::BillingProfileSummary {
+                    id: billing.profile_id.clone(),
+                    display_name: billing.display_name.clone(),
+                    provider: billing.provider.clone(),
+                })
+                .collect(),
             config,
             trust_grant_providers: vec!["synthetic-trust-provider".into()],
         })
@@ -926,4 +966,191 @@ async fn served_confirmation_uses_ordinary_guard_and_transfers_to_the_real_task_
     assert_eq!(owner.drain_effects().await.completed, 1);
     cancel.cancel();
     server.await.unwrap().unwrap();
+}
+
+fn synthetic_billing(revision: char, display: &str) -> config::headless_billing::ResolvedBilling {
+    config::headless_billing::ResolvedBilling {
+        mode: "api-key".into(),
+        profile_id: "paid".into(),
+        display_name: display.into(),
+        provider: "claude".into(),
+        revision: revision.to_string().repeat(64),
+        max_budget_usd: Some(1.0),
+    }
+}
+fn billing_request(f: &Fixture) -> ConfirmationRequest {
+    let mut request = request(f.parent.session, "worker");
+    let body = request.body.request_mut();
+    body.provider = "claude".into();
+    body.execution_mode = "headless".into();
+    body.billing_mode = "api-key".into();
+    body.billing_profile = "paid".into();
+    body.max_budget_usd = Some(1.0);
+    request
+}
+fn approval(
+    f: &Fixture,
+    id: &SpawnConfirmationId,
+    revision: Option<&str>,
+) -> Result<Box<dyn AcceptedSpawnDecision>, SessionError> {
+    let mut decision = response(id, true);
+    decision.billing_revision = revision.map(str::to_owned);
+    f.engine.clone().accept_decision(
+        decision,
+        VerifiedConfirmationRequest::after_server_authentication(f.engine.auth_epoch()),
+        now(),
+    )
+}
+fn refreshed_message(
+    result: Result<Box<dyn AcceptedSpawnDecision>, SessionError>,
+) -> proto::Message {
+    match result {
+        Err(SessionError::BillingProfileChanged { disclosure }) => {
+            serde_json::from_value(disclosure).unwrap()
+        }
+        _ => panic!("expected fresh billing disclosure without accepting a decision"),
+    }
+}
+#[tokio::test]
+async fn billing_revision_refresh_discloses_new_recipe_and_rejects_stale_browser() {
+    let f = fixture(true).await;
+    let before = synthetic_billing('a', "Original account");
+    let after = synthetic_billing('b', "Renamed account");
+    *lock(&f.executor.billing) = Some(before.clone());
+    let pending = SpawnConfirmations::register(f.engine.as_ref(), billing_request(&f)).unwrap();
+    *lock(&f.executor.billing) = Some(after.clone());
+    let wire = refreshed_message(approval(&f, &pending.pending.id, Some(&before.revision)));
+    assert_eq!(wire.spawn_confirmation_id, pending.pending.id.0);
+    assert_eq!(wire.session_id, f.parent.session.0);
+    assert_eq!(wire.r#type, "spawn_confirmation_requested");
+    let data: serde_json::Value = serde_json::from_slice(&wire.data).unwrap();
+    assert_eq!(data["billing"]["revision"], after.revision);
+    assert_eq!(data["billing"]["display_name"], "Renamed account");
+    assert_eq!(
+        data["billing_profiles"][0]["display_name"],
+        "Renamed account"
+    );
+    assert!(!String::from_utf8(wire.data).unwrap().contains("command"));
+    assert_eq!(f.engine.pending()[0].body.billing(), Some(&after));
+    refreshed_message(approval(&f, &pending.pending.id, Some(&before.revision)));
+    assert!(
+        lock(&f.engine.state).confirmations[&pending.pending.id]
+            .decision
+            .is_none()
+    );
+    assert_eq!(f.executor.spawns.load(Ordering::SeqCst), 0);
+    drop(approval(&f, &pending.pending.id, Some(&after.revision)).unwrap());
+}
+#[tokio::test]
+async fn api_confirmation_requires_disclosed_revision_and_profile_identity() {
+    let f = fixture(true).await;
+    let billing = synthetic_billing('a', "Paid account");
+    *lock(&f.executor.billing) = Some(billing.clone());
+    let pending = SpawnConfirmations::register(f.engine.as_ref(), billing_request(&f)).unwrap();
+    refreshed_message(approval(&f, &pending.pending.id, None));
+    let mut decision = response(&pending.pending.id, true);
+    decision.billing_revision = Some(billing.revision.clone());
+    decision.billing_profile = Some("another".into());
+    let wire = refreshed_message(f.engine.clone().accept_decision(
+        decision,
+        VerifiedConfirmationRequest::after_server_authentication(f.engine.auth_epoch()),
+        now(),
+    ));
+    let data: serde_json::Value = serde_json::from_slice(&wire.data).unwrap();
+    assert_eq!(data["billing_profile"], "another");
+    assert_eq!(f.executor.spawns.load(Ordering::SeqCst), 0);
+}
+#[tokio::test]
+async fn billing_refresh_rechecks_auth_and_exact_entry_after_callbacks() {
+    for replace in [false, true] {
+        let f = fixture(true).await;
+        *lock(&f.executor.billing) = Some(synthetic_billing('a', "Old account"));
+        let pending = SpawnConfirmations::register(f.engine.as_ref(), billing_request(&f)).unwrap();
+        *lock(&f.executor.billing) = Some(synthetic_billing('b', "New account"));
+        let weak = Arc::downgrade(&f.engine);
+        let parent = f.parent.session;
+        *lock(&f.executor.snapshot_hook) = Some(Arc::new(move || {
+            let engine = weak.upgrade().unwrap();
+            if replace {
+                SpawnConfirmations::register(engine.as_ref(), request(parent, "worker")).unwrap();
+            } else {
+                drop(engine.invalidate_all_ui());
+            }
+        }));
+        let result = approval(&f, &pending.pending.id, Some(&"a".repeat(64)));
+        assert!(matches!(
+            result,
+            Err(SessionError::AuthenticationExpired | SessionError::ConfirmationMissing)
+        ));
+        assert_eq!(f.executor.spawns.load(Ordering::SeqCst), 0);
+    }
+}
+
+#[tokio::test]
+async fn plan_to_api_requires_first_disclosure_and_refresh_failure_keeps_pending() {
+    let f = fixture(true).await;
+    let before = synthetic_billing('a', "Paid account");
+    *lock(&f.executor.billing) = Some(before.clone());
+    let pending = register(&f, "worker");
+    let mut decision = response(&pending.pending.id, true);
+    decision.provider = "claude".into();
+    decision.execution_mode = Some("headless".into());
+    decision.billing_mode = Some("api-key".into());
+    decision.billing_profile = Some("paid".into());
+    decision.billing_revision = Some(before.revision.clone());
+    decision.max_budget_usd = Some(1.0);
+    refreshed_message(f.engine.clone().accept_decision(
+        decision,
+        VerifiedConfirmationRequest::after_server_authentication(f.engine.auth_epoch()),
+        now(),
+    ));
+    let pinned = f.engine.pending()[0].body.billing().cloned();
+    *lock(&f.executor.billing) = Some(synthetic_billing('b', "Changed account"));
+    f.executor.snapshot_fail_at.store(
+        f.executor.snapshots.load(Ordering::SeqCst) + 2,
+        Ordering::SeqCst,
+    );
+    assert!(matches!(
+        approval(&f, &pending.pending.id, Some(&before.revision)),
+        Err(SessionError::Transport(_))
+    ));
+    assert_eq!(f.engine.pending()[0].body.billing(), pinned.as_ref());
+    assert!(
+        lock(&f.engine.state).confirmations[&pending.pending.id]
+            .decision
+            .is_none()
+    );
+    assert_eq!(f.executor.spawns.load(Ordering::SeqCst), 0);
+}
+#[tokio::test]
+async fn concurrent_billing_refresh_cannot_be_overwritten_or_approved() {
+    let f = fixture(true).await;
+    let before = synthetic_billing('a', "Original account");
+    let newer = synthetic_billing('c', "Newer account");
+    *lock(&f.executor.billing) = Some(before.clone());
+    let pending = SpawnConfirmations::register(f.engine.as_ref(), billing_request(&f)).unwrap();
+    let weak = Arc::downgrade(&f.engine);
+    let id = pending.pending.id.clone();
+    let concurrently_pinned = newer.clone();
+    *lock(&f.executor.snapshot_hook) = Some(Arc::new(move || {
+        let engine = weak.upgrade().unwrap();
+        lock(&engine.state)
+            .confirmations
+            .get_mut(&id)
+            .unwrap()
+            .pending
+            .body
+            .set_billing(concurrently_pinned.clone());
+    }));
+    let wire = refreshed_message(approval(&f, &pending.pending.id, Some(&before.revision)));
+    let data: serde_json::Value = serde_json::from_slice(&wire.data).unwrap();
+    assert_eq!(data["billing"]["revision"], newer.revision);
+    assert_eq!(data["billing_profiles"][0]["display_name"], "Newer account");
+    assert_eq!(f.engine.pending()[0].body.billing(), Some(&newer));
+    assert!(
+        lock(&f.engine.state).confirmations[&pending.pending.id]
+            .decision
+            .is_none()
+    );
+    assert_eq!(f.executor.spawns.load(Ordering::SeqCst), 0);
 }

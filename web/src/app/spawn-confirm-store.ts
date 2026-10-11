@@ -46,6 +46,11 @@ export interface SpawnConfirmationRecord {
   // ダイアログはこれを初期表示し、承認時は select の実効値をそのまま決定 body に載せる。
   effort: string;
   executionMode: string;
+  billingMode?: string;
+  billingProfile?: string;
+  billingRevision?: string;
+  maxBudgetUsd?: number;
+  billingProfiles?: { id: string; display_name: string; provider: string }[];
   permissionPreset: string;
   // 「この役割では次回もこの段を使う」チェックボックスの初期状態。Hub がその役割の
   // 段を既に覚えていれば true で開く。欄を持たない古い Hub からは false になり、
@@ -241,6 +246,15 @@ const pendingSpawnConfirmations = new Map<string, SpawnConfirmationRecord>();
 const openDialogControllers = new Map<string, SpawnConfirmationClosedController>();
 
 export function recordFromMessage(m: any): SpawnConfirmationRecord {
+  let billing: any = {};
+  // Rust-only extension within the existing Go byte/base64 envelope.
+  if (typeof m?.data === 'string' && m.data.length <= 32768) {
+    try {
+      const bytes = Uint8Array.from(atob(m.data), c => c.charCodeAt(0));
+      const parsed = JSON.parse(new TextDecoder().decode(bytes));
+      if (parsed?.version === 1) billing = parsed;
+    } catch (_) { /* Missing/invalid extension keeps the plan default. */ }
+  }
   return {
     id: String(m?.spawn_confirmation_id || ''),
     parentId: Number(m?.session_id || 0),
@@ -251,6 +265,13 @@ export function recordFromMessage(m: any): SpawnConfirmationRecord {
     initialPrompt: String(m?.initial_prompt || ''),
     effort: String(m?.effort || ''),
     executionMode: String(m?.execution_mode || ''),
+    billingMode: billing.billing_mode === 'api-key' ? 'api-key' : 'plan-login',
+    billingProfile: typeof billing.billing_profile === 'string' ? billing.billing_profile : '',
+    billingRevision: typeof billing.billing?.revision === 'string' && /^[a-f0-9]{64}$/.test(billing.billing.revision) ? billing.billing.revision : '',
+    maxBudgetUsd: Number.isFinite(billing.max_budget_usd) ? billing.max_budget_usd : undefined,
+    billingProfiles: Array.isArray(billing.billing_profiles) ? billing.billing_profiles.filter((p: any) =>
+      typeof p?.id === 'string' && p.id.length <= 128 && typeof p?.display_name === 'string' && p.display_name.length <= 256 && p.provider === 'claude'
+    ).map((p: any) => ({ id: p.id, display_name: p.display_name, provider: p.provider })) : [],
     permissionPreset: String(m?.permission_preset || ''),
     rememberPermission: Boolean(m?.remember_permission),
     trustGrantProviders: Array.isArray(m?.trust_grant_providers)
@@ -324,6 +345,18 @@ export function noteSpawnConfirmationRequested(m: any): void {
   const record = recordFromMessage(m);
   if (!record.id) return;
   pendingSpawnConfirmations.set(record.id, record);
+}
+
+// A changed private recipe requires fresh disclosure and a separate click. The
+// HTTP response can refresh only the same still-pending confirmation; it cannot
+// resurrect a request closed by a concurrent WebSocket event.
+export function refreshSpawnConfirmationDisclosure(id: string, parentId: number, message: any): boolean {
+  const previous = pendingSpawnConfirmations.get(id);
+  if (!previous || previous.parentId !== parentId
+    || message?.type !== 'spawn_confirmation_requested'
+    || message.spawn_confirmation_id !== id || message.session_id !== parentId) return false;
+  pendingSpawnConfirmations.set(id, recordFromMessage(message));
+  return true;
 }
 
 // parentId の保留件数（サイドバーの印・× 無効化の両方から使う）。

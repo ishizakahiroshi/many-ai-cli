@@ -143,6 +143,7 @@ pub struct ChildPreparation {
     pub branch: String,
 }
 pub struct ChildPreparer {
+    paths: RuntimePaths,
     pub boards: Arc<BoardStore>,
     git: WorktreeGit,
     hub_cwd: PathBuf,
@@ -165,6 +166,7 @@ impl ChildPreparer {
             ));
         }
         Ok(Self {
+            paths: paths.clone(),
             boards: Arc::new(BoardStore::new(paths)),
             git,
             hub_cwd,
@@ -501,6 +503,7 @@ impl ChildLaunchExecutor {
         let cfg = self.cfg()?;
         let resolved = super::child_options::prepare(request.body, &cfg)
             .map_err(|e| ChildLaunchError::new(400, "bad_request", e.to_string()))?;
+        let resolved = self.prepare_billing(resolved)?;
         let body = resolved.request();
         if parent.depth >= cfg.orchestration.max_depth {
             self.notify_limit(
@@ -627,9 +630,19 @@ impl ChildLaunchExecutor {
         } else {
             None
         };
-        let subscription = resolve_subscription(body, &parent, role_subscription, &cfg);
+        let subscription = if resolved.billing().is_some_and(|billing| billing.is_api()) {
+            if !body.subscription_profile_id.is_empty() {
+                return Err(SessionError::InvalidRequest(
+                    "API billing cannot select a subscription profile".into(),
+                ));
+            }
+            String::new()
+        } else {
+            resolve_subscription(body, &parent, role_subscription, &cfg)
+        };
         let spec = WrappedSpawnSpec {
             registration_metadata: SpawnRegistrationMetadata {
+                headless_billing: resolved.billing().cloned(),
                 parent: parent.id,
                 role: body.role.clone(),
                 auto: true,
@@ -806,10 +819,39 @@ impl ChildLaunchExecutor {
     }
 }
 impl ConfirmationExecutor for ChildLaunchExecutor {
+    fn prepare_billing(
+        &self,
+        mut body: ResolvedChildSpawn,
+    ) -> Result<ResolvedChildSpawn, SessionError> {
+        let selection = super::child_options::billing_selection(&body, &self.cfg()?)
+            .map_err(|error| SessionError::InvalidRequest(error.to_string()))?;
+        if let Some(billing) = body.billing() {
+            config::headless_billing::verify_revision(&self.preparation.paths, billing)
+                .map_err(|error| SessionError::InvalidRequest(error.to_string()))?;
+            return Ok(body);
+        }
+        let selected = config::headless_billing::resolve(&self.preparation.paths, selection)
+            .map_err(|error| SessionError::InvalidRequest(error.to_string()))?;
+        body.set_billing(selected);
+        Ok(body)
+    }
+    fn refresh_billing(
+        &self,
+        mut body: ResolvedChildSpawn,
+    ) -> Result<ResolvedChildSpawn, SessionError> {
+        let selected = super::child_options::billing_selection(&body, &self.cfg()?)
+            .map_err(|error| SessionError::InvalidRequest(error.to_string()))?;
+        let billing = config::headless_billing::resolve(&self.preparation.paths, selected)
+            .map_err(|error| SessionError::InvalidRequest(error.to_string()))?;
+        body.set_billing(billing);
+        Ok(body)
+    }
     fn presentation(&self) -> Result<ConfirmationPresentation, SessionError> {
         Ok(ConfirmationPresentation {
             config: self.cfg()?,
             trust_grant_providers: self.services.trust_grant_providers()?,
+            billing_profiles: config::headless_billing::profiles(&self.preparation.paths)
+                .map_err(|error| SessionError::InvalidRequest(error.to_string()))?,
         })
     }
     fn spawn<'a>(
@@ -948,7 +990,9 @@ pub fn launch_option_change_note(
     .join(", ")
 }
 fn restart_spec(mut spec: WrappedSpawnSpec) -> WrappedSpawnSpec {
+    let billing = spec.registration_metadata.headless_billing.clone();
     spec.registration_metadata = SpawnRegistrationMetadata::default();
+    spec.registration_metadata.headless_billing = billing;
     spec.spawn_attempt = None;
     spec.registration_proof = None;
     spec.label.clear();

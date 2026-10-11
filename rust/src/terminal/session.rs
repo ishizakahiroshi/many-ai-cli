@@ -33,6 +33,7 @@ pub mod board_input;
 mod branch;
 pub mod completion;
 pub mod confirmations;
+mod headless_progress;
 mod input;
 mod lane;
 mod lifecycle;
@@ -207,6 +208,7 @@ enum UiFrame {
     Message(Box<proto::Message>),
     GitTurn(GitTurnNotification),
     SpawnCorrelation(SpawnCorrelationNotification),
+    HeadlessProgress(HeadlessProgressNotification),
 }
 struct ConfirmationEntry {
     pending: PendingSpawnConfirmation,
@@ -516,6 +518,31 @@ impl State {
                         }
                     }
                 }
+                CoreEffect::BroadcastHeadlessProgress(event) => {
+                    if self
+                        .sessions
+                        .get(&LiveSessionId(event.session_id))
+                        .is_some_and(|s| s.usage_probe)
+                    {
+                        continue;
+                    }
+                    for ui in self.uis.values_mut() {
+                        if ui.priming {
+                            // One latest progress snapshot per session; preserve its lane position.
+                            if let Some(queued) = ui.queued.iter_mut().find(|frame| matches!(frame, UiFrame::HeadlessProgress(old) if old.session_id == event.session_id)) {
+                                *queued = UiFrame::HeadlessProgress(event.clone());
+                            } else {
+                                ui.queued.push(UiFrame::HeadlessProgress(event.clone()));
+                            }
+                        } else {
+                            out.push(CoreEffect::SendUiHeadlessProgress {
+                                binding: ui.binding,
+                                event: event.clone(),
+                                best_effort: true,
+                            });
+                        }
+                    }
+                }
                 CoreEffect::Persist(effect) => {
                     let id = super::journal::persistence_session(&effect);
                     let binding = self
@@ -750,6 +777,13 @@ impl SessionCore for SessionEngine {
         now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         SessionEngine::apply_observation(self, binding, observation, now)
+    }
+    fn observe_headless_progress(
+        &self,
+        binding: SessionBinding,
+        progress: crate::orchestration::headless_progress::HeadlessProgress,
+    ) -> Result<CoreEffects, SessionError> {
+        SessionEngine::observe_headless_progress(self, binding, progress)
     }
     fn observe_output(
         &self,

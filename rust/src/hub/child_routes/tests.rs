@@ -85,6 +85,12 @@ impl WrappedSessionSpawner for Io {
 #[derive(Default)]
 struct BoundExecutor(OnceLock<Arc<dyn ConfirmationExecutor>>);
 impl ConfirmationExecutor for BoundExecutor {
+    fn prepare_billing(
+        &self,
+        body: ResolvedChildSpawn,
+    ) -> Result<ResolvedChildSpawn, SessionError> {
+        self.0.get().unwrap().prepare_billing(body)
+    }
     fn presentation(&self) -> Result<ConfirmationPresentation, SessionError> {
         self.0.get().unwrap().presentation()
     }
@@ -531,4 +537,55 @@ async fn children_query_includes_terminal_children_and_unknown_parent_is_empty()
     )
     .unwrap();
     assert!(json["children"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn api_billing_cannot_bypass_confirmation_when_global_confirmation_is_off() {
+    let f = fixture("off", 4).await;
+    let path = f._root.path().join("trial/headless-billing.json");
+    crate::config::private_io::write_atomic(&path, br#"{"version":1,"profiles":[{"id":"synthetic","display_name":"Synthetic fixture","provider":"claude","command":"synthetic-never-executed"}]}"#).unwrap();
+    let mut req = request(f.parent, "");
+    req.body = serde_json::to_vec(&serde_json::json!({"role":"worker","provider":"claude","execution_mode":"headless","billing_mode":"api-key","billing_profile":"synthetic","max_budget_usd":1.0,"same_tree":true})).unwrap();
+    let route = f.route.clone();
+    let wait = HttpWaitCancellation::default();
+    let owned = wait.clone();
+    let http = tokio::spawn(async move {
+        route
+            .spawn_authenticated(&req, None, &owned, Timestamp::now())
+            .await
+    });
+    bounded(async {
+        loop {
+            if !f.core.pending().is_empty() {
+                break;
+            }
+            if http.is_finished() {
+                panic!("API request did not enter confirmation");
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await;
+    let pending = f.core.pending().remove(0);
+    assert!(pending.body.billing().unwrap().is_api());
+    assert!(!pending.body.billing().unwrap().revision.is_empty());
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+    wait.cancel();
+    assert_eq!(bounded(http).await.unwrap().status, 503);
+}
+
+#[test]
+fn billing_http_wire_fields_are_rust_only_and_preserve_selection() {
+    let child: ChildSpawnRequest = crate::proto::wire::decode(
+        br#"{"billing_mode":"api-key","billing_profile":"synthetic","max_budget_usd":0.25}"#,
+    )
+    .unwrap();
+    assert_eq!(child.billing_mode, "api-key");
+    assert_eq!(child.max_budget_usd, Some(0.25));
+    let decision: SpawnConfirmationResponse = crate::proto::wire::decode(
+        br#"{"billing_mode":"plan-login","billing_profile":"","max_budget_usd":null}"#,
+    )
+    .unwrap();
+    assert_eq!(decision.billing_mode.as_deref(), Some("plan-login"));
+    assert_eq!(decision.max_budget_usd, None);
 }

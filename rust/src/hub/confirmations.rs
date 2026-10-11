@@ -37,6 +37,22 @@ impl GoWire for SpawnConfirmationResponse {
                 kind: "*string",
             },
             Field {
+                name: "billing_mode",
+                kind: "*string",
+            },
+            Field {
+                name: "billing_profile",
+                kind: "*string",
+            },
+            Field {
+                name: "billing_revision",
+                kind: "*string",
+            },
+            Field {
+                name: "max_budget_usd",
+                kind: "*float64",
+            },
+            Field {
                 name: "execution_mode",
                 kind: "*string",
             },
@@ -125,6 +141,21 @@ fn response_error(error: SessionError) -> Response {
             "already_decided",
             "spawn confirmation has already been decided",
         ),
+        SessionError::BillingProfileChanged { disclosure } => Response::json(
+            409,
+            &serde_json::json!({
+                "ok": false,
+                "error": "billing_profile_changed",
+                "detail": crate::config::headless_billing::BillingError::RevisionChanged.to_string(),
+                "confirmation": disclosure,
+            }),
+        ).no_store(),
+        SessionError::InvalidRequest(detail)
+            if detail
+                == crate::config::headless_billing::BillingError::RevisionChanged.to_string() =>
+        {
+            Response::error(409, "billing_profile_changed", &detail)
+        }
         SessionError::InvalidRequest(detail) => Response::error(400, "bad_request", &detail),
         SessionError::ChildLaunch {
             status,
@@ -193,5 +224,20 @@ mod tests {
             404
         );
         assert_eq!(parent_path("/api/sessions/+1/spawn-confirm").unwrap(), 1);
+    }
+    #[test]
+    fn billing_refresh_is_no_store_conflict_with_only_public_disclosure() {
+        let disclosure = serde_json::json!({"type":"spawn_confirmation_requested", "spawn_confirmation_id":"sc-synthetic", "session_id":7});
+        let response = response_error(SessionError::BillingProfileChanged {
+            disclosure: disclosure.clone(),
+        });
+        assert_eq!(response.status, 409);
+        assert_eq!(
+            response.headers.get("Cache-Control").map(String::as_str),
+            Some("no-store")
+        );
+        let body: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
+        assert_eq!(body["error"], "billing_profile_changed");
+        assert_eq!(body["confirmation"], disclosure);
     }
 }
