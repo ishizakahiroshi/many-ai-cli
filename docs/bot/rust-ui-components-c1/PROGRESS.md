@@ -48,3 +48,7 @@ C1提出は親計画の完了ではなく、C2仕様確認前にC3以降へ進�
 - 指定base向けDraft PR: [#17](https://github.com/ishizakahiroshi/many-ai-cli/pull/17)。61daa7fのsecret-scan成功、Validateは別途実runを照合。CI結果の正本はIssue16。
 
 - 第2巡7f80b94では状態SVG共有helperの名簿、launcherのclose/launch順、shortcut helpの閉じ方を補正。計数/source不変、新SHA再レビュー待ち。7f80b94のValidateにはgovulncheck失敗・release-token-scopes skipあり（残ジョブ進行中時点）。成功扱いしない。
+
+- 追加依頼: §3.1.1に直書き色から既存変数への代表12行対照を追加。dark/light/custom、alpha、provider/状態/Git/footerの意味差を保留し、自動置換・C2採用決定は行わない。全196色の分類とは区別。
+- 手元報告: 61daa7fのWindows再集計（218件、fixture34、hex673/196、rgb320/161、font878/54、button557/398、overlay241/176、input164/124、SVG37、img3、inline311、self-check6）一致。手元追加24変更pathの確認は手元担当の別証拠でありdotsの実行とはしない。
+- 独立レビュー: 7f80b94まで確認済み。54c4002の最終差分読取は審査cancel、許可根拠付きの同一呼出1回もcancelで停止。追加追補を含む新SHAは独立未確認。C1 source棚卸し合格・実画面合格はまだ出していない。

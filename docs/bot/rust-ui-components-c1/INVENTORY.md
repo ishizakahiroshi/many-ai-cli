@@ -10,7 +10,7 @@ last_reviewed: 2026-10-11
 
 # #P-20261011-005 many-ai-cli：Rust UI C1 source棚卸し
 
-> 最終更新: 2026-10-11(日) 19:38:10 JST
+> 最終更新: 2026-10-11(日) 19:42:27 JST
 
 **実画面は未確認。これは固定公開sourceの棚卸しであり、見た目の乱れ・動作合格・C2仕様決定ではない。**
 
@@ -102,9 +102,30 @@ general、appearance、token-statusbar、session、server-connections、subscrip
 |代表|source上の値|判断|
 |---|---|---|
 |主surface|styles.css:50 `--bg:#0e0f12`、:52 `--bg-elev:#15171c`、light側:167以降|dark/lightの意図した差。統一対象は意味aliasの使い方|
-|主文字/補助|styles.css:63 `--text:#e2e8f0`、:68 `--muted:#8994a3`|本文/補助の役割を保持。表示コントラストは実測待ち|
+|主文字/補助|styles.css:62 `--text:#e2e8f0`、:67 `--muted:#8994a3`|本文/補助の役割を保持。表示コントラストは実測待ち|
 |footer固有|token-statusbar.css:155 branch `#bb9af7`、:156 git `#73daca`、:169 ok `#9ece6a`|自前計測パレットとして存在。global token化するかC2判断|
 |状態/識別|styles.css:88–106 badge/provider変数、live-status-color.ts:43/176|意味を失う一色化はしない。動的inlineも最終値へ影響|
+
+#### 3.1.1 直書き色と既存変数の代表対照（追加依頼）
+
+下表は代表12行の分類であり、hex196種類の全件対応表ではない。source基準は同じe1ab622。パスはweb/src/相対。候補は用途が近い既存変数を挙げたC2検討材料で、採用決定や自動置換の推奨ではない。「同値」は既定darkの色値を正規化（#fff→#ffffff、小数表記）した一致のみ。「近似」は色系統と役割の定性的比較で、RGB/知覚色差の距離計算や全変数の最近傍探索は行っていない。透明色は背景合成後の見た目を比較していない。
+
+|直書きの出典・用途・実値|候補変数と既定値 dark / light（styles.css定義行）|同値/近似・保留理由|
+|---|---|---|
+|styles/settings.css:647 avatar背景 `#6366f1`|`--accent`: `#6366f1` / `#4f46e5` (:69/:188)|dark同値。lightとcustomでは変化するため、avatarをテーマaccentへ追従させるか保留|
+|styles/settings.css:651 avatar文字 `#fff`|値だけなら`--bg-elev`: `#15171c` / `#ffffff` (:52/:171)|lightのみ同値だが背景用変数を文字へ転用しない。accent上の文字の意味とコントラストを維持する既存aliasが適切か未確定、置換保留|
+|styles/settings.css:665 avatar成功 `#4ade80`|`--green`: `#22c55e` / `#16a34a` (:82/:201)、文字候補`--green-text`: `#86efac` / `#166534` (:84/:203)|緑系・成功役割の近似候補。surfaceと文字の組合せが違うためどちらも即採用しない|
+|styles/settings.css:666 avatarエラー `#f87171`|意味候補`--danger`: `#fda4af` / `#be123c` (:78/:197)、`--red`: `#ef4444` / `#dc2626` (:79/:198)|赤系近似。`--lane-2` dark `#f87171` (:109、light :216 `#dc2626`)は数値同値でもGit識別色。エラーへlane変数を流用しない|
+|styles/approval.css:284 抑止警告の左枠 `#f59e0b`|`--warn`: `#f59e0b` / `#d97706` (:74/:193)|dark同値・警告役割も近い。light/custom時の枠の視認性は実画面未確認|
+|styles/chat.css:14 filter背景 `#0f1320`|`--bg`: `#0e0f12` / `#f1f5f9` (:50/:169)、`--bg-elev`: `#15171c` / `#ffffff` (:52/:171)|暗いsurface系近似。chat固有の階層差とlight切替の意図は未確定|
+|styles/chat.css:15 下枠 `rgba(255,255,255,0.06)`|枠の意味候補`--line`: `rgba(255,255,255,0.08)` / `#cbd5e1` (:59/:178)|alpha差あり。同値の`--bg-hover` dark (:56、light :175 `rgba(15,23,42,0.06)`)は背景用途。枠→hoverの置換もalpha .06→.08の丸めも行わない|
+|styles/token-statusbar.css:147 label hover文字 `#7aa2f7` と背景 `rgba(122,162,247,.10)`|`--accent`: `#6366f1` / `#4f46e5` (:69/:188)、`--accent-soft`: `rgba(99,102,241,0.12)` / `#ede9fe` (:71/:190)|青系近似だが色相とalpha・lightの不透明度が異なる。footer固有paletteをglobal化するか保留|
+|styles/token-statusbar.css:169 gauge成功背景 `#9ece6a`|`--green`: `#22c55e` / `#16a34a` (:82/:201)|成功/容量状態の緑系近似。footer計測区分の意味はセッション状態と別。既存state pill (:67–85)の変数利用まで未変数化扱いしない|
+|styles/git.css:621 Mバッジ文字 `#1f2937`（背景`--lane-4`）|文字候補`--text-soft`: `#cbd5e1` / `#334155` (:63/:182)|light側の暗い文字系近似。dark側は明るくなるため黄色lane背景上のコントラストを壊す可能性。Git状態の意味と対になる前景を保留|
+|app/provider-icon.ts:60 provider fallback `#6b7280`|中立候補`--muted`: `#8994a3` / `#475569` (:67/:186)、`--muted-2`: `#475569` / `#64748b` (:68/:187)|灰色系近似。未知providerの識別fallbackは補助文字と役割が違い、SVG/利用者カスタム色の契約もある。変更保留|
+|styles/spawn.css:70–71 `var(--accent, #3b82f6)` fallback|既に`--accent`: `#6366f1` / `#4f46e5` (:69/:188)|fallbackは既定値と非同値だが通常は変数が有効。未変数化の直書きとは別枠。定義欠落時の契約を確認せずfallback削除/置換しない|
+
+同じ値でも役割は同じではない。`--green`(:82)、`--prov-opencode`(:102)、`--lane-3`(:110)はdarkで全て`#22c55e`だが、成功・provider・Git laneの別契約であり、lightではgreen/laneが変わりproviderはこのlight節で上書きされない。custom themeの実行時上書き（theme-tokens.ts:166/224）もある。dark/light/custom、alphaと合成背景、provider/状態/Git/footerの意味差を保った採否はC2と実画面受入へ残す。
 
 ### 3.2 ボタン・入力の宣言profile
 
