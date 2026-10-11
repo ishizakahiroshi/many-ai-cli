@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "a114727651bdca2884c3d4b92262bbae240f6b2c",
+    "commit": "57415557542b6446507b9ffec4ad2d29bef441b2",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -139,9 +139,9 @@
   },
   "coverage": {
     "discovered": 1966,
-    "analyzed": 1526,
+    "analyzed": 1527,
     "unresolved": 9,
-    "unknown": 1,
+    "unknown": 0,
     "unclaimed": 430,
     "skipped_by_config": 0
   },
@@ -41398,10 +41398,32 @@
     {
       "path": "web/src/app/approval-queue-tab.ts",
       "adapter": "tsjs",
-      "status": "unknown",
-      "fields": {},
-      "unresolved": [],
-      "reason": "tree-sitter reported a syntax error, so the file was not analyzed. Anything read from a partial parse would be a guess."
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "approval-queue-tab.ts"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
     },
     {
       "path": "web/src/app/approval-store-fixtures.ts",
@@ -45400,7 +45422,7 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "token-statusbar.ts — 画面最下部に固定表示するトークン/コスト ステータスバー。"
+          "value": "token-statusbar.ts — CLI 列の最下段に表示するトークン/コスト ステータスバー。"
         },
         "authentication": {
           "state": "not_configured"

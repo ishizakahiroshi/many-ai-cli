@@ -118,7 +118,7 @@
 .memo-group-done { font-size: var(--fs-sm); }
 .memo-group-done summary { cursor: pointer; color: var(--muted-2, #9aa4b2); }
 .memo-group-done .memo-group-rows { margin-top: 6px; }
-.memo-row { display: flex; align-items: flex-start; gap: 8px; padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.memo-row { display: flex; align-items: flex-start; gap: 8px; padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .memo-row-done { opacity: 0.62; }
 .memo-row-done .memo-row-text { text-decoration: line-through; }
 .memo-row-check { margin-top: 3px; flex-shrink: 0; }
@@ -137,36 +137,46 @@
   font-size: var(--fs-sm);
   resize: vertical;
 }
-.memo-row-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+/* 操作ボタンは横 1 列（✎ 📋 ▶ 起動 🗑）。1 件の高さ（約 36px）は 24px のボタンで決まる。 */
+.memo-row-actions { display: flex; flex-direction: row; align-items: center; align-self: flex-start; gap: 3px; flex-shrink: 0; }
 .memo-row-launch,
-.memo-row-delete {
-  padding: 3px 8px;
+.memo-row-delete,
+.memo-row-edit-btn,
+.memo-row-copy {
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-soft, var(--muted));
   font: inherit;
   font-size: var(--fs-2xs);
+  line-height: 1;
   cursor: pointer;
   white-space: nowrap;
 }
-.memo-row-copy {
-  padding: 3px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-soft, var(--muted));
-  font: inherit;
+/* 絵文字だけのボタン（✎ 📋 🗑）は同じ幅にそろえて、中央に置く。 */
+.memo-row-edit-btn,
+.memo-row-copy,
+.memo-row-delete {
+  width: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: var(--icon-btn-fs);
-  line-height: 1.2;
-  cursor: pointer;
 }
+/* ▶ 起動は一番よく使う操作なので、枠線と文字をアクセント色にして目立たせる。 */
+.memo-row-launch { color: var(--accent, #3b82f6); border-color: var(--accent, #3b82f6); }
+.memo-row-edit-btn:hover,
 .memo-row-copy:hover { color: var(--text); border-color: var(--line-soft, var(--line)); }
 .memo-row-copy.copied { color: #86efac; }
 .memo-row-launch:hover { color: #fff; border-color: var(--accent, #3b82f6); background: var(--accent, #3b82f6); }
 .memo-row-delete:hover { color: #fff; border-color: var(--danger, #e06c75); background: var(--danger, #e06c75); }
+/* 2 回目の押下待ちの文字（「本当に削除」）は幅が要るので、幅の固定を外す。 */
 .memo-row-delete-armed,
-.memo-row-delete-armed:hover { color: #fff; border-color: var(--danger, #e06c75); background: var(--danger, #e06c75); font-weight: 600; }
+.memo-row-delete-armed:hover { color: #fff; border-color: var(--danger, #e06c75); background: var(--danger, #e06c75); font-weight: 600; width: auto; padding: 0 6px; }
 .memo-sidebar-icon { width: calc(var(--nsb-size, 32px) * 0.53); height: calc(var(--nsb-size, 32px) * 0.53); display: block; }
 
 /* C4: 件数バッジ（ボタン本体・セッション一覧の行）。0 件のときは要素ごと hidden にする。 */

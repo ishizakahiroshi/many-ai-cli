@@ -11,6 +11,7 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- Paths inside work memos now open the same context menu as paths in the CLI screen (right-click).
 - **Browser-local session-list tabs.** Group multiple
   session cards into tabs, add and rename tabs, reorder by drag or keyboard menu,
   and move root families using drag/drop or a destination chooser. Safe tab deletion
@@ -144,6 +145,7 @@ Release artifacts are published at
   open memo count.
 
 ### Changed
+- Work memo rows are now a single compact line with an explicit edit (✎) button; clicking a text memo also starts editing.
 - **Daily local Rust builds use the repair worktree, including uncommitted Web
   and Rust changes.** The local build helper no longer fetches an older trial copy
   by default. Explicit source or branch selection remains available for candidate checks.

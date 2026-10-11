@@ -5,6 +5,7 @@ import {
   cwdMatchesMemoProject,
   findOpenMemoByText,
   groupMemosByProject,
+  memoPathType,
   openMemoCountForCwd,
   pickMemoImageFiles,
   resolveMemoPathTarget,
@@ -172,4 +173,22 @@ test('findOpenMemoByText ignores done memos, other text and empty input', () => 
   const memos = [memo({ id: 'done', text: path, done: true }), memo({ id: 'other', text: `${path} C3 から` })];
   expect(findOpenMemoByText(memos, path)).toBeUndefined();
   expect(findOpenMemoByText(memos, '   ')).toBeUndefined();
+});
+
+// C2: 作業メモ内のパスをファイルかフォルダか推測する（showPathPopup の pathType に渡す）。
+test('memoPathType treats a path with an extension as a file', () => {
+  expect(memoPathType('D:\\x\\plan_a.md')).toBe('file');
+  expect(memoPathType('docs\\local\\plan_x.md')).toBe('file');
+  expect(memoPathType('/repo/docs/plan_x.md')).toBe('file');
+});
+
+test('memoPathType treats a path without an extension as a directory, except known file names', () => {
+  expect(memoPathType('F:\\nursery\\writing\\card_strategy_note_bundle')).toBe('dir');
+  expect(memoPathType('D:\\x\\Makefile')).toBe('file');
+  expect(memoPathType('/repo/Dockerfile')).toBe('file');
+});
+
+test('memoPathType treats a trailing separator as a directory', () => {
+  expect(memoPathType('D:\\x\\sub\\')).toBe('dir');
+  expect(memoPathType('/repo/sub/')).toBe('dir');
 });

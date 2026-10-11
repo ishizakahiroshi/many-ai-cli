@@ -197,6 +197,22 @@ export function totalOpenMemoCount(): number {
   return sharedCache.filter((m) => !m.done).length;
 }
 
+/**
+ * メモ本文のパスがファイルかフォルダかを推測する（showPathPopup の pathType に渡す）。
+ * 推測なので、誤って 'dir' にしても「既定のアプリで開く」が消えるだけで、フォルダを開く項目は残る。
+ * 末尾が区切り、または最後の要素に拡張子（. + 英数字 1〜8 文字）が無く、既知のファイル名でもなければ 'dir'。
+ * 既知のファイル名（Makefile 等）は path-links.ts の isTextPath と同じ並びを 1 行で持つ
+ * （memo-model.ts は path-links.ts を import できない・循環 import のため）。
+ */
+export function memoPathType(path: string): 'file' | 'dir' {
+  const trimmed = path.trim();
+  if (/[\\/]$/.test(trimmed)) return 'dir';
+  const last = trimmed.split(/[\\/]/).pop() ?? '';
+  if (/\.[A-Za-z0-9]{1,8}$/.test(last)) return 'file';
+  if (/^(Dockerfile|Makefile|README|LICENSE|CHANGELOG|NOTICE)$/i.test(last)) return 'file';
+  return 'dir';
+}
+
 // path-links.ts の joinPath / normalizePathSegments と同じ実装（コメント参照）。
 function joinPath(base: string, rel: string): string {
   if (!base || !rel) return rel || base || '';
