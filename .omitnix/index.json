@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "a114727651bdca2884c3d4b92262bbae240f6b2c",
+    "commit": "e1ab622aa7708ae883a3cdd83d042fbf2cf31e38",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1966,
+    "discovered": 1970,
     "analyzed": 1526,
     "unresolved": 9,
     "unknown": 1,
-    "unclaimed": 430,
+    "unclaimed": 434,
     "skipped_by_config": 0
   },
   "files": [
@@ -1399,6 +1399,38 @@
         }
       },
       "unresolved": []
+    },
+    {
+      "path": "docs/bot/rust-ui-components-c1/FACTS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/rust-ui-components-c1/PROGRESS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/rust-ui-components-c1/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/rust-ui-components-c1/REVIEW.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
     },
     {
       "path": "docs/bot/session-list-tabs/FACTS.md",
