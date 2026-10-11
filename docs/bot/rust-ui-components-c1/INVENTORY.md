@@ -10,7 +10,7 @@ last_reviewed: 2026-10-11
 
 # #P-20261011-005 many-ai-cli：Rust UI C1 source棚卸し
 
-> 最終更新: 2026-10-11(日) 19:29:15 JST
+> 最終更新: 2026-10-11(日) 19:34:54 JST
 
 **実画面は未確認。これは固定公開sourceの棚卸しであり、見た目の乱れ・動作合格・C2仕様決定ではない。**
 
@@ -50,7 +50,7 @@ python3 docs/bot/rust-ui-components-c1/recount_ui.py --repo . --ref e1ab622aa770
 |S02|セッション一覧とタブ/編集、index.html:1279/1612、session-list-tabs.ts:344、session-list.ts:216|session-list-tabs.css、styles.css。native dialog編集、選択/drag/長押しは別状態|
 |S03|上部セッションstrip、index.html:1779、session-strip.ts:215/468|session-strip.css。project/scope/グリップ、幅条件|
 |S04|メインビュー選択9タブ、index.html:1751–1759、settings.ts setActiveTab|tabs.css、styles.css。terminal/multi/chat/files/git/review/orchestration/approval/history|
-|S05|端末と入力/action-bar/添付/音声、terminal.ts、attachments.ts、voice.ts/voice-whisper.ts|terminal.css/voice.css、styles.css。xterm vendor、IME、入力フォント、mobile条件|
+|S05|端末と入力/action-bar/添付/音声、terminal.ts、attachments.ts、voice.ts/voice-whisper.ts。slash-pickerはindex.html:1864、app.ts:2649–2755、styles.css:2009–2098の子面|terminal.css/voice.css、styles.css。xterm vendor、IME、入力フォント、mobile条件|
 |S06|マルチペイン/配置メニュー、multi-pane.ts、flexible-pane-views.ts:40、pane-placement-menu.ts:121|terminal.css/pane-placement.css/tabs.css。既存DOMを移す、複製しない|
 |S07|チャット/生ログモーダル、chat-history.ts:1347、index.html:1809|chat.css、styles.css、highlight vendor。raw overlay別状態|
 |S08|Files/プレビュー/移動dialog、files-view.ts:1911/1982、index.html:1827|files.css。画像・動画・音声・Markdown/コードを子表示として持つ|
@@ -64,13 +64,13 @@ python3 docs/bot/rust-ui-components-c1/recount_ui.py --repo . --ref e1ab622aa770
 |S16|設定画面24セクション、index.html:41/65–982、settings.ts|settings.css/各機能CSS。section一覧は下記。配色/theme/close-leftもここで選ぶ|
 |S17|汎用確認/入力/危険操作/停止、settings.ts: appConfirm系/818|settings.css:871–965、spawn.css:576。div overlay、typed/warn/dangerを混同しない|
 |S18|新規セッション/モデルpicker/作業folder、index.html:1285/2141、spawn-panel.ts:2211|spawn.css。モデルpickerのoverlayをS17と共用、内容は置換|
-|S19|子起動承認、spawn-confirm.ts:251/616、ws-client.ts呼出|spawn-confirm.css。native dialog top-layer、520px以下の幅切替|
+|S19|子起動承認、spawn-confirm.ts:251/616、ws-client.ts呼出|spawn-confirm.css。native dialog top-layer、520px以下width指定変更。ただしbase max-widthが残る|
 |S20|CLI保守/確認/ログ、cli-maintenance.ts:429/593、index.html:343|cli-maintenance.css。2種類のnative dialog、状態表示|
 |S21|Provider登録/履歴、index.html:1027/1113、provider-manager.ts:116/provider-manager-view.ts|settings.css、provider-icon.ts。独自icon画像/色入力を含む|
 |S22|Subscription/usage詳細・確認、subscriptions.ts:137/420、usage-panel.ts:686/847|subscriptions.css、styles.css。popoverとprobe確認overlayを分ける|
 |S23|Server/remote profiles、index.html:1135、server-modal.ts:446|server-modal.css。refresh/接続状態/close、操作契約変更なし|
 |S24|外部公開popover/接続案内、host-expose.ts:263、mobile-connect.ts:281|host-expose.css/mobile-connect.css。QR/consent/wizardは同一機能の段階|
-|S25|PINログイン、index.html:2144、remote-auth.ts:118|styles.css。認証動作・tokenは今回操作しない|
+|S25|PINログイン、index.html:2144、remote-auth.ts:118|settings.css:584–639（styles.cssのimport）。認証動作・tokenは今回操作しない|
 |S26|Workflow進捗pill/modal、workflow-modal.ts:391/449/510|workflow-progress.css。pill.dismissと単独closeを同一化しない|
 |S27|引継ぎ通知/一覧/dialog、handoff.ts:100/187/240|styles.css/close-button.css。本文を無条件取得する機能へ広げない|
 |S28|Relay/派生起動、relay-dialog.ts:514、derive-dialog.ts:200|styles.css/spawn.css。別フォーム、幅/入力/危険操作を確認|
@@ -83,10 +83,9 @@ python3 docs/bot/rust-ui-components-c1/recount_ui.py --repo . --ref e1ab622aa770
 |S35|Lightbox/ファイルmodal/端末expand、lightbox.ts:4、path-links.ts:283、expand-popup.ts:65|styles.css/files.css/terminal.css。全画面overlayと部分popupのwheel契約は別|
 |S36|token/cost footer・送信履歴/詳細、token-statusbar.ts:354/750/1106|token-statusbar.css。意図した自前パレット、close例外|
 |S37|Mobile home/セッションdrawer、mobile-home.ts:420/504、index.html:1227|mobile-home.css。720px/coarse、デスクトップとは別タップ領域|
-|S38|Mobile承認専用/シート、mobile-approval-only.ts:114、mobile-approval-sheet.ts:76/145|mobile-approval-only.css/approval.css。sheet背面はwheel検査の明示除外|
+|S38|Mobile承認専用/シート、mobile-approval-only.ts:114、mobile-approval-sheet.ts:76/145|mobile-approval-only.css/mobile-home.css:540–625。sheet背面はwheel検査の明示除外|
 |S39|Mobile端末lite/詳細/short nudge、mobile-terminal-lite.ts:79/141、mobile-transcript.ts、mobile-short-nudge.ts|mobile-home.css/mobile-short-nudge.css。transcriptは描画材料で独立画面と数えない|
 |S40|分離タブ/分離grid/launcher、detached-view.ts:269/393、detached-grid.ts:706、detached-grid-launcher.ts:271|detached-view.css/detached-grid.css、各元viewCSSを継承。follow/選択/Hubへ戻る|
-
 |S41|起動失敗帯/Reload、boot-guard.ts:118–156|Object.assign(style)のinline #7f1d1d/#fff/#ef4444、font14px/1.5、z2147483647。通常theme外、Reloadは実行しない|
 
 S16設定内の24セクション（index.htmlのdetails[data-section]を重複排除）:
@@ -119,8 +118,8 @@ general、appearance、token-statusbar、session、server-connections、subscrip
 |B04 通常起動|spawn.css:562 launch accent系、spawn-confirm.css:308 is-primary accent/#fff、hover brightness1.08|B02と同じprimary語でも役割/値が違う|
 |B05 起動副操作|spawn-confirm.css:290: minheight control-h-sm、6px14px、muted、fs-md、focus ring box-shadow|B01と余白/文字/高さ/focusが異なる|
 |B06 単独閉じる|close-button.css:24–94: transparent/none/muted、radius-sm、.9rem、2px6px、hover danger-bg/danger|17selector共有。寸法変数の個別overrideあり|
-|B07 tab/pane内閉じる|styles.css:2607 `.main-tab-close`、terminal.css `.ph-close`|隣のtab/hover出現に従う。B06対象外|
-|B08 mobile閉じる/選択|mobile-home.css `.mtl-detail-close`、approval.css `.mas-close`|36px/44pxのタップ領域。desktop密度へ縮めない|
+|B07 tab/pane内閉じる|styles.css:2607 `.main-tab-close`、tabs.css:114–122 `.ph-close`＋pane-placement.css:81–105（後者は常時opacity1等を上書き）|隣のtab/hover出現に従う。B06対象外|
+|B08 mobile閉じる/選択|mobile-home.css `.mtl-detail-close`、mobile-home.css:540–625 `.mas-close`|mtl height36px/mas height44pxのsource指定。coarseではstyles.css:1305–1314 min-height44pxも適用されるためmtl実tap領域を36px固定とはしない|
 |B09 設定header列|settings.css:38 `.settings-header-btn`、:53 close|隣接列の枠/余白を共有、closeだけB06へ剥がさない|
 |B10 action確認|approval.css:713–723 back/go: transparent/line/muted-2 と accent/#fff|承認payload表示と実行契約を維持|
 |B11 自前footer操作|token-statusbar.css:283/315/341: 固有色、hover #2a2f45、focus #7aa2f7|計測footerとしての意図差。theme統合は要判断|
@@ -136,14 +135,19 @@ general、appearance、token-statusbar、session、server-connections、subscrip
 |---|---|---|
 |P01 停止/汎用confirm|M1、min420px/100%、radius-md、padding14、line枠、rgba黒.5、z9100|Esc/外側/ボタン。停止のEnterはshutdown。詳細§4|
 |P02 model picker|M1、min460px/100%、radius-lg、padding12、同overlay|検索/選択、S17とoverlay共用、同時表示を仮定しない|
-|P03 spawn-confirm|M2、min620px/calc100vw-32px、radius-lg、padding0、backdrop黒.62|showModal/cancel/結果。520px以下width-16px、maxheight90dvh|
+|P03 spawn-confirm|M2、min620px/calc100vw-32px、radius-lg、padding0、backdrop黒.62|showModal/cancel/結果。520px以下width=calc(100vw - 16px)だがmax-width=calc(100vw - 32px)はbaseから残る。max-height=min(90dvh,760px)。実際のused幅は制約を併せて決まる|
 |P04 CLI保守|M2、cli-maintenance.css:75/89、spawnに揃えたline/radius-lg/黒.62|確認とログは別dialog、実行中disable等を維持|
 |P05 action-confirm|M1、approval.css:670–723|payload確認→戻る/実行、他の確認へ無条件置換しない|
 |P06 memo|M4、memo.css、data-wheel-native|開いたまま端末操作。modal化しない|
-|P07 mobile承認sheet|M5、approval.css、mobile-approval-sheet.ts:76|tap/ドラフト抑制/自動表示、wheel例外は既存規則|
+|P07 mobile承認sheet|M5、mobile-home.css:540–625、mobile-approval-sheet.ts:76|tap/ドラフト抑制/自動表示、wheel例外は既存規則|
 |P08 detachedタブ/grid|M6、detached-view.css/detached-grid.css|別window/follow/元画面復帰、overlay z-indexと比較不可|
 
-server/bug-report/handoff/routine/relay/files/lightbox/shortcut/help等の個別幅と閉じ方は画面名簿および再集計profileに残す。これら8代表を全種類の完全数とはしない。別DOM階層のz-index数字だけで前後を保証しない。native dialogのtop-layerは通常overlayのz-indexより別機構。
+S17の特殊subcase（通常confirmと同一契約にしない）:
+
+- appLegacyResetNotice（settings.ts:711–754、呼出app.ts:2420）: 同じconfirm-dialog/overlayを使うが、✕/Cancel/外側clickによるcloseを提供せず、EscはcaptureでpreventDefault/stopPropagation。実行buttonの初期focus、3つのcheckbox値を返す。overlay不在のnullと通常のcancelを混同しない。sourceコメントにはEscapeでnullと残る箇所があるが、実装上の遮断を優先して記録する。これは改修依頼ではない。
+- showApprovalToast（settings.ts:52–112）: checkApprovalOnStartupから条件付き表示。aac-wheel-overlay内の承認機能opt-in案内、yes/laterの2操作とyes初期focus。yesはdisabled後enable API、laterはdismiss API、いずれも要素をremove。単なる自動消滅toastとも、汎用Esc/外側cancel付きconfirmとも数えない。承認機能は実際に有効化していない。
+
+server/bug-report/handoff/routine/relay/files/lightbox/shortcut/help等の個別宣言値は再集計profileに残す。閉じ方は下のsource補助名簿で扱い、CSS計数がJS契約も調べたとはしない。これら8代表を全種類の完全数とはしない。別DOM階層のz-index数字だけで前後を保証しない。native dialogのtop-layerは通常overlayのz-indexより別機構。
 
 ### 3.4 アイコン
 
@@ -165,6 +169,35 @@ server/bug-report/handoff/routine/relay/files/lightbox/shortcut/help等の個別
 - R5 terminal.ts:159 `isModalOverlayOpen`と:1192 data-wheel-native。scripts/check-wheel-overlays.mjsはviewport fixed単純selectorを検査し、mobile sheet/部分popover/複合selectorには限界がある。
 - R6 flexible-pane-views.ts:14/40のsingleRootsとFilesTabManager.mountPaneContent、detached表示。DOM IDを複製せずstate契約を保つ。
 - R7 ui-side.ts:94 body class、user-prefs、theme/store。見た目の共通化が保存値や承認/送信契約を書き換えてはならない。
+
+### 閉じ方・focusの補助名簿（source確認）
+
+CSS再集計はJSの閉じ方を出力しない。以下は別途sourceを読んだ契約で、ブラウザでの動作結果ではない。明示focusが無い所のUA focusや全てのボタンの連打競合は未検証。
+
+|画面/描画元|close/操作・後始末・初期focus|
+|---|---|
+|S22 subscriptions.ts:251–303|stacking同意はcheckbox未選択でOK disabled、changeで有効化しclickでもchecked確認。Enterの暗黙確定を実装せず、Esc/外側/cancelはfalse。checkboxをsetTimeout focus、同意時のみlocalStorage、listener除去/hidden/内容消去。overlay不在はwindow.confirm fallbackで別経路|
+|S19 spawn-confirm.ts:423–616|open時Escは閉じるだけで拒否送信しない。deciding中cancelをpreventDefault、HTTP200後WS未達のfallbackでのみ解除可。type=buttonで暗黙submitを避ける。closeはcleanup/controller/timer終了。showModalのUA focusは未実測|
+|S20 cli-maintenance.ts:429–475/593–612|確認cancelと実行、ログclose。native close eventでremove。実処理は実行していない|
+|S23 server-modal.ts:446–488|✕、box外mousedown/touchstart、Esc capture(preventDefault/stopPropagation)。hidden、connectAbort、key/down listener除去。open関数に明示初期focus無し|
+|S24 mobile-connect.ts:1087–1138|✕、box外（openerは除外）、Esc。最初のinput/buttonへfocus、closeでopenerへ戻す。reveal=false、snapshot消去、timer/visibility/key/down handler除去。秘密表示状態を残さない|
+|S24 host-expose.ts:306–339|Esc/外側popover dismiss、key/down handler除去とDOM remove。設定操作自体は別契約で未実行|
+|S25 remote-auth.ts:118/195–211|PIN input focus、EnterはpreventDefaultしてsubmitPINLogin。成功/失敗表示の認証経路であり、汎用cancel付きdialogとして扱わない|
+|S26 workflow-modal.ts:485–520|✕/Esc/box外mousedown/touchstart/pill再click。pill自身は外側handlerから除外、DOMとlistenersを除去|
+|S27 handoff.ts:187–205/380|✕/Esc/外側、DOM/listener除去、close button初期focus（一覧検索のfocusも後にある）|
+|S28 relay-dialog.ts:475–549|✕/cancel/外側mousedown/Esc、prefs保存・generation進行・current session消去・hidden。planInput focus|
+|S28 derive-dialog.ts:211–218/655–694|cancel/Esc/外側、keydown除去/DOM remove。promptArea focus。保存/開始actionは別処理|
+|S29 routines.ts:52–69|native dialog.close、close eventでgeneration進行/timer停止/opener.focus。showModal、browserのEscと外側クリックは同一仕様ではない|
+|S30 memo-panel.ts:300–301/483–506|drawer closeはhidden、入力focus。本文編集Escはfinish(false)で編集中止。非modal、画面全体のEscで他UIと同じ閉鎖を保証しない|
+|S32 session-search-palette.ts:513/526–539/599–611|外側mousedown/Escでclose、検索input focus、↑↓で候補移動、Enterは選択実行または検索。Ctrl/Cmd+Kでopen|
+|S33 shortcut-help.ts:48–67/94–117|✕/`?`再入力でhidden。typing targetや他overlay表示中は起動抑制。Esc汎用閉鎖を仮定しない|
+|S33 first-run-tour.ts:73–151|✕/Esc/外側はcomplete、laterは別処理。keydown除去、opener focus、次へbutton focus。閉じると後で見るを混同しない|
+|S34 bug-report-modal.ts:76–95/337–393|✕/cancel/外側/keydown handler、DOM/参照/body class等を後始末、symptom focus。submit disableには未入力/log preview待ち条件、送信未実施|
+|S35 lightbox.ts:22–29|Esc/外側でDOM/key listener除去。画像内部clickは同一ではない|
+|S35 path-links.ts:228–327|✕/外側/Esc capture、file modal DOMとkey handler除去。pop-outは別操作|
+|S40 detached-grid-launcher.ts:335–349|✕/overlay自身click/起動完了でremove。共通Esc実装を想定しない|
+
+未確認として残す細部: 各状態の実focus順・focus復帰/連打/既定Enterとclickの競合、provider画像dialog・Git/files子popup・footer詳細・mobile sheet全状態のイベント全組合せ。上表と停止契約以外の閉じ方を「すべて確認済み」としない。C2で共通部品へ移す際は、変更対象ごとにこの残りの契約を確定してから実装へ進む。
 
 ## 4. Hubを停止：source操作契約
 

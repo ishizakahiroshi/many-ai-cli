@@ -10,7 +10,7 @@ last_reviewed: 2026-10-11
 
 # #P-20261011-005 many-ai-cli：C1資料の入口
 
-> 最終更新: 2026-10-11(日) 19:30:01 JST
+> 最終更新: 2026-10-11(日) 19:34:54 JST
 
 管理Issue: [#16](https://github.com/ishizakahiroshi/many-ai-cli/issues/16)。送信・受付・調査提出・独立レビュー・手元検収の状態遷移は、このIssueのコメントに集約する。
 
@@ -18,13 +18,13 @@ last_reviewed: 2026-10-11
 
 - [作業指示](README.md): 目的、五軸の棚卸し、許可/禁止、提出形式。
 - [確認済み事実](FACTS.md): 公開source SHAと手元との差、停止モーダル、既存共通部品、自動CIの範囲。
-- [独立レビュー手順](REVIEW.md): sourceと集計を別担当が検証する。レビューは未実施。
-- 調査成果 [INVENTORY.md](INVENTORY.md): source棚卸し候補。再集計は [recount_ui.py](recount_ui.py)。独立レビューは固定成果SHAで実施後、REVIEW.mdとIssueへ記録する。
+- [独立レビュー手順](REVIEW.md): sourceと集計を別担当が検証する。第1巡と修正候補を記録。
+- 調査成果 [INVENTORY.md](INVENTORY.md): source棚卸し候補。再集計は [recount_ui.py](recount_ui.py)。独立レビュー第1巡の結果と修正をREVIEW.mdへ記録。新成果SHAの再レビュー待ち。
 - 最初の指示公開commit: `fad045cba803e7827d31cdaddcb4f333f1f39f32`。レビューdiffの起点。管理Issue追記後の最終固定指示URLはIssue本文・送信文へ載せる。branch最新版URLと区別する。
 
 ## 完了していない受入
 
-1. dotsの受付（番号、repo、固定指示commit、基準SHA、今回の能力、担当分離）。
+1. dots受付・source棚卸し候補は提出済み（最終受入とは別）。
 2. 公開SHAの全画面名簿、五軸の分類、再現できる計数、停止モーダルの契約一覧。
 3. 調査担当と別担当によるレビューと、修正後SHAの再確認。
 4. 手元AIによる全差分・集計の照合、普段のビルド元にある追加変更の確認、非公開棚卸しへの反映。
@@ -41,6 +41,8 @@ last_reviewed: 2026-10-11
 - 再集計self-check 6成功/0失敗/0skip。固定SHA再集計成功。CSSのEOF未閉鎖2 warningを明記。
 - 既存wheel静的gate成功（33件/免除1件）。instrumentationは最初archiveでGit無しexit1、その後固定SHAの隔離Git checkoutで成功（台帳17/active2）。過去失敗を隠さず、後者が実施結果。
 - 依存追加・製品変更・製品build・Hub操作なし。Windows/実画面/mobile/手元未公開差分は未検収。
-- 別contextのsource先読み・集計一致確認済み。固定成果SHAの全差分レビューは未了。PR/CIは提出後にIssueで実行結果・skipを区別して報告。
+- 別contextのsource先読み・集計一致確認済み。成果61daa7fの全差分を独立レビューし文書5項目を修正。新成果SHAの再レビューは未了。PR/CIは提出後にIssueで実行結果・skipを区別して報告。
 
 C1提出は親計画の完了ではなく、C2仕様確認前にC3以降へ進めない。
+
+- 指定base向けDraft PR: [#17](https://github.com/ishizakahiroshi/many-ai-cli/pull/17)。61daa7fのsecret-scan成功、Validateは別途実runを照合。CI結果の正本はIssue16。
