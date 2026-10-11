@@ -56,6 +56,19 @@ mod tests {
             0o700
         );
     }
+    #[cfg(windows)]
+    #[test]
+    fn private_atomic_create_and_replace_match_owner_and_acl_verification() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("synthetic-private.json");
+        let security = PrivateSecurity::for_current_user(false).unwrap();
+        for body in [b"first".as_slice(), b"replacement".as_slice()] {
+            write_atomic(&path, body).unwrap();
+            let file = fs::File::open(&path).unwrap();
+            security.verify_file(&file).unwrap();
+            assert_eq!(fs::read(&path).unwrap(), body);
+        }
+    }
     #[test]
     fn private_atomic_replace_and_failure_preserve_data() {
         let t = tempfile::tempdir().unwrap();

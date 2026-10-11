@@ -628,10 +628,9 @@ mod progress_contracts {
         let root = tempfile::tempdir().unwrap();
         let cancel = Cancellation::default();
         let child = cancel.clone();
-        let stop = tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(1200)).await;
-            child.cancel();
-        });
+        // Cancel only after a real running heartbeat, rather than racing a
+        // timer started before the owned process has emitted Started. The
+        // fixture's process timeout still bounds a missing-heartbeat failure.
         let mut snapshots = vec![];
         run_with_progress(
             fixture("sleep", root.path()),
@@ -639,11 +638,15 @@ mod progress_contracts {
             true,
             &cancel,
             |_| {},
-            |p| snapshots.push(p),
+            |p| {
+                if p.state == ProgressState::Running && p.elapsed_ms >= 900 {
+                    child.cancel();
+                }
+                snapshots.push(p);
+            },
         )
         .await
         .unwrap();
-        stop.await.unwrap();
         assert!(
             snapshots
                 .iter()

@@ -66,8 +66,11 @@ impl PrivateSecurity {
             let sid = String::from_utf16(std::slice::from_raw_parts(sid, len))
                 .map_err(|_| io::Error::other("invalid SID encoding"))?;
             let inheritance = if is_dir { "OICI" } else { "" };
+            // The token's default owner can be Administrators on an elevated
+            // Windows runner. Pin new objects to the same user SID that our
+            // read-only verification requires; keep the protected DACL intact.
             let sddl = format!(
-                "D:P(A;{inheritance};FA;;;{sid})(A;{inheritance};FA;;;SY)(A;{inheritance};FA;;;BA)"
+                "O:{sid}D:P(A;{inheritance};FA;;;{sid})(A;{inheritance};FA;;;SY)(A;{inheritance};FA;;;BA)"
             );
             let sddl: Vec<u16> = sddl.encode_utf16().chain([0]).collect();
             let mut descriptor = ptr::null_mut();
