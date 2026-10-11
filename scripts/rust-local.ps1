@@ -27,7 +27,8 @@ param(
     [switch]$Real,           # trial でなく通常モード。ただし home を F:\build\rust-home に向け、実際の ~/.many-ai-cli・DB・Go 版の Hub には触れない
     [switch]$CopyDb,         # -Real のとき、DB（any-ai-cli.db と -wal/-shm）のスナップショットも、コピーして持ち込む（予定の実行が二重に走る可能性があるので既定では持ち込まない）
     [string]$Branch = 'dots/rust-recovery-resume-3',
-    [string]$CodexHome,      # -Real の Hub に CODEX_HOME を渡す（例: %USERPROFILE%\.codex を展開した値）。「全部更新」で、本物の Codex のインストールを更新する。省略時は、仮 home の中だけを見る
+    [string]$CodexHome,      # -Real の Hub に CODEX_HOME を渡す（例: %USERPROFILE%\.codex を展開した値）。「全部更新」で、本物の Codex のインストールを更新する。省略時は実 home の .codex（あれば）を渡す
+    [switch]$IsolateCodex,   # -CodexHome の既定（実 home の .codex）を使わず、Codex も仮 home の中だけで動かす。仮 home の Codex は実 home の bin と食い違うので、「全部更新」は通らない
     [string]$Source,         # 手元の worktree（rust\Cargo.toml があるフォルダ）を、取得せずそのままビルドする。push 不要。-Stop も同じ -Source を付ける
     [int]$Port = 49400
 )
@@ -243,6 +244,12 @@ if ($Real) {
     if ($Run) {
         Step "serve を別ウィンドウで起動（通常モード・ポート $Port・home=$FakeHome）"
         $serveCmd = "`$env:USERPROFILE='$FakeHome'; `$env:HOME='$FakeHome'; "
+        # 仮 home のままだと、Codex のインストーラは仮 home の .codex を見る一方、PATH 上の bin は実 home を指す。
+        # 食い違ってジャンクションの更新が失敗する（2026-10-11 実測）ので、既定は実 home の .codex を渡す。
+        if (-not $CodexHome -and -not $IsolateCodex) {
+            $defaultCodexHome = Join-Path $RealUserHome '.codex'
+            if (Test-Path -LiteralPath $defaultCodexHome -PathType Container) { $CodexHome = $defaultCodexHome }
+        }
         if ($CodexHome) {
             if (-not (Test-Path -LiteralPath $CodexHome -PathType Container)) { throw "-CodexHome のフォルダが見つかりません: $CodexHome" }
             Write-Host "CODEX_HOME=$CodexHome を Hub に渡します。「全部更新」は、本物の Codex のインストールを書き換えます。" -ForegroundColor Yellow
