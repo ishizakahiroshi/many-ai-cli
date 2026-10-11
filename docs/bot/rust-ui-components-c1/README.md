@@ -10,7 +10,7 @@ last_reviewed: 2026-10-11
 
 # #P-20261011-005 many-ai-cli：UI部品統一 C1 棚卸し
 
-> 最終更新: 2026-10-11(日) 18:57:19
+> 最終更新: 2026-10-11(日) 19:18:50
 
 ## 目的と今回の範囲
 
@@ -22,9 +22,9 @@ last_reviewed: 2026-10-11
 
 - 作業repo・指示保存先: `ishizakahiroshi/many-ai-cli`（公開）。本フォルダだけで指示を読める形にする。
 - 調査基準SHA: `e1ab622aa7708ae883a3cdd83d042fbf2cf31e38`。公開Rust候補branch `dots/rust-recovery-resume-3` の送信準備時点。調査の最初にこのSHAを固定し、現在のbranch先端との差を報告する。
-- 指示公開予定branch: `wt/rust-ui-c1-20261011`。研究成果branch: `dots/P-20261011-005-rust-ui-inventory`。Draft PRのbaseは指示公開branch。
-- GitHub管理Issue: 未作成。指示公開の承認後、送信前に手元担当が作成し、この行と看板にURLを追記する。Issue未設定のまま依頼を送らない。
-- 実装reviewのdiff起点: 最初の指示公開commit。後続送信文に固定commit URLを記す。調査基準SHAとは別。
+- 指示公開branch: `wt/rust-ui-c1-20261011`。研究成果branch: `dots/P-20261011-005-rust-ui-inventory`。Draft PRのbaseは指示公開branch。
+- GitHub管理Issue: [#16](https://github.com/ishizakahiroshi/many-ai-cli/issues/16)。送信・受付・提出・レビュー・手元検収の記録先。
+- 実装reviewのdiff起点: 最初の指示公開commit `fad045cba803e7827d31cdaddcb4f333f1f39f32`。送信文の最終固定指示commitと調査基準SHAとは別。
 - 成果: 本フォルダの `INVENTORY.md`、必要なら再集計用の標準ライブラリだけのスクリプト1本、`REVIEW.md` の独立レビュー、`PROGRESS.md` の資料案内。独立レビューの対象SHAを明記する。
 - 状態と報告: 管理Issueコメントを正本とする。報告の毎回の先頭は `#P-20261011-005 many-ai-cli：<報告内容>`。
 
@@ -55,9 +55,9 @@ last_reviewed: 2026-10-11
 
 ## 許可と禁止
 
-この指示は送信前の準備版。GitHub公開とdotsの成果書込みについて手元担当が利用者の承認を得て、管理Issueと送信文で許可範囲を確定してから実行する。
+2026-10-11、利用者がC1の指示・調査文書のGitHub公開、dotsの調査文書のcommit/push・Draft PR・管理Issue報告を明示承認した。この指示と管理Issueで範囲を限定する。
 
-承認後に許可する範囲は、指定成果branch上の本フォルダの調査文書・再集計スクリプトのcommit/push、指定baseへのDraft PR、管理Issueへの調査・レビュー報告だけ。新しいbranch名・baseを推測しない。
+許可する範囲は、指定成果branch上の本フォルダの調査文書・再集計スクリプトのcommit/push、指定baseへのDraft PR、管理Issueへの調査・レビュー報告だけ。新しいbranch名・baseを推測しない。
 
 製品ソース・Rust/Goサーバロジック・i18n文言・workflow・依存・設定の変更、生成索引の手修正、main/develop/Rust候補branchへの直push、merge、release、tag、deploy、Hub停止・起動・再起動・ブラウザリロード、利用者の本番/個人データ利用は禁止。Go版の追加調査・回帰確認をしない。製品ビルド・コンパイルや実Hub実行はしない。調査のための標準ライブラリスクリプトは使用できる。commit hookが本フォルダの新規文書の索引登録を要求した場合だけ、既存omitnixで `.omitnix/index.json` を再生成し、文書追加と生成metadataに由来する差分を確認して含めてよい。ツールの新規導入やgateの迂回はしない。
 

@@ -10,9 +10,9 @@ last_reviewed: 2026-10-11
 
 # #P-20261011-005 many-ai-cli：C1資料の入口
 
-> 最終更新: 2026-10-11(日) 18:53:10
+> 最終更新: 2026-10-11(日) 19:19:10
 
-管理Issue: 未作成。指示branchの公開承認後、送信前に設定する。送信・受付・調査提出・独立レビュー・手元検収の状態遷移は、そのIssueのコメントに集約する。
+管理Issue: [#16](https://github.com/ishizakahiroshi/many-ai-cli/issues/16)。送信・受付・調査提出・独立レビュー・手元検収の状態遷移は、このIssueのコメントに集約する。
 
 ## 指示と証拠
 
@@ -20,7 +20,7 @@ last_reviewed: 2026-10-11
 - [確認済み事実](FACTS.md): 公開source SHAと手元との差、停止モーダル、既存共通部品、自動CIの範囲。
 - [独立レビュー手順](REVIEW.md): sourceと集計を別担当が検証する。レビューは未実施。
 - 調査成果 `INVENTORY.md`: 未提出。提出後にリンクを追加する。
-- 固定指示URL: まだ公開していない。送信時はGitHubのcommit指定URLを使い、branch最新版URLとは区別する。
+- 最初の指示公開commit: `fad045cba803e7827d31cdaddcb4f333f1f39f32`。レビューdiffの起点。管理Issue追記後の最終固定指示URLはIssue本文・送信文へ載せる。branch最新版URLと区別する。
 
 ## 完了していない受入
 
