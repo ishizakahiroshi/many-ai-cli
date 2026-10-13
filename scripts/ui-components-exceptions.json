@@ -213,17 +213,6 @@
     },
     {
       "file": "web/src/styles.css",
-      "selector": ".usage-dropdown",
-      "context": "",
-      "property": "box-shadow",
-      "value": "0 8px 20px rgba(0,0,0,0.4)",
-      "rule": "literal-color",
-      "fingerprint": "12b2209d615b20a65ded4a29671e841d90b36c3856be72de5687d924fc49a099",
-      "count": 1,
-      "reason": "Existing popup, tooltip, drawer or content shadow retains its placement/depth cue outside the shared modal body; the migrated shell uses the shared modal shadow. Reviewed declaration: .usage-dropdown { box-shadow: 0 8px 20px rgba(0,0,0,0.4) }."
-    },
-    {
-      "file": "web/src/styles.css",
       "selector": ".derive-dialog-error",
       "context": "",
       "property": "font-size",
@@ -367,17 +356,6 @@
     },
     {
       "file": "web/src/styles.css",
-      "selector": "#web-menu-dropdown #expose-btn.expose-on, #web-menu-dropdown #expose-btn[aria-pressed=\"true\"]",
-      "context": "",
-      "property": "border-color",
-      "value": "transparent",
-      "rule": "local-control-appearance",
-      "fingerprint": "2147f82d230b445e8214ccd51081e71e20a9b74396df50ec074f6ea5d10936ce",
-      "count": 1,
-      "reason": "Expanded or pressed menu state remains visible and distinct from the resting shared button appearance; existing state selectors and behavior are preserved. Reviewed declaration: #web-menu-dropdown #expose-btn.expose-on, #web-menu-dropdown #expose-btn[aria-pressed=\"true\"] { border-color: transparent }."
-    },
-    {
-      "file": "web/src/styles.css",
       "selector": ".derive-dialog-prompt",
       "context": "",
       "property": "color",
@@ -466,17 +444,6 @@
     },
     {
       "file": "web/src/styles.css",
-      "selector": "#web-menu-dropdown",
-      "context": "",
-      "property": "box-shadow",
-      "value": "0 8px 20px rgba(0,0,0,0.4)",
-      "rule": "literal-color",
-      "fingerprint": "342a5c2fa4edb2ce360f2ebd031ac82daef9794e3274cab4912245767fe79259",
-      "count": 1,
-      "reason": "Existing popup, tooltip, drawer or content shadow retains its placement/depth cue outside the shared modal body; the migrated shell uses the shared modal shadow. Reviewed declaration: #web-menu-dropdown { box-shadow: 0 8px 20px rgba(0,0,0,0.4) }."
-    },
-    {
-      "file": "web/src/styles.css",
       "selector": "[data-theme=\"light\"] .hljs-addition",
       "context": "",
       "property": "background-color",
@@ -532,28 +499,6 @@
     },
     {
       "file": "web/src/styles.css",
-      "selector": ".web-menu-btn.expose-on",
-      "context": "",
-      "property": "background",
-      "value": "color-mix(in srgb, var(--green-bg) 45%, transparent)",
-      "rule": "local-control-appearance",
-      "fingerprint": "4113fdb9f80e75bf8fad55eb4538a2eb6734c2800533a3f0325ee675e8c76502",
-      "count": 1,
-      "reason": "Session or exposed-access state feedback retains its distinct meaning and existing token palette; changing the base UI role must not erase this state. Reviewed declaration: .web-menu-btn.expose-on { background: color-mix(in srgb, var(--green-bg) 45%, transparent) }."
-    },
-    {
-      "file": "web/src/styles.css",
-      "selector": ".web-menu-btn.expose-on:hover, .web-menu-btn.expose-on[aria-expanded=\"true\"]",
-      "context": "",
-      "property": "border-color",
-      "value": "var(--green-text)",
-      "rule": "local-control-appearance",
-      "fingerprint": "445af5294871c5f1ab59804cac0884f14d3ea357716fa5aa666f6c7192ed9407",
-      "count": 1,
-      "reason": "Session or exposed-access state feedback retains its distinct meaning and existing token palette; changing the base UI role must not erase this state. Reviewed declaration: .web-menu-btn.expose-on:hover, .web-menu-btn.expose-on[aria-expanded=\"true\"] { border-color: var(--green-text) }."
-    },
-    {
-      "file": "web/src/styles.css",
       "selector": ".handoff-notify-banner",
       "context": "",
       "property": "box-shadow",
@@ -562,17 +507,6 @@
       "fingerprint": "44fd9d47d2ae5948659337b3d87960f0f39c87ae944e0c3df2fe5602d05645b8",
       "count": 1,
       "reason": "Existing popup, tooltip, drawer or content shadow retains its placement/depth cue outside the shared modal body; the migrated shell uses the shared modal shadow. Reviewed declaration: .handoff-notify-banner { box-shadow: 0 10px 28px rgba(0,0,0,0.4) }."
-    },
-    {
-      "file": "web/src/styles.css",
-      "selector": ".web-menu-btn.expose-on:hover, .web-menu-btn.expose-on[aria-expanded=\"true\"]",
-      "context": "",
-      "property": "background",
-      "value": "color-mix(in srgb, var(--green-bg) 65%, transparent)",
-      "rule": "local-control-appearance",
-      "fingerprint": "458057af70b064db3a98a7be9f3e6e162f2d84a96bb36aecf9635933f8c39a70",
-      "count": 1,
-      "reason": "Session or exposed-access state feedback retains its distinct meaning and existing token palette; changing the base UI role must not erase this state. Reviewed declaration: .web-menu-btn.expose-on:hover, .web-menu-btn.expose-on[aria-expanded=\"true\"] { background: color-mix(in srgb, var(--green-bg) 65%, transparent) }."
     },
     {
       "file": "web/src/styles.css",
@@ -628,17 +562,6 @@
       "fingerprint": "4aae2fbf4b5303837adddeaf7498b027a1c5d842819cef55cd442d07287cec55",
       "count": 1,
       "reason": "This declaration styles modal content, supporting labels, paths, errors or headings using existing shared tokens; it is not a separate button or modal shell appearance. Reviewed declaration: .derive-dialog-note-kind { font-size: var(--fs-sm) }."
-    },
-    {
-      "file": "web/src/styles.css",
-      "selector": "#web-menu-dropdown #expose-btn.expose-on, #web-menu-dropdown #expose-btn[aria-pressed=\"true\"]",
-      "context": "",
-      "property": "background",
-      "value": "transparent",
-      "rule": "local-control-appearance",
-      "fingerprint": "523c32a4c23cc5d1fa3911dc325192c981f9daa3a852ec13c72fe3e61a592903",
-      "count": 1,
-      "reason": "Expanded or pressed menu state remains visible and distinct from the resting shared button appearance; existing state selectors and behavior are preserved. Reviewed declaration: #web-menu-dropdown #expose-btn.expose-on, #web-menu-dropdown #expose-btn[aria-pressed=\"true\"] { background: transparent }."
     },
     {
       "file": "web/src/styles.css",
@@ -763,28 +686,6 @@
     },
     {
       "file": "web/src/styles.css",
-      "selector": ".web-menu-btn.expose-on",
-      "context": "",
-      "property": "color",
-      "value": "var(--green-text)",
-      "rule": "local-control-appearance",
-      "fingerprint": "656d1d359982a896e97f0d179300b1433cbeb273a38d14ddf9637275ae09eaa0",
-      "count": 1,
-      "reason": "Session or exposed-access state feedback retains its distinct meaning and existing token palette; changing the base UI role must not erase this state. Reviewed declaration: .web-menu-btn.expose-on { color: var(--green-text) }."
-    },
-    {
-      "file": "web/src/styles.css",
-      "selector": ".session-footer #settings-btn > span, .session-footer .usage-menu-btn > span, .session-footer .web-menu-btn > span",
-      "context": "@container (max-width: 235px)",
-      "property": "border",
-      "value": "0",
-      "rule": "local-control-appearance",
-      "fingerprint": "689bc4bfe9edaf05d90213ad452a0cc53aae938ee15b01340c0563c2fd456a5a",
-      "count": 1,
-      "reason": "Legacy footer label spans must not acquire a nested border inside the shared action button; this is descendant layout decoration. Reviewed declaration: .session-footer #settings-btn > span, .session-footer .usage-menu-btn > span, .session-footer .web-menu-btn > span { border: 0 }."
-    },
-    {
-      "file": "web/src/styles.css",
       "selector": ".relay-dialog-field input:where([type=\"radio\"]):focus",
       "context": "",
       "property": "border-color",
@@ -793,17 +694,6 @@
       "fingerprint": "6d9c916b35ed943bb306aa38908c39e27a6a336999c13bf3c757954ccc792676",
       "count": 1,
       "reason": "index.html relay-mode radio inputs remain native choices; preserve their prior appearance only for radio suppliers with a zero-specificity type filter. Shared text inputs/selects/textareas no longer receive this legacy rule. Reviewed declaration: .relay-dialog-field input:where([type=\"radio\"]):focus { border-color: var(--accent) }."
-    },
-    {
-      "file": "web/src/styles.css",
-      "selector": ".web-menu-btn.expose-on:hover, .web-menu-btn.expose-on[aria-expanded=\"true\"]",
-      "context": "",
-      "property": "color",
-      "value": "var(--green-text)",
-      "rule": "local-control-appearance",
-      "fingerprint": "6def63f2cb1a745f12ece88b0e57207f881f846f8f5c86fe7d6a9a2633ef4aa7",
-      "count": 1,
-      "reason": "Session or exposed-access state feedback retains its distinct meaning and existing token palette; changing the base UI role must not erase this state. Reviewed declaration: .web-menu-btn.expose-on:hover, .web-menu-btn.expose-on[aria-expanded=\"true\"] { color: var(--green-text) }."
     },
     {
       "file": "web/src/styles.css",
@@ -1464,28 +1354,6 @@
       "fingerprint": "f7a6e358d939cceb68657d7884f997ebeb62141410003d72a1f1a2eaaffbbb5b",
       "count": 1,
       "reason": "Existing overlay or lightbox dimming separates the active surface from underlying content; this value belongs to the backdrop rather than the shared modal body. Reviewed declaration: #about-panel { background: rgba(0, 0, 0, 0.5) }."
-    },
-    {
-      "file": "web/src/styles.css",
-      "selector": ".web-menu-btn.expose-on",
-      "context": "",
-      "property": "border-color",
-      "value": "color-mix(in srgb, var(--green-text) 35%, transparent)",
-      "rule": "local-control-appearance",
-      "fingerprint": "f9da4f11216c67580c28acb3e9674b28f6c5a44b5b574673080f6b2654ec2dfb",
-      "count": 1,
-      "reason": "Session or exposed-access state feedback retains its distinct meaning and existing token palette; changing the base UI role must not erase this state. Reviewed declaration: .web-menu-btn.expose-on { border-color: color-mix(in srgb, var(--green-text) 35%, transparent) }."
-    },
-    {
-      "file": "web/src/styles.css",
-      "selector": "#usage-dropdown, #web-menu-dropdown",
-      "context": "",
-      "property": "box-shadow",
-      "value": "0 -8px 20px rgba(0,0,0,0.4)",
-      "rule": "literal-color",
-      "fingerprint": "fab38ea1bf62d13be755793c41b91d0a5368ec113ff04bbbd299344b434075af",
-      "count": 1,
-      "reason": "Existing popup, tooltip, drawer or content shadow retains its placement/depth cue outside the shared modal body; the migrated shell uses the shared modal shadow. Reviewed declaration: #usage-dropdown, #web-menu-dropdown { box-shadow: 0 -8px 20px rgba(0,0,0,0.4) }."
     },
     {
       "file": "web/src/styles.css",

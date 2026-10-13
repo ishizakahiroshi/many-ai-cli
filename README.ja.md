@@ -22,7 +22,7 @@ https://github.com/user-attachments/assets/5b330094-9609-40ec-b059-c3dae964684f
 
 </details>
 
-**7 つの AI コーディング CLI を 1 画面に。契約を増やせるものは増やす。** `Claude Code` / `Codex CLI` / `GitHub Copilot CLI` / `Cursor Agent CLI` / `Grok Build CLI` / `opencode` / `Command Code` を並列実行できます。`many-ai-cli` は各 CLI を PTY でラップし、承認待ち・タスク完了・エラーで止まった瞬間をデスクトップ／スマホへ知らせます。積んだ契約の残量は、同じ Usage メニューに出ます。
+**7 つの AI コーディング CLI を 1 画面に。契約を増やせるものは増やす。** `Claude Code` / `Codex CLI` / `GitHub Copilot CLI` / `Cursor Agent CLI` / `Grok Build CLI` / `opencode` / `Command Code` を並列実行できます。`many-ai-cli` は各 CLI を PTY でラップし、承認待ち・タスク完了・エラーで止まった瞬間をデスクトップ／スマホへ知らせます。積んだ契約の残量は、同じ 設定 → Usageに出ます。
 
 [English README](README.md) · [README tiếng Việt](README.vi.md)
 
@@ -173,7 +173,7 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 - **言語切替**（英語 / 日本語 / ベトナム語）
 - **ローカル限定**: Hub は `127.0.0.1` のみに bind。`many-ai-cli` 自身はテレメトリを送信しません
 - **リモートアクセス保護**: 設定の「リモートアクセス保護」から、token と認証 cookie を一括再生成する**全アクセス失効**（紛失時のキルスイッチ）、非 loopback アクセス時のみ要求する**任意 PIN**（既定 OFF・ロックアウト付き）、**新規デバイス接続の通知**が使えます
-- **1 つの CLI に複数のサブスクリプション**: 7 つの CLI を 1 つの Hub に。Claude / Codex / Grok / opencode は契約を足して同時に使えます。Usage メニューには Claude / Codex / Grok のプロファイル別残量が出ます（下記参照）
+- **1 つの CLI に複数のサブスクリプション**: 7 つの CLI を 1 つの Hub に。Claude / Codex / Grok / opencode は契約を足して同時に使えます。設定 → Usageには Claude / Codex / Grok のプロファイル別残量が出ます（下記参照）
 
 ## 1 つの CLI に複数のサブスクリプション
 
@@ -181,7 +181,7 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 
 **これは API キーのルーターではありません。** 従量課金の API キーを束ねて安く回すためのものではなく、既に払っている月額契約の枠へ、既に走らせているセッションを割り振るための機能です。**プランの利用上限を回避する手段でもありません。** 同じベンダーのアカウントを複数積んで使う前に、「セキュリティ」節の注意書きを読んでください。
 
-**残量**はその掛け算の内訳であって、単独の機能ではありません。Usage メニューにプロファイルが並び、Claude（5h / 7d）/ Codex / Grok は数字が出ます。Copilot / Cursor / OpenCode はベンダーページへのリンクのままです。とくに Cursor Agent CLI は残量を返すローカルファイルもコマンドも無く（Free tier で確認済み）、検知できません。数字はメニューを開いたときに読み、定期ポーリングはしません。Claude は走行中の報告が無いとき、1 ターンの probe で取りにいきます。ログインを確認できないプロファイルでは、最後に取得できた値を、最新ではない旨と取得時刻を添えて表示します。
+**残量**はその掛け算の内訳であって、単独の機能ではありません。設定 → Usageにプロファイルが並び、Claude（5h / 7d）/ Codex / Grok は数字が出ます。Copilot / Cursor / OpenCode はベンダーページへのリンクのままです。とくに Cursor Agent CLI は残量を返すローカルファイルもコマンドも無く（Free tier で確認済み）、検知できません。数字は Usage を開いたときに読み、定期ポーリングはしません。Claude は走行中の報告が無いとき、1 ターンの probe で取りにいきます。ログインを確認できないプロファイルでは、最後に取得できた値を、最新ではない旨と取得時刻を添えて表示します。
 
 **仕組み**: 対応 CLI はどれも、設定ディレクトリを環境変数で選びます。`many-ai-cli` は profile ごとに `~/.many-ai-cli/subscriptions/<provider>/<dir>` を作り（フォルダ名は ID と別の `p1` `p2` … の短い名前。CLI によってはこの中に長さ制限のあるソケットのパスを作るため。これより前に足した profile は ID のままのフォルダを使い続けます）、セッション起動時にその変数を渡すだけです。ログインは公式 CLI が行い、認証情報はそのディレクトリの中で公式 CLI が持ちます。`many-ai-cli` は token を読みも書きも解析も保存もしません。`config.yaml` に入るのは profile の ID・表示名・フォルダ名・プラン名・有効フラグと、後述の手書き専用の項目（`profile_dir` / `settings_sync` / `profile_owned_keys` / `default_wins_keys`）だけです。
 
@@ -358,7 +358,7 @@ Windows zip の推奨手順:
    - Hub が起動し、ブラウザが自動で開きます（`http://127.0.0.1:47777/?token=<token>`）
    - すでに Hub が起動済みの場合は、ブラウザを開くだけで終了します
 3. ブラウザの Hub UI 左下の **「+ 新しいセッション」** をクリックし、使う AI CLI のセッションを起動する
-4. Hub を意図的に停止するときは、Hub UI の左パネル下部（フッター）の Hub メニューにある `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使う
+4. Hub を意図的に停止するときは、Hub UI の設定 → Hub にある `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使う
 
 ### リリース成果物の検証（チェックサム + 署名）
 
@@ -401,7 +401,7 @@ sha256sum -c SHA256SUMS.txt
 2. 以後はデスクトップのショートカットを**ダブルクリック**するだけです。Windows はタスクトレイにアイコンが出るので、クリックして **「Hub を開く」** を選ぶと、止まっていれば起動してからブラウザで開きます（`http://127.0.0.1:47777/?token=<token>`）。macOS / Linux は「Many AI Hub Start」で黒いコンソールウィンドウと一緒にブラウザが開きます。
 3. ブラウザの Hub UI 左下の **「+ 新しいセッション」** をクリックし、使う AI CLI（claude / codex / copilot / cursor-agent / opencode / grok / command-code）のセッションを起動します。承認待ちが発生すると入力欄の下にアクションバーが出るので、クリックまたはキーボードで操作します。
 
-止めるときは、トレイメニューの **「Hub を停止」**（Windows）、デスクトップの **「Many AI Hub Stop」**（macOS / Linux）、Hub UI の左パネル下部（フッター）の Hub メニューにある `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使います。ターミナルから直接起動したい場合は従来どおり `many-ai-cli serve --open` も使えます。
+止めるときは、トレイメニューの **「Hub を停止」**（Windows）、デスクトップの **「Many AI Hub Stop」**（macOS / Linux）、Hub UI の設定 → Hub にある `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使います。ターミナルから直接起動したい場合は従来どおり `many-ai-cli serve --open` も使えます。
 
 > **すでに旧バージョンを使っている場合**: `setup` をもう一度実行すると「MANY-AI-CLI」が追加されますが、**既存の「Start」「Stop」の 2 個はそのまま残ります**（引き続き動きます）。トレイに移行して不要になったら手動で削除してください。`setup` が勝手に消すことはありません。旧名「Many AI Hub」は同じトレイ起動なので、`setup` が「MANY-AI-CLI」に置き換えます。
 
@@ -991,7 +991,7 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
   - 各セッションカード: `📌`（最上部の「Pinned」グループへ固定）／ `×`（閉じる）／ プロバイダ色のドット ＋ 番号 ＋ 状態バッジ（実行中 / スタンバイ / 待機中 / 完了 / エラー / 切断）／ Git ブランチバッジ（取得できる場合）／ 最終応答時刻 ／ 直近の出力プレビュー
   - カード右クリックで Git ビューを開く、Files タブを開く、セッションをアクティブ化、セッションIDコピーが可能
   - 完了・エラーのセッションも一覧に残ります（手動で `×` を押すまで保持）
-  - 下部の固定フッター: `Usage` / `Hub`（Hub の停止はここのメニュー）/ `設定`。`設定` を押すと画面全体の設定画面が開き、左のナビ（基本 / 接続・契約 / 入力 / 承認・通知 / 保守）で項目を選ぶと、右にその項目だけが出ます。左上の検索欄で項目を絞り込め、`閉じる` ボタンか Esc で閉じます
+  - 下部の固定フッターは `設定` のみです。開くたびに既存の一般設定が初期表示されます。設定ナビの `Usage` で契約残量・リンク、`Hub` で外部公開・スマホ接続（QR）・Hub の停止・バグ報告を利用できます。他の設定も同じナビ（基本 / 接続・契約 / 入力 / 承認・通知 / 保守）から選べます。左上の検索欄で項目を絞り込め、`閉じる` ボタンか Esc で閉じます
 - **右ペイン（ターミナル + 入力）**
   - 上部バー: アクティブセッションのプロバイダ・cwd、`↑最上部へ`（PTY バッファの先頭にスクロール）
   - 中央: xterm.js でリアルタイム描画される PTY 出力
@@ -1246,7 +1246,7 @@ wrapper の Hub への WebSocket が切れたとき、wrapper は **Hub の HTTP
 - `hub.wrapper_reconnect_grace_sec` — `0` で再接続を無効化（旧来の「即 kill」動作）。範囲 `0`–`86400` 秒（最大 24 時間）。デフォルト `3600`（60 分）。設定パネルからも分単位で変更可。**新しいセッションにのみ適用**され、走行中のセッションは spawn 時の値を保持します。
 - `hub.idle_timeout_min` — UI 未接続のとき Hub が wrapper を生かしておく時間。`0` で無効。範囲 `0`–`1440` 分。設定パネルからも変更可。
 
-クリーンに停止するには、Hub UI の左パネル下部（フッター）の Hub メニューにある `⏻` ボタンまたは `many-ai-cli stop` を使ってください。コンソールウィンドウを閉じた場合は、即 kill ではなく Hub の復帰待ちになります。
+クリーンに停止するには、Hub UI の設定 → Hub にある `⏻` ボタンまたは `many-ai-cli stop` を使ってください。コンソールウィンドウを閉じた場合は、即 kill ではなく Hub の復帰待ちになります。
 
 ---
 
@@ -1300,7 +1300,7 @@ many-ai-cli log-clean ~/.many-ai-cli/logs/sessions/<session>.jsonl -o transcript
 
 ## バグを報告する
 
-Hub UI の左パネル下部（フッター）の Hub メニューにある **バグ報告**、または `many-ai-cli issue` を使います。どちらも GitHub を開く前に送信全文を表示し、外部へ渡す直前に機密情報スクラブを再実行します。
+Hub UI の設定 → Hub にある **バグ報告**、または `many-ai-cli issue` を使います。どちらも GitHub を開く前に送信全文を表示し、外部へ渡す直前に機密情報スクラブを再実行します。
 
 ```bash
 many-ai-cli issue "承認ボタンを1回押しても閉じない"
@@ -1409,7 +1409,7 @@ Grok セッションでは、生成された子は親自身のセッションフ
 - **スラッシュコマンド一覧の取得（Hub 本体の通信）**: スラッシュコマンドピッカーを開くと、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent,opencode,grok,command-code}.md` を取得し、24 時間キャッシュします。取得元 URL は設定パネルの **スラッシュコマンドソース** から変更可能で、ローカルファイルパスを指定することもできます。
 - **承認検出パターンの取得（Hub 本体の通信）**: Hub 起動時に、公式の承認検出パターンを `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,opencode,grok,command-code,common}.md` から取得し、24 時間キャッシュする場合があります。取得元 URL は config で上書きできます。
 - **CLI のインストール手順リンクの取得（Hub 本体の通信）**: 初回画面や **設定 → AI CLI 連携** で導入状況一覧を出すとき、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/install-links/defaults.json`（各 CLI の公式インストール手順へのリンク）を取得し、24 時間キャッシュします。取得できないときは、リンク無しで一覧を出します。
-- **AI Usage Links の既定リンクの取得（Hub 本体の通信）**: ダッシュボードの画面を読み込むと、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json`（Usage メニューに出す、各ベンダーの使用量ページへの既定のリンク）を取得し、24 時間キャッシュします。取得元 URL は変更できず、止める設定もありません。取得できないときは Hub に組み込んだリンクを使います。
+- **AI Usage Links の既定リンクの取得（Hub 本体の通信）**: ダッシュボードの画面を読み込むと、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json`（設定 → Usageに出す、各ベンダーの使用量ページへの既定のリンク）を取得し、24 時間キャッシュします。取得元 URL は変更できず、止める設定もありません。取得できないときは Hub に組み込んだリンクを使います。
 - **モデル候補の一覧の取得（Hub 本体の通信）**: 新規セッションの画面・派生ダイアログ・spawn 確認ダイアログが初めてモデル候補を出すときと、モデル欄の横の ↻ を押したとき、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/models/defaults.json`（Claude Code・Codex・Copilot のモデル候補と、Cursor Agent・Grok の予備の候補）を取得し、24 時間キャッシュします。取得元 URL は `config.yaml` の `models_source` で変更できます。取得できないときはこれらの候補が空になり、モデル名は手で入力できます。
 - **NVIDIA NIM のモデルカタログと接続試験（Hub 本体の通信 / opt-in のみ）**: NVIDIA NIM を設定している場合（上記の [NVIDIA NIM trial route](#nvidia-nim-trial-routeopencode-専用) 参照）、Hub は NVIDIA の `/v1/models` endpoint を呼び、モデルピッカーの一覧取得と設定画面の接続試験に使います。推論そのものは proxy されず、OpenCode から NVIDIA の Chat Completions endpoint へ直接送られます。
 - **Web Push 通知（Hub 本体の通信 / opt-in のみ）**: プッシュ通知を有効にした場合、Hub は暗号化された Web Push request をブラウザベンダーの push サービスへ HTTPS 送信します。承認 payload には OS 通知表示に必要なセッション ID / 名前、provider、承認質問・文脈の短い抜粋が含まれます。Workflow 完了 payload はセッション名と agent 集計件数だけです。Hub URL token、journal の result 本文、agent ID は含めません。VAPID 鍵と購読情報は `~/.many-ai-cli/push_store.json` にローカル保存されます。SSH トンネルが切れていても通知配送自体は届く場合がありますが、通知から Hub を開くにはトンネルと Hub に到達できる必要があります。

@@ -22,7 +22,7 @@ Music: [Happy Beats & Business Moves Vol. 1](https://ende.app/en/song/12866-happ
 
 </details>
 
-**Seven AI coding CLIs in one dashboard — and extra paid plans where the CLI lets you stack them.** Run `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI`, `Grok Build CLI`, `opencode`, and `Command Code` in parallel; `many-ai-cli` watches every session in a PTY and tells you the moment one of them stops — an approval, a finished task, or an error — even from your phone. Remaining quota for the plans you stacked sits in the same Usage menu.
+**Seven AI coding CLIs in one dashboard — and extra paid plans where the CLI lets you stack them.** Run `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI`, `Grok Build CLI`, `opencode`, and `Command Code` in parallel; `many-ai-cli` watches every session in a PTY and tells you the moment one of them stops — an approval, a finished task, or an error — even from your phone. Remaining quota for the plans you stacked sits in the same Settings → Usage view.
 
 [日本語版 README はこちら](README.ja.md) · [README tiếng Việt](README.vi.md)
 
@@ -174,7 +174,7 @@ A relay stops for a round limit, timeout, missing verdict or review file, blocke
 - **Language switching** (English / Japanese / Vietnamese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `many-ai-cli` itself
 - **Remote access protection** — Settings → "Remote access protection" offers a **Revoke all access** kill switch (regenerates the token and auth cookie when a device is lost), an **optional PIN** required only for non-loopback access (off by default, with lockout), and **new-device connection notifications**
-- **Multiple subscriptions per provider** — seven CLIs in one Hub; Claude, Codex, Grok, and opencode can stack extra paid plans per session. The Usage menu shows remaining quota per profile for Claude, Codex, and Grok (see below)
+- **Multiple subscriptions per provider** — seven CLIs in one Hub; Claude, Codex, Grok, and opencode can stack extra paid plans per session. The Settings → Usage view shows remaining quota per profile for Claude, Codex, and Grok (see below)
 
 ## Multiple subscriptions per provider
 
@@ -182,7 +182,7 @@ Seven AI coding CLIs share one dashboard. Four of them — Claude Code, Codex CL
 
 This is **not an API key router**. It does not pool metered API keys to make requests cheaper; it spreads the sessions you already run across the monthly subscriptions you already pay for. It is also not a way around a plan's usage limit — before stacking several of your own accounts with one vendor, read the warning under [Security / Privacy](#security--privacy).
 
-**Remaining quota** is the breakdown of that stack, not a separate product. The Usage menu lists each profile and, for Claude (5h / 7d), Codex, and Grok, the remaining figure. Copilot, Cursor, and OpenCode stay as links to the vendor page — Cursor Agent CLI in particular has no local file or command that reports remaining quota (checked on the Free tier), so it cannot be detected. Numbers are read when you open the menu, not on a timer; Claude may run a one-turn probe if nothing is already reporting. For a profile whose login cannot be confirmed, the last retrieved values are still shown, marked as not up to date together with the time they were retrieved.
+**Remaining quota** is the breakdown of that stack, not a separate product. The Settings → Usage view lists each profile and, for Claude (5h / 7d), Codex, and Grok, the remaining figure. Copilot, Cursor, and OpenCode stay as links to the vendor page — Cursor Agent CLI in particular has no local file or command that reports remaining quota (checked on the Free tier), so it cannot be detected. Numbers are read when you open that view, not on a timer; Claude may run a one-turn probe if nothing is already reporting. For a profile whose login cannot be confirmed, the last retrieved values are still shown, marked as not up to date together with the time they were retrieved.
 
 **How it works.** Every supported CLI selects its configuration directory from an environment variable. `many-ai-cli` creates one directory per profile under `~/.many-ai-cli/subscriptions/<provider>/<dir>` (a short `p1`, `p2`, … name kept apart from the id, because some CLIs build length-limited socket paths inside it; profiles added before this keep their id as the folder name) and sets that variable when it launches the session. The official CLI does its own login and owns the credential inside that directory. `many-ai-cli` never reads, writes, parses, or stores the token, and `config.yaml` holds nothing but the profile's id, display name, folder name, plan label, enabled flag and the hand-written options described below (`profile_dir`, `settings_sync`, `profile_owned_keys`, `default_wins_keys`).
 
@@ -410,7 +410,7 @@ If you still want to use the exe straight from the extracted zip, the previous f
    - The Hub starts and your browser opens automatically at `http://127.0.0.1:47777/?token=<token>`
    - If a Hub is already running, your browser is reopened against the existing instance
 3. In the Hub UI, click **"+ New Session"** to launch a wrapped AI CLI session
-4. To stop the Hub intentionally, use the `⏻` button in the Hub menu at the bottom of the left panel (footer) of the Hub UI, or run `many-ai-cli stop` from another terminal
+4. To stop the Hub intentionally, use the `⏻` button in the Settings → Hub view of the Hub UI, or run `many-ai-cli stop` from another terminal
 
 ### Verify Release Artifacts (Checksum + Signature)
 
@@ -453,7 +453,7 @@ Whichever install path you used, the next steps are the same.
 2. From now on, just **double-click the desktop shortcut**. On Windows a tray icon appears; click it and choose **"Hub を開く"** to start the Hub if needed and open it in your browser at `http://127.0.0.1:47777/?token=<token>`. On macOS and Linux, "Many AI Hub Start" opens a console window alongside the browser.
 3. In the Hub UI, click **"+ New Session"** in the lower left to launch one of the wrapped AI CLIs (claude / codex / copilot / cursor-agent / opencode / grok / command-code). When an approval prompt appears, an action bar shows up under the input — click a button or use the keyboard.
 
-To stop, use the tray menu's **"Hub を停止"** (Windows), **"Many AI Hub Stop"** on your desktop (macOS / Linux), the `⏻` button in the Hub menu at the bottom of the left panel (footer) of the Hub UI, or `many-ai-cli stop` from another terminal. If you prefer a terminal, `many-ai-cli serve --open` still works.
+To stop, use the tray menu's **"Hub を停止"** (Windows), **"Many AI Hub Stop"** on your desktop (macOS / Linux), the `⏻` button in the Settings → Hub view of the Hub UI, or `many-ai-cli stop` from another terminal. If you prefer a terminal, `many-ai-cli serve --open` still works.
 
 > **Upgrading from an earlier version?** The tray does not appear just because you installed a newer binary — **run `setup` once** to get the "MANY-AI-CLI" shortcut and the sign-in entry. Doing so **leaves your existing "Start" and "Stop" icons in place** — they keep working. Delete them yourself once you have switched to the tray; `setup` will never remove them for you. An older desktop icon named "Many AI Hub" is the same launcher under the previous name; `setup` replaces it with "MANY-AI-CLI".
 
@@ -1061,7 +1061,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
   - Each session card: `📌` (pin to the top "Pinned" group) / `×` (close) / provider-colored dot + ID + state badge (Running / Standby / Waiting / Completed / Error / Disconnected) / branch badge when Git is available / last response time / one-line preview of recent output.
   - Right-click a card to open the Git view, open the Files tab, activate the session, or copy the session ID.
   - Completed and errored sessions stay in the list until you click `×`.
-  - Fixed footer at the bottom: `Usage`, `Hub` (stopping the Hub is in this menu) and `Settings`. `Settings` opens a full-screen settings screen: pick an item in the left nav (General / Connections & plans / Input / Approvals & notifications / Maintenance) and only that item shows on the right. A search box at the top left narrows the items; close it with the `Close` button or Esc.
+  - Fixed footer at the bottom: `Settings`. It opens the existing General settings each time. Choose `Usage` or `Hub` in the settings navigation for provider usage or Hub actions (external access, mobile QR, shutdown and bug report). Other settings remain in the same navigation (General / Connections & plans / Input / Approvals & notifications / Maintenance). A search box at the top left narrows the items; close it with the `Close` button or Esc.
 - **Right pane (terminal + input)**
   - Top bar: active session's provider and cwd, plus `↑ to top` to scroll the PTY buffer back to the start.
   - Center: PTY output rendered live with xterm.js.
@@ -1315,7 +1315,7 @@ Configuration knobs in `~/.many-ai-cli/config.yaml`:
 - `hub.wrapper_reconnect_grace_sec` — `0` disables reconnect (legacy "kill immediately" behavior). Range `0`–`86400` seconds (up to 24 h). Default `3600` (60 min). Also editable in Settings (in minutes). **Applies to new sessions only** — running sessions keep the value they were spawned with.
 - `hub.idle_timeout_min` — how long the Hub keeps wrappers alive when no UI is connected. `0` disables. Range `0`–`1440` minutes. Also editable in Settings.
 
-For a clean shutdown, prefer the `⏻` button in the Hub menu at the bottom of the left panel (footer) of the Hub UI or `many-ai-cli stop`; closing the console window now leaves wrappers waiting for the Hub to come back rather than killing them right away.
+For a clean shutdown, prefer the `⏻` button in the Settings → Hub view of the Hub UI or `many-ai-cli stop`; closing the console window now leaves wrappers waiting for the Hub to come back rather than killing them right away.
 
 ---
 
@@ -1369,7 +1369,7 @@ many-ai-cli log-clean ~/.many-ai-cli/logs/sessions/<session>.jsonl -o transcript
 
 ## Reporting a bug
 
-Use **Report bug** in the Hub menu at the bottom of the left panel (footer) of the Hub UI, or run `many-ai-cli issue`. Both paths show the complete report before opening GitHub and run a final confidential-data scrub immediately before the handoff.
+Use **Report bug** in the Settings → Hub view of the Hub UI, or run `many-ai-cli issue`. Both paths show the complete report before opening GitHub and run a final confidential-data scrub immediately before the handoff.
 
 ```bash
 many-ai-cli issue "Approval buttons do not close after one click"
@@ -1478,7 +1478,7 @@ The new session's own board records which session it continues, and the two card
 - **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent,opencode,grok,command-code}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
 - **Approval pattern list (Hub itself)** — On Hub startup, the official approval detection patterns can be fetched from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,opencode,grok,command-code,common}.md` and cached for 24 hours. The source URLs can be overridden in config.
 - **CLI install links (Hub itself)** — When the first-run screen or **Settings → AI CLI integrations** shows the install status list, the Hub fetches `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/install-links/defaults.json` (links to each CLI's official install instructions) and caches it for 24 hours. If the fetch fails, the list is shown without links.
-- **AI Usage Links defaults (Hub itself)** — When the dashboard page loads, the Hub fetches `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json` (the default link to each vendor's usage page in the Usage menu) and caches it for 24 hours. The source URL cannot be changed or turned off; if the fetch fails, the links built into the Hub are used.
+- **AI Usage Links defaults (Hub itself)** — When the dashboard page loads, the Hub fetches `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json` (the default link to each vendor's usage page in the Settings → Usage view) and caches it for 24 hours. The source URL cannot be changed or turned off; if the fetch fails, the links built into the Hub are used.
 - **Model suggestions (Hub itself)** — When New Session, the derive dialog or the spawn confirmation dialog first needs model suggestions, and when you press ↻ next to the model field, the Hub fetches `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/models/defaults.json` (the models suggested for Claude Code, Codex and Copilot, and the fallback list for Cursor Agent and Grok) and caches it for 24 hours. `models_source` in `config.yaml` changes the source URL; if the fetch fails, those suggestions are left empty and you can still type a model name.
 - **NVIDIA NIM model catalog and connection check (Hub itself, opt-in only)** — When NVIDIA NIM is configured (see [NVIDIA NIM trial route](#nvidia-nim-trial-route-opencode-only) above), the Hub calls NVIDIA's `/v1/models` endpoint to populate the model picker and to run the Settings connection check. Inference itself is not proxied — OpenCode sends it directly to NVIDIA's Chat Completions endpoint.
 - **Web Push notifications (Hub itself, opt-in only)** — When Push notifications are enabled, the Hub sends encrypted Web Push requests to the browser vendor's push service over HTTPS. Approval payloads include the session ID/name, provider, and a short approval-question/context excerpt; workflow-completion payloads contain only the session name and aggregate agent count. They do **not** include the Hub URL token, journal result text, or agent IDs. VAPID keys and subscriptions are stored locally in `~/.many-ai-cli/push_store.json`. Notifications can be delivered while an SSH tunnel is down, but opening the Hub from the notification still requires the tunnel and Hub to be reachable.

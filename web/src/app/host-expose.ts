@@ -1,3 +1,4 @@
+import { isSettingsContentVisible } from './settings-visibility.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { apiFetch, showToast, el } from './util.js';
@@ -151,18 +152,10 @@ function dotEl(): HTMLElement | null {
 function stateEl(): HTMLElement | null {
   return document.getElementById('expose-state');
 }
-function lampEl(): Element | null {
-  return document.querySelector('.web-menu-lamp');
-}
-function webMenuBtnEl(): HTMLElement | null {
-  return document.getElementById('web-menu-btn');
-}
-
 // メニュー行の文言＋ツールチップ＋ランプ（状態の常時可視化）。
 function reflectDot(): void {
   const btn = btnEl();
   const dot = dotEl();
-  const lamp = lampEl();
   if (!btn || !dot) return;
   const st = cached?.state;
   let cls = 'expose-dot';
@@ -190,20 +183,24 @@ function reflectDot(): void {
     state.textContent = label;
     state.className = stateKind ? `web-menu-item-state ${stateKind}` : 'web-menu-item-state';
   }
-  lamp?.classList.toggle('expose-dot-ready', !busy && st === 'ready');
+  document.querySelectorAll('.web-menu-lamp').forEach((lamp) => {
+    lamp.classList.toggle('expose-dot-ready', !busy && st === 'ready');
+  });
+  const footerDot = document.getElementById('settings-expose-dot');
+  if (footerDot) {
+    footerDot.className = cls;
+    footerDot.title = `${t('expose_btn')} — ${label}`;
+  }
+  const summary = document.getElementById('settings-hub-state');
+  if (summary) summary.textContent = label;
+  document.dispatchEvent(new CustomEvent('settings-current-updated'));
   btn.classList.toggle('expose-on', st === 'ready');
   btn.setAttribute('aria-pressed', st === 'ready' ? 'true' : 'false');
   const tip = `${t('expose_tooltip')} — ${label}`;
   btn.setAttribute('title', tip);
   btn.dataset.tooltip = tip;
   btn.setAttribute('aria-label', `${t('expose_btn')} — ${label}`);
-  const webBtn = webMenuBtnEl();
-  if (webBtn) {
-    const base = t('web_menu_tooltip');
-    const isReady = !busy && st === 'ready';
-    webBtn.dataset.tooltip = isReady ? `${label} — ${base}` : base;
-    webBtn.classList.toggle('expose-on', isReady);
-  }
+
 }
 
 function setBusy(v: boolean): void {
@@ -263,7 +260,7 @@ async function onClick(): Promise<void> {
 function openPopover(): void {
   closePopover();
   const btn = btnEl();
-  if (!btn) return;
+  if (!btn || !isSettingsContentVisible(btn)) return;
   const st = cached?.state;
   const pop = el('div', { class: 'expose-pop', attrs: { role: 'dialog', 'aria-label': t('expose_popover_title') } });
   pop.appendChild(el('div', { class: 'expose-pop-title', text: t('expose_popover_title') }));
@@ -287,6 +284,7 @@ function openPopover(): void {
   refresh.addEventListener('click', async () => {
     const r = await fetchExposeStatus(true);
     if (!r.ok) { showToast(httpErrText(r.httpStatus), btn); return; }
+    if (popover !== pop) return;
     // 状態が変わったらポップオーバーを開き直す（toggle 可能になったら閉じてトグルへ）。
     if (cached?.state === 'serve_inactive' || cached?.state === 'ready') closePopover();
     else openPopover();
@@ -303,7 +301,13 @@ function openPopover(): void {
     if ((target as HTMLElement).closest?.('#expose-btn')) return;
     closePopover();
   };
-  popKeyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') closePopover(); };
+  popKeyHandler = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape' || e.isComposing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closePopover();
+    btn.focus();
+  };
   setTimeout(() => {
     if (popDownHandler) {
       document.addEventListener('mousedown', popDownHandler, true);
@@ -354,6 +358,9 @@ export function initHostExpose(): void {
   const btn = btnEl();
   if (!btn) return;
   reflectDot();
+  document.addEventListener('settings-view-changed', () => {
+    if (!isSettingsContentVisible(btn)) closePopover();
+  });
   btn.addEventListener('click', (e) => { e.stopPropagation(); void onClick(); });
   // 他コンポーネント（📱ウィザード）の操作に追従してドットを更新。
   onExposeChange(() => reflectDot());
