@@ -5,8 +5,7 @@
 .settings-row.jev-opt-in-row { justify-content: flex-start; gap: 0.5rem; }
 /* 設定パネル */
 #settings-panel {
-  /* 画面全体を覆う設定画面。確認ダイアログ・トースト・Usage/Hub のポップオーバーは
-     z-index が 1000 より大きいので前面に出る（spawn.css の #model-picker-overlay 9100、#toast 9999、.usage-dropdown 1300）。 */
+  /* 画面全体を覆う設定画面。操作別の確認ダイアログとトーストは前面に出る。 */
   position: fixed;
   inset: 0;
   background: var(--bg-elev);
@@ -638,7 +637,7 @@ summary.settings-section-title::-webkit-details-marker { display: none; }
 .settings-effective-command:empty { display: none; }
 
 @media (max-width: 720px) {
-  /* 一覧 → 詳細の 2 画面。最初はナビの一覧だけ、項目を選ぶと右ペインだけ（#settings-panel.settings-detail-open）。 */
+  /* 一覧と詳細の 2 画面。初期表示は一般設定、戻る操作でナビの一覧へ移る。 */
   .settings-layout { grid-template-columns: minmax(0, 1fr); }
   .settings-nav { border-right: 0; }
   .settings-body { display: none; }
@@ -804,3 +803,23 @@ summary.settings-section-title::-webkit-details-marker { display: none; }
 .doctor-level--FAIL { color: var(--danger); }
 .doctor-fix { grid-column: 2; color: var(--muted); font-size: var(--fs-sm); }
 .doctor-copy { margin-left: 6px; font-size: var(--fs-xs); }
+
+/* Embedded destinations keep their labels/icons intact in the narrow navigation. */
+.settings-nav-item--icon {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: center;
+}
+.settings-nav-item--icon .settings-nav-item-label { overflow-wrap: anywhere; }
+.settings-nav-item--icon .settings-nav-item-current { grid-column: 2; }
+.settings-destination-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+.settings-section-title > .settings-destination-icon { display: none; }
+.settings-usage-panel { min-width: 0; }
+.settings-hub-actions { display: grid; gap: 8px; padding: 8px 14px; }
+.settings-hub-actions .web-menu-item-label { overflow-wrap: anywhere; }

@@ -11,6 +11,7 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- The persistent footer now has one Settings entry. Each open starts at General; Usage and Hub actions live inside Settings navigation, retaining provider links, exposure status, QR connection, shutdown confirmations, and bug reporting.
 - Shared Web UI buttons, modal frames, focus styles and general SVG icons now reuse the existing themes. Hub confirmation actions use shared localized labels such as "更新しない / 更新する"; shutdown keeps its distinct choices and the token footer keeps its dedicated palette. A CI guard prevents new appearance and confirmation-label duplication.
 - Paths inside work memos now open the same context menu as paths in the CLI screen (right-click).
 - **Browser-local session-list tabs.** Group multiple

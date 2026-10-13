@@ -371,46 +371,6 @@ header {
 #reconnect-btn[hidden] { display: none; }
 .header-icon { width: 32px; height: 32px; vertical-align: middle; margin-right: 8px; }
 /* Usage ドロップダウンメニュー */
-.usage-menu {
-  position: relative;
-  display: inline-block;
-  margin-left: auto;
-}
-.usage-menu-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-height: var(--ui-control-size);
-  white-space: nowrap;
-}
-
-.usage-menu-btn[aria-expanded="true"] {
-  color: var(--text);
-  border-color: var(--line);
-  background: var(--bg-elev);
-}
-.usage-menu-icon { flex-shrink: 0; }
-.usage-menu-chevron {
-  flex-shrink: 0;
-  opacity: 0.55;
-  transition: transform 0.15s;
-}
-.usage-menu-btn[aria-expanded="true"] .usage-menu-chevron {
-  transform: rotate(180deg);
-}
-.usage-dropdown {
-  position: fixed;
-  z-index: 1300;
-  min-width: 340px;
-  max-width: min(430px, calc(100vw - 12px));
-  max-height: calc(100vh - 70px);
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
-  overflow: auto;
-}
-.usage-dropdown[hidden] { display: none !important; }
 .usage-dropdown-header {
   display: flex;
   align-items: center;
@@ -421,14 +381,8 @@ header {
   letter-spacing: 0.07em;
   color: var(--muted-2);
   border-bottom: 1px solid var(--line);
-  /* .usage-dropdown は overflow:auto。スクロールしても ✕ に手が届くようヘッダは貼り付ける。
-     z-index は .usage-info-bubble（2）より下にして、行の説明バブルを隠さない。 */
-  position: sticky;
-  top: 0;
-  z-index: 1;
   background: var(--bg-elev);
 }
-/* .usage-dropdown-close の見た目と配置は /styles/close-button.css（閉じるボタンの名簿）にある。 */
 .usage-dropdown-item {
   display: flex;
   align-items: center;
@@ -498,7 +452,7 @@ header {
 .usage-info-bubble {
   position: absolute;
   z-index: 2;
-  /* Pin to the row. .usage-dropdown is overflow:auto and min-width:340px;
+  /* Pin to the row inside the Settings scrolling pane;
      a 300px bubble with right:8px was clipped on the left (「CLI の」が消える). */
   left: 8px;
   right: 8px;
@@ -878,21 +832,16 @@ header {
 .label-rename-dialog-error[hidden] { display: none; }
 .label-rename-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 15px; }
 
-/* Usage ドロップダウンの広幅レイアウト。900px 未満は既定の縦 1 カラムを保つ
-   （docs/local/plan_usage-panel-wide-layout.md C1〜C3）。 */
+/* Usage columns follow their Settings pane width, not the whole viewport. */
+.usage-dropdown-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 12px 16px;
+  align-items: start;
+}
+.usage-dropdown-col { min-width: 0; }
+.usage-dropdown-col > .usage-dropdown-section-title:first-child { border-top: 0; }
 @media (min-width: 900px) {
-  /* 2 列のメーターが最長ロケール（en の Remaining 100% / vi の Hàng tuần）でも
-     入る幅。足りない幅では .usage-meters が自動で 1 列へ戻る。 */
-  .usage-dropdown { max-width: min(840px, calc(100vw - 24px)); }
-  .usage-dropdown-columns {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px 16px;
-    align-items: start;
-  }
-  .usage-dropdown-col { min-width: 0; }
-  /* ヘッダ下の区切り線と重なるので左カラム先頭の見出しは上罫線を消す */
-  .usage-dropdown-col > .usage-dropdown-section-title:first-child { border-top: 0; }
   /* 1 プロファイルのメーター群（5h/7d 等）を横並びにする。メーター行と直下の
      usage-meter-meta の対応が分からなくならないよう、セル単位は group ごと。
      minmax(0, 1fr) だとセルが 1 行分の最小幅を下回り、行がセルからはみ出して
@@ -910,47 +859,7 @@ header {
   .usage-meters .usage-meter { min-width: 40px; }
 }
 
-/* ヘッダーの Web メニュー（Hub 自体への操作） */
-.web-menu {
-  position: relative;
-  display: inline-block;
-}
-.web-menu-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-height: var(--ui-control-size);
-  white-space: nowrap;
-}
-
-.web-menu-btn[aria-expanded="true"] {
-  color: var(--text);
-  border-color: var(--line);
-  background: var(--bg-elev);
-}
-/* 外部公開中はボタン全体を色付けし、ドロップダウンを開かなくても常時気づけるようにする。 */
-.web-menu-btn.expose-on {
-  color: var(--green-text);
-  border-color: color-mix(in srgb, var(--green-text) 35%, transparent);
-  background: color-mix(in srgb, var(--green-bg) 45%, transparent);
-}
-.web-menu-btn.expose-on:hover,
-.web-menu-btn.expose-on[aria-expanded="true"] {
-  color: var(--green-text);
-  border-color: var(--green-text);
-  background: color-mix(in srgb, var(--green-bg) 65%, transparent);
-}
-.web-menu-icon,
-.web-menu-chevron {
-  flex-shrink: 0;
-}
-.web-menu-chevron {
-  opacity: 0.55;
-  transition: transform 0.15s;
-}
-.web-menu-btn[aria-expanded="true"] .web-menu-chevron {
-  transform: rotate(180deg);
-}
+/* Settings Hub actions and exposure-state indicators. */
 .web-menu-lamp {
   stroke: currentColor;
   filter: none;
@@ -960,30 +869,21 @@ header {
   stroke: var(--green);
   filter: drop-shadow(0 0 2px var(--green));
 }
-#web-menu-dropdown {
-  position: fixed;
-  z-index: 1300;
-  min-width: 220px;
-  max-width: min(320px, calc(100vw - 12px));
-  max-height: calc(100vh - 70px);
-  padding: 4px 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
-}
-#web-menu-dropdown[hidden] { display: none !important; }
-#web-menu-dropdown .web-menu-item {
+#settings-hub-actions .web-menu-item {
   display: flex;
   align-items: center;
   width: 100%;
   gap: var(--space-2);
   text-align: left;
-  white-space: nowrap;
+  white-space: normal;
+  flex-wrap: wrap;
 }
-#web-menu-dropdown .web-menu-item:disabled {
+/* Keep the embedded exposure control independent of its legacy header rule. */
+#settings-hub-actions #expose-btn {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#settings-hub-actions .web-menu-item:disabled {
   cursor: progress;
 }
 .web-menu-item-icon {
@@ -1012,18 +912,9 @@ header {
   margin: 4px 12px;
   background: var(--line);
 }
-/* 旧ドットは状態反映の互換フック。表示はメニュー行の文言と、閉じた Web ボタンのランプ。 */
-#web-menu-dropdown #expose-dot { display: none !important; }
-/* ヘッダーボタン時代の「ON 枠」はメニューではホバーと区別できないので外す。 */
-#web-menu-dropdown #expose-btn.expose-on,
-#web-menu-dropdown #expose-btn[aria-pressed="true"] {
-  border-color: transparent;
-  background: transparent;
-}
-
 /* 既存の狭幅用ヘッダールールより、メニュー内のラベル表示を優先する。 */
-#web-menu-dropdown #expose-btn span[data-i18n="expose_btn"],
-#web-menu-dropdown #bug-report-btn span:last-child { display: inline; }
+#settings-hub-actions #expose-btn span[data-i18n="expose_btn"],
+#settings-hub-actions #bug-report-btn span:last-child { display: inline; }
 
 /* シャットダウン・設定ボタン共通 */
 #shutdown-btn,
@@ -1046,11 +937,6 @@ header {
 }
 #settings-btn[aria-expanded="true"] .settings-chevron {
   transform: rotate(180deg);
-}
-
-@media (max-width: 720px) {
-  .usage-menu-btn span { display: none; }
-
 }
 
 /* moved to /styles/settings.css */
@@ -1078,11 +964,7 @@ header {
   max-width: var(--sidebar-max);
 }
 
-/* 左サイドバー下の固定フッター（設定 / Usage / Hub）。ヘッダーから移設（plan_settings-footer-buttons.md C1）。
-   #session-list を縦 flex にして、一覧が短くても下端へ寄せる。長いときは sticky で一覧の上に浮く。
-   aside の padding（8px）を負の margin で打ち消し、下端いっぱいに背景を敷く。
-   ドロップダウン（#usage-dropdown / #web-menu-dropdown）は起動時に body 直下へ移され position:fixed なので、
-   ここには置かない。位置は TS が決める。 */
+/* The session footer retains the single persistent Settings entry. */
 #session-list { display: flex; flex-direction: column; }
 #session-list > * { flex-shrink: 0; }
 .session-footer {
@@ -1096,8 +978,6 @@ header {
   gap: 4px;
   background: var(--bg);
   border-top: 1px solid var(--line);
-  /* 幅が足りないときはラベルを隠してアイコンだけにする（下の @container）。 */
-  container-type: inline-size;
 }
 /* 設定画面が開いても、同じ左下の入口を前面に残して歯車から閉じられるようにする。 */
 @media (min-width: 721px) {
@@ -1106,23 +986,9 @@ header {
     bottom: 0;
   }
 }
-.session-footer > .usage-menu,
-.session-footer > .web-menu { flex: 1 1 0; min-width: 0; margin-left: 0; display: flex; }
 .session-footer > #settings-btn { flex: 1 1 0; min-width: 0; }
-/* 歯車は枠いっぱい、Usage の半円は枠の下半分だけだったので見た目の大きさが揃っていなかった。
-   外寸は 14px で固定し、メーターは同じ枠を使う円弧にする。 */
 .session-footer .footer-action-icon { width: 14px; height: 14px; flex-shrink: 0; }
-.session-footer #settings-btn,
-.session-footer .usage-menu-btn,
-.session-footer .web-menu-btn {
-  flex: 1 1 auto;
-  justify-content: center;
-  min-width: 0;
-}
-
-/* ドロップダウンは上向きに開く（位置は TS 側）。影も上向きにする。 */
-#usage-dropdown,
-#web-menu-dropdown { box-shadow: 0 -8px 20px rgba(0,0,0,0.4); }
+.session-footer #settings-btn { justify-content: center; min-width: 0; }
 /* トークンバーは position:fixed で画面下端を覆う。端末列は --tsb-bottom-offset で避けている。
    sticky の bottom だけで上げる（padding も足すと二重に空く）。
    バーが無いときは下の 8px padding を残し、負の margin で下端へ敷く。 */
@@ -1131,21 +997,7 @@ header {
     padding-bottom: max(0px, calc(8px - var(--tsb-bottom-offset, 22px)));
   }
 }
-@container (max-width: 235px) {
-  .session-footer #settings-btn > span,
-  .session-footer .usage-menu-btn > span,
-  .session-footer .web-menu-btn > span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-}
+
 @media (max-width: 720px) {
   .session-footer { display: none; }
 }

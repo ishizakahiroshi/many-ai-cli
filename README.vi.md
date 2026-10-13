@@ -226,7 +226,7 @@ Nếu vẫn dùng exe từ zip:
 1. Giải nén; chạy `unblock-windows.cmd` nếu cần  
 2. **Double-click `many-ai-cli.exe`** (hoặc `many-ai-cli` không đối số) — Hub start, trình duyệt mở `http://127.0.0.1:47777/?token=<token>`; nếu Hub đã chạy thì mở lại instance hiện có  
 3. Trên Hub UI, **"+ New Session"** để launch session wrap  
-4. Dừng cố ý: nút `⏻` góc phải Hub UI, hoặc `many-ai-cli stop` từ terminal khác  
+4. Dừng cố ý: nút `⏻` trong **Settings → Hub**, hoặc `many-ai-cli stop` từ terminal khác
 
 ### Xác minh artifact release (checksum + chữ ký)
 
@@ -259,7 +259,7 @@ Mọi đường cài đều chung các bước sau.
 2. Sau đó chỉ **double-click "Many AI Hub Start"**. Console + trình duyệt mở `http://127.0.0.1:47777/?token=<token>`.
 3. Trên Hub UI, **"+ New Session"** (góc dưới trái) để launch CLI wrap (claude / codex / copilot / cursor-agent / opencode / grok). Khi có phê duyệt, action-bar hiện dưới ô nhập — bấm nút hoặc phím.
 
-Dừng: **"Many AI Hub Stop"**, nút `⏻` Hub UI, hoặc `many-ai-cli stop`. Terminal: `many-ai-cli serve --open` vẫn dùng được.
+Dừng: **"Many AI Hub Stop"**, nút `⏻` trong **Settings → Hub**, hoặc `many-ai-cli stop`. Terminal: `many-ai-cli serve --open` vẫn dùng được.
 
 > **⚠ Về cửa sổ console**  
 > "Many AI Hub Start" mở console **chính là process Hub** — đóng `×` = tắt Hub. Lấn màn hình thì **minimize**, đừng đóng.  
@@ -521,7 +521,8 @@ Mở `http://127.0.0.1:47777/?token=<token>`.
 
 ### Bố cục (tóm tắt)
 
-- **Header**: chip `[running][waiting][standby]`, đếm theo provider; `⏻` dừng Hub; Settings.  
+- **Header**: chip `[running][waiting][standby]`, đếm theo provider.
+- **Footer cố định**: chỉ có **Settings**. Mỗi lần mở sẽ hiển thị **General**. Trong điều hướng Settings, chọn **Usage** để xem mức sử dụng hoặc **Hub** để truy cập bên ngoài, kết nối điện thoại bằng mã QR, dừng Hub và báo lỗi.
 - **Sidebar trái**: `+ New Session`; session nhóm theo project folder; pin / đóng / state badge / branch / last response. Cuối danh sách provider có **Thêm AI CLI**, cùng dialog với **Settings → Tích hợp AI CLI**.
 - **Pane phải**: terminal xterm.js + ô nhập + attach + slash picker.  
 - **Tab**: Terminal, Chat, Split, Multi, Files, Git (Files/Git lazy).  

@@ -34,7 +34,8 @@ import { MULTI_SCROLLBACK, getMessages } from './chat-history.js';
 import { FilesTabManager } from './files-view.js';
 import { fetchPushStatus, getPushSubscription, isLikelyIOSBrowserTabWithoutStandalone, pushNotificationsSupported, subscribeWebPush, unsubscribeWebPush } from './pwa.js';
 import { setStatusbarEnabled, isStatusbarEnabled, TOGGLEABLE_SEGMENTS, applySegmentVisibility, getSessionAgentInfo } from './token-statusbar.js';
-import { initUsagePanel, refreshUsagePanel } from './usage-panel.js';
+import { initUsagePanel } from './usage-panel.js';
+import { notifySettingsViewChanged } from './settings-visibility.js';
 import { setHandoffNoteMode, setHandoffNotifyThresholdPercent } from './handoff.js';
 import { applySessionStripMetrics, setSessionStripTab } from './session-strip.js';
 import { VALID_TAB_NAME_LIST } from './project-view-memory.js';
@@ -574,85 +575,9 @@ export function saveUsageLinkSettings() {
   applyUsageLinks();
 }
 
-export function initUsageDropdown() {
-  const btn      = document.getElementById('usage-menu-btn');
-  const dropdown = document.getElementById('usage-dropdown');
-  if (!btn || !dropdown) return;
-
-  // header に backdrop-filter があり新しい stacking context が作られるため、
-  // dropdown が body 配下にないと z-index が効かず本体側に隠れる。body 直下へ移す。
-  if (dropdown.parentElement !== document.body) {
-    document.body.appendChild(dropdown);
-  }
-  initUsagePanel(dropdown);
-
-  const positionDropdown = () => {
-    // フッターのボタンの上に開く。bottom 基準にして、中身が後から伸びても
-    // ボタンから離れない。上端に届かないよう max-height をボタン上の空きに絞る。
-    const rect = btn.getBoundingClientRect();
-    const margin = 6;
-    const gap = 4;
-    dropdown.style.top = 'auto';
-    dropdown.style.bottom = `${Math.max(margin, window.innerHeight - rect.top + gap)}px`;
-    dropdown.style.maxHeight = `${Math.max(120, rect.top - gap - margin)}px`;
-    // 横はボタンの左端に合わせ、左右の端にはみ出すなら押し戻す（表示前は幅 0）。
-    const width = dropdown.offsetWidth;
-    const left = Math.max(margin, Math.min(rect.left, window.innerWidth - width - margin));
-    dropdown.style.left = `${left}px`;
-    dropdown.style.right = 'auto';
-    dropdown.style.transform = 'none';
-  };
-
-  const closeDropdown = () => {
-    dropdown.hidden = true;
-    btn.setAttribute('aria-expanded', 'false');
-  };
-
-  // ヘッダ右上の ✕。パネル外クリック・Escape と同じ closeDropdown を通す。
-  // stopPropagation は、閉じた後のクリックが背後の要素へ届かないようにするため。
-  const panelCloseBtn = dropdown.querySelector('#usage-dropdown-close');
-  if (panelCloseBtn) {
-    panelCloseBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      closeDropdown();
-    });
-  }
-
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const isOpen = !dropdown.hidden;
-    if (isOpen) {
-      closeDropdown();
-      return;
-    }
-    dropdown.hidden = false;
-    positionDropdown();
-    btn.setAttribute('aria-expanded', 'true');
-    // 中身の更新で幅が変わることがあるので、終わったら横位置を取り直す。
-    void Promise.resolve(refreshUsagePanel()).then(() => {
-      if (!dropdown.hidden) positionDropdown();
-    });
-  });
-
-  // xterm 等で stopPropagation されると bubble phase の document リスナーまで届かないため、
-   // capture phase の mousedown / touchstart で拾って確実に閉じる。
-   const onOutsidePointer = (e) => {
-     if (dropdown.hidden) return;
-     if (btn.contains(e.target) || dropdown.contains(e.target)) return;
-     closeDropdown();
-   };
-   document.addEventListener('mousedown',  onOutsidePointer, true);
-   document.addEventListener('touchstart', onOutsidePointer, true);
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !dropdown.hidden) {
-      closeDropdown();
-    }
-  });
-
-  window.addEventListener('resize', () => {
-    if (!dropdown.hidden) positionDropdown();
-  });
+export function initUsageSettings(): void {
+  const panel = document.getElementById('settings-usage-panel');
+  if (panel) initUsagePanel(panel);
 }
 
 export function appConfirm({ title, message, confirmText, cancelText, kind = 'default', action }: { title?: string; message: string; confirmText?: string; cancelText?: string; kind?: string; action?: ConfirmationAction }): Promise<boolean> {
@@ -1287,20 +1212,38 @@ const settingsMobileMql = (typeof window !== 'undefined' && typeof window.matchM
 
 function setSettingsDetailScreen(detail: boolean): void {
   document.getElementById('settings-panel')?.classList.toggle(SETTINGS_DETAIL_CLASS, detail);
+  notifySettingsViewChanged();
+}
+
+function focusSettingsNavigation(): void {
+  const active = document.querySelector<HTMLButtonElement>('.settings-nav-item.active:not([hidden])');
+  (active ?? document.getElementById('settings-search-input'))?.focus();
 }
 
 // 720px を超える幅に戻ったらクラスを外す（次に狭くしたとき詳細画面から始まらないように）。
 settingsMobileMql?.addEventListener('change', () => {
   if (!settingsMobileMql.matches) setSettingsDetailScreen(false);
+  else notifySettingsViewChanged();
 });
 
 export function setSettingsPanelOpen(open: boolean): void {
   const panel = document.getElementById('settings-panel');
   if (!panel) return;
-  // 閉じていた設定を開き直すときは一覧画面から始める（外から節を指定して開く場合は、そのあと詳細へ進む）。
-  if (open && panel.hidden) setSettingsDetailScreen(false);
+  const opening = open && panel.hidden;
   panel.hidden = !open;
+  if (opening) {
+    // A normal open always starts at General, regardless of the last destination/search.
+    const search = document.getElementById('settings-search-input') as HTMLInputElement | null;
+    if (search) search.value = '';
+    const status = document.getElementById('settings-search-status');
+    if (status) status.textContent = '';
+    _filterSettingsNav?.(null);
+    _selectSettingsNavSection?.('general');
+    setSettingsDetailScreen(true);
+  }
   document.getElementById('settings-btn')?.setAttribute('aria-expanded', String(open));
+  notifySettingsViewChanged();
+  if (!open) document.getElementById('settings-btn')?.focus();
 }
 
 function syncSettingsPanelButton(): void {
@@ -1314,7 +1257,7 @@ function syncSettingsPanelButton(): void {
   applyFontSize(localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium');
   applyLang(localStorage.getItem(STORAGE_LANG_KEY) || 'ja');
   applyUsageLinks();
-  initUsageDropdown();
+  initUsageSettings();
 
   const panel      = document.getElementById('settings-panel');
   const btn        = document.getElementById('settings-btn');
@@ -1347,6 +1290,7 @@ function syncSettingsPanelButton(): void {
     e.stopPropagation();
     setSettingsDetailScreen(false);
     document.getElementById('settings-nav')?.scrollTo?.({ top: 0 });
+    focusSettingsNavigation();
   });
   if (closeBtn) {
     closeBtn.addEventListener('click', (e) => {
@@ -1376,6 +1320,7 @@ function syncSettingsPanelButton(): void {
     // 720px 以下の詳細画面では、Esc は「一覧へ戻る」。一覧画面では閉じる。
     if (settingsMobileMql?.matches && panel.classList.contains(SETTINGS_DETAIL_CLASS)) {
       setSettingsDetailScreen(false);
+      focusSettingsNavigation();
       return;
     }
     setSettingsPanelOpen(false);
@@ -1462,22 +1407,21 @@ function syncSettingsPanelButton(): void {
 })();
 
 // =============================================================================
-// 設定画面の情報設計（左ナビ + 右ペイン・検索・直リンク・前回の選択）
+// 設定画面の情報設計（左ナビ + 右ペイン・検索・直リンク）
 // =============================================================================
-const SETTINGS_LAST_SECTION_KEY = 'many-ai-cli.settings-last-section';
 
 // コマンドパレットの「設定を開く」コマンド・#settings/<id> 直リンク用。
 // initSettingsInformationArchitecture() の中で定義される節オープン処理を、ここへ差し込んでおく。
 let _openSettingsSectionImpl: ((sectionId?: string) => void) | null = null;
 
 // 左ナビ + 右ペイン: 選んだ節だけを右ペインに出す。initSettingsNav() が差し込む。
-let _selectSettingsNavSection: ((sectionId: string, persist?: boolean) => void) | null = null;
+let _selectSettingsNavSection: ((sectionId: string) => void) | null = null;
 // ナビの項目名（言語切替に追従）と現在値（各節の .settings-section-current の写し）を合わせる。
 let _syncSettingsNav: (() => void) | null = null;
 // 検索で一致した節だけをナビに残す。null なら全項目。
 let _filterSettingsNav: ((visibleIds: ReadonlySet<string> | null) => void) | null = null;
-// ナビに並んでいる順の節 id（検索結果の「先頭」を決める）。
-let _listSettingsNavIds: (() => string[]) | null = null;
+// 初期本文 General、その後はナビ順の節 id（検索結果の「先頭」を決める）。
+let _listSettingsSectionIds: (() => string[]) | null = null;
 
 // グループ名は settings_group_<id>（i18n）。辞書の読み込みは非同期なので、文字は _syncSettingsNav で入れる。
 const SETTINGS_NAV_GROUPS: readonly string[] = ['basic', 'conn', 'input', 'approval', 'maint'];
@@ -1490,6 +1434,7 @@ function initSettingsNav(): void {
 
   // <details> は常時 open。見出しのクリックでも閉じない。
   sections.forEach((section) => {
+    section.id ||= `settings-section-${section.dataset.section}`;
     section.open = true;
     section.addEventListener('toggle', () => { if (!section.open) section.open = true; });
     section.querySelector('summary')?.addEventListener('click', (e) => e.preventDefault());
@@ -1500,7 +1445,8 @@ function initSettingsNav(): void {
   const items = new Map<string, HTMLButtonElement>();
   const groups: Array<{ id: string; title: HTMLElement; ids: string[] }> = [];
   for (const groupId of SETTINGS_NAV_GROUPS) {
-    const members = sections.filter((section) => section.dataset.group === groupId);
+    // General remains the initial content and a search/deep-link target, without a nav destination.
+    const members = sections.filter((section) => section.dataset.group === groupId && section.dataset.section !== 'general');
     if (members.length === 0) continue;
     const title = document.createElement('div');
     title.className = 'settings-nav-group-title';
@@ -1512,6 +1458,13 @@ function initSettingsNav(): void {
       btn.type = 'button';
       btn.className = 'settings-nav-item' + (section.classList.contains('settings-section--danger') ? ' settings-nav-item--danger' : '');
       btn.dataset.section = id;
+      btn.id = `settings-nav-${id}`;
+      btn.setAttribute('aria-controls', section.id);
+      const icon = section.querySelector('.settings-destination-icon');
+      if (icon) {
+        btn.classList.add('settings-nav-item--icon');
+        btn.appendChild(icon.cloneNode(true));
+      }
       const label = document.createElement('span');
       label.className = 'settings-nav-item-label';
       const current = document.createElement('span');
@@ -1520,6 +1473,9 @@ function initSettingsNav(): void {
       btn.addEventListener('click', () => {
         _selectSettingsNavSection?.(id);
         setSettingsDetailScreen(true);
+        if (settingsMobileMql?.matches) {
+          section.querySelector<HTMLElement>('input, select, button, a')?.focus();
+        }
       });
       items.set(id, btn);
       ids.push(id);
@@ -1543,28 +1499,25 @@ function initSettingsNav(): void {
     items.forEach((btn, id) => { btn.hidden = !!visibleIds && !visibleIds.has(id); });
     groups.forEach(({ title, ids }) => { title.hidden = !!visibleIds && !ids.some((id) => visibleIds.has(id)); });
   };
-  _listSettingsNavIds = () => groups.flatMap((group) => group.ids);
-  _selectSettingsNavSection = (sectionId: string, persist = true) => {
-    if (!items.has(sectionId)) return;
+  _listSettingsSectionIds = () => ['general', ...groups.flatMap((group) => group.ids)];
+  _selectSettingsNavSection = (sectionId: string) => {
+    const selected = sections.find((section) => section.dataset.section === sectionId);
+    if (!selected) return;
     sections.forEach((section) => { section.hidden = section.dataset.section !== sectionId; });
-    items.forEach((btn, id) => btn.classList.toggle('active', id === sectionId));
+    items.forEach((btn, id) => {
+      btn.classList.toggle('active', id === sectionId);
+      if (id === sectionId) btn.setAttribute('aria-current', 'true');
+      else btn.removeAttribute('aria-current');
+    });
     body.scrollTop = 0;
-    if (persist) {
-      try { localStorage.setItem(SETTINGS_LAST_SECTION_KEY, sectionId); } catch (_) {}
-    }
     _syncSettingsNav?.();
     items.get(sectionId)?.scrollIntoView({ block: 'nearest' });
-    sections.find((section) => section.dataset.section === sectionId)?.dispatchEvent(new CustomEvent('settings-section-selected'));
+    selected.dispatchEvent(new CustomEvent('settings-section-selected'));
+    notifySettingsViewChanged();
   };
 
-  // 前回選んだ節を復元する。無ければ（保存なし・節が無くなった）先頭。
-  let initial = sections[0].dataset.section as string;
-  try {
-    const saved = localStorage.getItem(SETTINGS_LAST_SECTION_KEY);
-    if (saved && items.has(saved)) initial = saved;
-  } catch (_) {}
   _syncSettingsNav();
-  _selectSettingsNavSection(initial, false);
+  _selectSettingsNavSection('general');
 
   // 言語切替・設定を開き直したときに、見出しの文言（data-i18n で差し替わる）と現在値をナビへ写す。
   document.getElementById('settings-btn')?.addEventListener('click', () => requestAnimationFrame(() => _syncSettingsNav?.()));
@@ -1610,8 +1563,10 @@ function initSettingsInformationArchitecture(): void {
   const sections = Array.from(document.querySelectorAll<HTMLDetailsElement>('.settings-section[data-section]'));
   if (!panel || !search || !status || sections.length === 0) return;
 
+  let firstMatch: string | undefined;
   // 項目名・現在値・説明に一致した節だけをナビに残す。selectFirst なら先頭の一致を右ペインに出す。
   const apply = (selectFirst: boolean) => {
+    firstMatch = undefined;
     const query = search.value.trim().toLocaleLowerCase();
     if (!query) {
       _filterSettingsNav?.(null);
@@ -1630,13 +1585,20 @@ function initSettingsInformationArchitecture(): void {
     });
     _filterSettingsNav?.(matched);
     status.textContent = matched.size ? t('settings_search_matched', { n: matched.size }) : t('settings_search_none');
-    if (selectFirst) {
-      const first = (_listSettingsNavIds?.() ?? []).find((id) => matched.has(id));
-      // 検索のための自動選択は「前回の選択」として覚えない。
-      if (first) _selectSettingsNavSection?.(first, false);
-    }
+    firstMatch = (_listSettingsSectionIds?.() ?? []).find((id) => matched.has(id));
+    if (selectFirst && firstMatch) _selectSettingsNavSection?.(firstMatch);
   };
   search.addEventListener('input', () => apply(true));
+  // モバイルは Enter で検索結果の本文へ。General にも届き、入力中は検索欄を隠さない。
+  search.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229 || event.defaultPrevented
+      || !settingsMobileMql?.matches || !search.value.trim() || !firstMatch) return;
+    event.preventDefault();
+    _selectSettingsNavSection?.(firstMatch);
+    setSettingsDetailScreen(true);
+    sections.find((section) => section.dataset.section === firstMatch)
+      ?.querySelector<HTMLElement>('input, select, button, a')?.focus();
+  });
 
   // #settings/<id> ハッシュと openSettingsSection() の両方から呼べる、節を選ぶ本体。
   const openSection = (sectionId?: string) => {

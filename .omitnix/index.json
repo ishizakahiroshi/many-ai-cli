@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "d4ab694943671d5933de31956adc2bb3c4a838e0",
+    "commit": "9189d26becf6c56b15ea6df9fb24f0ff2d0102d8",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1974,
+    "discovered": 1978,
     "analyzed": 1533,
     "unresolved": 9,
     "unknown": 0,
-    "unclaimed": 432,
+    "unclaimed": 436,
     "skipped_by_config": 0
   },
   "files": [
@@ -1467,6 +1467,38 @@
         }
       },
       "unresolved": []
+    },
+    {
+      "path": "docs/bot/settings-usage-hub-navigation/FACTS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/settings-usage-hub-navigation/PROGRESS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/settings-usage-hub-navigation/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/settings-usage-hub-navigation/REVIEW.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
     },
     {
       "path": "docs/manual_docker-multiuser.md",

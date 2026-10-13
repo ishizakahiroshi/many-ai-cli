@@ -1,5 +1,6 @@
-// Usage dropdown and active-session inline row share the Hub usage snapshot.
-// The dropdown fetches on open; the inline row fetches on session/profile change.
+import { isSettingsContentVisible } from './settings-visibility.js';
+// Settings Usage and the active-session inline row share the Hub usage snapshot.
+// The Usage view fetches on entry; the inline row fetches on session/profile change.
 // No provider auth file is read in the browser.
 import { t } from '../i18n.js';
 import { confirmationLabels } from './confirmation-labels.js';
@@ -90,6 +91,7 @@ const AUTH_POLL_WINDOW_MS = 20000;
 const running = new Set<string>();
 const failures = new Map<string, string>();
 let panelRoot: HTMLElement | null = null;
+let panelVisible = false;
 let usageData: UsageResponse | null = null;
 let refreshInFlight: Promise<boolean> | null = null;
 let inlineRoot: HTMLElement | null = null;
@@ -562,14 +564,13 @@ function stopAuthPoll(): void {
 }
 
 function scheduleAuthPoll(): void {
-  if (authPollTimer !== null) return;
+  if (authPollTimer !== null || !isSettingsContentVisible(panelRoot)) return;
   if (!anyAuthChecking(usageData)) return;
   if (Date.now() >= authPollDeadline) return;
   authPollTimer = window.setTimeout(() => {
     authPollTimer = null;
-    // A closed dropdown has nothing to update, and polling it would keep
-    // starting vendor CLIs on the Hub for a panel nobody is looking at.
-    if (!panelRoot || panelRoot.hidden) return;
+    // Hidden Settings, another section, and mobile Back all stop panel polling.
+    if (!isSettingsContentVisible(panelRoot)) return;
     void runRefresh(false, true);
   }, AUTH_POLL_INTERVAL_MS);
 }
@@ -845,14 +846,23 @@ function applyProviderOrderToPanel(): void {
   }
 }
 
-export function initUsagePanel(dropdown: HTMLElement): void {
-  if (panelRoot === dropdown) return;
-  panelRoot = dropdown;
-  // ドロップダウン各行のアイコンは index.html に図形を複製せず、空の器へ provider-icon.ts が入れる。
-  fillProviderIconSlots(dropdown);
+function syncUsageVisibility(): void {
+  const visible = isSettingsContentVisible(panelRoot);
+  if (visible === panelVisible) return;
+  panelVisible = visible;
+  if (visible) void refreshUsagePanel();
+  else stopAuthPoll();
+}
+
+export function initUsagePanel(panel: HTMLElement): void {
+  if (panelRoot === panel) return;
+  panelRoot = panel;
+  document.addEventListener('settings-view-changed', syncUsageVisibility);
+  // Usage 各行のアイコンは index.html に図形を複製せず、空の器へ provider-icon.ts が入れる。
+  fillProviderIconSlots(panel);
   inlineRoot = document.getElementById('session-inline-usage');
   document.addEventListener('session-usage-target-changed', onInlineTargetChanged);
-  // settings.ts initializes the dropdown while modules are still evaluating.
+  // settings.ts initializes the panel while modules are still evaluating.
   // Wait until state.ts has initialized activeSessionId before reading it.
   queueMicrotask(onInlineTargetChanged);
   applyProviderOrderToPanel();

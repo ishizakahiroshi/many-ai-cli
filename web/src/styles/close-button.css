@@ -18,7 +18,6 @@
      - .tsb-sent-close / .tsb-detail-close … token-statusbar はテーマトークンを使わない自前配色で統一されている */
 
 /* ── 共通の見た目 ── */
-.usage-dropdown-close,
 .server-modal-close,
 .wf-modal-close,
 .handoff-dialog-close,
@@ -61,7 +60,6 @@
 .about-x-btn { --close-btn-fs: var(--fs-md); }
 
 /* ヘッダ内で右端へ押し出すもの。 */
-.usage-dropdown-close,
 .wf-modal-close,
 .handoff-dialog-close { margin-left: auto; }
 
@@ -99,7 +97,7 @@ body.close-left :is(
 }
 
 /* margin-left:auto で右端へ押し出しているものは、押し出す向きを逆にする。 */
-body.close-left :is(.tsb-detail-close, .pane-slot .ph-close, .settings-header-actions, .usage-dropdown-close) {
+body.close-left :is(.tsb-detail-close, .pane-slot .ph-close, .settings-header-actions) {
   order: -1;
   margin-left: 0;
   margin-right: auto;
