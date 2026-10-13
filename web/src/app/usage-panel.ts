@@ -2,6 +2,7 @@
 // The dropdown fetches on open; the inline row fetches on session/profile change.
 // No provider auth file is read in the browser.
 import { t } from '../i18n.js';
+import { confirmationLabels } from './confirmation-labels.js';
 import { apiFetch, escapeHtml } from './util.js';
 import {
   remainingPercent,
@@ -238,7 +239,7 @@ function metersGroup(groups: string[], freshness: UsageFreshness = 'current'): s
 }
 
 function actionButton(className: string, label: string, attribute: string, disabled = false): string {
-  return `<button type="button" class="${className}" ${attribute}${disabled ? ' disabled' : ''}>${escapeHtml(label)}</button>`;
+  return `<button type="button" class="ui-button ui-button--secondary ui-button--regular ${className}" ${attribute}${disabled ? ' disabled' : ''}>${escapeHtml(label)}</button>`;
 }
 
 function hasWindows(usage: ClaudeUsage | CodexUsage | undefined): boolean {
@@ -466,7 +467,7 @@ function renderInlineUsage(): void {
     ? `<span class="inline-usage-refresh-error" role="status" aria-label="${escapeHtml(errorText)}" title="${escapeHtml(errorText)}">!</span>`
     : '';
   const refreshLabel = tx('usage_inline_refresh', 'Refresh usage');
-  inlineRoot.innerHTML = `${identity}${center}${side}${staleBadge}${errorBadge}<button class="inline-usage-refresh" type="button" aria-label="${escapeHtml(refreshLabel)}" title="${escapeHtml(refreshLabel)}"${!target || !hasProviderCapability(provider, 'usage') || busy ? ' disabled' : ''}>${busy ? '…' : '↻'}</button>`;
+  inlineRoot.innerHTML = `${identity}${center}${side}${staleBadge}${errorBadge}<button class="ui-button ui-button--quiet ui-button--compact inline-usage-refresh" type="button" aria-label="${escapeHtml(refreshLabel)}" title="${escapeHtml(refreshLabel)}"${!target || !hasProviderCapability(provider, 'usage') || busy ? ' disabled' : ''}>${busy ? '…' : '↻'}</button>`;
   inlineRoot.querySelector<HTMLButtonElement>('.inline-usage-refresh')?.addEventListener('click', () => { void refreshInlineUsage(); });
 }
 
@@ -684,13 +685,13 @@ async function confirmProbe(profile: UsageProfile): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const backdrop = document.createElement('div');
     backdrop.className = 'usage-probe-dialog-backdrop aac-wheel-overlay';
-    backdrop.innerHTML = `<div class="usage-probe-dialog" role="dialog" aria-modal="true" aria-labelledby="usage-probe-dialog-title">
-      <h2 id="usage-probe-dialog-title">${escapeHtml(tx('usage_probe_confirm_title', 'Retrieve subscription usage'))}</h2>
+    backdrop.innerHTML = `<div class="ui-modal ui-modal--sm usage-probe-dialog" role="dialog" aria-modal="true" aria-labelledby="usage-probe-dialog-title">
+      <h2 class="ui-modal__title" id="usage-probe-dialog-title">${escapeHtml(confirmationLabels('retrieve').question)}</h2>
       <p>${escapeHtml(tx('usage_probe_confirm_profile', 'Profile: {name}', { name }))}</p>
       <p>${escapeHtml(tx('usage_probe_confirm_body', 'Claude will start briefly, read usage from its statusLine, and close.'))}</p>
       <p>${escapeHtml(tx('usage_probe_confirm_cost', 'This uses a small amount of this subscription quota.'))}</p>
       <label><input type="checkbox" data-probe-confirm-skip> ${escapeHtml(tx('usage_probe_confirm_check', 'Do not ask again'))}</label>
-      <div class="usage-probe-dialog-actions"><button type="button" data-probe-dialog-cancel>${escapeHtml(tx('usage_probe_confirm_cancel', 'Cancel'))}</button><button type="button" class="primary" data-probe-dialog-start>${escapeHtml(tx('usage_probe_confirm_start', 'Retrieve'))}</button></div>
+      <div class="ui-modal__actions usage-probe-dialog-actions"><button class="ui-button ui-button--secondary ui-button--regular" type="button" data-probe-dialog-cancel>${escapeHtml(confirmationLabels('retrieve').decline)}</button><button type="button" class="ui-button ui-button--primary ui-button--regular primary" data-probe-dialog-start>${escapeHtml(confirmationLabels('retrieve').accept)}</button></div>
     </div>`;
     document.body.appendChild(backdrop);
     const finish = (value: boolean) => {

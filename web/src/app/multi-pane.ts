@@ -85,7 +85,7 @@ export class GridPicker {
       ];
       configs.forEach(({ label, cols, rows }) => {
         const btn = document.createElement('button');
-        btn.className = 'picker-preset-btn';
+        btn.className = 'ui-button ui-button--secondary ui-button--regular picker-preset-btn';
         btn.type = 'button';
         btn.textContent = label;
         btn.title = `${cols}×${rows}`;
@@ -491,7 +491,7 @@ export class MultiPaneManager {
 
   _appendPaneControls(header, idx) {
     const moveBtn = document.createElement('button');
-    moveBtn.className = 'ph-move';
+    moveBtn.className = 'ui-button ui-button--secondary ui-button--regular ui-button--icon ph-move';
     moveBtn.type = 'button';
     moveBtn.textContent = '⠿';
     moveBtn.title = this._t('pane_move', 'ペインを移動');
@@ -520,7 +520,7 @@ export class MultiPaneManager {
 
     // ✕ removes only this display placement; the session continues.
     const closeBtn = document.createElement('button');
-    closeBtn.className = 'ph-close';
+    closeBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon ph-close';
     closeBtn.type = 'button';
     closeBtn.textContent = '✕';
     closeBtn.title = this._t('pane_remove', 'ペインの配置を外す');
@@ -557,7 +557,7 @@ export class MultiPaneManager {
 
   _buildScrollButton(edge, labelKey, fallbackLabel, tipKey, fallbackTip) {
     const btn = document.createElement('button');
-    btn.className = `terminal-scroll-btn pane-scroll-${edge}`;
+    btn.className = `ui-button ui-button--secondary ui-button--regular terminal-scroll-btn pane-scroll-${edge}`;
     btn.type = 'button';
     btn.dataset.i18n = labelKey;
     btn.dataset.i18nTooltip = tipKey;
@@ -678,7 +678,7 @@ export class MultiPaneManager {
     const line = this._emptyLineOf(idx);
     if (line) {
       const removeBtn = document.createElement('button');
-      removeBtn.className = 'empty-remove';
+      removeBtn.className = 'ui-button ui-button--secondary ui-button--regular empty-remove';
       removeBtn.type = 'button';
       removeBtn.textContent = line.axis === 'row'
         ? `✕ ${this._t('pane_remove_empty_row', 'この段を消す')}`

@@ -1,11 +1,5 @@
 /* The destination chooser remains available for moving an existing pane by keyboard. */
-.pane-placement-dialog button:focus-visible,
-.pane-placement-dialog button:focus-visible,
-#compact-pane-switcher :is(button, select):focus-visible,
-.mobile-drawer-pane-place:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
+
 #display-area.pane-drop-ready { outline: 2px solid var(--accent); outline-offset: -2px; }
 #display-area { position: relative; }
 .pane-drop-preview {
@@ -35,7 +29,7 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
   border: 1px solid rgba(180, 197, 240, .4);
   border-radius: var(--radius-sm);
@@ -83,26 +77,24 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
+  width: var(--ui-control-size, var(--ui-control-regular));
+  height: var(--ui-control-size, var(--ui-control-regular))
+
+  ;
   cursor: pointer;
-  font: inherit;
+
   opacity: 1;
 }
 .pane-slot .pane-header,
 .pane-slot .pane-header:active { cursor: default; }
-.pane-slot .ph-move { cursor: grab; margin-left: auto; }
-.pane-slot .ph-move:active { cursor: grabbing; }
+.pane-slot .ph-move {
+  margin-left: auto;
+}
+
 .pane-slot .ph-close { margin-left: 0; }
 body.close-left .pane-slot .ph-close { order: 0; margin-right: 0; }
-.pane-slot .ph-move:hover,
-.pane-slot .ph-close:hover { border-color: var(--accent); }
 .pane-slot .ph-move:focus-visible,
-.pane-slot .ph-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pane-slot .ph-close:focus-visible {  outline-offset: 1px; }
 
 .pane-placement-overlay {
   position: fixed;
@@ -114,35 +106,28 @@ body.close-left .pane-slot .ph-close { order: 0; margin-right: 0; }
   background: rgba(0, 0, 0, .58);
 }
 .pane-placement-dialog {
-  width: min(100%, 460px);
   max-height: min(78dvh, 680px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--bg-elev);
-  color: var(--text);
-  box-shadow: 0 14px 42px rgba(0, 0, 0, .42);
 }
+
 .pane-placement-dialog-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 12px;
   border-bottom: 1px solid var(--line);
 }
-.pane-placement-dialog h2 { flex: 1; margin: 0; font-size: var(--fs-lg); }
+.pane-placement-dialog h2 { flex: 1; margin: 0; }
 .pane-placement-cancel,
 .pane-placement-choice {
   min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
+  padding: 8px 12px
+
+  ;
+  cursor: pointer
+
 }
 .pane-placement-choices {
   display: grid;
@@ -151,7 +136,7 @@ body.close-left .pane-slot .ph-close { order: 0; margin-right: 0; }
   padding: 12px;
 }
 .pane-placement-choice { text-align: left; overflow-wrap: anywhere; }
-.pane-placement-choice:hover { border-color: var(--accent); background: var(--bg-deep); }
+
 .pane-placement-empty { margin: 0; padding: 8px 4px; color: var(--muted); font-size: var(--fs-sm); }
 
 /* The compact switcher changes presentation only; saved grid dimensions stay intact. */
@@ -162,7 +147,7 @@ body.close-left .pane-slot .ph-close { order: 0; margin-right: 0; }
     display: flex;
     flex: 0 0 auto;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     min-height: 52px;
     padding: 4px 8px;
     border-bottom: 1px solid var(--line);
@@ -174,11 +159,6 @@ body.close-left .pane-slot .ph-close { order: 0; margin-right: 0; }
     width: 100%;
     min-height: 44px;
     padding: 6px 8px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    background: var(--bg);
-    color: var(--text);
-    font: inherit;
   }
   .compact-pane-scope { display: none; }
   #multi-view:not([hidden]) {
@@ -191,37 +171,39 @@ body.close-left .pane-slot .ph-close { order: 0; margin-right: 0; }
   #multi-view .pane-slot.mobile-pane-active { grid-column: 1; grid-row: 1; }
 }
 @media (max-width: 720px) {
-  .compact-pane-scope { display: flex; gap: 4px; }
+  .compact-pane-scope { display: flex; gap: var(--space-1); }
   .compact-pane-scope button {
-    min-height: 44px;
+  min-height: 44px;
     min-width: 44px;
-    padding: 5px 8px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    background: var(--bg);
-    color: var(--text);
-    font: inherit;
-  }
-  .compact-pane-scope button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-text); }
-  .compact-pane-scope button:disabled { opacity: .48; }
+}
+
+  .compact-pane-scope button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.compact-pane-scope button[aria-pressed="true"].ui-button {
+  --ui-button-border: var(--accent);
+  --ui-button-fg: var(--accent-text);
+}
+  .compact-pane-scope button:disabled {
+  opacity: .48;
+}
   .compact-pane-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .mobile-drawer-view-entry { display: flex; min-width: 0; gap: 4px; }
+  .mobile-drawer-view-entry { display: flex; min-width: 0; gap: var(--space-1); }
   .mobile-drawer-view-entry .mobile-drawer-view-btn { flex: 1; min-width: 0; }
-  .mobile-drawer-session-entry { display: flex; align-items: stretch; gap: 4px; min-width: 0; }
+  .mobile-drawer-session-entry { display: flex; align-items: stretch; gap: var(--space-1); min-width: 0; }
   .mobile-drawer-session-entry .mh-session-row { flex: 1; min-width: 0; width: auto; }
   .mobile-drawer-pane-place,
   .mobile-drawer-session-place {
-    min-width: 44px;
+  min-width: 44px;
     min-height: 44px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    background: var(--bg);
-    color: var(--text);
-    font-size: var(--fs-lg);
-  }
+}
 }
 @media (pointer: coarse) {
   .pane-slot .ph-move,
   .pane-slot .ph-close { min-width: 44px; min-height: 44px; opacity: 1; }
   .pane-slot .pane-header { height: 44px; }
 }
+
+/* The existing header/body own padding and scrolling for these shells. */
+.pane-placement-dialog.ui-modal { padding: 0; }

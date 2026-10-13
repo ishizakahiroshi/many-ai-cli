@@ -333,7 +333,7 @@ export class DetachedGridManager {
 
   private _buildScrollButton(edge: 'top' | 'bottom'): HTMLButtonElement {
     const btn = document.createElement('button');
-    btn.className = `terminal-scroll-btn pane-scroll-${edge}`;
+    btn.className = `ui-button ui-button--secondary ui-button--regular terminal-scroll-btn pane-scroll-${edge}`;
     btn.type = 'button';
     btn.textContent = edge === 'top' ? '↑ up' : '↓ down';
     btn.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -804,7 +804,7 @@ function _insertHubOpenButton(): void {
 
   const btn = document.createElement('button');
   btn.id = 'detached-hub-open-btn';
-  btn.className = 'detached-hub-open-btn';
+  btn.className = 'ui-button ui-button--secondary ui-button--regular detached-hub-open-btn';
   btn.textContent = '⊞ Hub';
   btn.title = 'Hub 本体を開く';
   btn.addEventListener('click', () => {

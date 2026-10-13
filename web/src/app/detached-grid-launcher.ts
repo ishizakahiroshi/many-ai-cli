@@ -298,10 +298,10 @@ export function openDetachedGridLauncher(opts?: {
     const label = tw(p.labelKey, p.id);
     return (
       `<div class="dgl-preset-item" data-preset="${p.id}">` +
-      `<button class="dgl-preset-fav${isFav ? ' is-fav' : ''}" data-preset="${p.id}" type="button" title="${tw('preset_fav_toggle', 'Toggle favorite')}">★</button>` +
+      `<button class="ui-button ui-button--secondary ui-button--regular dgl-preset-fav${isFav ? ' is-fav' : ''}" data-preset="${p.id}" type="button" title="${tw('preset_fav_toggle', 'Toggle favorite')}">★</button>` +
       `<span class="dgl-preset-label">${label}</span>` +
       `<span class="dgl-preset-badge">${p.urlOnly ? '' : (p.defaultCount ? `×${p.defaultCount}` : '')}</span>` +
-      `<button class="dgl-preset-launch" data-preset="${p.id}" type="button">${tw('preset_launch', 'Open')}</button>` +
+      `<button class="ui-button ui-button--primary ui-button--regular dgl-preset-launch" data-preset="${p.id}" type="button">${tw('preset_launch', 'Open')}</button>` +
       `</div>`
     );
   }).join('');
@@ -312,20 +312,20 @@ export function openDetachedGridLauncher(opts?: {
   ).join('');
 
   overlay.innerHTML =
-    `<div class="dgl-dialog">` +
+    `<div class="ui-modal ui-modal--md dgl-dialog">` +
     `<div class="dgl-header">` +
     `<span class="dgl-title">${tw('dgl_title', 'Open Detached Grid')}</span>` +
-    `<button class="dgl-close" id="dgl-close-btn" type="button">✕</button>` +
+    `<button class="ui-button ui-button--quiet ui-button--compact ui-button--icon dgl-close" id="dgl-close-btn" type="button">✕</button>` +
     `</div>` +
     `<div class="dgl-body">` +
     `<div class="dgl-presets">${presetListHtml}</div>` +
     `<div class="dgl-options">` +
     `<label class="dgl-opt-label">${tw('dgl_layout', 'Layout')}</label>` +
-    `<select class="dgl-layout-select" id="dgl-layout-select">${layoutOpts}</select>` +
+    `<select class="ui-input dgl-layout-select" id="dgl-layout-select">${layoutOpts}</select>` +
     `<label class="dgl-opt-label">${tw('dgl_count', 'Count')}</label>` +
-    `<input class="dgl-count-input" id="dgl-count-input" type="number" min="1" max="18" value="${prefs.lastCount || 4}">` +
+    `<input class="ui-input dgl-count-input" id="dgl-count-input" type="number" min="1" max="18" value="${prefs.lastCount || 4}">` +
     `<label class="dgl-opt-label">${tw('dgl_cwd', 'CWD')}</label>` +
-    `<input class="dgl-cwd-input" id="dgl-cwd-input" type="text" value="${escapeHtml(currentCwd)}">` +
+    `<input class="ui-input dgl-cwd-input" id="dgl-cwd-input" type="text" value="${escapeHtml(currentCwd)}">` +
     `</div>` +
     `</div>` +
     `</div>`;

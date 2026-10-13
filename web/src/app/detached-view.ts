@@ -183,6 +183,7 @@ function buildBar(tab: DetachedTabName): HTMLElement {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.textContent = t(follow ? 'detached_follow' : 'detached_fixed');
+      btn.className = 'ui-button ui-button--secondary ui-button--compact';
       btn.title = t(follow ? 'detached_follow_tooltip' : 'detached_fixed_tooltip');
       btn.addEventListener('click', () => {
         setFollowing(follow);
@@ -211,7 +212,7 @@ function buildBar(tab: DetachedTabName): HTMLElement {
 
   const hub = document.createElement('button');
   hub.type = 'button';
-  hub.className = 'detached-hub-open-btn';
+  hub.className = 'ui-button ui-button--secondary ui-button--regular detached-hub-open-btn';
   hub.textContent = '⊞ Hub';
   hub.title = t('detached_hub_tooltip');
   hub.addEventListener('click', focusOrOpenHub);

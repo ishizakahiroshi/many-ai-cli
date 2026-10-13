@@ -35,42 +35,10 @@
 .provider-enrollment-close,
 .about-x-btn,
 .handoff-notify-dismiss {
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--muted);
   cursor: pointer;
-  /* 寸法だけは置き場所で変わる。個別ルールはこの 2 変数だけを上書きする。 */
-  font-size: var(--close-btn-fs, 0.9rem);
-  padding: var(--close-btn-pad, 2px 6px);
-  line-height: 1;
-  /* ヘッダ側の uppercase / letter-spacing をグリフに継承させない（Usage ドロップダウン等）。 */
-  font-family: inherit;
   letter-spacing: 0;
   text-transform: none;
-}
-
-/* hover は危険色に寄せる。「閉じる」は取り消しがきかないので、押す前に気づけるほうを採る。 */
-.usage-dropdown-close:hover,
-.server-modal-close:hover,
-.wf-modal-close:hover,
-.handoff-dialog-close:hover,
-.mc-modal-close:hover,
-.spawn-web-dir-close:hover,
-.dgl-close:hover,
-.relay-dialog-close:hover,
-.routines-dialog-close:hover,
-.bug-report-close:hover,
-.detail-close:hover,
-.git-commit-close:hover,
-.git-turn-close-btn:hover,
-.memo-drawer-close:hover,
-.provider-enrollment-close:hover,
-.about-x-btn:hover,
-.handoff-notify-dismiss:hover {
-  background: var(--danger-bg);
-  color: var(--danger);
-}
+}/* hover は危険色に寄せる。「閉じる」は取り消しがきかないので、押す前に気づけるほうを採る。 */
 
 /* ── 置き場所ごとの差分（寸法と配置だけ） ── */
 
@@ -81,7 +49,7 @@
 .routines-dialog-close,
 .handoff-dialog-close,
 .bug-report-close,
-.spawn-web-dir-close { --close-btn-fs: 1rem; }
+.spawn-web-dir-close { --close-btn-fs: var(--fs-body); }
 
 .spawn-web-dir-close { --close-btn-pad: 4px 8px; }
 .relay-dialog-close { --close-btn-pad: 4px 6px; }
@@ -89,7 +57,7 @@
 /* Git 詳細ペインのヘッダは行の高さが固定なので、縦 padding を足さず横だけ広く取る。 */
 .detail-close { --close-btn-pad: 0 12px; }
 /* .about-x-btn / .handoff-notify-dismiss は styles.css 本体に個別ルールが残っており、それを消すまでそちらが勝つ。 */
-.handoff-notify-dismiss { --close-btn-fs: 1rem; --close-btn-pad: 2px 7px; }
+.handoff-notify-dismiss { --close-btn-fs: var(--fs-body); --close-btn-pad: 2px 7px; }
 .about-x-btn { --close-btn-fs: var(--fs-md); }
 
 /* ヘッダ内で右端へ押し出すもの。 */

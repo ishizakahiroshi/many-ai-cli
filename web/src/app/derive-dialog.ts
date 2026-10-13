@@ -200,11 +200,11 @@ function unsetOption(): { value: string; label: string } {
 export async function openDeriveDialog(sessionID: number, opts: { kind?: DeriveKind } = {}): Promise<void> {
   const backdrop = document.createElement('div');
   backdrop.className = 'derive-dialog-backdrop aac-wheel-overlay';
-  backdrop.innerHTML = `<div class="derive-dialog" role="dialog" aria-modal="true" aria-labelledby="derive-dialog-title">
-    <h2 id="derive-dialog-title">${escapeHtml(tx('derive_dialog_title', '派生セッションを起動'))}</h2>
-    <div class="derive-dialog-body"><p>${escapeHtml(tx('handoff_dialog_loading', '読み込み中…'))}</p></div>
+  backdrop.innerHTML = `<div class="ui-modal ui-modal--md derive-dialog" role="dialog" aria-modal="true" aria-labelledby="derive-dialog-title">
+    <h2 class="ui-modal__title" id="derive-dialog-title">${escapeHtml(tx('derive_dialog_title', '派生セッションを起動'))}</h2>
+    <div class="ui-modal__body derive-dialog-body"><p>${escapeHtml(tx('handoff_dialog_loading', '読み込み中…'))}</p></div>
     <p class="derive-dialog-error" data-derive-error hidden></p>
-    <div class="derive-dialog-actions"><button type="button" data-derive-cancel>${escapeHtml(tx('handoff_dialog_cancel', 'キャンセル'))}</button></div>
+    <div class="ui-modal__actions derive-dialog-actions"><button class="ui-button ui-button--secondary ui-button--regular" type="button" data-derive-cancel>${escapeHtml(tx('handoff_dialog_cancel', 'キャンセル'))}</button></div>
   </div>`;
   document.body.appendChild(backdrop);
 
@@ -260,36 +260,36 @@ function renderDeriveForm(
     <div class="derive-dialog-fields">
       <label class="derive-field">
         <span class="derive-field-label">${escapeHtml(tx('derive_kind_label', '種別'))}</span>
-        <select name="kind" class="derive-select">${optionsHtml(kindOptions, kind)}</select>
+        <select name="kind" class="ui-input derive-select">${optionsHtml(kindOptions, kind)}</select>
       </label>
       <label class="derive-field" data-derive-role-field>
         <span class="derive-field-label">${escapeHtml(tx('spawn_role_table_role', '役割'))}</span>
-        <select name="role" class="derive-select">${optionsHtml(roleOptions, roleOptions[0].value)}</select>
+        <select name="role" class="ui-input derive-select">${optionsHtml(roleOptions, roleOptions[0].value)}</select>
       </label>
       <label class="derive-field">
         <span class="derive-field-label">${escapeHtml(tx('spawn_role_table_cli', 'CLI'))}</span>
-        <select name="provider" class="derive-select" data-derive-provider></select>
+        <select name="provider" class="ui-input derive-select" data-derive-provider></select>
       </label>
       <label class="derive-field" data-derive-subscription-field>
         <span class="derive-field-label">${escapeHtml(tx('spawn_subscription_default', 'Subscription'))}</span>
-        <select name="subscription" class="derive-select" data-derive-subscription></select>
+        <select name="subscription" class="ui-input derive-select" data-derive-subscription></select>
       </label>
       <label class="derive-field" data-derive-model-field>
         <span class="derive-field-label">${escapeHtml(tx('spawn_role_table_model', 'Model'))}</span>
-        <input name="model" class="derive-input" list="derive-model-datalist" spellcheck="false" autocomplete="off" placeholder="${escapeHtml(tx('spawn_confirm_model_placeholder', ''))}">
+        <input name="model" class="ui-input derive-input" list="derive-model-datalist" spellcheck="false" autocomplete="off" placeholder="${escapeHtml(tx('spawn_confirm_model_placeholder', ''))}">
         <datalist id="derive-model-datalist"></datalist>
       </label>
       <label class="derive-field" data-derive-effort-field hidden>
         <span class="derive-field-label">${escapeHtml(tx('spawn_confirm_effort', 'Reasoning effort'))}</span>
-        <select name="effort" class="derive-select" data-derive-effort></select>
+        <select name="effort" class="ui-input derive-select" data-derive-effort></select>
       </label>
       <label class="derive-field">
         <span class="derive-field-label">${escapeHtml(tx('spawn_confirm_execution_mode', 'Execution mode'))}</span>
-        <select name="execution_mode" class="derive-select">${optionsHtml(executionModeOptions, '')}</select>
+        <select name="execution_mode" class="ui-input derive-select">${optionsHtml(executionModeOptions, '')}</select>
       </label>
       <label class="derive-field">
         <span class="derive-field-label">${escapeHtml(tx('spawn_confirm_permission_preset', 'Permission tier'))}</span>
-        <select name="permission_preset" class="derive-select">${optionsHtml(permissionOptions, '')}</select>
+        <select name="permission_preset" class="ui-input derive-select">${optionsHtml(permissionOptions, '')}</select>
       </label>
       <label class="derive-remember-permission" data-derive-remember-field hidden>
         <input type="checkbox" name="remember_permission">
@@ -307,7 +307,7 @@ function renderDeriveForm(
       <span>${escapeHtml(tx('derive_same_tree_label', '親と同じツリーで動かす（worktree を作らない）'))}</span>
     </label>
     <label class="derive-dialog-prompt-label" for="derive-dialog-prompt" data-derive-prompt-label></label>
-    <textarea id="derive-dialog-prompt" class="derive-dialog-prompt" rows="12" spellcheck="false"></textarea>`;
+    <textarea id="derive-dialog-prompt" class="ui-input derive-dialog-prompt" rows="12" spellcheck="false"></textarea>`;
 
   const kindSelect = bodyEl.querySelector('[name=kind]') as HTMLSelectElement;
   const roleField = bodyEl.querySelector('[data-derive-role-field]') as HTMLElement;
@@ -341,7 +341,7 @@ function renderDeriveForm(
       const hidden = kind === 'handoff' ? '' : ' hidden';
       return `<div class="derive-dialog-note-entry" data-derive-source-path${hidden}>
         <div class="derive-dialog-note-copy"><span class="derive-dialog-note-kind">${escapeHtml(label)}</span><span class="derive-dialog-note-path">${escapeHtml(path)}</span></div>
-        <button type="button" class="derive-dialog-note-view" data-derive-open-note="${index}">${escapeHtml(tx('derive_note_view', 'Markdownで表示'))}</button>
+        <button type="button" class="ui-button ui-button--secondary ui-button--regular derive-dialog-note-view" data-derive-open-note="${index}">${escapeHtml(tx('derive_note_view', 'Markdownで表示'))}</button>
       </div>`;
     }).join('');
     noteListEl.querySelectorAll<HTMLButtonElement>('[data-derive-open-note]').forEach((button) => {
@@ -601,10 +601,8 @@ function renderDeriveForm(
     }
     if (!riskConfirmed && selection.kind === 'handoff' && String(data?.error || '') === 'risk_confirmation_required') {
       const agreed = await appConfirm({
-        title: tx('derive_risk_confirm_title', '強い権限で起動します'),
+        action: 'launch',
         message: tx('derive_risk_confirm_message', '選んだ権限の段では、この CLI は承認を求めずに動きます。起動しますか?'),
-        confirmText: tx('derive_risk_confirm_run', '起動する'),
-        cancelText: tx('spawn_cancel', 'キャンセル'),
         kind: 'danger',
       });
       if (!agreed) return;
@@ -651,13 +649,15 @@ function renderDeriveForm(
   }
 
   cancelBtn.type = 'button';
+  cancelBtn.className = 'ui-button ui-button--secondary ui-button--regular';
   cancelBtn.textContent = tx('handoff_dialog_cancel', 'キャンセル');
   cancelBtn.addEventListener('click', close);
   saveBtn.type = 'button';
+  saveBtn.className = 'ui-button ui-button--secondary ui-button--regular';
   saveBtn.textContent = tx('handoff_manual_save', '看板に保存');
   saveBtn.addEventListener('click', () => { void saveManualMemo(); });
   startBtn.type = 'button';
-  startBtn.className = 'primary';
+  startBtn.className = 'ui-button ui-button--primary ui-button--regular primary';
   startBtn.textContent = tx('handoff_dialog_start', '起動');
   startBtn.addEventListener('click', () => {
     if (startBtn.disabled) return;

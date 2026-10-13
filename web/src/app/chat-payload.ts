@@ -172,7 +172,7 @@ function renderTurn(t: ChatTurn): HTMLElement {
   footer.innerHTML = `<span class="cp-usage">${escapeHtml(usage)}</span>`;
   const rawBtn = document.createElement('button');
   rawBtn.type = 'button';
-  rawBtn.className = 'cp-raw-toggle';
+  rawBtn.className = 'ui-button ui-button--secondary ui-button--regular cp-raw-toggle';
   rawBtn.textContent = 'Raw';
   const rawBox = document.createElement('div');
   rawBox.className = 'cp-raw-box';

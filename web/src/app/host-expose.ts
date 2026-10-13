@@ -283,7 +283,7 @@ function openPopover(): void {
     pop.appendChild(el('div', { class: 'expose-pop-msg', text: t('expose_state_loading') }));
   }
 
-  const refresh = el('button', { class: 'expose-pop-refresh', text: t('mobile_connect_ts_refresh'), attrs: { type: 'button' } });
+  const refresh = el('button', { class: 'ui-button ui-button--quiet ui-button--compact expose-pop-refresh', text: t('mobile_connect_ts_refresh'), attrs: { type: 'button' } });
   refresh.addEventListener('click', async () => {
     const r = await fetchExposeStatus(true);
     if (!r.ok) { showToast(httpErrText(r.httpStatus), btn); return; }

@@ -14,6 +14,7 @@
 // 純パース部は workflow-progress.ts（DOM/i18n 非依存）に分離。ここは描画と配線だけ。
 
 import { t } from '../i18n.js';
+import { uiIconHtml } from './ui-components.js';
 import type { WfAgentDetail, WorkflowProgress as HubWorkflowProgress } from '../types/proto.js';
 import { activeSessionId, sessions } from './state.js';
 import { scanBuffer } from './terminal.js';
@@ -171,10 +172,10 @@ function ensurePill(): HTMLElement {
   pill.id = 'workflow-progress-pill';
   pill.hidden = true;
   pill.innerHTML =
-    '<button type="button" class="wf-pill-open" aria-haspopup="dialog">' +
+    '<button type="button" class="ui-button ui-button--secondary ui-button--regular wf-pill-open" aria-haspopup="dialog">' +
     '<span class="wf-pill-spinner wf-running" aria-hidden="true">' + stateIconSvgHtml('ring') + '</span>' +
     '<span class="wf-pill-text"></span></button>' +
-    '<button type="button" class="wf-pill-dismiss" aria-label="dismiss">✕</button>';
+    '<button type="button" class="ui-button ui-button--secondary ui-button--regular wf-pill-dismiss" aria-label="dismiss">✕</button>';
   pill.querySelector('.wf-pill-open')?.addEventListener('click', toggleWorkflowModal);
   pill.querySelector('.wf-pill-dismiss')?.addEventListener('click', dismissActive);
   // 入力欄直上のライブ進捗ピル（#terminal-live-status）の直前に置くと導線が一貫する。
@@ -454,14 +455,14 @@ export function openWorkflowModal(): void {
   overlay.classList.add('aac-wheel-overlay');
 
   const box = document.createElement('div');
-  box.className = 'wf-modal-box';
+  box.className = 'ui-modal ui-modal--lg wf-modal-box';
   box.setAttribute('role', 'dialog');
   box.setAttribute('aria-modal', 'true');
 
   const header = document.createElement('div');
-  header.className = 'wf-modal-header';
+  header.className = 'ui-modal__header wf-modal-header';
   const title = document.createElement('span');
-  title.className = 'wf-modal-title';
+  title.className = 'ui-modal__title wf-modal-title';
   title.textContent = t('wf_progress_title');
   header.appendChild(title);
   const counts = document.createElement('span');
@@ -469,15 +470,15 @@ export function openWorkflowModal(): void {
   header.appendChild(counts);
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
-  closeBtn.className = 'wf-modal-close';
-  closeBtn.textContent = '✕';
+  closeBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon wf-modal-close';
+  closeBtn.innerHTML = uiIconHtml('close');
   closeBtn.setAttribute('aria-label', t('settings_close'));
   closeBtn.addEventListener('click', closeWorkflowModal);
   header.appendChild(closeBtn);
   box.appendChild(header);
 
   const body = document.createElement('div');
-  body.className = 'wf-modal-body';
+  body.className = 'ui-modal__body wf-modal-body';
   box.appendChild(body);
 
   overlay.appendChild(box);

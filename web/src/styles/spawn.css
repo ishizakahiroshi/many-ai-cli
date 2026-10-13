@@ -15,124 +15,54 @@
   container-type: inline-size;
   --nsb-size: clamp(18px, calc((100cqw - 24px) / 7), 32px);
 }
-/* マウス操作の PC では、下のタブ行が増えたぶんカードの見える範囲を空けるため一回り詰める
-   （上限 28px でも押せる大きさの最低基準 24px は満たす）。スマホ幅・タッチ操作は指で押しやすい 32px のまま。 */
+/* マウス操作の PC では compact の 32px を上限にし、サイドバーが狭いときだけ 7 個とも収まるまで縮める
+   （押せる大きさの最低基準 24px は守る）。タッチ操作は下の coarse 側で指で押せる大きさを保つ。 */
 @media (min-width: 721px) and (not (pointer: coarse)) {
   #new-session-bar {
     padding: 4px 4px 3px;
-    --nsb-size: clamp(18px, calc((100cqw - 24px) / 7), 28px);
+    --nsb-size: clamp(24px, calc((100cqw - 24px) / 7), var(--ui-control-compact));
   }
 }
 
-#new-session-btn.new-session-sidebar-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 var(--nsb-size, 32px);
-  width: var(--nsb-size, 32px);
-  height: var(--nsb-size, 32px);
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-md);
-  padding: 0;
-  cursor: pointer;
-  font-family: inherit;
-  flex-shrink: 0;
-  opacity: 0.82;
-  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+/* 列のボタンはすべて同じ正方形にする（見た目は親の .ui-toolbar）。.ui-button の min-height（compact 32px）
+   のままだと狭いときに縦だけ縮まらないため 0 に戻す。アイコンも列でまとめて大きさを決める。 */
+#new-session-bar > .ui-button {
+  flex: 0 0 auto;
+  width: var(--nsb-size);
+  height: var(--nsb-size);
+  min-height: 0;
 }
-#new-session-btn.new-session-sidebar-btn:hover { background: var(--accent); color: var(--bg); opacity: 1; }
-#new-session-btn.new-session-sidebar-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.new-session-sidebar-icon { width: calc(var(--nsb-size, 32px) * 0.53); height: calc(var(--nsb-size, 32px) * 0.53); display: block; }
+@media (pointer: coarse) {
+  #new-session-bar > .ui-button {
+    width: max(var(--nsb-size), var(--ui-control-size));
+    height: max(var(--nsb-size), var(--ui-control-size));
+  }
+}
+#new-session-bar > .ui-button > svg {
+  display: block;
+  flex-shrink: 0;
+  width: calc(var(--nsb-size) * 0.56);
+  height: calc(var(--nsb-size) * 0.56);
+}
+
 .new-session-btn-label {
   position: absolute;
   width: 1px;
   height: 1px;
-  padding: 0;
   margin: -1px;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
-  border: 0;
 }
-
-/* C5: Detached Grid Launcher サイドバーボタン */
-.detached-grid-launcher-sidebar-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--nsb-size, 32px);
-  height: var(--nsb-size, 32px);
-  background: var(--bg-elev, #181c24);
-  color: var(--accent-text, #93c5fd);
-  border: 1px solid var(--line, #2a3040);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: calc(var(--nsb-size, 32px) * 0.5);
-  flex-shrink: 0;
-  padding: 0;
-  transition: background 0.15s, border-color 0.15s;
-}
-.detached-grid-launcher-sidebar-btn:hover {
-  background: var(--accent, #3b82f6);
-  border-color: var(--accent, #3b82f6);
-  color: #fff;
-}
-.routine-sidebar-icon { width: calc(var(--nsb-size, 32px) * 0.53); height: calc(var(--nsb-size, 32px) * 0.53); display: block; }
 
 #kill-all-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: var(--nsb-size, 32px);
-  height: var(--nsb-size, 32px);
-  background: rgba(244,63,94,0.06);
-  color: var(--danger);
-  border: 1px solid rgba(244,63,94,0.34);
-  border-radius: var(--radius-md);
-  padding: 0;
-  cursor: pointer;
-  font-family: inherit;
   opacity: 0.82;
   transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
 }
-.kill-all-icon {
-  width: calc(var(--nsb-size, 32px) * 0.53);
-  height: calc(var(--nsb-size, 32px) * 0.53);
-  display: block;
-}
-#kill-all-btn:hover {
-  background: var(--danger-bg);
-  border-color: var(--danger);
-  color: var(--danger);
-  opacity: 1;
-}
+#kill-all-btn:hover { opacity: 1; }
 #kill-all-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-/* C1: plan_orchestration-spawn-ui-exposure.md — オーケストレーション独立ボタン。
-   停止/gridと同じ丸アイコンスタイルに揃える。 */
-.orchestration-sidebar-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--nsb-size, 32px);
-  height: var(--nsb-size, 32px);
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-md);
-  padding: 0;
-  cursor: pointer;
-  font-family: inherit;
-  opacity: 0.82;
-  flex-shrink: 0;
-  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
-}
 .orchestration-icon { width: calc(var(--nsb-size, 32px) * 0.53); height: calc(var(--nsb-size, 32px) * 0.53); display: block; }
-.orchestration-sidebar-btn:hover { background: var(--accent); color: var(--bg); opacity: 1; }
-.orchestration-sidebar-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 /* C1: 子役割の詳細設定アコーディオン内の役割×CLI×モデル表 */
 .spawn-orchestration-section { margin-top: 6px; }
@@ -326,9 +256,10 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 #spawn-model-refresh.is-loading { opacity: 0.5; pointer-events: none; }
 .spawn-model-clear { min-width: 26px; padding-left: 0; padding-right: 0; }
 .spawn-model-discover { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
-.spawn-btn-browse { flex-shrink: 0; background: transparent; border: 1px solid var(--line); color: var(--fg); border-radius: var(--radius-sm); padding: 3px 7px; cursor: pointer; font-size: var(--fs-md); line-height: 1; }
-.spawn-btn-browse:hover { background: var(--bg-elev2); }
-.spawn-btn-browse:disabled { opacity: 0.4; cursor: not-allowed; }
+.spawn-btn-browse {
+  flex-shrink: 0;
+}
+
 .cwd-combobox { position: relative; flex: 1; display: flex; }
 .cwd-combobox .spawn-input { width: 100%; box-sizing: border-box; }
 .cwd-dropdown {
@@ -408,9 +339,9 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 }
 .cwd-dropdown-chip {
   background: var(--bg); color: var(--text); border: 1px solid var(--line-soft);
-  border-radius: 999px; padding: 3px 9px; font: inherit; font-size: var(--fs-sm);
+  border-radius: var(--radius-pill); padding: 3px 9px; font: inherit; font-size: var(--fs-sm);
   font-family: ui-monospace, Menlo, Consolas, monospace; cursor: pointer;
-  display: inline-flex; align-items: center; gap: 4px;
+  display: inline-flex; align-items: center; gap: var(--space-1);
 }
 .cwd-dropdown-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
 .cwd-dropdown-chip.is-active {
@@ -421,36 +352,28 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 }
 /* chip 行右側: 履歴/お気に入りの一括削除ボタン群 */
 .cwd-dropdown-chip-actions {
-  margin-left: auto; display: flex; gap: 4px; align-items: center;
+  margin-left: auto; display: flex; gap: var(--space-1); align-items: center;
 }
 .cwd-dropdown-clear-history,
 .cwd-dropdown-clear-favorites {
-  background: transparent; color: var(--muted); border: 1px solid var(--line-soft);
-  border-radius: 999px; padding: 3px 8px; font: inherit; font-size: var(--fs-xs);
-  cursor: pointer; line-height: 1; white-space: nowrap;
+  white-space: nowrap;
 }
-.cwd-dropdown-clear-history:hover,
-.cwd-dropdown-clear-favorites:hover {
-  border-color: var(--danger, #ff6b6b); color: var(--danger, #ff6b6b);
-  background: rgba(255, 107, 107, 0.08);
-}
+
 .cwd-dropdown-close {
-  background: transparent; color: var(--muted); border: 1px solid var(--line-soft);
-  border-radius: 999px; padding: 3px 7px; font: inherit; font-size: var(--fs-xs);
+
+  ; padding: 3px 7px;
   cursor: pointer; line-height: 1;
 }
-.cwd-dropdown-close:hover {
-  border-color: var(--text); color: var(--text);
-}
+
 /* chip 圧縮 UI: launcher 1 個＋ホバー/クリックで popover 展開 */
 .cwd-dropdown-chip-collapsed {
   position: relative;
 }
 .cwd-dropdown-chip-launcher {
   background: var(--bg); color: var(--text); border: 1px solid var(--line-soft);
-  border-radius: 999px; padding: 3px 9px; font: inherit; font-size: var(--fs-sm);
+  border-radius: var(--radius-pill); padding: 3px 9px; font: inherit; font-size: var(--fs-sm);
   font-family: ui-monospace, Menlo, Consolas, monospace; cursor: pointer;
-  display: inline-flex; align-items: center; gap: 4px;
+  display: inline-flex; align-items: center; gap: var(--space-1);
 }
 .cwd-dropdown-chip-launcher:hover {
   border-color: var(--accent); background: var(--accent-soft);
@@ -464,7 +387,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   display: none;
   position: absolute; top: 100%; left: 0;
   margin-top: 4px; padding: 6px;
-  background: var(--bg); border: 1px solid var(--line-soft); border-radius: 8px;
+  background: var(--bg); border: 1px solid var(--line-soft); border-radius: var(--radius-md);
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   flex-wrap: wrap; gap: 6px;
   min-width: 220px; max-width: 360px;
@@ -497,22 +420,12 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 
 .spawn-select,
 .spawn-input {
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
   padding: 5px 8px;
-  font-size: var(--fs-md);
-  font-family: inherit;
-  outline: none;
 }
-.spawn-select:focus,
-.spawn-input:focus { border-color: var(--accent); }
-.spawn-input { font-family: Consolas, monospace; font-size: var(--fs-sm); }
 
 /* plan_session-handoff-board_c4_prompted-spawn.md C2: 最初に渡す指示（任意）欄。
    spawn-input の見た目を引き継ぎつつ、複数行入力向けに resize と行間だけ足す。 */
-.spawn-initial-prompt-row { display: flex; flex-direction: column; gap: 4px; }
+.spawn-initial-prompt-row { display: flex; flex-direction: column; gap: var(--space-1); }
 .spawn-field-label { font-size: var(--fs-sm); color: var(--muted); }
 .spawn-textarea {
   width: 100%;
@@ -520,17 +433,9 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   resize: vertical;
   min-height: 3.4em;
   line-height: 1.4;
-}
-
-/* iOS WebKit は font-size 16px 未満の入力欄にフォーカスすると自動ズームし、
+}/* iOS WebKit は font-size 16px 未満の入力欄にフォーカスすると自動ズームし、
    セッション作成パネルを開いた瞬間（spawnCwdInput.focus()）に画面が拡大して
    使いにくくなる。ターミナル入力欄 #input と同じく mobile 時は 16px を確保する。 */
-@media (max-width: 720px), (pointer: coarse) {
-  .spawn-select,
-  .spawn-input {
-    font-size: 16px;
-  }
-}
 
 @media (max-width: 520px) {
   .spawn-provider-row { gap: var(--space-1); }
@@ -569,29 +474,6 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 }
 
 /* Spawn buttons */
-.spawn-btn-cancel {
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 4px 10px;
-  font-size: var(--fs-sm);
-  cursor: pointer;
-  font-family: inherit;
-}
-.spawn-btn-cancel:hover { color: var(--text); border-color: var(--line-soft); }
-
-.spawn-btn-launch {
-  background: var(--accent-soft);
-  color: var(--text);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  padding: 4px 10px;
-  font-size: var(--fs-sm);
-  cursor: pointer;
-  font-family: inherit;
-}
-.spawn-btn-launch:hover { background: var(--accent); color: var(--bg); }
 
 /* Model picker */
 /* ---- /model picker ---- */
@@ -607,26 +489,15 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 }
 #model-picker-overlay[hidden] { display: none !important; }
 .model-picker-dialog {
-  width: min(460px, 100%);
-  background: var(--bg-elev);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
-.model-picker-title { font-size: var(--fs-body); font-weight: 700; }
+
 .model-picker-current { font-size: var(--fs-sm); color: var(--muted); }
 .model-picker-input {
   width: 100%;
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
   padding: 7px 9px;
-  font-size: var(--fs-md);
 }
 .model-picker-recent { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .model-picker-chip {
@@ -641,20 +512,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .model-picker-chip:hover { color: var(--text); border-color: var(--line-soft); }
 .model-picker-note { font-size: var(--fs-xs); color: var(--muted); }
 .model-picker-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
-.model-picker-btn {
-  border-radius: var(--radius-md);
-  padding: 6px 12px;
-  font-size: var(--fs-sm);
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-}
-.model-picker-btn.primary {
-  border: none;
-  background: var(--accent);
-  color: #fff;
-}
+
 .model-picker-check { display: flex; gap: var(--space-2); align-items: center; font-size: var(--fs-sm); color: var(--muted); }
 .spawn-risk-label {
   display: inline-flex;
@@ -681,25 +539,19 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   flex-shrink: 0;
   width: 16px;
   height: 16px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: transparent;
-  color: var(--muted);
-  font-size: var(--fs-2xs);
-  line-height: 1;
-  cursor: pointer;
 }
-.spawn-inline-help-btn:hover { color: var(--text); border-color: var(--muted); }
-.spawn-inline-help-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.spawn-inline-help-btn[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
+
+.spawn-inline-help-btn[aria-expanded="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
 /* 指で押す端末では 16px の丸は小さすぎるので、入力欄と同じ breakpoint で広げる。 */
 @media (max-width: 720px), (pointer: coarse) {
   .spawn-inline-help-btn {
-    width: 24px;
+  width: 24px;
     height: 24px;
-    font-size: var(--fs-sm);
-  }
+}
+
 }
 
 /* ---- C2: Detached 設定セクション ---- */
@@ -810,26 +662,20 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 }
 .spawn-web-dir-overlay[hidden] { display: none !important; }
 .spawn-web-dir-modal {
-  width: min(520px, 100%);
   max-height: min(72vh, 640px);
   display: flex;
   flex-direction: column;
-  background: var(--bg-elev, var(--bg));
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md, 10px);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
   overflow: hidden;
 }
 .spawn-web-dir-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
 }
-.spawn-web-dir-title { font-size: var(--fs-body); font-weight: 700; }
+
 /* .spawn-web-dir-close の見た目は /styles/close-button.css にある。 */
 .spawn-web-dir-pathrow {
   display: flex;
@@ -851,16 +697,10 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .spawn-web-dir-up,
 .spawn-web-dir-go {
   flex-shrink: 0;
-  width: 36px;
-  height: 34px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm, 6px);
-  background: var(--bg);
-  color: var(--text);
-  cursor: pointer;
+  width: var(--ui-control-size, var(--ui-control-regular));
+  height: var(--ui-control-size, var(--ui-control-regular));
 }
-.spawn-web-dir-up:hover,
-.spawn-web-dir-go:hover { border-color: var(--accent); color: var(--accent-text, var(--accent)); }
+
 .spawn-web-dir-status {
   margin: 0 14px 6px;
   font-size: var(--fs-sm);
@@ -878,7 +718,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .spawn-web-dir-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 8px 10px;
   border-radius: var(--radius-sm, 6px);
   cursor: pointer;
@@ -905,26 +745,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .spawn-web-dir-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 10px 14px 12px;
   border-top: 1px solid var(--line);
 }
-.spawn-web-dir-cancel,
-.spawn-web-dir-select {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm, 6px);
-  padding: 7px 12px;
-  font-size: var(--fs-md);
-  cursor: pointer;
-  font-family: inherit;
-  background: var(--bg);
-  color: var(--text);
-}
-.spawn-web-dir-select {
-  background: var(--accent, #3b82f6);
-  border-color: var(--accent, #3b82f6);
-  color: #fff;
-  font-weight: 600;
-}
-.spawn-web-dir-select:hover { filter: brightness(1.05); }
-.spawn-web-dir-cancel:hover { border-color: var(--muted); }

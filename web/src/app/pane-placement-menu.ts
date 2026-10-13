@@ -123,7 +123,7 @@ function openPlacementMenu(request: PlacementRequest): void {
     if (event.target === overlay) closePlacementMenu();
   });
   const dialog = document.createElement('section');
-  dialog.className = 'pane-placement-dialog';
+  dialog.className = 'ui-modal ui-modal--md pane-placement-dialog';
   dialog.setAttribute('role', 'dialog');
   dialog.setAttribute('aria-modal', 'true');
   dialog.setAttribute('aria-labelledby', 'pane-placement-heading');
@@ -132,11 +132,11 @@ function openPlacementMenu(request: PlacementRequest): void {
   heading.textContent = label('pane_placement_move_to', '移動先を選ぶ');
   const close = document.createElement('button');
   close.type = 'button';
-  close.className = 'pane-placement-cancel';
+  close.className = 'ui-button ui-button--quiet ui-button--compact pane-placement-cancel';
   close.textContent = label('pane_placement_cancel', '閉じる');
   close.addEventListener('click', closePlacementMenu);
   const header = document.createElement('div');
-  header.className = 'pane-placement-dialog-header';
+  header.className = 'ui-modal__header pane-placement-dialog-header';
   header.append(heading, close);
   dialog.appendChild(header);
 
@@ -149,7 +149,7 @@ function openPlacementMenu(request: PlacementRequest): void {
     const slot = mgr.slots?.[idx] || null;
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'pane-placement-choice';
+    button.className = 'ui-button ui-button--secondary ui-button--regular pane-placement-choice';
     const action = slot ? label('pane_placement_swap', '入れ替え') : label('pane_placement_move', '移動');
     button.textContent = `${idx + 1}. ${slotTitle(slot, idx)} · ${action}`;
     button.addEventListener('click', () => commitPlacement(request, idx));
@@ -219,6 +219,7 @@ function initPanePlacementMenu(): void {
   for (const [value, fallback] of [['box', 'この箱'], ['all', '全部']]) {
     const button = document.createElement('button');
     button.type = 'button';
+    button.className = 'ui-button ui-button--secondary ui-button--compact';
     button.dataset.paneScope = value;
     button.textContent = label(value === 'box' ? 'multi_scope_box' : 'multi_scope_all', fallback);
     button.addEventListener('click', () => {
@@ -231,6 +232,7 @@ function initPanePlacementMenu(): void {
   selectLabel.className = 'compact-pane-label';
   selectLabel.textContent = label('pane_placement_visible_pane', '表示する画面');
   const select = document.createElement('select');
+  select.classList.add('ui-input');
   select.id = 'compact-pane-select';
   select.setAttribute('aria-label', label('pane_placement_visible_pane', '表示する画面'));
   select.addEventListener('change', () => {

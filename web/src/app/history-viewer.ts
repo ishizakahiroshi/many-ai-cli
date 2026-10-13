@@ -33,6 +33,7 @@ function ensureOpenBtn() {
   if (!wrapper) return null;
   const btn = document.createElement('button');
   btn.id = 'history-viewer-open-btn';
+  btn.className = 'ui-button ui-button--quiet ui-button--compact';
   btn.type = 'button';
   btn.hidden = true;
   btn.addEventListener('click', () => {
@@ -88,7 +89,7 @@ function ensureViewer() {
   const mkBtn = (cls: string, handler: () => void) => {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'hv-btn ' + cls;
+    b.className = 'ui-button ui-button--secondary ui-button--compact hv-btn ' + cls;
     b.addEventListener('click', handler);
     return b;
   };

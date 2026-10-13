@@ -1,5 +1,6 @@
 // --- ESM imports (generated) ---
 import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
+import { uiIconHtml } from './ui-components.js';
 import { appendTextWithUrlLinks } from './url-links.js';
 import { activeSessionId, chatHistory, chatHistoryAutoCommitTimers, chatHistoryIdSeq, chatHistoryOutputBuffers, chatHistorySubs, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName } from '../app.js';
@@ -1290,7 +1291,7 @@ if (typeof window !== 'undefined') {
     // copy ボタン
     const copyBtn = document.createElement('button');
     copyBtn.type = 'button';
-    copyBtn.className = 'msg-action msg-action-copy';
+    copyBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon msg-action msg-action-copy';
     copyBtn.title = ti18n('chat_copy_btn', 'コピー');
     copyBtn.textContent = '📋';
     copyBtn.addEventListener('click', (e) => {
@@ -1309,7 +1310,7 @@ if (typeof window !== 'undefined') {
     // 折りたたみボタン (bubble に .collapsed クラス)
     const collBtn = document.createElement('button');
     collBtn.type = 'button';
-    collBtn.className = 'msg-action msg-action-collapse';
+    collBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon msg-action msg-action-collapse';
     collBtn.title = ti18n('chat_collapse_btn', '折りたたみ');
     collBtn.textContent = '–';
     collBtn.addEventListener('click', (e) => {
@@ -1346,27 +1347,28 @@ if (typeof window !== 'undefined') {
     const overlay = document.createElement('div');
     overlay.className = 'chat-raw-modal-overlay aac-wheel-overlay';
     const dlg = document.createElement('div');
-    dlg.className = 'chat-raw-modal';
+    dlg.className = 'ui-modal ui-modal--lg chat-raw-modal';
     const head = document.createElement('div');
-    head.className = 'chat-raw-modal-head';
+    head.className = 'ui-modal__header chat-raw-modal-head';
     const title = document.createElement('span');
-    title.className = 'chat-raw-modal-title';
+    title.className = 'ui-modal__title chat-raw-modal-title';
     title.textContent = ti18n('chat_raw_modal_title', '生 PTY テキスト') + ' ' + (msg && msg.id != null ? '#' + String(msg.id).padStart(3, '0') : '');
     head.appendChild(title);
     const copyBtn = document.createElement('button');
     copyBtn.type = 'button';
-    copyBtn.className = 'chat-raw-modal-btn';
+    copyBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon chat-raw-modal-btn';
     copyBtn.textContent = '📋';
     copyBtn.title = ti18n('chat_copy_btn', 'コピー');
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
-    closeBtn.className = 'chat-raw-modal-btn chat-raw-modal-close';
-    closeBtn.textContent = '✕';
+    closeBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon chat-raw-modal-btn chat-raw-modal-close';
+    closeBtn.innerHTML = uiIconHtml('close');
+    closeBtn.setAttribute('aria-label', ti18n('settings_close', 'Close'));
     head.appendChild(copyBtn);
     head.appendChild(closeBtn);
     dlg.appendChild(head);
     const body = document.createElement('pre');
-    body.className = 'chat-raw-modal-body';
+    body.className = 'ui-modal__body chat-raw-modal-body';
     body.textContent = (msg && (msg.rawText || msg.normalizedText)) || '';
     dlg.appendChild(body);
     overlay.appendChild(dlg);
@@ -1477,6 +1479,7 @@ if (typeof window !== 'undefined') {
     const close = document.createElement('button');
     close.type = 'button';
     close.textContent = '閉じる';
+    close.className = 'ui-button ui-button--quiet ui-button--compact';
     close.addEventListener('click', () => { box.hidden = true; });
     head.appendChild(title);
     head.appendChild(close);
@@ -1492,7 +1495,7 @@ if (typeof window !== 'undefined') {
     for (const r of results) {
       const item = document.createElement('button');
       item.type = 'button';
-      item.className = 'chat-global-search-item';
+      item.className = 'ui-button ui-button--secondary ui-button--regular chat-global-search-item';
       const meta = document.createElement('span');
       meta.className = 'chat-global-search-meta';
       const folder = String(r.cwd || '').replace(/\\/g, '/').split('/').filter(Boolean).pop() || r.cwd || '';
@@ -1590,7 +1593,7 @@ if (typeof window !== 'undefined') {
       const ib = document.createElement('button');
       ib.id = def.id;
       ib.type = 'button';
-      ib.className = 'icon-btn';
+      ib.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon icon-btn';
       ib.dataset.tooltip = def.tip;
       ib.innerHTML = `<span>${def.icon}</span><span>${def.label}</span>`;
       ib.addEventListener('click', (e) => { e.preventDefault(); def.fn(); });
@@ -1599,7 +1602,7 @@ if (typeof window !== 'undefined') {
 
     const input = document.createElement('input');
     input.type = 'text';
-    input.className = 'chat-search-input';
+    input.className = 'ui-input chat-search-input';
     input.placeholder = ti18n('chat_search_placeholder', '履歴を検索 (Ctrl+F)');
     input.addEventListener('input', () => {
       _searchQuery = input.value || '';

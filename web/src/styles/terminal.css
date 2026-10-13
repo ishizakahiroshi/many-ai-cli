@@ -40,7 +40,7 @@
   z-index: 10;
   cursor: ew-resize;
   touch-action: none;
-  /* 視覚的には目立たない程度に存在を示す */
+  /* 視覚的には目立たない程度に存在を示す */;
   background: linear-gradient(to bottom, rgba(255,255,255,0.035) 0%, transparent 100%);
 }
 /* モバイル以外では非表示 */
@@ -55,13 +55,8 @@
   position: absolute;
   right: 14px;
   z-index: 20;
-  background: rgba(30, 40, 60, 0.36);
-  color: rgba(147, 197, 253, 0.78);
-  border: 1px solid rgba(59, 130, 246, 0.45);
-  border-radius: var(--radius-md);
-  /* 約 0.7 倍に縮小（min-height 32px→22px） */
+  /* 約 0.7 倍に縮小（min-height 32px→22px） */;
   padding: 3px 8px;
-  font-size: var(--fs-2xs);
   min-height: 22px;
   cursor: pointer;
   backdrop-filter: blur(1px);
@@ -82,11 +77,7 @@
 #scroll-to-top-btn:hover,
 #scroll-to-bottom-btn:hover,
 .terminal-scroll-btn:hover {
-  background: rgba(59, 130, 246, 0.92);
-  color: #fff;
-  border-color: #60a5fa;
   backdrop-filter: blur(4px);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 
 /* 承認ポップアップを畳む「✕ 承認」（↓ down の真下に右揃えで配置）。
@@ -103,25 +94,16 @@
   display: none;
 }
 #approval-dismiss-btn {
-  background: rgba(30, 40, 60, 0.36);
-  color: rgba(147, 197, 253, 0.78);
-  border: 1px solid rgba(59, 130, 246, 0.45);
-  border-radius: var(--radius-md);
-  /* 約 0.7 倍に縮小（up/down と同サイズ） */
+
+  ;
+  /* 約 0.7 倍に縮小（up/down と同サイズ） */;
   padding: 3px 8px;
-  font-size: var(--fs-2xs);
-  min-height: 22px;
+
+  min-height: var(--ui-control-size, var(--ui-control-regular));
   cursor: pointer;
   backdrop-filter: blur(1px);
   transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
-}
-/* 畳むだけで承認は消えない（保留のまま）ので、消す操作の赤系にはしない。 */
-#approval-dismiss-btn:hover {
-  background: rgba(59, 130, 246, 0.92);
-  color: #fff;
-  border-color: #60a5fa;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-}
+}/* 畳むだけで承認は消えない（保留のまま）ので、消す操作の赤系にはしない。 */
 
 /* 読み取り専用バッジ（ターミナル上に重なるため暗色固定） */
 #terminal-readonly-badge {
@@ -146,11 +128,11 @@
   margin: 0 12px 6px;
   z-index: 15;
   /* ユーザー配色（live-status-color.ts が documentElement に立てる CSS 変数）。
-     未設定なら既定の青系へフォールバック。 */
+     未設定なら既定の青系へフォールバック。 */;
   background: var(--live-status-bg, rgba(13, 17, 23, 0.82));
   color: var(--live-status-fg, rgba(147, 197, 253, 0.92));
   font-family: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   line-height: 1.4;
   padding: 3px 10px;
   border-radius: var(--radius-sm);
@@ -302,16 +284,8 @@
   flex: 0 0 auto;
   margin-left: auto;        /* テキストを左に詰め、ボタンを右端へ */
   pointer-events: auto;
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  padding: 0 2px;
-  font-size: var(--fs-md);
-  line-height: 1;
-  opacity: 0.78;
-  transition: opacity 0.15s ease;
 }
-.live-status-palette-btn:hover { opacity: 1; }
+
 .live-status-palette-popover {
   /* body 直下に出して帯の overflow:hidden によるクリップを回避し、
      JS（live-status-color.ts）が開くたびにボタン位置から配置する。 */
@@ -351,16 +325,8 @@
 }
 .live-status-palette-reset {
   pointer-events: auto;
-  cursor: pointer;
   margin-top: 2px;
-  padding: 4px 8px;
-  font-size: var(--fs-xs);
-  color: #cbd5e1;
-  background: rgba(148, 163, 184, 0.12);
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  border-radius: var(--radius-sm);
 }
-.live-status-palette-reset:hover { background: rgba(148, 163, 184, 0.22); }
 
 @media (max-width: 720px) {
   body.mobile-has-session:not(.mobile-home-view) #input-bar-outer {
@@ -379,7 +345,7 @@
     flex-wrap: nowrap;
     align-items: flex-end;
     justify-content: flex-start;
-    gap: 8px;
+    gap: var(--space-2);
     min-height: 52px;
     padding: 8px 10px;
     border-radius: 24px;
@@ -395,15 +361,13 @@
   body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-btn {
     display: inline-flex;
     flex: 0 0 34px;
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
-    min-height: 34px;
+    width: var(--ui-control-size, var(--ui-control-regular));
+    height: var(--ui-control-size, var(--ui-control-regular));
+    min-width: var(--ui-control-size, var(--ui-control-regular));
+    min-height: var(--ui-control-size, var(--ui-control-regular));
     align-self: flex-end;
-    border-radius: 50%;
-    background: var(--bg-elev2, rgba(255, 255, 255, 0.08));
-    color: var(--text);
-    font-size: 1.05rem;
+    border-radius: 50%
+
   }
 
   body.mobile-has-session:not(.mobile-home-view) #input-area {
@@ -411,7 +375,7 @@
     flex: 1 1 auto;
     width: auto;
     min-width: 0;
-    gap: 4px;
+    gap: var(--space-1);
   }
 
   body.mobile-has-session:not(.mobile-home-view) #input {
@@ -428,14 +392,14 @@
   }
 
   body.mobile-has-session:not(.mobile-home-view) #send-btn {
-    flex: 0 0 34px;
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
-    min-height: 34px;
+    flex: 0 0 var(--ui-control-size, var(--ui-control-regular));
+    width: var(--ui-control-size, var(--ui-control-regular));
+    height: var(--ui-control-size, var(--ui-control-regular));
+    min-width: var(--ui-control-size, var(--ui-control-regular));
+    min-height: var(--ui-control-size, var(--ui-control-regular));
     align-self: flex-end;
-    border-radius: 50%;
-    font-size: 0;
+    border-radius: 50%
+
   }
   body.mobile-has-session:not(.mobile-home-view) #send-btn::before {
     content: "▲";
@@ -463,10 +427,10 @@
     align-items: center;
     justify-content: center;
     flex: 0 0 34px;
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
-    min-height: 34px;
+    width: var(--ui-control-size, var(--ui-control-regular));
+    height: var(--ui-control-size, var(--ui-control-regular));
+    min-width: var(--ui-control-size, var(--ui-control-regular));
+    min-height: var(--ui-control-size, var(--ui-control-regular));
     align-self: flex-end;
     border-radius: 50%;
   }
@@ -491,24 +455,15 @@
   body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-menu:not([hidden]) {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
   }
   body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-menu button {
-    min-height: 40px;
-    padding: 0 10px;
+  min-height: var(--touch-target);
     display: flex;
     align-items: center;
-    gap: 8px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text);
-    font: inherit;
+    gap: var(--space-2);
     text-align: left;
-  }
-  body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-menu button:active {
-    background: var(--bg-hover, rgba(255,255,255,0.1));
-  }
+}
 
   body.mobile-has-session:not(.mobile-home-view) #attach-panel {
     display: none;
@@ -542,7 +497,7 @@
 
   body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments #attach-clear-btn {
     flex: 0 0 auto;
-    min-height: 32px;
+    min-height: var(--ui-control-size, var(--ui-control-regular));
   }
 
   body.mobile-has-session:not(.mobile-home-view) #mobile-keyboard-panel {
@@ -562,11 +517,9 @@
     padding-bottom: 8px;
   }
   body.mobile-has-session:not(.mobile-home-view) #mobile-key-row button {
-    min-height: 34px;
+  min-height: var(--touch-target);
     min-width: 46px;
-    border-radius: 999px;
-    font-size: var(--fs-sm);
-  }
+}
 
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status {
     margin: 0 14px 3px;
@@ -711,7 +664,6 @@
   display: none;
 }
 
-
 /* Input bar / terminal adjacent panels */
 /* 入力バー外枠 — padding-bottom: token-statusbar の高さ分（fixed 要素が attach-panel に被るのを防ぐ）。
    常に最下部へ吸着させる（flex-shrink:0 で縮まず、display-area(flex:1) の下に置かれる）。 */
@@ -741,19 +693,18 @@
   flex: 0 0 auto;
   min-width: 44px;
   min-height: var(--touch-target);
-  padding: 0 12px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-md);
-  background: var(--bg);
-  color: var(--text);
-  font-family: Consolas, monospace;
-  font-size: 0.82rem;
-  cursor: pointer;
 }
+
 #mobile-key-row button[aria-pressed="true"] {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent-text);
+}
+#mobile-key-row button[aria-pressed="true"].ui-button {
+  --ui-button-border: var(--accent);
+  --ui-button-bg: var(--accent-soft);
+  --ui-button-hover: var(--accent-soft);
+  --ui-button-fg: var(--accent-text);
 }
 
 /* スラッシュコマンドメニュー */
@@ -773,7 +724,7 @@
 .slash-item { display: flex; align-items: center; gap: var(--space-3); padding: 7px 12px; cursor: pointer; }
 .slash-item:hover,
 .slash-item.selected { background: var(--accent-soft); }
-.slash-item .slash-cmd { color: var(--accent); font-family: Consolas, monospace; font-size: 13px; min-width: 120px; }
+.slash-item .slash-cmd { color: var(--accent); font-family: Consolas, monospace; font-size: var(--fs-md); min-width: 120px; }
 .slash-item .slash-desc { color: var(--muted-2); font-size: var(--fs-sm); }
 .slash-item.slash-unsupported-notice { cursor: default; color: var(--muted-2); font-size: var(--fs-sm); }
 .slash-item.slash-unsupported-notice:hover { background: none; }
@@ -835,15 +786,14 @@ body.pc-input-tools-off #input-tools { display: none; }
 }
 
 #tools-flip-btn {
-  color: var(--muted);
-  border: 1px dashed var(--line-soft);
+
   opacity: 0.7;
   flex: 0 0 var(--control-h-sm);
-  min-width: var(--control-h-sm);
+  min-width: var(--ui-control-size, var(--ui-control-compact));
   align-self: flex-end;
   line-height: 1;
 }
-#tools-flip-btn:hover { opacity: 1; color: var(--text); }
+#tools-flip-btn:hover { opacity: 1  }
 
 /* 入力欄ツールの並べ替え（ドラッグ&ドロップ）— input-tools-order.ts
    並びを保存したときだけ .custom-tool-order が付き、各ボタンの --tool-order を order に使う。
@@ -873,23 +823,19 @@ body.pc-input-tools-off #input-tools { display: none; }
 }
 .input-icon-grip {
   position: absolute;
-  width: 18px;
-  height: 18px;
+  width: var(--ui-control-size, var(--ui-control-regular));
+  height: var(--ui-control-size, var(--ui-control-regular));
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 5px;
-  border: 0;
+
   padding: 0;
   z-index: 4;
-  background: var(--bg-elev);
-  color: var(--muted-2);
-  font: 14px/1 system-ui;
+
   cursor: grab;
   touch-action: none;
   user-select: none;
 }
-.input-icon-grip:hover { color: var(--text); }
 .input-icon-grip:active { cursor: grabbing; }
 .input-icon-moving { outline: 2px solid var(--accent); }
 .input-icon-slot { flex-shrink: 0; pointer-events: none; }
@@ -917,7 +863,7 @@ body.pc-input-tools-off #input-tools { display: none; }
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   padding: 2px 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--accent-text);
   font-family: Consolas, monospace;
   max-width: 100%;
@@ -935,7 +881,7 @@ body.pc-input-tools-off #input-tools { display: none; }
   border-radius: 0;
   padding: 0;
   font-family: Consolas, monospace;
-  font-size: 13px;
+  font-size: var(--fs-md);
   outline: none;
   resize: none;
   line-height: 1.5;
@@ -947,15 +893,13 @@ body.pc-input-tools-off #input-tools { display: none; }
 #input:focus { border-color: transparent; }
 
 #send-btn {
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-md);
-  width: var(--control-h-md);
-  height: var(--control-h-md);
-  min-width: var(--control-h-md);
-  min-height: var(--control-h-md);
-  font-size: var(--fs-body);
+
+  ;
+  width: var(--ui-control-size, var(--ui-control-regular));
+  height: var(--ui-control-size, var(--ui-control-regular));
+  min-width: var(--ui-control-size, var(--ui-control-regular));
+  min-height: var(--ui-control-size, var(--ui-control-regular));
+
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -963,51 +907,47 @@ body.pc-input-tools-off #input-tools { display: none; }
   flex-shrink: 0;
   transition: background 0.12s, transform 0.1s;
 }
-#send-btn:hover { background: var(--accent-2); }
 #send-btn:active { transform: scale(0.92); }
 
 /* C2: 実行中は停止ボタン（■）化。白アイコンとのコントラストを両テーマで保つため
    テーマ変数（--danger はダークテーマだと淡色前景）ではなく固定の停止赤を使う */
 #send-btn.is-stopping { background: #d9534f; }
+#send-btn.is-stopping.ui-button {
+  --ui-button-bg: #d9534f;
+  --ui-button-hover: #d9534f;
+}
 #send-btn.is-stopping:hover { background: #c9302c; }
+#send-btn.is-stopping:hover.ui-button {
+  --ui-button-bg: #c9302c;
+  --ui-button-hover: #c9302c;
+}
 
 .quick-cmd-btn {
-  background: transparent;
-  color: var(--muted-2);
-  border: none;
-  border-radius: var(--radius-md);
-  width: var(--control-h-sm);
-  height: var(--control-h-sm);
-  min-width: var(--control-h-sm);
-  min-height: var(--control-h-sm);
-  font-size: 0.72rem;
-  font-family: Consolas, monospace;
-  cursor: pointer;
+  width: var(--ui-control-size, var(--ui-control-compact));
+  height: var(--ui-control-size, var(--ui-control-compact));
+  min-width: var(--ui-control-size, var(--ui-control-compact));
+  min-height: var(--ui-control-size, var(--ui-control-compact));
   white-space: nowrap;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
-  transition: color 0.12s, background 0.12s;
 }
+
 /* 自由入力テキスト用クイックコマンドボタン: 先頭数文字を表示するため正方形固定を解き、
    横幅可変（max 制限 + ellipsis）にする。アイコン専用ボタン（/ ▾・⌫）は正方形のまま。 */
 .quick-cmd-btn--text {
   width: auto;
-  min-width: var(--control-h-sm);
+  min-width: var(--ui-control-size, var(--ui-control-compact));
   max-width: 6.5em;
-  padding: 0 6px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.quick-cmd-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+
 .quick-cmd-btn:disabled,
 .quick-cmd-btn[disabled] {
-  opacity: 0.35;
-  cursor: not-allowed;
   pointer-events: none;
 }
-.quick-cmd-btn:disabled:hover { background: transparent; color: var(--muted-2); }
+
 #quick-clear-btn,
 #quick-model-btn,
 #quick-cmd-btn-3,
@@ -1058,7 +998,7 @@ body.pc-input-tools-off #input-tools { display: none; }
   #slash-picker-btn {
     min-width: var(--touch-target);
     padding: 0 4px;
-    font-size: var(--fs-2xs);
+
   }
   #quick-model-btn,
   #quick-cmd-btn-3,
@@ -1132,20 +1072,15 @@ body.pc-input-tools-off #input-tools { display: none; }
 }
 .path-link-popup[hidden] { display: none !important; }
 .path-link-popup-item {
-  background: none;
-  border: none;
-  color: var(--text);
-  font-family: inherit;
-  font-size: var(--fs-md);
+
+  ;
+
   text-align: left;
   padding: 6px 14px;
   cursor: pointer;
   white-space: nowrap;
 }
-.path-link-popup-item:hover {
-  background: var(--accent-soft);
-  color: var(--text);
-}
+
 /* URL のメニューの先頭に出す行き先（開く前に全文を見せる） */
 .path-link-popup-url {
   max-width: min(520px, 80vw);
@@ -1191,17 +1126,13 @@ body.pc-input-tools-off #input-tools { display: none; }
 
 .expand-popup-copy,
 .expand-popup-close {
-  background: transparent;
-  color: var(--muted-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+
+  ;
   padding: 2px 7px;
-  font-size: var(--icon-btn-fs);
+
   cursor: pointer;
   line-height: 1.3;
 }
-.expand-popup-copy:hover { color: var(--text); border-color: var(--line-soft); }
-.expand-popup-close:hover { color: var(--danger); border-color: var(--danger); }
 
 .expand-popup-content {
   margin: 0;
@@ -1224,20 +1155,9 @@ body.pc-input-tools-off #input-tools { display: none; }
 .expand-popup-show-full {
   display: block;
   margin: 0;
-  padding: 10px 12px;
   width: 100%;
-  background: var(--bg-elev);
-  border: none;
   border-top: 1px solid var(--line-soft);
-  border-radius: 0 0 6px 6px;
-  color: var(--accent, #2563eb);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  cursor: pointer;
   text-align: center;
-}
-.expand-popup-show-full:hover {
-  background: var(--bg-hover, rgba(255,255,255,0.06));
 }
 
 /* ─── 選択範囲コピーの右クリックメニュー ─── */
@@ -1256,19 +1176,12 @@ body.pc-input-tools-off #input-tools { display: none; }
 .term-ctx-menu.open { display: block; }
 .term-ctx-menu button {
   width: 100%;
-  background: transparent;
-  border: 0;
-  color: var(--text);
   text-align: left;
-  padding: 6px 12px;
-  font-size: var(--fs-sm);
-  cursor: pointer;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  font-family: inherit;
 }
-.term-ctx-menu button:hover { background: var(--row-hover); }
+
 .term-ctx-menu .ctx-icon {
   width: 16px;
   text-align: center;
@@ -1284,15 +1197,10 @@ body.pc-input-tools-off #input-tools { display: none; }
   left: 50%;
   transform: translateX(-50%);
   z-index: 18;
-  background: rgba(22, 30, 43, 0.92);
-  color: var(--text);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-lg);
   padding: 3px 12px;
-  font-size: var(--fs-sm);
   cursor: pointer;
 }
-#history-viewer-open-btn:hover { background: var(--row-hover); }
+
 #history-viewer {
   position: absolute;
   inset: 0;
@@ -1313,19 +1221,15 @@ body.pc-input-tools-off #input-tools { display: none; }
   font-size: var(--fs-sm);
   flex-shrink: 0;
 }
-#history-viewer .hv-title { color: var(--text); font-weight: 600; }
+#history-viewer .hv-title:where(:not(.ui-modal__title)) {
+  color: var(--text);
+  font-weight: 600;
+}
 #history-viewer .hv-range { color: var(--muted); margin-right: auto; margin-left: 8px; }
 #history-viewer .hv-btn {
-  background: transparent;
-  color: var(--text);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-md);
-  padding: 2px 8px;
-  font-size: var(--fs-sm);
-  cursor: pointer;
   white-space: nowrap;
 }
-#history-viewer .hv-btn:hover { background: var(--row-hover); }
+
 #history-viewer .hv-body { flex: 1; min-height: 0; overflow: hidden; }
 #history-viewer .hv-body .xterm { height: 100%; }
 
@@ -1351,19 +1255,15 @@ body.pc-input-tools-off #input-tools { display: none; }
   font-size: var(--fs-sm);
   flex-shrink: 0;
 }
-#grok-chat-viewer .gcv-title { color: var(--text); font-weight: 600; }
+#grok-chat-viewer .gcv-title:where(:not(.ui-modal__title)) {
+  color: var(--text);
+  font-weight: 600;
+}
 #grok-chat-viewer .gcv-range { color: var(--muted); margin-right: auto; margin-left: 8px; }
 #grok-chat-viewer .gcv-btn {
-  background: transparent;
-  color: var(--text);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-md);
-  padding: 2px 8px;
-  font-size: var(--fs-sm);
-  cursor: pointer;
   white-space: nowrap;
 }
-#grok-chat-viewer .gcv-btn:hover { background: var(--row-hover); }
+
 #grok-chat-viewer .gcv-body {
   flex: 1;
   min-height: 0;
@@ -1395,19 +1295,15 @@ body.pc-input-tools-off #input-tools { display: none; }
   min-width: 0;
 }
 #grok-chat-viewer .gcv-msg-copy {
-  padding: 0 6px;
-  font-size: var(--icon-btn-fs);
-  line-height: 1.4;
-  opacity: 0.55;
   flex-shrink: 0;
 }
-#grok-chat-viewer .gcv-msg:hover .gcv-msg-copy,
-#grok-chat-viewer .gcv-msg-copy:focus-visible {
-  opacity: 1;
-}
+
 #grok-chat-viewer .gcv-msg-copy.copied {
   opacity: 1;
   color: var(--green-text, #6ee7b7);
+}
+#grok-chat-viewer .gcv-msg-copy.copied.ui-button {
+  --ui-button-fg: var(--green-text, #6ee7b7);
 }
 /* 読み取り専用でもドラッグ選択・コピー可能にする */
 #grok-chat-viewer .gcv-text {

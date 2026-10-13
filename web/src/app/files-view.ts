@@ -254,7 +254,7 @@ export const FilesTabManager = (function () {
   function ensureSessionTab() {
     if (sessionTabEl) return;
     sessionTabEl = document.createElement('button');
-    sessionTabEl.className = 'main-tab main-tab-session active';
+    sessionTabEl.className = 'ui-button ui-button--secondary ui-button--regular main-tab main-tab-session active';
     sessionTabEl.dataset.tabId = 'session';
     sessionTabEl.textContent = t('files_tab_session_label');
     sessionTabEl.addEventListener('click', () => switchToSessionView());
@@ -363,7 +363,7 @@ export const FilesTabManager = (function () {
 
     // タブボタン DOM
     const tabBtn = document.createElement('button');
-    tabBtn.className = 'main-tab';
+    tabBtn.className = 'ui-button ui-button--secondary ui-button--regular main-tab';
     tabBtn.dataset.tabId = id;
 
     const labelSpan = document.createElement('span');
@@ -372,7 +372,7 @@ export const FilesTabManager = (function () {
     tabBtn.appendChild(labelSpan);
 
     const closeBtn = document.createElement('button');
-    closeBtn.className = 'main-tab-close';
+    closeBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon main-tab-close';
     closeBtn.textContent = '✕';
     closeBtn.title = t('files_tab_close_tooltip');
     closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeFilesTab(id); });
@@ -519,7 +519,7 @@ export const FilesTabManager = (function () {
   function ensureAddTabButton() {
     if (addTabBtn) return;
     addTabBtn = document.createElement('button');
-    addTabBtn.className = 'main-tab-add-btn';
+    addTabBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon main-tab-add-btn';
     addTabBtn.type = 'button';
     addTabBtn.textContent = '+';
     addTabBtn.title = ti18n('main_tab_add_tooltip', 'Add tab');
@@ -541,9 +541,9 @@ export const FilesTabManager = (function () {
     menu.className = 'main-tab-add-menu open';
     const sessId = (typeof activeSessionId !== 'undefined') ? activeSessionId : null;
     menu.innerHTML =
-      `<button data-act="add-git" type="button"><span class="ico">⎇</span><span>${escapeHtml(ti18n('add_git_tab', 'Add Git tab'))}</span></button>` +
-      `<button data-act="add-review" type="button"><span class="ico">±</span><span>${escapeHtml(ti18n('add_review_tab', 'Add Review tab'))}</span></button>` +
-      `<button data-act="add-files" type="button"><span class="ico">📁</span><span>${escapeHtml(ti18n('add_files_tab', 'Add Files tab'))}</span></button>`;
+      `<button class="ui-button ui-button--secondary ui-button--regular" data-act="add-git" type="button"><span class="ico">⎇</span><span>${escapeHtml(ti18n('add_git_tab', 'Add Git tab'))}</span></button>` +
+      `<button class="ui-button ui-button--secondary ui-button--regular" data-act="add-review" type="button"><span class="ico">±</span><span>${escapeHtml(ti18n('add_review_tab', 'Add Review tab'))}</span></button>` +
+      `<button class="ui-button ui-button--secondary ui-button--regular" data-act="add-files" type="button"><span class="ico">📁</span><span>${escapeHtml(ti18n('add_files_tab', 'Add Files tab'))}</span></button>`;
     document.body.appendChild(menu);
     const r = menu.getBoundingClientRect();
     const x = Math.min(anchorRect.left, window.innerWidth - r.width - 4);
@@ -653,7 +653,7 @@ export const FilesTabManager = (function () {
     }
 
     const tabBtn = document.createElement('button');
-    tabBtn.className = 'main-tab main-tab-git';
+    tabBtn.className = 'ui-button ui-button--secondary ui-button--regular main-tab main-tab-git';
     tabBtn.dataset.tabId = id;
     tabBtn.type = 'button';
 
@@ -673,7 +673,7 @@ export const FilesTabManager = (function () {
     tabBtn.appendChild(refSpan);
 
     const closeBtn = document.createElement('button');
-    closeBtn.className = 'main-tab-close';
+    closeBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon main-tab-close';
     closeBtn.type = 'button';
     closeBtn.textContent = '✕';
     closeBtn.title = (typeof t === 'function' ? t('files_tab_close_tooltip') : 'Close');
@@ -794,7 +794,7 @@ export const FilesTabManager = (function () {
     }
 
     const tabBtn = document.createElement('button');
-    tabBtn.className = 'main-tab main-tab-review';
+    tabBtn.className = 'ui-button ui-button--secondary ui-button--regular main-tab main-tab-review';
     tabBtn.dataset.tabId = id;
     tabBtn.type = 'button';
 
@@ -809,7 +809,7 @@ export const FilesTabManager = (function () {
     tabBtn.appendChild(labelSpan);
 
     const closeBtn = document.createElement('button');
-    closeBtn.className = 'main-tab-close';
+    closeBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon main-tab-close';
     closeBtn.type = 'button';
     closeBtn.textContent = '✕';
     closeBtn.title = (typeof t === 'function' ? t('files_tab_close_tooltip') : 'Close');
@@ -1472,44 +1472,44 @@ export const FilesTreeView = (function () {
     toolbar.className = 'files-tree-toolbar';
 
     const reloadBtn = document.createElement('button');
-    reloadBtn.className = 'files-tree-toolbar-btn';
+    reloadBtn.className = 'ui-button ui-button--quiet ui-button--compact files-tree-toolbar-btn';
     reloadBtn.title = t('files_tree_reload_tooltip') || 'Reload';
     reloadBtn.textContent = '↻';
 
     const openFolderBtn = document.createElement('button');
-    openFolderBtn.className = 'files-tree-toolbar-btn';
+    openFolderBtn.className = 'ui-button ui-button--quiet ui-button--compact files-tree-toolbar-btn';
     openFolderBtn.title = t('files_tree_open_folder_tooltip') || 'Open folder in OS';
     openFolderBtn.textContent = '⛶';
 
     const searchBtn = document.createElement('button');
-    searchBtn.className = 'files-tree-toolbar-btn';
+    searchBtn.className = 'ui-button ui-button--quiet ui-button--compact files-tree-toolbar-btn';
     searchBtn.title = t('files_tree_search_tooltip') || 'Search';
     searchBtn.textContent = '🔍';
 
     const moveBtn = document.createElement('button');
-    moveBtn.className = 'files-tree-toolbar-btn';
+    moveBtn.className = 'ui-button ui-button--quiet ui-button--compact files-tree-toolbar-btn';
     moveBtn.title = t('files_tree_move_tooltip') || 'Move selected';
     moveBtn.textContent = '↗';
     moveBtn.disabled = true;
 
     const insertPromptBtn = document.createElement('button');
-    insertPromptBtn.className = 'files-tree-toolbar-btn files-tree-insert-prompt-btn';
+    insertPromptBtn.className = 'ui-button ui-button--quiet ui-button--compact files-tree-toolbar-btn files-tree-insert-prompt-btn';
     insertPromptBtn.title = 'Insert selected file path into the active prompt';
     insertPromptBtn.textContent = '@';
     insertPromptBtn.disabled = true;
 
     const newFileBtn = document.createElement('button');
-    newFileBtn.className = 'files-tree-toolbar-btn';
+    newFileBtn.className = 'ui-button ui-button--quiet ui-button--compact files-tree-toolbar-btn';
     newFileBtn.title = t('files_tree_new_file_tooltip') || 'Create new file';
     newFileBtn.textContent = '📄+';
 
     const newFolderBtn = document.createElement('button');
-    newFolderBtn.className = 'files-tree-toolbar-btn';
+    newFolderBtn.className = 'ui-button ui-button--quiet ui-button--compact files-tree-toolbar-btn';
     newFolderBtn.title = t('files_tree_new_folder_tooltip') || 'Create new folder';
     newFolderBtn.textContent = '📁+';
 
     const closeTabBtn = document.createElement('button');
-    closeTabBtn.className = 'files-tree-toolbar-btn';
+    closeTabBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon files-tree-toolbar-btn';
     closeTabBtn.title = t('files_tree_close_tab_tooltip') || 'Close tab';
     closeTabBtn.textContent = '✕';
 
@@ -1527,10 +1527,10 @@ export const FilesTreeView = (function () {
     searchWrap.hidden = true;
     const searchInput = document.createElement('input');
     searchInput.type = 'text';
-    searchInput.className = 'files-tree-search-input';
+    searchInput.className = 'ui-input files-tree-search-input';
     searchInput.placeholder = t('files_tree_search_placeholder') || 'Filter files…';
     const searchClearBtn = document.createElement('button');
-    searchClearBtn.className = 'files-tree-toolbar-btn';
+    searchClearBtn.className = 'ui-button ui-button--quiet ui-button--compact files-tree-toolbar-btn';
     searchClearBtn.textContent = '✕';
     searchWrap.appendChild(searchInput);
     searchWrap.appendChild(searchClearBtn);
@@ -1909,10 +1909,10 @@ export const FilesTreeView = (function () {
     function openMoveDialog() {
       if (!currentTree || selectedAbsPaths.size === 0) return;
       const dialog = document.createElement('dialog');
-      dialog.className = 'files-move-dialog';
+      dialog.className = 'ui-modal ui-modal--sm files-move-dialog';
 
       const titleEl = document.createElement('p');
-      titleEl.className = 'files-move-dialog-title';
+      titleEl.className = 'ui-modal__title files-move-dialog-title';
       titleEl.textContent = (t('files_move_dialog_title') || 'Move {n} item(s) to folder…')
         .replace('{n}', String(selectedAbsPaths.size));
       dialog.appendChild(titleEl);
@@ -1949,13 +1949,14 @@ export const FilesTreeView = (function () {
       dialog.appendChild(listEl);
 
       const btnRow = document.createElement('div');
-      btnRow.className = 'files-move-dialog-buttons';
+      btnRow.className = 'ui-modal__actions files-move-dialog-buttons';
       const cancelBtn = document.createElement('button');
       cancelBtn.textContent = t('files_move_dialog_cancel') || 'Cancel';
+      cancelBtn.className = 'ui-button ui-button--secondary ui-button--regular';
       cancelBtn.addEventListener('click', () => dialog.close());
       confirmBtn = document.createElement('button');
       confirmBtn.textContent = t('files_move_dialog_confirm') || 'Move';
-      confirmBtn.className = 'files-move-dialog-confirm';
+      confirmBtn.className = 'ui-button ui-button--primary ui-button--regular files-move-dialog-confirm';
       confirmBtn.disabled = true;
       confirmBtn.addEventListener('click', async () => {
         if (!dialogSelectedDir) return;
@@ -2321,7 +2322,7 @@ export const FilesPreview = (function () {
 
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'files-preview-code-copy-btn';
+      btn.className = 'ui-button ui-button--quiet ui-button--compact files-preview-code-copy-btn';
       btn.dataset.filesSkipSearch = '1';
       const defaultLabel = COPY_ICON;
       const copiedLabel = COPIED_ICON;
@@ -2362,7 +2363,7 @@ export const FilesPreview = (function () {
 
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'files-preview-table-copy-btn';
+      btn.className = 'ui-button ui-button--quiet ui-button--compact files-preview-table-copy-btn';
       btn.dataset.filesSkipSearch = '1';
       const defaultLabel = COPY_ICON;
       const copiedLabel = COPIED_ICON;
@@ -2468,44 +2469,44 @@ export const FilesPreview = (function () {
 
     // ツールバーボタン群（ファイル選択後に有効化）
     const openExternalBtn = document.createElement('button');
-    openExternalBtn.className = 'files-preview-toolbar-btn';
+    openExternalBtn.className = 'ui-button ui-button--quiet ui-button--compact files-preview-toolbar-btn';
     openExternalBtn.title = t('link_open_default') || 'Open with default app';
     openExternalBtn.textContent = '🚀';
     openExternalBtn.disabled = true;
 
     const openFolderBtn = document.createElement('button');
-    openFolderBtn.className = 'files-preview-toolbar-btn';
+    openFolderBtn.className = 'ui-button ui-button--quiet ui-button--compact files-preview-toolbar-btn';
     openFolderBtn.title = t('files_preview_open_folder_tooltip') || 'Open folder';
     openFolderBtn.textContent = '📁';
     openFolderBtn.disabled = true;
 
     const copyPathBtn = document.createElement('button');
-    copyPathBtn.className = 'files-preview-toolbar-btn';
+    copyPathBtn.className = 'ui-button ui-button--quiet ui-button--compact files-preview-toolbar-btn';
     copyPathBtn.title = t('files_preview_copy_path_tooltip') || 'Copy path';
     copyPathBtn.textContent = '🔗';
     copyPathBtn.disabled = true;
 
     const searchBtn = document.createElement('button');
-    searchBtn.className = 'files-preview-toolbar-btn';
+    searchBtn.className = 'ui-button ui-button--quiet ui-button--compact files-preview-toolbar-btn';
     searchBtn.title = t('files_preview_search_tooltip') || 'Search in page';
     searchBtn.textContent = '🔍';
     searchBtn.disabled = true;
 
     const reloadBtn = document.createElement('button');
-    reloadBtn.className = 'files-preview-toolbar-btn';
+    reloadBtn.className = 'ui-button ui-button--quiet ui-button--compact files-preview-toolbar-btn';
     reloadBtn.title = t('files_preview_reload_tooltip') || 'Reload';
     reloadBtn.textContent = '↻';
     reloadBtn.disabled = true;
 
     const editBtn = document.createElement('button');
-    editBtn.className = 'files-preview-toolbar-btn';
+    editBtn.className = 'ui-button ui-button--quiet ui-button--compact files-preview-toolbar-btn';
     editBtn.title = t('files_preview_edit_tooltip') || 'Edit';
     editBtn.textContent = '✏️';
     editBtn.disabled = true;
     editBtn.hidden = true;
 
     const closeBtn = document.createElement('button');
-    closeBtn.className = 'files-preview-toolbar-btn';
+    closeBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon files-preview-toolbar-btn';
     closeBtn.title = t('files_preview_close_tooltip') || 'Close preview';
     closeBtn.textContent = '✕';
     // path-links.ts のモーダルがこのボタンを隠して自前の閉じるへ差し替える目印。
@@ -2529,20 +2530,20 @@ export const FilesPreview = (function () {
     searchBar.hidden = true;
     const searchInput = document.createElement('input');
     searchInput.type = 'text';
-    searchInput.className = 'files-preview-search-input';
+    searchInput.className = 'ui-input files-preview-search-input';
     searchInput.placeholder = t('files_preview_search_placeholder') || 'Search…';
     const searchPrevBtn = document.createElement('button');
-    searchPrevBtn.className = 'files-preview-search-nav-btn';
+    searchPrevBtn.className = 'ui-button ui-button--secondary ui-button--regular files-preview-search-nav-btn';
     searchPrevBtn.textContent = '▲';
     searchPrevBtn.title = t('files_preview_search_prev') || 'Previous';
     const searchNextBtn = document.createElement('button');
-    searchNextBtn.className = 'files-preview-search-nav-btn';
+    searchNextBtn.className = 'ui-button ui-button--secondary ui-button--regular files-preview-search-nav-btn';
     searchNextBtn.textContent = '▼';
     searchNextBtn.title = t('files_preview_search_next') || 'Next';
     const searchCountEl = document.createElement('span');
     searchCountEl.className = 'files-preview-search-count';
     const searchCloseBtn = document.createElement('button');
-    searchCloseBtn.className = 'files-preview-search-nav-btn';
+    searchCloseBtn.className = 'ui-button ui-button--secondary ui-button--regular files-preview-search-nav-btn';
     searchCloseBtn.textContent = '✕';
     searchCloseBtn.title = t('files_preview_search_close') || 'Close search';
     searchBar.appendChild(searchInput);
@@ -2755,13 +2756,13 @@ export const FilesPreview = (function () {
       editBarEl = bar;
 
       const saveBtn = document.createElement('button');
-      saveBtn.className = 'files-preview-toolbar-btn files-preview-edit-save-btn';
+      saveBtn.className = 'ui-button ui-button--primary ui-button--compact files-preview-toolbar-btn files-preview-edit-save-btn';
       saveBtn.textContent = t('files_preview_edit_save') || '保存';
       saveBtn.title = t('files_preview_edit_save_tooltip') || 'Save file';
       editSaveBtn = saveBtn;
 
       const discardBtn = document.createElement('button');
-      discardBtn.className = 'files-preview-toolbar-btn';
+      discardBtn.className = 'ui-button ui-button--quiet ui-button--compact files-preview-toolbar-btn';
       discardBtn.textContent = t('files_preview_edit_discard') || '破棄';
       discardBtn.title = t('files_preview_edit_discard_tooltip') || 'Discard changes';
       editDiscardBtn = discardBtn;
@@ -2848,7 +2849,7 @@ export const FilesPreview = (function () {
       conflictMsg.textContent = t('files_preview_edit_conflict_msg') || '他のプロセスがこのファイルを変更しました';
 
       const reloadLatestBtn = document.createElement('button');
-      reloadLatestBtn.className = 'files-preview-toolbar-btn';
+      reloadLatestBtn.className = 'ui-button ui-button--quiet ui-button--compact files-preview-toolbar-btn';
       reloadLatestBtn.textContent = t('files_preview_edit_conflict_reload') || '最新を読み直す';
       reloadLatestBtn.addEventListener('click', () => {
         exitEditMode();
@@ -2856,7 +2857,7 @@ export const FilesPreview = (function () {
       });
 
       const overwriteBtn = document.createElement('button');
-      overwriteBtn.className = 'files-preview-toolbar-btn files-preview-edit-save-btn';
+      overwriteBtn.className = 'ui-button ui-button--primary ui-button--compact files-preview-toolbar-btn files-preview-edit-save-btn';
       overwriteBtn.textContent = t('files_preview_edit_conflict_overwrite') || '上書き保存';
       overwriteBtn.addEventListener('click', () => {
         editStatusEl.innerHTML = '';
@@ -2896,7 +2897,7 @@ export const FilesPreview = (function () {
           media.addEventListener('dblclick', () => openLightbox(mediaUrl, { type: 'video' }));
           const modalBtn = document.createElement('button');
           modalBtn.type = 'button';
-          modalBtn.className = 'files-preview-media-modal-btn';
+          modalBtn.className = 'ui-button ui-button--secondary ui-button--regular ui-button--icon files-preview-media-modal-btn';
           modalBtn.title = 'Open video';
           modalBtn.textContent = '⛶';
           modalBtn.addEventListener('click', () => openLightbox(mediaUrl, { type: 'video' }));

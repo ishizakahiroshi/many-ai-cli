@@ -1,4 +1,5 @@
 import { t } from '../i18n.js';
+import { uiButtonClass } from './ui-components.js';
 import { apiFetch } from './util.js';
 import { activeSessionId, sessions } from './state.js';
 import { activateSession } from './session-list.js';
@@ -17,7 +18,7 @@ const requests = new Map<string, string>();
 const tr = (key: string) => t('routines_' + key);
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, text = '', className = ''): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag); el.textContent = text; el.className = className; return el;
+  const el = document.createElement(tag); el.textContent = text; el.className = tag === 'button' ? `${uiButtonClass(className.includes('primary') ? 'primary' : 'secondary')} ${className}` : tag === 'select' || tag === 'textarea' ? `ui-input ${className}` : className; return el;
 }
 function button(label: string, action: () => void, primary = false): HTMLButtonElement {
   const el = node('button', label, primary ? 'routine-button primary' : 'routine-button');
@@ -52,7 +53,7 @@ function status(run: RoutineRun): string { return tr('status_' + run.status); }
 function close(): void { dialog?.close(); }
 function ensureDialog(): HTMLDialogElement {
   if (dialog) return dialog;
-  dialog = node('dialog', '', 'routines-dialog aac-wheel-overlay'); dialog.id = 'routines-dialog';
+  dialog = node('dialog', '', 'ui-modal ui-modal--lg routines-dialog aac-wheel-overlay'); dialog.id = 'routines-dialog';
   dialog.setAttribute('aria-labelledby', 'routines-title');
   const header = node('div', '', 'routines-header');
   const heading = node('h2', tr('title')); heading.id = 'routines-title';
@@ -113,7 +114,7 @@ function editRoutine(routine?: Routine): void {
   content.append(button('← '+tr('title'),()=>void showList()),node('h3',routine?tr('edit'):tr('new')));
   const form=node('form','','routine-form');
   function input(key:string,value:string,required=false,type='text'):HTMLInputElement {
-    const label=node('label',tr(key));const field=node('input');field.name=key;field.value=value;field.required=required;field.type=type;label.append(field);form.append(label);return field;
+    const label=node('label',tr(key));const field=node('input');field.name=key;field.value=value;field.required=required;field.type=type;if(type!=='checkbox')field.classList.add('ui-input');label.append(field);form.append(label);return field;
   }
   const name=input('name',routine?.name||'',true);name.maxLength=120;
   const cwd=input('cwd',routine?.cwd||session?.cwd||'',true);

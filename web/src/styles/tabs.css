@@ -69,13 +69,11 @@ body.pane-resizing .xterm { pointer-events: none; }
   color: var(--muted); font-size: var(--fs-sm); cursor: default;
 }
 .pane-slot.empty .empty-remove {
-  margin-top: var(--space-1); padding: 2px 8px; font-size: var(--fs-xs);
-  color: var(--muted); background: transparent;
-  border: 1px solid var(--line); border-radius: 4px; cursor: pointer;
+  margin-top: var(--space-1);
 }
-.pane-slot.empty .empty-remove:hover { color: var(--text); border-color: var(--accent); }
+
 .pane-slot .pane-header {
-  flex-shrink: 0; height: 24px; background: var(--bg-elev);
+  flex-shrink: 0; min-height: var(--ui-control-regular); height: auto; background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
   display: flex; align-items: center; padding: 0 6px; gap: var(--space-1); min-width: 0;
 }
@@ -112,14 +110,13 @@ body.pane-resizing .xterm { pointer-events: none; }
 .pane-slot .ph-badge.error    { color: var(--red,    #ef4444); }
 /* ✕ 閉じるボタン: ペインヘッダ右端、hover時のみ表示 */
 .pane-slot .ph-close {
-  flex-shrink: 0; width: 16px; height: 16px; border-radius: var(--radius-sm);
-  background: transparent; border: none; color: var(--muted);
-  cursor: pointer; font-size: 0.6rem;
+  flex-shrink: 0; width: var(--ui-control-size, var(--ui-control-regular)); height: var(--ui-control-size, var(--ui-control-regular))
+   ;
+  cursor: pointer;
   opacity: 0; transition: opacity 0.1s, background 0.1s;
   margin-left: auto;
 }
 .pane-slot:hover .ph-close { opacity: 1; }
-.pane-slot .ph-close:hover { background: rgba(244,63,94,0.2); color: var(--danger); }
 
 /* 承認待ちペインの強調（薄黄アウトライン） */
 .pane-slot.waiting-approval { outline: 1px solid rgba(250,204,21,0.4); }
@@ -152,7 +149,11 @@ body.pane-resizing .xterm { pointer-events: none; }
 #grid-picker-popup[hidden] { display: none !important; }
 
 .picker-title {
-  font-size: var(--fs-xs); color: var(--muted); white-space: nowrap;
+  white-space: nowrap;
+}
+.picker-title:where(:not(.ui-modal__title)) {
+  font-size: var(--fs-xs);
+  color: var(--muted);
 }
 .picker-grid {
   display: grid;
@@ -176,14 +177,6 @@ body.pane-resizing .xterm { pointer-events: none; }
 .picker-presets {
   display: flex; flex-wrap: wrap; gap: var(--space-1);
 }
-.picker-preset-btn {
-  padding: 2px 8px; border-radius: var(--radius-sm);
-  background: var(--bg-deep); border: 1px solid var(--line);
-  color: var(--muted); font-size: var(--fs-xs); cursor: pointer;
-  font-family: inherit;
-  transition: background 0.1s, border-color 0.1s, color 0.1s;
-}
-.picker-preset-btn:hover { background: rgba(91,124,246,0.2); border-color: var(--accent); color: var(--accent-text); }
 
 /* タブバーに position:relative を付与 */
 #unified-tab-bar { position: relative; }
@@ -194,31 +187,21 @@ body.pane-resizing .xterm { pointer-events: none; }
 /* project-group files button */
 .project-group-files-btn {
   flex-shrink: 0;
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  border-radius: var(--radius-sm);
-  padding: 1px 5px;
-  font-size: var(--fs-xs);
-  cursor: pointer;
-  font-family: inherit;
-  line-height: 1.4;
   min-height: var(--control-h-sm);
-  opacity: 0.7;
-  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
 }
-.project-group-files-btn:hover { opacity: 1; color: var(--accent-text); border-color: var(--accent); }
 
 /* C2: 統合タブバー (unified-tab-bar) — 1段固定, 5 タブ + utility */
 #unified-tab-bar {
   flex-shrink: 0;
   display: flex;
   align-items: stretch;
-  height: var(--control-h-lg);
+  height: var(--control-h-md);
   background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
   padding: 0 8px;
   overflow-x: auto;
+  /* 幅が足りずタブがはみ出したときの横スクロールバーで、タブの文字が上へ押し出されないよう細くする */
+  scrollbar-width: thin;
   min-height: 0;
 }
 /* D11: セッション情報チップ (左端) */
@@ -230,7 +213,7 @@ body.pane-resizing .xterm { pointer-events: none; }
   margin-right: 4px;
   /* height:100% だとタブ溢れ時の横スクロールバーで content box が縮み（40px→29px）、
      チップだけ上寄りになる。.view-tab と同じ min-height + 下辺構造で文字の縦中心を揃える。 */
-  min-height: var(--control-h-lg);
+  min-height: var(--control-h-md);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   border-right: 1px solid var(--line);
@@ -253,34 +236,32 @@ body.pane-resizing .xterm { pointer-events: none; }
 /* effort バッジ（HIGH 等）。配色はステータスバー側の .effort-badge 定義を共有し、
    ここではヘッダー内の統一フォントサイズだけ上書きする。 */
 .session-info-chip .effort-badge { font-size: var(--header-font-size); }
-/* 表示モード系タブ */
+/* 表示モード系タブ。ボタン部品は quiet（面と枠なし）を使い、タブの形はここで決める:
+   選択は下線で示すので下の角は丸めない。文字はセッション情報チップと同じヘッダーの大きさ。 */
 .view-tab {
-  padding: 0 14px;
+  padding: 0 var(--space-3);
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  font-size: var(--header-font-size);
   line-height: 1.2;
   cursor: pointer;
   border-bottom: 2px solid transparent;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   margin-bottom: -1px;
   position: relative;
-  font-family: inherit;
+  font-size: var(--header-font-size);
   white-space: nowrap;
   flex-shrink: 0;
-  min-height: var(--control-h-lg);
+  min-height: var(--control-h-md);
 }
 .view-tab-icon,
 .view-tab .orchestration-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 16px;
-  width: 16px;
-  height: 16px;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
 }
 .view-tab-icon svg,
 .view-tab .orchestration-icon {
@@ -297,7 +278,13 @@ body.pane-resizing .xterm { pointer-events: none; }
   color: var(--accent-text);
   border-bottom-color: var(--accent);
 }
+.view-tab.active.ui-button {
+  --ui-button-fg: var(--accent-text);
+}
 .view-tab:hover:not(.active) { color: var(--text); }
+.view-tab:hover:not(.active).ui-button {
+  --ui-button-fg: var(--text);
+}
 .view-tab .badge {
   display: inline-flex;
   min-width: 18px;
@@ -310,12 +297,14 @@ body.pane-resizing .xterm { pointer-events: none; }
   font-weight: normal;
   align-items: center;
   justify-content: center;
-}
-/* Files/Git lazy (未取得) — dim 表示 */
-.view-tab.lazy { color: color-mix(in srgb, var(--muted) 60%, transparent); }
+}/* Files/Git lazy (未取得) — dim 表示 */
+.view-tab.lazy.ui-button { --ui-button-fg: color-mix(in srgb, var(--muted) 60%, transparent); }
+.view-tab.lazy:hover.ui-button { --ui-button-fg: var(--muted); }
 .view-tab.lazy::after { content: none; display: none; }
-.view-tab.lazy:hover { color: var(--muted); }
 .view-tab.lazy.active { color: var(--accent-text); }
+.view-tab.lazy.active.ui-button {
+  --ui-button-fg: var(--accent-text);
+}
 
 @media (max-width: 1000px) {
   #multi-view,
@@ -389,37 +378,20 @@ body.pane-resizing .xterm { pointer-events: none; }
   flex-shrink: 0;
 }
 #unified-tab-bar .icon-btn {
-  min-height: var(--control-h-sm);
+  min-height: var(--ui-control-size, var(--ui-control-compact));
   align-self: center;
-  padding: 0 9px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--muted);
-  font-size: var(--header-font-size);
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  font-family: inherit;
 }
-#unified-tab-bar .icon-btn:hover { background: var(--bg-elev2, var(--bg-deep)); color: var(--text); }
+
 #chat-pane .chat-filter-bar .icon-btn {
-  min-height: var(--control-h-sm);
+  min-height: var(--ui-control-size, var(--ui-control-compact));
   align-self: center;
-  padding: 0 9px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--muted);
-  font-size: var(--fs-xs);
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  font-family: inherit;
 }
-#chat-pane .chat-filter-bar .icon-btn:hover { background: var(--bg-elev2, var(--bg-deep)); color: var(--text); }
 
 /* display-stack — #display-area / #multi-view / #action-bar を束ねる位置基準。
    #action-bar は絶対配置でこの箱の下端へ重なるため、承認バーが出ても
@@ -465,8 +437,8 @@ body.pane-resizing .xterm { pointer-events: none; }
 #display-area.mode-orchestration > #orchestration-dashboard-pane { display: flex; }
 
 /* P-18 C1: conductor ごとの子カード一覧。最大6枚を 1 画面で見渡せる密度にする。 */
-#orchestration-dashboard-pane { flex-direction: column; gap: 12px; padding: 18px; background: var(--bg-deep); }
-.orchestration-dashboard-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+#orchestration-dashboard-pane { flex-direction: column; gap: var(--space-3); padding: 18px; background: var(--bg-deep); }
+.orchestration-dashboard-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .orchestration-dashboard-heading h2 { margin: 0; font-size: var(--fs-lg); }
 .orchestration-dashboard-heading p { margin: 3px 0 0; color: var(--muted); font-size: var(--fs-sm); }
 .orchestration-conductor-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
@@ -481,11 +453,7 @@ body.pane-resizing .xterm { pointer-events: none; }
 .orchestration-board-head h3,
 .orchestration-cross-session-messages h3 { margin: 0; color: var(--text); font-size: var(--fs-md); }
 .orchestration-board-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.orchestration-board-action,
-.orchestration-cross-session-message-session { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-deep); color: var(--accent); padding: 4px 8px; cursor: pointer; font: inherit; font-size: var(--fs-xs); }
-.orchestration-board-action:hover,
-.orchestration-cross-session-message-session:hover { border-color: var(--accent); }
-.orchestration-board-action:disabled { cursor: wait; opacity: .6; }
+
 .orchestration-board-path { overflow: hidden; margin: 7px 0 0; color: var(--muted-2); font-size: var(--fs-2xs); text-overflow: ellipsis; white-space: nowrap; }
 .orchestration-board-meta { min-height: 1.1em; margin-top: 5px; color: var(--muted-2); font-size: var(--fs-2xs); }
 .orchestration-board-meta:empty { display: none; }
@@ -494,20 +462,20 @@ body.pane-resizing .xterm { pointer-events: none; }
 .orchestration-cross-session-empty { border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 10px; color: var(--muted-2); font-size: var(--fs-xs); }
 .orchestration-cross-session-list { display: grid; gap: 6px; }
 .orchestration-cross-session-message { border-left: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); padding: 7px 9px; }
-.orchestration-cross-session-message-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; color: var(--muted-2); font-size: var(--fs-2xs); }
-.orchestration-cross-session-message-session { padding: 2px 6px; }
+.orchestration-cross-session-message-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1); color: var(--muted-2); font-size: var(--fs-2xs); }
+
 .orchestration-cross-session-message-text { overflow: hidden; margin: 4px 0 0; color: var(--text); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
 .orchestration-child-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-content: start; }
 .orchestration-child-card { min-height: 150px; text-align: left; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--bg-elev); color: var(--text); padding: 12px; cursor: pointer; font: inherit; }
 .orchestration-child-card:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev)); }
 .orchestration-child-card.done { border-color: color-mix(in srgb, var(--green) 65%, var(--line)); }
-.orchestration-child-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.orchestration-child-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: 12px; }
 .orchestration-child-card-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.orchestration-done-badge { border-radius: 999px; padding: 2px 6px; font-size: var(--fs-2xs); font-weight: 700; white-space: nowrap; }
+.orchestration-done-badge { border-radius: var(--radius-pill); padding: 2px 6px; font-size: var(--fs-2xs); font-weight: 700; white-space: nowrap; }
 .orchestration-done-badge.done { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
 .orchestration-done-badge.pending { color: var(--warn-text); background: color-mix(in srgb, var(--warn) 15%, transparent); }
 .orchestration-child-card dl { display: grid; gap: 7px; margin: 0; }
-.orchestration-child-card dl div { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; }
+.orchestration-child-card dl div { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: var(--space-2); }
 .orchestration-child-card dt { color: var(--muted); font-size: var(--fs-2xs); }
 .orchestration-child-card dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); }
 .orchestration-dashboard-empty { display: grid; place-items: center; min-height: 160px; border: 1px dashed var(--line); border-radius: var(--radius-md); color: var(--muted); font-size: var(--fs-md); padding: 20px; text-align: center; }
@@ -556,4 +524,4 @@ body.pane-resizing .xterm { pointer-events: none; }
 .view-tab.dragging { opacity: 0.4; }
 /* 挿入位置のガイド線。active タブの border-bottom と競合しないよう inset shadow で描く */
 .view-tab.drop-before { box-shadow: inset 2px 0 0 0 var(--accent); }
-.view-tab.drop-after  { box-shadow: inset -2px 0 0 0 var(--accent); }
+.view-tab.drop-after { box-shadow: inset -2px 0 0 0 var(--accent); }

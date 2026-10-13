@@ -23,13 +23,16 @@
 .review-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 6px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
   flex: none;
   flex-wrap: wrap;
 }
-.review-title { font-weight: 700; font-size: var(--fs-sm); }
+.review-title:where(:not(.ui-modal__title)) {
+  font-weight: 700;
+  font-size: var(--fs-sm);
+}
 .review-scope-label {
   display: inline-flex;
   align-items: center;
@@ -40,7 +43,6 @@
 .review-scope-label select {
   max-width: 250px;
   min-width: 170px;
-  font-size: var(--fs-sm);
   padding: 3px 7px;
 }
 .review-repo {
@@ -54,17 +56,16 @@
 .review-branch { color: var(--muted); font-size: var(--fs-2xs); }
 .review-spacer { flex: 1; }
 .review-stat { font-size: var(--fs-sm); color: var(--muted); }
-.review-mode-group { display: flex; gap: 4px; }
+.review-mode-group { display: flex; gap: var(--space-1); }
 .review-mode-group .git-icon-btn.active {
   background: color-mix(in srgb, var(--accent) 24%, transparent);
 }
+.review-mode-group .git-icon-btn.active.ui-button {
+  --ui-button-bg: color-mix(in srgb, var(--accent) 24%, transparent);
+  --ui-button-hover: color-mix(in srgb, var(--accent) 24%, transparent);
+}
 /* ヘッダ右端の閉じるボタン。↻ と隣接しても誤爆しないよう少し離す。 */
 .review-close-btn { margin-left: 4px; }
-.review-close-btn:hover {
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 48%, transparent);
-  background: color-mix(in srgb, var(--danger) 14%, var(--bg-deep));
-}
 
 .review-body {
   display: flex;
@@ -160,7 +161,6 @@
 .review-tree-pane input[type="search"] {
   width: 100%;
   box-sizing: border-box;
-  font-size: var(--fs-sm);
   padding: 4px 8px;
 }
 .review-tree { flex: 1; overflow: auto; }
@@ -182,7 +182,7 @@
   border-radius: 5px;
   cursor: pointer;
   font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .review-tree-file:hover { background: color-mix(in srgb, var(--muted) 14%, transparent); }
 .review-tree-file.selected { outline: 1.5px solid var(--accent); }
@@ -208,7 +208,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   margin: 0;
   padding: 9px 12px;
   border: 1px solid color-mix(in srgb, var(--muted) 38%, transparent);
@@ -229,7 +229,7 @@
 .git-turn-card-summary {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
   font-size: var(--fs-sm);
 }
@@ -241,20 +241,12 @@
 .git-turn-card-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   flex: none;
 }
 /* .git-turn-close-btn の見た目は /styles/close-button.css にある。 */
 .git-turn-review-btn {
   flex: none;
-  border: 1px solid color-mix(in srgb, var(--muted) 45%, transparent);
-  border-radius: 999px;
-  padding: 4px 14px;
-  background: var(--text);
-  color: var(--bg);
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  cursor: pointer;
 }
 
 @media (max-width: 768px) {
