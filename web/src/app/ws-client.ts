@@ -1,5 +1,5 @@
 import { noteSpawnCorrelation, noteSpawnDisconnected, noteSpawnSessions, noteSpawnSnapshot } from './session-spawn-tracker.js';
-import { preserveSessionListSelection } from './session-list-tabs.js';
+import { noteSessionListTurnEnd, preserveSessionListSelection } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
@@ -664,6 +664,9 @@ export function _connectWs() {
       if (!isNew) {
         const isCandidate = observeTurnEndCandidate(m.session_id, cur.state, m.state, Date.now());
         if (isCandidate) {
+          // 同じ作業終了の合図で、見ていないセッションの所属タブに「新しく止まった」印を付ける
+          // （ベルや通知設定とは独立。タブを開くと消える）。
+          if (!isSessionCurrentlyViewed(m.session_id)) noteSessionListTurnEnd(m.session_id);
           const decision = shouldNotifyTurnEnd(
             isCandidate,
             isTurnEndBellOff(m.session_id),

@@ -7286,6 +7286,17 @@
     },
     {
       "file": "web/src/styles/session-list-tabs.css",
+      "selector": ".session-list-tab-stopped",
+      "context": "",
+      "property": "font-size",
+      "value": "10px",
+      "rule": "literal-font-size",
+      "fingerprint": "4440870f307bac6263fff7ebff0318202876664682d19c2a9cfc7bea24003a91",
+      "count": 1,
+      "reason": "icon-or-badge-density: Small badge, timestamp or glyph scale belongs to a compact indicator, not body/button/input chrome. Reviewed font-size=10px at .session-list-tab-stopped."
+    },
+    {
+      "file": "web/src/styles/session-list-tabs.css",
       "selector": "#session-list-tabs-storage",
       "context": "",
       "property": "color",
@@ -7294,6 +7305,17 @@
       "fingerprint": "52ce6eff7ebb3aa7d6a3a7a7ea1fb850fc6beb3577b70ecac6c7757fe5adcfc1",
       "count": 1,
       "reason": "theme-fallback: The primary value already references an existing theme/status token; the exact fallback preserves old/custom theme compatibility. Reviewed color=var(--warning, #efc66d) at #session-list-tabs-storage."
+    },
+    {
+      "file": "web/src/styles/session-list-tabs.css",
+      "selector": ".session-list-tab-stopped",
+      "context": "",
+      "property": "border",
+      "value": "1px solid color-mix(in srgb, var(--badge-standby-text, #cbd5e1) 70%, transparent)",
+      "rule": "literal-color",
+      "fingerprint": "5ff56b54ac9b561853154383551b4e5e551ac1dc26e939225d3199059e787d04",
+      "count": 1,
+      "reason": "theme-fallback: The primary value already references an existing theme/status token; the exact fallback preserves old/custom theme compatibility. Reviewed border=1px solid color-mix(in srgb, var(--badge-standby-text, #cbd5e1) 70%, transparent) at .session-list-tab-stopped."
     },
     {
       "file": "web/src/styles/session-list-tabs.css",
@@ -7327,6 +7349,17 @@
       "fingerprint": "aa33f80f03c27eca3467d6216504086e4abc49854891213eac54461d88855765",
       "count": 1,
       "reason": "modal-content-structure: Inner content/header divider/status/code metadata or dedicated transient/setup surface, rather than the shared ordinary modal shell. Reviewed font-size=var(--fs-sm) at .session-list-tab-dialog label."
+    },
+    {
+      "file": "web/src/styles/session-list-tabs.css",
+      "selector": ".session-list-tab-stopped",
+      "context": "",
+      "property": "color",
+      "value": "var(--badge-standby-text, #cbd5e1)",
+      "rule": "literal-color",
+      "fingerprint": "e12956893b0b73ba7e22c26d220ce9f8ba9fe25f7061e5e8cb521742c57d7796",
+      "count": 1,
+      "reason": "theme-fallback: The primary value already references an existing theme/status token; the exact fallback preserves old/custom theme compatibility. Reviewed color=var(--badge-standby-text, #cbd5e1) at .session-list-tab-stopped."
     },
     {
       "file": "web/src/styles/session-list-tabs.css",

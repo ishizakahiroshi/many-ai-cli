@@ -12,6 +12,7 @@ Release artifacts are published at
 
 ### Added
 - Shared Web UI buttons, modal frames, focus styles and general SVG icons now reuse the existing themes. Hub confirmation actions use shared localized labels such as "更新しない / 更新する"; shutdown keeps its distinct choices and the token footer keeps its dedicated palette. A CI guard prevents new appearance and confirmation-label duplication.
+- Paths inside work memos now open the same context menu as paths in the CLI screen (right-click).
 - **Browser-local session-list tabs.** Group multiple
   session cards into tabs, add and rename tabs, reorder by drag or keyboard menu,
   and move root families using drag/drop or a destination chooser. Safe tab deletion
@@ -145,6 +146,7 @@ Release artifacts are published at
   open memo count.
 
 ### Changed
+- Work memo rows are now a single compact line with an explicit edit (✎) button; clicking a text memo also starts editing.
 - **Daily local Rust builds use the repair worktree, including uncommitted Web
   and Rust changes.** The local build helper no longer fetches an older trial copy
   by default. Explicit source or branch selection remains available for candidate checks.

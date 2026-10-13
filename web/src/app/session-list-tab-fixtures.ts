@@ -6,7 +6,9 @@ import { SESSION_LIST_TABS_KEY, normalizeSessionListTabs as normalize, loadSessi
   addSessionListTab as add, renameSessionListTab as rename, deleteSessionListTab as remove,
   reorderSessionListTab as reorder, sessionListIdentity as identity, reconcileSessionListTabs as reconcile,
   sessionListOwners as owners, moveSessionListFamily as move, filterSessionListTree as filter,
-  sessionListWaitingCounts as waiting } from './session-list-tab-state.js';
+  sessionListWaitingCounts as waiting, SESSION_LIST_STOPPED_KEY, loadSessionListStopped as loadStopped,
+  saveSessionListStopped as saveStopped, noteSessionListStopped as noteStopped,
+  settleSessionListStopped as settle } from './session-list-tab-state.js';
 const session = (id: number, extra: Partial<SessionSnapshot> = {}): SessionSnapshot =>
   ({ id, started_at: `2026-10-08T01:00:${String(id).padStart(2, '0')}Z`, cwd: '/repos/example', ...extra } as SessionSnapshot);
 const state = () => { const value = normalize(null); add(value, 'Work', 'work'); return value; };
@@ -116,6 +118,40 @@ test('waiting/approval counts derive from live state and count each session once
   assert.equal(waiting(s, live, id => id === 3).get('work'), 2);
   assert.equal(waiting(s, live, id => id === 3).get('tab-1'), 1);
   assert.ok(!JSON.stringify(s).includes('awaiting'));
+});
+test('newly stopped: only hidden tabs collect a mark, and selecting the tab clears it', () => {
+  const s = state(); const live = [session(1, { state: 'standby' }), session(2, { state: 'standby' })];
+  move(s, live, 2, 'work'); const unseen = new Set<string>();
+  assert.equal(noteStopped(s, live, unseen, 2), false);
+  assert.equal(noteStopped(s, live, unseen, 1), true);
+  const hidden = settle(s, live, unseen);
+  assert.equal(hidden.counts.get('tab-1'), 1); assert.equal(hidden.counts.get('work'), 0); assert.equal(hidden.changed, false);
+  s.selectedId = 'tab-1';
+  const opened = settle(s, live, unseen);
+  assert.equal(opened.changed, true); assert.equal(opened.counts.get('tab-1'), 0); assert.equal(unseen.size, 0);
+});
+test('newly stopped ends on running/waiting and ID reuse, but survives an incomplete startup map', () => {
+  const s = state(); const live = [session(1, { state: 'standby' })]; const unseen = new Set<string>();
+  noteStopped(s, live, unseen, 1);
+  assert.equal(settle(s, [session(1, { state: 'running' })], unseen).changed, true); assert.equal(unseen.size, 0);
+  noteStopped(s, live, unseen, 1);
+  assert.equal(settle(s, live, unseen, id => id === 1).counts.get('tab-1'), 0); assert.equal(unseen.size, 0);
+  noteStopped(s, live, unseen, 1);
+  assert.equal(settle(s, [session(1, { started_at: '2026-10-09T01:00:00Z', state: 'standby' })], unseen).counts.get('tab-1'), 0);
+  assert.equal(unseen.size, 0);
+  noteStopped(s, live, unseen, 1);
+  assert.equal(settle(s, [], unseen).changed, false); assert.equal(unseen.size, 1);
+  assert.equal(noteStopped(s, [session(1, { started_at: '' })], new Set(), 1), false);
+});
+test('newly stopped marks reload as identities only; storage denial stays usable', () => {
+  let saved = ''; const storage = { getItem: (key: string) => { assert.equal(key, SESSION_LIST_STOPPED_KEY); return saved; },
+    setItem: (key: string, value: string) => { assert.equal(key, SESSION_LIST_STOPPED_KEY); saved = value; } };
+  const unseen = new Set([identity(session(1))!]);
+  assert.equal(saveStopped(storage, unseen), true); assert.deepEqual([...loadStopped(storage)], [...unseen]);
+  saved = JSON.stringify([7, 'bad', identity(session(2))]); assert.deepEqual([...loadStopped(storage)], [identity(session(2))]);
+  saved = '{'; assert.equal(loadStopped(storage).size, 0);
+  const denied = { getItem() { throw Error('denied'); }, setItem() { throw Error('quota'); } };
+  assert.equal(loadStopped(denied).size, 0); assert.equal(saveStopped(denied, unseen), false);
 });
 test('reload preserves names/order/memberships/selected tab/scroll; storage denial stays usable', () => {
   const s = state(); s.scroll.work = 213; move(s, [session(1)], 1, 'work');

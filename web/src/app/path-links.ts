@@ -106,6 +106,8 @@ export function getPathOpenItem(filePath, sessionId) {
   return { icon: '🚀', key: 'link_open_default', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId) };
 }
 
+// pathContext: filesRoot / projectKey / relativeBase に加え、hideSaveToMemo（真なら「作業メモに保存」を出さない）と
+// hideOpenInApp（真なら「MANY-AI-CLI で開く」を出さない）を受ける。作業メモ内のパスが使う（memo-panel.ts）。
 export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file', extraItems: any[] = [], pathContext: any = {}) {
   cancelPathPopupHideTimer();
   const popup = getOrCreatePathPopup();
@@ -118,7 +120,7 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
   // 呼び出し側固有の操作は、既存の共通メニューへ任意に追加する。
   if (Array.isArray(extraItems)) items.push(...extraItems);
   if (!isDir && isAnyAiCliPreviewable(filePath)) {
-    items.push({
+    if (!context.hideOpenInApp) items.push({
       icon: '📖',
       key: 'link_open_any_ai_cli',
       action: () => {
@@ -169,10 +171,10 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
     }},
     // 絶対パスのまま保存する。メモの分類先（project）は Hub がセッションの cwd から決めるので、
     // ここで相対にすると基点がずれうる（plan_path-menu-save-to-memo.md の方針）。
-    { icon: '📝', key: 'link_save_to_memo', action: (anchor) => saveTextToMemo(filePath, sessionId).then(
+    ...(context.hideSaveToMemo ? [] : [{ icon: '📝', key: 'link_save_to_memo', action: (anchor) => saveTextToMemo(filePath, sessionId).then(
       (result) => showToast(t(result === 'exists' ? 'link_save_to_memo_exists' : 'link_save_to_memo_done'), anchor),
       (err) => showToast(err instanceof Error ? err.message : t('memo_request_failed'), anchor),
-    )},
+    )}]),
   );
   if (isDir) {
     items.push(

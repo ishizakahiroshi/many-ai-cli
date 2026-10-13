@@ -7,7 +7,7 @@ import { apiFetch } from './util.js';
 import { openLightbox } from './lightbox.js';
 import { activeSessionId, sessions } from './state.js';
 import { openSpawnPanelWith } from './spawn-panel.js';
-import { basenameForPath, openFileModal } from './path-links.js';
+import { basenameForPath, openFileModal, showPathPopup } from './path-links.js';
 import { findPathCandidates } from './path-detect.js';
 import {
   countOpenMemosForProject,
@@ -15,6 +15,7 @@ import {
   groupMemosByProject,
   MEMO_IMAGE_MAX_BYTES,
   MEMO_IMAGES_PER_MEMO,
+  memoPathType,
   MEMOS_CHANGED_EVENT,
   pickMemoImageFiles,
   registerMemoSaver,
@@ -207,19 +208,38 @@ function renderMemoText(container: HTMLElement, text: string, project: string): 
   const candidates = findPathCandidates(text);
   if (candidates.length === 0) { container.textContent = text; return; }
   container.textContent = '';
+  // 右クリック・ContextMenu キー・Shift+F10 は CLI 画面と同じメニュー（showPathPopup）。
+  // 「作業メモに保存」は出さない（すでにメモの中のパス）。別窓では本体の窓のファイルタブを開けないので
+  // 「MANY-AI-CLI で開く」も出さない。左クリック・Enter・Space はこれまでどおりプレビュー。
+  const menuContext = {
+    filesRoot: project || undefined,
+    projectKey: project ? basenameForPath(project) : undefined,
+    relativeBase: project || undefined,
+    hideSaveToMemo: true,
+    hideOpenInApp: isDetachedTabView(),
+  };
   let pos = 0;
   for (const c of candidates) {
     if (c.start > pos) container.appendChild(document.createTextNode(text.slice(pos, c.start)));
     const resolved = resolveMemoPathTarget(c.text, project);
+    const pathType = memoPathType(resolved);
     const link = document.createElement('span');
     link.className = 'tool-output-path-link';
     link.textContent = c.text;
     link.tabIndex = 0;
     const openIt = (): void => { openFileModal(resolved, activeSessionId, project); };
+    const openMenu = (x: number, y: number): void => {
+      showPathPopup(resolved, x, y, activeSessionId, pathType, [], menuContext);
+    };
     link.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openIt(); });
-    link.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); openIt(); });
+    link.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); openMenu(e.clientX, e.clientY); });
     link.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); }
+      else if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+        e.preventDefault();
+        const r = link.getBoundingClientRect();
+        openMenu(r.left, r.bottom);
+      }
     });
     container.appendChild(link);
     pos = c.end;
@@ -319,20 +339,39 @@ function buildMemoRow(memo: Memo, project: string): HTMLElement {
   textEl.tabIndex = 0;
   textEl.title = t('memo_edit_hint');
   renderMemoText(textEl, memo.text, project);
-  textEl.addEventListener('dblclick', () => beginEdit(memo, rowBody, textEl));
+  // 本文の 1 回クリックで編集に入る。パスの青い文字（左クリックはプレビュー）と、
+  // 文字を選択するためのドラッグ（選択が残っている）では編集に入れない。
+  textEl.addEventListener('click', (e) => {
+    if ((e.target as Element | null)?.closest?.('.tool-output-path-link')) return;
+    if (window.getSelection()?.toString()) return;
+    beginEdit(memo, rowBody, textEl);
+  });
   rowBody.append(textEl);
   if (memo.images && memo.images.length > 0) {
     renderMemoImages(rowBody, memo.images);
-    // 画像だけのメモは本文が空。ダブルクリックで後から一言足せるよう、薄い案内を出す。
+    // 画像だけのメモは本文が空。クリックで後から一言足せるよう、薄い案内を出す。
     if (!memo.text) {
       textEl.classList.add('memo-row-text-empty');
       textEl.textContent = t('memo_image_add_note');
     }
   }
 
+  // 操作ボタンは横 1 列: ✎（編集）→ 📋（コピー）→ ▶ 起動 → 🗑（削除）。
   const actions = node('div', '', 'memo-row-actions');
-  const launch = node('button', t('memo_launch'), 'memo-row-launch');
+  const editBtn = node('button', '✎', 'memo-row-edit-btn');
+  editBtn.type = 'button';
+  editBtn.title = t('memo_edit');
+  editBtn.setAttribute('aria-label', t('memo_edit'));
+  editBtn.innerHTML = uiIconHtml('edit');
+  editBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    beginEdit(memo, rowBody, textEl);
+  });
+  actions.append(editBtn);
+  const launch = node('button', `▶ ${t('memo_launch_short')}`, 'memo-row-launch');
   launch.type = 'button';
+  launch.title = t('memo_launch');
+  launch.setAttribute('aria-label', t('memo_launch'));
   launch.addEventListener('click', (e) => {
     e.stopPropagation();
     if (isDetachedTabView()) {
@@ -344,7 +383,7 @@ function buildMemoRow(memo: Memo, project: string): HTMLElement {
     }
     openSpawnPanelWith({ cwd: memo.project, prompt: memo.text });
   });
-  const del = node('button', t('memo_delete'), 'memo-row-delete');
+  const del = node('button', '🗑', 'memo-row-delete');
   del.type = 'button';
   del.title = t('memo_delete');
   del.setAttribute('aria-label', t('memo_delete'));
@@ -367,7 +406,6 @@ function buildMemoRow(memo: Memo, project: string): HTMLElement {
   });
   del.addEventListener('blur', disarm);
   del.addEventListener('mouseleave', disarm);
-  actions.append(launch, del);
   // 本文のコピー（アプリ共通の 📋 → ✓）。画像だけのメモは本文が無いので出さない。
   if (memo.text) {
     const copy = node('button', COPY_ICON, 'memo-row-copy');
@@ -383,6 +421,7 @@ function buildMemoRow(memo: Memo, project: string): HTMLElement {
     });
     actions.append(copy);
   }
+  actions.append(launch, del);
 
   row.append(checkbox, rowBody, actions);
   return row;
