@@ -20,8 +20,8 @@
 | Implementation tree | `716e770365985e9c547001acb9352efeb9222c95` |
 | Dots independent review | Exact implementation tree `716e770365985e9c547001acb9352efeb9222c95`; 0 required code findings reported |
 | Codex source review | Exact commit `44984653b9f32cf66b3c359556e0893b2cebedb1` / tree `716e770365985e9c547001acb9352efeb9222c95`; no required findings |
-| CI before Draft PR creation | Commit status and PR workflow run lists were empty at `4498465`; recheck after opening the Draft PR |
-| Draft PR | Not created yet; next step is create one against `wt/rust-ui-publication-20261011` |
+| Draft PR / initial CI | [PR #21](https://github.com/ishizakahiroshi/many-ai-cli/pull/21), open Draft to `wt/rust-ui-publication-20261011` | At creation, head `1ab86a403304dce69ca21793042ce359cf2cd209`; Validate was queued and secret-scan was in progress. This PROGRESS update is documentation-only and advances the PR head; re-read checks on the new head before reporting CI. |
+| Draft PR | Created as [PR #21](https://github.com/ishizakahiroshi/many-ai-cli/pull/21), open and Draft; base head was still `d95effb70cf550ff93ca593160ee8aa827abc28b` at creation |
 | Actual screen acceptance | Pending; no Hub start, app reload, browser, or device check performed |
 
 ## Work state
@@ -32,7 +32,7 @@
 | Implementation | Dots | Submitted on task branch | Usage/Hub content and actions moved into Settings navigation; the lower footer has one Settings control. Existing session token usage remains separate. Commit `4498465`, tree `716e770365985e9c547001acb9352efeb9222c95`. |
 | Independent implementation review | Dots reviewer | Complete | Separate reviewer inspected exact tree `716e770365985e9c547001acb9352efeb9222c95`; no required product code findings reported. |
 | Adversarial source review | Codex | Complete | Audited exact commit/tree above. The earlier CSS-specificity concern was corrected as a selector-reading error; the explicit narrow-width wrap rule/test is responsive hardening. No remaining required findings. |
-| Draft PR and CI | Codex | Pending | Create one Draft PR to the planned base, then inspect the PR head, diff, and checks for that exact SHA. |
+| Draft PR and CI | Codex | Draft PR created; exact-head checks being re-read | PR #21 is open/Draft against the planned base. Before this documentation-only follow-up, head was `1ab86a403304dce69ca21793042ce359cf2cd209` with Validate queued and secret-scan in progress. Verify the new head, diff, and its checks after this update. |
 | Windows build and actual screen acceptance | User | Pending | Check initial General view, Usage/Hub navigation, and narrow-width icon/content after the user has the candidate. No screen evidence is claimed here. |
 
 ## Validation evidence
