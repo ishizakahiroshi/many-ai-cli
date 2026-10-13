@@ -1215,6 +1215,11 @@ function setSettingsDetailScreen(detail: boolean): void {
   notifySettingsViewChanged();
 }
 
+function focusSettingsNavigation(): void {
+  const active = document.querySelector<HTMLButtonElement>('.settings-nav-item.active:not([hidden])');
+  (active ?? document.getElementById('settings-search-input'))?.focus();
+}
+
 // 720px を超える幅に戻ったらクラスを外す（次に狭くしたとき詳細画面から始まらないように）。
 settingsMobileMql?.addEventListener('change', () => {
   if (!settingsMobileMql.matches) setSettingsDetailScreen(false);
@@ -1285,7 +1290,7 @@ function syncSettingsPanelButton(): void {
     e.stopPropagation();
     setSettingsDetailScreen(false);
     document.getElementById('settings-nav')?.scrollTo?.({ top: 0 });
-    document.querySelector<HTMLButtonElement>('.settings-nav-item.active')?.focus();
+    focusSettingsNavigation();
   });
   if (closeBtn) {
     closeBtn.addEventListener('click', (e) => {
@@ -1315,7 +1320,7 @@ function syncSettingsPanelButton(): void {
     // 720px 以下の詳細画面では、Esc は「一覧へ戻る」。一覧画面では閉じる。
     if (settingsMobileMql?.matches && panel.classList.contains(SETTINGS_DETAIL_CLASS)) {
       setSettingsDetailScreen(false);
-      document.querySelector<HTMLButtonElement>('.settings-nav-item.active')?.focus();
+      focusSettingsNavigation();
       return;
     }
     setSettingsPanelOpen(false);
@@ -1415,8 +1420,8 @@ let _selectSettingsNavSection: ((sectionId: string) => void) | null = null;
 let _syncSettingsNav: (() => void) | null = null;
 // 検索で一致した節だけをナビに残す。null なら全項目。
 let _filterSettingsNav: ((visibleIds: ReadonlySet<string> | null) => void) | null = null;
-// ナビに並んでいる順の節 id（検索結果の「先頭」を決める）。
-let _listSettingsNavIds: (() => string[]) | null = null;
+// 初期本文 General、その後はナビ順の節 id（検索結果の「先頭」を決める）。
+let _listSettingsSectionIds: (() => string[]) | null = null;
 
 // グループ名は settings_group_<id>（i18n）。辞書の読み込みは非同期なので、文字は _syncSettingsNav で入れる。
 const SETTINGS_NAV_GROUPS: readonly string[] = ['basic', 'conn', 'input', 'approval', 'maint'];
@@ -1429,6 +1434,7 @@ function initSettingsNav(): void {
 
   // <details> は常時 open。見出しのクリックでも閉じない。
   sections.forEach((section) => {
+    section.id ||= `settings-section-${section.dataset.section}`;
     section.open = true;
     section.addEventListener('toggle', () => { if (!section.open) section.open = true; });
     section.querySelector('summary')?.addEventListener('click', (e) => e.preventDefault());
@@ -1439,7 +1445,8 @@ function initSettingsNav(): void {
   const items = new Map<string, HTMLButtonElement>();
   const groups: Array<{ id: string; title: HTMLElement; ids: string[] }> = [];
   for (const groupId of SETTINGS_NAV_GROUPS) {
-    const members = sections.filter((section) => section.dataset.group === groupId);
+    // General remains the initial content and a search/deep-link target, without a nav destination.
+    const members = sections.filter((section) => section.dataset.group === groupId && section.dataset.section !== 'general');
     if (members.length === 0) continue;
     const title = document.createElement('div');
     title.className = 'settings-nav-group-title';
@@ -1452,7 +1459,6 @@ function initSettingsNav(): void {
       btn.className = 'settings-nav-item' + (section.classList.contains('settings-section--danger') ? ' settings-nav-item--danger' : '');
       btn.dataset.section = id;
       btn.id = `settings-nav-${id}`;
-      section.id ||= `settings-section-${id}`;
       btn.setAttribute('aria-controls', section.id);
       const icon = section.querySelector('.settings-destination-icon');
       if (icon) {
@@ -1493,9 +1499,10 @@ function initSettingsNav(): void {
     items.forEach((btn, id) => { btn.hidden = !!visibleIds && !visibleIds.has(id); });
     groups.forEach(({ title, ids }) => { title.hidden = !!visibleIds && !ids.some((id) => visibleIds.has(id)); });
   };
-  _listSettingsNavIds = () => groups.flatMap((group) => group.ids);
+  _listSettingsSectionIds = () => ['general', ...groups.flatMap((group) => group.ids)];
   _selectSettingsNavSection = (sectionId: string) => {
-    if (!items.has(sectionId)) return;
+    const selected = sections.find((section) => section.dataset.section === sectionId);
+    if (!selected) return;
     sections.forEach((section) => { section.hidden = section.dataset.section !== sectionId; });
     items.forEach((btn, id) => {
       btn.classList.toggle('active', id === sectionId);
@@ -1505,7 +1512,7 @@ function initSettingsNav(): void {
     body.scrollTop = 0;
     _syncSettingsNav?.();
     items.get(sectionId)?.scrollIntoView({ block: 'nearest' });
-    sections.find((section) => section.dataset.section === sectionId)?.dispatchEvent(new CustomEvent('settings-section-selected'));
+    selected.dispatchEvent(new CustomEvent('settings-section-selected'));
     notifySettingsViewChanged();
   };
 
@@ -1556,8 +1563,10 @@ function initSettingsInformationArchitecture(): void {
   const sections = Array.from(document.querySelectorAll<HTMLDetailsElement>('.settings-section[data-section]'));
   if (!panel || !search || !status || sections.length === 0) return;
 
+  let firstMatch: string | undefined;
   // 項目名・現在値・説明に一致した節だけをナビに残す。selectFirst なら先頭の一致を右ペインに出す。
   const apply = (selectFirst: boolean) => {
+    firstMatch = undefined;
     const query = search.value.trim().toLocaleLowerCase();
     if (!query) {
       _filterSettingsNav?.(null);
@@ -1576,12 +1585,20 @@ function initSettingsInformationArchitecture(): void {
     });
     _filterSettingsNav?.(matched);
     status.textContent = matched.size ? t('settings_search_matched', { n: matched.size }) : t('settings_search_none');
-    if (selectFirst) {
-      const first = (_listSettingsNavIds?.() ?? []).find((id) => matched.has(id));
-      if (first) _selectSettingsNavSection?.(first);
-    }
+    firstMatch = (_listSettingsSectionIds?.() ?? []).find((id) => matched.has(id));
+    if (selectFirst && firstMatch) _selectSettingsNavSection?.(firstMatch);
   };
   search.addEventListener('input', () => apply(true));
+  // モバイルは Enter で検索結果の本文へ。General にも届き、入力中は検索欄を隠さない。
+  search.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229 || event.defaultPrevented
+      || !settingsMobileMql?.matches || !search.value.trim() || !firstMatch) return;
+    event.preventDefault();
+    _selectSettingsNavSection?.(firstMatch);
+    setSettingsDetailScreen(true);
+    sections.find((section) => section.dataset.section === firstMatch)
+      ?.querySelector<HTMLElement>('input, select, button, a')?.focus();
+  });
 
   // #settings/<id> ハッシュと openSettingsSection() の両方から呼べる、節を選ぶ本体。
   const openSection = (sectionId?: string) => {

@@ -41,8 +41,9 @@ class El {
   matches(selector:string):boolean {
     if(selector==='[hidden]')return this.hidden;
     if(selector==='summary > span:first-child')return this.tagName==='span'&&this.parentElement?.tagName==='summary'&&this.parentElement.children[0]===this;
-    if(selector.includes(' ')){const cut=selector.lastIndexOf(' ');return this.matches(selector.slice(cut+1))&&!!this.parentElement?.closest(selector.slice(0,cut));}
     if(selector.includes(','))return selector.split(',').some(part=>this.matches(part.trim()));
+    if(selector.includes(' ')){const cut=selector.lastIndexOf(' ');return this.matches(selector.slice(cut+1))&&!!this.parentElement?.closest(selector.slice(0,cut));}
+    const visible=selector.includes(':not([hidden])'); selector=selector.replace(':not([hidden])','');if(visible&&this.hidden)return false;
     const enabled=selector.includes(':not(:disabled)'); selector=selector.replace(':not(:disabled)','');if(enabled&&this.disabled)return false;
     for(const [,name,value] of selector.matchAll(/\[([\w-]+)(?:="([^"]*)")?\]/g)){
       const actual=name.startsWith('data-')?this.dataset[name.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]:this.getAttribute(name);
@@ -109,7 +110,7 @@ function fixture(mobile = false) {
   window.__settingsSaveAll = async () => { saves++; }; window.__settingsResetAll = async () => { resets++; };
   const ctx: any = { document: doc, window, Element: El, HTMLElement: El, HTMLInputElement: El, HTMLSelectElement: El,
     CustomEvent: class { constructor(public type: string) {} },
-    localStorage: { getItem: () => 'usage', setItem: () => {}, removeItem: () => {} },
+    localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
     setTimeout: (fn: Function) => { timers.set(++seq, fn); return seq; }, clearTimeout: (id: number) => timers.delete(id),
     requestAnimationFrame: (fn: Function) => frames.push(fn), getComputedStyle: (el: El) => ({ display: el.hidden ? 'none' : 'block' }),
     t: (key: string) => key, showToast: () => {}, pathPopupEl: null,
@@ -153,18 +154,39 @@ test('footer has only Settings; destinations are embedded exactly once and retai
   assert.ok(html.indexOf('id="session-inline-usage"') > html.indexOf('id="session-footer"'));
 });
 
-test('actual Settings open resets last section and stale search to General every time', () => {
-  const f = fixture(); assert.equal(f.sections.get('general')!.hidden, false);
-  for (const destination of ['usage', 'hub', 'appearance']) {
-    f.button('settings-btn').click(); f.select(destination);
-    assert.equal(f.sections.get(destination)!.hidden, false);
-    f.search.value = 'no-such-synthetic-match'; f.search.emit('input');
-    f.button('settings-close-btn').click(); f.button('settings-btn').click();
-    assert.equal(f.sections.get('general')!.hidden, false);
-    assert.equal(f.sections.get(destination)!.hidden, true);
-    assert.equal(f.search.value, ''); assert.equal(f.button('settings-search-status').textContent, '');
-    assert.ok(f.all().filter(el => el.classList.contains('settings-nav-item')).every(el => !el.hidden));
-    f.button('settings-close-btn').click(); assert.equal(f.doc.activeElement, f.button('settings-btn'));
+test('General is initial content only; every other section retains exactly one navigation destination', () => {
+  const f = fixture(); f.button('settings-btn').click();
+  const items = f.nav.querySelectorAll('.settings-nav-item');
+  assert.equal(f.doc.getElementById('settings-nav-general'), null);
+  assert.equal(items.length, f.sections.size - 1);
+  assert.equal(f.sections.get('general')!.hidden, false);
+  assert.ok([...f.sections].filter(([id]) => id !== 'general').every(([, section]) => section.hidden));
+  assert.ok(items.every(item => !item.classList.contains('active') && item.getAttribute('aria-current') === null));
+  for (const [id, section] of f.sections) {
+    if (id === 'general') continue;
+    assert.equal(items.filter(item => item.dataset.section === id).length, 1);
+    f.select(id);
+    assert.deepEqual([...f.sections].filter(([, el]) => !el.hidden).map(([key]) => key), [id]);
+    assert.equal(f.button('settings-nav-' + id).getAttribute('aria-current'), 'true');
+    assert.equal(f.button('settings-nav-' + id).getAttribute('aria-controls'), section.id);
+  }
+});
+
+test('desktop and mobile reopen at General content without a nav item or stale search', () => {
+  for (const mobile of [false, true]) {
+    const f = fixture(mobile);
+    for (const destination of ['usage', 'hub', 'appearance']) {
+      f.button('settings-btn').click(); f.select(destination);
+      assert.equal(f.sections.get(destination)!.hidden, false);
+      f.search.value = 'no-such-synthetic-match'; f.search.emit('input');
+      f.button('settings-close-btn').click(); f.button('settings-btn').click();
+      assert.deepEqual([...f.sections].filter(([, el]) => !el.hidden).map(([id]) => id), ['general']);
+      assert.equal(f.doc.getElementById('settings-nav-general'), null);
+      assert.equal(f.search.value, ''); assert.equal(f.button('settings-search-status').textContent, '');
+      assert.ok(f.nav.querySelectorAll('.settings-nav-item').every(el => !el.hidden && !el.classList.contains('active')));
+      assert.equal(f.panel.classList.contains('settings-detail-open'), true);
+      f.button('settings-close-btn').click(); assert.equal(f.doc.activeElement, f.button('settings-btn'));
+    }
   }
 });
 
@@ -179,15 +201,67 @@ test('actual search, section transfer and hash route remain available inside Set
   assert.equal(f.button('settings-nav-usage').getAttribute('aria-current'), null);
 });
 
+test('General stays reachable by search, explicit section open and hash without a navigation item', () => {
+  for (const mobile of [false, true]) {
+    const f = fixture(mobile); f.button('settings-btn').click(); f.select('hub');
+    f.search.value = 'General'; f.search.emit('input');
+    assert.equal(f.sections.get('general')!.hidden, false);
+    assert.equal(f.sections.get('hub')!.hidden, true);
+    assert.equal(f.button('settings-search-status').textContent, 'settings_search_matched');
+    assert.equal(f.nav.querySelector('.settings-nav-item.active'), null);
+    f.ui.openSettingsSection('general'); f.flush();
+    assert.equal(f.search.value, '');
+    assert.ok(f.sections.get('general')!.contains(f.doc.activeElement));
+    f.button('settings-close-btn').click(); f.ctx.window.location.hash = '#settings/general'; f.ctx.window.emit('hashchange'); f.flush();
+    assert.equal(f.panel.hidden, false); assert.equal(f.sections.get('general')!.hidden, false);
+    assert.equal(f.panel.classList.contains('settings-detail-open'), true);
+    assert.ok(f.sections.get('general')!.contains(f.doc.activeElement));
+    assert.equal(f.doc.getElementById('settings-nav-general'), null);
+  }
+});
+
 test('actual mobile Back and Escape return to navigation; Close and footer toggle close', () => {
   const f = fixture(true); f.button('settings-btn').click();
   assert.equal(f.sections.get('general')!.hidden, false); assert.equal(f.panel.classList.contains('settings-detail-open'), true);
-  f.button('settings-back-btn').click(); assert.equal(f.panel.hidden, false);
-  assert.equal(f.panel.classList.contains('settings-detail-open'), false); assert.equal(f.doc.activeElement, f.button('settings-nav-general'));
+  f.button('settings-back-btn').focus(); f.button('settings-back-btn').click(); assert.equal(f.panel.hidden, false);
+  assert.equal(f.panel.classList.contains('settings-detail-open'), false); assert.equal(f.doc.activeElement, f.search);
+  f.ui.openSettingsSection('general'); f.flush(); f.doc.body.emit('keydown', { key: 'Escape' });
+  assert.equal(f.panel.classList.contains('settings-detail-open'), false); assert.equal(f.doc.activeElement, f.search);
   f.select('usage'); f.doc.body.emit('keydown', { key: 'Escape' });
   assert.equal(f.panel.hidden, false); assert.equal(f.panel.classList.contains('settings-detail-open'), false);
+  assert.equal(f.doc.activeElement, f.button('settings-nav-usage'));
   f.doc.body.emit('keydown', { key: 'Escape' }); assert.equal(f.panel.hidden, true);
   f.button('settings-btn').click(); f.button('settings-btn').click(); assert.equal(f.panel.hidden, true);
+});
+
+test('mobile search keeps input visible and Enter reaches General and ordinary results without IME submission', () => {
+  const f = fixture(true); f.button('settings-btn').click(); f.button('settings-back-btn').click();
+  for (const query of ['General', 'Hub']) {
+    f.search.value = query; f.search.emit('input');
+    assert.equal(f.panel.classList.contains('settings-detail-open'), false);
+    assert.equal(f.doc.activeElement, f.search);
+    assert.equal(f.button('settings-search-status').textContent, 'settings_search_matched');
+    if (query === 'General') assert.ok(f.nav.querySelectorAll('.settings-nav-item').every(item => item.hidden));
+    for (const blocked of [{ isComposing: true }, { keyCode: 229 }, { defaultPrevented: true }]) {
+      f.search.emit('keydown', { key: 'Enter', ...blocked });
+      assert.equal(f.panel.classList.contains('settings-detail-open'), false);
+    }
+    assert.equal(f.search.emit('keydown', { key: 'Enter' }).defaultPrevented, true);
+    const section = f.sections.get(query.toLowerCase())!;
+    assert.equal(section.hidden, false); assert.equal(f.panel.classList.contains('settings-detail-open'), true);
+    assert.ok(section.contains(f.doc.activeElement));
+    f.button('settings-back-btn').click();
+    if (query === 'General') assert.equal(f.doc.activeElement, f.search);
+    else { assert.equal(f.doc.activeElement, f.button('settings-nav-hub')); f.search.focus(); }
+  }
+  for (const query of ['', 'no-such-synthetic-match']) {
+    f.search.value = query; f.search.emit('input');
+    f.search.emit('keydown', { key: 'Enter' });
+    assert.equal(f.panel.classList.contains('settings-detail-open'), false);
+  }
+  // A filtered-out active destination must not receive focus when returning from detail.
+  f.ui.openSettingsSection('hub'); f.search.value = 'no-such-synthetic-match'; f.search.emit('input');
+  f.doc.body.emit('keydown', { key: 'Escape' }); assert.equal(f.doc.activeElement, f.search);
 });
 
 test('Save and Reset keep existing hooks, cancellation and Settings state', async () => {
@@ -215,15 +289,27 @@ test('Usage initializes once, refreshes on entry, and stops polling after naviga
   f.select('usage'); await f.respond(); assert.equal(f.requests(), 1); assert.equal(f.timers.size, 1);
   f.select('hub'); assert.equal(f.timers.size, 0);
   f.select('usage'); await f.respond(); assert.equal(f.requests(), 2);
+  f.ui.openSettingsSection('general'); assert.equal(f.timers.size, 0);
+  f.select('usage'); await f.respond(); assert.equal(f.requests(), 3);
+  f.search.value = 'General'; f.search.emit('input'); assert.equal(f.timers.size, 0);
+  f.ui.openSettingsSection('usage'); await f.respond(); assert.equal(f.requests(), 4);
   f.button('settings-close-btn').click(); assert.equal(f.timers.size, 0);
 });
 
-test('late Usage response cannot restart polling after Close or mobile Back', async () => {
+test('late Usage response cannot restart polling after Close, mobile Back or General selection', async () => {
   for (const mobile of [false, true]) {
     const f = usageFixture(mobile); f.button('settings-btn').click(); f.select('usage');
     f.button(mobile ? 'settings-back-btn' : 'settings-close-btn').click(); await f.respond();
     assert.equal(f.timers.size, 0); assert.equal(f.requests(), 1);
     if (mobile) { f.select('usage'); await f.respond(); assert.equal(f.requests(), 2); }
+  }
+  for (const route of ['search', 'deep-link']) {
+    const f = usageFixture(); f.button('settings-btn').click(); f.select('usage');
+    if (route === 'search') { f.search.value = 'General'; f.search.emit('input'); }
+    else { f.ctx.window.location.hash = '#settings/general'; f.ctx.window.emit('hashchange'); }
+    await f.respond();
+    assert.equal(f.sections.get('general')!.hidden, false);
+    assert.equal(f.timers.size, 0); assert.equal(f.requests(), 1);
   }
 });
 
