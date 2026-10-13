@@ -2692,7 +2692,12 @@ header {
 .project-group-header--collapsed .project-group-chevron { transform: rotate(-90deg); }
 .project-group-body { padding-left: 8px; }
 .project-group-body.hidden { display: none; }
-.group-status-chips { margin-left: auto; display: flex; gap: var(--space-1); flex-shrink: 0; }
+/* リポ名は操作部品を除いた残りの幅を使い、長い名前だけ省略する。 */
+.project-group-title { display: flex; align-items: center; gap: var(--space-2); flex: 1 1 0; min-width: 0; }
+.project-group-name { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.project-group-meta { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; flex-shrink: 0; }
+.group-status-chips { display: flex; gap: 2px; flex-shrink: 0; }
+.group-status-chips .status-chip { min-width: 19px; padding: 1px 4px; font-size: var(--fs-xs); }
 .project-group-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; opacity: 1; transition: opacity 0.15s; }
 .project-group-grid-btn {
   background: none;

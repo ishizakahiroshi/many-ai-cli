@@ -1034,12 +1034,19 @@ export function renderSessionList() {
     chevron.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') toggleGroupCollapsed(e);
     });
-    header.appendChild(chevron);
+    const titleEl = document.createElement('span');
+    titleEl.className = 'project-group-title';
+    titleEl.appendChild(chevron);
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'project-group-name';
     nameSpan.textContent = projectDisplayName;
-    header.appendChild(nameSpan);
+    nameSpan.title = projectDisplayName;
+    titleEl.appendChild(nameSpan);
+    header.appendChild(titleEl);
+
+    const metaEl = document.createElement('span');
+    metaEl.className = 'project-group-meta';
 
     // Files 導線はステータスバーの 📁project セグメントへ移設（plan_statusbar-files-open.md C1）。
     // ここ（プロジェクトグループ header）の「📁 Files」ボタンは廃止した。
@@ -1069,7 +1076,7 @@ export function renderSessionList() {
       `<span class="status-chip status-chip--running">${runningCount}</span>` +
       `<span class="status-chip status-chip--waiting${waitingCount > 0 ? ' status-chip--attention' : ''}">${waitingCount}</span>` +
       `<span class="status-chip status-chip--standby">${standbyCount}</span>`;
-    header.appendChild(chipsEl);
+    metaEl.appendChild(chipsEl);
 
     // プロジェクト ☆/✕ ボタン
     const projActions = document.createElement('div');
@@ -1110,7 +1117,8 @@ export function renderSessionList() {
       projActions.appendChild(projXBtn);
     }
 
-    header.appendChild(projActions);
+    metaEl.appendChild(projActions);
+    header.appendChild(metaEl);
 
     // ヘッダのクリックは「この箱を開く」。折りたたみの開閉は上の矢印が持つ
     // （plan_project-box-open-and-session-strip_c1_box-open.md の決定 B1）。
