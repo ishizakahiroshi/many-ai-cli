@@ -1,5 +1,5 @@
 # Progress board
-> 最終更新: 2026-10-13(火) 17:34:47 UTC
+> 最終更新: 2026-10-13(火) 17:39:00 UTC
 
 ## Task
 
@@ -14,18 +14,18 @@
 
 ## Current handoff
 
-The General navigation contract needs correction. The previous implementation generated a General navigation button from the existing General section. The adopted behavior is initial General content with no General navigation destination. Usage, Hub, and all other preexisting non-General navigation destinations remain available.
+The General navigation contract has been corrected in the submitted source; CI and actual-screen acceptance remain separate. The previous implementation generated a General navigation button from the existing General section. The adopted behavior is initial General content with no General navigation destination. Usage, Hub, and all other preexisting non-General navigation destinations remain available.
 
-This repair was prepared and checked as working-tree changes based on PR head `ee34c46d2554759b2c9e3a322818e7c8dac3e268`. A new committed repair SHA, independent review, publication verification, and new-head CI results are pending at this handoff. Earlier review conclusions do not constitute approval of this repair or the corrected navigation contract.
+This repair was published as `4035bc2adac794b9e4d28849041efdfc52fa93b5`, tree `c7f9e765e7f869479b2ef873cc7830579c608cd9`, parent `ee34c46d2554759b2c9e3a322818e7c8dac3e268`. Conditional ref update and PR head read-back succeeded. A separate reviewer inspected all 17 task-diff paths against `8b90f475c56df30f47709fe538b8938c35f0187f`, explicitly corrected the prior General-contract omission, and reported no current must-fix findings. Review and commands are recorded in [Issue receipt](https://github.com/ishizakahiroshi/many-ai-cli/issues/20#issuecomment-6151500599). This follow-up changes only this board, not reviewed source. Exact final-head CI results will be recorded in Issue #20 without repeatedly changing this board.
 
 | Work | Status | Evidence and next action |
 |---|---|---|
-| General navigation correction | Source repair prepared | General remains selectable as initial content, a search match, and a deep-link target; it no longer creates a navigation button. Selection validation uses sections rather than navigation buttons. |
+| General navigation correction | Source repair published | General remains selectable as initial content, a search match, and a deep-link target; it no longer creates a navigation button. Selection validation uses sections rather than navigation buttons. |
 | Preserved navigation | Synthetic checks passed | Every non-General section has exactly one navigation destination. Desktop/mobile reopen selects only General and clears stale search. Usage, Hub, existing sections, Close, footer toggle, Save, and Reset remain covered. |
 | Mobile focus and General search | Synthetic checks passed | Back/Escape focuses a visible active destination or the search input. Search keeps the input visible while typing; Enter opens the first matching content, including General. IME confirmation and already-handled key events do not navigate. |
 | Usage lifecycle | Synthetic checks passed | Returning to General through search or section/deep-link selection stops polling. A late response after General selection cannot restart polling. |
-| Independent review | Pending | Review the final repair SHA against the product base and fixed instructions. Do not carry forward an earlier pass. |
-| Draft PR publication and CI | Pending for repair | Keep PR #21 Draft with the existing base. Record the published repair SHA and exact-head workflow results in Issue #20. |
+| Independent review | Complete for source/synthetic scope | Target repair tree c7f9e765 at commit 4035bc2; separate reviewer found no current must-fix issue and independently reran focused 14/14, guard 14/14, cached TypeScript, module-init, wheel, text hygiene, instrumentation, diff and HTML source audits. Bun remains unavailable. |
+| Draft PR publication and CI | Repair published; new-head CI being checked | PR #21 is Draft with its existing base. At repair commit 4035bc2, Validate run 38440259775 was running and both secret-scan runs 38440259682/38440251821 succeeded. This board-only update advances head; final-head CI will be recorded in Issue #20. No prior CI pass is assigned to the new head. |
 | Actual screen acceptance | Pending | No browser/device inspection has been performed. Initial General content, mobile search/Enter, focus, Usage/Hub navigation, and narrow-width labels/icons remain real-screen acceptance checks. |
 
 Changed files: `web/src/app/settings.ts`, `web/tests/settings-usage-hub.test.ts`, and this progress record. General content/markup, Usage/Hub actions, and the previously adopted explicit exposure-button wrap rule remain unchanged. No dependency, Go/module, or CI workflow change is included.
