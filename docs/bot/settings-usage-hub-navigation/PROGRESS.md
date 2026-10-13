@@ -1,5 +1,5 @@
 # Progress board
-> 最終更新: 2026-10-13 22:32:06 +09:00
+> 最終更新: 2026-10-13 22:41:58 +09:00
 
 ## Task
 
@@ -16,9 +16,10 @@
 | Evidence | Value |
 |---|---|
 | Initial instruction commit | 4d744dfbf5cea15eef16c3351694690d352f910c |
-| Final fixed instruction URL | will be pinned in Issue #20 after this Issue-linked instruction update is published |
+| Final fixed instruction URL | https://github.com/ishizakahiroshi/many-ai-cli/blob/9db24622dad1c2fc5ee48d8661b337a1e98a7249/docs/bot/settings-usage-hub-navigation/README.md |
 | Latest PROGRESS URL | https://github.com/ishizakahiroshi/many-ai-cli/blob/dots/P-20261013-001-settings-usage-hub-nav/docs/bot/settings-usage-hub-navigation/PROGRESS.md |
 | Product base SHA | d95effb70cf550ff93ca593160ee8aa827abc28b |
+| Slack send/read-back | 2026-10-13; sent via verified configured DM; fixed README SHA and adopted behavior confirmed on read-back |
 | Implementation code SHA | not submitted |
 | dots independent review SHA | not submitted |
 | Codex review SHA | pending |
@@ -29,8 +30,8 @@
 
 | Work | Owner | Issue status | Evidence and next action |
 |---|---|---|---|
-| Accepted design and task instruction | Codex | Issue created | Publish the Issue-linked instruction update, then pin the final README URL in Issue #20 |
-| Implementation | dots | not sent | Start only after receipt of the fixed instruction commit |
+| Accepted design and task instruction | Codex | sent; body read back | Issue #20 contains the commit-pinned README and branch-latest board URL; Slack body was read back and matched |
+| Implementation | dots | sent; awaiting receipt | Request asks for instruction SHA, current parent/task branch SHAs, available checks, and status; no receipt or implementation start confirmed |
 | Independent implementation review | dots reviewer | not started | Reviewer must be separate from the implementation author |
 | Adversarial source review and canonical-source reflection | Codex | not started | Review the exact submitted SHA; retain unrelated dirty work |
 | Windows build, Hub reload, and actual screen acceptance | user | pending | Record after the user checks the Settings initial view and both navigation destinations |
