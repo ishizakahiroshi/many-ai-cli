@@ -141,7 +141,6 @@
   width: auto;
   padding: 0 var(--space-2);
 }
-.memo-sidebar-icon { width: calc(var(--nsb-size, 32px) * 0.53); height: calc(var(--nsb-size, 32px) * 0.53); display: block; }
 
 /* C4: 件数バッジ（ボタン本体・セッション一覧の行）。0 件のときは要素ごと hidden にする。 */
 [data-open-memo] { position: relative; }

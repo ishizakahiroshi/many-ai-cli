@@ -10,7 +10,8 @@ last_reviewed: 2026-10-11
 
 # Web UI部品と確認文言の共通化
 
-> 最終更新: 2026-10-11(日) 20:58:29
+> 最終更新: 2026-10-13(火) 12:56:37 — アイコンだけの操作の列に使う `ui-toolbar` を追記
+> 2026-10-11(日) 20:58:29
 
 Rustが同梱するWeb画面は、同じ意味の操作に同じ外観を使う。新しい画面を作る前に、
 `web/src/styles/ui-components.css` と `web/src/app/ui-components.ts` を確認する。
@@ -40,6 +41,10 @@ classを供給する。静的HTMLでは同じclassを直接付ける。既存cla
 意味のある状態に必要なら併用する。`ui-button--compact` は32px、regularは36px、
 coarse pointerでは44px以上の操作領域を確保する。アイコン形状は色の第6variantではない。
 独立したclose位置・底寄せsheetは専用配置を保ち、共通icon操作の領域は32/44pxに揃える。
+
+常に見えているアイコンだけの操作の列（サイドバー上端など）は、親に `ui-toolbar` を付ける。
+列の中のボタンは塗りと横の余白を持たず、variantの意味はアイコンの色で表す。primaryは列に1つまで
+（accentの薄い面）、dangerは危険色のアイコン、その他はsecondary。塗りのprimaryを並べると列が色の帯になる。
 
 専用配置の寸法も `--ui-control-size` を参照し、compact/regular/coarseの切替に追従する。
 通常入力は `ui-input` を付け、narrow/coarseでは既存 `--fs-lg` の16pxを使って

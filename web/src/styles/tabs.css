@@ -195,11 +195,13 @@ body.pane-resizing .xterm { pointer-events: none; }
   flex-shrink: 0;
   display: flex;
   align-items: stretch;
-  height: var(--control-h-lg);
+  height: var(--control-h-md);
   background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
   padding: 0 8px;
   overflow-x: auto;
+  /* 幅が足りずタブがはみ出したときの横スクロールバーで、タブの文字が上へ押し出されないよう細くする */
+  scrollbar-width: thin;
   min-height: 0;
 }
 /* D11: セッション情報チップ (左端) */
@@ -211,7 +213,7 @@ body.pane-resizing .xterm { pointer-events: none; }
   margin-right: 4px;
   /* height:100% だとタブ溢れ時の横スクロールバーで content box が縮み（40px→29px）、
      チップだけ上寄りになる。.view-tab と同じ min-height + 下辺構造で文字の縦中心を揃える。 */
-  min-height: var(--control-h-lg);
+  min-height: var(--control-h-md);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   border-right: 1px solid var(--line);
@@ -234,32 +236,32 @@ body.pane-resizing .xterm { pointer-events: none; }
 /* effort バッジ（HIGH 等）。配色はステータスバー側の .effort-badge 定義を共有し、
    ここではヘッダー内の統一フォントサイズだけ上書きする。 */
 .session-info-chip .effort-badge { font-size: var(--header-font-size); }
-/* 表示モード系タブ */
+/* 表示モード系タブ。ボタン部品は quiet（面と枠なし）を使い、タブの形はここで決める:
+   選択は下線で示すので下の角は丸めない。文字はセッション情報チップと同じヘッダーの大きさ。 */
 .view-tab {
-  padding: 0 14px;
+  padding: 0 var(--space-3);
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2)
-
-  ;
+  gap: var(--space-2);
   line-height: 1.2;
   cursor: pointer;
   border-bottom: 2px solid transparent;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   margin-bottom: -1px;
   position: relative;
-
+  font-size: var(--header-font-size);
   white-space: nowrap;
   flex-shrink: 0;
-  min-height: var(--control-h-lg);
+  min-height: var(--control-h-md);
 }
 .view-tab-icon,
 .view-tab .orchestration-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 16px;
-  width: 16px;
-  height: 16px;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
 }
 .view-tab-icon svg,
 .view-tab .orchestration-icon {

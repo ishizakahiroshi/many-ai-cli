@@ -15,18 +15,36 @@
   container-type: inline-size;
   --nsb-size: clamp(18px, calc((100cqw - 24px) / 7), 32px);
 }
-
-#new-session-btn.new-session-sidebar-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 var(--nsb-size, 32px);
-  width: max(var(--nsb-size, 32px), var(--ui-control-size, var(--ui-control-compact)));
-  height: max(var(--nsb-size, 32px), var(--ui-control-size, var(--ui-control-compact)));
-  flex-shrink: 0;
+/* マウス操作の PC では compact の 32px を上限にし、サイドバーが狭いときだけ 7 個とも収まるまで縮める
+   （押せる大きさの最低基準 24px は守る）。タッチ操作は下の coarse 側で指で押せる大きさを保つ。 */
+@media (min-width: 721px) and (not (pointer: coarse)) {
+  #new-session-bar {
+    padding: 4px 4px 3px;
+    --nsb-size: clamp(24px, calc((100cqw - 24px) / 7), var(--ui-control-compact));
+  }
 }
 
-.new-session-sidebar-icon { width: calc(var(--nsb-size, 32px) * 0.53); height: calc(var(--nsb-size, 32px) * 0.53); display: block; }
+/* 列のボタンはすべて同じ正方形にする（見た目は親の .ui-toolbar）。.ui-button の min-height（compact 32px）
+   のままだと狭いときに縦だけ縮まらないため 0 に戻す。アイコンも列でまとめて大きさを決める。 */
+#new-session-bar > .ui-button {
+  flex: 0 0 auto;
+  width: var(--nsb-size);
+  height: var(--nsb-size);
+  min-height: 0;
+}
+@media (pointer: coarse) {
+  #new-session-bar > .ui-button {
+    width: max(var(--nsb-size), var(--ui-control-size));
+    height: max(var(--nsb-size), var(--ui-control-size));
+  }
+}
+#new-session-bar > .ui-button > svg {
+  display: block;
+  flex-shrink: 0;
+  width: calc(var(--nsb-size) * 0.56);
+  height: calc(var(--nsb-size) * 0.56);
+}
+
 .new-session-btn-label {
   position: absolute;
   width: 1px;
@@ -37,54 +55,12 @@
   white-space: nowrap;
 }
 
-/* C5: Detached Grid Launcher サイドバーボタン */
-.detached-grid-launcher-sidebar-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: max(var(--nsb-size, 32px), var(--ui-control-size, var(--ui-control-compact)));
-  height: max(var(--nsb-size, 32px), var(--ui-control-size, var(--ui-control-compact)));
-  flex-shrink: 0;
-}
-
-.routine-sidebar-icon { width: calc(var(--nsb-size, 32px) * 0.53); height: calc(var(--nsb-size, 32px) * 0.53); display: block; }
-
 #kill-all-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: max(var(--nsb-size, 32px), var(--ui-control-size, var(--ui-control-compact)));
-  height: max(var(--nsb-size, 32px), var(--ui-control-size, var(--ui-control-compact)))
-
-  ;
-  padding: 0;
-  cursor: pointer;
-
   opacity: 0.82;
   transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
 }
-.kill-all-icon {
-  width: calc(var(--nsb-size, 32px) * 0.53);
-  height: calc(var(--nsb-size, 32px) * 0.53);
-  display: block;
-}
-#kill-all-btn:hover {
-
-  opacity: 1;
-}
+#kill-all-btn:hover { opacity: 1; }
 #kill-all-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-/* C1: plan_orchestration-spawn-ui-exposure.md — オーケストレーション独立ボタン。
-   停止/gridと同じ丸アイコンスタイルに揃える。 */
-.orchestration-sidebar-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: max(var(--nsb-size, 32px), var(--ui-control-size, var(--ui-control-compact)));
-  height: max(var(--nsb-size, 32px), var(--ui-control-size, var(--ui-control-compact)));
-  flex-shrink: 0;
-}
 
 .orchestration-icon { width: calc(var(--nsb-size, 32px) * 0.53); height: calc(var(--nsb-size, 32px) * 0.53); display: block; }
 

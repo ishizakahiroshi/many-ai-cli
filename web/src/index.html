@@ -1232,17 +1232,22 @@
           <button class="ui-button ui-button--secondary ui-button--regular" id="mobile-log-btn" type="button" hidden aria-label="Raw log">⛶</button>
         </div>
       </div>
-      <div id="new-session-bar">
-        <button class="ui-button ui-button--danger ui-button--regular" id="kill-all-btn" data-i18n-tooltip="kill_all_tooltip" aria-label="Terminate all sessions">
+      <div id="new-session-bar" class="ui-toolbar">
+        <button class="ui-button ui-button--danger ui-button--compact" id="kill-all-btn" data-i18n-tooltip="kill_all_tooltip" aria-label="Terminate all sessions">
           <svg class="kill-all-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
             <rect x="9" y="9" width="6" height="6" rx="1.2" fill="currentColor"/>
           </svg>
         </button>
-        <button id="detached-grid-launcher-btn" class="ui-button ui-button--primary ui-button--regular detached-grid-launcher-sidebar-btn" data-i18n-tooltip="dgl_sidebar_btn_tooltip" aria-label="Open Detached Grid Launcher" title="Open Detached Grid">⊞</button>
+        <button id="detached-grid-launcher-btn" class="ui-button ui-button--secondary ui-button--compact detached-grid-launcher-sidebar-btn" data-i18n-tooltip="dgl_sidebar_btn_tooltip" aria-label="Open Detached Grid Launcher" title="Open Detached Grid">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <path d="M12 3v18M3 12h18"/>
+          </svg>
+        </button>
         <!-- C1: plan_orchestration-spawn-ui-exposure.md — 停止/gridと同じ丸アイコンボタンで
              オーケストレーション導線を追加。クリックで通常の起動フォームを開く（spawn-panel.ts）。 -->
-        <button id="orchestration-btn" class="ui-button ui-button--secondary ui-button--regular orchestration-sidebar-btn" data-i18n-tooltip="orchestration_tooltip" aria-label="Start orchestration conductor session">
+        <button id="orchestration-btn" class="ui-button ui-button--secondary ui-button--compact orchestration-sidebar-btn" data-i18n-tooltip="orchestration_tooltip" aria-label="Start orchestration conductor session">
           <svg class="orchestration-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
             <circle cx="12" cy="5" r="2.4"></circle>
             <circle cx="5" cy="19" r="2.4"></circle>
@@ -1252,8 +1257,13 @@
         </button>
         <!-- C5: plan_session-handoff-board_c5_handoff-md.md — 経路2「一覧のボタンから」の
              入口。看板ディレクトリを直接読むので、Hub 再起動後・セッション終了後も開ける。 -->
-        <button id="handoff-list-btn" class="ui-button ui-button--primary ui-button--regular detached-grid-launcher-sidebar-btn" data-i18n-tooltip="handoff_list_button" aria-label="Open handoff list" title="引き継ぎ一覧">↪</button>
-        <button type="button" class="ui-button ui-button--primary ui-button--regular detached-grid-launcher-sidebar-btn" data-open-routines data-i18n-tooltip="routines_title" aria-label="Routines">
+        <button id="handoff-list-btn" class="ui-button ui-button--secondary ui-button--compact detached-grid-launcher-sidebar-btn" data-i18n-tooltip="handoff_list_button" aria-label="Open handoff list" title="引き継ぎ一覧">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m15 17 5-5-5-5"/>
+            <path d="M4 18v-2a4 4 0 0 1 4-4h12"/>
+          </svg>
+        </button>
+        <button type="button" class="ui-button ui-button--secondary ui-button--compact detached-grid-launcher-sidebar-btn" data-open-routines data-i18n-tooltip="routines_title" aria-label="Routines">
           <svg class="routine-sidebar-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20 8a8 8 0 1 0 1 6"/>
             <path d="M20 4v4h-4"/>
@@ -1262,13 +1272,13 @@
         </button>
         <!-- C3: plan_memo-panel.md — 自分用の作業メモ（プロジェクトに紐づく）。
              AI がセッション単位で書く引き継ぎ看板とは別物。ルーティンと新規セッションの間に置く。 -->
-        <button type="button" class="ui-button ui-button--primary ui-button--regular detached-grid-launcher-sidebar-btn" data-open-memo data-i18n-tooltip="memo_button_tooltip" aria-label="Memo">
+        <button type="button" class="ui-button ui-button--secondary ui-button--compact detached-grid-launcher-sidebar-btn" data-open-memo data-i18n-tooltip="memo_button_tooltip" aria-label="Memo">
           <svg class="memo-sidebar-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M6 3h9l3 3v15H6z"/>
             <path d="M9 10h6M9 14h6M9 18h3"/>
           </svg>
         </button>
-        <button id="new-session-btn" class="ui-button ui-button--secondary ui-button--regular new-session-sidebar-btn" data-i18n-tooltip="new_session" aria-labelledby="new-session-btn-label">
+        <button id="new-session-btn" class="ui-button ui-button--primary ui-button--compact new-session-sidebar-btn" data-i18n-tooltip="new_session" aria-labelledby="new-session-btn-label">
           <svg class="new-session-sidebar-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
             <path d="M12 18H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5M10 8h6M5 12h8M18 14v8M14 18h8"/><circle cx="6" cy="8" r="1"/>
           </svg>
@@ -1748,15 +1758,15 @@
     <div id="unified-tab-bar">
       <!-- D11: セッション情報チップ (セッションカードと同じ provider chip + model + status) -->
       <span class="session-info-chip" id="session-info-chip" hidden></span>
-      <button class="ui-button ui-button--secondary ui-button--regular view-tab active" data-tab="terminal" type="button"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg></span><span data-i18n="tab_terminal">ターミナル</span></button>
-      <button class="ui-button ui-button--secondary ui-button--regular view-tab" data-tab="multi" id="tab-multi" type="button"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span data-i18n="tab_multi">マルチ</span><span class="multi-layout-badge" id="multi-tab-layout-badge">2×2</span></button>
-      <button class="ui-button ui-button--secondary ui-button--regular view-tab" data-tab="chat" type="button"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 8 8 0 0 1-3.4-.8L4 20l1.8-5.1a8 8 0 0 1-.8-3.4A7.5 7.5 0 0 1 12.5 4 7.5 7.5 0 0 1 20 11.5Z"/></svg></span><span data-i18n="tab_chat">チャット</span><span class="badge" id="chat-count-badge">0</span></button>
-      <button class="ui-button ui-button--secondary ui-button--regular view-tab lazy" data-tab="files" type="button" data-i18n-tooltip="tab_files_lazy_tooltip"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></span><span data-i18n="tab_files">Files</span></button>
-      <button class="ui-button ui-button--secondary ui-button--regular view-tab lazy" data-tab="git" type="button" data-i18n-tooltip="tab_git_lazy_tooltip"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="4" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="20" r="2"/><path d="M6 6v12M18 8v3a7 7 0 0 1-7 7H8"/></svg></span><span data-i18n="tab_git">Git</span></button>
-      <button class="ui-button ui-button--secondary ui-button--regular view-tab lazy" data-tab="review" type="button" data-i18n-tooltip="tab_review_lazy_tooltip"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 7h10M10 2v10M14 17h7M3 17h6"/></svg></span><span data-i18n="tab_review">Review</span></button>
-      <button class="ui-button ui-button--secondary ui-button--regular view-tab" data-tab="orchestration" type="button" data-i18n-tooltip="orchestration_tooltip" aria-label="Orchestration"><svg class="orchestration-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="5" r="2.4"></circle><circle cx="5" cy="19" r="2.4"></circle><circle cx="19" cy="19" r="2.4"></circle><path d="M12 7.4V12M12 12L6.6 17M12 12L17.4 17"></path></svg></button>
-      <button class="ui-button ui-button--secondary ui-button--regular view-tab" data-tab="approval" type="button" id="approval-tab-btn"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m13 2-9 11h7l-1 9 10-12h-7Z"/></svg></span><span data-i18n="tab_approval">承認</span><span id="approval-tab-badge" hidden>0</span></button>
-      <button class="ui-button ui-button--secondary ui-button--regular view-tab" data-tab="history" type="button" id="history-tab-btn"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/></svg></span><span>履歴</span></button>
+      <button class="ui-button ui-button--quiet ui-button--regular view-tab active" data-tab="terminal" type="button"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg></span><span data-i18n="tab_terminal">ターミナル</span></button>
+      <button class="ui-button ui-button--quiet ui-button--regular view-tab" data-tab="multi" id="tab-multi" type="button"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span data-i18n="tab_multi">マルチ</span><span class="multi-layout-badge" id="multi-tab-layout-badge">2×2</span></button>
+      <button class="ui-button ui-button--quiet ui-button--regular view-tab" data-tab="chat" type="button"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 8 8 0 0 1-3.4-.8L4 20l1.8-5.1a8 8 0 0 1-.8-3.4A7.5 7.5 0 0 1 12.5 4 7.5 7.5 0 0 1 20 11.5Z"/></svg></span><span data-i18n="tab_chat">チャット</span><span class="badge" id="chat-count-badge">0</span></button>
+      <button class="ui-button ui-button--quiet ui-button--regular view-tab lazy" data-tab="files" type="button" data-i18n-tooltip="tab_files_lazy_tooltip"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></span><span data-i18n="tab_files">Files</span></button>
+      <button class="ui-button ui-button--quiet ui-button--regular view-tab lazy" data-tab="git" type="button" data-i18n-tooltip="tab_git_lazy_tooltip"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="4" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="20" r="2"/><path d="M6 6v12M18 8v3a7 7 0 0 1-7 7H8"/></svg></span><span data-i18n="tab_git">Git</span></button>
+      <button class="ui-button ui-button--quiet ui-button--regular view-tab lazy" data-tab="review" type="button" data-i18n-tooltip="tab_review_lazy_tooltip"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 7h10M10 2v10M14 17h7M3 17h6"/></svg></span><span data-i18n="tab_review">Review</span></button>
+      <button class="ui-button ui-button--quiet ui-button--regular view-tab" data-tab="orchestration" type="button" data-i18n-tooltip="orchestration_tooltip" aria-label="Orchestration"><svg class="orchestration-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="5" r="2.4"></circle><circle cx="5" cy="19" r="2.4"></circle><circle cx="19" cy="19" r="2.4"></circle><path d="M12 7.4V12M12 12L6.6 17M12 12L17.4 17"></path></svg></button>
+      <button class="ui-button ui-button--quiet ui-button--regular view-tab" data-tab="approval" type="button" id="approval-tab-btn"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m13 2-9 11h7l-1 9 10-12h-7Z"/></svg></span><span data-i18n="tab_approval">承認</span><span id="approval-tab-badge" hidden>0</span></button>
+      <button class="ui-button ui-button--quiet ui-button--regular view-tab" data-tab="history" type="button" id="history-tab-btn"><span class="view-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/></svg></span><span>履歴</span></button>
 
       <!-- 旧 #main-tab-bar / #main-tab-list: FilesTabManager の DOM 状態保持用に残置(非表示) -->
       <div id="main-tab-bar" hidden><div id="main-tab-list"></div></div>

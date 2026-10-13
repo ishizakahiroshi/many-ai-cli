@@ -53,6 +53,19 @@
 .ui-button.ui-button--icon { width: var(--ui-control-regular); padding: var(--space-1); flex-shrink: 0; }
 .ui-button.ui-button--compact.ui-button--icon { width: var(--ui-control-compact); }
 .ui-button.ui-button--touch { min-width: var(--touch-target); min-height: var(--touch-target); }
+/* 常に見えているアイコンだけの操作の列（サイドバー上端など）。塗りの面を並べると列が色の帯になるため、
+   面は持たず、variant の意味はアイコンの色で表す（primary=accent の薄い面、danger=危険色のアイコン）。
+   横の余白も持たない（狭い正方形で余白を取るとアイコンが潰れる）。寸法は配置側が compact/coarse に合わせる。 */
+.ui-toolbar .ui-button {
+  --ui-button-bg: transparent;
+  --ui-button-border: transparent;
+  --ui-button-fg: var(--muted);
+  --ui-button-hover: var(--bg-hover);
+  padding: 0;
+}
+.ui-toolbar .ui-button:where(:hover:not(:disabled)) { --ui-button-fg: var(--text); }
+.ui-toolbar .ui-button.ui-button--primary { --ui-button-bg: var(--accent-soft); --ui-button-fg: var(--accent-text); --ui-button-hover: var(--accent-glow); }
+.ui-toolbar .ui-button.ui-button--danger { --ui-button-fg: var(--danger); --ui-button-hover: var(--danger-bg); }
 @media (pointer: coarse) {
   :root { --ui-control-compact: var(--touch-target); --ui-control-regular: var(--touch-target); }
   .ui-button { min-height: var(--touch-target); }
