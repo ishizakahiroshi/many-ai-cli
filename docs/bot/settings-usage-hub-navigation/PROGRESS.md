@@ -1,10 +1,10 @@
 # Progress board
-> 最終更新: 2026-10-13(火) 22:20:28
+> 最終更新: 2026-10-13 22:32:06 +09:00
 
 ## Task
 
 - Task: #P-20261013-001 many-ai-cli
-- Issue URL: added after initial instruction publication
+- Issue URL: https://github.com/ishizakahiroshi/many-ai-cli/issues/20
 - Instruction repo/path: ishizakahiroshi/many-ai-cli / docs/bot/settings-usage-hub-navigation/
 - Implementation branch: dots/P-20261013-001-settings-usage-hub-nav
 - Planned PR base: wt/rust-ui-publication-20261011
@@ -15,9 +15,9 @@
 
 | Evidence | Value |
 |---|---|
-| Initial instruction commit | pending first publication |
-| Final fixed instruction URL | pending Issue creation and follow-up commit |
-| Latest PROGRESS URL | this task branch |
+| Initial instruction commit | 4d744dfbf5cea15eef16c3351694690d352f910c |
+| Final fixed instruction URL | will be pinned in Issue #20 after this Issue-linked instruction update is published |
+| Latest PROGRESS URL | https://github.com/ishizakahiroshi/many-ai-cli/blob/dots/P-20261013-001-settings-usage-hub-nav/docs/bot/settings-usage-hub-navigation/PROGRESS.md |
 | Product base SHA | d95effb70cf550ff93ca593160ee8aa827abc28b |
 | Implementation code SHA | not submitted |
 | dots independent review SHA | not submitted |
@@ -29,7 +29,7 @@
 
 | Work | Owner | Issue status | Evidence and next action |
 |---|---|---|---|
-| Accepted design and task instruction | Codex | preparing | Publish instruction commit, create the dedicated Issue, then pin the final URLs |
+| Accepted design and task instruction | Codex | Issue created | Publish the Issue-linked instruction update, then pin the final README URL in Issue #20 |
 | Implementation | dots | not sent | Start only after receipt of the fixed instruction commit |
 | Independent implementation review | dots reviewer | not started | Reviewer must be separate from the implementation author |
 | Adversarial source review and canonical-source reflection | Codex | not started | Review the exact submitted SHA; retain unrelated dirty work |

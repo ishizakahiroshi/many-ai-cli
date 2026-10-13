@@ -1,17 +1,17 @@
 # #P-20261013-001 many-ai-cli: Usage and Hub inside Settings
-> 最終更新: 2026-10-13(火) 22:20:28
+> 最終更新: 2026-10-13 22:31:55 +09:00
 
 ## Task
 
 - Task ID: #P-20261013-001
 - Product repository: ishizakahiroshi/many-ai-cli
-- GitHub Issue: created after the initial task-instruction commit; URL is added in the next instruction commit
+- GitHub Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/20
 - Instruction directory: docs/bot/settings-usage-hub-navigation/
 - Implementation branch: dots/P-20261013-001-settings-usage-hub-nav
 - Initial product base: wt/rust-ui-publication-20261011 at d95effb70cf550ff93ca593160ee8aa827abc28b
 - Parent Draft PR: [PR #18](https://github.com/ishizakahiroshi/many-ai-cli/pull/18)
 - Planned Draft PR base: wt/rust-ui-publication-20261011
-- Initial instruction commit SHA: recorded in PROGRESS.md after publication
+- Initial instruction commit SHA: 4d744dfbf5cea15eef16c3351694690d352f910c
 
 ## Adopted behavior
 
