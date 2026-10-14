@@ -62,6 +62,9 @@ struct Child {
     resolved: bool,
     failed: bool,
     finished_at: i64,
+    /// tool_use id of the SendMessage that resumed this child; empty until it is resumed.
+    /// Once set, the completion notice carrying this id (not `meta.tool_use_id`) decides the state.
+    run_id: String,
 }
 #[derive(Clone, Default)]
 struct Signal {
@@ -77,6 +80,8 @@ pub struct State {
     children: BTreeMap<String, Child>,
     parent_stamp: Option<Stamp>,
     signals: BTreeMap<String, Signal>,
+    /// agent id -> tool_use id of its newest resume (SendMessage whose result has `resumedAgentId`).
+    resumes: BTreeMap<String, String>,
 }
 #[derive(Default, Deserialize)]
 #[serde(default)]
@@ -335,13 +340,29 @@ fn read_inner(
     if !nodes.is_empty() {
         let stamp = Stamp::read(paths, parent).ok();
         if state.parent_stamp.is_none() || stamp != state.parent_stamp {
-            state.signals = scan_parent(paths, parent, stats);
+            (state.signals, state.resumes) = scan_parent(paths, parent, stats);
             state.parent_stamp = stamp;
         }
         for (id, node) in &mut nodes {
             let child = state.children.get_mut(id).expect("node owns child cache");
+            // A newer resume starts a new run: forget the earlier verdict and judge by the
+            // resume's own completion notice. Records without `resumedAgentId` never get here.
+            if let Some(run) = state.resumes.get(id)
+                && child.run_id != *run
+            {
+                child.run_id = run.clone();
+                child.resolved = false;
+                child.failed = false;
+                child.finished_at = 0;
+                child.ever_running = true;
+            }
             if !child.resolved {
-                if let Some(signal) = state.signals.get(&child.meta.tool_use_id) {
+                let key = if child.run_id.is_empty() {
+                    &child.meta.tool_use_id
+                } else {
+                    &child.run_id
+                };
+                if let Some(signal) = state.signals.get(key) {
                     if signal.resolved {
                         child.resolved = true;
                         child.failed = signal.failed;
@@ -350,6 +371,13 @@ fn read_inner(
                     } else if signal.launched {
                         child.ever_running = true;
                     }
+                } else if !child.run_id.is_empty()
+                    && now.saturating_sub(child.stamp.millis()) > FRESH_MS
+                {
+                    // The resume fell out of the bounded parent tail and its child log has been
+                    // quiet for FRESH_MS: stop reporting "running"; the last write is the end.
+                    child.resolved = true;
+                    child.finished_at = child.stamp.millis();
                 }
                 if !child.resolved
                     && !child.ever_running
@@ -470,11 +498,19 @@ fn mark(signals: &mut BTreeMap<String, Signal>, id: &str, completion: Option<boo
         signal.finished_at = ts;
     }
 }
+/// `resumedAgentId` is read on its own and leniently: a value of another type, or a changed
+/// shape, only means "no resume" and never disturbs the isAsync/status signals above.
+fn resumed_agent(raw: &str) -> Option<String> {
+    let value = raw_field(raw.as_bytes(), "resumedAgentId")?;
+    serde_json::from_str::<String>(value.get())
+        .ok()
+        .filter(|id| !id.is_empty())
+}
 fn scan_parent(
     paths: &RuntimePaths,
     path: &Path,
     stats: &mut ReadStats,
-) -> BTreeMap<String, Signal> {
+) -> (BTreeMap<String, Signal>, BTreeMap<String, String>) {
     static NOTICE: OnceLock<regex::Regex> = OnceLock::new();
     static ID: OnceLock<regex::Regex> = OnceLock::new();
     static STATUS: OnceLock<regex::Regex> = OnceLock::new();
@@ -492,6 +528,8 @@ fn scan_parent(
             .unwrap()
     });
     let mut signals = BTreeMap::new();
+    let mut resumes = BTreeMap::new();
+    // Records arrive newest first, so the first resume seen per agent is the latest run.
     for line in read_tail(paths, path, PARENT_BYTES, true, stats) {
         let Ok(record) = decode_record(&line, "Parent") else {
             continue;
@@ -506,6 +544,14 @@ fn scan_parent(
                 }
             }
             "user" => {
+                if let Some(raw) = &record.tool_use_result
+                    && let Some(agent) = resumed_agent(raw.get())
+                    && let Some(block) = blocks(&record)
+                        .into_iter()
+                        .find(|b| b.kind == "tool_result" && !b.tool_use_id.is_empty())
+                {
+                    resumes.entry(agent).or_insert(block.tool_use_id);
+                }
                 if let Some(raw) = &record.tool_use_result
                     && let Ok(result) = decode_default::<ToolResult>(raw.get().as_bytes())
                     && let Some(block) = blocks(&record)
@@ -537,5 +583,5 @@ fn scan_parent(
             _ => {}
         }
     }
-    signals
+    (signals, resumes)
 }
