@@ -39,6 +39,7 @@ mod handoff_hooks;
 mod observations;
 #[cfg(test)]
 mod recovery_core_prompt_tests;
+mod subagent_activity;
 #[cfg(test)]
 mod tests;
 mod transcript_path;
@@ -474,6 +475,31 @@ impl SessionWorkers {
             if cursor.binding != details.binding || cursor.path != path {
                 *cursor = Cursor::new(details.binding, path.clone());
             }
+            // Sub-agent logs live outside the parent transcript (subagent_activity.rs).
+            // Looked at every PROBE_INTERVAL, whatever `workflow.subagent_tree_enabled` says.
+            let probe_at = Timestamp::now();
+            if details.snapshot.state == "running"
+                && cursor.subagent_checked_at.is_none_or(|at| {
+                    probe_at
+                        .duration_since(at)
+                        .map_or(true, |elapsed| elapsed >= subagent_activity::PROBE_INTERVAL)
+                })
+            {
+                cursor.subagent_checked_at = Some(probe_at);
+                if let Some(latest) =
+                    subagent_activity::latest_mtime(&self.paths, &details.snapshot.provider, &path)
+                {
+                    match core.apply_observation(
+                        details.binding,
+                        SessionObservation::SubagentActivity { latest },
+                        probe_at,
+                    ) {
+                        Ok(effects) => self.apply(effects).await?,
+                        Err(SessionError::StaleBinding) => {}
+                        Err(error) => return Err(error),
+                    }
+                }
+            }
             let prime = !cursor.primed;
             let messages = if prime {
                 cursor
@@ -589,6 +615,8 @@ struct Cursor {
     primed: bool,
     published_path: Option<PathBuf>,
     published_offset: u64,
+    /// When the sub-agent log folder was last looked at (see `subagent_activity`).
+    subagent_checked_at: Option<Timestamp>,
 }
 impl Cursor {
     fn new(binding: SessionBinding, path: PathBuf) -> Self {
@@ -599,6 +627,7 @@ impl Cursor {
             primed: false,
             published_path: None,
             published_offset: 0,
+            subagent_checked_at: None,
         }
     }
 }

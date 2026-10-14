@@ -3,7 +3,7 @@ use crate::{
     config::RuntimePaths,
     terminal::{events::CoreEventBus, journal::JournalOptions},
 };
-struct Io;
+pub(super) struct Io;
 impl WrapperTransport for Io {
     fn send<'a>(
         &'a self,
@@ -28,7 +28,7 @@ impl WrappedSessionSpawner for Io {
         Box::pin(async { SpawnWaitOutcome::Failed("synthetic no provider".into()) })
     }
 }
-fn now() -> Timestamp {
+pub(super) fn now() -> Timestamp {
     Timestamp::from_unix(1791158400, 0).unwrap()
 }
 fn fixture() -> (tempfile::TempDir, SessionEngine) {
@@ -46,7 +46,7 @@ fn fixture() -> (tempfile::TempDir, SessionEngine) {
     );
     (root, core)
 }
-async fn register(core: &SessionEngine, pid: i64) -> SessionBinding {
+pub(super) async fn register(core: &SessionEngine, pid: i64) -> SessionBinding {
     core.register(
         RegisterRequest {
             message: proto::Message {

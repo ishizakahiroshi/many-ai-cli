@@ -364,7 +364,7 @@ impl SessionEngine {
                 }
             }
         }
-        if let Some(update) = s.refresh_approval_activity() {
+        if let Some(update) = s.refresh_approval_activity(now) {
             effects.0.push(CoreEffect::Broadcast(update));
         }
         let effects = state.route(effects);
@@ -567,7 +567,7 @@ impl Session {
             None,
             now,
         );
-        if let Some(update) = self.refresh_approval_activity() {
+        if let Some(update) = self.refresh_approval_activity(now) {
             effects.0.push(CoreEffect::Broadcast(update));
         }
         effects

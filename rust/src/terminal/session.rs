@@ -176,6 +176,11 @@ struct Session {
     input_lane: Arc<lane::InputLane>,
     awaiting_submit_enter: bool,
     last_output: Option<Timestamp>,
+    /// High-water mark of the provider's sub-agent log folder; reset by a new turn.
+    subagent_activity_at: Option<Timestamp>,
+    /// When `transcript_grew_at` last went to the UI, and whether a newer value waits.
+    transcript_grew_sent_at: Option<Timestamp>,
+    transcript_grew_pending: bool,
     output_generation: u64,
     usage_probe: bool,
     subscription_login: bool,

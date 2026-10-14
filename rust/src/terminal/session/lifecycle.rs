@@ -352,6 +352,9 @@ impl SessionEngine {
             input_lane: Arc::new(lane::InputLane::default()),
             awaiting_submit_enter: false,
             last_output: None,
+            subagent_activity_at: None,
+            transcript_grew_sent_at: None,
+            transcript_grew_pending: false,
             output_generation: 0,
             usage_probe: m.usage_probe,
             subscription_login: m.subscription_login,
@@ -576,6 +579,10 @@ impl SessionEngine {
             session.done = old.done;
             session.completion = old.completion;
             session.last_output = old.last_output;
+            // A socket replacement is not a new turn: keep the "no response" clock whole.
+            session.subagent_activity_at = old.subagent_activity_at;
+            session.transcript_grew_sent_at = old.transcript_grew_sent_at;
+            session.transcript_grew_pending = old.transcript_grew_pending;
             preserve_warm_conversation(&mut session.snapshot, &old.snapshot);
             session.snapshot.effort = old.snapshot.effort;
             session.snapshot.execution_mode = old.snapshot.execution_mode;
