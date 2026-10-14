@@ -126,7 +126,7 @@ function templateIndex(templates: PromptTemplate[], body: string): number {
 function makeActionButton(icon: string, label: string, handler: (event: MouseEvent) => void): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = 'prompt-template-action';
+  button.className = 'ui-button ui-button--secondary ui-button--compact ui-button--icon prompt-template-action';
   button.textContent = icon;
   button.title = label;
   button.setAttribute('aria-label', label);
@@ -252,7 +252,7 @@ function stepReorder(list: HTMLElement, row: HTMLElement, body: string, delta: n
 function makeDragHandle(list: HTMLElement, row: HTMLElement, template: PromptTemplate): HTMLButtonElement {
   const handle = document.createElement('button');
   handle.type = 'button';
-  handle.className = 'prompt-template-drag';
+  handle.className = 'ui-button ui-button--secondary ui-button--compact ui-button--icon prompt-template-drag';
   handle.textContent = '⠿';
   const label = text('template_reorder', 'ドラッグで並べ替え');
   handle.title = label;
@@ -275,7 +275,7 @@ function renderEditor(row: HTMLElement, mode: 'add' | 'edit', template?: PromptT
   const textarea = document.createElement('textarea');
   textarea.rows = 3;
   textarea.maxLength = MAX_BODY_LENGTH;
-  textarea.className = 'prompt-template-editor-input';
+  textarea.className = 'ui-input prompt-template-editor-input';
   textarea.placeholder = text('template_body_placeholder', 'テンプレート本文');
   textarea.value = mode === 'edit' ? editDraft : addDraft;
   textarea.addEventListener('input', () => {
@@ -287,11 +287,11 @@ function renderEditor(row: HTMLElement, mode: 'add' | 'edit', template?: PromptT
   actions.className = 'prompt-template-editor-actions';
   const saveButton = document.createElement('button');
   saveButton.type = 'button';
-  saveButton.className = 'prompt-template-editor-save';
+  saveButton.className = 'ui-button ui-button--quiet ui-button--compact prompt-template-editor-save';
   saveButton.textContent = text('template_save', '保存');
   const cancelButton = document.createElement('button');
   cancelButton.type = 'button';
-  cancelButton.className = 'prompt-template-editor-cancel';
+  cancelButton.className = 'ui-button ui-button--quiet ui-button--compact prompt-template-editor-cancel';
   cancelButton.textContent = text('template_cancel', 'キャンセル');
 
   saveButton.addEventListener('click', (event) => {
@@ -361,7 +361,7 @@ function renderTemplateRow(row: HTMLElement, template: PromptTemplate, panel: HT
 
   const selectButton = document.createElement('button');
   selectButton.type = 'button';
-  selectButton.className = 'prompt-template-item';
+  selectButton.className = 'ui-button ui-button--quiet ui-button--compact ui-button--menu-item prompt-template-item';
   selectButton.setAttribute('role', 'menuitem');
   selectButton.textContent = template.body;
   selectButton.title = template.body;
@@ -412,6 +412,7 @@ function renderUndoRow(list: HTMLElement): void {
   const undoButton = document.createElement('button');
   undoButton.type = 'button';
   undoButton.textContent = text('template_undo', '元に戻す');
+  undoButton.className = 'ui-button ui-button--secondary ui-button--compact';
   undoButton.addEventListener('click', (event) => {
     event.stopPropagation();
     if (!undoState) return;
@@ -462,7 +463,7 @@ function renderPalette(): void {
   } else {
     const addButton = document.createElement('button');
     addButton.type = 'button';
-    addButton.className = 'prompt-template-add';
+    addButton.className = 'ui-button ui-button--secondary ui-button--regular ui-button--menu-item prompt-template-add';
     addButton.textContent = text('template_add', '＋ 追加');
     addButton.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -504,6 +505,7 @@ function renderSyncConflict(): void {
   for (const keepLocal of [false, true]) {
     const button = document.createElement('button');
     button.type = 'button';
+    button.className = 'ui-button ui-button--warn ui-button--regular';
     button.textContent = keepLocal
       ? text('template_sync_keep_local', 'この端末の一覧で共有側を置き換える')
       : text('template_sync_reload', 'この端末の変更を破棄して共有側を読む');

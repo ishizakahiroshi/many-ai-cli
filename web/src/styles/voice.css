@@ -3,13 +3,11 @@
 /* Voice input */
 /* 音声入力ボタン */
 #voice-btn {
-  background: transparent;
-  color: var(--muted-2);
-  border: none;
-  border-radius: var(--radius-md);
-  width: 28px;
-  height: 28px;
-  font-size: var(--fs-body);
+
+  ;
+  width: var(--ui-control-size, var(--ui-control-regular));
+  height: var(--ui-control-size, var(--ui-control-regular));
+
   cursor: pointer;
   flex-shrink: 0;
   line-height: 1;
@@ -18,11 +16,16 @@
   justify-content: center;
   transition: background 0.15s, color 0.15s;
 }
-#voice-btn:hover { background: rgba(255,255,255,0.08); color: var(--accent); }
+
 #voice-btn.recording {
   background: rgba(220, 38, 38, 0.12);
   color: #ef4444;
   animation: voice-pulse 1.2s ease-in-out infinite;
+}
+#voice-btn.recording.ui-button {
+  --ui-button-bg: rgba(220, 38, 38, 0.12);
+  --ui-button-hover: rgba(220, 38, 38, 0.12);
+  --ui-button-fg: #ef4444;
 }
 @keyframes voice-pulse {
   0%, 100% { opacity: 1; }
@@ -31,27 +34,35 @@
 
 /* グローバルウェイクワードボタン（ヘッダー） */
 #global-wakeword-btn {
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+
+  ;
   padding: 3px 8px;
-  font-size: var(--fs-lg);
+
   line-height: 1;
   cursor: pointer;
-  font-family: inherit;
+
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-#global-wakeword-btn:hover { color: var(--accent-text); border-color: var(--accent); }
+
 #global-wakeword-btn.standby {
   background: rgba(59, 130, 246, 0.12);
   border-color: #3b82f6;
   color: #3b82f6;
   animation: wakeword-pulse 2s ease-in-out infinite;
 }
+#global-wakeword-btn.standby.ui-button {
+  --ui-button-bg: rgba(59, 130, 246, 0.12);
+  --ui-button-hover: rgba(59, 130, 246, 0.12);
+  --ui-button-border: #3b82f6;
+  --ui-button-fg: #3b82f6;
+}
 #global-wakeword-btn.standby.listening {
   background: rgba(59, 130, 246, 0.28);
   animation: wakeword-pulse 2s ease-in-out infinite;
+}
+#global-wakeword-btn.standby.listening.ui-button {
+  --ui-button-bg: rgba(59, 130, 246, 0.28);
+  --ui-button-hover: rgba(59, 130, 246, 0.28);
 }
 @keyframes wakeword-pulse {
   0%, 100% { opacity: 1; }
@@ -60,8 +71,8 @@
 
 /* 入力クリアボタン: テキストがあるときだけ visible にする */
 #input-clear-btn {
-  width: 26px;
-  height: 26px;
+  width: var(--ui-control-size, var(--ui-control-regular));
+  height: var(--ui-control-size, var(--ui-control-regular));
   padding: 0;
   border-radius: 50%;
   opacity: 0;
@@ -73,20 +84,14 @@
   opacity: 1;
   pointer-events: auto;
 }
-#input-clear-btn:hover {
-  background: rgba(239,68,68,0.15);
-  color: #f87171;
-}
 
 /* ウェイクワードボタン（入力バー内・旧来） */
 #voice-wakeword-btn {
-  background: transparent;
-  color: var(--muted-2);
-  border: none;
-  border-radius: var(--radius-md);
-  width: 28px;
-  height: 28px;
-  font-size: var(--fs-body);
+
+  ;
+  width: var(--ui-control-size, var(--ui-control-regular));
+  height: var(--ui-control-size, var(--ui-control-regular));
+
   cursor: pointer;
   flex-shrink: 0;
   line-height: 1;
@@ -95,12 +100,18 @@
   justify-content: center;
   transition: background 0.15s, color 0.15s;
 }
-#voice-wakeword-btn:hover { background: rgba(255,255,255,0.08); color: var(--accent); }
+
 #voice-wakeword-btn.standby {
   background: rgba(59, 130, 246, 0.12);
   border-color: #3b82f6;
   color: #3b82f6;
   animation: wakeword-pulse 2s ease-in-out infinite;
+}
+#voice-wakeword-btn.standby.ui-button {
+  --ui-button-bg: rgba(59, 130, 246, 0.12);
+  --ui-button-hover: rgba(59, 130, 246, 0.12);
+  --ui-button-border: #3b82f6;
+  --ui-button-fg: #3b82f6;
 }
 
 /* 音声入力バー（入力欄の上にホバー表示） */
@@ -131,22 +142,14 @@
 }
 .voice-action-btn {
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 1.5px solid;
-  cursor: pointer;
-  font-size: var(--fs-body);
+  width: var(--ui-control-size, var(--ui-control-regular));
+  height: var(--ui-control-size, var(--ui-control-regular));
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, transform 0.1s;
 }
+
 .voice-action-btn:active { transform: scale(0.92); }
-.voice-cancel-btn { border-color: #ef4444; color: #ef4444; background: rgba(220,38,38,0.08); }
-.voice-cancel-btn:hover { background: rgba(220,38,38,0.2); }
-.voice-confirm-btn { border-color: var(--green); color: var(--green); background: rgba(34,197,94,0.08); }
-.voice-confirm-btn:hover { background: rgba(34,197,94,0.2); }
 
 /* audioend 後、Chrome サーバー応答待ち中の視覚フィードバック */
 @keyframes voice-processing-pulse {
@@ -212,8 +215,10 @@
   line-height: 1.55;
 }
 .voice-diagnostic-guide-title {
-  font-weight: 600;
   margin-bottom: 6px;
+}
+.voice-diagnostic-guide-title:where(:not(.ui-modal__title)) {
+  font-weight: 600;
 }
 .voice-diagnostic-guide ol {
   margin: 6px 0 0 18px;

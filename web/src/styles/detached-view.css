@@ -4,8 +4,6 @@
 
 body.detached-tab-mode header { display: none; }
 body.detached-tab-mode #app { height: 100dvh; }
-/* token-statusbar を隠すので、その高さぶんの下余白も要らない */
-body.detached-tab-mode { --tsb-bottom-offset: 0px; }
 
 #detached-tab-bar {
   flex-shrink: 0;
@@ -18,7 +16,12 @@ body.detached-tab-mode { --tsb-bottom-offset: 0px; }
   background: var(--bg-elev, #181c24);
   font-size: var(--fs-md);
 }
-.detached-tab-title { flex-shrink: 0; color: var(--text); }
+.detached-tab-title {
+  flex-shrink: 0;
+}
+.detached-tab-title:where(:not(.ui-modal__title)) {
+  color: var(--text);
+}
 .detached-tab-session {
   min-width: 0;
   overflow: hidden;
@@ -34,17 +37,14 @@ body.detached-tab-mode { --tsb-bottom-offset: 0px; }
   border-radius: var(--radius-sm);
   overflow: hidden;
 }
-.detached-follow-toggle button {
-  padding: 2px 10px;
-  border: none;
-  background: transparent;
-  color: var(--text-soft, var(--muted));
-  font: inherit;
-  font-size: var(--fs-sm);
-  cursor: pointer;
-}
+
 .detached-follow-toggle button + button { border-left: 1px solid var(--line); }
 .detached-follow-toggle button.active { background: var(--accent, #3b82f6); color: #fff; }
+.detached-follow-toggle button.active.ui-button {
+  --ui-button-bg: var(--accent, #3b82f6);
+  --ui-button-hover: var(--accent, #3b82f6);
+  --ui-button-fg: #fff;
+}
 
 /* 作業メモの別窓: ドロワーを右端の浮き窓ではなく、窓いっぱいの面として出す */
 #detached-memo-host { flex: 1; min-height: 0; display: flex; }

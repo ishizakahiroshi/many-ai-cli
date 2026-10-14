@@ -1,4 +1,33 @@
-/* token-statusbar.css — 画面最下部固定のトークン/コスト ステータスバー */
+/* token-statusbar.css — CLI 列の最下段のトークン/コスト ステータスバー */
+
+/* Dedicated footer palette: preserve the existing colors in every theme. */
+:root {
+  --ui-footer-copy-bg: rgba(125,207,255,.18);
+  --ui-footer-popover-shadow: rgba(0,0,0,.5);
+  --ui-footer-overlay-bg: rgba(0,0,0,.45);
+  --ui-footer-modal-shadow: rgba(0,0,0,.6);
+  --ui-footer-row-hover: rgba(122,162,247,.08);
+  --ui-footer-code-bg: #0d1117;
+  --ui-footer-panel-bg: #1a1b26;
+  --ui-footer-panel-hover: #1a1d29;
+  --ui-footer-bg: #1f2335;
+  --ui-footer-row-line: #20232f;
+  --ui-footer-line: #292e42;
+  --ui-footer-hover: #2a2f45;
+  --ui-footer-line-strong: #3b4261;
+  --ui-footer-muted: #565f89;
+  --ui-footer-teal: #73daca;
+  --ui-footer-accent: #7aa2f7;
+  --ui-footer-cyan: #7dcfff;
+  --ui-footer-text-soft: #9aa5ce;
+  --ui-footer-violet: #9d7cd8;
+  --ui-footer-success: #9ece6a;
+  --ui-footer-branch: #bb9af7;
+  --ui-footer-text: #c0caf5;
+  --ui-footer-warning: #e0af68;
+  --ui-footer-danger: #f7768e;
+  --ui-footer-tokens: #ff9e64;
+}
 
 #token-statusbar {
   display: flex;
@@ -6,8 +35,8 @@
   gap: 0;
   flex-wrap: nowrap;
   overflow: hidden;
-  background: #1f2335;
-  border-top: 1px solid #292e42;
+  background: var(--ui-footer-bg);
+  border-top: 1px solid var(--ui-footer-line);
   height: 22px;
   min-height: 22px;
   font-size: var(--statusbar-font-size);
@@ -15,16 +44,54 @@
   user-select: none;
   flex-shrink: 0;
   z-index: 10;
-  /* body 最下部に固定 */
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  /* 幅が足りないときの段階的省略（下の @container）は、この要素自身の幅で判定する。 */
+  container-type: inline-size;
   /* iOS Safari の下部ナビ・ホームインジケータと重ならないようにセーフエリア分だけ
      高さを伸ばし、内容は上端側へ寄せる（既存セグメントの位置は変えない）。 */
   height: calc(22px + env(safe-area-inset-bottom));
   min-height: calc(22px + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* スマホ（720px 以下）はふだん出さない。危ないときの知らせは #tsb-mobile-alert が出す。 */
+@media (max-width: 720px) {
+  #token-statusbar {
+    display: none !important;
+  }
+}
+
+/* スマホの知らせ（#tsb-mobile-alert）: ctx・compact・レート制限が危険域のときだけ、
+   入力欄の上（進捗の帯の位置）に 1 行出す。押すと詳細一覧を開く。絶対配置なので、
+   出し入れしても端末の高さは変わらない。 */
+#tsb-mobile-alert { display: none; }
+#tsb-mobile-alert[hidden] { display: none !important; }
+@media (max-width: 720px) {
+  #tsb-mobile-alert:not([hidden]) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    position: absolute;
+    top: 0;
+    left: 14px;
+    right: 14px;
+    /* 進捗の帯（terminal.css の #terminal-live-status は z-index: 15）より上に出す。浮くメニュー類（1000 以上）は隠さない。 */
+    z-index: 16;
+    box-sizing: border-box;
+    height: var(--ui-control-size, var(--ui-control-regular));
+    min-height: 0;
+    margin: 0;
+    padding: 0 6px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+
+    line-height: 1
+
+    /* 下の進捗の帯の文字が透けないよう、入力欄帯の背景（terminal.css のスマホ用 --bg-deep）と混ぜた不透明色にする。 */;
+    background: color-mix(in srgb, var(--warn-bg) 25%, var(--bg-deep, var(--ui-footer-code-bg)));
+
+    cursor: pointer;
+  }
 }
 
 /* セグメント共通 */
@@ -36,7 +103,7 @@
   text-overflow: ellipsis;
   padding: 0 8px;
   height: 100%;
-  border-right: 1px solid #292e42;
+  border-right: 1px solid var(--ui-footer-line);
   gap: var(--space-1);
 }
 .tsb-seg:last-child {
@@ -46,8 +113,8 @@
 /* #N セッション番号（最左・チップ風） */
 .tsb-seg-id {
   font-weight: 700;
-  color: #c0caf5;
-  background: #2a2f45;
+  color: var(--ui-footer-text);
+  background: var(--ui-footer-hover);
 }
 
 /* 状態 pill */
@@ -89,14 +156,14 @@
 .tsb-seg-agent .card-provider-icon { width: 13px; height: 13px; }
 .tsb-seg-agent .card-provider-chip { font-size: var(--statusbar-font-size); padding: 1px 6px; }
 .tsb-model {
-  color: #9ece6a;
+  color: var(--ui-footer-success);
   max-width: 16ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .tsb-agent-name {
-  color: #7dcfff;
+  color: var(--ui-footer-cyan);
   max-width: 10ch;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -106,13 +173,13 @@
 /* effort / thinking バッジ（モデルチップ隣） */
 /* .effort-badge はステータスバーとタブバーのセッションチップで共有する
    （同じ値を同じ見た目で出すため、定義もここ 1 箇所）。 */
-.tsb-seg-effort { gap: 4px; }
+.tsb-seg-effort { gap: var(--space-1); }
 .effort-badge,
 .tsb-effort-lvl {
   font-size: var(--statusbar-font-size);
   font-weight: 700;
-  color: #e0af68;
-  background: color-mix(in srgb, #e0af68 18%, transparent);
+  color: var(--ui-footer-warning);
+  background: color-mix(in srgb, var(--ui-footer-warning) 18%, transparent);
   border-radius: var(--radius-sm);
   padding: 1px 5px;
   text-transform: uppercase;
@@ -120,40 +187,40 @@
 .tsb-thinking { font-size: var(--statusbar-font-size); }
 
 /* AI 編集行数（project 隣・追加=緑 / 削除=赤） */
-.tsb-seg-ailines { color: #565f89; }
-.tsb-seg-ailines .tsb-add { color: #9ece6a; }
-.tsb-seg-ailines .tsb-del { color: #f7768e; }
+.tsb-seg-ailines { color: var(--ui-footer-muted); }
+.tsb-seg-ailines .tsb-add { color: var(--ui-footer-success); }
+.tsb-seg-ailines .tsb-del { color: var(--ui-footer-danger); }
 
 /* 拡張コンテキスト（1M 窓）バッジ */
 .tsb-1m {
   font-size: var(--statusbar-font-size);
   font-weight: 700;
-  color: #7dcfff;
-  background: color-mix(in srgb, #7dcfff 18%, transparent);
+  color: var(--ui-footer-cyan);
+  background: color-mix(in srgb, var(--ui-footer-cyan) 18%, transparent);
   border-radius: var(--radius-sm);
   padding: 0 4px;
 }
 
 /* レート制限残量（接続状態の手前・hourglass + 5h/7d %） */
-.tsb-seg-ratelimit { color: #9aa5ce; gap: 4px; }
+.tsb-seg-ratelimit { color: var(--ui-footer-text-soft); gap: var(--space-1); }
 
 /* 作業ラベル（一押しE・薄字イタリック・クリックで送信履歴モーダル） */
 .tsb-seg-label {
-  color: #565f89;
+  color: var(--ui-footer-muted);
   font-style: italic;
   max-width: 160px;
   cursor: pointer;
 }
-.tsb-seg-label:hover { color: #7aa2f7; background: rgba(122,162,247,.10); }
+.tsb-seg-label:hover { color: var(--ui-footer-accent); background: color-mix(in srgb, var(--ui-footer-accent) 10%, transparent); }
 
 /* project(branch) ±git: cyan クラスタ */
 .tsb-seg-project {
-  color: #7dcfff;
+  color: var(--ui-footer-cyan);
   max-width: 280px;
   cursor: pointer;
 }
-.tsb-branch { color: #bb9af7; }
-.tsb-git { color: #73daca; }
+.tsb-branch { color: var(--ui-footer-branch); }
+.tsb-git { color: var(--ui-footer-teal); }
 
 /* 塗りゲージ（ctx / cache 共通） */
 .tsb-gauge {
@@ -161,40 +228,40 @@
   width: 46px;
   height: 8px;
   border-radius: var(--radius-sm);
-  background: #2a2f45;
+  background: var(--ui-footer-hover);
   overflow: hidden;
   vertical-align: middle;
 }
 .tsb-gauge .tsb-fill { display: block; height: 100%; border-radius: var(--radius-sm); }
-.tsb-fill.ok    { background: #9ece6a; }
-.tsb-fill.warn  { background: #e0af68; }
-.tsb-fill.crit  { background: #f7768e; }
-.tsb-fill.cache { background: #7dcfff; }
+.tsb-fill.ok    { background: var(--ui-footer-success); }
+.tsb-fill.warn  { background: var(--ui-footer-warning); }
+.tsb-fill.crit  { background: var(--ui-footer-danger); }
+.tsb-fill.cache { background: var(--ui-footer-cyan); }
 .tsb-pct { font-size: var(--statusbar-font-size); }
-.tsb-pct.crit { color: #f7768e; font-weight: 700; }
+.tsb-pct.crit { color: var(--ui-footer-danger); font-weight: 700; }
 
-.tsb-seg-ctx   { color: #9aa5ce; cursor: pointer; }
-.tsb-seg-tok   { color: #ff9e64; cursor: pointer; }
-.tsb-seg-cache { color: #7dcfff; }
+.tsb-seg-ctx   { color: var(--ui-footer-text-soft); cursor: pointer; }
+.tsb-seg-tok   { color: var(--ui-footer-tokens); cursor: pointer; }
+.tsb-seg-cache { color: var(--ui-footer-cyan); }
 
 /* compact 残量: teal（auto-compact 目安までの残りトークン） */
-.tsb-seg-compact { color: #73daca; }
+.tsb-seg-compact { color: var(--ui-footer-teal); }
 
 /* コピー時の一瞬のフラッシュ */
-.tsb-copied { background: rgba(125,207,255,.18); }
+.tsb-copied { background: var(--ui-footer-copy-bg); }
 
 /* cost: purple（+ today / クリックで内訳） */
-.tsb-seg-cost { color: #bb9af7; cursor: pointer; }
-.tsb-today { color: #9d7cd8; }
+.tsb-seg-cost { color: var(--ui-footer-branch); cursor: pointer; }
+.tsb-today { color: var(--ui-footer-violet); }
 /* モバイル専用の today 短縮表記（デスクトップ・詳細モーダルでは出さない） */
-.tsb-today-short { display: none; color: #9d7cd8; }
+.tsb-today-short { display: none; color: var(--ui-footer-violet); }
 
 /* burn rate: amber */
-.tsb-seg-burn { color: #e0af68; }
+.tsb-seg-burn { color: var(--ui-footer-warning); }
 
 /* elapsed: pink/red（+ turn） */
-.tsb-seg-elapsed { color: #f7768e; }
-.tsb-turn { color: #ff9e64; }
+.tsb-seg-elapsed { color: var(--ui-footer-danger); }
+.tsb-turn { color: var(--ui-footer-tokens); }
 
 /* 接続状態 */
 .tsb-seg-conn { padding: 0 6px; }
@@ -214,20 +281,20 @@
   max-width: 360px;
   max-height: min(70vh, calc(100vh - 48px));
   overflow-y: auto;
-  background: #1a1b26;
-  border: 1px solid #3b4261;
+  background: var(--ui-footer-panel-bg);
+  border: 1px solid var(--ui-footer-line-strong);
   border-radius: var(--radius-md);
   padding: 6px 0;
   font-size: var(--fs-xs);
-  color: #c0caf5;
-  box-shadow: 0 6px 20px rgba(0,0,0,.5);
+  color: var(--ui-footer-text);
+  box-shadow: 0 6px 20px var(--ui-footer-popover-shadow);
   z-index: 1300;
 }
 #tsb-cost-pop .tsb-pop-title {
   padding: 2px 12px 6px;
   font-weight: 700;
-  color: #7aa2f7;
-  border-bottom: 1px solid #292e42;
+  color: var(--ui-footer-accent);
+  border-bottom: 1px solid var(--ui-footer-line);
   margin-bottom: 4px;
 }
 #tsb-cost-pop .tsb-pop-row {
@@ -241,9 +308,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-#tsb-cost-pop .tsb-pop-row span:last-child { color: #bb9af7; flex-shrink: 0; }
+#tsb-cost-pop .tsb-pop-row span:last-child { color: var(--ui-footer-branch); flex-shrink: 0; }
 #tsb-cost-pop .tsb-pop-total {
-  border-top: 1px solid #292e42;
+  border-top: 1px solid var(--ui-footer-line);
   margin-top: 4px;
   padding-top: 4px;
   font-weight: 700;
@@ -253,7 +320,7 @@
 #tsb-sent-modal {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.45);
+  background: var(--ui-footer-overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -264,10 +331,10 @@
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  background: #1a1b26;
-  border: 1px solid #3b4261;
+  background: var(--ui-footer-panel-bg);
+  border: 1px solid var(--ui-footer-line-strong);
   border-radius: var(--radius-md);
-  box-shadow: 0 10px 40px rgba(0,0,0,.6);
+  box-shadow: 0 10px 40px var(--ui-footer-modal-shadow);
   overflow: hidden;
 }
 .tsb-sent-header {
@@ -275,42 +342,42 @@
   align-items: center;
   gap: var(--space-3);
   padding: 8px 12px;
-  border-bottom: 1px solid #292e42;
+  border-bottom: 1px solid var(--ui-footer-line);
   flex-shrink: 0;
 }
-.tsb-sent-title { font-weight: 700; color: #7aa2f7; font-size: var(--fs-md); }
-.tsb-sent-count { color: #565f89; font-size: var(--fs-xs); }
+.tsb-sent-title { font-weight: 700; color: var(--ui-footer-accent); font-size: var(--fs-md); }
+.tsb-sent-count { color: var(--ui-footer-muted); font-size: var(--fs-xs); }
 .tsb-sent-close {
   margin-left: auto;
   background: transparent;
   border: none;
-  color: #c0caf5;
+  color: var(--ui-footer-text);
   font-size: var(--icon-btn-fs);
   cursor: pointer;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
 }
-.tsb-sent-close:hover { background: #2a2f45; }
+.tsb-sent-close:hover { background: var(--ui-footer-hover); }
 .tsb-sent-body {
   overflow-y: auto;
   padding: 6px 0;
 }
-.tsb-sent-empty { padding: 24px 12px; text-align: center; color: #565f89; font-size: var(--fs-sm); }
+.tsb-sent-empty { padding: 24px 12px; text-align: center; color: var(--ui-footer-muted); font-size: var(--fs-sm); }
 .tsb-sent-row {
   padding: 8px 14px;
-  border-bottom: 1px solid #20232f;
+  border-bottom: 1px solid var(--ui-footer-row-line);
   cursor: pointer;
 }
 .tsb-sent-row:last-child { border-bottom: none; }
-.tsb-sent-row:hover { background: rgba(122,162,247,.08); }
+.tsb-sent-row:hover { background: var(--ui-footer-row-hover); }
 .tsb-sent-meta {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
   margin-bottom: 3px;
 }
-.tsb-sent-idx { color: #565f89; font-size: var(--fs-xs); font-weight: 700; flex-shrink: 0; }
-.tsb-sent-time { color: #7dcfff; font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.tsb-sent-idx { color: var(--ui-footer-muted); font-size: var(--fs-xs); font-weight: 700; flex-shrink: 0; }
+.tsb-sent-time { color: var(--ui-footer-cyan); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
 /* 各送信の右上コピーボタン（行クリックと同じ動作を明示的に押せる形で出す） */
 .tsb-sent-copy {
   margin-left: auto;
@@ -318,17 +385,17 @@
   flex-shrink: 0;
   background: transparent;
   border: none;
-  color: #565f89;
+  color: var(--ui-footer-muted);
   font-size: var(--icon-btn-fs);
   line-height: 1;
   cursor: pointer;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
 }
-.tsb-sent-copy:hover { background: #2a2f45; color: #c0caf5; }
-.tsb-sent-copy.copied { color: #9ece6a; }
+.tsb-sent-copy:hover { background: var(--ui-footer-hover); color: var(--ui-footer-text); }
+.tsb-sent-copy.copied { color: var(--ui-footer-success); }
 .tsb-sent-text {
-  color: #c0caf5;
+  color: var(--ui-footer-text);
   font-size: var(--fs-sm);
   line-height: 1.5;
   white-space: pre-wrap;
@@ -347,15 +414,15 @@
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: #7aa2f7;
+  color: var(--ui-footer-accent);
   font: inherit;
   font-size: var(--fs-xs);
   line-height: 1.4;
   cursor: pointer;
 }
-.tsb-sent-expand:hover { background: #2a2f45; color: #c0caf5; }
-.tsb-sent-expand:focus-visible { outline: 2px solid #7aa2f7; outline-offset: 1px; }
-.tsb-sent-row.tsb-copied { background: rgba(125,207,255,.18); }
+.tsb-sent-expand:hover { background: var(--ui-footer-hover); color: var(--ui-footer-text); }
+.tsb-sent-expand:focus-visible { outline: 2px solid var(--ui-footer-accent); outline-offset: 1px; }
+.tsb-sent-row.tsb-copied { background: var(--ui-footer-copy-bg); }
 .tsb-sent-attachments {
   display: flex;
   flex-wrap: wrap;
@@ -367,10 +434,10 @@
   align-items: center;
   max-width: 100%;
   padding: 3px 8px;
-  border: 1px solid #2a2f45;
+  border: 1px solid var(--ui-footer-hover);
   border-radius: var(--radius-md);
-  background: #1a1d29;
-  color: #c0caf5;
+  background: var(--ui-footer-panel-hover);
+  color: var(--ui-footer-text);
   font-size: var(--fs-xs);
   line-height: 1.3;
   cursor: pointer;
@@ -378,7 +445,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.tsb-sent-attach-chip:hover { background: #2a2f45; border-color: #7aa2f7; }
+.tsb-sent-attach-chip:hover { background: var(--ui-footer-hover); border-color: var(--ui-footer-accent); }
 
 /* 設定 OFF やセッション未選択時は非表示（JS で制御するが念のため） */
 #token-statusbar[hidden] {
@@ -389,8 +456,8 @@
 .tsb-seg-more {
   background: transparent;
   border: none;
-  border-left: 1px solid #292e42;
-  color: #c0caf5;
+  border-left: 1px solid var(--ui-footer-line);
+  color: var(--ui-footer-text);
   font-size: var(--fs-body);
   cursor: pointer;
   padding: 0 12px;
@@ -399,7 +466,7 @@
   align-items: center;
   margin-left: auto;
 }
-.tsb-seg-more:hover { background: #2a2f45; }
+.tsb-seg-more:hover { background: var(--ui-footer-hover); }
 
 /* ── 幅が足りないときの縮み方 ───────────────────────────────────────────
    既定では全セグメントが等しく縮む（flex-shrink 初期値 1）。.tsb-seg は
@@ -415,16 +482,32 @@
   min-width: 0;
 }
 
-/* ── 中間幅の段階的省略（641px 〜 デスクトップ）──────────────────────────
-   全部入りには 1900px 前後の幅が要る。足りない幅では優先度の低い順に
-   セグメントごと落とし、文字を途中で切らない。落とした内容は右端の
+/* PC（721px 以上）: 番号・状態・AI・effort はヘッダーのチップに出ているので、フッターからは外す。
+   CSS で隠すので、「…」の詳細一覧には今までどおり出る。 */
+@media (min-width: 721px) {
+  #token-statusbar .tsb-seg-id,
+  #token-statusbar .tsb-seg-status,
+  #token-statusbar .tsb-seg-agent,
+  #token-statusbar .tsb-seg-effort {
+    display: none !important;
+  }
+}
+
+/* ── 幅が足りないときの段階的省略（フッター自身の幅で判定）──────────────────────────
+   判定は #token-statusbar の幅（@container）。PC ではフッターは CLI 列の幅で、
+   ウィンドウ幅とは一致しない。
+   閾値は、4 項目を消す前にウィンドウ幅で判定していた値から、消した 4 項目の
+   幅の目安 315px（目測・概算）を引いたもの。4 項目を消す前は、全部入りに
+   1900px 前後の幅が要るという概算だった。
+   足りない幅では優先度の低い順にセグメントごと落とし、文字を途中で切らない。
+   落とした内容は右端の
    … （詳細モーダル）から読める。
    閾値はブラウザでの実測値ではなく、各セグメントの内容幅の見積もりから
    置いた概算。パス・モデル名・作業ラベルが長いセッションでは 1 段早く
    落とす必要が出ることがある（CSS だけで直す方式の既知の弱点）。 */
 
 /* 1 段目: AI 編集行数 / キャッシュ率 */
-@media (max-width: 1600px) {
+@container (max-width: 1285px) {
   #token-statusbar .tsb-seg-ailines,
   #token-statusbar .tsb-seg-cache {
     display: none !important;
@@ -436,7 +519,7 @@
 }
 
 /* 2 段目: バーンレート / トークン実数（ctx 使用率が残るので冗長度が高い） */
-@media (max-width: 1400px) {
+@container (max-width: 1085px) {
   #token-statusbar .tsb-seg-burn,
   #token-statusbar .tsb-seg-tok {
     display: none !important;
@@ -444,7 +527,7 @@
 }
 
 /* 3 段目: 経過時間 / effort */
-@media (max-width: 1200px) {
+@container (max-width: 885px) {
   #token-statusbar .tsb-seg-elapsed,
   #token-statusbar .tsb-seg-effort {
     display: none !important;
@@ -452,7 +535,7 @@
 }
 
 /* 4 段目: compact 残量（危険域は残す）+ 自由文 2 本の上限を圧縮 */
-@media (max-width: 1000px) {
+@container (max-width: 685px) {
   #token-statusbar .tsb-seg-compact:not(.tsb-crit) {
     display: none !important;
   }
@@ -461,7 +544,7 @@
 }
 
 /* 5 段目: 作業ラベル / レート制限（危険域は残す） */
-@media (max-width: 860px) {
+@container (max-width: 545px) {
   #token-statusbar .tsb-seg-label {
     display: none !important;
   }
@@ -470,63 +553,11 @@
   }
 }
 
-/* ── モバイル（640px 以下）: 監視・割り込み用に絞る ─────────────────
-   表示: #N / 状態 / providerアイコンのみ / ctx(%のみ) / cost(today短縮のみ) /
-         conn / fleet / …（詳細ボタン）
-   条件付き表示: compact / ratelimit は crit（90%超・発動間近）のときだけ出す
-   非表示: label / project / ailines / tok / cache / burn / elapsed */
-@media (max-width: 640px) {
-  #token-statusbar .tsb-seg-effort,
-  #token-statusbar .tsb-seg-label,
-  #token-statusbar .tsb-seg-project,
-  #token-statusbar .tsb-seg-ailines,
-  #token-statusbar .tsb-seg-tok,
-  #token-statusbar .tsb-seg-cache,
-  #token-statusbar .tsb-seg-burn,
-  #token-statusbar .tsb-seg-elapsed {
-    display: none !important;
-  }
-  /* compact / ratelimit: 危険域（.tsb-crit は TS 側で付与）だけ表示する */
-  #token-statusbar .tsb-seg-compact:not(.tsb-crit),
-  #token-statusbar .tsb-seg-ratelimit:not(.tsb-crit) {
-    display: none !important;
-  }
-  /* agent はチップ・モデル名・エージェント名を落として provider アイコン 1 個だけ残す */
-  #token-statusbar .tsb-seg-agent .card-provider-chip,
-  #token-statusbar .tsb-seg-agent .tsb-model,
-  #token-statusbar .tsb-seg-agent .tsb-agent-name {
-    display: none;
-  }
-  /* ctx / compact はゲージバー・1M バッジを落として % テキストだけにする */
-  #token-statusbar .tsb-seg-ctx .tsb-gauge,
-  #token-statusbar .tsb-seg-compact .tsb-gauge,
-  #token-statusbar .tsb-seg-ctx .tsb-1m {
-    display: none;
-  }
-  /* cost はセッション個別コストと通常 today を落とし、today 短縮表記 1 個に絞る。
-     today 不明（tsb-today-short 不在）のときはセッションコストを残す */
-  #token-statusbar .tsb-seg-cost:has(.tsb-today-short) .tsb-cost-session,
-  #token-statusbar .tsb-seg-cost .tsb-today {
-    display: none;
-  }
-  #token-statusbar .tsb-seg-cost .tsb-today-short {
-    display: inline;
-  }
-  #token-statusbar .tsb-seg-more {
-    display: inline-flex;
-  }
-  /* fleet を右端固定にして … を最右に並べる */
-  #token-statusbar .tsb-seg-fleet { margin-left: auto; }
-  #token-statusbar .tsb-seg-fleet + .tsb-seg-more { margin-left: 0; }
-  /* 残ったセグメントの padding を詰めて文字数を稼ぐ */
-  #token-statusbar .tsb-seg { padding: 0 6px; }
-}
-
 /* 詳細モーダル（モバイルで … タップで開く） */
 #tsb-detail-modal {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.45);
+  background: var(--ui-footer-overlay-bg);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -538,32 +569,32 @@
   max-height: 70vh;
   display: flex;
   flex-direction: column;
-  background: #1a1b26;
-  border: 1px solid #3b4261;
+  background: var(--ui-footer-panel-bg);
+  border: 1px solid var(--ui-footer-line-strong);
   border-top-left-radius: var(--radius-lg, 12px);
   border-top-right-radius: var(--radius-lg, 12px);
-  box-shadow: 0 -10px 40px rgba(0,0,0,.6);
+  box-shadow: 0 -10px 40px var(--ui-footer-modal-shadow);
   overflow: hidden;
 }
 .tsb-detail-header {
   display: flex;
   align-items: center;
   padding: 10px 14px;
-  border-bottom: 1px solid #292e42;
+  border-bottom: 1px solid var(--ui-footer-line);
   flex-shrink: 0;
 }
-.tsb-detail-title { font-weight: 700; color: #7aa2f7; font-size: var(--fs-body); }
+.tsb-detail-title { font-weight: 700; color: var(--ui-footer-accent); font-size: var(--fs-body); }
 .tsb-detail-close {
   margin-left: auto;
   background: transparent;
   border: none;
-  color: #c0caf5;
+  color: var(--ui-footer-text);
   font-size: var(--icon-btn-fs);
   cursor: pointer;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
 }
-.tsb-detail-close:hover { background: #2a2f45; }
+.tsb-detail-close:hover { background: var(--ui-footer-hover); }
 .tsb-detail-body {
   overflow-y: auto;
   padding: 6px 0;
@@ -573,18 +604,18 @@
   align-items: center;
   gap: var(--space-3);
   padding: 10px 14px;
-  border-bottom: 1px solid #20232f;
+  border-bottom: 1px solid var(--ui-footer-row-line);
   font-size: var(--fs-md);
 }
 .tsb-detail-row:last-child { border-bottom: none; }
 .tsb-detail-label {
-  color: #565f89;
+  color: var(--ui-footer-muted);
   font-size: var(--fs-xs);
   min-width: 64px;
   flex-shrink: 0;
 }
 .tsb-detail-value {
-  color: #c0caf5;
+  color: var(--ui-footer-text);
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -599,7 +630,7 @@
   margin-bottom: 4px;
   font-size: var(--fs-xs);
   font-weight: 700;
-  color: #7aa2f7;
+  color: var(--ui-footer-accent);
 }
 .tsb-segments-toggles {
   display: grid;
@@ -611,8 +642,12 @@
   align-items: center;
   gap: 6px;
   font-size: var(--fs-sm);
-  color: #c0caf5;
+  color: var(--ui-footer-text);
   cursor: pointer;
   padding: 2px 0;
 }
 .tsb-seg-toggle input { cursor: pointer; }
+
+/* Footer close controls retain their compact dimensions and dedicated palette. */
+.tsb-detail-close .ui-icon,
+.tsb-sent-close .ui-icon { width: 1em; height: 1em; }

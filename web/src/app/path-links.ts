@@ -196,7 +196,7 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
 export function renderPathPopupItems(popup, items, clientX, clientY) {
   for (const item of items) {
     const btn = document.createElement('button');
-    btn.className = 'path-link-popup-item';
+    btn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--menu-item path-link-popup-item';
     btn.textContent = item.icon + ' ' + (item.label || t(item.key));
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -284,9 +284,9 @@ export function openFileModal(filePath, sessionId, cwdOverride = '') {
   const overlay = document.createElement('div');
   overlay.className = 'aac-file-modal-overlay aac-wheel-overlay';
   const panel = document.createElement('div');
-  panel.className = 'aac-file-modal';
+  panel.className = 'ui-modal ui-modal--lg aac-file-modal';
   const body = document.createElement('div');
-  body.className = 'aac-file-modal-body';
+  body.className = 'ui-modal__body aac-file-modal-body';
   panel.appendChild(body);
   overlay.appendChild(panel);
   document.body.appendChild(overlay);
@@ -307,7 +307,7 @@ export function openFileModal(filePath, sessionId, cwdOverride = '') {
     // サブモニターへ置いて表示しておきたいとき用。モーダルを閉じ、同じファイルを別窓で開く
     // （作業メモのドロワーの 🗗 と同じ文言・同じ動き）。
     const popOut = document.createElement('button');
-    popOut.className = 'files-preview-toolbar-btn';
+    popOut.className = 'ui-button ui-button--quiet ui-button--compact files-preview-toolbar-btn';
     popOut.title = t('detached_open_in_window');
     popOut.setAttribute('aria-label', t('detached_open_in_window'));
     popOut.textContent = '🗗';
@@ -323,7 +323,7 @@ export function openFileModal(filePath, sessionId, cwdOverride = '') {
     toolbar.appendChild(popOut);
 
     const modalClose = document.createElement('button');
-    modalClose.className = 'files-preview-toolbar-btn';
+    modalClose.className = 'ui-button ui-button--quiet ui-button--compact files-preview-toolbar-btn';
     modalClose.title = t('files_preview_close_tooltip') || 'Close';
     modalClose.textContent = '✕';
     modalClose.addEventListener('click', () => closeFileModal());

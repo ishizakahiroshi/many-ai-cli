@@ -1,0 +1,116 @@
+/* Shared appearance. Behavior belongs to the existing screen/controller. */
+:root {
+  --ui-modal-sm: 420px;
+  --ui-modal-md: 620px;
+  --ui-modal-lg: 840px;
+  --ui-control-compact: var(--control-h-sm);
+  --ui-control-regular: var(--control-h-md);
+  --ui-primary-fg: #fff;
+  --ui-shade: #000;
+  --ui-warning-ink: #111;
+  --ui-primary-bg: color-mix(in srgb, var(--accent) 95%, var(--ui-shade));
+  --ui-primary-hover: color-mix(in srgb, var(--accent) 85%, var(--ui-shade));
+  --ui-shadow-modal: 0 14px 48px color-mix(in srgb, var(--bg-deep) 65%, transparent);
+  --ui-button-bg: var(--bg-elev);
+  --ui-button-fg: var(--text);
+  --ui-button-border: var(--line);
+  --ui-button-hover: var(--bg-hover);
+  --ui-modal-bg: var(--bg-elev);
+  --ui-input-bg: var(--bg-deep);
+  --ui-focus: var(--accent);
+}
+
+.ui-button {
+  --ui-control-size: var(--ui-control-regular);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--ui-control-regular);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--ui-button-border);
+  border-radius: var(--radius-md);
+  background: var(--ui-button-bg);
+  color: var(--ui-button-fg);
+  font-family: inherit;
+  font-size: var(--fs-md);
+  line-height: 1.3;
+  cursor: pointer;
+}
+.ui-button.ui-button--compact { --ui-control-size: var(--ui-control-compact); min-height: var(--ui-control-compact); }
+.ui-button.ui-button--regular { min-height: var(--ui-control-regular); }
+.ui-button.ui-button--primary { --ui-button-bg: var(--ui-primary-bg); --ui-button-fg: var(--ui-primary-fg); --ui-button-border: var(--ui-primary-bg); --ui-button-hover: var(--ui-primary-hover); font-weight: 600; }
+.ui-button.ui-button--secondary { --ui-button-bg: var(--bg-elev); }
+.ui-button.ui-button--danger { --ui-button-bg: var(--danger-bg); --ui-button-fg: var(--danger); --ui-button-border: var(--danger); --ui-button-hover: var(--danger-bg-hover); font-weight: 600; }
+.ui-button.ui-button--quiet { --ui-button-bg: transparent; --ui-button-border: transparent; --ui-button-fg: var(--muted); }
+.ui-button.ui-button--warn { --ui-button-bg: var(--warn-bg); --ui-button-fg: var(--warn-text); --ui-button-border: var(--warn); --ui-button-hover: color-mix(in srgb, var(--warn-bg), var(--warn) 20%); font-weight: 600; }
+.ui-button:hover:not(:disabled) { background: var(--ui-button-hover); }
+.ui-button:active:not(:disabled) { filter: brightness(0.94); }
+.ui-button:focus-visible, .ui-input:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
+.ui-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.ui-button[aria-busy="true"] { cursor: wait; }
+.ui-button.ui-button--icon { width: var(--ui-control-regular); padding: var(--space-1); flex-shrink: 0; }
+.ui-button.ui-button--compact.ui-button--icon { width: var(--ui-control-compact); }
+.ui-button.ui-button--touch { min-width: var(--touch-target); min-height: var(--touch-target); }
+/* メニューの 1 行。ボタンの既定（中央寄せ・内容幅）だと項目の文字が行ごとに中央へ寄る。
+   文字色は quiet の薄い色ではなく本文と同じ色にする（統一前のメニュー項目と同じ）。 */
+.ui-button.ui-button--menu-item { --ui-button-fg: var(--text); display: flex; width: 100%; justify-content: flex-start; text-align: left; }
+/* 常に見えているアイコンだけの操作の列（サイドバー上端など）。塗りの面を並べると列が色の帯になるため、
+   面は持たず、variant の意味はアイコンの色で表す（primary=accent の薄い面、danger=危険色のアイコン）。
+   横の余白も持たない（狭い正方形で余白を取るとアイコンが潰れる）。寸法は配置側が compact/coarse に合わせる。 */
+.ui-toolbar .ui-button {
+  --ui-button-bg: transparent;
+  --ui-button-border: transparent;
+  --ui-button-fg: var(--muted);
+  --ui-button-hover: var(--bg-hover);
+  padding: 0;
+}
+.ui-toolbar .ui-button:where(:hover:not(:disabled)) { --ui-button-fg: var(--text); }
+.ui-toolbar .ui-button.ui-button--primary { --ui-button-bg: var(--accent-soft); --ui-button-fg: var(--accent-text); --ui-button-hover: var(--accent-glow); }
+.ui-toolbar .ui-button.ui-button--danger { --ui-button-fg: var(--danger); --ui-button-hover: var(--danger-bg); }
+@media (pointer: coarse) {
+  :root { --ui-control-compact: var(--touch-target); --ui-control-regular: var(--touch-target); }
+  .ui-button { min-height: var(--touch-target); }
+  .ui-button.ui-button--compact, .ui-button.ui-button--regular { min-height: var(--touch-target); }
+  .ui-button.ui-button--icon, .ui-button.ui-button--compact.ui-button--icon { width: var(--touch-target); }
+}
+
+.ui-modal {
+  box-sizing: border-box;
+  width: min(var(--ui-modal-width, var(--ui-modal-sm)), calc(100vw - var(--space-8)));
+  max-width: calc(100vw - var(--space-8));
+  max-height: calc(100dvh - var(--space-8));
+  overflow: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--ui-modal-bg);
+  color: var(--text);
+  box-shadow: var(--ui-shadow-modal);
+}
+.ui-modal.ui-modal--sm { --ui-modal-width: var(--ui-modal-sm); }
+.ui-modal.ui-modal--md { --ui-modal-width: var(--ui-modal-md); }
+.ui-modal.ui-modal--lg { --ui-modal-width: var(--ui-modal-lg); }
+.ui-modal__title { color: var(--text); font-size: var(--fs-lg); font-weight: 700; }
+.ui-modal__body { min-width: 0; color: var(--muted); font-size: var(--fs-sm); line-height: 1.55; }
+.ui-modal__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); }
+.ui-input {
+  box-sizing: border-box;
+  min-height: var(--ui-control-regular);
+  padding: var(--space-1) var(--space-2);
+  border: 1px var(--ui-input-border-style, solid) var(--ui-input-border, var(--line));
+  border-radius: var(--radius-md);
+  background: var(--ui-input-bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+}
+.ui-input:disabled { opacity: 0.5; cursor: not-allowed; }
+.ui-input[aria-invalid="true"] { border-color: var(--danger); }
+/* Native inputs on iOS need 16px to avoid focus zoom. Reuse the existing stage. */
+@media (max-width: 640px), (pointer: coarse) {
+  .ui-input { font-size: var(--fs-lg); }
+}
+.ui-icon { display: inline-block; width: 16px; height: 16px; vertical-align: middle; flex-shrink: 0; }
+.ui-icon.ui-icon--md { width: 20px; height: 20px; }

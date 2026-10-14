@@ -15,14 +15,9 @@
 #server-modal[hidden] { display: none !important; }
 
 .server-modal-box {
-  width: min(560px, 94vw);
   max-height: 84vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
   overflow: hidden;
 }
 
@@ -34,21 +29,12 @@
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
-.server-modal-title { font-size: var(--fs-body); font-weight: 700; color: var(--text); }
+
 .server-modal-title::before { content: "🖥 "; }
 /* .server-modal-close の見た目は /styles/close-button.css（閉じるボタンの名簿）にある。 */
 .server-modal-icon-btn {
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  font-size: var(--fs-md);
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-family: inherit;
   margin-left: auto;
 }
-.server-modal-icon-btn:hover { background: var(--bg-soft); color: var(--text); }
 
 .server-modal-body {
   overflow-y: auto;
@@ -142,32 +128,7 @@
 
 .server-profile-actions { flex: 0 0 auto; display: flex; gap: var(--space-2); }
 
-.server-row-btn { font-size: var(--fs-xs); padding: 4px 11px; }
-
 /* ── 共通ボタン ── */
-.server-btn-primary,
-.server-btn-secondary {
-  cursor: pointer;
-  font-family: inherit;
-  border-radius: var(--radius-md);
-  padding: 6px 13px;
-  font-size: var(--fs-sm);
-  border: 1px solid var(--line);
-  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
-}
-.server-btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.server-btn-primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
-.server-btn-secondary {
-  background: transparent;
-  color: var(--text-soft);
-}
-.server-btn-secondary:hover { background: var(--bg-hover); color: var(--text); }
-.server-btn-primary:disabled,
-.server-btn-secondary:disabled { opacity: 0.5; cursor: default; }
 
 /* ── 追加フォーム ── */
 .server-add-section {
@@ -193,16 +154,8 @@
 .server-select {
   flex: 1 1 auto;
   min-width: 0;
-  background: var(--bg-deep);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  color: var(--text);
   padding: 6px 9px;
-  font-size: var(--fs-sm);
-  font-family: inherit;
 }
-.server-input:focus,
-.server-select:focus { outline: none; border-color: var(--accent); }
 
 .server-add-error {
   font-size: var(--fs-sm);
@@ -225,6 +178,16 @@
   padding: 10px 12px;
 }
 .server-fetch-box[hidden] { display: none; }
-.server-fetch-title { font-size: var(--fs-sm); font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.server-fetch-title {
+  margin-bottom: 4px;
+}
+.server-fetch-title:where(:not(.ui-modal__title)) {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
 .server-fetch-hint { font-size: var(--fs-xs); color: var(--text-soft); line-height: 1.45; margin-bottom: 8px; }
 .server-fetch-candidate { margin-top: 8px; }
+
+/* The existing header/body own padding and scrolling for these shells. */
+.server-modal-box.ui-modal { padding: 0; }

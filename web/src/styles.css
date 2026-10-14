@@ -1,3 +1,4 @@
+@import url("/styles/ui-components.css");
 @import url("/styles/settings.css");
 @import url("/styles/terminal.css");
 @import url("/styles/approval.css");
@@ -37,7 +38,6 @@
 .deferred-send-track { flex:1; height:3px; overflow:hidden; border-radius:999px; background:var(--line); }
 .deferred-send-progress { display:block; width:55%; height:100%; border-radius:inherit; background:var(--accent); animation:deferred-send-pulse 1.1s ease-in-out infinite; }
 #deferred-send-status[data-state="injected"] .deferred-send-progress, #deferred-send-status[data-state="acked"] .deferred-send-progress { width:100%; animation:none; }
-#deferred-send-cancel { border:0; border-radius:4px; padding:2px 6px; color:var(--text); background:var(--line); cursor:pointer; font:inherit; }
 #deferred-send-status[data-state="injected"] #deferred-send-cancel, #deferred-send-status[data-state="acked"] #deferred-send-cancel { display:none; }
 @keyframes deferred-send-pulse { 0%,100% { transform:translateX(-55%); } 50% { transform:translateX(90%); } }
 
@@ -258,7 +258,7 @@ body { font-family: "Segoe UI", sans-serif; margin: 0; background: var(--bg); co
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: var(--radius-sm); }
 ::-webkit-scrollbar-thumb:hover { background: var(--line-soft); }
 * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
-h1 { margin: 0; font-size: 1.25rem; }
+h1 { margin: 0; font-size: var(--fs-xl); }
 
 button,
 select,
@@ -349,7 +349,7 @@ header {
   background: rgba(34,197,94,0.08);
 }
 .session-chip.waiting {
-  color: #111;
+  color: var(--ui-warning-ink);
   border-color: var(--warn);
   background: var(--warn);
 }
@@ -365,70 +365,12 @@ header {
   background: currentColor;
 }
 #reconnect-btn {
-  background: transparent;
-  color: var(--accent-text);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  padding: 3px 9px;
-  font-size: var(--header-font-size);
-  cursor: pointer;
-  font-family: inherit;
-  min-height: var(--control-h-sm);
+  min-height: var(--ui-control-size);
 }
-#reconnect-btn:hover { background: var(--accent); color: var(--bg); }
+
 #reconnect-btn[hidden] { display: none; }
 .header-icon { width: 32px; height: 32px; vertical-align: middle; margin-right: 8px; }
 /* Usage ドロップダウンメニュー */
-.usage-menu {
-  position: relative;
-  display: inline-block;
-  margin-left: auto;
-}
-.usage-menu-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-height: var(--control-h-sm);
-  padding: 3px 9px;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  font-size: var(--header-font-size);
-  font-family: inherit;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
-}
-.usage-menu-btn:hover,
-.usage-menu-btn[aria-expanded="true"] {
-  color: var(--text);
-  border-color: var(--line);
-  background: var(--bg-elev);
-}
-.usage-menu-icon { flex-shrink: 0; }
-.usage-menu-chevron {
-  flex-shrink: 0;
-  opacity: 0.55;
-  transition: transform 0.15s;
-}
-.usage-menu-btn[aria-expanded="true"] .usage-menu-chevron {
-  transform: rotate(180deg);
-}
-.usage-dropdown {
-  position: fixed;
-  z-index: 1300;
-  min-width: 340px;
-  max-width: min(430px, calc(100vw - 12px));
-  max-height: calc(100vh - 70px);
-  background: var(--bg-elev, #1e2330);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
-  overflow: auto;
-}
-.usage-dropdown[hidden] { display: none !important; }
 .usage-dropdown-header {
   display: flex;
   align-items: center;
@@ -437,16 +379,10 @@ header {
   font-size: var(--fs-2xs);
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: var(--muted-2, #666);
+  color: var(--muted-2);
   border-bottom: 1px solid var(--line);
-  /* .usage-dropdown は overflow:auto。スクロールしても ✕ に手が届くようヘッダは貼り付ける。
-     z-index は .usage-info-bubble（2）より下にして、行の説明バブルを隠さない。 */
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--bg-elev, #1e2330);
+  background: var(--bg-elev);
 }
-/* .usage-dropdown-close の見た目と配置は /styles/close-button.css（閉じるボタンの名簿）にある。 */
 .usage-dropdown-item {
   display: flex;
   align-items: center;
@@ -459,7 +395,7 @@ header {
 }
 .usage-dropdown-item[hidden] { display: none !important; }
 .usage-dropdown-item:hover {
-  background: var(--bg-hover, rgba(255,255,255,0.06));
+  background: var(--bg-hover);
   color: var(--text);
 }
 /* 器（<span data-provider-icon>）。中の svg は provider-icon.ts が入れる。inline の svg が行の高さを
@@ -472,7 +408,7 @@ header {
   font-size: var(--fs-2xs);
   font-weight: 700;
   letter-spacing: 0.03em;
-  color: var(--muted-2, #777);
+  color: var(--muted-2);
   border-top: 1px solid var(--line);
 }
 .usage-dropdown-unavailable-row {
@@ -486,7 +422,7 @@ header {
   flex-shrink: 0;
   margin-right: 4px;
   font-size: var(--fs-2xs);
-  color: var(--muted-2, #777);
+  color: var(--muted-2);
   white-space: nowrap;
 }
 .usage-info {
@@ -495,9 +431,9 @@ header {
   height: 18px;
   margin-right: 9px;
   padding: 0;
-  border: 1px solid var(--muted-2, #777);
+  border: 1px solid var(--muted-2);
   border-radius: 50%;
-  color: var(--muted-2, #777);
+  color: var(--muted-2);
   background: transparent;
   font-family: inherit;
   font-size: var(--fs-2xs);
@@ -516,7 +452,7 @@ header {
 .usage-info-bubble {
   position: absolute;
   z-index: 2;
-  /* Pin to the row. .usage-dropdown is overflow:auto and min-width:340px;
+  /* Pin to the row inside the Settings scrolling pane;
      a 300px bubble with right:8px was clipped on the left (「CLI の」が消える). */
   left: 8px;
   right: 8px;
@@ -526,7 +462,7 @@ header {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   color: var(--text);
-  background: var(--bg-elev, #1e2330);
+  background: var(--bg-elev);
   box-shadow: 0 5px 14px rgba(0,0,0,0.35);
   font-size: var(--fs-2xs);
   line-height: 1.4;
@@ -554,9 +490,9 @@ header {
 }
 .usage-profile-head { min-width: 0; margin-bottom: 3px; }
 .usage-profile-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-.usage-profile-plan { margin-left: auto; color: var(--muted-2, #777); white-space: nowrap; }
+.usage-profile-plan { margin-left: auto; color: var(--muted-2); white-space: nowrap; }
 .usage-meter-line { min-width: 0; margin: 2px 0; }
-.usage-meter-label { min-width: 27px; flex-shrink: 0; color: var(--muted-2, #777); }
+.usage-meter-label { min-width: 27px; flex-shrink: 0; color: var(--muted-2); }
 .usage-meter {
   flex: 1;
   min-width: 55px;
@@ -565,21 +501,21 @@ header {
   border-radius: 99px;
   background: color-mix(in srgb, var(--line) 65%, transparent);
 }
-.usage-meter-fill { display: block; height: 100%; border-radius: inherit; background: var(--green, #22c55e); }
+.usage-meter-fill { display: block; height: 100%; border-radius: inherit; background: var(--green); }
 .usage-meter-line[data-usage-severity="warning"] .usage-meter-label,
-.usage-meter-line[data-usage-severity="warning"] .usage-meter-value { color: var(--warn, #f59e0b); }
-.usage-meter-line[data-usage-severity="warning"] .usage-meter-fill { background: var(--warn, #f59e0b); }
+.usage-meter-line[data-usage-severity="warning"] .usage-meter-value { color: var(--warn); }
+.usage-meter-line[data-usage-severity="warning"] .usage-meter-fill { background: var(--warn); }
 .usage-meter-line[data-usage-severity="danger"] .usage-meter-label,
-.usage-meter-line[data-usage-severity="danger"] .usage-meter-value { color: var(--danger, #e06c75); font-weight: 700; }
-.usage-meter-line[data-usage-severity="danger"] .usage-meter-fill { background: var(--danger, #e06c75); }
+.usage-meter-line[data-usage-severity="danger"] .usage-meter-value { color: var(--danger); font-weight: 700; }
+.usage-meter-line[data-usage-severity="danger"] .usage-meter-fill { background: var(--danger); }
 .usage-meter-value { width: 84px; flex-shrink: 0; text-align: right; color: var(--text); }
 .usage-meter-group--stale .usage-meter-fill { opacity: 0.55; }
 /* ログインを確認できないまま残っている旧値。--stale（リセット時刻を過ぎた窓）とは別の意味なので流用しない。 */
 .usage-meters--stale-auth .usage-meter-fill,
 .inline-usage-center--stale-auth .usage-meter-fill { opacity: 0.55; }
-.usage-stale-note { margin: 2px 0 4px; color: var(--warn, #f59e0b); font-size: var(--fs-2xs); line-height: 1.35; }
+.usage-stale-note { margin: 2px 0 4px; color: var(--warn); font-size: var(--fs-2xs); line-height: 1.35; }
 .usage-meter-meta { line-height: 1.35; }
-.usage-meter-meta--stale { color: var(--warn, #f59e0b); }
+.usage-meter-meta--stale { color: var(--warn); }
 .usage-profile-facts {
   display: flex;
   flex-wrap: wrap;
@@ -598,16 +534,16 @@ header {
   border-radius: var(--radius-sm);
   line-height: 1.35;
 }
-.usage-auth strong { color: var(--warn, #f59e0b); }
+.usage-auth strong { color: var(--warn); }
 .usage-auth span { color: var(--muted); }
 .usage-auth--unknown { border-color: color-mix(in srgb, var(--muted) 60%, transparent); }
 .usage-auth--unknown strong { color: var(--muted); }
 .usage-auth--checking {
   align-items: center;
   border-color: color-mix(in srgb, var(--line) 80%, transparent);
-  color: var(--muted-2, #777);
+  color: var(--muted-2);
 }
-.usage-auth--checking span { color: var(--muted-2, #777); }
+.usage-auth--checking span { color: var(--muted-2); }
 .usage-auth-spinner {
   width: 9px;
   height: 9px;
@@ -653,34 +589,23 @@ header {
   cursor: pointer;
 }
 .usage-auth-action:hover,
-.usage-auth-retry:hover { color: var(--text); background: var(--bg-hover, rgba(255,255,255,0.06)); }
+.usage-auth-retry:hover { color: var(--text); background: var(--bg-hover); }
 .usage-auth-retry:disabled { opacity: 0.55; cursor: wait; }
-.usage-profile-meta { margin-top: 3px; color: var(--muted-2, #777); font-size: var(--fs-2xs); }
+.usage-profile-meta { margin-top: 3px; color: var(--muted-2); font-size: var(--fs-2xs); }
 .usage-profile-meta--stale,
-.inline-usage-side .usage-profile-meta--stale { color: var(--warn, #f59e0b); }
+.inline-usage-side .usage-profile-meta--stale { color: var(--warn); }
 .usage-not-acquired {
   display: block;
-  color: var(--muted-2, #777);
+  color: var(--muted-2);
   line-height: 1.4;
   white-space: normal;
 }
 .usage-probe-button,
 .usage-probe-cancel {
   margin-left: auto;
-  padding: 2px 7px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  color: var(--text-soft, var(--muted));
-  background: transparent;
-  font: inherit;
-  cursor: pointer;
 }
-.usage-probe-button:hover,
-.usage-probe-cancel:hover { color: var(--text); background: var(--bg-hover, rgba(255,255,255,0.06)); }
-.usage-probe-button:disabled,
-.usage-probe-cancel:disabled { opacity: 0.55; cursor: wait; }
-.usage-probe-state { color: var(--muted-2, #777); }
-.usage-probe-error { margin-top: 3px; color: var(--danger, #e06c75); }
+.usage-probe-state { color: var(--muted-2); }
+.usage-probe-error { margin-top: 3px; color: var(--danger); }
 .usage-probe-dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -692,20 +617,12 @@ header {
 }
 .usage-probe-dialog-backdrop[hidden] { display: none; }
 .usage-probe-dialog {
-  width: min(390px, 100%);
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  color: var(--text);
-  background: var(--bg-elev, #1e2330);
-  box-shadow: 0 10px 34px rgba(0,0,0,0.45);
+  min-width: 0;
 }
-.usage-probe-dialog h2 { margin: 0 0 10px; font-size: var(--fs-lg); }
+.usage-probe-dialog h2 { margin: 0 0 10px; }
 .usage-probe-dialog p { margin: 7px 0; font-size: var(--fs-sm); line-height: 1.5; }
 .usage-probe-dialog label { display: flex; gap: 7px; align-items: center; margin: 13px 0; font-size: var(--fs-xs); }
 .usage-probe-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; }
-.usage-probe-dialog-actions button { padding: 6px 11px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; cursor: pointer; }
-.usage-probe-dialog-actions .primary { color: var(--button-fg, #fff); background: var(--accent, #4568a9); border-color: var(--accent, #4568a9); }
 
 /* C5: plan_session-handoff-board_c5_handoff-md.md — 引き継ぎプレビュー/一覧
    ダイアログと、経路1の通知バナー。usage-probe-dialog と同じ構造を流用する。 */
@@ -719,27 +636,19 @@ header {
   background: rgba(0,0,0,0.55);
 }
 .handoff-dialog {
-  width: min(560px, 100%);
-  max-height: min(80vh, 720px);
   display: flex;
   flex-direction: column;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  color: var(--text);
-  background: var(--bg-elev, #1e2330);
-  box-shadow: 0 10px 34px rgba(0,0,0,0.45);
 }
-.handoff-dialog.handoff-list-dialog { width: min(680px, 100%); min-width: 0; }
+.handoff-dialog.handoff-list-dialog { min-width: 0; }
 .handoff-dialog-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-shrink: 0; }
-.handoff-dialog h2 { margin: 0; font-size: var(--fs-lg); flex-shrink: 0; }
+.handoff-dialog h2 { margin: 0; flex-shrink: 0; }
 .handoff-dialog-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
-.handoff-dialog-source { margin: 0 0 8px; font-size: var(--fs-sm); color: var(--muted-2, #9aa4b2); word-break: break-all; }
+.handoff-dialog-source { margin: 0 0 8px; font-size: var(--fs-sm); color: var(--muted-2); word-break: break-all; }
 .handoff-dialog-prompt-label {
   display: block;
   margin: 0 0 6px;
   font-size: var(--fs-sm);
-  color: var(--muted-2, #9aa4b2);
+  color: var(--muted-2);
 }
 .handoff-dialog-markdown {
   display: block;
@@ -756,18 +665,19 @@ header {
   font-size: var(--fs-xs);
   line-height: 1.5;
   color: var(--text);
-  background: var(--bg, #14171f);
+  background: var(--bg);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
 }
 .handoff-dialog-provider-row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); }
-.handoff-provider-select { flex: 1; padding: 5px 7px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font: inherit; }
+.handoff-provider-select { flex: 1; }
+
 .handoff-list-search-bar {
   position: sticky;
   top: 0;
   z-index: 1;
   padding-bottom: 10px;
-  background: var(--bg-elev, #1e2330);
+  background: var(--bg-elev);
 }
 .handoff-list-search {
   display: block;
@@ -776,31 +686,31 @@ header {
   padding: 7px 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--bg, #14171f);
+  background: var(--bg);
   color: var(--text);
   font: inherit;
 }
-.handoff-list-search:focus { outline: 2px solid var(--accent, #3b82f6); outline-offset: 1px; }
+.handoff-list-search:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .handoff-list-results { display: flex; flex-direction: column; gap: 10px; }
-.handoff-list-group-label { font-size: var(--fs-xs); color: var(--muted-2, #9aa4b2); }
+.handoff-list-group-label { font-size: var(--fs-xs); color: var(--muted-2); }
 .handoff-list-rows { display: flex; flex-direction: column; gap: 6px; }
 .handoff-list-row { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .handoff-list-row-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; font-size: var(--fs-sm); }
-.handoff-list-row-id { color: var(--muted-2, #9aa4b2); flex-shrink: 0; }
+.handoff-list-row-id { color: var(--muted-2); flex-shrink: 0; }
 .handoff-list-row-provider { flex-shrink: 0; }
-.handoff-list-row-status { flex-shrink: 0; padding: 1px 6px; border-radius: 999px; background: var(--bg, #14171f); border: 1px solid var(--line); }
-.handoff-list-row-status[data-live="1"] { color: var(--accent-text, #93c5fd); border-color: var(--accent, #3b82f6); }
+.handoff-list-row-status { flex-shrink: 0; padding: 1px 6px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); }
+.handoff-list-row-status[data-live="1"] { color: var(--accent-text); border-color: var(--accent); }
 .handoff-list-row-successor,
-.handoff-list-row-predecessor { flex-shrink: 0; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted-2, #9aa4b2); cursor: pointer; }
+.handoff-list-row-predecessor { flex-shrink: 0; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted-2); cursor: pointer; }
 .handoff-list-row-successor:hover,
-.handoff-list-row-predecessor:hover { color: var(--accent-text, #93c5fd); border-color: var(--accent, #3b82f6); }
+.handoff-list-row-predecessor:hover { color: var(--accent-text); border-color: var(--accent); }
 .handoff-list-row-successor:focus-visible,
-.handoff-list-row-predecessor:focus-visible { outline: 2px solid var(--accent, #3b82f6); outline-offset: 1px; }
-.handoff-list-row-branch { flex-shrink: 0; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-2, #9aa4b2); font-family: Consolas, monospace; font-size: var(--fs-xs); }
-.handoff-list-row-time { flex-shrink: 0; color: var(--muted-2, #9aa4b2); font-size: var(--fs-xs); }
-.handoff-list-row-cwd { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-2, #9aa4b2); }
+.handoff-list-row-predecessor:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.handoff-list-row-branch { flex-shrink: 0; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-2); font-family: Consolas, monospace; font-size: var(--fs-xs); }
+.handoff-list-row-time { flex-shrink: 0; color: var(--muted-2); font-size: var(--fs-xs); }
+.handoff-list-row-cwd { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-2); }
 .handoff-list-row-preview { flex-shrink: 0; padding: 4px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; cursor: pointer; }
-.handoff-list-row-preview:hover { background: var(--accent, #3b82f6); border-color: var(--accent, #3b82f6); color: #fff; }
+.handoff-list-row-preview:hover { background: var(--accent); border-color: var(--accent); color: var(--ui-primary-fg); }
 
 .handoff-notify-banner {
   position: fixed;
@@ -809,19 +719,19 @@ header {
   z-index: 2100;
   width: min(340px, calc(100vw - 32px));
   padding: 12px 14px;
-  border: 1px solid var(--accent, #3b82f6);
+  border: 1px solid var(--accent);
   border-radius: var(--radius-md);
-  background: var(--bg-elev, #1e2330);
+  background: var(--bg-elev);
   color: var(--text);
   box-shadow: 0 10px 28px rgba(0,0,0,0.4);
 }
 .handoff-notify-body { font-size: var(--fs-sm); line-height: 1.5; margin-bottom: 10px; }
 /* 引き継ぎメモの進行・結果（子 plan: plan_derived-session-launch_c4_handoff-routes.md 内部 C2）。
    パスが入るので折り返しを許す。 */
-.handoff-notify-status { font-size: var(--fs-xs); line-height: 1.5; margin-bottom: 10px; color: var(--muted-2, #9aa4b2); word-break: break-all; }
+.handoff-notify-status { font-size: var(--fs-xs); line-height: 1.5; margin-bottom: 10px; color: var(--muted-2); word-break: break-all; }
 .handoff-notify-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
-.handoff-notify-action { padding: 5px 10px; border: 1px solid var(--accent, #3b82f6); border-radius: var(--radius-sm); background: var(--accent, #3b82f6); color: #fff; font: inherit; cursor: pointer; }
-.handoff-notify-note { padding: 5px 10px; border: 1px solid var(--border, #2b3242); border-radius: var(--radius-sm); background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.handoff-notify-action { padding: 5px 10px; border: 1px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent); color: var(--ui-primary-fg); font: inherit; cursor: pointer; }
+.handoff-notify-note { padding: 5px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--text); font: inherit; cursor: pointer; }
 .handoff-notify-note:disabled { opacity: 0.6; cursor: default; }
 .handoff-notify-dismiss { --close-btn-fs: var(--fs-lg); --close-btn-pad: 2px 7px; }
 
@@ -839,44 +749,30 @@ header {
   background: rgba(0,0,0,0.55);
 }
 .derive-dialog {
-  width: min(620px, 100%);
-  max-height: min(86vh, 780px);
   display: flex;
   flex-direction: column;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  color: var(--text);
-  background: var(--bg-elev, #1e2330);
-  box-shadow: 0 10px 34px rgba(0,0,0,0.45);
 }
-.derive-dialog h2 { margin: 0 0 10px; font-size: var(--fs-lg); flex-shrink: 0; }
+.derive-dialog h2 { margin: 0 0 10px; flex-shrink: 0; }
 .derive-dialog-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
-.derive-dialog-source { margin: 0 0 10px; font-size: var(--fs-sm); color: var(--muted-2, #9aa4b2); word-break: break-all; }
+.derive-dialog-source { margin: 0 0 10px; font-size: var(--fs-sm); color: var(--muted-2); word-break: break-all; }
 .derive-dialog-note-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .derive-dialog-note-entry { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .derive-dialog-note-copy { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
 .derive-dialog-note-kind { font-size: var(--fs-sm); color: var(--text); }
-.derive-dialog-note-path { font-size: var(--fs-xs); color: var(--muted-2, #9aa4b2); word-break: break-all; }
-.derive-dialog-note-view { flex-shrink: 0; padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; cursor: pointer; }
+.derive-dialog-note-path { font-size: var(--fs-xs); color: var(--muted-2); word-break: break-all; }
+.derive-dialog-note-view { flex-shrink: 0; }
 .derive-dialog-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 12px; margin-bottom: 12px; }
 .derive-field { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); }
 .derive-field[hidden] { display: none; }
-.derive-field-label { color: var(--muted-2, #9aa4b2); }
+.derive-field-label { color: var(--muted-2); }
 .derive-select,
 .derive-input {
   width: 100%;
   box-sizing: border-box;
-  padding: 5px 7px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-sm);
 }
+
 .derive-dialog-meta { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0 0 12px; font-size: var(--fs-sm); }
-.derive-dialog-meta dt { color: var(--muted-2, #9aa4b2); }
+.derive-dialog-meta dt { color: var(--muted-2); }
 .derive-dialog-meta dd { margin: 0; min-width: 0; word-break: break-all; }
 .derive-dialog-meta dt[hidden], .derive-dialog-meta dd[hidden] { display: none; }
 /* 開示の中身は spawn-confirm.ts の approvalDisplayHtml が組む（spawn 確認ダイアログと
@@ -887,9 +783,9 @@ header {
 .derive-same-tree[hidden] { display: none; }
 /* 「この役割では次回もこの段を使う」。段の select の真下に来るよう、欄の grid で
    1 行を占有する（列に並ぶと、どの欄にかかる記憶なのか読めない）。 */
-.derive-remember-permission { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; font-size: var(--fs-sm); color: var(--muted-2, #9aa4b2); cursor: pointer; }
+.derive-remember-permission { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; font-size: var(--fs-sm); color: var(--muted-2); cursor: pointer; }
 .derive-remember-permission[hidden] { display: none; }
-.derive-dialog-prompt-label { display: block; margin: 0 0 6px; font-size: var(--fs-sm); color: var(--muted-2, #9aa4b2); }
+.derive-dialog-prompt-label { display: block; margin: 0 0 6px; font-size: var(--fs-sm); color: var(--muted-2); }
 .derive-dialog-prompt {
   display: block;
   width: 100%;
@@ -904,16 +800,13 @@ header {
   font-size: var(--fs-xs);
   line-height: 1.5;
   color: var(--text);
-  background: var(--bg, #14171f);
+  background: var(--bg);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
 }
-.derive-dialog-error { margin: 10px 0 0; font-size: var(--fs-xs); color: var(--danger, #f87171); flex-shrink: 0; }
+.derive-dialog-error { margin: 10px 0 0; font-size: var(--fs-xs); color: var(--danger); flex-shrink: 0; }
 .derive-dialog-error[hidden] { display: none; }
 .derive-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 15px; flex-shrink: 0; }
-.derive-dialog-actions button { padding: 6px 11px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; cursor: pointer; }
-.derive-dialog-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
-.derive-dialog-actions .primary { color: var(--button-fg, #fff); background: var(--accent, #4568a9); border-color: var(--accent, #4568a9); }
 
 /* 子 plan: docs/local/plan_session-card-label-edit.md C2 — カード右クリック「ラベルを
    変更」の入力ダイアログ。入力欄は新規セッション画面のラベル欄と同じ .spawn-input を
@@ -929,41 +822,26 @@ header {
   background: rgba(0,0,0,0.55);
 }
 .label-rename-dialog {
-  width: min(380px, 100%);
   display: flex;
   flex-direction: column;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  color: var(--text);
-  background: var(--bg-elev, #1e2330);
-  box-shadow: 0 10px 34px rgba(0,0,0,0.45);
 }
-.label-rename-dialog h2 { margin: 0 0 10px; font-size: var(--fs-lg); }
+.label-rename-dialog h2 { margin: 0 0 10px; }
 .label-rename-dialog-input { width: 100%; box-sizing: border-box; }
-.label-rename-dialog-hint { margin: 6px 0 0; font-size: var(--fs-sm); color: var(--muted-2, #9aa4b2); }
-.label-rename-dialog-error { margin: 8px 0 0; font-size: var(--fs-xs); color: var(--danger, #f87171); }
+.label-rename-dialog-hint { margin: 6px 0 0; font-size: var(--fs-sm); color: var(--muted-2); }
+.label-rename-dialog-error { margin: 8px 0 0; font-size: var(--fs-xs); color: var(--danger); }
 .label-rename-dialog-error[hidden] { display: none; }
 .label-rename-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 15px; }
-.label-rename-dialog-actions button { padding: 6px 11px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; cursor: pointer; }
-.label-rename-dialog-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
-.label-rename-dialog-actions .primary { color: var(--button-fg, #fff); background: var(--accent, #4568a9); border-color: var(--accent, #4568a9); }
 
-/* Usage ドロップダウンの広幅レイアウト。900px 未満は既定の縦 1 カラムを保つ
-   （docs/local/plan_usage-panel-wide-layout.md C1〜C3）。 */
+/* Usage columns follow their Settings pane width, not the whole viewport. */
+.usage-dropdown-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 12px 16px;
+  align-items: start;
+}
+.usage-dropdown-col { min-width: 0; }
+.usage-dropdown-col > .usage-dropdown-section-title:first-child { border-top: 0; }
 @media (min-width: 900px) {
-  /* 2 列のメーターが最長ロケール（en の Remaining 100% / vi の Hàng tuần）でも
-     入る幅。足りない幅では .usage-meters が自動で 1 列へ戻る。 */
-  .usage-dropdown { max-width: min(840px, calc(100vw - 24px)); }
-  .usage-dropdown-columns {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px 16px;
-    align-items: start;
-  }
-  .usage-dropdown-col { min-width: 0; }
-  /* ヘッダ下の区切り線と重なるので左カラム先頭の見出しは上罫線を消す */
-  .usage-dropdown-col > .usage-dropdown-section-title:first-child { border-top: 0; }
   /* 1 プロファイルのメーター群（5h/7d 等）を横並びにする。メーター行と直下の
      usage-meter-meta の対応が分からなくならないよう、セル単位は group ごと。
      minmax(0, 1fr) だとセルが 1 行分の最小幅を下回り、行がセルからはみ出して
@@ -981,57 +859,7 @@ header {
   .usage-meters .usage-meter { min-width: 40px; }
 }
 
-/* ヘッダーの Web メニュー（Hub 自体への操作） */
-.web-menu {
-  position: relative;
-  display: inline-block;
-}
-.web-menu-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-height: var(--control-h-sm);
-  padding: 3px 9px;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  font-size: var(--header-font-size);
-  font-family: inherit;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
-}
-.web-menu-btn:hover,
-.web-menu-btn[aria-expanded="true"] {
-  color: var(--text);
-  border-color: var(--line);
-  background: var(--bg-elev);
-}
-/* 外部公開中はボタン全体を色付けし、ドロップダウンを開かなくても常時気づけるようにする。 */
-.web-menu-btn.expose-on {
-  color: var(--green-text);
-  border-color: color-mix(in srgb, var(--green-text) 35%, transparent);
-  background: color-mix(in srgb, var(--green-bg) 45%, transparent);
-}
-.web-menu-btn.expose-on:hover,
-.web-menu-btn.expose-on[aria-expanded="true"] {
-  color: var(--green-text);
-  border-color: var(--green-text);
-  background: color-mix(in srgb, var(--green-bg) 65%, transparent);
-}
-.web-menu-icon,
-.web-menu-chevron {
-  flex-shrink: 0;
-}
-.web-menu-chevron {
-  opacity: 0.55;
-  transition: transform 0.15s;
-}
-.web-menu-btn[aria-expanded="true"] .web-menu-chevron {
-  transform: rotate(180deg);
-}
+/* Settings Hub actions and exposure-state indicators. */
 .web-menu-lamp {
   stroke: currentColor;
   filter: none;
@@ -1041,46 +869,21 @@ header {
   stroke: var(--green);
   filter: drop-shadow(0 0 2px var(--green));
 }
-#web-menu-dropdown {
-  position: fixed;
-  z-index: 1300;
-  min-width: 220px;
-  max-width: min(320px, calc(100vw - 12px));
-  max-height: calc(100vh - 70px);
-  padding: 4px 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  background: var(--bg-elev, #1e2330);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
-}
-#web-menu-dropdown[hidden] { display: none !important; }
-#web-menu-dropdown .web-menu-item {
+#settings-hub-actions .web-menu-item {
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: var(--control-h-sm);
   gap: var(--space-2);
-  padding: 7px 12px;
-  color: var(--text-soft, var(--muted));
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  font: inherit;
-  font-size: var(--header-font-size);
-  line-height: 1.3;
   text-align: left;
-  white-space: nowrap;
-  cursor: pointer;
+  white-space: normal;
+  flex-wrap: wrap;
 }
-#web-menu-dropdown .web-menu-item:hover,
-#web-menu-dropdown .web-menu-item:focus-visible {
-  color: var(--text);
-  background: var(--bg-hover, rgba(255,255,255,0.06));
+/* Keep the embedded exposure control independent of its legacy header rule. */
+#settings-hub-actions #expose-btn {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
-#web-menu-dropdown .web-menu-item:disabled {
-  opacity: 0.6;
+#settings-hub-actions .web-menu-item:disabled {
   cursor: progress;
 }
 .web-menu-item-icon {
@@ -1102,57 +905,30 @@ header {
   font-size: var(--fs-sm);
   color: var(--muted-2, var(--muted));
 }
-.web-menu-item-state.is-ready { color: var(--green, #3fb950); }
-.web-menu-item-state.is-warn { color: var(--warn, #d29922); }
+.web-menu-item-state.is-ready { color: var(--green); }
+.web-menu-item-state.is-warn { color: var(--warn); }
 .web-menu-divider {
   height: 1px;
   margin: 4px 12px;
   background: var(--line);
 }
-/* 旧ドットは状態反映の互換フック。表示はメニュー行の文言と、閉じた Web ボタンのランプ。 */
-#web-menu-dropdown #expose-dot { display: none !important; }
-/* ヘッダーボタン時代の「ON 枠」はメニューではホバーと区別できないので外す。 */
-#web-menu-dropdown #expose-btn.expose-on,
-#web-menu-dropdown #expose-btn[aria-pressed="true"] {
-  border-color: transparent;
-  background: transparent;
-}
-#web-menu-dropdown #expose-btn:hover,
-#web-menu-dropdown #expose-btn:focus-visible {
-  color: var(--text);
-  background: var(--bg-hover, rgba(255,255,255,0.06));
-}
 /* 既存の狭幅用ヘッダールールより、メニュー内のラベル表示を優先する。 */
-#web-menu-dropdown #expose-btn span[data-i18n="expose_btn"],
-#web-menu-dropdown #bug-report-btn span:last-child { display: inline; }
+#settings-hub-actions #expose-btn span[data-i18n="expose_btn"],
+#settings-hub-actions #bug-report-btn span:last-child { display: inline; }
 
 /* シャットダウン・設定ボタン共通 */
 #shutdown-btn,
 #settings-btn {
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-family: inherit;
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
-  min-height: var(--control-h-sm);
+  min-height: var(--ui-control-size);
 }
-#shutdown-btn {
-  padding: 4px 8px;
-  font-size: var(--fs-lg);
-  line-height: 1;
-}
-#shutdown-btn:hover { color: #e57373; border-color: rgba(229,115,115,0.4); background: rgba(229,115,115,0.08); }
+
 #settings-btn {
-  padding: 4px 9px;
-  font-size: var(--header-font-size);
   white-space: nowrap;
 }
-#settings-btn:hover,
+
 #settings-btn[aria-expanded="true"] { color: var(--text); border-color: var(--line); background: var(--bg-elev); }
 .settings-chevron {
   flex-shrink: 0;
@@ -1161,11 +937,6 @@ header {
 }
 #settings-btn[aria-expanded="true"] .settings-chevron {
   transform: rotate(180deg);
-}
-
-@media (max-width: 720px) {
-  .usage-menu-btn span { display: none; }
-  .usage-menu-btn { padding: 3px 6px; }
 }
 
 /* moved to /styles/settings.css */
@@ -1193,16 +964,12 @@ header {
   max-width: var(--sidebar-max);
 }
 
-/* 左サイドバー下の固定フッター（設定 / Usage / Hub）。ヘッダーから移設（plan_settings-footer-buttons.md C1）。
-   #session-list を縦 flex にして、一覧が短くても下端へ寄せる。長いときは sticky で一覧の上に浮く。
-   aside の padding（8px）を負の margin で打ち消し、下端いっぱいに背景を敷く。
-   ドロップダウン（#usage-dropdown / #web-menu-dropdown）は起動時に body 直下へ移され position:fixed なので、
-   ここには置かない。位置は TS が決める。 */
+/* The session footer retains the single persistent Settings entry. */
 #session-list { display: flex; flex-direction: column; }
 #session-list > * { flex-shrink: 0; }
 .session-footer {
   position: sticky;
-  bottom: calc(var(--tsb-bottom-offset, 22px) + env(safe-area-inset-bottom));
+  bottom: 0;
   z-index: 2;
   margin: auto -8px -8px;
   padding: 6px;
@@ -1211,8 +978,6 @@ header {
   gap: 4px;
   background: var(--bg);
   border-top: 1px solid var(--line);
-  /* 幅が足りないときはラベルを隠してアイコンだけにする（下の @container）。 */
-  container-type: inline-size;
 }
 /* 設定画面が開いても、同じ左下の入口を前面に残して歯車から閉じられるようにする。 */
 @media (min-width: 721px) {
@@ -1220,48 +985,16 @@ header {
     z-index: 1001;
     bottom: 0;
   }
+  /* サイドバーは 220〜520px で可変だが、設定画面の左ナビは 260px 固定（settings.css の .settings-layout）。
+     フッターがナビより広いと右ペインへ食い込むので、左配置ではナビの幅までに収める。 */
+  body:not(.sidebar-right):has(#settings-panel:not([hidden])) .session-footer {
+    max-width: 260px;
+    margin-right: auto;
+  }
 }
-.session-footer > .usage-menu,
-.session-footer > .web-menu { flex: 1 1 0; min-width: 0; margin-left: 0; display: flex; }
 .session-footer > #settings-btn { flex: 1 1 0; min-width: 0; }
-/* 歯車は枠いっぱい、Usage の半円は枠の下半分だけだったので見た目の大きさが揃っていなかった。
-   外寸は 14px で固定し、メーターは同じ枠を使う円弧にする。 */
 .session-footer .footer-action-icon { width: 14px; height: 14px; flex-shrink: 0; }
-.session-footer #settings-btn,
-.session-footer .usage-menu-btn,
-.session-footer .web-menu-btn {
-  flex: 1 1 auto;
-  justify-content: center;
-  min-width: 0;
-  padding-left: 6px;
-  padding-right: 6px;
-}
-/* ドロップダウンは上向きに開く（位置は TS 側）。影も上向きにする。 */
-#usage-dropdown,
-#web-menu-dropdown { box-shadow: 0 -8px 20px rgba(0,0,0,0.4); }
-/* トークンバーは position:fixed で画面下端を覆う。端末列は --tsb-bottom-offset で避けている。
-   sticky の bottom だけで上げる（padding も足すと二重に空く）。
-   バーが無いときは下の 8px padding を残し、負の margin で下端へ敷く。 */
-@media (min-width: 721px) {
-  #session-list {
-    padding-bottom: max(0px, calc(8px - var(--tsb-bottom-offset, 22px)));
-  }
-}
-@container (max-width: 235px) {
-  .session-footer #settings-btn > span,
-  .session-footer .usage-menu-btn > span,
-  .session-footer .web-menu-btn > span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-}
+.session-footer #settings-btn { justify-content: center; min-width: 0; }
 @media (max-width: 720px) {
   .session-footer { display: none; }
 }
@@ -1324,11 +1057,6 @@ header {
 
   .dismiss-btn,
   .star-btn,
-  .session-history-reset-btn,
-  .session-board-open-btn,
-  .session-relay-open-btn,
-  .session-derive-open-btn,
-  .session-turn-end-bell-btn,
   .project-group-files-btn,
   .quick-cmd-btn,
   .spawn-btn-browse {
@@ -1392,48 +1120,36 @@ header {
   /* ☰ は header の子ではなく #app 直下（フロー外・visibility:hidden の影響を受けない）。
      ヘッダーが見えなくても左上に単独で浮く（ユーザー指定の「あるべき姿」）。 */
   #mobile-menu-btn {
-    position: fixed;
-    top: calc(6px + env(safe-area-inset-top));
-    left: calc(8px + env(safe-area-inset-left));
-    z-index: 1500;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 32px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    /* 本文の上に浮くフローティングボタン。下のターミナル文字を完全に潰さないよう半透明 + blur。 */
-    background: rgba(13, 15, 23, 0.7);
-    backdrop-filter: blur(4px);
-    color: var(--text);
-    font-size: var(--fs-lg);
-    cursor: pointer;
-  }
+  position: fixed;
+  top: calc(6px + env(safe-area-inset-top));
+  left: calc(8px + env(safe-area-inset-left));
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  /* 本文の上に浮くフローティングボタン。下のターミナル文字を完全に潰さないよう半透明 + blur。 */
+  backdrop-filter: blur(4px);
+}
 
   /* E: 入力欄FAB被り対策 — 旧来は右下固定の大型FABで送信ボタン/textareaに常時重なっていた
      (docs/mockups/mobile-ui-rework/index.html の「E. 入力欄FAB被り」に該当)。
      ◀▶ セッション送りボタンと同じ上段固定列（右端の空き 8px〜48px）へ移し、入力欄と物理的に重ならなくする。 */
   #mobile-spawn-btn {
-    position: fixed;
-    top: calc(6px + env(safe-area-inset-top));
-    right: calc(8px + env(safe-area-inset-right));
-    z-index: 1500;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 32px;
-    min-width: 36px;
-    min-height: 32px;
-    border: 1px solid var(--accent);
-    border-radius: var(--radius-md);
-    background: var(--accent);
-    color: #fff;
-    font-size: 1.2rem;
-    line-height: 1;
-    cursor: pointer;
-  }
+  position: fixed;
+  top: calc(6px + env(safe-area-inset-top));
+  right: calc(8px + env(safe-area-inset-right));
+  z-index: 1500;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  min-width: 36px;
+  min-height: 32px;
+}
+
   body.mobile-has-session #mobile-spawn-btn {
     display: none;
   }
@@ -1466,20 +1182,14 @@ header {
   }
 
   body.mobile-has-session:not(.mobile-home-view) #mobile-log-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    width: 32px;
-    height: 26px;
-    margin-left: auto;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: var(--bg-elev);
-    color: var(--text);
-    font-size: var(--fs-lg);
-    cursor: pointer;
-  }
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 26px;
+  margin-left: auto;
+}
 
   #mobile-drawer-backdrop {
     position: fixed;
@@ -1574,7 +1284,8 @@ header {
 }
 
 /* セッションカード */
-.card { position: relative; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 9px 42px 9px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; overflow: hidden; }
+/* 右上の ⋯ と × の幅だけタイトル行の右を空ける（重なるとタイトルが隠れる）。2 行目は .card-meta-row が取り戻す。 */
+.card { --card-actions-reserve: calc(2 * var(--ui-control-compact) + var(--space-1) + 10px); position: relative; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 9px var(--card-actions-reserve) 9px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; overflow: hidden; }
 .card:hover { border-color: var(--line-soft); background: var(--bg-deep); }
 .card.waiting { border-color: rgba(245,158,11,0.35); }
 .card.awaiting-approval { background: color-mix(in srgb, var(--warn-bg) 12%, var(--bg-elev)); }
@@ -1639,6 +1350,10 @@ header {
   padding: 0 6px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   color: color-mix(in srgb, var(--accent) 85%, var(--fg)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .card-children-toggle:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+/* 作業終了のベルが OFF のときだけ出す印。押すと ON に戻る。 */
+.card-bell-muted { flex-shrink: 0; cursor: pointer; user-select: none; font-size: var(--fs-xs); line-height: 1.4; opacity: 0.75; }
+.card-bell-muted:hover { opacity: 1; }
+.card-bell-muted:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .card.orchestration-parent { border-left: 2px solid color-mix(in srgb, var(--warn) 70%, transparent); }
 /* 状態は記号だけを表示し、名前は tooltip / aria-label へ残す。 */
 /* 箱は全状態で同じ正方形。awaiting-approval だけ幅を可変にすると、中の記号の送り幅で
@@ -1679,8 +1394,8 @@ header {
 .card-state-pill.error,
 .card-state-pill.disconnected { color: var(--danger); }
 /* 付帯状態は通常 state の色より優先する（standby 中の入力待ち等）。 */
-.card-state-pill.awaiting-approval { color: #111; background: var(--warn); border-radius: var(--radius-sm); }
-.card-state-pill.pending-spawn-confirm { color: #111; background: var(--perm); border-radius: var(--radius-sm); }
+.card-state-pill.awaiting-approval { color: var(--ui-warning-ink); background: var(--warn); border-radius: var(--radius-sm); }
+.card-state-pill.pending-spawn-confirm { color: var(--ui-warning-ink); background: var(--perm); border-radius: var(--radius-sm); }
 .card-state-pill.awaiting-input { color: var(--accent); }
 .card-state-pill.workflow-active { color: var(--muted-2); }
 .card-started-at { flex-shrink: 0; font-size: var(--fs-xs); color: var(--muted-2); margin-left: 3px; }
@@ -1691,7 +1406,7 @@ header {
 .card-ctx-fill.crit { background: var(--danger); }
 .card-ctx-pct { font-variant-numeric: tabular-nums; }
 .card-ctx-pct.crit { color: var(--danger); font-weight: 700; }
-.card-ctx-1m { font-size: 0.58rem; font-weight: 700; padding: 0 3px; border-radius: 3px; color: var(--accent); }
+.card-ctx-1m { font-size: var(--fs-2xs); font-weight: 700; padding: 0 3px; border-radius: var(--radius-sm); color: var(--accent); }
 .card-longproc { white-space: nowrap; color: var(--muted-2); border-radius: var(--radius-sm); padding: 0 5px; }
 /* 段階表示（longproc.ts の LongprocLevel）。severe = 15 分超、stalled = provider の
    transcript が伸びていない。stalled は「重いだけ」ではないので危険色にする。 */
@@ -1784,19 +1499,12 @@ header {
 .card-ctx-menu.open { display: block; }
 .card-ctx-menu button {
   width: 100%;
-  background: transparent;
-  border: 0;
-  color: var(--text);
   text-align: left;
-  padding: 6px 14px;
-  font-size: inherit;
-  cursor: pointer;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  font-family: inherit;
 }
-.card-ctx-menu button:hover { background: var(--bg-elev2, var(--bg-deep)); }
+
 .card-ctx-menu .ico { width: 18px; text-align: center; color: var(--muted); }
 .card-ctx-menu .kbd {
   margin-left: auto;
@@ -1811,26 +1519,13 @@ header {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 24px;
-  width: 24px;
-  height: 24px;
+  flex: 0 0 var(--ui-control-size);
+  width: var(--ui-control-size);
+  height: var(--ui-control-size);
   margin: 0 6px 0 -6px;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  cursor: pointer;
-  font-size: var(--fs-body);
-  line-height: 1;
-  padding: 0;
   align-self: center;
-  font-family: inherit;
 }
-#unified-tab-bar :is(.main-tab-add-btn, .tab-pane-placement-btn, .multi-detach-btn):hover {
-  border-color: var(--accent);
-  color: var(--accent-text);
-  background: var(--bg-elev2, var(--bg-deep));
-}
+
 #unified-tab-bar .multi-detach-btn svg {
   width: 16px;
   height: 16px;
@@ -1857,31 +1552,15 @@ header {
 .main-tab-add-menu.open { display: block; }
 .main-tab-add-menu button {
   width: 100%;
-  background: transparent;
-  border: 0;
-  color: var(--text);
   text-align: left;
-  padding: 6px 14px;
-  font-size: inherit;
-  cursor: pointer;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-family: inherit;
 }
-.main-tab-add-menu button:hover { background: var(--bg-elev2, var(--bg-deep)); }
+
 .main-tab-add-menu .ico { width: 16px; text-align: center; color: var(--muted); }
 
 /* moved to /styles/git.css */
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted);
-  font-size: var(--fs-md);
-  text-align: center;
-  padding: 20px;
-}
 .main-tab .ref {
   color: var(--green-text);
   font-family: Consolas, monospace;
@@ -1893,7 +1572,7 @@ header {
 /* meta-row（2行目）はアクション(☆↻×)が上段のみのため、右パディング(42px)分まで
    はみ出させてブランチバッジを右端近くまで寄せる（上段アクションとは縦に重ならない）。 */
 /* サマリーやバッジの出入りでも高さを変えない。最大のチップ（.72rem + 枠）を収める。 */
-.card-meta-row { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--space-2); height: 1.3rem; margin-top: 3px; margin-right: -30px; overflow: hidden; font-size: var(--fs-2xs); color: var(--muted-2); line-height: 1.4; }
+.card-meta-row { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--space-2); height: 1.3rem; margin-top: 3px; margin-right: calc(12px - var(--card-actions-reserve)); overflow: hidden; font-size: var(--fs-2xs); color: var(--muted-2); line-height: 1.4; }
 .card-meta-content { display: flex; align-items: center; gap: var(--space-2); flex: 1 1 0; min-width: 0; overflow: hidden; }
 .card-meta-extra { display: inline-flex; align-items: center; gap: var(--space-2); flex: 0 1 auto; min-width: 0; overflow: hidden; }
 .card-meta-extra:empty { display: none; }
@@ -1921,7 +1600,7 @@ header {
 /* 長い自動タイトルはブランチバッジを押し出さず … で省略（全文は data-tooltip で表示） */
 .card-label { flex: 1 1 auto; min-width: 0; font-size: var(--fs-sm); color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-note { flex: 1; min-width: 0; color: var(--muted); font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; }
-.card-end-reason { min-width: 0; flex-shrink: 1; font-size: var(--fs-xs); color: var(--danger, #ef4444); font-weight: 500; white-space: nowrap; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; }
+.card-end-reason { min-width: 0; flex-shrink: 1; font-size: var(--fs-xs); color: var(--danger); font-weight: 500; white-space: nowrap; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; }
 .card-actions {
   position: absolute;
   top: 6px;
@@ -1944,8 +1623,7 @@ header {
   opacity: 1;
 }
 .card-dir-icon:hover { opacity: 1; }
-.session-front-btn, .session-meta-btn { border: 0; background: transparent; color: var(--muted); padding: 2px; min-width: 20px; min-height: 20px; cursor: pointer; font: inherit; }
-.session-front-btn:hover, .session-meta-btn:hover { color: var(--warn); }
+
 .session-color-filters { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 0 8px; }
 .session-color-filter { border: 1px solid var(--line); border-radius: 999px; background: var(--bg-elev); color: var(--muted); cursor: pointer; padding: 2px 8px; font: inherit; font-size: var(--fs-xs); }
 .session-color-filter.active { border-color: var(--accent); color: var(--text); }
@@ -1978,8 +1656,8 @@ header {
   border: 1px solid var(--prov);
 }
 /* SVGアイコン: 淡色塗り + メイン色の線/文字（未知プロバイダはグレー） */
-.prov-shape  { fill: color-mix(in srgb, var(--prov, #6b7280) 10%, white); stroke: var(--prov, #6b7280); }
-.prov-letter { fill: var(--prov, #6b7280); }
+.prov-shape  { fill: color-mix(in srgb, var(--prov) 10%, white); stroke: var(--prov); }
+.prov-letter { fill: var(--prov); }
 
 /* プロバイダーチップ */
 .card-provider-chip {
@@ -2041,17 +1719,7 @@ header {
   font-size: var(--fs-2xs);
   color: var(--muted-2);
 }
-.slash-picker-icon-btn {
-  background: transparent;
-  border: none;
-  color: var(--muted-2);
-  cursor: pointer;
-  font-size: var(--fs-body);
-  padding: 2px 5px;
-  border-radius: var(--radius-sm);
-  line-height: 1;
-}
-.slash-picker-icon-btn:hover { background: var(--accent-soft); color: var(--accent); }
+
 .slash-picker-search {
   margin: 7px 10px 4px;
   padding: 5px 9px;
@@ -2104,60 +1772,39 @@ header {
 /* カード閉じるボタン */
 .dismiss-btn {
   position: static;
-  background: none;
   appearance: none;
   -webkit-appearance: none;
-  color: var(--muted);
-  border: none;
-  border-radius: var(--radius-sm);
-  width: 18px;
-  height: 18px;
-  font-size: var(--fs-md);
-  line-height: 18px;
+  width: var(--ui-control-size);
+  height: var(--ui-control-size);
   text-align: center;
-  padding: 0;
-  cursor: pointer;
-  display: block;
 }
-.dismiss-btn:hover { color: var(--danger); }
+
 /* C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): 子起動の
    確認待ちを抱えたセッション（グループ）は × を押せない見た目にする。 */
-.dismiss-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.dismiss-btn:disabled:hover { color: var(--muted); }
 
 /* お気に入りボタン */
-.star-btn,
-.session-history-reset-btn,
-.session-board-open-btn,
-.session-relay-open-btn,
-.session-derive-open-btn,
-.session-turn-end-bell-btn {
-  position: static;
-  background: none;
-  appearance: none;
-  -webkit-appearance: none;
-  color: var(--muted);
-  border: none;
-  border-radius: var(--radius-sm);
-  width: 18px;
-  height: 18px;
-  font-size: var(--fs-sm);
-  line-height: 18px;
-  text-align: center;
-  padding: 0;
-  cursor: pointer;
-  display: block;
+.star-btn {
+position: static;
+appearance: none;
+-webkit-appearance: none;
+width: 18px;
+height: 18px;
+text-align: center;
+display: block;
+background: none;
+color: var(--muted);
+border: none;
+border-radius: var(--radius-sm);
+font-size: var(--fs-sm);
+line-height: 18px;
+padding: 0;
+cursor: pointer;
 }
 .star-btn.starred { color: var(--warn); }
-.star-btn:hover { color: var(--warn); }
-.session-history-reset-btn:hover { color: var(--accent-text); }
-.session-board-open-btn:hover { color: var(--accent-text); }
-.session-relay-open-btn:hover { color: var(--accent-text); }
-.session-derive-open-btn:hover { color: var(--accent-text); }
-/* ベルは OFF（ミュート）を色だけでなく絵文字とラベルでも示す（title/aria-label 側）。
-   ここでは OFF 時に少し薄くして「鳴らない」を視覚的にも添える。 */
-.session-turn-end-bell-btn:hover { color: var(--accent-text); }
-.session-turn-end-bell-btn.muted { opacity: 0.55; }
+.star-btn:hover {
+color: var(--warn);
+}
+
 
 /* ドラッグ状態 */
 .card.dragging { opacity: 0.4; cursor: grabbing; }
@@ -2167,7 +1814,6 @@ header {
 .project-group-header:active { cursor: grabbing; }
 
 /* moved to /styles/approval.css */
-.action-dismiss-btn:hover { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
 
 /* 画像転送パネル */
 #attach-panel {
@@ -2253,7 +1899,7 @@ header {
   background: var(--danger-bg);
   color: var(--danger);
   border: none;
-  font-size: 9px;
+  font-size: var(--fs-2xs);
   line-height: 16px;
   text-align: center;
   padding: 0;
@@ -2293,17 +1939,9 @@ header {
 .attach-file-chip:hover .attach-thumb-remove { display: flex; }
 
 #attach-clear-btn {
-  background: transparent;
-  color: var(--muted-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 2px 7px;
-  font-size: var(--fs-sm);
-  cursor: pointer;
   flex-shrink: 0;
   align-self: center;
 }
-#attach-clear-btn:hover { color: var(--danger); border-color: var(--danger-bg); background: var(--danger-bg); }
 
 #session-inline-usage {
   display: flex;
@@ -2360,10 +1998,10 @@ header {
   flex: 0 0 auto;
   margin-left: 4px;
   padding: 0 3px;
-  border: 1px solid color-mix(in srgb, var(--warn, #f59e0b) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 60%, transparent);
   border-radius: var(--radius-sm);
-  color: var(--warn, #f59e0b);
-  font-size: 0.56rem;
+  color: var(--warn);
+  font-size: var(--fs-2xs);
   line-height: 1.3;
   white-space: nowrap;
   cursor: help;
@@ -2391,31 +2029,15 @@ header {
 
 #agent-log-btn {
   margin-left: 0;
-  background: transparent;
-  color: var(--muted-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 2px 7px;
-  font-size: var(--fs-sm);
-  cursor: pointer;
   flex-shrink: 0;
   align-self: center;
 }
-#agent-log-btn:hover { color: var(--fg); border-color: var(--muted-2); background: var(--bg-2); }
 
 #attach-copy-cwd-btn {
   margin-left: 2px;
-  background: transparent;
-  color: var(--muted-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 2px 7px;
-  font-size: var(--fs-sm);
-  cursor: pointer;
   flex-shrink: 0;
   align-self: center;
 }
-#attach-copy-cwd-btn:hover { color: var(--fg); border-color: var(--muted-2); background: var(--bg-2); }
 
 .agent-log-popup {
   position: fixed;
@@ -2436,23 +2058,13 @@ header {
   border-radius: var(--radius-sm);
   background: var(--bg-deep);
   color: var(--fg);
-  font: 0.72rem/1.35 var(--mono, ui-monospace, monospace);
+  font: var(--fs-xs)/1.35 var(--mono, ui-monospace, monospace);
   overflow-wrap: anywhere;
 }
 .agent-log-popup-actions { display: flex; gap: 6px; margin-top: 9px; }
-.agent-log-popup-actions button {
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--bg-2);
-  color: var(--fg);
-  font-size: var(--fs-xs);
-  cursor: pointer;
-}
-.agent-log-popup-actions button:hover { border-color: var(--accent); color: var(--accent-text); }
 
 @media (max-width: 600px) {
-  #agent-log-btn { font-size: 0; padding: 4px 7px; }
+
   #agent-log-btn::first-letter { font-size: var(--fs-lg); }
 }
 
@@ -2469,15 +2081,10 @@ header {
 #about-panel[hidden] { display: none; }
 
 .about-dialog {
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  width: 680px;
-  max-height: 80vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
 }
+.about-dialog.ui-modal { padding: 0; }
 
 .about-title-bar {
   display: flex;
@@ -2523,15 +2130,8 @@ header {
 .about-github-btns { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .about-gh-btn {
   display: inline-block;
-  padding: 4px 12px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-xl);
-  font-size: var(--fs-sm);
-  color: var(--text);
   text-decoration: none;
-  background: transparent;
 }
-.about-gh-btn:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); }
 
 /* メディアライトボックス */
 #image-lightbox {
@@ -2553,7 +2153,7 @@ header {
   box-shadow: 0 0 60px rgba(0, 0, 0, 0.9);
 }
 #image-lightbox video {
-  background: #000;
+  background: var(--ui-shade);
   cursor: default;
 }
 
@@ -2657,7 +2257,6 @@ header {
 /* moved to /styles/spawn.css */
 
 /* moved to /styles/settings.css */
-.confirm-btn.warn:hover { background: var(--warn); color: var(--bg); }
 
 /* ============================================================
    プロジェクトグループ
@@ -2667,7 +2266,7 @@ header {
   display: flex; align-items: center; gap: var(--space-2);
   padding: 4px 8px; cursor: grab;
   background: var(--bg-elev); border-radius: var(--radius-sm);
-  font-size: 0.82em; font-weight: bold; color: var(--muted);
+  font-size: var(--fs-sm); font-weight: bold; color: var(--muted);
   user-select: none;
 }
 .project-group-header:hover { background: var(--line); }
@@ -2692,7 +2291,7 @@ header {
 .project-group-header--collapsed .project-group-chevron { transform: rotate(-90deg); }
 .project-group-body { padding-left: 8px; }
 .project-group-body.hidden { display: none; }
-/* リポ名は操作部品を除いた残りの幅を使い、長い名前だけ省略する。 */
+/* 名前は固定幅の状態チップ・操作ボタンを除いた残りを使う。 */
 .project-group-title { display: flex; align-items: center; gap: var(--space-2); flex: 1 1 0; min-width: 0; }
 .project-group-name { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .project-group-meta { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; flex-shrink: 0; }
@@ -2700,28 +2299,42 @@ header {
 .group-status-chips .status-chip { min-width: 19px; padding: 1px 4px; font-size: var(--fs-xs); }
 .project-group-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; opacity: 1; transition: opacity 0.15s; }
 .project-group-grid-btn {
-  background: none;
   appearance: none;
   -webkit-appearance: none;
-  color: var(--muted);
-  border: none;
-  border-radius: var(--radius-sm);
-  width: 18px;
-  height: 18px;
-  font-size: var(--fs-sm);
-  line-height: 18px;
+  width: var(--ui-control-size);
+  height: var(--ui-control-size);
   text-align: center;
-  padding: 0;
-  cursor: pointer;
-  display: block;
-  transition: color 0.12s;
 }
-.project-group-grid-btn:hover { color: var(--accent-text); }
+
+/* 見出し名にマウスを載せたときの吹き出し（project-group-path-popover.ts）。名前の下に固定して出し、
+   中の 📋 でフォルダのフルパスをコピーできる。 */
+.project-path-pop {
+  position: fixed; z-index: 2100; display: none;
+  max-width: min(460px, calc(100vw - 12px));
+  padding: 6px 8px;
+  border: 1px solid var(--line-soft); border-radius: var(--radius-sm);
+  background: var(--bg-elev); color: var(--text);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.32);
+  font-size: var(--fs-sm); line-height: 1.4;
+}
+.project-path-pop-name { font-weight: bold; overflow-wrap: anywhere; }
+.project-path-pop-row { display: flex; align-items: flex-start; gap: 6px; margin-top: 2px; }
+.project-path-pop-path {
+  flex: 1 1 auto; min-width: 0; color: var(--muted);
+  font: var(--fs-xs)/1.4 var(--mono, ui-monospace, monospace);
+  overflow-wrap: anywhere; user-select: text;
+}
+.project-path-pop-copy {
+  flex-shrink: 0; padding: 0 4px;
+  background: none; border: 1px solid transparent; border-radius: var(--radius-sm);
+  font-size: var(--fs-sm); line-height: 1.4; cursor: pointer;
+}
+.project-path-pop-copy:hover { border-color: var(--line); background: var(--line); }
 .project-group--pinned > .project-group-header { border-left: 2px solid var(--warn); padding-left: 6px; }
 .status-chip { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 26px; font-variant-numeric: tabular-nums; font-size: var(--fs-sm); font-weight: bold; padding: 2px 8px; border-radius: var(--radius-sm); line-height: 1.4; }
 .status-chip--running { color: var(--badge-running-text); background: color-mix(in srgb, var(--badge-running-bg) 25%, transparent); border: 1px solid color-mix(in srgb, var(--badge-running-text) 35%, transparent); }
 .status-chip--waiting { color: var(--warn-text);          background: color-mix(in srgb, var(--warn-bg) 25%, transparent);         border: 1px solid color-mix(in srgb, var(--warn-text) 35%, transparent); }
-.status-chip--attention { color: #111; background: var(--warn); border-color: var(--warn); }
+.status-chip--attention { color: var(--ui-warning-ink); background: var(--warn); border-color: var(--warn); }
 .status-chip--standby { color: var(--badge-standby-text); background: color-mix(in srgb, var(--badge-standby-bg) 25%, transparent); border: 1px solid color-mix(in srgb, var(--badge-standby-text) 35%, transparent); }
 .status-chip--blink { animation: status-chip-blink 2.5s ease-in-out infinite; }
 @keyframes status-chip-blink {
@@ -2759,7 +2372,6 @@ header {
 /* moved to /styles/terminal.css */
 
 /* moved to /styles/settings.css */
-}
 
 /* ============================================================
    Git Graph View (C3)
@@ -2767,11 +2379,6 @@ header {
    - mock: docs/local/mockup-git-graph.html
    ============================================================ */
 /* moved to /styles/git.css */
-  }
-  .git-commit-action-spacer {
-    display: none;
-  }
-}
 
 /* ============================================================
    C5: サイドバー並び替え + ★お気に入り
@@ -2780,7 +2387,7 @@ header {
 
 /* P<n> バッジ: スロット内セッションのカード右上に表示 */
 .sc-pane-badge {
-  font-size: 0.58rem;
+  font-size: var(--fs-2xs);
   color: var(--green);
   font-weight: 700;
   float: right;
@@ -3099,16 +2706,8 @@ button.orchestration-relay-session.active {
 }
 #relay-dialog[hidden] { display: none !important; }
 .relay-dialog-box {
-  width: min(720px, 100%);
-  max-height: calc(100dvh - 32px);
   overflow-y: auto;
   margin: auto 0;
-  padding: 16px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-lg);
-  background: var(--bg-elev);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
-  color: var(--text);
 }
 .relay-dialog-header,
 .relay-dialog-actions {
@@ -3118,7 +2717,7 @@ button.orchestration-relay-session.active {
   gap: var(--space-2);
 }
 .relay-dialog-header { margin-bottom: 12px; }
-.relay-dialog-header h2 { margin: 0; font-size: var(--fs-lg); }
+.relay-dialog-header h2 { margin: 0; }
 /* .relay-dialog-close の見た目は /styles/close-button.css にある。 */
 .relay-dialog-target {
   display: flex;
@@ -3141,6 +2740,8 @@ button.orchestration-relay-session.active {
 .relay-dialog-field select,
 .relay-dialog-field textarea {
   width: 100%;
+}
+.relay-dialog-field input:where([type="radio"]) {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--bg);
@@ -3149,9 +2750,7 @@ button.orchestration-relay-session.active {
   font-size: var(--fs-sm);
 }
 .relay-dialog-field textarea { resize: vertical; min-height: 52px; }
-.relay-dialog-field input:focus,
-.relay-dialog-field select:focus,
-.relay-dialog-field textarea:focus { border-color: var(--accent); }
+.relay-dialog-field input:where([type="radio"]):focus { border-color: var(--accent); }
 .relay-dialog-candidates { margin-top: 8px; }
 .relay-dialog-section-title {
   margin-top: 14px;
@@ -3165,13 +2764,8 @@ button.orchestration-relay-session.active {
 .relay-role-table .relay-role-model {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text);
-  padding: 5px 6px;
-  font-size: var(--fs-sm);
 }
+
 .relay-role-table .relay-role-model:disabled { opacity: 0.45; cursor: not-allowed; }
 /* 権限の段の列。段の名前は説明込みで長い（「有人 — 承認はあなたが答えます」）ので、
    列の幅に収めてはみ出さないようにする。 */
@@ -3209,20 +2803,10 @@ button.orchestration-relay-session.active {
 }
 .relay-start-button {
   margin-left: auto;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--fs-xs);
-  padding: 4px 8px;
 }
-.relay-start-button:hover { background: var(--accent); color: var(--bg); }
-.relay-start-button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 @media (max-width: 560px) {
-  .relay-dialog-box { max-height: calc(100dvh - 16px); padding: 12px; }
+  .relay-dialog-box { max-height: calc(100dvh - 16px); }
   .relay-dialog-options { grid-template-columns: 1fr; gap: var(--space-2); }
   .relay-role-table { font-size: var(--fs-xs); }
   .relay-role-table th,
@@ -3231,7 +2815,19 @@ button.orchestration-relay-session.active {
 }
 
 /* モバイル行の「先頭へ」。スマホには D&D が無いので優先度の唯一の入口になる。 */
-.mh-front-btn { cursor: pointer; user-select: none; font-size: var(--fs-md); line-height: 1;
-  padding: 4px 7px; border-radius: 8px; border: 1px solid var(--line);
-  color: var(--fg); background: transparent; }
-.mh-front-btn:active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.mh-front-btn {
+  user-select: none;
+}
+.mh-front-btn {
+cursor: pointer;
+font-size: var(--fs-md);
+line-height: 1;
+padding: 4px 7px;
+border-radius: 8px;
+border: 1px solid var(--line);
+color: var(--fg);
+background: transparent;
+}
+.mh-front-btn:active {
+background: color-mix(in srgb, var(--accent) 18%, transparent);
+}

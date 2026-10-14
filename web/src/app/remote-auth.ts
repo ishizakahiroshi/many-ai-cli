@@ -28,10 +28,8 @@ const jsonInit = (bodyObj: unknown): RequestInit => ({
 // ---- B: 全アクセス失効 ----
 async function revokeAll(btn: HTMLElement): Promise<void> {
   const ok = await appConfirm({
-    title: t('revoke_all_confirm_title'),
+    action: 'revoke',
     message: t('revoke_all_confirm_message'),
-    confirmText: t('revoke_all_confirm_ok'),
-    cancelText: t('cancel'),
     kind: 'danger',
   });
   if (!ok) return;
@@ -94,10 +92,8 @@ async function setPIN(btn: HTMLElement): Promise<void> {
 
 async function clearPIN(btn: HTMLElement): Promise<void> {
   const ok = await appConfirm({
-    title: t('settings_remote_pin_clear_title'),
+    action: 'clear',
     message: t('settings_remote_pin_clear_msg'),
-    confirmText: t('settings_remote_pin_clear'),
-    cancelText: t('cancel'),
     kind: 'warn',
   });
   if (!ok) return;

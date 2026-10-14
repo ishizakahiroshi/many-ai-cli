@@ -8,7 +8,7 @@
 //
 // デスクトップは入力欄・添付欄の帯（#input-bar-outer）に高さの余裕があるので、バーを
 // #display-stack の外側までそのぶん下げ、ターミナル本文を一切覆わないようにする。
-// 下げ幅は入力欄帯の実測（token-statusbar 用の padding は除く＝ステータスバーは覆わない）。
+// 下げ幅は入力欄帯の実測（ステータスバーは入力欄帯の下に並ぶので覆わない）。
 // モバイルは approval.css 側で position:relative に戻るため、この変数は効かない。
 //
 // 右/左カラム（body.approval-dock-right / -left。状態は ui-side.ts の uiSideApproval）では
@@ -35,7 +35,7 @@ export function initApprovalDock(): void {
       document.documentElement.style.setProperty(SHIFT_VAR, '0px');
       return;
     }
-    // 入力欄帯の下端から token-statusbar 用の padding を引いた位置がバー下端の狙い。
+    // 入力欄帯の下端から帯の padding-bottom を引いた位置がバー下端の狙い（フッターは帯の下に並ぶので覆わない）。
     const pad = parseFloat(getComputedStyle(outer).paddingBottom) || 0;
     const targetBottom = outer.getBoundingClientRect().bottom - pad;
     const shift = Math.max(0, Math.round(targetBottom - stack.getBoundingClientRect().bottom));

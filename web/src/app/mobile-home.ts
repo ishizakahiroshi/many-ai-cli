@@ -176,7 +176,7 @@ function buildSessionRow(id: number, compact = false): HTMLElement {
   const bucket = getSessionBucket(id);
   const row = document.createElement('button');
   row.type = 'button';
-  row.className = `mh-session-row mh-session-row--${bucket}${compact ? ' mh-session-row--compact' : ''}`;
+  row.className = `ui-button ui-button--secondary ui-button--regular mh-session-row mh-session-row--${bucket}${compact ? ' mh-session-row--compact' : ''}`;
   row.dataset.sessionId = String(id);
   row.classList.toggle('is-active', id === activeSessionId);
 
@@ -209,7 +209,7 @@ function buildDrawerSessionEntry(id: number): HTMLElement {
   entry.appendChild(buildSessionRow(id, true));
   const place = document.createElement('button');
   place.type = 'button';
-  place.className = 'mobile-drawer-session-place';
+  place.className = 'ui-button ui-button--secondary ui-button--regular mobile-drawer-session-place';
   place.textContent = '＋';
   const translated = t('pane_show_in_pane');
   place.setAttribute('aria-label', translated === 'pane_show_in_pane' ? 'ペインに表示' : translated);
@@ -243,7 +243,7 @@ function buildMonitoringRow(id: number): HTMLElement {
   const s = sessions.get(id);
   const row = document.createElement('button');
   row.type = 'button';
-  row.className = `mh-monitor-row mh-monitor-row--${bucket}${s?.color ? ` mh-monitor-row--${s.color}` : ''}`;
+  row.className = `ui-button ui-button--secondary ui-button--regular mh-monitor-row mh-monitor-row--${bucket}${s?.color ? ` mh-monitor-row--${s.color}` : ''}`;
   row.dataset.sessionId = String(id);
   row.classList.toggle('is-active', id === activeSessionId);
   row.setAttribute('aria-label', `${sessionTitle(s)}, ${providerModelText(id)}, ${statusChipText(bucket)}`);
@@ -327,7 +327,7 @@ function buildViewSwitchSection(): HTMLElement | null {
     entry.className = 'mobile-drawer-view-entry';
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'mobile-drawer-view-btn';
+    btn.className = 'ui-button ui-button--secondary ui-button--regular mobile-drawer-view-btn';
     if (tab.classList.contains('active')) btn.classList.add('active');
     btn.innerHTML = tab.innerHTML;
     btn.addEventListener('click', () => {
@@ -339,7 +339,7 @@ function buildViewSwitchSection(): HTMLElement | null {
     if (tabName && tabName !== 'multi') {
       const place = document.createElement('button');
       place.type = 'button';
-      place.className = 'mobile-drawer-pane-place';
+      place.className = 'ui-button ui-button--secondary ui-button--regular mobile-drawer-pane-place';
       place.textContent = '＋';
       const translated = t('pane_show_in_pane');
       place.setAttribute('aria-label', translated === 'pane_show_in_pane' ? 'ペインに表示' : translated);
@@ -364,6 +364,7 @@ function buildSearchInput(value: string, onChange: (value: string) => void, plac
   icon.setAttribute('aria-hidden', 'true');
   icon.textContent = '⌕';
   const input = document.createElement('input');
+  input.classList.add('ui-input');
   input.type = 'search';
   input.value = value;
   input.placeholder = t(placeholderKey);
@@ -394,7 +395,7 @@ function ensurePendingOnlyToggle(parent: HTMLElement): void {
     toggle = document.createElement('button');
     toggle.id = 'mobile-pending-only-toggle';
     toggle.type = 'button';
-    toggle.className = 'mh-pending-filter';
+    toggle.className = 'ui-button ui-button--secondary ui-button--regular mh-pending-filter';
     toggle.addEventListener('click', () => {
       mobilePendingOnly = !mobilePendingOnly;
       renderMobileHomeResults();
@@ -426,7 +427,7 @@ export function renderMobileHome() {
   let routines = container.querySelector<HTMLButtonElement>('[data-open-routines]');
   if (!routines) {
     routines = document.createElement('button');
-    routines.type = 'button'; routines.className = 'routine-button mh-routines-entry';
+    routines.type = 'button'; routines.className = 'ui-button ui-button--secondary ui-button--regular routine-button mh-routines-entry';
     routines.setAttribute('data-open-routines', ''); container.prepend(routines);
   }
   routines.textContent = t('routines_title');
@@ -558,7 +559,7 @@ function renderMobileDrawerResults(): void {
   spawnTop.className = 'mobile-drawer-section mobile-drawer-spawn-top';
   const spawn = document.createElement('button');
   spawn.type = 'button';
-  spawn.className = 'mobile-drawer-action mobile-drawer-action--primary';
+  spawn.className = 'ui-button ui-button--primary ui-button--regular mobile-drawer-action mobile-drawer-action--primary';
   spawn.textContent = t('mobile_new_session');
   spawn.addEventListener('click', () => {
     document.getElementById('new-session-btn')?.click();
@@ -596,7 +597,7 @@ function renderMobileDrawerResults(): void {
   actions.className = 'mobile-drawer-section mobile-drawer-actions';
   const home = document.createElement('button');
   home.type = 'button';
-  home.className = 'mobile-drawer-action';
+  home.className = 'ui-button ui-button--secondary ui-button--regular mobile-drawer-action';
   home.textContent = t('mobile_back');
   home.addEventListener('click', () => {
     set_activeSessionId(null);
@@ -606,7 +607,7 @@ function renderMobileDrawerResults(): void {
   });
   const expose = document.createElement('button');
   expose.type = 'button';
-  expose.className = 'mobile-drawer-action';
+  expose.className = 'ui-button ui-button--secondary ui-button--regular mobile-drawer-action';
   expose.textContent = `🌐 ${t('expose_btn')}`;
   expose.addEventListener('click', () => {
     (window as any).closeMobileSessionDrawer?.();
@@ -614,7 +615,7 @@ function renderMobileDrawerResults(): void {
   });
   const shutdown = document.createElement('button');
   shutdown.type = 'button';
-  shutdown.className = 'mobile-drawer-action';
+  shutdown.className = 'ui-button ui-button--secondary ui-button--regular mobile-drawer-action';
   shutdown.textContent = `⏻ ${t('shutdown_tooltip')}`;
   shutdown.addEventListener('click', () => {
     (window as any).closeMobileSessionDrawer?.();
@@ -622,7 +623,7 @@ function renderMobileDrawerResults(): void {
   });
   const settings = document.createElement('button');
   settings.type = 'button';
-  settings.className = 'mobile-drawer-action';
+  settings.className = 'ui-button ui-button--secondary ui-button--regular mobile-drawer-action';
   settings.textContent = t('mobile_drawer_settings_server');
   settings.addEventListener('click', (e) => {
     // 設定パネルは settings.ts が document の click で「外側クリック → 閉じる」を見ている。
@@ -635,7 +636,7 @@ function renderMobileDrawerResults(): void {
   });
   const server = document.createElement('button');
   server.type = 'button';
-  server.className = 'mobile-drawer-action';
+  server.className = 'ui-button ui-button--secondary ui-button--regular mobile-drawer-action';
   server.textContent = t('server_btn');
   server.addEventListener('click', () => {
     (window as any).closeMobileSessionDrawer?.();

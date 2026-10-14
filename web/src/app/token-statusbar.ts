@@ -1,4 +1,4 @@
-// token-statusbar.ts — 画面最下部に固定表示するトークン/コスト ステータスバー。
+// token-statusbar.ts — CLI 列の最下段に表示するトークン/コスト ステータスバー。
 //
 // 表示対象: アクティブセッション 1 件分（+ 全セッション横断バッジ）。
 // セグメント構成（左→右）:
@@ -18,6 +18,7 @@ import { FilesTabManager } from './files-view.js';
 import { showPathPopup } from './path-links.js';
 import { _chatPaneMountedSid, isTranscriptBackedSession, mountChatPaneForSession, restoreChatHistoryFromStore } from './chat-history.js';
 import { sentHistoryModalOwnerMatches, type SentHistoryModalOwner } from './token-statusbar-owner.js';
+import { uiIconHtml } from './ui-components.js';
 
 // セッション単位の usage データキャッシュ。
 interface UsageCacheEntry {
@@ -71,6 +72,8 @@ let _tickInterval: ReturnType<typeof setInterval> | null = null;
 let _barEnabled = true;
 // クリックハンドラを 1 度だけ結線するためのフラグ。
 let _clickWired = false;
+// スマホの知らせ（#tsb-mobile-alert）の click・幅の変化の登録済み印（showMobileAlert の初回だけ付ける）。
+let _mobileAlertWired = false;
 
 // ── モデル別コンテキスト上限テーブル ────────────────────────────────────────
 // feedback_no_hardcoded_model_names: UI の分岐にモデル名文字列を使うのは禁止だが、
@@ -320,9 +323,8 @@ function setSeg(bar: HTMLElement, cls: string, show: boolean): HTMLElement | nul
 // 設定 UI で表示/非表示を切り替えられるセグメント一覧（短いキー + 二言語ラベル）。
 // id / status / conn は常時表示（コア情報）のため対象外。ラベルは i18n.json に増やさず
 // ここで二言語を持つ（DETAIL_SEGMENTS が JP ラベル直書きなのと同じ方針）。
+// agent / effort は PC のフッターにもスマホにも出ないため対象外（保存済みの false は読み捨てる）。
 export const TOGGLEABLE_SEGMENTS: Array<{ key: string; ja: string; en: string }> = [
-  { key: 'agent',     ja: 'AI / モデル',   en: 'AI / model' },
-  { key: 'effort',    ja: 'effort / 思考', en: 'effort / thinking' },
   { key: 'label',     ja: '作業ラベル',    en: 'work label' },
   { key: 'project',   ja: 'プロジェクト',  en: 'project' },
   { key: 'ailines',   ja: 'AI 編集行数',   en: 'AI lines' },
@@ -343,7 +345,8 @@ export function applySegmentVisibility(segments: Record<string, boolean> | undef
   disabledSegments.clear();
   if (segments) {
     for (const [k, v] of Object.entries(segments)) {
-      if (v === false) disabledSegments.add(k);
+      // 設定から外した agent / effort の保存済み false は読まない（設定から戻せないのに詳細一覧から消えたままになるため）。
+      if (v === false && k !== 'agent' && k !== 'effort') disabledSegments.add(k);
     }
   }
   renderStatusbar();
@@ -353,16 +356,21 @@ export function applySegmentVisibility(segments: Record<string, boolean> | undef
 
 export function renderStatusbar(): void {
   const bar = getBar();
-  if (!bar) return;
+  if (!bar) {
+    hideMobileAlert();
+    return;
+  }
 
   if (!_barEnabled) {
     bar.style.display = 'none';
+    hideMobileAlert();
     return;
   }
 
   const sid = activeSessionId;
   if (sid === null) {
     bar.style.display = 'none';
+    hideMobileAlert();
     return;
   }
 
@@ -372,11 +380,16 @@ export function renderStatusbar(): void {
 
   if (!entry && !sesData) {
     bar.style.display = 'none';
+    hideMobileAlert();
     return;
   }
 
   bar.style.display = 'flex';
   wireClicks(bar);
+  // スマホの知らせに出す危険域の値。下の各セグメントで表示されたものだけ入る（設定で切ったものは null / false のまま）。
+  let alertCtxPct: number | null = null;
+  let alertCompact = false;
+  let alertRlPct: number | null = null;
 
   const isTokenProvider = provider === 'claude' || provider === 'codex';
   const sessionModelName = sesData?.model || '';
@@ -483,6 +496,7 @@ export function renderStatusbar(): void {
       : Math.max(0, Math.min(100, Math.round((used / (ctxLimit as number)) * 100)));
     const fill = pct >= 90 ? 'crit' : pct >= 80 ? 'warn' : 'ok';
     const pctCls = pct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
+    if (pct >= 90) alertCtxPct = pct;
     // 拡張コンテキスト（1M 窓）で動作中ならバッジを添える。relay 中継の実窓サイズで判定。
     const ctxMark = entry.ctxWindow >= 1_000_000 ? ` <span class="tsb-1m" title="${escapeHtml(t('tsb_ctx_1m_title'))}">1M</span>` : '';
     ctxEl.innerHTML = `ctx ${gaugeHtml(pct, fill)}<span class="${pctCls}">${pct}%</span>${ctxMark}`;
@@ -537,8 +551,10 @@ export function renderStatusbar(): void {
       const pctCls = reachPct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
       compactEl.innerHTML = `⌛ ${gaugeHtml(reachPct, fill)}<span class="${pctCls}">${reachPct}%</span>`;
     }
-    // モバイルは crit（発動間近）のときだけ表示する（CSS @media が :not(.tsb-crit) を隠す）。
-    compactEl.classList.toggle('tsb-crit', left <= 0 || reachPct >= 90);
+    // crit（発動間近）は .tsb-crit で示す。幅の段階的省略で危険域を残す判定と、スマホの知らせに同じ値を使う。
+    const compactCrit = left <= 0 || reachPct >= 90;
+    compactEl.classList.toggle('tsb-crit', compactCrit);
+    alertCompact = compactCrit;
     compactEl.title = `auto-compact しきい値到達率 ${reachPct}%（100% で発動）`
       + `\n残り ${formatTok(Math.max(0, left))} tokens`
       + `\nしきい値 ~${Math.round(COMPACT_TRIGGER_RATIO * 100)}% = ${formatTok(threshold)} / ${formatTok(ctxLimit)}、現在 ${formatTok(entry.tokensIn)}`;
@@ -549,8 +565,7 @@ export function renderStatusbar(): void {
   const showCost = !!(isTokenProvider && entry);
   const costEl = setSeg(bar, 'tsb-seg-cost', showCost);
   if (costEl && entry) {
-    // モバイルではセッション個別コストを隠して today 短縮表記だけ出すため、span で分離する
-    // （CSS の @media + :has で切替。today 不明時はモバイルでもセッションコストを出す）。
+    // 個別コストと today 表記は span で分けてある（短縮表記 .tsb-today-short は CSS の既定で隠れている）。
     let html = `<span class="tsb-cost-session">${escapeHtml(formatCost(entry.costUSD, entry.costKnown))}</span>`;
     const today = todayCostSum();
     if (today.known && today.sum > 0) {
@@ -615,8 +630,10 @@ export function renderStatusbar(): void {
   const showRl = !!(provider === 'claude' && entry && (entry.rl5hPresent || entry.rl7dPresent));
   const rlEl = setSeg(bar, 'tsb-seg-ratelimit', showRl);
   if (rlEl && entry) {
-    // モバイルは crit（残量 90% 超）のときだけ表示する（CSS @media が :not(.tsb-crit) を隠す）。
-    rlEl.classList.toggle('tsb-crit', entry.rl5hPct >= 90 || entry.rl7dPct >= 90);
+    // crit（90% 以上）は .tsb-crit で示す。幅の段階的省略で危険域を残す判定と、スマホの知らせに同じ値を使う。
+    const rlCrit = entry.rl5hPct >= 90 || entry.rl7dPct >= 90;
+    rlEl.classList.toggle('tsb-crit', rlCrit);
+    if (rlCrit) alertRlPct = Math.round(Math.max(entry.rl5hPct, entry.rl7dPct));
     const cls5 = entry.rl5hPct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
     const cls7 = entry.rl7dPct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
     const seg5 = entry.rl5hPresent ? `<span class="${cls5}">5h ${Math.round(entry.rl5hPct)}%</span>` : '';
@@ -655,6 +672,46 @@ export function renderStatusbar(): void {
     if (fc.waiting > 0) html += `<span class="tsb-wait" title="${escapeHtml(t('tsb_fleet_jump'))}">⚠${fc.waiting}</span>`;
     fleetEl.innerHTML = html;
   }
+
+  // ---- スマホの知らせ（危険域のときだけ入力欄の上に 1 行）----
+  const alertParts: string[] = [];
+  if (alertCtxPct !== null) alertParts.push(t('tsb_alert_ctx', { pct: alertCtxPct }));
+  if (alertCompact) alertParts.push(t('tsb_alert_compact'));
+  if (alertRlPct !== null) alertParts.push(t('tsb_alert_ratelimit', { pct: alertRlPct }));
+  showMobileAlert(alertParts);
+}
+
+// ── スマホの知らせ（#tsb-mobile-alert）──────────────────────────────────────
+// 720px 以下ではフッターをふだん出さない。ctx・compact・レート制限が危険域のときだけ、
+// 入力欄の上（進捗の帯の位置）に 1 行出す。押すと詳細一覧を開く。
+
+function hideMobileAlert(): void {
+  const el = document.getElementById('tsb-mobile-alert');
+  if (el) el.hidden = true;
+}
+
+function showMobileAlert(parts: string[]): void {
+  const el = document.getElementById('tsb-mobile-alert');
+  if (!el) return;
+  // クリックと幅の変化の登録は 1 回だけ（幅が 720px を越えたら renderStatusbar で判定し直す）。
+  if (!_mobileAlertWired) {
+    _mobileAlertWired = true;
+    el.addEventListener('click', () => openDetailModal());
+    window.matchMedia('(max-width: 720px)').addEventListener('change', () => renderStatusbar());
+  }
+  if (parts.length === 0 || !window.matchMedia('(max-width: 720px)').matches) {
+    el.hidden = true;
+    return;
+  }
+  const text = `${t('tsb_alert_label')} ${parts.join(' · ')}`;
+  el.textContent = text;
+  el.title = t('tsb_alert_open');
+  // 読み上げでも警告の中身が伝わるよう、表示文と操作の両方を入れる。
+  el.setAttribute('aria-label', `${text} · ${t('tsb_alert_open')}`);
+  // 進捗の帯（#terminal-live-status）が見えていれば、その位置に重ねる（端末の高さは変えない）。
+  const live = document.getElementById('terminal-live-status');
+  el.style.top = live && !live.hidden ? `${live.offsetTop}px` : '';
+  el.hidden = false;
 }
 
 // ── クリック操作（D）─────────────────────────────────────────────────────────
@@ -707,7 +764,7 @@ function wireClicks(bar: HTMLElement): void {
 }
 
 // ── 詳細モーダル（モバイル時 … タップで開く）─────────────────────────────────
-// CSS @media でモバイル時に折り畳まれるセグメントを、垂直リストとして再表示する。
+// CSS で隠れているセグメント（幅の段階的省略など）も含めて、垂直リストとして再表示する。
 // バーの現在 DOM をそのままクローンしてラベルを添える方式で、表示ロジックを二重化しない。
 
 const DETAIL_SEGMENTS: Array<{ cls: string; label: string }> = [
@@ -767,7 +824,8 @@ function openDetailModal(): void {
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'tsb-detail-close';
-  closeBtn.textContent = '✕';
+  closeBtn.innerHTML = uiIconHtml('close');
+  closeBtn.setAttribute('aria-label', t('settings_close'));
   closeBtn.addEventListener('click', closeDetailModal);
   header.appendChild(closeBtn);
   box.appendChild(header);
@@ -1136,7 +1194,7 @@ function openSentHistoryModal(): void {
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'tsb-sent-close';
-  closeBtn.textContent = '✕';
+  closeBtn.innerHTML = uiIconHtml('close');
   closeBtn.setAttribute('aria-label', t('settings_close'));
   closeBtn.addEventListener('click', closeSentHistoryModal);
   header.appendChild(closeBtn);
@@ -1219,6 +1277,11 @@ export interface SessionAgentInfo {
   model: string;
   effort: string;
   thinking: boolean;
+  // 以下 4 つは usageCache の値だけから取る（無いときは空文字）。
+  agentName: string;
+  version: string;
+  outputStyle: string;
+  vimMode: string;
 }
 
 export function getSessionAgentInfo(sessionId: number): SessionAgentInfo {
@@ -1227,7 +1290,13 @@ export function getSessionAgentInfo(sessionId: number): SessionAgentInfo {
   const provider = String(entry?.provider || sess?.provider || '').trim();
   const model = String(entry?.usageModel || sess?.model || '').trim();
   const effort = String(entry?.effortLevel || sess?.effort || '').trim();
-  return { provider, model, effort, thinking: !!entry?.thinking };
+  return {
+    provider, model, effort, thinking: !!entry?.thinking,
+    agentName: String(entry?.agentName || '').trim(),
+    version: String(entry?.version || '').trim(),
+    outputStyle: String(entry?.outputStyle || '').trim(),
+    vimMode: String(entry?.vimMode || '').trim(),
+  };
 }
 
 /** WS usage_stat メッセージを受信したときに呼ぶ。 */
@@ -1310,12 +1379,12 @@ export function setStatusbarEnabled(enabled: boolean): void {
   if (bar) {
     bar.style.display = enabled ? '' : 'none';
   }
-  document.body.style.setProperty('--tsb-bottom-offset', enabled ? '22px' : '0px');
   if (enabled) {
     renderStatusbar();
     startTick();
   } else {
     stopTick();
+    hideMobileAlert();
   }
 }
 

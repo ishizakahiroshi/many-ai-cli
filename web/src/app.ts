@@ -2559,7 +2559,7 @@ inputEl.addEventListener('blur', (e) => {
           addText(fix, '', check.fix);
           const copy = document.createElement('button');
           copy.type = 'button';
-          copy.className = 'settings-inline-btn doctor-copy';
+          copy.className = 'ui-button ui-button--secondary ui-button--compact settings-inline-btn doctor-copy';
           copy.textContent = t('settings_doctor_copy');
           copy.addEventListener('click', async () => {
             try { await navigator.clipboard.writeText(check.fix); showToast(t('settings_doctor_copied')); } catch (_) { showToast(t('settings_doctor_copy_failed')); }

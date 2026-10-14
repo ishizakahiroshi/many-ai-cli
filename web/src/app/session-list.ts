@@ -4,7 +4,8 @@ import { isApprovalPending } from './approval-store.js';
 import { t } from '../i18n.js';
 import { apiFetch, escapeHtml, ti18n } from './util.js';
 import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, openProjectKey, orderSessions, projectFavorites, saveCollapsedNodes, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, set_openProjectKey, terminals } from './state.js';
-import { NO_PROJECT_KEY, buildSidebarTree, flattenSidebarTree, moveToSiblingFront, projectBoxKeyAfterSessionCardSelection, projectKeyForSession } from './sidebar-tree.js';
+import { NO_PROJECT_KEY, buildSidebarTree, deriveProjectKeyFromCwd, flattenSidebarTree, moveToSiblingFront, projectBoxKeyAfterSessionCardSelection, projectKeyForSession } from './sidebar-tree.js';
+import { attachProjectPathPopover } from './project-group-path-popover.js';
 import { STORAGE_SIDEBAR_PIN_MIGRATED_KEY, isTurnEndBellOff, setTurnEndBellOff, setUserPref } from './user-prefs.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
 import { renderZeroSessionEmptyState } from './zero-session-empty-state.js';
@@ -485,7 +486,7 @@ export function migratePinnedSessionsOnce(): void {
 }
 
 // セッションを自分の器（プロジェクト、または親セッション）の中で兄弟順の先頭へ動かす。
-// カードの ⇧・カードのコンテキストメニュー・モバイルの行アクションが同じ経路を通る。
+// 入口はモバイルの行アクションだけ（PC のサイドバーは D&D で並べ替える）。
 export function moveSessionToSiblingFront(id: number): void {
   const next = moveToSiblingFront(sessionOrder, Array.from(sessions.values()) as any[], id);
   // sessionOrder は他モジュールが同じ配列参照を見ているので、差し替えずに中身を入れ替える。
@@ -501,6 +502,41 @@ export function moveSessionToSiblingFront(id: number): void {
     try { window.multiPaneManager.render(); }
     finally { window._c5SidebarUpdating = false; }
   }
+}
+
+// カードの ⋯ メニュー（右クリックも同じ）に載せる、このセッション固有の操作。
+// 以前はカード右上のボタンだったもの。出す条件はボタンだったときと同じ。
+export interface CardSessionAction { action: string; icon: string; label: string; run: () => void; }
+export function cardSessionActions(s: any): CardSessionAction[] {
+  const items: CardSessionAction[] = [];
+  const isAI = isAIOrCustomProvider(String(s.provider || ''));
+  // 派生起動（引き継ぎ / 子）。relay と違い子カードにも出す: 子から子を立てても深さの
+  // 上限に掛かるだけで、禁止する理由が無い（plan_derived-session-launch_c3_derive-launch.md 内部 C3）。
+  if (isAI) items.push({ action: 'derive', icon: '🌱', label: t('derive_button_title'), run: () => { void openDeriveDialog(s.id); } });
+  // relay は子ではない AI セッションから。進行中の relay があっても追加で開ける。
+  if (isAI && !s.parent_session_id) items.push({ action: 'relay', icon: '🔁', label: t('relay_start'), run: () => openRelayDialog(s.id) });
+  // board は conductor（orchestration_id あり・子ではない）で board がある場合だけ。
+  if (s.orchestration_id && !s.parent_session_id && s.board_path) {
+    items.push({
+      action: 'board', icon: '📋', label: t('card_board_button_tooltip'),
+      run: () => {
+        const boardDir = dirnameForPath(s.board_path) || s.board_path;
+        FilesTabManager.openFilesTabAtFile(s.id, s.orchestration_id, boardDir, boardDir, s.board_path);
+      },
+    });
+  }
+  // 作業終了通知のベル（セッションごとの ON/OFF）。localStorage のみで持ち、Hub 再起動時に
+  // ws-client.ts の purgeLocalStateForHubRestart() から一括で消す（plan_ux-notify-palette-review_c1_notify.md 内部 C2）。
+  if (isAI) {
+    const muted = isTurnEndBellOff(s.id);
+    items.push({
+      action: 'turn-end-bell', icon: muted ? '🔔' : '🔕',
+      label: muted ? t('card_menu_bell_unmute') : t('card_menu_bell_mute'),
+      run: () => { setTurnEndBellOff(s.id, !muted); renderSessionList(); },
+    });
+  }
+  items.push({ action: 'history-reset', icon: '↺', label: t('session_history_reset_tooltip'), run: () => requestSessionHistoryReset(s.id) });
+  return items;
 }
 
 // C9: 整列ロジックは state.js の orderSessions に集約。getOrderedSessions は後方互換の薄い委譲。
@@ -711,7 +747,7 @@ let _sessionCardPointerActivatedAt = 0;
 let _sessionCardPointerActivatedId = null;
 
 function isSessionCardInteractiveTarget(target) {
-  return target?.closest?.('.card-actions, .card-branch');
+  return target?.closest?.('.card-actions, .card-branch, .card-bell-muted');
 }
 
 function sessionCardTapMoveLimit() {
@@ -841,6 +877,18 @@ export function maybeRestoreLastOpenProject(): void {
   if (!key) return;
   if (sessionIdsInProject(key).length === 0) return;
   preserveSessionListSelection(() => openProjectBox(key, { fromRestore: true }));
+}
+
+/**
+ * 箱の見出しからコピーするフォルダのフルパス。git の箱はキー自体が本体リポジトリの
+ * フルパス（project_id）。git 管理外の箱はキーがフォルダ名だけなので、そのフォルダ名を持つ
+ * セッションの cwd を使う。どちらでもない（プロジェクトなし等）なら空。
+ */
+function projectGroupFullPath(key: string, groupSessions: any[]): string {
+  if (key === NO_PROJECT_KEY) return '';
+  if (groupSessions.some(s => String(s.project_id || '').trim() === key)) return key;
+  const owner = groupSessions.find(s => !String(s.project_id || '').trim() && deriveProjectKeyFromCwd(s.cwd) === key);
+  return owner ? String(owner.cwd) : '';
 }
 
 export function renderSessionList() {
@@ -1034,6 +1082,9 @@ export function renderSessionList() {
     chevron.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') toggleGroupCollapsed(e);
     });
+    // 見出しは「▼ と名前」と「状態チップと ⊞ ☆ ✕」を 1 行に収める。
+    // 名前は残りの幅まで表示し、収まらない部分だけ省略する。全文はマウスを載せると出る
+    // 吹き出しで読め、そこからフォルダのフルパスをコピーできる。
     const titleEl = document.createElement('span');
     titleEl.className = 'project-group-title';
     titleEl.appendChild(chevron);
@@ -1041,7 +1092,9 @@ export function renderSessionList() {
     const nameSpan = document.createElement('span');
     nameSpan.className = 'project-group-name';
     nameSpan.textContent = projectDisplayName;
-    nameSpan.title = projectDisplayName;
+    const projectPath = projectGroupFullPath(key, groupSessions);
+    if (projectPath) attachProjectPathPopover(nameSpan, projectDisplayName, projectPath);
+    else nameSpan.title = projectDisplayName;
     titleEl.appendChild(nameSpan);
     header.appendChild(titleEl);
 
@@ -1056,7 +1109,7 @@ export function renderSessionList() {
       const runningSessionsInGroup = groupSessions.filter(s => s.state === 'running' || s.state === 'waiting' || (s.state || 'standby') === 'standby');
       if (runningSessionsInGroup.length > 0) {
         gridBtn = document.createElement('button');
-        gridBtn.className = 'project-group-grid-btn';
+      gridBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon project-group-grid-btn';
         gridBtn.textContent = '⊞';
         gridBtn.title = t('ctx_open_project_in_grid');
         gridBtn.setAttribute('aria-label', t('ctx_open_project_in_grid'));
@@ -1101,7 +1154,7 @@ export function renderSessionList() {
       projActions.appendChild(projStarBtn);
 
       const projXBtn = document.createElement('button');
-      projXBtn.className = 'dismiss-btn';
+      projXBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon dismiss-btn';
       projXBtn.textContent = t('remove');
       // C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): グループ内に
       // 子起動の確認待ちを抱えたセッションが 1 件でもあれば、グループ ✕ ごと無効化する。
@@ -1272,7 +1325,13 @@ export function renderSessionList() {
       // 2 行目の文字情報を伸縮する領域へまとめ、ctx・子トグル・右端 branch の幅を守る。
       // サマリーの器は常設し、追加・消去でもカードの行数を変えない。
       const metaExtra = `${noteHtml}${roleHtml}${headlessHtml}${permissionModeHtml}${branchRoleHtml}${boardPendingHtml}${handoffFromHtml}${handoffToHtml}`;
-      const metaRow = `<div class="card-meta-row"><span class="card-meta-content"><span class="card-status-slot">${cardStatusRowHtml(s)}</span><span class="card-done-slot">${cardDoneHtml(s)}</span><span class="card-meta-extra">${metaExtra}</span></span><span class="card-ctx-slot">${cardCtxHtml(s)}</span>${childToggleHtml}${branchBadge}</div>`;
+      // 作業終了のベルは既定が ON なので、OFF のときだけ 🔕 を出す（押すと ON に戻る）。
+      // 切り替えの入口は ⋯ メニューにもある。
+      const bellMutedTip = t('turn_end_bell_off_tooltip');
+      const bellMutedHtml = isAIOrCustomProvider(String(s.provider || '')) && isTurnEndBellOff(s.id)
+        ? `<span class="card-bell-muted" role="button" tabindex="0" data-tooltip="${escapeHtml(bellMutedTip)}" aria-label="${escapeHtml(bellMutedTip)}">🔕</span>`
+        : '';
+      const metaRow = `<div class="card-meta-row"><span class="card-meta-content"><span class="card-status-slot">${cardStatusRowHtml(s)}</span><span class="card-done-slot">${cardDoneHtml(s)}</span><span class="card-meta-extra">${metaExtra}</span></span><span class="card-ctx-slot">${cardCtxHtml(s)}</span>${bellMutedHtml}${childToggleHtml}${branchBadge}</div>`;
       // 状態は記号だけを表示し、名前は tooltip / aria-label へ残す。#N より前に置く
       // （#N の桁数はカードごとに違うため、後ろに置くとアイコンの横位置がカードごとにズレる。
       // 先頭に固定すると全カードで同じX座標に揃い、縦に並ぶ実行中セッションを一直線で拾える）。
@@ -1298,6 +1357,19 @@ export function renderSessionList() {
         });
       }
 
+      const bellMutedEl = c.querySelector('.card-bell-muted') as HTMLElement | null;
+      if (bellMutedEl) {
+        const unmute = (e: Event) => {
+          e.stopPropagation();
+          setTurnEndBellOff(s.id, false);
+          renderSessionList();
+        };
+        bellMutedEl.addEventListener('click', unmute);
+        bellMutedEl.addEventListener('keydown', (e: any) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); unmute(e); }
+        });
+      }
+
       c.querySelectorAll('[data-handoff-open]').forEach((chip) => {
         const targetID = Number((chip as HTMLElement).dataset.handoffOpen || 0);
         const openTarget = (e: Event) => {
@@ -1319,22 +1391,12 @@ export function renderSessionList() {
       actions.className = 'card-actions';
       c.appendChild(actions);
 
-      // 「先頭へ」。器（プロジェクト、または親セッション）の中で兄弟順の先頭へ動かすだけ。
-      // 以前の 📌 は所属を書き換えて Pinned という別の箱へ移していたが、★ と同じ
-      // 「器の中で先頭へ」に揃えた。セッションの属性（pinned 列）はもう書かない。
-      const frontBtn = document.createElement('button');
-      frontBtn.className = 'session-front-btn';
-      frontBtn.textContent = '⇧';
-      frontBtn.title = ti18n('session_move_front', 'このセッションを先頭へ');
-      frontBtn.setAttribute('aria-label', frontBtn.title);
-      frontBtn.onclick = (e) => {
-        e.stopPropagation();
-        moveSessionToSiblingFront(s.id);
-      };
-      actions.appendChild(frontBtn);
-
+      // カードに置くボタンは ⋯（メニュー）と × だけにする。以前は ⇧ ↺ 📋 🔁 🌱 🔔 も
+      // 並べていたが、右上からタイトル行の上へ重なって状態・#N・タイトルを隠していた。
+      // それらの操作は cardSessionActions() に集め、⋯ と右クリックのメニューから開く。
+      // 先頭へ動かすのは D&D で足りるので、メニューにも載せない。
       const metaBtn = document.createElement('button');
-      metaBtn.className = 'session-meta-btn';
+      metaBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon session-meta-btn';
       metaBtn.textContent = '⋯';
       metaBtn.title = ti18n('session_edit_meta', 'Edit session details');
       metaBtn.setAttribute('aria-label', metaBtn.title);
@@ -1345,87 +1407,8 @@ export function renderSessionList() {
       };
       actions.appendChild(metaBtn);
 
-
-      const resetBtn = document.createElement('button');
-      resetBtn.className = 'session-history-reset-btn';
-      resetBtn.textContent = '↺';
-      resetBtn.title = t('session_history_reset_tooltip');
-      resetBtn.onclick = (e) => {
-        e.stopPropagation();
-        requestSessionHistoryReset(s.id);
-      };
-      actions.appendChild(resetBtn);
-
-      // conductor カード（orchestration_id あり・子ではない）にのみ「board を開く」ボタンを出す
-      if (s.orchestration_id && !s.parent_session_id && s.board_path) {
-        const boardBtn = document.createElement('button');
-        boardBtn.className = 'session-board-open-btn';
-        boardBtn.textContent = '📋';
-        boardBtn.title = t('card_board_button_tooltip');
-        boardBtn.onclick = (e) => {
-          e.stopPropagation();
-          const boardDir = dirnameForPath(s.board_path) || s.board_path;
-          FilesTabManager.openFilesTabAtFile(s.id, s.orchestration_id, boardDir, boardDir, s.board_path);
-        };
-        actions.appendChild(boardBtn);
-      }
-
-      // AI セッション（子ではない）から relay を開始する入口。conductor の進行中 relay
-      // の有無にかかわらず、追加の relay を開けるようにする。
-      if (!s.parent_session_id && isAIOrCustomProvider(String(s.provider || ''))) {
-        const relayBtn = document.createElement('button');
-        relayBtn.className = 'session-relay-open-btn';
-        relayBtn.textContent = '🔁';
-        relayBtn.title = t('relay_start');
-        relayBtn.setAttribute('aria-label', relayBtn.title);
-        relayBtn.onclick = (e) => {
-          e.stopPropagation();
-          openRelayDialog(s.id);
-        };
-        actions.appendChild(relayBtn);
-      }
-
-      // 派生起動（引き継ぎ / 子）の入口。relay と違い子カードにも出す: 子から子を
-      // 立てても深さの上限に掛かるだけで、禁止する理由が無い
-      // （子 plan: docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C3）。
-      if (isAIOrCustomProvider(String(s.provider || ''))) {
-        const deriveBtn = document.createElement('button');
-        deriveBtn.className = 'session-derive-open-btn';
-        deriveBtn.textContent = '🌱';
-        deriveBtn.title = t('derive_button_title');
-        deriveBtn.setAttribute('aria-label', deriveBtn.title);
-        deriveBtn.onclick = (e) => {
-          e.stopPropagation();
-          void openDeriveDialog(s.id);
-        };
-        actions.appendChild(deriveBtn);
-      }
-
-      // 作業終了通知のベル（セッションごとの ON/OFF）。localStorage のみで持ち、Hub
-      // 再起動時に ws-client.ts の purgeLocalStateForHubRestart() から一括で消す
-      // （子 plan: plan_ux-notify-palette-review_c1_notify.md 内部 C2）。
-      if (isAIOrCustomProvider(String(s.provider || ''))) {
-        const bellBtn = document.createElement('button');
-        bellBtn.className = 'session-turn-end-bell-btn';
-        const applyBellState = (muted: boolean) => {
-          bellBtn.textContent = muted ? '🔕' : '🔔';
-          bellBtn.classList.toggle('muted', muted);
-          const title = muted ? t('turn_end_bell_off_tooltip') : t('turn_end_bell_on_tooltip');
-          bellBtn.title = title;
-          bellBtn.setAttribute('aria-label', title);
-        };
-        applyBellState(isTurnEndBellOff(s.id));
-        bellBtn.onclick = (e) => {
-          e.stopPropagation();
-          const next = !isTurnEndBellOff(s.id);
-          setTurnEndBellOff(s.id, next);
-          applyBellState(next);
-        };
-        actions.appendChild(bellBtn);
-      }
-
       const xBtn = document.createElement('button');
-      xBtn.className = 'dismiss-btn';
+      xBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon dismiss-btn';
       xBtn.textContent = t('remove');
       // C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): 子起動の
       // 確認待ちを抱えている親は × を無効化する。requestSessionDismiss 側にも同じガードが

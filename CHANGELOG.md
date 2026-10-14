@@ -11,6 +11,11 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- Input controls can be placed independently across the app. On desktop they
+  start beside the live status display instead of occupying the composer;
+  existing saved positions are retained and Reset restores the new default.
+- The persistent footer now has one Settings entry. Each open starts at General, which stays in the Settings navigation; the new Usage and Hub destinations there keep provider links, exposure status, QR connection, shutdown confirmations, and bug reporting.
+- Shared Web UI buttons, modal frames, focus styles and general SVG icons now reuse the existing themes. Hub confirmation actions use shared localized labels such as "更新しない / 更新する"; shutdown keeps its distinct choices and the token footer keeps its dedicated palette. A CI guard prevents new appearance and confirmation-label duplication.
 - Paths inside work memos now open the same context menu as paths in the CLI screen (right-click).
 - **Browser-local session-list tabs.** Group multiple
   session cards into tabs, add and rename tabs, reorder by drag or keyboard menu,
@@ -167,6 +172,14 @@ Release artifacts are published at
   as-is. The same now
   applies to ordinary explanations outside the markers: no bold, headings,
   leading symbols or tables (`internal/wrapper/approval_rules.go`).
+- **Status bar moved under the terminal input.** The token/cost status bar now sits
+  at the bottom of the terminal column (under the Paste / drop row) instead of
+  spanning the whole window, and no longer repeats the session number, state,
+  provider/model and effort that the header above the terminal already shows. On
+  phones (720 px and below) it stays hidden and only shows a one-line warning above
+  the input when context, compaction or the rate limit is close to its limit. The
+  settings panel no longer lists the "AI / model" and "effort / thinking" segments,
+  which now appear only in the details opened from the "…" button.
 
 ### Fixed
 - **Editing a minified dependency no longer marks its unchanged text as a new

@@ -145,14 +145,14 @@ function buildRoleTable(prefs: RelayDialogPrefs): void {
 
     const cliCell = document.createElement('td');
     const cli = document.createElement('select');
-    cli.className = 'relay-role-cli';
+    cli.className = 'ui-input relay-role-cli';
     cli.setAttribute('aria-label', `${labelCell.textContent || definition.key} CLI`);
     appendSelectOptions(cli, prefs.roles?.[definition.key]?.provider || '');
 
     const modelCell = document.createElement('td');
     const model = document.createElement('input');
     model.type = 'text';
-    model.className = 'relay-role-model';
+    model.className = 'ui-input relay-role-model';
     model.placeholder = translated('spawn_role_model_placeholder', 'Model name');
     model.value = prefs.roles?.[definition.key]?.model || '';
     model.disabled = !cli.value;
@@ -168,7 +168,7 @@ function buildRoleTable(prefs: RelayDialogPrefs): void {
     modelCell.appendChild(model);
     const subscriptionCell = document.createElement('td');
     const subscription = document.createElement('select');
-    subscription.className = 'relay-role-subscription';
+    subscription.className = 'ui-input relay-role-subscription';
     const refreshSubscription = (): void => {
       const profiles = selectableProfiles(cli.value);
       subscription.replaceChildren();
@@ -196,7 +196,7 @@ function buildRoleTable(prefs: RelayDialogPrefs): void {
     // 分かる方がよい。確認ダイアログ・派生ダイアログと同じ規則）。
     const permissionCell = document.createElement('td');
     const permission = document.createElement('select');
-    permission.className = 'relay-role-permission';
+    permission.className = 'ui-input relay-role-permission';
     const defaultPermission = document.createElement('option');
     defaultPermission.value = '';
     defaultPermission.textContent = translated('spawn_confirm_option_unset', 'Not specified');

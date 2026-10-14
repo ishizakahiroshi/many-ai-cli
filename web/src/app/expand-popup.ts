@@ -85,7 +85,7 @@ function renderExpandPopup(sessionId, lines, clientX, clientY, loading, opts: { 
   if (!loading && lines.length > 0) {
     const copyBtn = document.createElement('button');
     copyBtn.type = 'button';
-    copyBtn.className = 'expand-popup-copy';
+    copyBtn.className = 'ui-button ui-button--quiet ui-button--compact expand-popup-copy';
     copyBtn.textContent = COPY_ICON;
     copyBtn.title = t('copy_to_clipboard');
     copyBtn.setAttribute('aria-label', t('copy_to_clipboard'));
@@ -96,7 +96,7 @@ function renderExpandPopup(sessionId, lines, clientX, clientY, loading, opts: { 
   }
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
-  closeBtn.className = 'expand-popup-close';
+  closeBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon expand-popup-close';
   closeBtn.textContent = '✕';
   closeBtn.addEventListener('click', () => { popup.hidden = true; });
   btns.appendChild(closeBtn);
@@ -121,7 +121,7 @@ function renderExpandPopup(sessionId, lines, clientX, clientY, loading, opts: { 
 
       const showFullBtn = document.createElement('button');
       showFullBtn.type = 'button';
-      showFullBtn.className = 'expand-popup-show-full';
+      showFullBtn.className = 'ui-button ui-button--secondary ui-button--regular expand-popup-show-full';
       showFullBtn.textContent = t('expand_popup_show_full');
       showFullBtn.addEventListener('click', () => {
         renderExpandPopup(sessionId, lines, clientX, clientY, false, { showFull: true });

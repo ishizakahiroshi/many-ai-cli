@@ -33,7 +33,7 @@
     overflow-y: auto;
     flex: 1 1 auto;
     /* C6 PWA safe-area: 横ノッチ（landscape）で本文が欠けないよう左右 inset を加算。
-       上端は header ではなく #app 直下の浮遊 ☰ ボタンと重ならないよう --mobile-float-clear を使う。 */
+       上端は header ではなく #app 直下の浮遊 ☰ ボタンと重ならないよう --mobile-float-clear を使う。 */;
     padding: var(--mobile-float-clear, 40px) calc(8px + env(safe-area-inset-right)) 8px calc(8px + env(safe-area-inset-left));
     background: var(--bg-layer);
     flex-direction: column;
@@ -82,13 +82,12 @@
     z-index: 1500;
     width: auto;
     min-width: 72px;
-    height: 32px;
-    min-height: 32px;
-    padding: 0 12px;
-    border-radius: 999px;
-    font-size: var(--fs-md);
-    font-weight: 800;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+    height: var(--ui-control-size, var(--ui-control-regular));
+    min-height: var(--ui-control-size, var(--ui-control-regular));
+    padding: 0 12px
+
+    ;
+
   }
 
   /* ── セクション ── */
@@ -119,7 +118,7 @@
   .mh-search {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     min-height: 44px;
     padding: 0 10px;
     margin-bottom: 8px;
@@ -131,11 +130,6 @@
   .mh-search input {
     flex: 1 1 auto;
     min-width: 0;
-    border: 0;
-    outline: 0;
-    background: transparent;
-    color: var(--text);
-    font-size: var(--fs-lg);
   }
   .mh-search-icon {
     flex: 0 0 auto;
@@ -143,22 +137,17 @@
   }
 
   .mh-pending-filter {
-    width: 100%;
+  width: 100%;
     min-height: 44px;
     margin: 0 0 8px;
-    padding: 0 12px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: var(--bg);
-    color: var(--text);
-    font: inherit;
-    font-weight: 700;
     text-align: left;
-  }
-  .mh-pending-filter.is-active {
-    border-color: var(--danger, #e53e3e);
-    background: color-mix(in srgb, var(--danger, #e53e3e) 12%, var(--bg));
-    color: var(--danger, #e53e3e);
+}
+
+  .mh-pending-filter.is-active.ui-button {
+    --ui-button-border: var(--danger);
+    --ui-button-bg: color-mix(in srgb, var(--danger) 12%, var(--bg));
+    --ui-button-hover: var(--ui-button-bg);
+    --ui-button-fg: var(--danger);
   }
 
   .mh-monitor-summary {
@@ -237,7 +226,7 @@
   .mh-monitor-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     width: 100%;
     min-height: 56px;
     padding: 7px 10px;
@@ -266,13 +255,15 @@
   .mh-monitor-row--purple { border-left-color: #a855f7; }
   .mh-monitor-main { flex: 1 1 auto; min-width: 0; }
   .mh-monitor-title {
-    display: flex;
+  display: flex;
     align-items: center;
     min-width: 0;
-    gap: 4px;
-    font-size: var(--fs-body);
-    font-weight: 700;
-  }
+    gap: var(--space-1);
+}
+.mh-monitor-title:where(:not(.ui-modal__title)) {
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
   .mh-monitor-title .mh-session-name { flex: 1 1 auto; min-width: 0; }
   .mh-monitor-meta {
     margin-top: 2px;
@@ -293,11 +284,11 @@
     flex: 0 0 auto;
     flex-direction: column;
     align-items: flex-end;
-    gap: 4px;
+    gap: var(--space-1);
   }
   .mh-approval-badge {
     padding: 2px 6px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--danger, #e53e3e);
     color: #fff;
     font-size: var(--fs-2xs);
@@ -309,14 +300,16 @@
     min-width: 0;
   }
   .mh-row-title {
-    display: flex;
+  display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     min-width: 0;
     /* C6: スマホ本文 16px 基準（リスト行の主テキスト）。 */
-    font-size: var(--fs-lg);
-    font-weight: 650;
-  }
+}
+.mh-row-title:where(:not(.ui-modal__title)) {
+  font-size: var(--fs-lg);
+  font-weight: 650;
+}
   .mh-row-progress {
     margin-top: 2px;
     color: var(--text-soft);
@@ -334,22 +327,24 @@
   }
 
   .mh-card-title {
-    flex: 1;
+  flex: 1;
     /* C6: スマホ本文 16px 基準（承認カードのタイトル行）。 */
-    font-size: var(--fs-lg);
-    font-weight: 600;
-    color: var(--text);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     display: flex;
     align-items: center;
-    gap: 4px;
-  }
+    gap: var(--space-1);
+}
+.mh-card-title:where(:not(.ui-modal__title)) {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text);
+}
 
   .mh-session-id {
     color: var(--muted);
-    font-size: 0.8em;
+    font-size: var(--fs-xs);
   }
 
   .mh-session-name {
@@ -358,7 +353,7 @@
     white-space: nowrap;
   }
 
-  .mh-project-group { gap: 4px; }
+  .mh-project-group { gap: var(--space-1); }
   .mh-project-header {
     position: sticky;
     top: 0;
@@ -444,31 +439,31 @@
   }
 
   .mh-options .aqt-option-btn {
-    width: 100%;
+  width: 100%;
     min-height: 48px;
-    padding: 12px 14px;
-    font-size: var(--fs-body);
     display: inline-flex;
     align-items: center;
     gap: 10px;
-  }
+}
 
   /* 番号を丸バッジ化（mockup S-06 の <span class="n">N</span> に相当・Q1 視覚スタイル）。
      PC 側 .aqt-option-num::after の ". " もここで打ち消す。 */
   .mh-options .aqt-option-btn .aqt-option-num {
-    display: inline-flex;
+  display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 22px;
     height: 22px;
-    border-radius: 50%;
-    background: var(--bg-elev3, rgba(255, 255, 255, 0.08));
-    color: var(--text);
-    font-size: var(--fs-xs);
-    font-weight: 700;
     flex-shrink: 0;
-    line-height: 1;
-  }
+}
+.mh-options .aqt-option-btn .aqt-option-num {
+  border-radius: 50%;
+  background: var(--bg-elev3, rgba(255, 255, 255, 0.08));
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1;
+}
   .mh-options .aqt-option-btn .aqt-option-num::after { content: none; }
   .mh-options .aqt-option-btn .aqt-option-label {
     flex: 1;
@@ -476,13 +471,13 @@
     word-break: break-word;
   }
   .mh-options .aqt-option-btn.is-current .aqt-option-num {
-    background: color-mix(in srgb, var(--warn) 35%, transparent);
-    color: var(--warn-text);
-  }
+  background: color-mix(in srgb, var(--warn) 35%, transparent);
+  color: var(--warn-text);
+}
   .mh-options .aqt-option-btn.chosen .aqt-option-num {
-    background: color-mix(in srgb, var(--green) 30%, transparent);
-    color: var(--green);
-  }
+  background: color-mix(in srgb, var(--green) 30%, transparent);
+  color: var(--green);
+}
 
   /* ── fallback（batch / multiQ） ── */
   .mh-approval-fallback {
@@ -509,11 +504,6 @@
     flex: 1;
     min-height: 44px;
     padding: 10px 12px;
-    background: var(--bg);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    color: var(--text);
-    font-size: var(--fs-body);
     -webkit-appearance: none;
     appearance: none;
   }
@@ -523,12 +513,6 @@
   .mh-free-input-send {
     min-height: 44px;
     padding: 0 14px;
-    background: var(--accent, #2563eb);
-    border: 1px solid transparent;
-    border-radius: var(--radius-md);
-    color: #fff;
-    font-size: var(--fs-body);
-    font-weight: 600;
     cursor: pointer;
     flex-shrink: 0;
   }
@@ -566,21 +550,17 @@
   }
 
   .mas-grab {
-    align-self: center;
+  align-self: center;
     width: 44px;
     height: 44px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    cursor: pointer;
-  }
+}
   .mas-grab::before {
     content: "";
     display: block;
     width: 42px;
     height: 4px;
     margin: 20px auto;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--line);
   }
 
@@ -596,7 +576,7 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--space-3);
   }
   .mas-header-text {
     min-width: 0;
@@ -608,20 +588,20 @@
     text-transform: uppercase;
   }
   .mas-title {
-    color: var(--text);
-    font-size: var(--fs-lg);
-    font-weight: 700;
-    line-height: 1.35;
+  line-height: 1.35;
     overflow-wrap: anywhere;
-  }
+}
+.mas-title:where(:not(.ui-modal__title)) {
+  color: var(--text);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+}
   .mas-close {
     flex: 0 0 44px;
     width: 44px;
     height: 44px;
-    border-radius: 50%;
-    background: var(--bg-elev2, rgba(255, 255, 255, 0.08));
-    color: var(--text);
-    font-size: 1.2rem;
+    border-radius: 50%
+
   }
 
   .mas-preamble,
@@ -646,7 +626,7 @@
   .mas-progress {
     align-self: flex-start;
     padding: 3px 8px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: color-mix(in srgb, var(--accent) 18%, transparent);
     color: var(--text);
     font-size: var(--fs-sm);
@@ -656,25 +636,22 @@
   .mas-options {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-2);
   }
   .mas-option {
-    width: 100%;
+  width: 100%;
     min-height: 48px;
-    padding: 10px 12px;
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 10px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: var(--bg-elev, #161b22);
-    color: var(--text);
     text-align: left;
-    font: inherit;
-  }
-  .mas-option.is-current {
-    border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
-    background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev));
+}
+
+  .mas-option.is-current.ui-button {
+    --ui-button-border: color-mix(in srgb, var(--accent) 70%, var(--line));
+    --ui-button-bg: color-mix(in srgb, var(--accent) 16%, var(--bg-elev));
+    --ui-button-hover: var(--ui-button-bg);
   }
   .mas-option-num {
     display: inline-flex;
@@ -696,7 +673,7 @@
   .mas-free-row,
   .mas-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
     align-items: stretch;
   }
   .mas-free-input {
@@ -704,35 +681,17 @@
     min-width: 0;
     min-height: 46px;
     padding: 10px 12px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: var(--bg-deep, #0d1117);
-    color: var(--text);
-    font-size: var(--fs-lg);
   }
   .mas-primary,
   .mas-secondary {
-    min-height: 46px;
-    padding: 0 14px;
-    border-radius: var(--radius-md);
-    font-weight: 700;
-  }
+  min-height: 46px;
+}
   .mas-primary {
-    flex: 1 1 auto;
-    border: 1px solid transparent;
-    background: var(--accent, #2563eb);
-    color: #fff;
-  }
+  flex: 1 1 auto;
+}
   .mas-secondary {
-    flex: 0 0 auto;
-    border: 1px solid var(--line);
-    background: var(--bg-elev, #161b22);
-    color: var(--text);
-  }
-  .mas-primary:disabled,
-  .mas-secondary:disabled {
-    opacity: 0.45;
-  }
+  flex: 0 0 auto;
+}
 
   /* ── A3: 簡易ターミナルビュー ── */
   /* CLI/chat now use the same explicit tabs as desktop. The legacy text projection
@@ -763,7 +722,7 @@
   .mtl-chat-messages {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--space-3);
     min-height: 100%;
   }
   .mtl-msg {
@@ -804,20 +763,13 @@
     animation: mtl-status-pulse 1.4s ease-in-out infinite;
   }
   .mtl-jump-latest {
-    position: sticky;
+  position: sticky;
     left: 50%;
     bottom: 10px;
     transform: translateX(-50%);
     z-index: 3;
-    min-height: 34px;
-    padding: 0 12px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--bg-elev, #161b22);
-    color: var(--text);
-    font-size: var(--fs-md);
-    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
-  }
+    min-height: var(--ui-control-size, var(--ui-control-regular));
+}
   .mtl-jump-latest[hidden] {
     display: none;
   }
@@ -828,36 +780,21 @@
   /* C4: 詳細を見る (全画面) — 中央配置の幅広ボタンからターミナル右上の小さなアイコンへ変更。
      幅広ボタンがあった頃はターミナル本文と入力欄の間に大きな帯ができ視線の流れが切れていた。 */
   .mtl-detail-icon {
-    position: absolute;
+  position: absolute;
     top: 4px;
     right: 4px;
     z-index: 2;
-    width: 32px;
-    height: 32px;
-    padding: 0;
+    width: var(--ui-control-size, var(--ui-control-regular));
+    height: var(--ui-control-size, var(--ui-control-regular));
     margin: 0;
     /* 半透明の重ね色は白固定にせず前景色から作る（ライトテーマで白を重ねると消える）。
-       比率 8/14/20% は白固定だった頃の値をそのまま引き継いでいる。 */
-    background: color-mix(in srgb, var(--text) 8%, transparent);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm, 6px);
-    color: var(--text-soft);
-    font-size: var(--fs-body);
-    line-height: 1;
-    cursor: pointer;
+       比率 8/14/20% は白固定だった頃の値をそのまま引き継いでいる。 */;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
-  }
-  .mtl-detail-icon:hover {
-    background: color-mix(in srgb, var(--text) 14%, transparent);
-    color: var(--text);
-  }
-  .mtl-detail-icon:active {
-    background: color-mix(in srgb, var(--text) 20%, transparent);
-  }
+}
 
   /* 「詳細を見る」モーダル（PTY バッファ全行を全画面 pre で表示）。 */
   .mtl-detail-overlay {
@@ -882,7 +819,7 @@
   .mtl-detail-head {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     padding: 8px 12px;
     border-bottom: 1px solid var(--line);
     background: var(--bg-elev);
@@ -890,28 +827,28 @@
     flex-shrink: 0;
   }
   .mtl-detail-title {
-    flex: 1 1 auto;
+  flex: 1 1 auto;
     min-width: 0;
-    font-size: var(--fs-body);
-    font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
+}
+.mtl-detail-title:where(:not(.ui-modal__title)) {
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
   .mtl-detail-tail,
   .mtl-detail-close {
-    background: transparent;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    min-width: 36px;
-    height: 36px;
+
+    min-width: var(--ui-control-size, var(--ui-control-regular));
+    height: var(--ui-control-size, var(--ui-control-regular));
     padding: 0 10px;
-    color: var(--text);
+
     cursor: pointer;
-    font-size: 0.85rem;
+
   }
   .mtl-detail-close {
-    width: 36px;
+    width: var(--ui-control-size, var(--ui-control-regular));
     padding: 0;
   }
   .mtl-detail-pre {
@@ -990,23 +927,15 @@
     margin-bottom: 2px;
   }
   .mobile-drawer-action {
-    width: 100%;
+  width: 100%;
     min-height: 44px;
-    padding: 0 12px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: var(--bg);
-    color: var(--text);
-    font-weight: 650;
+    justify-content: flex-start;
     text-align: left;
-  }
+}
   .mobile-drawer-action--primary {
-    border-color: var(--accent);
-    background: var(--accent);
-    color: #fff;
-    font-weight: 800;
-    text-align: center;
-  }
+  justify-content: center;
+  text-align: center;
+}
 
   /* C7指摘: ドロワーの「表示切り替え」セクション。旧 #unified-tab-bar の帯撤去に伴い、
      ターミナル/マルチ/チャット/分割/Files/Git/承認 の切り替えをここへ移設。 */
@@ -1020,23 +949,21 @@
     gap: 6px;
   }
   .mobile-drawer-view-btn {
-    display: flex;
+  display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: var(--space-1);
     min-height: 44px;
-    padding: 0 6px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: var(--bg);
-    color: var(--text);
-    font-size: var(--fs-sm);
-    font-weight: 600;
-  }
+}
+
   .mobile-drawer-view-btn.active {
     border-color: var(--accent);
     color: var(--accent);
   }
+.mobile-drawer-view-btn.active.ui-button {
+  --ui-button-border: var(--accent);
+  --ui-button-fg: var(--accent);
+}
   .mobile-drawer-view-btn .orchestration-icon {
     width: 16px;
     height: 16px;
@@ -1054,14 +981,8 @@
     min-height: 44px;
     margin-left: 6px;
     padding: 0 10px;
-    background: var(--bg-elev2, rgba(255,255,255,0.06));
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    color: var(--text);
-    font-size: var(--fs-xl);
+
     cursor: pointer;
   }
-  #attach-camera-btn:active {
-    background: var(--bg-hover, rgba(255,255,255,0.12));
-  }
+
 }

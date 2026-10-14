@@ -770,6 +770,7 @@ function ensureTermCtxMenu() {
   const mkItem = (i18nKey, fallback, icon, handler) => {
     const btn = document.createElement('button');
     btn.type = 'button';
+    btn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--menu-item';
     const ico = document.createElement('span');
     ico.className = 'ctx-icon';
     ico.textContent = icon;

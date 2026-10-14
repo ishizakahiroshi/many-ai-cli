@@ -43,7 +43,7 @@
 .subs-id {
   display: inline-flex;
   align-items: baseline;
-  gap: 4px;
+  gap: var(--space-1);
   font-size: var(--fs-xs);
   color: var(--muted);
   flex-shrink: 0;
@@ -97,7 +97,7 @@
 
 /* ---- 複数契約の同意ゲート ---- */
 /* 本文が長いので既定の確認ダイアログ（420px）より広く取る。 */
-.subs-consent-dialog { width: min(560px, 100%); }
+
 .subs-consent-dialog .confirm-message { max-height: 46vh; overflow-y: auto; }
 .subs-consent-link { margin-top: 8px; font-size: var(--fs-sm); }
 .subs-consent-link a { color: var(--accent); }

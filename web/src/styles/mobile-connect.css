@@ -5,26 +5,31 @@
 
 /* ── ヘッダーボタン（#shutdown-btn と同じ見た目） ── */
 #mobile-connect-btn {
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
+
+  ;
   cursor: pointer;
-  font-family: inherit;
+
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 4px 8px;
-  font-size: var(--fs-lg);
+
   line-height: 1;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
-  min-height: var(--control-h-sm);
+  min-height: var(--ui-control-size, var(--ui-control-compact));
 }
 #mobile-connect-btn:hover,
 #mobile-connect-btn[aria-expanded="true"] {
   color: var(--text);
   border-color: var(--line);
   background: var(--bg-elev);
+}
+#mobile-connect-btn:hover.ui-button,
+#mobile-connect-btn[aria-expanded="true"].ui-button {
+  --ui-button-fg: var(--text);
+  --ui-button-border: var(--line);
+  --ui-button-bg: var(--bg-elev);
+  --ui-button-hover: var(--bg-elev);
 }
 
 /* ── モーダル ── */
@@ -61,7 +66,11 @@
   flex-shrink: 0;
 }
 .mc-head-icon { font-size: var(--fs-xl); }
-.mc-head-title { font-weight: 600; font-size: var(--fs-lg); color: var(--text); }
+.mc-head-title:where(:not(.ui-modal__title)) {
+  font-weight: 600;
+  font-size: var(--fs-lg);
+  color: var(--text);
+}
 .mc-head-reshow { margin-left: auto; }
 /* .mc-modal-close の見た目は /styles/close-button.css にある。ここは隣接時の間隔だけ。 */
 .mc-head-reshow + .mc-modal-close { margin-left: 8px; }
@@ -91,13 +100,16 @@
 .mc-step-dot.on { background: var(--accent); }
 
 /* P-29: 途中中断しても同じ番号から再開する4手順。狭い画面では横スクロールで番号を保持する。 */
-.mc-setup-progress { display: flex; gap: 4px; list-style: none; padding: 0; margin: 0 0 14px; overflow-x: auto; }
+.mc-setup-progress { display: flex; gap: var(--space-1); list-style: none; padding: 0; margin: 0 0 14px; overflow-x: auto; }
 .mc-setup-progress-item { flex: 1 0 76px; font-size: var(--fs-2xs); line-height: 1.3; color: var(--muted); border-bottom: 2px solid var(--line-soft); padding: 0 2px 5px; }
 .mc-setup-progress-item.active { color: var(--accent-text); border-color: var(--accent); font-weight: 700; }
 .mc-setup-progress-item.done { color: var(--green-text); border-color: var(--green); }
 .mc-setup-back { display: inline-block; margin: -2px 0 8px; }
 .mc-test-approval { background: var(--bg-elev2); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 12px; }
-.mc-test-approval-title { font-weight: 600; color: var(--text); }
+.mc-test-approval-title:where(:not(.ui-modal__title)) {
+  font-weight: 600;
+  color: var(--text);
+}
 .mc-test-approval-state { color: var(--muted); font-size: var(--fs-sm); margin: 5px 0 10px; }
 .mc-test-approval-actions { display: flex; gap: var(--space-2); }
 
@@ -257,6 +269,8 @@
 .mc-seg { display: flex; gap: var(--space-2); margin: 0 0 10px; }
 .mc-seg-btn {
   flex: 1;
+}
+.mc-seg-btn:where(:not(.ui-button)) {
   background: var(--bg-elev2);
   border: 1px solid var(--line);
   color: var(--muted);
@@ -321,20 +335,11 @@
 
 /* ナビ */
 .mc-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; gap: var(--space-2); }
-.mc-nav-btn {
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  border-radius: var(--radius-md);
-  padding: 7px 14px;
-  cursor: pointer;
-  font-size: var(--fs-sm);
-  font-family: inherit;
+
+.mc-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
-.mc-nav-btn:hover { color: var(--text); border-color: var(--line-soft); }
-.mc-nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.mc-nav-primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-.mc-nav-primary:hover { background: var(--accent-2); color: #fff; }
 
 .mc-link {
   color: var(--accent-text);
@@ -384,8 +389,11 @@
 
 /* serve_inactive 状態のウィザード内有効化ボタン */
 .mc-ts-enable { display: flex; justify-content: center; margin: 8px 0 10px; }
-.mc-ts-enable-btn { padding: 8px 18px; font-size: var(--fs-md); }
-.mc-ts-enable-btn:disabled { opacity: 0.6; cursor: progress; }
+
+.mc-ts-enable-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
 
 /* env_kind 連動メッセージ（remote/remote-tunnel 時のリモート注記） */
 .mc-ts-remote-note {
@@ -441,12 +449,6 @@
 /* WG サーバ IP 入力（D4: ダミー撤廃） */
 .mc-input {
   width: 100%;
-  background: var(--bg-deep);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  color: var(--text);
-  font-family: Consolas, monospace;
-  font-size: var(--fs-xs);
   padding: 8px 10px;
   margin: 4px 0 8px;
 }

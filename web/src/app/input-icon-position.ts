@@ -1,7 +1,8 @@
 // Independent pointer placement. Only the grip moves an icon; the icon's
 // existing handlers remain responsible for ordinary clicks. Grips are sibling
 // buttons, so changing command labels does not remove them or their listeners.
-const KEY = 'inputIconPositionsV1';
+const KEY = 'inputIconPositionsV2';
+const OLD_KEY = 'inputIconPositionsV1';
 export const INPUT_ICON_IDS = [
   'tools-flip-btn', 'mobile-composer-attach-btn', 'mobile-keyboard-toggle',
   'input-clear-btn', 'send-btn', 'voice-btn', 'prompt-template-toggle',
@@ -14,9 +15,36 @@ type IconId = typeof IDS[number];
 export interface IconPoint { x: number; y: number }
 type Positions = Partial<Record<IconId, IconPoint>>;
 let positions: Positions = {};
-const slots = new Map<IconId, HTMLElement>();
 const grips = new Map<IconId, HTMLButtonElement>();
 let cancelDrag: (() => void) | null = null;
+const desktopDock = () => window.matchMedia('(min-width: 721px)').matches;
+
+/** Lay out the default controls at the right of the status band, leaving its text readable. */
+export function layoutStatusControls(widths: number[], bandWidth: number): {
+  points: IconPoint[]; rows: number; reservedWidth: number;
+} {
+  const gap = 6;
+  const available = Math.max(1, bandWidth - 180);
+  const points: IconPoint[] = [];
+  const rows: { start: number; width: number }[] = [];
+  for (let i = 0; i < widths.length; i++) {
+    let row = rows[rows.length - 1];
+    if (!row || row.width + gap + widths[i] > available) {
+      row = { start: i, width: 0 };
+      rows.push(row);
+    }
+    row.width += (i === row.start ? 0 : gap) + widths[i];
+  }
+  rows.forEach((row, rowIndex) => {
+    let x = bandWidth - 8 - row.width;
+    const end = rows[rowIndex + 1]?.start ?? widths.length;
+    for (let i = row.start; i < end; i++) {
+      points[i] = { x, y: 5 + rowIndex * 38 };
+      x += widths[i] + gap;
+    }
+  });
+  return { points, rows: rows.length, reservedWidth: (rows[0]?.width ?? 0) + 18 };
+}
 
 function positionedElement(id: IconId): HTMLElement | null {
   // Move the template's anchor along with its menu, rather than detaching the
@@ -58,51 +86,58 @@ function save(): void {
 export function refreshInputIconPositions(): void {
   const wrap = document.getElementById('input-wrap');
   if (!wrap || wrap.clientWidth === 0 || wrap.clientHeight === 0) return;
+  const band = document.getElementById('terminal-live-status');
+  const dock = desktopDock() && band && !band.hidden && band.getBoundingClientRect().width > 0;
+  const visible: { id: IconId; icon: HTMLElement; width: number; height: number }[] = [];
   for (const id of IDS) {
     const icon = positionedElement(id);
     if (!icon) continue;
     icon.classList.add('input-icon-movable');
-    const point = positions[id];
-    if (!point) {
+    // Clear fixed placement before measuring newly shown controls. A hidden
+    // input-tools parent still has zero dimensions and must stay hidden.
+    if (!positions[id] && !dock) icon.classList.remove('input-icon-positioned');
+    if (icon.offsetWidth && icon.offsetHeight) {
+      visible.push({ id, icon, width: icon.offsetWidth, height: icon.offsetHeight });
+    }
+  }
+  const defaults = dock ? visible.filter(item => !positions[item.id]) : [];
+  const bandRect = band?.getBoundingClientRect();
+  const layout = bandRect ? layoutStatusControls(defaults.map(item => item.width), bandRect.width) : null;
+  if (band) {
+    const height = layout?.rows ? Math.max(38, layout.rows * 38 + 4) : 0;
+    band.style.setProperty('--input-actions-height', height ? `${height}px` : '');
+    band.style.setProperty('--input-actions-space', layout?.reservedWidth ? `${layout.reservedWidth}px` : '');
+  }
+  for (const id of IDS) {
+    const icon = positionedElement(id);
+    if (!icon) continue;
+    const item = visible.find(entry => entry.id === id);
+    const index = defaults.findIndex(entry => entry.id === id);
+    const custom = positions[id];
+    const point = custom || (index >= 0 && layout && bandRect
+      ? { x: bandRect.left + layout.points[index].x, y: bandRect.top + layout.points[index].y }
+      : null);
+    if (point && item) {
+      const applied = clampIconPoint(point, document.documentElement.clientWidth, window.innerHeight,
+        item.width, item.height);
+      icon.classList.add('input-icon-positioned');
+      icon.style.setProperty('--input-icon-x', `${applied.x}px`);
+      icon.style.setProperty('--input-icon-y', `${applied.y}px`);
+    } else {
       icon.classList.remove('input-icon-positioned');
       icon.style.removeProperty('--input-icon-x');
       icon.style.removeProperty('--input-icon-y');
-      slots.get(id)?.remove();
-      slots.delete(id);
-    } else {
-      let slot = slots.get(id);
-      if (!slot) {
-        slot = document.createElement('span');
-        slot.className = 'input-icon-slot';
-        slot.setAttribute('aria-hidden', 'true');
-        slots.set(id, slot);
-      }
-      // Keep the former flex/grid footprint, including after the side switch
-      // reorders DOM nodes. Moving icons must not collapse the input box.
-      if (slot.nextSibling !== icon) icon.parentElement?.insertBefore(slot, icon);
-      const slotHidden = icon.offsetWidth === 0 || icon.offsetHeight === 0;
-      if (slot.hidden !== slotHidden) slot.hidden = slotHidden;
-      slot.style.width = `${icon.offsetWidth}px`;
-      slot.style.height = `${icon.offsetHeight}px`;
-      slot.style.setProperty('--tool-order', icon.style.getPropertyValue('--tool-order') || '0');
-      icon.classList.add('input-icon-positioned');
-      const applied = clampIconPoint(point, wrap.clientWidth, wrap.clientHeight, icon.offsetWidth, icon.offsetHeight);
-      icon.style.setProperty('--input-icon-x', `${applied.x}px`);
-      icon.style.setProperty('--input-icon-y', `${applied.y}px`);
     }
     const grip = grips.get(id);
     const control = document.getElementById(id);
     if (grip && control) {
       const rect = control.getBoundingClientRect();
-      const bounds = wrap.getBoundingClientRect();
       const gripHidden = rect.width === 0 || rect.height === 0 || getComputedStyle(control).visibility === 'hidden';
       if (grip.hidden !== gripHidden) grip.hidden = gripHidden;
-      const scaleX = bounds.width / wrap.offsetWidth || 1;
-      const scaleY = bounds.height / wrap.offsetHeight || 1;
-      const x = (rect.right - bounds.left) / scaleX - wrap.clientLeft - 13;
-      const y = (rect.top - bounds.top) / scaleY - wrap.clientTop - 6;
-      grip.style.left = `${Math.max(0, Math.min(wrap.clientWidth - 18, x))}px`;
-      grip.style.top = `${Math.max(0, Math.min(wrap.clientHeight - 18, y))}px`;
+      const gripWidth = grip.offsetWidth || 18;
+      const gripHeight = grip.offsetHeight || 18;
+      grip.style.left = `${Math.max(0, Math.min(document.documentElement.clientWidth - gripWidth, rect.right - gripWidth + 5))}px`;
+      grip.style.top = `${Math.max(0, Math.min(window.innerHeight - gripHeight, rect.top - 6))}px`;
       const label = control.getAttribute('aria-label') || control.dataset.tooltip || control.title || control.textContent || id;
       grip.setAttribute('aria-label', `↔ ↕ ${label.trim()}`);
     }
@@ -114,6 +149,7 @@ export function resetInputIconPositions(): void {
   positions = {};
   try {
     localStorage.removeItem(KEY);
+    localStorage.removeItem(OLD_KEY);
     localStorage.removeItem('inputPrimaryToolsOffset');
   } catch (_) { /* private mode */ }
   refreshInputIconPositions();
@@ -122,7 +158,18 @@ export function resetInputIconPositions(): void {
 export function initInputIconPositions(): void {
   const wrap = document.getElementById('input-wrap');
   if (!wrap) return;
-  try { positions = parseIconPositions(localStorage.getItem(KEY)); } catch (_) { /* private mode */ }
+  try {
+    const saved = localStorage.getItem(KEY);
+    positions = parseIconPositions(saved);
+    if (saved === null) {
+      const old = parseIconPositions(localStorage.getItem(OLD_KEY));
+      const rect = wrap.getBoundingClientRect();
+      for (const id of IDS) {
+        if (old[id]) positions[id] = { x: rect.left + old[id].x, y: rect.top + old[id].y };
+      }
+      if (Object.keys(positions).length) save();
+    }
+  } catch (_) { /* private mode */ }
 
   for (const id of IDS) {
     const control = document.getElementById(id);
@@ -131,7 +178,7 @@ export function initInputIconPositions(): void {
     control.setAttribute('aria-keyshortcuts', 'Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown');
     const grip = document.createElement('button');
     grip.type = 'button';
-    grip.className = 'input-icon-grip';
+    grip.className = 'ui-button ui-button--quiet ui-button--compact input-icon-grip';
     grip.textContent = '⠿';
     grip.title = '↔ ↕ · Alt + ← ↑ → ↓';
     grip.hidden = true;
@@ -157,15 +204,10 @@ export function initInputIconPositions(): void {
       const move = (ev: PointerEvent) => {
         if (ev.pointerId !== pointerId) return;
         ev.preventDefault();
-        const bounds = wrap.getBoundingClientRect();
-        // Pointer coordinates are viewport CSS pixels; account for transformed
-        // input boxes before storing local CSS coordinates.
-        const scaleX = bounds.width / wrap.offsetWidth || 1;
-        const scaleY = bounds.height / wrap.offsetHeight || 1;
         positions[id] = clampIconPoint({
-          x: (ev.clientX - bounds.left - grabX) / scaleX - wrap.clientLeft,
-          y: (ev.clientY - bounds.top - grabY) / scaleY - wrap.clientTop,
-        }, wrap.clientWidth, wrap.clientHeight, icon.offsetWidth, icon.offsetHeight);
+          x: ev.clientX - grabX,
+          y: ev.clientY - grabY,
+        }, document.documentElement.clientWidth, window.innerHeight, icon.offsetWidth, icon.offsetHeight);
         refreshInputIconPositions();
       };
       const finish = (commit: boolean) => {
@@ -208,17 +250,16 @@ export function initInputIconPositions(): void {
         || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
       e.preventDefault();
       e.stopPropagation();
-      const bounds = wrap.getBoundingClientRect();
       const rect = icon.getBoundingClientRect();
       const point = positions[id] || {
-        x: (rect.left - bounds.left) / (bounds.width / wrap.offsetWidth || 1) - wrap.clientLeft,
-        y: (rect.top - bounds.top) / (bounds.height / wrap.offsetHeight || 1) - wrap.clientTop,
+        x: rect.left,
+        y: rect.top,
       };
       const step = e.shiftKey ? 20 : 4;
       positions[id] = clampIconPoint({
         x: point.x + (e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0),
         y: point.y + (e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0),
-      }, wrap.clientWidth, wrap.clientHeight, icon.offsetWidth, icon.offsetHeight);
+      }, document.documentElement.clientWidth, window.innerHeight, icon.offsetWidth, icon.offsetHeight);
       refreshInputIconPositions();
       save();
     };
@@ -233,6 +274,8 @@ export function initInputIconPositions(): void {
   };
   const resize = new ResizeObserver(schedule);
   resize.observe(wrap);
+  const band = document.getElementById('terminal-live-status');
+  if (band) resize.observe(band);
   IDS.forEach(id => { const el = positionedElement(id); if (el) resize.observe(el); });
   // Observe label replacement, control visibility, and side-switch DOM moves.
   // Do not observe style/class: refresh itself changes both.
@@ -240,5 +283,7 @@ export function initInputIconPositions(): void {
     subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden'],
   });
   wrap.addEventListener('scroll', schedule, true);
+  window.addEventListener('resize', schedule);
+  window.addEventListener('scroll', schedule, true);
   refreshInputIconPositions();
 }

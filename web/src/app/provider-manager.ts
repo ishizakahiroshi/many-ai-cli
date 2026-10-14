@@ -511,14 +511,14 @@ function initProviderManager(): void {
       const actions = document.createElement('div');
       actions.className = 'provider-manager-actions';
       const history = document.createElement('button');
-      history.className = 'settings-inline-btn';
+      history.className = 'ui-button ui-button--secondary ui-button--compact settings-inline-btn';
       history.type = 'button';
       history.textContent = tx('settings_ai_providers_history', 'History');
       history.setAttribute('aria-label', `${history.textContent}: ${name.textContent}`);
       history.addEventListener('click', () => void showHistory(provider));
       actions.append(history);
       const duplicate = document.createElement('button');
-      duplicate.className = 'settings-inline-btn';
+      duplicate.className = 'ui-button ui-button--secondary ui-button--compact settings-inline-btn';
       duplicate.type = 'button';
       duplicate.textContent = tx('settings_ai_providers_duplicate', 'Duplicate');
       duplicate.setAttribute('aria-label', `${duplicate.textContent}: ${name.textContent}`);
@@ -526,13 +526,13 @@ function initProviderManager(): void {
       actions.append(duplicate);
       if (isBuiltinProviderID(provider.id)) {
         const edit = document.createElement('button');
-        edit.className = 'settings-inline-btn';
+        edit.className = 'ui-button ui-button--quiet ui-button--compact settings-inline-btn';
         edit.type = 'button';
         edit.textContent = tx('settings_ai_providers_edit', 'Edit');
         edit.setAttribute('aria-label', `${edit.textContent}: ${name.textContent}`);
         edit.addEventListener('click', () => void editProvider(provider));
         const toggle = document.createElement('button');
-        toggle.className = provider.enabled ? 'settings-inline-btn danger' : 'settings-inline-btn';
+        toggle.className = provider.enabled ? 'ui-button ui-button--danger ui-button--compact settings-inline-btn danger' : 'ui-button ui-button--secondary ui-button--compact settings-inline-btn';
         toggle.type = 'button';
         toggle.textContent = provider.enabled
           ? tx('settings_ai_providers_disable', 'Disable')
@@ -542,13 +542,13 @@ function initProviderManager(): void {
         actions.append(edit, toggle);
       } else {
         const edit = document.createElement('button');
-        edit.className = 'settings-inline-btn';
+        edit.className = 'ui-button ui-button--quiet ui-button--compact settings-inline-btn';
         edit.type = 'button';
         edit.textContent = tx('settings_ai_providers_edit', 'Edit');
         edit.setAttribute('aria-label', `${edit.textContent}: ${name.textContent}`);
         edit.addEventListener('click', () => void editProvider(provider));
         const remove = document.createElement('button');
-        remove.className = 'settings-inline-btn danger';
+        remove.className = 'ui-button ui-button--danger ui-button--compact settings-inline-btn danger';
         remove.type = 'button';
         remove.textContent = tx('settings_ai_providers_delete', 'Delete');
         remove.setAttribute('aria-label', `${remove.textContent}: ${name.textContent}`);
@@ -749,10 +749,8 @@ function initProviderManager(): void {
     targetRevision: string,
   ): Promise<void> => {
     const confirmed = await appConfirm({
-      title: tx('settings_ai_providers_history_restore', 'Restore'),
+      action: 'restore',
       message: tx('settings_ai_providers_history_restore_confirm', 'Restore {name} to this revision?', { name: providerName }),
-      confirmText: tx('settings_ai_providers_history_restore', 'Restore'),
-      cancelText: tx('settings_ai_providers_cancel', 'Cancel'),
       kind: 'danger',
     });
     if (!confirmed) return;
@@ -797,10 +795,8 @@ function initProviderManager(): void {
     candidate: ProviderRecoveryCandidate,
   ): Promise<void> => {
     const confirmed = await appConfirm({
-      title: tx('settings_ai_providers_recovery_apply', 'Restore to this state'),
+      action: 'restore',
       message: recoveryCandidateLabel(candidate),
-      confirmText: tx('settings_ai_providers_recovery_apply', 'Restore to this state'),
-      cancelText: tx('settings_ai_providers_cancel', 'Cancel'),
     });
     if (!confirmed) return;
     const result = await recoverProvider(providerId, candidate.kind === 'user_revision' ? candidate.revision : '');
@@ -843,7 +839,7 @@ function initProviderManager(): void {
       const actions = document.createElement('div');
       actions.className = 'provider-history-row-actions';
       const applyButton = document.createElement('button');
-      applyButton.className = 'settings-inline-btn';
+      applyButton.className = 'ui-button ui-button--secondary ui-button--compact settings-inline-btn';
       applyButton.type = 'button';
       applyButton.textContent = tx('settings_ai_providers_recovery_apply', 'Restore to this state');
       applyButton.addEventListener('click', () => void recoverAction(providerId, providerName, candidate));
@@ -885,7 +881,7 @@ function initProviderManager(): void {
       actions.className = 'provider-history-row-actions';
       if (kind === 'backup') {
         const verifyButton = document.createElement('button');
-        verifyButton.className = 'settings-inline-btn';
+        verifyButton.className = 'ui-button ui-button--secondary ui-button--compact settings-inline-btn';
         verifyButton.type = 'button';
         verifyButton.textContent = tx('settings_ai_providers_history_verify', 'Verify');
         verifyButton.addEventListener('click', () => void verifyBackupAction(providerId, record.revision));
@@ -893,7 +889,7 @@ function initProviderManager(): void {
       }
       if (kind === 'revision') {
         const diffButton = document.createElement('button');
-        diffButton.className = 'settings-inline-btn';
+        diffButton.className = 'ui-button ui-button--secondary ui-button--compact settings-inline-btn';
         diffButton.type = 'button';
         diffButton.textContent = tx('settings_ai_providers_history_diff', 'Diff');
         diffButton.addEventListener('click', () => void showRevisionDiff(providerId, record.revision));
@@ -901,7 +897,7 @@ function initProviderManager(): void {
       }
       if (!isCurrent) {
         const restoreButton = document.createElement('button');
-        restoreButton.className = 'settings-inline-btn';
+        restoreButton.className = 'ui-button ui-button--secondary ui-button--compact settings-inline-btn';
         restoreButton.type = 'button';
         restoreButton.textContent = tx('settings_ai_providers_history_restore', 'Restore');
         restoreButton.addEventListener('click', () => void restoreAction(kind, providerId, providerName, record.revision));
@@ -1053,10 +1049,8 @@ function initProviderManager(): void {
   const removeProvider = async (provider: ProviderSummary): Promise<void> => {
     const name = provider.display_name || provider.id;
     const confirmed = await appConfirm({
-      title: tx('settings_ai_providers_delete', 'Delete'),
+      action: 'delete',
       message: tx('settings_ai_providers_delete_confirm', 'Delete {name}? This does not uninstall the CLI.', { name }),
-      confirmText: tx('settings_ai_providers_delete', 'Delete'),
-      cancelText: tx('settings_ai_providers_cancel', 'Cancel'),
       kind: 'danger',
     });
     if (!confirmed) return;
@@ -1080,10 +1074,8 @@ function initProviderManager(): void {
     if (provider.enabled) {
       const name = provider.display_name || provider.id;
       const confirmed = await appConfirm({
-        title: tx('settings_ai_providers_disable', 'Disable'),
+        action: 'disable',
         message: tx('settings_ai_providers_disable_confirm', 'Disable {name}? You can turn it back on any time.', { name }),
-        confirmText: tx('settings_ai_providers_disable', 'Disable'),
-        cancelText: tx('settings_ai_providers_cancel', 'Cancel'),
         kind: 'danger',
       });
       if (!confirmed) return;

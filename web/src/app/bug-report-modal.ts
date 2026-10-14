@@ -1,4 +1,5 @@
 import { t } from '../i18n.js';
+import { uiIconHtml } from './ui-components.js';
 import { activeSessionId } from './state.js';
 import { apiFetch, showToast } from './util.js';
 
@@ -159,6 +160,7 @@ function field(labelText: string, required = false): { wrapper: HTMLDivElement; 
   const label = document.createElement('label');
   label.textContent = labelText;
   const textarea = document.createElement('textarea');
+  textarea.classList.add('ui-input');
   textarea.required = required;
   textarea.addEventListener('input', refreshFullPreview);
   label.appendChild(textarea);
@@ -243,7 +245,7 @@ async function openModal(): Promise<void> {
   overlay.setAttribute('role', 'presentation');
 
   const dialog = document.createElement('section');
-  dialog.className = 'bug-report-dialog';
+  dialog.className = 'ui-modal ui-modal--lg bug-report-dialog';
   dialog.setAttribute('role', 'dialog');
   dialog.setAttribute('aria-modal', 'true');
   dialog.setAttribute('aria-labelledby', 'bug-report-title');
@@ -255,8 +257,8 @@ async function openModal(): Promise<void> {
   title.textContent = t('bug_report_title');
   const close = document.createElement('button');
   close.type = 'button';
-  close.className = 'bug-report-close';
-  close.textContent = '✕';
+  close.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon bug-report-close';
+  close.innerHTML = uiIconHtml('close');
   close.setAttribute('aria-label', t('bug_report_cancel'));
   close.addEventListener('click', closeModal);
   header.append(title, close);
@@ -279,7 +281,7 @@ async function openModal(): Promise<void> {
   summary.textContent = t('bug_report_environment');
   const environment = field(t('bug_report_environment_editable'));
   environmentEl = environment.textarea;
-  environment.textarea.className = 'bug-report-environment-text';
+  environment.textarea.className = 'ui-input bug-report-environment-text';
   environment.textarea.readOnly = true;
   environment.textarea.placeholder = t('bug_report_loading');
   details.append(summary, environment.wrapper);
@@ -332,12 +334,12 @@ async function openModal(): Promise<void> {
   actions.className = 'bug-report-actions';
   const cancel = document.createElement('button');
   cancel.type = 'button';
-  cancel.className = 'bug-report-cancel';
+  cancel.className = 'ui-button ui-button--secondary ui-button--regular bug-report-cancel';
   cancel.textContent = t('bug_report_cancel');
   cancel.addEventListener('click', closeModal);
   submitBtn = document.createElement('button');
   submitBtn.type = 'button';
-  submitBtn.className = 'bug-report-submit';
+  submitBtn.className = 'ui-button ui-button--primary ui-button--regular bug-report-submit';
   submitBtn.textContent = t('bug_report_open_github');
   submitBtn.disabled = true;
   submitBtn.addEventListener('click', () => void finalizeReport());

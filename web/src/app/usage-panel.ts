@@ -1,7 +1,9 @@
-// Usage dropdown and active-session inline row share the Hub usage snapshot.
-// The dropdown fetches on open; the inline row fetches on session/profile change.
+import { isSettingsContentVisible } from './settings-visibility.js';
+// Settings Usage and the active-session inline row share the Hub usage snapshot.
+// The Usage view fetches on entry; the inline row fetches on session/profile change.
 // No provider auth file is read in the browser.
 import { t } from '../i18n.js';
+import { confirmationLabels } from './confirmation-labels.js';
 import { apiFetch, escapeHtml } from './util.js';
 import {
   remainingPercent,
@@ -89,6 +91,7 @@ const AUTH_POLL_WINDOW_MS = 20000;
 const running = new Set<string>();
 const failures = new Map<string, string>();
 let panelRoot: HTMLElement | null = null;
+let panelVisible = false;
 let usageData: UsageResponse | null = null;
 let refreshInFlight: Promise<boolean> | null = null;
 let inlineRoot: HTMLElement | null = null;
@@ -238,7 +241,7 @@ function metersGroup(groups: string[], freshness: UsageFreshness = 'current'): s
 }
 
 function actionButton(className: string, label: string, attribute: string, disabled = false): string {
-  return `<button type="button" class="${className}" ${attribute}${disabled ? ' disabled' : ''}>${escapeHtml(label)}</button>`;
+  return `<button type="button" class="ui-button ui-button--secondary ui-button--regular ${className}" ${attribute}${disabled ? ' disabled' : ''}>${escapeHtml(label)}</button>`;
 }
 
 function hasWindows(usage: ClaudeUsage | CodexUsage | undefined): boolean {
@@ -466,7 +469,7 @@ function renderInlineUsage(): void {
     ? `<span class="inline-usage-refresh-error" role="status" aria-label="${escapeHtml(errorText)}" title="${escapeHtml(errorText)}">!</span>`
     : '';
   const refreshLabel = tx('usage_inline_refresh', 'Refresh usage');
-  inlineRoot.innerHTML = `${identity}${center}${side}${staleBadge}${errorBadge}<button class="inline-usage-refresh" type="button" aria-label="${escapeHtml(refreshLabel)}" title="${escapeHtml(refreshLabel)}"${!target || !hasProviderCapability(provider, 'usage') || busy ? ' disabled' : ''}>${busy ? '…' : '↻'}</button>`;
+  inlineRoot.innerHTML = `${identity}${center}${side}${staleBadge}${errorBadge}<button class="ui-button ui-button--quiet ui-button--compact inline-usage-refresh" type="button" aria-label="${escapeHtml(refreshLabel)}" title="${escapeHtml(refreshLabel)}"${!target || !hasProviderCapability(provider, 'usage') || busy ? ' disabled' : ''}>${busy ? '…' : '↻'}</button>`;
   inlineRoot.querySelector<HTMLButtonElement>('.inline-usage-refresh')?.addEventListener('click', () => { void refreshInlineUsage(); });
 }
 
@@ -561,14 +564,13 @@ function stopAuthPoll(): void {
 }
 
 function scheduleAuthPoll(): void {
-  if (authPollTimer !== null) return;
+  if (authPollTimer !== null || !isSettingsContentVisible(panelRoot)) return;
   if (!anyAuthChecking(usageData)) return;
   if (Date.now() >= authPollDeadline) return;
   authPollTimer = window.setTimeout(() => {
     authPollTimer = null;
-    // A closed dropdown has nothing to update, and polling it would keep
-    // starting vendor CLIs on the Hub for a panel nobody is looking at.
-    if (!panelRoot || panelRoot.hidden) return;
+    // Hidden Settings, another section, and mobile Back all stop panel polling.
+    if (!isSettingsContentVisible(panelRoot)) return;
     void runRefresh(false, true);
   }, AUTH_POLL_INTERVAL_MS);
 }
@@ -684,13 +686,13 @@ async function confirmProbe(profile: UsageProfile): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const backdrop = document.createElement('div');
     backdrop.className = 'usage-probe-dialog-backdrop aac-wheel-overlay';
-    backdrop.innerHTML = `<div class="usage-probe-dialog" role="dialog" aria-modal="true" aria-labelledby="usage-probe-dialog-title">
-      <h2 id="usage-probe-dialog-title">${escapeHtml(tx('usage_probe_confirm_title', 'Retrieve subscription usage'))}</h2>
+    backdrop.innerHTML = `<div class="ui-modal ui-modal--sm usage-probe-dialog" role="dialog" aria-modal="true" aria-labelledby="usage-probe-dialog-title">
+      <h2 class="ui-modal__title" id="usage-probe-dialog-title">${escapeHtml(confirmationLabels('retrieve').question)}</h2>
       <p>${escapeHtml(tx('usage_probe_confirm_profile', 'Profile: {name}', { name }))}</p>
       <p>${escapeHtml(tx('usage_probe_confirm_body', 'Claude will start briefly, read usage from its statusLine, and close.'))}</p>
       <p>${escapeHtml(tx('usage_probe_confirm_cost', 'This uses a small amount of this subscription quota.'))}</p>
       <label><input type="checkbox" data-probe-confirm-skip> ${escapeHtml(tx('usage_probe_confirm_check', 'Do not ask again'))}</label>
-      <div class="usage-probe-dialog-actions"><button type="button" data-probe-dialog-cancel>${escapeHtml(tx('usage_probe_confirm_cancel', 'Cancel'))}</button><button type="button" class="primary" data-probe-dialog-start>${escapeHtml(tx('usage_probe_confirm_start', 'Retrieve'))}</button></div>
+      <div class="ui-modal__actions usage-probe-dialog-actions"><button class="ui-button ui-button--secondary ui-button--regular" type="button" data-probe-dialog-cancel>${escapeHtml(confirmationLabels('retrieve').decline)}</button><button type="button" class="ui-button ui-button--primary ui-button--regular primary" data-probe-dialog-start>${escapeHtml(confirmationLabels('retrieve').accept)}</button></div>
     </div>`;
     document.body.appendChild(backdrop);
     const finish = (value: boolean) => {
@@ -844,14 +846,23 @@ function applyProviderOrderToPanel(): void {
   }
 }
 
-export function initUsagePanel(dropdown: HTMLElement): void {
-  if (panelRoot === dropdown) return;
-  panelRoot = dropdown;
-  // ドロップダウン各行のアイコンは index.html に図形を複製せず、空の器へ provider-icon.ts が入れる。
-  fillProviderIconSlots(dropdown);
+function syncUsageVisibility(): void {
+  const visible = isSettingsContentVisible(panelRoot);
+  if (visible === panelVisible) return;
+  panelVisible = visible;
+  if (visible) void refreshUsagePanel();
+  else stopAuthPoll();
+}
+
+export function initUsagePanel(panel: HTMLElement): void {
+  if (panelRoot === panel) return;
+  panelRoot = panel;
+  document.addEventListener('settings-view-changed', syncUsageVisibility);
+  // Usage 各行のアイコンは index.html に図形を複製せず、空の器へ provider-icon.ts が入れる。
+  fillProviderIconSlots(panel);
   inlineRoot = document.getElementById('session-inline-usage');
   document.addEventListener('session-usage-target-changed', onInlineTargetChanged);
-  // settings.ts initializes the dropdown while modules are still evaluating.
+  // settings.ts initializes the panel while modules are still evaluating.
   // Wait until state.ts has initialized activeSessionId before reading it.
   queueMicrotask(onInlineTargetChanged);
   applyProviderOrderToPanel();

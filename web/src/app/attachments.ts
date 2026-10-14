@@ -103,12 +103,14 @@ function showAgentLogPopup(anchor: HTMLButtonElement, sessionId: number, detail:
 
   const copyBtn = document.createElement('button');
   copyBtn.type = 'button';
+  copyBtn.className = 'ui-button ui-button--quiet ui-button--compact';
   copyBtn.textContent = `📋 ${t('agent_log_copy_path')}`;
   copyBtn.addEventListener('click', () => {
     void copyPathText(path, copyBtn).catch(() => showToast(t('agent_log_copy_error'), copyBtn));
   });
   const openBtn = document.createElement('button');
   openBtn.type = 'button';
+  openBtn.className = 'ui-button ui-button--secondary ui-button--compact';
   openBtn.textContent = `📁 ${t('agent_log_open_folder')}`;
   openBtn.addEventListener('click', async () => {
     try {
@@ -474,7 +476,7 @@ export function addAttachThumbnail(file, onRemove) {
   img.addEventListener('click', () => openLightbox(img.src));
 
   const removeBtn = document.createElement('button');
-  removeBtn.className = 'attach-thumb-remove';
+  removeBtn.className = 'ui-button ui-button--quiet ui-button--compact attach-thumb-remove';
   removeBtn.textContent = t('remove');
   removeBtn.title = t('delete_attach');
   removeBtn.addEventListener('click', (e) => {
@@ -509,7 +511,7 @@ export function addFileChip(file, onRemove) {
   label.title = file.name || 'file';
 
   const removeBtn = document.createElement('button');
-  removeBtn.className = 'attach-thumb-remove';
+  removeBtn.className = 'ui-button ui-button--quiet ui-button--compact attach-thumb-remove';
   removeBtn.textContent = t('remove');
   removeBtn.title = t('delete_attach');
   removeBtn.addEventListener('click', (e) => {

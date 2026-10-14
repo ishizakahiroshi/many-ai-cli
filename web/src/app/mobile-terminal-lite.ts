@@ -32,7 +32,7 @@ function getOrCreateLiteContainer(): HTMLElement | null {
   const detailBtn = document.createElement('button');
   detailBtn.id = 'mobile-terminal-lite-detail';
   detailBtn.type = 'button';
-  detailBtn.className = 'mtl-detail-icon';
+  detailBtn.className = 'ui-button ui-button--quiet ui-button--compact mtl-detail-icon';
   detailBtn.textContent = '⛶';
   detailBtn.title = t('mobile_terminal_lite_show_detail');
   detailBtn.setAttribute('aria-label', t('mobile_terminal_lite_show_detail'));
@@ -54,7 +54,7 @@ function getOrCreateLiteContainer(): HTMLElement | null {
 
   const jump = document.createElement('button');
   jump.type = 'button';
-  jump.className = 'mtl-jump-latest';
+  jump.className = 'ui-button ui-button--secondary ui-button--regular mtl-jump-latest';
   jump.textContent = t('mobile_chat_jump_latest');
   jump.hidden = true;
   jump.addEventListener('click', () => {
@@ -161,14 +161,14 @@ function openDetailModal(e?: Event): void {
 
   const tailBtn = document.createElement('button');
   tailBtn.type = 'button';
-  tailBtn.className = 'mtl-detail-tail';
+  tailBtn.className = 'ui-button ui-button--secondary ui-button--regular mtl-detail-tail';
   tailBtn.textContent = t('mobile_terminal_lite_tail');
   tailBtn.addEventListener('click', () => { pre.scrollTop = pre.scrollHeight; });
   head.appendChild(tailBtn);
 
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
-  closeBtn.className = 'mtl-detail-close';
+  closeBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon mtl-detail-close';
   closeBtn.textContent = '✕';
   closeBtn.setAttribute('aria-label', t('settings_close'));
   head.appendChild(closeBtn);

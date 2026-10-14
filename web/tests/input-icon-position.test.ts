@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { clampIconPoint, parseIconPositions, INPUT_ICON_IDS } from '../src/app/input-icon-position.js';
+import { clampIconPoint, layoutStatusControls, parseIconPositions, INPUT_ICON_IDS } from '../src/app/input-icon-position.js';
 
 describe('independent input icon positions', () => {
   test('clear, templates and nested quick commands keep separate saved positions', () => {
@@ -32,7 +32,7 @@ describe('independent input icon positions', () => {
     expect(parseIconPositions('[1,2]')).toEqual({});
     expect(parseIconPositions('bad json')).toEqual({});
   });
-  test('keeps the icon and grip reachable at every edge', () => {
+  test('keeps the icon and grip reachable at every viewport edge', () => {
     expect(clampIconPoint({ x: -10, y: -30 }, 1000, 100, 32, 32)).toEqual({ x: 8, y: 8 });
     expect(clampIconPoint({ x: 2000, y: 500 }, 1000, 100, 32, 32)).toEqual({ x: 960, y: 60 });
     expect(clampIconPoint({ x: 2000, y: 500 }, 20, 20, 32, 32)).toEqual({ x: 0, y: 0 });
@@ -42,5 +42,18 @@ describe('independent input icon positions', () => {
     expect(clampIconPoint(saved, 300, 64, 34, 34)).toEqual({ x: 258, y: 22 });
     expect(clampIconPoint(saved, 1000, 200, 34, 34)).toEqual(saved);
     expect(saved).toEqual({ x: 600, y: 80 });
+  });
+  test('default controls occupy the status band right side and wrap without covering status text', () => {
+    const single = layoutStatusControls([80, 80, 80], 600);
+    expect(single).toEqual({
+      points: [{ x: 340, y: 5 }, { x: 426, y: 5 }, { x: 512, y: 5 }],
+      rows: 1,
+      reservedWidth: 270,
+    });
+    const wrapped = layoutStatusControls([80, 80, 80], 330);
+    expect(wrapped.points).toEqual([
+      { x: 242, y: 5 }, { x: 242, y: 43 }, { x: 242, y: 81 },
+    ]);
+    expect(wrapped.rows).toBe(3);
   });
 });

@@ -431,9 +431,9 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
       return (
         `<tr data-role="${r.key}">` +
         `<td>${escapeHtml(t(r.labelKey))}</td>` +
-        `<td><select class="spawn-role-cli">${cliOptions}</select></td>` +
-        `<td><input type="text" class="spawn-role-model" data-i18n-placeholder="spawn_role_model_placeholder" placeholder="${escapeHtml(t('spawn_role_model_placeholder'))}" disabled></td>` +
-        `<td><select class="spawn-role-subscription" hidden disabled></select></td>` +
+        `<td><select class="ui-input spawn-role-cli">${cliOptions}</select></td>` +
+        `<td><input type="text" class="ui-input spawn-role-model" data-i18n-placeholder="spawn_role_model_placeholder" placeholder="${escapeHtml(t('spawn_role_model_placeholder'))}" disabled></td>` +
+        `<td><select class="ui-input spawn-role-subscription" hidden disabled></select></td>` +
         `</tr>`
       );
     }).join('');
@@ -1855,10 +1855,10 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
       const baseOnlyFilter = isSub ? subPartial : '';
       return (
         `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}${isSub ? ' is-subdir' : ''}" tabindex="-1" data-value="${escapeHtml(v)}">` +
-        `<button class="cwd-dropdown-fav${fav ? ' is-on' : ''}" tabindex="-1" data-value="${escapeHtml(v)}" ` +
+        `<button class="ui-button ui-button--quiet ui-button--compact cwd-dropdown-fav${fav ? ' is-on' : ''}" tabindex="-1" data-value="${escapeHtml(v)}" ` +
         `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
         `<span class="cwd-dropdown-label" title="${escapeHtml(v)}">${buildCwdLabelHtml(v, labelFilter, baseOnlyFilter)}</span>` +
-        (isSub ? '' : `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(v)}" ` +
+        (isSub ? '' : `<button class="ui-button ui-button--danger ui-button--compact cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(v)}" ` +
           `title="${escapeHtml(t('spawn_cwd_remove_entry'))}">✕</button>`) +
         `</li>`
       );
@@ -1868,11 +1868,11 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
       const fav = r.isFav;
       return (
         `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}" tabindex="-1" data-value="${escapeHtml(r.path)}">` +
-        `<button class="cwd-dropdown-fav${fav ? ' is-on' : ''}" tabindex="-1" data-value="${escapeHtml(r.path)}" ` +
+        `<button class="ui-button ui-button--quiet ui-button--compact cwd-dropdown-fav${fav ? ' is-on' : ''}" tabindex="-1" data-value="${escapeHtml(r.path)}" ` +
         `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
         `<span class="cwd-dropdown-mag" aria-hidden="true">🔍</span>` +
         `<span class="cwd-dropdown-label" title="${escapeHtml(r.path)}">${buildCwdLabelHtml(r.path, parsed.query)}</span>` +
-        `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(r.path)}" ` +
+        `<button class="ui-button ui-button--danger ui-button--compact cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(r.path)}" ` +
         `title="${escapeHtml(t('spawn_cwd_remove_entry'))}">✕</button>` +
         `</li>`
       );
@@ -1900,7 +1900,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
           ? `${escapeHtml(activeRoot)}:`
           : `<span class="chip-count">${totalCount}</span>`;
         chipsHtml += `<div class="cwd-dropdown-chip-collapsed">` +
-          `<button class="cwd-dropdown-chip-launcher${activeRoot ? ' is-active' : ''}" type="button" aria-haspopup="true">` +
+          `<button class="ui-button ui-button--primary ui-button--regular cwd-dropdown-chip-launcher${activeRoot ? ' is-active' : ''}" type="button" aria-haspopup="true">` +
           `<span class="chip-icon" aria-hidden="true">🗂</span> ${launcherInner} <span class="chip-caret" aria-hidden="true">▾</span>` +
           `</button>` +
           `<div class="cwd-dropdown-chip-popover" role="menu">`;
@@ -1908,7 +1908,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
           const count = countForRoot(shortName, rootPath);
           const activeClass = isChipActive(shortName) ? ' is-active' : '';
           chipsHtml +=
-            `<button class="cwd-dropdown-chip${activeClass}" type="button" data-prefix="${escapeHtml(shortName)}">` +
+            `<button class="ui-button ui-button--secondary ui-button--regular cwd-dropdown-chip${activeClass}" type="button" data-prefix="${escapeHtml(shortName)}">` +
             `${escapeHtml(shortName)}:` +
             `<span class="chip-count">${count}</span>` +
             `</button>`;
@@ -1918,12 +1918,12 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
       // 履歴/お気に入りの一括削除ボタンと閉じるボタン（chip 行の右寄せ）。
       chipsHtml += `<div class="cwd-dropdown-chip-actions">`;
       if (hist.length > 0) {
-        chipsHtml += `<button class="cwd-dropdown-clear-history" type="button" title="${escapeHtml(t('spawn_cwd_clear_history'))}">${escapeHtml(t('spawn_cwd_clear_history'))}</button>`;
+        chipsHtml += `<button class="ui-button ui-button--secondary ui-button--regular cwd-dropdown-clear-history" type="button" title="${escapeHtml(t('spawn_cwd_clear_history'))}">${escapeHtml(t('spawn_cwd_clear_history'))}</button>`;
       }
       if (favs.length > 0) {
-        chipsHtml += `<button class="cwd-dropdown-clear-favorites" type="button" title="${escapeHtml(t('spawn_cwd_clear_favorites'))}">${escapeHtml(t('spawn_cwd_clear_favorites'))}</button>`;
+        chipsHtml += `<button class="ui-button ui-button--secondary ui-button--regular cwd-dropdown-clear-favorites" type="button" title="${escapeHtml(t('spawn_cwd_clear_favorites'))}">${escapeHtml(t('spawn_cwd_clear_favorites'))}</button>`;
       }
-      chipsHtml += `<button class="cwd-dropdown-close" type="button" title="${escapeHtml(t('spawn_cwd_close_dropdown'))}" aria-label="${escapeHtml(t('spawn_cwd_close_dropdown'))}">✕</button>`;
+      chipsHtml += `<button class="ui-button ui-button--quiet ui-button--compact ui-button--icon cwd-dropdown-close" type="button" title="${escapeHtml(t('spawn_cwd_close_dropdown'))}" aria-label="${escapeHtml(t('spawn_cwd_close_dropdown'))}">✕</button>`;
       chipsHtml += `</div>`;
       if (noMatch) {
         chipsHtml += `</li>` +
@@ -2211,21 +2211,21 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
     overlay.className = 'spawn-web-dir-overlay aac-wheel-overlay';
     overlay.hidden = true;
     overlay.innerHTML =
-      `<div class="spawn-web-dir-modal" role="dialog" aria-modal="true" aria-labelledby="spawn-web-dir-title">` +
+      `<div class="ui-modal ui-modal--sm spawn-web-dir-modal" role="dialog" aria-modal="true" aria-labelledby="spawn-web-dir-title">` +
       `<div class="spawn-web-dir-header">` +
       `<strong id="spawn-web-dir-title" class="spawn-web-dir-title"></strong>` +
-      `<button type="button" class="spawn-web-dir-close" data-action="close" aria-label="Close">✕</button>` +
+      `<button type="button" class="ui-button ui-button--quiet ui-button--compact ui-button--icon spawn-web-dir-close" data-action="close" aria-label="Close">✕</button>` +
       `</div>` +
       `<div class="spawn-web-dir-pathrow">` +
-      `<button type="button" class="spawn-web-dir-up" data-action="up" title="..">⬆</button>` +
-      `<input type="text" class="spawn-web-dir-path" spellcheck="false" autocomplete="off">` +
-      `<button type="button" class="spawn-web-dir-go" data-action="go">→</button>` +
+      `<button type="button" class="ui-button ui-button--secondary ui-button--regular ui-button--icon spawn-web-dir-up" data-action="up" title="..">⬆</button>` +
+      `<input type="text" class="ui-input spawn-web-dir-path" spellcheck="false" autocomplete="off">` +
+      `<button type="button" class="ui-button ui-button--secondary ui-button--regular ui-button--icon spawn-web-dir-go" data-action="go">→</button>` +
       `</div>` +
       `<div class="spawn-web-dir-status" hidden></div>` +
       `<ul class="spawn-web-dir-list" role="listbox"></ul>` +
       `<div class="spawn-web-dir-actions">` +
-      `<button type="button" class="spawn-web-dir-cancel" data-action="close"></button>` +
-      `<button type="button" class="spawn-web-dir-select" data-action="select"></button>` +
+      `<button type="button" class="ui-button ui-button--quiet ui-button--compact spawn-web-dir-cancel" data-action="close"></button>` +
+      `<button type="button" class="ui-button ui-button--secondary ui-button--regular spawn-web-dir-select" data-action="select"></button>` +
       `</div>` +
       `</div>`;
     document.body.appendChild(overlay);
@@ -2653,12 +2653,12 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
       overlay.hidden = false;
 
       const dialog = document.createElement('div');
-      dialog.className = 'model-picker-dialog';
+      dialog.className = 'ui-modal ui-modal--md model-picker-dialog';
       dialog.innerHTML = `
         <div class="model-picker-title">${escapeHtml(t(opts.titleKey))}</div>
         <div class="model-picker-current">${escapeHtml(t('model_current', { model: display }))}</div>
         <label class="model-picker-note">${escapeHtml(t('model_candidate'))}</label>
-        <input class="model-picker-input" id="model-candidate-input" type="text" list="spawn-model-datalist" value="${escapeHtml(currentModel || '')}">
+        <input class="ui-input model-picker-input" id="model-candidate-input" type="text" list="spawn-model-datalist" value="${escapeHtml(currentModel || '')}">
         <div class="model-picker-note">${escapeHtml(t('model_summary'))}</div>
         <div class="model-picker-note">- ${escapeHtml(t('model_summary_cost'))}</div>
         <div class="model-picker-note">- ${escapeHtml(t(opts.permSummaryKey))}</div>
@@ -2668,8 +2668,8 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
           <span>${escapeHtml(t('model_require_confirm'))}</span>
         </label>
         <div class="model-picker-actions">
-          <button class="model-picker-btn" id="model-cancel-btn">${escapeHtml(t('model_cancel'))}</button>
-          <button class="model-picker-btn primary" id="model-apply-btn">${escapeHtml(t('model_apply'))}</button>
+          <button class="ui-button ui-button--secondary ui-button--regular model-picker-btn" id="model-cancel-btn">${escapeHtml(t('model_cancel'))}</button>
+          <button class="ui-button ui-button--primary ui-button--regular model-picker-btn primary" id="model-apply-btn">${escapeHtml(t('model_apply'))}</button>
         </div>
       `;
       overlay.appendChild(dialog);
@@ -2855,10 +2855,8 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
 
         if (highRisk && !riskConfirmed) {
           riskConfirmed = await appConfirm({
-            title: t('claude_model_confirm_title'),
+            action: 'launch',
             message: t('claude_model_confirm_message'),
-            confirmText: t('claude_model_confirm_run'),
-            cancelText: t('spawn_cancel'),
             kind: 'danger',
           });
           if (!riskConfirmed) {
@@ -2876,10 +2874,8 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
 
         if (fullAllow) {
           riskConfirmed = await appConfirm({
-            title: t('opencode_confirm_title'),
+            action: 'launch',
             message: t('opencode_confirm_message'),
-            confirmText: t('opencode_confirm_run'),
-            cancelText: t('spawn_cancel'),
             kind: 'danger',
           });
           if (!riskConfirmed) {
@@ -2900,10 +2896,8 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
 
         if (highRisk && !riskConfirmed) {
           riskConfirmed = await appConfirm({
-            title: t('codex_model_confirm_title'),
+            action: 'launch',
             message: t('codex_model_confirm_message'),
-            confirmText: t('codex_model_confirm_run'),
-            cancelText: t('spawn_cancel'),
             kind: 'danger',
           });
           if (!riskConfirmed) {
@@ -2920,10 +2914,8 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
         const permMode = spawnPermissionMode ? spawnPermissionMode.value : 'default';
         if (permMode === 'bypassPermissions') {
           const riskConfirmed = await appConfirm({
-            title: t('full_allow_confirm_title'),
+            action: 'launch',
             message: t('full_allow_confirm_message'),
-            confirmText: t('full_allow_confirm_run'),
-            cancelText: t('spawn_cancel'),
             kind: 'danger',
           });
           if (!riskConfirmed) {

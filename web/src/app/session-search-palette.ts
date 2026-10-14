@@ -294,7 +294,7 @@ function renderCommands() {
   for (const item of currentCommandItems) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'command-palette-command';
+    btn.className = 'ui-button ui-button--secondary ui-button--regular command-palette-command';
     btn.setAttribute('role', 'option');
     btn.setAttribute('aria-selected', 'false');
     if (!item.enabled) btn.classList.add('command-palette-command--disabled');
@@ -352,7 +352,7 @@ function renderResults() {
   for (const result of results.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)) {
     const item = document.createElement('button');
     item.type = 'button';
-    item.className = 'session-search-result';
+    item.className = 'ui-button ui-button--secondary ui-button--regular session-search-result';
     item.setAttribute('role', 'option');
     item.setAttribute('aria-selected', 'false');
     const meta = document.createElement('span');
@@ -378,6 +378,7 @@ function renderResults() {
     const previous = document.createElement('button');
     previous.type = 'button';
     previous.textContent = t('session_search_prev_page');
+    previous.className = 'ui-button ui-button--secondary ui-button--compact';
     previous.disabled = page === 0;
     previous.onclick = () => { page--; renderResults(); };
     const label = document.createElement('span');
@@ -385,6 +386,7 @@ function renderResults() {
     const next = document.createElement('button');
     next.type = 'button';
     next.textContent = t('session_search_next_page');
+    next.className = 'ui-button ui-button--secondary ui-button--compact';
     next.disabled = page >= pageCount - 1;
     next.onclick = () => { page++; renderResults(); };
     pager.append(previous, label, next);
@@ -480,7 +482,7 @@ function renderSuggestions() {
     for (const query of queries) {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'session-search-query';
+      button.className = 'ui-button ui-button--secondary ui-button--regular session-search-query';
       button.textContent = query;
       button.onclick = () => {
         if (!input) return;
@@ -512,10 +514,11 @@ function ensurePalette(): HTMLElement | null {
   overlay.addEventListener('mousedown', (event) => { if (event.target === overlay) closePalette(); });
 
   const dialog = document.createElement('section');
-  dialog.className = 'session-search-dialog';
+  dialog.className = 'ui-modal ui-modal--md session-search-dialog';
   const header = document.createElement('div');
   header.className = 'session-search-header';
   input = document.createElement('input');
+  input.classList.add('ui-input');
   input.type = 'search';
   input.placeholder = t('session_search_placeholder');
   input.autocomplete = 'off';
@@ -536,7 +539,7 @@ function ensurePalette(): HTMLElement | null {
   });
   const pin = document.createElement('button');
   pin.type = 'button';
-  pin.className = 'session-search-pin';
+  pin.className = 'ui-button ui-button--secondary ui-button--regular session-search-pin';
   pin.title = t('session_search_pin_title');
   pin.textContent = '☆';
   pin.onclick = () => {
@@ -547,7 +550,7 @@ function ensurePalette(): HTMLElement | null {
   };
   const close = document.createElement('button');
   close.type = 'button';
-  close.className = 'session-search-close';
+  close.className = 'ui-button ui-button--quiet ui-button--compact session-search-close';
   close.textContent = 'Esc';
   close.onclick = closePalette;
   header.append(input, pin, close);
@@ -555,8 +558,11 @@ function ensurePalette(): HTMLElement | null {
   const filters = document.createElement('div');
   filters.className = 'session-search-filters';
   providerEl = document.createElement('select');
+  providerEl.classList.add('ui-input');
   labelEl = document.createElement('select');
+  labelEl.classList.add('ui-input');
   periodEl = document.createElement('select');
+  periodEl.classList.add('ui-input');
   periodEl.append(
     new Option(t('session_search_period_all'), '0'),
     new Option(t('session_search_period_24h'), '1'),

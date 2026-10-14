@@ -7,6 +7,7 @@
 // 「未導入の行の『インストール手順』リンクは今のまま残す」）。ここは provider 一覧
 // そのものは受け取り、バージョン確認・更新可否・更新ジョブの API だけを自分で持つ。
 import { t } from '../i18n.js';
+import { confirmationLabels } from './confirmation-labels.js';
 import {
   cliUpdateEligibleCount,
   cliUpdateFailureDetail,
@@ -269,7 +270,7 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
 
   function updateButtonHtml(status: CliInstallStatus, state: ReturnType<typeof cliUpdateRowState>): string {
     if (state.kind === 'ready') {
-      return `<button type="button" class="cli-maint-btn" data-action="update-one" data-provider="${escapeHtml(status.id)}">${escapeHtml(tx('cli_maintenance_update_btn', '更新'))}</button>`;
+      return `<button type="button" class="ui-button ui-button--secondary ui-button--regular cli-maint-btn" data-action="update-one" data-provider="${escapeHtml(status.id)}">${escapeHtml(tx('cli_maintenance_update_btn', '更新'))}</button>`;
     }
     if (state.kind === 'running') {
       return `<span class="cli-maint-btn is-disabled" aria-disabled="true">${escapeHtml(tx('cli_maintenance_update_btn_running', '更新（実行中）'))}</span>`;
@@ -324,7 +325,7 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
       ? `${st.version_before} → ${st.version_after}`
       : (st.version_after || st.version_before || (inFlight ? tx('cli_maintenance_version_checking', '確認中…') : ''));
     const logBtn = (st.log_available && r.jobId)
-      ? `<button type="button" class="cli-maint-btn" data-action="show-log" data-provider="${escapeHtml(status.id)}" data-job="${escapeHtml(r.jobId)}">${escapeHtml(tx('cli_maintenance_log_btn', 'ログ'))}</button>`
+      ? `<button type="button" class="ui-button ui-button--secondary ui-button--regular cli-maint-btn" data-action="show-log" data-provider="${escapeHtml(status.id)}" data-job="${escapeHtml(r.jobId)}">${escapeHtml(tx('cli_maintenance_log_btn', 'ログ'))}</button>`
       : '';
     const failureDetail = cliUpdateFailureDetail(st, status.displayName);
     const detailRow = failureDetail
@@ -362,8 +363,8 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
 
     const toolbarHtml = activeJob
       ? `<span class="cli-maint-btn is-disabled" aria-disabled="true">${escapeHtml(tx('cli_maintenance_running_progress', '更新中… {done} / {total} 完了', progressVars()))}</span>`
-      : `<button type="button" class="cli-maint-btn" data-action="check-all"${busy ? ' disabled' : ''}>${escapeHtml(tx('cli_maintenance_check_versions_btn', 'バージョン確認'))}</button>` +
-        `<button type="button" class="cli-maint-btn is-primary" data-action="update-all"${(busy || allCount === 0) ? ' disabled' : ''}>${escapeHtml(tx('cli_maintenance_update_all_btn', '全部更新（{count} 件）', { count: allCount }))}</button>`;
+      : `<button type="button" class="ui-button ui-button--secondary ui-button--regular cli-maint-btn" data-action="check-all"${busy ? ' disabled' : ''}>${escapeHtml(tx('cli_maintenance_check_versions_btn', 'バージョン確認'))}</button>` +
+        `<button type="button" class="ui-button ui-button--primary ui-button--regular cli-maint-btn is-primary" data-action="update-all"${(busy || allCount === 0) ? ' disabled' : ''}>${escapeHtml(tx('cli_maintenance_update_all_btn', '全部更新（{count} 件）', { count: allCount }))}</button>`;
 
     let summaryHtml = '';
     if (!activeJob && justSettledSummary) {
@@ -371,7 +372,7 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
       const separator = tx('cli_maintenance_summary_separator', '／');
       const line = tx('cli_maintenance_summary_done', '更新が終わりました — {parts}', { parts: parts.map((p) => txm(p)).join(separator) });
       const retryBtn = justSettledSummary.failed > 0
-        ? `<button type="button" class="cli-maint-btn is-primary" data-action="retry-failed">${escapeHtml(tx('cli_maintenance_retry_failed_btn', '失敗した分を 1 本ずつやり直す'))}</button>`
+        ? `<button type="button" class="ui-button ui-button--primary ui-button--regular cli-maint-btn is-primary" data-action="retry-failed">${escapeHtml(tx('cli_maintenance_retry_failed_btn', '失敗した分を 1 本ずつやり直す'))}</button>`
         : '';
       summaryHtml = `<div class="cli-maint-summary">${parts.length ? `<span>${escapeHtml(line)}</span>` : ''}${retryBtn}</div>`;
     }
@@ -425,11 +426,12 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
   }
 
   function showConfirmDialog(mode: 'all' | 'one', entries: CliUpdateEligibilityEntry[]): void {
+    const labels = confirmationLabels('update');
     const groups = cliUpdatePlanGroups(entries);
     const dialog = document.createElement('dialog');
     // aac-wheel-overlay: 全画面オーバーレイの wheel 除外クラス。無いと document レベルの
     // wheel ハンドラが背後のターミナルへホイールを転送する（scripts/check-wheel-overlays.mjs）。
-    dialog.className = 'cli-maint-confirm-dialog aac-wheel-overlay';
+    dialog.className = 'ui-modal ui-modal--md cli-maint-confirm-dialog aac-wheel-overlay';
     const soleProvider = groups.toUpdate[0]?.provider || entries[0]?.provider || '';
     const title = mode === 'all'
       ? tx('cli_maintenance_confirm_title_all', '{count} 件の AI を更新します', { count: groups.toUpdate.length })
@@ -443,18 +445,19 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
     const noteText = mode === 'all'
       ? tx('cli_maintenance_confirm_note', '同時に実行します。1 本が失敗しても残りは続けます。更新中はこれらの AI で新しいセッションを起動できません。出力は ~/.many-ai-cli/logs/cli-updates/ に残ります。')
       : tx('cli_maintenance_confirm_note_one', '更新中はこの AI で新しいセッションを起動できません。出力は ~/.many-ai-cli/logs/cli-updates/ に残ります。');
-    dialog.innerHTML = `<div class="cli-maint-confirm-header">
-        <h2 class="cli-maint-confirm-title">${escapeHtml(title)}</h2>
-        <button type="button" class="cli-maint-btn" data-action="cancel" aria-label="${escapeHtml(tx('settings_close', 'Close'))}">${escapeHtml(tx('settings_close', 'Close'))}</button>
+    dialog.innerHTML = `<div class="ui-modal__header cli-maint-confirm-header">
+        <h2 class="ui-modal__title cli-maint-confirm-title">${escapeHtml(title)}</h2>
+        <button type="button" class="ui-button ui-button--quiet ui-button--compact cli-maint-btn" data-action="cancel" aria-label="${escapeHtml(tx('settings_close', 'Close'))}">${escapeHtml(tx('settings_close', 'Close'))}</button>
       </div>
-      <div class="cli-maint-confirm-body">
+      <div class="ui-modal__body cli-maint-confirm-body">
+        <p class="cli-maint-confirm-question">${escapeHtml(labels.question)}</p>
         <div class="cli-maint-confirm-group"><strong>${escapeHtml(tx('cli_maintenance_confirm_to_update', '更新する'))}</strong>${toUpdateHtml}</div>
         ${excludedHtml ? `<div class="cli-maint-confirm-group"><strong>${escapeHtml(tx('cli_maintenance_confirm_to_skip', '今回は更新しない'))}</strong>${excludedHtml}</div>` : ''}
         <p class="cli-maint-confirm-note">${escapeHtml(noteText)}</p>
       </div>
-      <div class="cli-maint-confirm-actions">
-        <button type="button" class="cli-maint-btn" data-action="cancel">${escapeHtml(tx('cli_maintenance_confirm_cancel', 'やめる'))}</button>
-        <button type="button" class="cli-maint-btn is-primary" data-action="run"${groups.toUpdate.length === 0 ? ' disabled' : ''}>${escapeHtml(mode === 'all' ? tx('cli_maintenance_confirm_run', '{count} 件を更新', { count: groups.toUpdate.length }) : tx('cli_maintenance_confirm_run_one', '更新'))}</button>
+      <div class="ui-modal__actions cli-maint-confirm-actions">
+        <button type="button" class="ui-button ui-button--secondary ui-button--regular cli-maint-btn" data-action="cancel">${escapeHtml(labels.decline)}</button>
+        <button type="button" class="ui-button ui-button--primary ui-button--regular cli-maint-btn is-primary" data-action="run"${groups.toUpdate.length === 0 ? ' disabled' : ''}>${escapeHtml(labels.accept)}</button>
       </div>`;
     const close = (): void => {
       try { dialog.close(); } catch (_) { /* already closed */ }
@@ -591,11 +594,11 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
   async function showLog(jobId: string, providerId: string): Promise<void> {
     if (!jobId || !providerId) return;
     const dialog = document.createElement('dialog');
-    dialog.className = 'cli-maint-log-dialog aac-wheel-overlay';
+    dialog.className = 'ui-modal ui-modal--md cli-maint-log-dialog aac-wheel-overlay';
     const name = displayNameFor(providerId);
-    dialog.innerHTML = `<div class="cli-maint-confirm-header">
-        <h2 class="cli-maint-confirm-title">${escapeHtml(tx('cli_maintenance_log_title', '{name} の更新ログ', { name }))}</h2>
-        <button type="button" class="cli-maint-btn" data-action="close">${escapeHtml(tx('cli_maintenance_log_close', '閉じる'))}</button>
+    dialog.innerHTML = `<div class="ui-modal__header cli-maint-confirm-header">
+        <h2 class="ui-modal__title cli-maint-confirm-title">${escapeHtml(tx('cli_maintenance_log_title', '{name} の更新ログ', { name }))}</h2>
+        <button type="button" class="ui-button ui-button--quiet ui-button--compact cli-maint-btn" data-action="close">${escapeHtml(tx('cli_maintenance_log_close', '閉じる'))}</button>
       </div>
       <div class="cli-maint-log-body"><pre class="cli-maint-log-pre"></pre></div>`;
     const pre = dialog.querySelector('.cli-maint-log-pre') as HTMLElement | null;

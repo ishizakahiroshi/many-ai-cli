@@ -158,7 +158,7 @@ function buildRow(p: ServerProfile, conn: ActiveConn | null): HTMLLIElement {
   if (conn) {
     const openBtn = document.createElement('button');
     openBtn.type = 'button';
-    openBtn.className = 'server-btn-primary server-row-btn';
+    openBtn.className = 'ui-button ui-button--primary ui-button--compact server-btn-primary server-row-btn';
     openBtn.textContent = t('server_open');
     openBtn.addEventListener('click', () => { window.open(conn.hub_url, '_blank', 'noopener'); });
     actions.appendChild(openBtn);
@@ -166,7 +166,7 @@ function buildRow(p: ServerProfile, conn: ActiveConn | null): HTMLLIElement {
     if (conn.owned) {
       const discBtn = document.createElement('button');
       discBtn.type = 'button';
-      discBtn.className = 'server-btn-secondary server-row-btn';
+      discBtn.className = 'ui-button ui-button--secondary ui-button--compact server-btn-secondary server-row-btn';
       discBtn.textContent = t('server_disconnect');
       discBtn.addEventListener('click', () => disconnectProfile(p.name, discBtn));
       actions.appendChild(discBtn);
@@ -174,7 +174,7 @@ function buildRow(p: ServerProfile, conn: ActiveConn | null): HTMLLIElement {
   } else {
     const connBtn = document.createElement('button');
     connBtn.type = 'button';
-    connBtn.className = 'server-btn-primary server-row-btn';
+    connBtn.className = 'ui-button ui-button--primary ui-button--compact server-btn-primary server-row-btn';
     connBtn.textContent = t('server_connect');
     connBtn.addEventListener('click', () => connectProfile(p.name, connBtn));
     actions.appendChild(connBtn);

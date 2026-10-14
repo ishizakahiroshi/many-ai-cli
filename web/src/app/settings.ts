@@ -1,13 +1,15 @@
 import { openSessionListMoveDialog, sessionListMoveLabel, sessionListCanMove, wireSessionListMenu, restoreSessionListFocus, sessionListCardElement } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
+import { confirmationLabels, type ConfirmationAction } from './confirmation-labels.js';
+import { uiButtonClass, uiIconHtml, uiModalClass } from './ui-components.js';
 import { getNotificationVolume, setNotificationVolume, STORAGE_NOTIFY_SOUND_VOLUME_KEY } from './notification-volume.js';
 import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
 import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, openProjectKey, sessions, terminals } from './state.js';
 import { getDoneSummary } from './done-summary.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
-import { activateSession, moveSessionToSiblingFront, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
+import { activateSession, cardSessionActions, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
 import { pathPopupEl } from './path-links.js';
 import { TERMINAL_SCROLLBACK_LINES, attachTerminal, dismissTerminalReadOverlays, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, refreshTerminalThemes, sendResize } from './terminal.js';
 import {
@@ -32,7 +34,8 @@ import { MULTI_SCROLLBACK, getMessages } from './chat-history.js';
 import { FilesTabManager } from './files-view.js';
 import { fetchPushStatus, getPushSubscription, isLikelyIOSBrowserTabWithoutStandalone, pushNotificationsSupported, subscribeWebPush, unsubscribeWebPush } from './pwa.js';
 import { setStatusbarEnabled, isStatusbarEnabled, TOGGLEABLE_SEGMENTS, applySegmentVisibility, getSessionAgentInfo } from './token-statusbar.js';
-import { initUsagePanel, refreshUsagePanel } from './usage-panel.js';
+import { initUsagePanel } from './usage-panel.js';
+import { notifySettingsViewChanged } from './settings-visibility.js';
 import { setHandoffNoteMode, setHandoffNotifyThresholdPercent } from './handoff.js';
 import { applySessionStripMetrics, setSessionStripTab } from './session-strip.js';
 import { VALID_TAB_NAME_LIST } from './project-view-memory.js';
@@ -79,7 +82,7 @@ export function showApprovalToast() {
   actions.className = 'approval-toast-actions';
 
   const yesBtn = document.createElement('button');
-  yesBtn.className = 'approval-toast-btn';
+  yesBtn.className = `approval-toast-btn ${uiButtonClass('primary', 'compact')}`;
   yesBtn.textContent = t('approval_toast_yes');
   yesBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
@@ -93,7 +96,7 @@ export function showApprovalToast() {
   });
 
   const noBtn = document.createElement('button');
-  noBtn.className = 'approval-toast-btn-dismiss';
+  noBtn.className = `approval-toast-btn-dismiss ${uiButtonClass('quiet', 'compact')}`;
   noBtn.textContent = t('approval_toast_later');
   noBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
@@ -572,88 +575,16 @@ export function saveUsageLinkSettings() {
   applyUsageLinks();
 }
 
-export function initUsageDropdown() {
-  const btn      = document.getElementById('usage-menu-btn');
-  const dropdown = document.getElementById('usage-dropdown');
-  if (!btn || !dropdown) return;
-
-  // header に backdrop-filter があり新しい stacking context が作られるため、
-  // dropdown が body 配下にないと z-index が効かず本体側に隠れる。body 直下へ移す。
-  if (dropdown.parentElement !== document.body) {
-    document.body.appendChild(dropdown);
-  }
-  initUsagePanel(dropdown);
-
-  const positionDropdown = () => {
-    // フッターのボタンの上に開く。bottom 基準にして、中身が後から伸びても
-    // ボタンから離れない。上端に届かないよう max-height をボタン上の空きに絞る。
-    const rect = btn.getBoundingClientRect();
-    const margin = 6;
-    const gap = 4;
-    dropdown.style.top = 'auto';
-    dropdown.style.bottom = `${Math.max(margin, window.innerHeight - rect.top + gap)}px`;
-    dropdown.style.maxHeight = `${Math.max(120, rect.top - gap - margin)}px`;
-    // 横はボタンの左端に合わせ、左右の端にはみ出すなら押し戻す（表示前は幅 0）。
-    const width = dropdown.offsetWidth;
-    const left = Math.max(margin, Math.min(rect.left, window.innerWidth - width - margin));
-    dropdown.style.left = `${left}px`;
-    dropdown.style.right = 'auto';
-    dropdown.style.transform = 'none';
-  };
-
-  const closeDropdown = () => {
-    dropdown.hidden = true;
-    btn.setAttribute('aria-expanded', 'false');
-  };
-
-  // ヘッダ右上の ✕。パネル外クリック・Escape と同じ closeDropdown を通す。
-  // stopPropagation は、閉じた後のクリックが背後の要素へ届かないようにするため。
-  const panelCloseBtn = dropdown.querySelector('#usage-dropdown-close');
-  if (panelCloseBtn) {
-    panelCloseBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      closeDropdown();
-    });
-  }
-
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const isOpen = !dropdown.hidden;
-    if (isOpen) {
-      closeDropdown();
-      return;
-    }
-    dropdown.hidden = false;
-    positionDropdown();
-    btn.setAttribute('aria-expanded', 'true');
-    // 中身の更新で幅が変わることがあるので、終わったら横位置を取り直す。
-    void Promise.resolve(refreshUsagePanel()).then(() => {
-      if (!dropdown.hidden) positionDropdown();
-    });
-  });
-
-  // xterm 等で stopPropagation されると bubble phase の document リスナーまで届かないため、
-   // capture phase の mousedown / touchstart で拾って確実に閉じる。
-   const onOutsidePointer = (e) => {
-     if (dropdown.hidden) return;
-     if (btn.contains(e.target) || dropdown.contains(e.target)) return;
-     closeDropdown();
-   };
-   document.addEventListener('mousedown',  onOutsidePointer, true);
-   document.addEventListener('touchstart', onOutsidePointer, true);
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !dropdown.hidden) {
-      closeDropdown();
-    }
-  });
-
-  window.addEventListener('resize', () => {
-    if (!dropdown.hidden) positionDropdown();
-  });
+export function initUsageSettings(): void {
+  const panel = document.getElementById('settings-usage-panel');
+  if (panel) initUsagePanel(panel);
 }
 
-export function appConfirm({ title, message, confirmText, cancelText, kind = 'default' }): Promise<boolean> {
+export function appConfirm({ title, message, confirmText, cancelText, kind = 'default', action }: { title?: string; message: string; confirmText?: string; cancelText?: string; kind?: string; action?: ConfirmationAction }): Promise<boolean> {
+  const labels = action ? confirmationLabels(action) : null;
+  const heading = title ?? labels?.question ?? '';
+  const decline = cancelText || labels?.decline || t('confirm_cancel');
+  const accept = confirmText || labels?.accept || t('confirm_ok');
   return new Promise<boolean>((resolve) => {
     const overlay = document.getElementById('model-picker-overlay');
     if (!overlay) { resolve(window.confirm(message)); return; }
@@ -681,16 +612,16 @@ export function appConfirm({ title, message, confirmText, cancelText, kind = 'de
     overlay.hidden = false;
 
     const dialog = document.createElement('div');
-    dialog.className = `confirm-dialog confirm-dialog--${kind}`;
+    dialog.className = `confirm-dialog confirm-dialog--${kind} ${uiModalClass('sm')}`;
     dialog.innerHTML = `
       <div class="confirm-icon" aria-hidden="true">!</div>
-      <div class="confirm-body">
-        <div class="confirm-title">${escapeHtml(title)}</div>
+      <div class="confirm-body ui-modal__body">
+        <div class="confirm-title ui-modal__title">${escapeHtml(heading)}</div>
         <div class="confirm-message">${escapeHtml(message)}</div>
       </div>
-      <div class="confirm-actions">
-        <button class="confirm-btn" id="app-confirm-cancel">${escapeHtml(cancelText || t('confirm_cancel'))}</button>
-        <button class="confirm-btn primary" id="app-confirm-ok">${escapeHtml(confirmText || t('confirm_ok'))}</button>
+      <div class="confirm-actions ui-modal__actions">
+        <button class="${uiButtonClass('secondary')}" id="app-confirm-cancel">${escapeHtml(decline)}</button>
+        <button class="${uiButtonClass(kind === 'danger' ? 'danger' : kind === 'warn' ? 'warn' : 'primary')}" id="app-confirm-ok">${escapeHtml(accept)}</button>
       </div>
     `;
     overlay.appendChild(dialog);
@@ -728,18 +659,18 @@ export function appLegacyResetNotice(): Promise<{ deleteLogs: boolean; deleteAtt
 
     const rowStyle = 'display:flex;align-items:center;gap:8px;margin-top:10px;text-align:left;cursor:pointer';
     const dialog = document.createElement('div');
-    dialog.className = 'confirm-dialog confirm-dialog--danger';
+    dialog.className = `confirm-dialog confirm-dialog--danger ${uiModalClass('sm')}`;
     dialog.innerHTML = `
       <div class="confirm-icon" aria-hidden="true">!</div>
-      <div class="confirm-body">
-        <div class="confirm-title">${escapeHtml(t('legacy_logs_notice_title'))}</div>
+      <div class="confirm-body ui-modal__body">
+        <div class="confirm-title ui-modal__title">${escapeHtml(t('legacy_logs_notice_title'))}</div>
         <div class="confirm-message">${escapeHtml(t('legacy_logs_notice_message'))}</div>
         <label style="${rowStyle}"><input type="checkbox" id="legacy-del-logs" checked> <span>${escapeHtml(t('legacy_logs_notice_opt_logs'))}</span></label>
         <label style="${rowStyle}"><input type="checkbox" id="legacy-del-attach" checked> <span>${escapeHtml(t('legacy_logs_notice_opt_attach'))}</span></label>
         <label style="${rowStyle}"><input type="checkbox" id="legacy-enable-logging"> <span>${escapeHtml(t('legacy_logs_notice_opt_enable'))}</span></label>
       </div>
-      <div class="confirm-actions">
-        <button class="confirm-btn primary" id="legacy-exec">${escapeHtml(t('legacy_logs_notice_exec'))}</button>
+      <div class="confirm-actions ui-modal__actions">
+        <button class="${uiButtonClass('danger')}" id="legacy-exec">${escapeHtml(t('legacy_logs_notice_exec'))}</button>
       </div>
     `;
     overlay.appendChild(dialog);
@@ -788,16 +719,16 @@ export function appConfirmOllamaEncoding() {
     overlay.hidden = false;
 
     const dialog = document.createElement('div');
-    dialog.className = 'confirm-dialog confirm-dialog--warn';
+    dialog.className = `confirm-dialog confirm-dialog--warn ${uiModalClass('sm')}`;
     dialog.innerHTML = `
       <div class="confirm-icon" aria-hidden="true">⚠</div>
-      <div class="confirm-body">
-        <div class="confirm-title">${escapeHtml(t('ollama_encoding_warn_title'))}</div>
+      <div class="confirm-body ui-modal__body">
+        <div class="confirm-title ui-modal__title">${escapeHtml(t('ollama_encoding_warn_title'))}</div>
         <div class="confirm-message">${escapeHtml(t('ollama_encoding_warn_message'))}</div>
       </div>
-      <div class="confirm-actions ollama-encoding-actions">
-        <button class="confirm-btn" id="ollama-enc-continue">${escapeHtml(t('ollama_encoding_continue'))}</button>
-        <button class="confirm-btn primary" id="ollama-enc-utf8">${escapeHtml(t('ollama_encoding_utf8_session'))}</button>
+      <div class="confirm-actions ui-modal__actions ollama-encoding-actions">
+        <button class="${uiButtonClass('secondary')}" id="ollama-enc-continue">${escapeHtml(t('ollama_encoding_continue'))}</button>
+        <button class="${uiButtonClass('warn')}" id="ollama-enc-utf8">${escapeHtml(t('ollama_encoding_utf8_session'))}</button>
       </div>
     `;
     overlay.appendChild(dialog);
@@ -854,17 +785,17 @@ export function appConfirmShutdown(opts) {
         </label>` : '';
 
     const dialog = document.createElement('div');
-    dialog.className = 'confirm-dialog confirm-dialog--danger';
+    dialog.className = `confirm-dialog confirm-dialog--danger ${uiModalClass('sm')}`;
     dialog.innerHTML = `
       <div class="confirm-icon" aria-hidden="true">!</div>
-      <div class="confirm-body">
-        <div class="confirm-title">${escapeHtml(t('shutdown_confirm_title'))}</div>
+      <div class="confirm-body ui-modal__body">
+        <div class="confirm-title ui-modal__title">${escapeHtml(t('shutdown_confirm_title'))}</div>
         <div class="confirm-message">${escapeHtml(t('shutdown_confirm'))}</div>${exposeRow}
       </div>
-      <div class="confirm-actions">
-        <button class="confirm-btn" id="app-confirm-cancel">${escapeHtml(t('spawn_cancel'))}</button>
-        <button class="confirm-btn primary" id="app-confirm-sessions">${escapeHtml(t('shutdown_sessions_only'))}</button>
-        <button class="confirm-btn primary" id="app-confirm-ok">${escapeHtml(t('shutdown_confirm_run'))}</button>
+      <div class="confirm-actions ui-modal__actions">
+        <button class="${uiButtonClass('secondary')}" id="app-confirm-cancel">${escapeHtml(confirmationLabels('stop').decline)}</button>
+        <button class="${uiButtonClass('danger')}" id="app-confirm-sessions">${escapeHtml(confirmationLabels('stopAll').accept)}</button>
+        <button class="${uiButtonClass('danger')}" id="app-confirm-ok">${escapeHtml(confirmationLabels('stopHub').accept)}</button>
       </div>
     `;
     overlay.appendChild(dialog);
@@ -1281,20 +1212,38 @@ const settingsMobileMql = (typeof window !== 'undefined' && typeof window.matchM
 
 function setSettingsDetailScreen(detail: boolean): void {
   document.getElementById('settings-panel')?.classList.toggle(SETTINGS_DETAIL_CLASS, detail);
+  notifySettingsViewChanged();
+}
+
+function focusSettingsNavigation(): void {
+  const active = document.querySelector<HTMLButtonElement>('.settings-nav-item.active:not([hidden])');
+  (active ?? document.getElementById('settings-search-input'))?.focus();
 }
 
 // 720px を超える幅に戻ったらクラスを外す（次に狭くしたとき詳細画面から始まらないように）。
 settingsMobileMql?.addEventListener('change', () => {
   if (!settingsMobileMql.matches) setSettingsDetailScreen(false);
+  else notifySettingsViewChanged();
 });
 
 export function setSettingsPanelOpen(open: boolean): void {
   const panel = document.getElementById('settings-panel');
   if (!panel) return;
-  // 閉じていた設定を開き直すときは一覧画面から始める（外から節を指定して開く場合は、そのあと詳細へ進む）。
-  if (open && panel.hidden) setSettingsDetailScreen(false);
+  const opening = open && panel.hidden;
   panel.hidden = !open;
+  if (opening) {
+    // A normal open always starts at General, regardless of the last destination/search.
+    const search = document.getElementById('settings-search-input') as HTMLInputElement | null;
+    if (search) search.value = '';
+    const status = document.getElementById('settings-search-status');
+    if (status) status.textContent = '';
+    _filterSettingsNav?.(null);
+    _selectSettingsNavSection?.('general');
+    setSettingsDetailScreen(true);
+  }
   document.getElementById('settings-btn')?.setAttribute('aria-expanded', String(open));
+  notifySettingsViewChanged();
+  if (!open) document.getElementById('settings-btn')?.focus();
 }
 
 function syncSettingsPanelButton(): void {
@@ -1308,7 +1257,7 @@ function syncSettingsPanelButton(): void {
   applyFontSize(localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium');
   applyLang(localStorage.getItem(STORAGE_LANG_KEY) || 'ja');
   applyUsageLinks();
-  initUsageDropdown();
+  initUsageSettings();
 
   const panel      = document.getElementById('settings-panel');
   const btn        = document.getElementById('settings-btn');
@@ -1341,6 +1290,7 @@ function syncSettingsPanelButton(): void {
     e.stopPropagation();
     setSettingsDetailScreen(false);
     document.getElementById('settings-nav')?.scrollTo?.({ top: 0 });
+    focusSettingsNavigation();
   });
   if (closeBtn) {
     closeBtn.addEventListener('click', (e) => {
@@ -1370,6 +1320,7 @@ function syncSettingsPanelButton(): void {
     // 720px 以下の詳細画面では、Esc は「一覧へ戻る」。一覧画面では閉じる。
     if (settingsMobileMql?.matches && panel.classList.contains(SETTINGS_DETAIL_CLASS)) {
       setSettingsDetailScreen(false);
+      focusSettingsNavigation();
       return;
     }
     setSettingsPanelOpen(false);
@@ -1406,8 +1357,7 @@ function syncSettingsPanelButton(): void {
       const ok = await appConfirm({
         title: t('settings_reset_confirm_title'),
         message: t('settings_reset_confirm_message'),
-        confirmText: t('settings_reset'),
-        cancelText: t('cancel'),
+        action: 'reset',
         kind: 'warn',
       });
       if (!ok) return;
@@ -1457,22 +1407,21 @@ function syncSettingsPanelButton(): void {
 })();
 
 // =============================================================================
-// 設定画面の情報設計（左ナビ + 右ペイン・検索・直リンク・前回の選択）
+// 設定画面の情報設計（左ナビ + 右ペイン・検索・直リンク）
 // =============================================================================
-const SETTINGS_LAST_SECTION_KEY = 'many-ai-cli.settings-last-section';
 
 // コマンドパレットの「設定を開く」コマンド・#settings/<id> 直リンク用。
 // initSettingsInformationArchitecture() の中で定義される節オープン処理を、ここへ差し込んでおく。
 let _openSettingsSectionImpl: ((sectionId?: string) => void) | null = null;
 
 // 左ナビ + 右ペイン: 選んだ節だけを右ペインに出す。initSettingsNav() が差し込む。
-let _selectSettingsNavSection: ((sectionId: string, persist?: boolean) => void) | null = null;
+let _selectSettingsNavSection: ((sectionId: string) => void) | null = null;
 // ナビの項目名（言語切替に追従）と現在値（各節の .settings-section-current の写し）を合わせる。
 let _syncSettingsNav: (() => void) | null = null;
 // 検索で一致した節だけをナビに残す。null なら全項目。
 let _filterSettingsNav: ((visibleIds: ReadonlySet<string> | null) => void) | null = null;
-// ナビに並んでいる順の節 id（検索結果の「先頭」を決める）。
-let _listSettingsNavIds: (() => string[]) | null = null;
+// ナビに並んでいる順の節 id（検索結果の「先頭」を決める）。General も先頭の行き先としてナビに残す。
+let _listSettingsSectionIds: (() => string[]) | null = null;
 
 // グループ名は settings_group_<id>（i18n）。辞書の読み込みは非同期なので、文字は _syncSettingsNav で入れる。
 const SETTINGS_NAV_GROUPS: readonly string[] = ['basic', 'conn', 'input', 'approval', 'maint'];
@@ -1485,6 +1434,7 @@ function initSettingsNav(): void {
 
   // <details> は常時 open。見出しのクリックでも閉じない。
   sections.forEach((section) => {
+    section.id ||= `settings-section-${section.dataset.section}`;
     section.open = true;
     section.addEventListener('toggle', () => { if (!section.open) section.open = true; });
     section.querySelector('summary')?.addEventListener('click', (e) => e.preventDefault());
@@ -1507,6 +1457,13 @@ function initSettingsNav(): void {
       btn.type = 'button';
       btn.className = 'settings-nav-item' + (section.classList.contains('settings-section--danger') ? ' settings-nav-item--danger' : '');
       btn.dataset.section = id;
+      btn.id = `settings-nav-${id}`;
+      btn.setAttribute('aria-controls', section.id);
+      const icon = section.querySelector('.settings-destination-icon');
+      if (icon) {
+        btn.classList.add('settings-nav-item--icon');
+        btn.appendChild(icon.cloneNode(true));
+      }
       const label = document.createElement('span');
       label.className = 'settings-nav-item-label';
       const current = document.createElement('span');
@@ -1515,6 +1472,9 @@ function initSettingsNav(): void {
       btn.addEventListener('click', () => {
         _selectSettingsNavSection?.(id);
         setSettingsDetailScreen(true);
+        if (settingsMobileMql?.matches) {
+          section.querySelector<HTMLElement>('input, select, button, a')?.focus();
+        }
       });
       items.set(id, btn);
       ids.push(id);
@@ -1538,28 +1498,25 @@ function initSettingsNav(): void {
     items.forEach((btn, id) => { btn.hidden = !!visibleIds && !visibleIds.has(id); });
     groups.forEach(({ title, ids }) => { title.hidden = !!visibleIds && !ids.some((id) => visibleIds.has(id)); });
   };
-  _listSettingsNavIds = () => groups.flatMap((group) => group.ids);
-  _selectSettingsNavSection = (sectionId: string, persist = true) => {
-    if (!items.has(sectionId)) return;
+  _listSettingsSectionIds = () => groups.flatMap((group) => group.ids);
+  _selectSettingsNavSection = (sectionId: string) => {
+    const selected = sections.find((section) => section.dataset.section === sectionId);
+    if (!selected) return;
     sections.forEach((section) => { section.hidden = section.dataset.section !== sectionId; });
-    items.forEach((btn, id) => btn.classList.toggle('active', id === sectionId));
+    items.forEach((btn, id) => {
+      btn.classList.toggle('active', id === sectionId);
+      if (id === sectionId) btn.setAttribute('aria-current', 'true');
+      else btn.removeAttribute('aria-current');
+    });
     body.scrollTop = 0;
-    if (persist) {
-      try { localStorage.setItem(SETTINGS_LAST_SECTION_KEY, sectionId); } catch (_) {}
-    }
     _syncSettingsNav?.();
     items.get(sectionId)?.scrollIntoView({ block: 'nearest' });
-    sections.find((section) => section.dataset.section === sectionId)?.dispatchEvent(new CustomEvent('settings-section-selected'));
+    selected.dispatchEvent(new CustomEvent('settings-section-selected'));
+    notifySettingsViewChanged();
   };
 
-  // 前回選んだ節を復元する。無ければ（保存なし・節が無くなった）先頭。
-  let initial = sections[0].dataset.section as string;
-  try {
-    const saved = localStorage.getItem(SETTINGS_LAST_SECTION_KEY);
-    if (saved && items.has(saved)) initial = saved;
-  } catch (_) {}
   _syncSettingsNav();
-  _selectSettingsNavSection(initial, false);
+  _selectSettingsNavSection('general');
 
   // 言語切替・設定を開き直したときに、見出しの文言（data-i18n で差し替わる）と現在値をナビへ写す。
   document.getElementById('settings-btn')?.addEventListener('click', () => requestAnimationFrame(() => _syncSettingsNav?.()));
@@ -1605,8 +1562,10 @@ function initSettingsInformationArchitecture(): void {
   const sections = Array.from(document.querySelectorAll<HTMLDetailsElement>('.settings-section[data-section]'));
   if (!panel || !search || !status || sections.length === 0) return;
 
+  let firstMatch: string | undefined;
   // 項目名・現在値・説明に一致した節だけをナビに残す。selectFirst なら先頭の一致を右ペインに出す。
   const apply = (selectFirst: boolean) => {
+    firstMatch = undefined;
     const query = search.value.trim().toLocaleLowerCase();
     if (!query) {
       _filterSettingsNav?.(null);
@@ -1625,13 +1584,20 @@ function initSettingsInformationArchitecture(): void {
     });
     _filterSettingsNav?.(matched);
     status.textContent = matched.size ? t('settings_search_matched', { n: matched.size }) : t('settings_search_none');
-    if (selectFirst) {
-      const first = (_listSettingsNavIds?.() ?? []).find((id) => matched.has(id));
-      // 検索のための自動選択は「前回の選択」として覚えない。
-      if (first) _selectSettingsNavSection?.(first, false);
-    }
+    firstMatch = (_listSettingsSectionIds?.() ?? []).find((id) => matched.has(id));
+    if (selectFirst && firstMatch) _selectSettingsNavSection?.(firstMatch);
   };
   search.addEventListener('input', () => apply(true));
+  // モバイルは Enter で検索結果の本文へ。General にも届き、入力中は検索欄を隠さない。
+  search.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229 || event.defaultPrevented
+      || !settingsMobileMql?.matches || !search.value.trim() || !firstMatch) return;
+    event.preventDefault();
+    _selectSettingsNavSection?.(firstMatch);
+    setSettingsDetailScreen(true);
+    sections.find((section) => section.dataset.section === firstMatch)
+      ?.querySelector<HTMLElement>('input, select, button, a')?.focus();
+  });
 
   // #settings/<id> ハッシュと openSettingsSection() の両方から呼べる、節を選ぶ本体。
   const openSection = (sectionId?: string) => {
@@ -1678,19 +1644,19 @@ export function appConfirmTypedDanger(opts: { title: string; message: string; co
     overlay.innerHTML = '';
     overlay.hidden = false;
     const dialog = document.createElement('div');
-    dialog.className = 'confirm-dialog confirm-dialog--danger';
+    dialog.className = `confirm-dialog confirm-dialog--danger ${uiModalClass('sm')}`;
     dialog.innerHTML = `
       <div class="confirm-icon" aria-hidden="true">!</div>
-      <div class="confirm-body">
-        <div class="confirm-title">${escapeHtml(opts.title)}</div>
+      <div class="confirm-body ui-modal__body">
+        <div class="confirm-title ui-modal__title">${escapeHtml(opts.title)}</div>
         <div class="confirm-message">${escapeHtml(opts.message)}</div>
         <label class="confirm-type-label">確認のため <code>${escapeHtml(opts.phrase)}</code> と入力
-          <input id="app-confirm-type-input" class="settings-input-text" autocomplete="off" spellcheck="false">
+          <input id="app-confirm-type-input" class="settings-input-text ui-input" autocomplete="off" spellcheck="false">
         </label>
       </div>
-      <div class="confirm-actions">
-        <button class="confirm-btn" id="app-confirm-type-cancel">${escapeHtml(opts.cancelText)}</button>
-        <button class="confirm-btn primary" id="app-confirm-type-ok" disabled>${escapeHtml(opts.confirmText)}</button>
+      <div class="confirm-actions ui-modal__actions">
+        <button class="${uiButtonClass('secondary')}" id="app-confirm-type-cancel">${escapeHtml(opts.cancelText)}</button>
+        <button class="${uiButtonClass('danger')}" id="app-confirm-type-ok" disabled>${escapeHtml(opts.confirmText)}</button>
       </div>`;
     overlay.appendChild(dialog);
     const input = document.getElementById('app-confirm-type-input') as HTMLInputElement;
@@ -2713,7 +2679,7 @@ window.approvalPatternsUI = (function () {
       li.appendChild(span);
       if (!readonly) {
         const rm = document.createElement('button');
-        rm.className = 'pattern-remove';
+        rm.className = `pattern-remove ${uiButtonClass('quiet', 'compact', { icon: true })}`;
         rm.textContent = '✕';
         rm.title = t('settings_approval_patterns_remove');
         rm.addEventListener('click', () => removeAt(i));
@@ -3004,12 +2970,24 @@ export function renderSessionInfoChip() {
   if (agentInfo.model) {
     const badgeProviderKey = isOllamaBackedSess ? 'ollama' : (s.provider || '');
     const badgeProviderLabel = isOllamaBackedSess ? 'Ollama' : providerName;
-    const tip = [badgeProviderLabel, agentInfo.model, agentInfo.effort].filter(Boolean).join(' · ');
+    const tipParts = [badgeProviderLabel, agentInfo.model, agentInfo.effort];
+    // バージョン・出力スタイル・vim モードは、値があるものだけ足す（ステータスバーのモデル表示と同じキー）。
+    if (agentInfo.version) tipParts.push(t('tsb_agent_version_title', { version: agentInfo.version }));
+    if (agentInfo.outputStyle) tipParts.push(t('tsb_agent_output_style_title', { style: agentInfo.outputStyle }));
+    if (agentInfo.vimMode) tipParts.push(t('tsb_agent_vim_mode_title', { mode: agentInfo.vimMode }));
+    const tip = tipParts.filter(Boolean).join(' · ');
     modelBadge = ` <span class="card-model card-model--with-icon" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(badgeProviderKey)}<span class="card-model-text">${escapeHtml(agentInfo.model)}</span></span>`;
   }
   // effort バッジはステータスバーと同じ .effort-badge（見た目も 1 箇所で定義）。
   const effortBadge = agentInfo.effort
     ? ` <span class="effort-badge" data-tooltip="${escapeHtml(t('tsb_effort_title', { level: agentInfo.effort }))}">${escapeHtml(agentInfo.effort)}</span>`
+    : '';
+  // 思考中の印とエージェント名。並びは effort → 🧠 → エージェント名 → 契約（subBadge）。
+  const thinkBadge = agentInfo.thinking
+    ? ` <span class="tsb-thinking" data-tooltip="${escapeHtml(t('tsb_thinking_title'))}">🧠</span>`
+    : '';
+  const agentNameBadge = agentInfo.agentName
+    ? ` <span class="tsb-agent-name" data-tooltip="${escapeHtml(t('tsb_agent_name_title', { name: agentInfo.agentName }))}">${escapeHtml(agentInfo.agentName)}</span>`
     : '';
   const state = s.state || 'standby';
   const stateLbl = (typeof stateLabel === 'function') ? stateLabel(state) : state;
@@ -3032,7 +3010,7 @@ export function renderSessionInfoChip() {
   chip.innerHTML =
     `<span class="sid">#${s.id}</span>` +
     ` ${statePill} ` +
-    `${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${effortBadge}${subBadge}`;
+    `${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${effortBadge}${thinkBadge}${agentNameBadge}${subBadge}`;
 }
 
 // D12: チャット件数バッジ更新
@@ -3410,7 +3388,7 @@ function _ensureMultiDetachBtn(): void {
   if (btn) return; // 既存
   btn = document.createElement('button');
   btn.id = 'multi-detach-btn';
-  btn.className = 'multi-detach-btn view-tab-util';
+  btn.className = `multi-detach-btn view-tab-util ${uiButtonClass('quiet', 'compact', { icon: true })}`;
   btn.type = 'button';
   btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="9" width="10" height="11" rx="1"/><path d="M12 4h9v9M21 4l-9 9"/></svg>';
   btn.title = ti18n('multi_detach_current_grid', 'Detach current grid');
@@ -3448,26 +3426,36 @@ export function openCardCtxMenu(x, y, sid, origin: HTMLElement | null = null) {
   const labelOpenInGrid     = ti18n('ctx_open_in_grid',          'Open in detached grid');
   const labelOpenProjectGrid = ti18n('ctx_open_project_in_grid', 'Open project in detached grid');
   const labelRename         = ti18n('session_rename',             'Change label');
-  const labelMoveFront      = ti18n('session_move_front',         'Move this session to the front');
   const labelColor          = ti18n('session_set_color',          'Set color');
   const labelNote           = ti18n('session_edit_note',          'Edit note');
+  const itemCls = uiButtonClass('quiet', 'compact', { menuItem: true });
+  // カードから移した操作（派生起動・relay・board・ベル・履歴リセット）。出す条件は session-list.ts 側。
+  const ctxSess = sessions.get(sid);
+  const sessionActions = ctxSess ? cardSessionActions(ctxSess) : [];
+  const sessionActionHtml = sessionActions
+    .map((a) => `<button type="button" class="${itemCls}" data-action="session:${escapeHtml(a.action)}"><span class="ico">${escapeHtml(a.icon)}</span><span>${escapeHtml(a.label)}</span></button>`)
+    .join('');
   menu.innerHTML =
-    `<button type="button" data-action="open-git"><span class="ico">⎇</span><span>${escapeHtml(labelOpenGit)}</span><span class="kbd">Ctrl+Shift+G</span></button>` +
-    `<button type="button" data-action="open-files"><span class="ico">📁</span><span>${escapeHtml(labelOpenFiles)}</span><span class="kbd">Ctrl+Shift+F</span></button>` +
+    `<button type="button" class="${itemCls}" data-action="open-git"><span class="ico">⎇</span><span>${escapeHtml(labelOpenGit)}</span><span class="kbd">Ctrl+Shift+G</span></button>` +
+    `<button type="button" class="${itemCls}" data-action="open-files"><span class="ico">📁</span><span>${escapeHtml(labelOpenFiles)}</span><span class="kbd">Ctrl+Shift+F</span></button>` +
     `<div class="card-ctx-sep"></div>` +
-    `<button type="button" data-action="open-in-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenInGrid)}</span></button>` +
-    `<button type="button" data-action="open-project-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenProjectGrid)}</span></button>` +
+    `<button type="button" class="${itemCls}" data-action="open-in-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenInGrid)}</span></button>` +
+    `<button type="button" class="${itemCls}" data-action="open-project-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenProjectGrid)}</span></button>` +
     `<div class="card-ctx-sep"></div>` +
-    `<button type="button" data-action="rename"><span class="ico">✏️</span><span>${escapeHtml(labelRename)}</span></button>` +
-    `<button type="button" data-action="move-front"><span class="ico">⇧</span><span>${escapeHtml(labelMoveFront)}</span></button>` +
-    `<button type="button" data-action="color"><span class="ico">●</span><span>${escapeHtml(labelColor)}</span></button>` +
-    `<button type="button" data-action="note"><span class="ico">☰</span><span>${escapeHtml(labelNote)}</span></button>` +
+    `<button type="button" class="${itemCls}" data-action="rename"><span class="ico">${uiIconHtml('edit')}</span><span>${escapeHtml(labelRename)}</span></button>` +
+    `<button type="button" class="${itemCls}" data-action="color"><span class="ico">●</span><span>${escapeHtml(labelColor)}</span></button>` +
+    `<button type="button" class="${itemCls}" data-action="note"><span class="ico">☰</span><span>${escapeHtml(labelNote)}</span></button>` +
+    (sessionActionHtml ? `<div class="card-ctx-sep"></div>${sessionActionHtml}` : '') +
     `<div class="card-ctx-sep"></div>` +
-    `<button type="button" data-action="activate"><span class="ico">→</span><span>${escapeHtml(labelActivate)}</span></button>` +
-    `<button type="button" data-action="copy-id"><span class="ico">#</span><span>${escapeHtml(labelCopyId)}</span></button>`;
+    `<button type="button" class="${itemCls}" data-action="activate"><span class="ico">→</span><span>${escapeHtml(labelActivate)}</span></button>` +
+    `<button type="button" class="${itemCls}" data-action="copy-id"><span class="ico">${uiIconHtml('copy')}</span><span>${escapeHtml(labelCopyId)}</span></button>`;
   const moveTab = document.createElement('button');
+  moveTab.className = itemCls;
   moveTab.type = 'button'; moveTab.dataset.action = 'move-list-tab';
-  moveTab.textContent = sessionListMoveLabel(sid); moveTab.disabled = !sessionListCanMove(sid);
+  // 空のアイコン欄を置き、ほかの項目と文字の開始位置を揃える。
+  const moveIco = document.createElement('span'); moveIco.className = 'ico';
+  const moveLabel = document.createElement('span'); moveLabel.textContent = sessionListMoveLabel(sid);
+  moveTab.append(moveIco, moveLabel); moveTab.disabled = !sessionListCanMove(sid);
   menu.append(moveTab);
   document.body.appendChild(menu);
   wireSessionListMenu(menu, () => closeCardCtxMenu(true));
@@ -3485,7 +3473,10 @@ export function openCardCtxMenu(x, y, sid, origin: HTMLElement | null = null) {
       closeCardCtxMenu();
       const sess = sessions.get(id);
       if (!sess) return;
-      if (action === 'move-list-tab') {
+      if (action && action.startsWith('session:')) {
+        const name = action.slice('session:'.length);
+        sessionActions.find((a) => a.action === name)?.run();
+      } else if (action === 'move-list-tab') {
         openSessionListMoveDialog(id, origin);
       } else if (action === 'open-git') {
         const gr = String(sess.git_root || sess.cwd || '');
@@ -3514,9 +3505,6 @@ export function openCardCtxMenu(x, y, sid, origin: HTMLElement | null = null) {
         try { navigator.clipboard && navigator.clipboard.writeText(String(id)); } catch (_) {}
       } else if (action === 'rename') {
         openLabelRenameDialog(id);
-      } else if (action === 'move-front') {
-        // 器の中で兄弟順の先頭へ動かすだけ。セッションの属性は書き換えない。
-        moveSessionToSiblingFront(id);
       } else if (action === 'color') {
         const current = String(sess.color || '');
         const value = window.prompt(`${labelColor} (blue / green / orange / red / purple; blank to clear)`, current);
@@ -3545,14 +3533,14 @@ export function openLabelRenameDialog(id: number): void {
   const placeholder = ti18n('spawn_label_placeholder', 'ラベル（省略可）例: dev改修作業');
   const saveText = ti18n('settings_save', '保存');
   const cancelText = ti18n('handoff_dialog_cancel', 'キャンセル');
-  backdrop.innerHTML = `<div class="label-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="label-rename-dialog-title">
-    <h2 id="label-rename-dialog-title">${escapeHtml(titleText)}</h2>
-    <input type="text" class="spawn-input label-rename-dialog-input" placeholder="${escapeHtml(placeholder)}" autocomplete="off" spellcheck="false">
+  backdrop.innerHTML = `<div class="label-rename-dialog ${uiModalClass('sm')}" role="dialog" aria-modal="true" aria-labelledby="label-rename-dialog-title">
+    <h2 id="label-rename-dialog-title" class="ui-modal__title">${escapeHtml(titleText)}</h2>
+    <input type="text" class="spawn-input label-rename-dialog-input ui-input" placeholder="${escapeHtml(placeholder)}" autocomplete="off" spellcheck="false">
     <p class="label-rename-dialog-hint">${escapeHtml(hintText)}</p>
     <p class="label-rename-dialog-error" data-label-rename-error hidden></p>
-    <div class="label-rename-dialog-actions">
-      <button type="button" data-label-rename-cancel>${escapeHtml(cancelText)}</button>
-      <button type="button" class="primary" data-label-rename-save>${escapeHtml(saveText)}</button>
+    <div class="label-rename-dialog-actions ui-modal__actions">
+      <button type="button" class="${uiButtonClass('secondary')}" data-label-rename-cancel>${escapeHtml(cancelText)}</button>
+      <button type="button" class="primary ${uiButtonClass('primary')}" data-label-rename-save>${escapeHtml(saveText)}</button>
     </div>
   </div>`;
   document.body.appendChild(backdrop);
@@ -3709,18 +3697,19 @@ window.addEventListener('files-tab-state-changed', () => {
     backends.forEach((b, i) => {
       const row = document.createElement('div');
       row.className = 'ntfy-backend-row';
-      row.style.cssText = 'display:flex;flex-direction:column;gap:4px;border:1px solid var(--border-color,#ccc);border-radius:4px;padding:6px 8px;margin-bottom:6px';
+      row.style.cssText = 'display:flex;flex-direction:column;gap:var(--space-1);border:1px solid var(--line);border-radius:var(--radius-sm);padding:6px var(--space-2);margin-bottom:6px';
 
       const header = document.createElement('div');
       header.style.cssText = 'display:flex;align-items:center;gap:6px;';
       const typeBadge = document.createElement('span');
       typeBadge.textContent = b.type.toUpperCase();
-      typeBadge.style.cssText = 'font-size:0.75em;background:var(--accent-bg,#e0e0e0);padding:1px 6px;border-radius:3px;';
+      typeBadge.style.cssText = 'font-size:var(--fs-xs);background:var(--accent-soft);padding:1px 6px;border-radius:var(--radius-sm);';
       const removeBtn = document.createElement('button');
-      removeBtn.className = 'settings-link-btn';
+      removeBtn.className = `settings-link-btn ${uiButtonClass('danger', 'compact')}`;
       removeBtn.textContent = '✕';
-      removeBtn.style.cssText = 'margin-left:auto;color:var(--danger-color,#c00);';
+      removeBtn.style.cssText = 'margin-left:auto;';
       removeBtn.title = t('settings_ntfy_remove_backend') || 'Remove';
+      removeBtn.setAttribute('aria-label', removeBtn.title);
       removeBtn.addEventListener('click', () => { backends.splice(i, 1); renderBackends(); });
       header.appendChild(typeBadge);
       header.appendChild(removeBtn);
@@ -3729,13 +3718,13 @@ window.addEventListener('files-tab-state-changed', () => {
       urlRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
       const urlLabel = document.createElement('span');
       urlLabel.textContent = 'URL';
-      urlLabel.style.cssText = 'font-size:0.82em;min-width:52px;';
+      urlLabel.style.cssText = 'font-size:var(--fs-sm);min-width:52px;';
       const urlInput = document.createElement('input');
       urlInput.type = 'url';
       urlInput.value = b.url;
       urlInput.placeholder = b.type === 'ntfy' ? 'https://ntfy.sh' : 'https://...';
-      urlInput.className = 'settings-input-url';
-      urlInput.style.cssText = 'flex:1;font-size:0.85em;';
+      urlInput.className = 'settings-input-url ui-input';
+      urlInput.style.cssText = 'flex:1;';
       urlInput.addEventListener('input', () => { backends[i].url = urlInput.value; });
       urlRow.appendChild(urlLabel);
       urlRow.appendChild(urlInput);
@@ -3748,16 +3737,16 @@ window.addEventListener('files-tab-state-changed', () => {
         topicRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
         const topicLabel = document.createElement('span');
         topicLabel.textContent = t('settings_ntfy_topic') || 'Topic';
-        topicLabel.style.cssText = 'font-size:0.82em;min-width:52px;';
+        topicLabel.style.cssText = 'font-size:var(--fs-sm);min-width:52px;';
         const topicInput = document.createElement('input');
         topicInput.type = 'text';
         topicInput.value = b.topic || '';
         topicInput.placeholder = 'anyaicli-xxxx';
-        topicInput.className = 'settings-input-url';
-        topicInput.style.cssText = 'flex:1;font-size:0.85em;';
+        topicInput.className = 'settings-input-url ui-input';
+        topicInput.style.cssText = 'flex:1;';
         topicInput.addEventListener('input', () => { backends[i].topic = topicInput.value; });
         const genBtn = document.createElement('button');
-        genBtn.className = 'settings-link-btn';
+        genBtn.className = `settings-link-btn ${uiButtonClass('secondary', 'compact')}`;
         genBtn.textContent = t('settings_ntfy_generate_topic') || '自動生成';
         genBtn.addEventListener('click', async () => {
           try {
@@ -3777,7 +3766,7 @@ window.addEventListener('files-tab-state-changed', () => {
       const testRow = document.createElement('div');
       testRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:2px;';
       const testBtn = document.createElement('button');
-      testBtn.className = 'settings-link-btn';
+      testBtn.className = `settings-link-btn ${uiButtonClass('secondary', 'compact')}`;
       testBtn.textContent = t('settings_ntfy_test_send') || 'テスト送信';
       testBtn.addEventListener('click', async () => {
         testBtn.disabled = true;
@@ -4279,8 +4268,7 @@ export function attachSummaryToggleListeners(): void {
     const confirmed = await appConfirm({
       title: t('settings_nim_delete_confirm_title'),
       message: t('settings_nim_delete_confirm_message'),
-      confirmText: t('settings_nim_delete_key'),
-      cancelText: t('cancel'),
+      action: 'delete',
       kind: 'warn',
     });
     if (!confirmed) return;

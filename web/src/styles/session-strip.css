@@ -18,7 +18,7 @@
      掴み帯が重なり、ボタンの下側を押したのにドラッグが始まる。
      （action-bar 側は「pointerdown の target がバー本体のときだけ掴む」という
      当たり判定で同じ問題を避けている。こちらは中身が横いっぱいに広がるので、
-     場所で分ける方を採る。box-sizing: border-box なので高さは変わらない） */
+     場所で分ける方を採る。box-sizing: border-box なので高さは変わらない） */;
   padding: 0 8px var(--session-strip-grip-h, 8px);
   background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
@@ -34,20 +34,12 @@
   display: inline-flex;
   align-items: center;
   max-width: 22ch;
-  padding: 0 8px;
-  border: 0;
   border-right: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-soft, var(--text));
-  font: inherit;
-  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
 }
-.session-strip-project:hover { color: var(--text); background: var(--bg-hover); }
+
 .session-strip-project[hidden] { display: none !important; }
 
 /* セッションの並び。横に溢れたらここだけがスクロールする。 */
@@ -56,7 +48,7 @@
   min-width: 0;
   display: flex;
   align-items: stretch;
-  gap: 4px;
+  gap: var(--space-1);
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
@@ -130,17 +122,22 @@
   align-items: center;
   gap: 6px;
   max-width: 32ch;
+  white-space: nowrap;
+}
+.session-strip-scope-btn:where(:not(.ui-button)) {
   padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: transparent;
   color: var(--muted);
   font: inherit;
-  white-space: nowrap;
   cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.session-strip-scope-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+.session-strip-scope-btn:where(:not(.ui-button)):hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
 /* 選ばれている側は色だけで示さない（背景 + 枠 + 文字の太さの 3 点で示す）。 */
 .session-strip-scope-btn[aria-pressed="true"] {
   background: var(--accent-soft);
@@ -148,8 +145,14 @@
   color: var(--text);
   font-weight: 700;
 }
-.session-strip-scope-btn:disabled { opacity: 0.5; cursor: default; }
-.session-strip-scope-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.session-strip-scope-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.session-strip-scope-btn:where(:not(.ui-button)):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 
 /* 押せない「この箱だけ」の包み。理由のツールチップはここが持つ（disabled な button は
    マウスイベントを出さないので、包みが無いと理由を読む手段が無くなる）。 */

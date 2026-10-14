@@ -88,7 +88,7 @@ function ensureSheet(): void {
 
   const grab = document.createElement('button');
   grab.type = 'button';
-  grab.className = 'mas-grab';
+  grab.className = 'ui-button ui-button--secondary ui-button--regular mas-grab';
   grab.setAttribute('aria-label', t('mobile_approval_sheet_close'));
   grab.addEventListener('click', () => closeApprovalSheet({ manual: true }));
   grab.addEventListener('touchstart', (ev) => {
@@ -169,7 +169,7 @@ function renderHeader(parent: HTMLElement, sessionId: number, titleText: string)
 
   const close = document.createElement('button');
   close.type = 'button';
-  close.className = 'mas-close';
+  close.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon mas-close';
   close.textContent = '✕';
   close.setAttribute('aria-label', t('mobile_approval_sheet_close'));
   close.addEventListener('click', () => closeApprovalSheet({ manual: true }));
@@ -202,7 +202,7 @@ function appendQuestion(parent: HTMLElement, text: unknown): void {
 function optionButton(label: string, num: string | number): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'mas-option';
+  btn.className = 'ui-button ui-button--secondary ui-button--regular mas-option';
   const n = document.createElement('span');
   n.className = 'mas-option-num';
   n.textContent = String(num);
@@ -244,7 +244,7 @@ function renderSingle(sessionId: number, options: any[]): void {
     row.className = 'mas-free-row';
     const input = document.createElement('input');
     input.type = 'text';
-    input.className = 'mas-free-input';
+    input.className = 'ui-input mas-free-input';
     input.placeholder = t('approval_free_input_placeholder');
     input.value = getSingleFreeText(sessionId);
     input.addEventListener('input', () => setSingleFreeText(sessionId, input.value));
@@ -256,7 +256,7 @@ function renderSingle(sessionId: number, options: any[]): void {
     });
     const send = document.createElement('button');
     send.type = 'button';
-    send.className = 'mas-primary';
+    send.className = 'ui-button ui-button--primary ui-button--regular mas-primary';
     send.textContent = t('send');
     send.addEventListener('click', () => {
       if (sendSingleFreeText(sessionId)) closeApprovalSheet();
@@ -326,7 +326,7 @@ function renderBatch(sessionId: number, sections: any[]): void {
   if (batchSelections.get(sessionId)?.[idx] === BATCH_FREE) {
     const input = document.createElement('input');
     input.type = 'text';
-    input.className = 'mas-free-input';
+    input.className = 'ui-input mas-free-input';
     input.placeholder = t('approval_free_input_placeholder');
     input.value = batchFreeText.get(sessionId)?.[idx] || '';
     input.addEventListener('input', () => {
@@ -341,7 +341,7 @@ function renderBatch(sessionId: number, sections: any[]): void {
   nav.className = 'mas-actions';
   const back = document.createElement('button');
   back.type = 'button';
-  back.className = 'mas-secondary';
+  back.className = 'ui-button ui-button--secondary ui-button--regular mas-secondary';
   back.textContent = t('approval_confirm_back');
   back.disabled = idx === 0;
   back.addEventListener('click', () => {
@@ -350,7 +350,7 @@ function renderBatch(sessionId: number, sections: any[]): void {
   });
   const primary = document.createElement('button');
   primary.type = 'button';
-  primary.className = 'mas-primary';
+  primary.className = 'ui-button ui-button--primary ui-button--regular mas-primary';
   const allAnswered = sections.every((_: any, i: number) => isBatchAnswered(sessionId, i));
   primary.textContent = idx < sections.length - 1 ? t('mobile_approval_next') : t('approval_batch_submit');
   primary.disabled = idx < sections.length - 1 ? !isBatchAnswered(sessionId, idx) : !allAnswered;
@@ -400,7 +400,7 @@ function renderMulti(sessionId: number, options: any[]): void {
   nav.className = 'mas-actions';
   const clear = document.createElement('button');
   clear.type = 'button';
-  clear.className = 'mas-secondary';
+  clear.className = 'ui-button ui-button--secondary ui-button--regular mas-secondary';
   clear.textContent = t('approval_batch_clear');
   clear.addEventListener('click', () => {
     multiSelectSelections.set(sessionId, new Set<number>());
@@ -408,7 +408,7 @@ function renderMulti(sessionId: number, options: any[]): void {
   });
   const submit = document.createElement('button');
   submit.type = 'button';
-  submit.className = 'mas-primary';
+  submit.className = 'ui-button ui-button--primary ui-button--regular mas-primary';
   submit.textContent = t('approval_batch_submit');
   submit.disabled = selected.size === 0;
   submit.addEventListener('click', () => {

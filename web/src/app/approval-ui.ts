@@ -66,7 +66,7 @@ import { probe } from '../debug/probe.js';
       msg.textContent = t('multi_question_banner');
       const closeBtn = document.createElement('button');
       closeBtn.type = 'button';
-      closeBtn.className = 'multi-question-banner-close';
+      closeBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon multi-question-banner-close';
       closeBtn.textContent = '✕';
       closeBtn.title = t('multi_question_banner_close_tooltip') || 'Dismiss';
       closeBtn.setAttribute('aria-label', closeBtn.title);
@@ -128,7 +128,7 @@ import { probe } from '../debug/probe.js';
     msg.textContent = t('approval_suppressed_banner').replace('{reason}', approvalSuppressedReasonLabel(reason));
     const retryBtn = document.createElement('button');
     retryBtn.type = 'button';
-    retryBtn.className = 'multi-question-banner-action';
+    retryBtn.className = 'ui-button ui-button--secondary ui-button--regular multi-question-banner-action';
     retryBtn.textContent = t('approval_suppressed_banner_retry');
     retryBtn.title = t('approval_suppressed_banner_retry_tooltip');
     retryBtn.addEventListener('click', () => {
@@ -137,7 +137,7 @@ import { probe } from '../debug/probe.js';
     });
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
-    closeBtn.className = 'multi-question-banner-close';
+    closeBtn.className = 'ui-button ui-button--quiet ui-button--compact ui-button--icon multi-question-banner-close';
     closeBtn.textContent = '✕';
     closeBtn.title = t('approval_suppressed_banner_close_tooltip') || 'Dismiss';
     closeBtn.addEventListener('click', () => {

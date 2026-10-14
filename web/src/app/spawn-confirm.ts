@@ -11,6 +11,7 @@
 //
 // 見た目の正本は web/src/styles/spawn-confirm.css。
 import { t } from '../i18n.js';
+import { confirmationLabels } from './confirmation-labels.js';
 import { apiFetch, escapeHtml, token } from './util.js';
 import {
   fillModelDatalist,
@@ -252,7 +253,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   // aac-wheel-overlay: これが無いと document レベルの wheel ハンドラが背後の
   // ターミナルへホイールを転送し、指示文をスクロールできなくなる
   // （scripts/check-wheel-overlays.mjs が付け忘れを止める）。
-  dialog.className = 'spawn-confirm-dialog aac-wheel-overlay';
+  dialog.className = 'ui-modal ui-modal--md spawn-confirm-dialog aac-wheel-overlay';
   dialog.dataset.spawnConfirmationId = record.id;
 
   const prompt = record.initialPrompt.trim();
@@ -273,11 +274,11 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   const parentTitle = String(parent?.label || parent?.display_name || '').trim();
 
   dialog.innerHTML = `<form class="spawn-confirm-form">
-  <div class="spawn-confirm-header">
-    <h2 class="spawn-confirm-title">${escapeHtml(t('spawn_confirm_title'))}</h2>
+  <div class="ui-modal__header spawn-confirm-header">
+    <h2 class="ui-modal__title spawn-confirm-title">${escapeHtml(t('spawn_confirm_title'))}</h2>
     ${record.parentId ? `<span class="spawn-confirm-parent">${escapeHtml(t('spawn_confirm_parent', { id: record.parentId }))}${parentTitle ? ' · ' + escapeHtml(parentTitle) : ''}</span>` : ''}
   </div>
-  <div class="spawn-confirm-body">
+  <div class="ui-modal__body spawn-confirm-body">
     <dl class="spawn-confirm-meta">
       <dt>${escapeHtml(t('spawn_confirm_repo'))}</dt>
       <dd>${escapeHtml(repoLabel)}</dd>
@@ -297,25 +298,25 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_role_table_cli'))}</span>
         <span class="spawn-confirm-provider-row">
           <span class="spawn-confirm-provider-icon" data-spawn-confirm-icon>${providerIconHtml(provider)}</span>
-          <select name="provider" class="spawn-select">${optionsHtml}</select>
+          <select name="provider" class="ui-input spawn-select">${optionsHtml}</select>
         </span>
       </label>
       <label class="spawn-confirm-field">
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_role_table_model'))}</span>
-        <input name="model" class="spawn-input" list="spawn-confirm-model-datalist-${escapeHtml(record.id)}" value="${escapeHtml(record.model)}" placeholder="${escapeHtml(t('spawn_confirm_model_placeholder'))}" spellcheck="false" autocomplete="off">
+        <input name="model" class="ui-input spawn-input" list="spawn-confirm-model-datalist-${escapeHtml(record.id)}" value="${escapeHtml(record.model)}" placeholder="${escapeHtml(t('spawn_confirm_model_placeholder'))}" spellcheck="false" autocomplete="off">
         <datalist id="spawn-confirm-model-datalist-${escapeHtml(record.id)}"></datalist>
       </label>
       <label class="spawn-confirm-field" data-spawn-confirm-effort-field${effortFieldHidden(provider) ? ' hidden' : ''}>
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_confirm_effort'))}</span>
-        <select name="effort" class="spawn-select" data-spawn-confirm-effort>${effortOptionsHtml(provider, record.effort)}</select>
+        <select name="effort" class="ui-input spawn-select" data-spawn-confirm-effort>${effortOptionsHtml(provider, record.effort)}</select>
       </label>
       <label class="spawn-confirm-field">
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_confirm_execution_mode'))}</span>
-        <select name="execution_mode" class="spawn-select">${executionModeOptionsHtml(record.executionMode)}</select>
+        <select name="execution_mode" class="ui-input spawn-select">${executionModeOptionsHtml(record.executionMode)}</select>
       </label>
       <label class="spawn-confirm-field">
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_confirm_permission_preset'))}</span>
-        <select name="permission_preset" class="spawn-select">${permissionPresetOptionsHtml(record.permissionPreset)}</select>
+        <select name="permission_preset" class="ui-input spawn-select">${permissionPresetOptionsHtml(record.permissionPreset)}</select>
       </label>
       <label class="spawn-confirm-remember">
         <input type="checkbox" name="remember_permission"${record.rememberPermission ? ' checked' : ''}>
@@ -335,9 +336,9 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     </div>
   </div>
   <p class="spawn-confirm-status" data-spawn-confirm-status hidden></p>
-  <div class="spawn-confirm-actions" data-spawn-confirm-actions>
-    <button type="button" class="spawn-confirm-btn" data-action="refuse">${escapeHtml(t('spawn_confirm_refuse'))}</button>
-    <button type="button" class="spawn-confirm-btn is-primary" data-action="approve"${parentGone ? ' disabled' : ''}>${escapeHtml(t('spawn_confirm_approve'))}</button>
+  <div class="ui-modal__actions spawn-confirm-actions" data-spawn-confirm-actions>
+    <button type="button" class="ui-button ui-button--secondary ui-button--regular spawn-confirm-btn" data-action="refuse">${escapeHtml(confirmationLabels('launch').decline)}</button>
+    <button type="button" class="ui-button ui-button--primary ui-button--regular spawn-confirm-btn is-primary" data-action="approve"${parentGone ? ' disabled' : ''}>${escapeHtml(confirmationLabels('launch').accept)}</button>
   </div>
 </form>`;
 
@@ -473,7 +474,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
 
   function setActionsToClose(): void {
     if (!actionsEl) return;
-    actionsEl.innerHTML = `<button type="button" class="spawn-confirm-btn is-primary" data-action="close">${escapeHtml(t('spawn_confirm_close'))}</button>`;
+    actionsEl.innerHTML = `<button type="button" class="ui-button ui-button--primary ui-button--compact spawn-confirm-btn is-primary" data-action="close">${escapeHtml(t('spawn_confirm_close'))}</button>`;
   }
 
   function scheduleAutoClose(): void {
