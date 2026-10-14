@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "69fa442feafeb96e2cce37c2d94463a2c9ab90b9",
+    "commit": "61491041b215a3c397f097d69993c88b2ac64f67",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1976,
-    "analyzed": 1535,
+    "discovered": 1978,
+    "analyzed": 1537,
     "unresolved": 9,
     "unknown": 0,
     "unclaimed": 432,
@@ -26055,6 +26055,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/application/session_workers/subagent_activity.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Newest modification time of a provider's sub-agent log folder, used only as"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/application/session_workers/tests.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -35122,6 +35151,35 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/terminal/session/stall_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "\"No response\" clock (`transcript_grew_at`): growth is pushed to the UI at"
         },
         "authentication": {
           "state": "not_configured"

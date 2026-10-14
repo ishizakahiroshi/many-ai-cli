@@ -1833,6 +1833,12 @@ pub enum SessionObservation {
         safe_offset: i64,
         grew_at: String,
     },
+    /// Newest modification time under the provider's sub-agent log folder.
+    /// Metadata only: the sender never reads those logs, and this deliberately
+    /// does not raise `CoreEvent::TranscriptChanged` (that event feeds handoff).
+    SubagentActivity {
+        latest: Timestamp,
+    },
     Workflow(super::WorkflowProgress),
     Subagents(super::SubagentTree),
     Done(super::DoneSummary),

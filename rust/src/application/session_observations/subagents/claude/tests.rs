@@ -278,3 +278,146 @@ fn trial_child_symlink_cannot_read_foreign_transcript() {
     .unwrap();
     assert!(tree.is_none());
 }
+
+// ---- 呼び直し (SendMessage + resumedAgentId) の合成ログ。値はすべて合成。 ----
+fn ts(sec: u64) -> String {
+    let t = now() + Duration::from_secs(sec);
+    crate::proto::time::format_rfc3339(t).unwrap()
+}
+fn agent_launch(at: u64, id: &str) -> String {
+    format!(
+        "{{\"type\":\"assistant\",\"timestamp\":\"{}\",\"message\":{{\"content\":[{{\"type\":\"tool_use\",\"id\":\"{id}\",\"name\":\"Agent\"}}]}}}}\n{{\"type\":\"user\",\"timestamp\":\"{}\",\"toolUseResult\":{{\"isAsync\":true}},\"message\":{{\"content\":[{{\"type\":\"tool_result\",\"tool_use_id\":\"{id}\"}}]}}}}\n",
+        ts(at),
+        ts(at)
+    )
+}
+fn notice(at: u64, id: &str, status: &str) -> String {
+    let text = format!(
+        "<task-notification><task-id>a</task-id><tool-use-id>{id}</tool-use-id><status>{status}</status><summary>synthetic</summary></task-notification>"
+    );
+    format!(
+        "{{\"type\":\"queue-operation\",\"operation\":\"enqueue\",\"timestamp\":\"{}\",\"content\":\"{text}\"}}\n",
+        ts(at)
+    )
+}
+fn resume(at: u64, id: &str, agent: &str) -> String {
+    format!(
+        "{{\"type\":\"assistant\",\"timestamp\":\"{}\",\"message\":{{\"content\":[{{\"type\":\"tool_use\",\"id\":\"{id}\",\"name\":\"SendMessage\",\"input\":{{\"to\":\"{agent}\"}}}}]}}}}\n{{\"type\":\"user\",\"timestamp\":\"{}\",\"toolUseResult\":{{\"success\":true,\"message\":\"Resuming agent a\",\"resumedAgentId\":\"{agent}\",\"pin\":{{\"id\":\"{agent}\",\"name\":\"{agent}\",\"ref\":\"r\"}}}},\"message\":{{\"content\":[{{\"type\":\"tool_result\",\"tool_use_id\":\"{id}\"}}]}}}}\n",
+        ts(at),
+        ts(at)
+    )
+}
+fn observe(
+    paths: &RuntimePaths,
+    parent: &Path,
+    log: &str,
+    state: State,
+    at: u64,
+) -> (String, i64, State) {
+    let at = now() + Duration::from_secs(at);
+    write(parent, log.as_bytes(), at);
+    let (tree, state) = read(
+        parent,
+        now() - Duration::from_secs(3600),
+        state,
+        &ReadBudget::default(),
+        paths,
+        at,
+    )
+    .unwrap();
+    let node = tree.unwrap().nodes.remove(0);
+    (node.state, node.finished_at, state)
+}
+#[test]
+fn resumed_agent_goes_running_done_running_done_by_each_notice() {
+    let (_root, paths, parent) = fixture();
+    child(&parent, "a", META, BODY, now());
+    let mut log = agent_launch(1, "tool-a");
+    let (s, _, st) = observe(&paths, &parent, &log, State::default(), 2);
+    assert_eq!(s, "running");
+    log += &notice(10, "tool-a", "completed");
+    let (s, fin, st) = observe(&paths, &parent, &log, st, 11);
+    assert_eq!(s, "done");
+    assert_eq!(fin, parse_timestamp(&ts(10)));
+    log += &resume(20, "tool-b", "a");
+    let (s, _, st) = observe(&paths, &parent, &log, st, 21);
+    assert_eq!(s, "running");
+    log += &notice(30, "tool-b", "completed");
+    let (s, fin, st) = observe(&paths, &parent, &log, st, 31);
+    assert_eq!((s.as_str(), fin), ("done", parse_timestamp(&ts(30))));
+    // 3 回目の呼び直しでも同じ（最新の実行で決める）。
+    log += &resume(40, "tool-c", "a");
+    let (s, _, st) = observe(&paths, &parent, &log, st, 41);
+    assert_eq!(s, "running");
+    log += &notice(50, "tool-c", "completed");
+    let (s, fin, _) = observe(&paths, &parent, &log, st, 51);
+    assert_eq!((s.as_str(), fin), ("done", parse_timestamp(&ts(50))));
+    // 状態を引き継がず最後のログだけ読んでも同じ結果。
+    let (s, fin, _) = observe(&paths, &parent, &log, State::default(), 52);
+    assert_eq!((s.as_str(), fin), ("done", parse_timestamp(&ts(50))));
+}
+#[test]
+fn resumed_run_with_failure_status_is_failed() {
+    let (_root, paths, parent) = fixture();
+    child(&parent, "a", META, BODY, now());
+    let mut log = agent_launch(1, "tool-a") + &notice(10, "tool-a", "completed");
+    let (s, _, st) = observe(&paths, &parent, &log, State::default(), 11);
+    assert_eq!(s, "done");
+    log += &resume(20, "tool-b", "a");
+    let (s, _, st) = observe(&paths, &parent, &log, st, 21);
+    assert_eq!(s, "running");
+    log += &notice(30, "tool-b", "failed");
+    let (s, fin, _) = observe(&paths, &parent, &log, st, 31);
+    assert_eq!((s.as_str(), fin), ("failed", parse_timestamp(&ts(30))));
+}
+#[test]
+fn newest_resume_wins_when_resumed_twice() {
+    let (_root, paths, parent) = fixture();
+    child(&parent, "a", META, BODY, now());
+    let log = agent_launch(1, "tool-a")
+        + &notice(10, "tool-a", "completed")
+        + &resume(20, "tool-b", "a")
+        + &notice(30, "tool-b", "completed")
+        + &resume(40, "tool-c", "a");
+    let (s, _, _) = observe(&paths, &parent, &log, State::default(), 41);
+    assert_eq!(s, "running");
+}
+#[test]
+fn resume_record_without_resumed_agent_id_changes_nothing() {
+    let (_root, paths, parent) = fixture();
+    child(&parent, "a", META, BODY, now());
+    let plain = resume(20, "tool-b", "a").replace("resumedAgentId", "other");
+    let log = agent_launch(1, "tool-a") + &notice(10, "tool-a", "completed") + &plain;
+    let (s, fin, _) = observe(&paths, &parent, &log, State::default(), 21);
+    assert_eq!((s.as_str(), fin), ("done", parse_timestamp(&ts(10))));
+    // 型が違う値でも既存の信号（isAsync/status）の読み取りは壊れない。
+    let odd = resume(20, "tool-b", "a").replace("\"resumedAgentId\":\"a\"", "\"resumedAgentId\":7");
+    let log = agent_launch(1, "tool-a") + &notice(10, "tool-a", "completed") + &odd;
+    let (s, _, _) = observe(&paths, &parent, &log, State::default(), 21);
+    assert_eq!(s, "done");
+}
+#[test]
+fn resume_leaving_the_parent_window_does_not_stay_running_forever() {
+    // 呼び直しの記録が読み取り範囲（500 件）の外へ出ても、完了通知が範囲内なら done になる。
+    let (_root, paths, parent) = fixture();
+    child(&parent, "a", META, BODY, now());
+    let mut log = agent_launch(1, "tool-a") + &notice(10, "tool-a", "completed");
+    log += &resume(20, "tool-b", "a");
+    let (s, _, st) = observe(&paths, &parent, &log, State::default(), 21);
+    assert_eq!(s, "running");
+    log += &"{}\n".repeat(300);
+    log += &notice(30, "tool-b", "completed");
+    log += &"{}\n".repeat(300);
+    let (s, fin, _) = observe(&paths, &parent, &log, st, 31);
+    assert_eq!((s.as_str(), fin), ("done", parse_timestamp(&ts(30))));
+    // 呼び直しも完了通知も範囲外に出て、子のログも古いなら、running のまま残らない。
+    let mut log = agent_launch(1, "tool-a") + &notice(10, "tool-a", "completed");
+    log += &resume(20, "tool-b", "a");
+    let (_root2, paths2, parent2) = fixture();
+    child(&parent2, "a", META, BODY, now() - Duration::from_secs(1200));
+    let (s, _, st2) = observe(&paths2, &parent2, &log, State::default(), 21);
+    assert_eq!(s, "running"); // 呼び直し直後。子のログは古いが launched の信号がある。
+    log += &"{}\n".repeat(600);
+    let (s, _, _) = observe(&paths2, &parent2, &log, st2, 1300);
+    assert_eq!(s, "done");
+}

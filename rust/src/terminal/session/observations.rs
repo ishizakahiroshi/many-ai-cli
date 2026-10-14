@@ -157,8 +157,9 @@ impl SessionEngine {
             s.snapshot.activity.workflow_active = !s.snapshot.activity.awaiting_user;
             s.snapshot.activity.normalize();
             s.snapshot.state = s.snapshot.activity.display_state().into();
+            s.restart_stall_clock(&old, now);
             if s.snapshot.activity != before || s.snapshot.state != old {
-                effects.0.push(CoreEffect::Broadcast(s.activity_update()));
+                effects.0.push(CoreEffect::Broadcast(s.push_grew(now)));
                 effects.0.push(CoreEffect::Notify(CoreEvent::SessionState {
                     binding,
                     activity: s.snapshot.activity.clone(),
@@ -336,7 +337,7 @@ impl SessionEngine {
                 s.transcript.agent_session_id = agent_session_id;
                 s.transcript_offset = safe_offset;
                 s.marker_source.resolved(path.clone());
-                s.snapshot.transcript_grew_at = grew_at.clone();
+                let push = s.note_growth(grew_at.clone(), now);
                 effects
                     .0
                     .push(CoreEffect::Notify(CoreEvent::TranscriptChanged {
@@ -345,6 +346,17 @@ impl SessionEngine {
                         safe_offset,
                         grew_at,
                     }));
+                effects.0.extend(push.map(CoreEffect::Broadcast));
+            }
+            SessionObservation::SubagentActivity { latest } => {
+                // Only a running turn is being timed; the sender probes nothing else.
+                if s.snapshot.state == "running"
+                    && s.subagent_activity_at.is_none_or(|m| latest > m)
+                {
+                    s.subagent_activity_at = Some(latest);
+                    let push = s.note_growth(timestamp(now)?, now);
+                    effects.0.extend(push.map(CoreEffect::Broadcast));
+                }
             }
             SessionObservation::Workflow(progress) => {
                 s.workflow = Some(progress.clone());
@@ -441,7 +453,7 @@ impl SessionEngine {
             s.approval_reservation = None;
             s.marker_suppression.reset_history();
             effects.0.extend(s.approval.reset_history(now).0);
-            if let Some(update) = s.refresh_approval_activity() {
+            if let Some(update) = s.refresh_approval_activity(now) {
                 effects.0.push(CoreEffect::Broadcast(update));
             }
             effects
@@ -574,6 +586,7 @@ impl SessionEngine {
                 !s.snapshot.activity.output_idle && !s.snapshot.activity.awaiting_user;
             s.snapshot.activity.normalize();
             s.snapshot.state = s.snapshot.activity.display_state().into();
+            s.restart_stall_clock(&old, now);
             if old == "running" && s.snapshot.state == "standby" {
                 match s.schedule_fallback(now) {
                     Ok(end) => effects.0.extend(end.0),
@@ -581,12 +594,15 @@ impl SessionEngine {
                 }
             }
             if old != s.snapshot.state || before != s.snapshot.activity {
-                effects.0.push(CoreEffect::Broadcast(s.activity_update()));
+                effects.0.push(CoreEffect::Broadcast(s.push_grew(now)));
                 effects.0.push(CoreEffect::Notify(CoreEvent::SessionState {
                     binding: s.binding,
                     activity: s.snapshot.activity.clone(),
                     display_state: s.snapshot.state.clone(),
                 }));
+            } else if s.transcript_grew_pending && s.grew_push_due(now) {
+                // Growth that arrived inside the interval: deliver it now, once.
+                effects.0.push(CoreEffect::Broadcast(s.push_grew(now)));
             }
         }
         questions.0.extend(state.route(effects).0);
@@ -655,7 +671,61 @@ impl State {
         ]))
     }
 }
+/// "No response" clock = `snapshot.transcript_grew_at`. Growth is pushed to the UI
+/// (it once rode only on state changes, so long turns showed a stale count), at
+/// most every 10 s. Sub-agent logs count as growth too: Claude writes nothing to
+/// the parent transcript while one runs. A new turn restarts the clock; a
+/// reattach keeps it (lifecycle.rs).
+const GROW_PUSH_INTERVAL: Duration = Duration::from_secs(10);
 impl Session {
+    /// Record growth and return the frame to push when one is due; otherwise the
+    /// value waits for `evaluate_idle` (so it is at most one interval late).
+    fn note_growth(&mut self, grew_at: String, now: Timestamp) -> Option<proto::Message> {
+        self.snapshot.transcript_grew_at = grew_at;
+        if self.grew_push_due(now) {
+            Some(self.push_grew(now))
+        } else {
+            self.transcript_grew_pending = true;
+            None
+        }
+    }
+    fn grew_push_due(&self, now: Timestamp) -> bool {
+        self.transcript_grew_sent_at.is_none_or(|sent| {
+            now.duration_since(sent)
+                .map_or(true, |elapsed| elapsed >= GROW_PUSH_INTERVAL)
+        })
+    }
+    /// The activity frame carries `transcript_grew_at`; building it is the push.
+    fn push_grew(&mut self, now: Timestamp) -> proto::Message {
+        self.transcript_grew_sent_at = Some(now);
+        self.transcript_grew_pending = false;
+        self.activity_update()
+    }
+    /// Leaving standby/waiting for running starts a new turn: the idle time before
+    /// it must not count as a stall. The caller broadcasts the new value.
+    pub(super) fn restart_stall_clock(&mut self, previous: &str, now: Timestamp) -> bool {
+        if previous == "running" || self.snapshot.state != "running" {
+            return false;
+        }
+        let Ok(at) = proto::time::format_rfc3339(now) else {
+            return false;
+        };
+        self.snapshot.transcript_grew_at = at;
+        self.subagent_activity_at = None;
+        self.transcript_grew_sent_at = Some(now);
+        self.transcript_grew_pending = false;
+        true
+    }
+    pub(super) fn with_stall_clock(
+        &self,
+        mut message: proto::Message,
+        restarted: bool,
+    ) -> proto::Message {
+        if restarted {
+            message.transcript_grew_at = self.snapshot.transcript_grew_at.clone();
+        }
+        message
+    }
     pub(super) fn observe_marker(
         &mut self,
         marker: Option<marker::Marker>,
@@ -727,7 +797,7 @@ impl Session {
             }
         }
     }
-    pub(super) fn refresh_approval_activity(&mut self) -> Option<proto::Message> {
+    pub(super) fn refresh_approval_activity(&mut self, now: Timestamp) -> Option<proto::Message> {
         let before = self.snapshot.activity.clone();
         let before_state = self.snapshot.state.clone();
         self.refresh_awaiting();
@@ -736,8 +806,9 @@ impl Session {
             return None;
         }
         self.snapshot.state = self.snapshot.activity.display_state().into();
+        let entered = self.restart_stall_clock(&before_state, now);
         (before != self.snapshot.activity || before_state != self.snapshot.state)
-            .then(|| self.update_message())
+            .then(|| self.with_stall_clock(self.update_message(), entered))
     }
     pub(super) fn refresh_awaiting(&mut self) {
         let awaiting = self.approval.record().is_some();
@@ -780,3 +851,6 @@ mod observer_tests;
 #[cfg(test)]
 #[path = "output_model_tests.rs"]
 mod output_model_tests;
+#[cfg(test)]
+#[path = "stall_tests.rs"]
+mod stall_tests;

@@ -421,8 +421,12 @@ impl SessionEngine {
         if matches {
             s.refresh_awaiting();
             if !terminal(&s.snapshot.state) {
+                let previous = s.snapshot.state.clone();
                 s.snapshot.state = s.snapshot.activity.display_state().into();
-                effects.0.push(CoreEffect::Broadcast(s.update_message()));
+                let entered = s.restart_stall_clock(&previous, now);
+                effects.0.push(CoreEffect::Broadcast(
+                    s.with_stall_clock(s.update_message(), entered),
+                ));
             }
         }
         Ok(state.route(effects))

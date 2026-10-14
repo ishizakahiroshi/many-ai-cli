@@ -382,7 +382,7 @@ impl SessionEngine {
                 let closure = s.approval.submitted_turn(&text, now);
                 if !closure.0.is_empty() {
                     effects.0.extend(closure.0);
-                    if let Some(update) = s.refresh_approval_activity() {
+                    if let Some(update) = s.refresh_approval_activity(now) {
                         effects.0.push(CoreEffect::Broadcast(update));
                     }
                 }
