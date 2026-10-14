@@ -2027,6 +2027,7 @@ color: var(--warn);
   .inline-usage-window-reset.usage-meter-meta--stale { flex-basis: 8px; }
 }
 
+#input-icon-reset-btn,
 #agent-log-btn {
   margin-left: 0;
   flex-shrink: 0;

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "c2ab8b30689a1b809fc8e6c2d776ad0bbaaa82c3",
+    "commit": "69fa442feafeb96e2cce37c2d94463a2c9ab90b9",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -42888,7 +42888,7 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "Independent pointer placement. Only the grip moves an icon; the icon's"
+          "value": "Independent pointer placement and size. Only the small grip on an icon's"
         },
         "authentication": {
           "state": "not_configured"

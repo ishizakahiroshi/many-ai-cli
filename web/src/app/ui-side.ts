@@ -2,14 +2,15 @@
 //
 // 対象は 4 つ:
 //   - cards    セッションカードの列（#session-list）
-//   - tools    入力欄のツール群（#input-wrap 内のボタン列。⇄ = #tools-flip-btn）
+//   - tools    入力欄のツール群（#input-wrap 内のボタン列）
 //   - close    各パネルの閉じるボタン（Review / Git / 設定 / 各モーダルの ✕）
 //   - approval 確認ポップアップ（#action-bar）。軸が違うため '' = 下ドック
 //
 // v0.8 までは uiSide 1 本で 3 要素をまとめて倒していた（32f101b）。
 // 「カードは左・ポップアップは右・入力欄は右」のように要素ごとに決めたい要求のため、
-// localStorage キーを要素ごとの 4 本へ分けた。⇄ ボタンは 4 要素を一括で倒す
-// ショートカットとして残す。
+// localStorage キーを要素ごとの 4 本へ分けた。4 要素を一括で倒していた入力欄の ⇄ ボタンは、
+// 入力欄の各ボタンを取っ手で自由配置できるようになったので廃止した（2026-10-14）。
+// 側は設定画面の 4 つの選択欄で選ぶ。
 //
 // 値は '' / 'left' / 'right' の 3 値。'' は「その要素の従来どおりの位置」を意味し、
 // 更新しただけで画面が変わらないことを守る:
@@ -116,17 +117,6 @@ function syncSelects(state: UiSideMap): void {
     const sel = document.getElementById(`ui-side-${el}-select`) as HTMLSelectElement | null;
     if (sel && sel.value !== state[el]) sel.value = state[el];
   }
-}
-
-/** ⇄ ボタン用。入力欄ツールの実効側の反対へ 4 要素を一括で倒す。
- *  下ドック（''）の確認ポップアップは下のまま動かさない。 */
-export function toggleUiSide(): void {
-  const target: UiSide = toolsOnLeft() ? 'right' : 'left';
-  for (const el of ELEMENTS) {
-    if (el === 'approval') continue;
-    setUiSideEl(el, target);
-  }
-  if (getUiSideEl('approval')) setUiSideEl('approval', target);
 }
 
 /** 側が変わったときに呼ばれる。DOM 並べ替えが要る入力欄ツール用。 */

@@ -18,7 +18,7 @@ import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { pendingSessionIds } from './app/approval-queue-tab.js';
 import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitFor, cancelDeferredEnter } from './app/deferred-enter.js';
 import { scheduleResidueSweep, cancelResidueSweep } from './app/residue-sweep.js';
-import { onUiSideChange, toggleUiSide, toolsOnLeft } from './app/ui-side.js';
+import { onUiSideChange, toolsOnLeft } from './app/ui-side.js';
 import { cancelExpandCapture } from './app/expand-popup.js';
 import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
 import { clearSequentialChoiceState, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isAIProvider, isBatchActionBarVisible, isMultiSelectActionBarVisible, isShellProvider, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
@@ -1091,21 +1091,20 @@ inputEl.addEventListener('keydown', (e) => {
   }
 });
 
-// ツール群 左右切替ボタン
+// ツール群の左右配置（側は設定の「操作系の左右: 入力欄のツール群」で選ぶ）
 (function initToolsFlip() {
   const wrap = document.getElementById('input-wrap');
-  const btn = document.getElementById('tools-flip-btn');
   const inputArea = document.getElementById('input-area');
   const inputTools = document.getElementById('input-tools');
   const promptTemplateWrap = document.getElementById('prompt-template-wrap');
-  if (!wrap || !btn || !inputArea || !inputTools || !promptTemplateWrap) return;
+  if (!wrap || !inputArea || !inputTools || !promptTemplateWrap) return;
 
   const applyToolsPosition = (isLeft) => {
     wrap.classList.toggle('tools-left', isLeft);
     const voiceBtn = document.getElementById('voice-btn');
     const sendBtn = document.getElementById('send-btn');
     if (isLeft) {
-      wrap.append(btn, inputTools);
+      wrap.append(inputTools);
       if (voiceBtn) wrap.append(voiceBtn);
       wrap.append(promptTemplateWrap);
       if (sendBtn) wrap.append(sendBtn);
@@ -1116,14 +1115,13 @@ inputEl.addEventListener('keydown', (e) => {
       if (inputClearBtn) wrap.append(inputClearBtn);
       if (sendBtn) wrap.append(sendBtn);
       if (voiceBtn) wrap.append(voiceBtn);
-      wrap.append(promptTemplateWrap, inputTools, btn);
+      wrap.append(promptTemplateWrap, inputTools);
     }
   };
 
-  // 側の保持は ui-side.ts に一本化した。⇄ はカード列・パネルの ✕ も同時に振る。
+  // 側の保持は ui-side.ts に一本化した。
   applyToolsPosition(toolsOnLeft());
   onUiSideChange((_side, isLeft) => applyToolsPosition(isLeft));
-  btn.addEventListener('click', () => { toggleUiSide(); });
 
   // 入力欄の空白（ボタン以外＝paddingや flex 余白）をクリックしたら textarea に
   // フォーカスを移す。ネイティブでは textarea の矩形上しか focus されず、行間や

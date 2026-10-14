@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { clampIconPoint, layoutStatusControls, parseIconPositions, INPUT_ICON_IDS } from '../src/app/input-icon-position.js';
+import {
+  clampIconPoint, layoutStatusControls, nextIconScale, parseIconPositions, parseIconScales,
+  INPUT_ICON_IDS, MAX_ICON_SCALE, MIN_ICON_SCALE,
+} from '../src/app/input-icon-position.js';
 
 describe('independent input icon positions', () => {
   test('clear, templates and nested quick commands keep separate saved positions', () => {
@@ -49,11 +52,35 @@ describe('independent input icon positions', () => {
       points: [{ x: 340, y: 5 }, { x: 426, y: 5 }, { x: 512, y: 5 }],
       rows: 1,
       reservedWidth: 270,
+      height: 42,
     });
     const wrapped = layoutStatusControls([80, 80, 80], 330);
     expect(wrapped.points).toEqual([
       { x: 242, y: 5 }, { x: 242, y: 43 }, { x: 242, y: 81 },
     ]);
     expect(wrapped.rows).toBe(3);
+    expect(wrapped.height).toBe(118);
+  });
+  test('an enlarged control makes its row taller so the next row does not overlap it', () => {
+    const layout = layoutStatusControls([80, 80, 80], 330, [36, 144, 36]);
+    expect(layout.points.map(p => p.y)).toEqual([5, 43, 189]);
+    expect(layout.height).toBe(226);
+  });
+  test('ctrl+wheel resizes in 10% steps, returns to 100%, and stays within 50%-400%', () => {
+    expect(nextIconScale(1, -100)).toBe(1.1);
+    expect(nextIconScale(1.1, 100)).toBe(1);
+    expect(nextIconScale(1, 100)).toBe(0.9091);
+    expect(nextIconScale(3.9, -100)).toBe(MAX_ICON_SCALE);
+    expect(nextIconScale(0.52, 100)).toBe(MIN_ICON_SCALE);
+    expect(MIN_ICON_SCALE).toBe(0.5);
+    expect(MAX_ICON_SCALE).toBe(4);
+    // A small trackpad delta still moves the size instead of being rounded away.
+    expect(nextIconScale(1, -2)).toBeGreaterThan(1);
+  });
+  test('restores saved sizes within range and ignores malformed ones', () => {
+    expect(parseIconScales('{"send-btn":2,"voice-btn":9,"slash-picker-btn":0.1,"buf-clear-btn":1}'))
+      .toEqual({ 'send-btn': 2, 'voice-btn': 4, 'slash-picker-btn': 0.5 });
+    expect(parseIconScales('{"send-btn":"2","not-an-input-control":2}')).toEqual({});
+    expect(parseIconScales('bad json')).toEqual({});
   });
 });

@@ -2,13 +2,13 @@
 // 現在の移動操作は各ボタンの取っ手による自由配置へ統一する。
 //
 // 設計メモ:
-//  - DOM は動かさず、CSS の order だけで並びを変える。DOM 順は ⇄（左右切替・app.ts の
+//  - DOM は動かさず、CSS の order だけで並びを変える。DOM 順は左右配置（app.ts の
 //    initToolsFlip）が側ごとに組み直すので、ここで DOM を動かすと互いに上書きし合う。
 //  - #input-tools の中のボタンも外のボタンと自由に混ぜられるよう、並べ替えが有効な間は
 //    #input-tools を display: contents にして子を #input-wrap の flex item に昇格させる
 //    （styles/terminal.css の .custom-tool-order）。
 //  - 保存するのは「ツールが右側にあるとき」の左→右の順。左側のときは鏡写しで適用する
-//    （⇄ の既定の並びも概ね鏡写しなので、切り替えても入力欄に近いボタンが変わらない）。
+//    （左右配置の既定の並びも概ね鏡写しなので、切り替えても入力欄に近いボタンが変わらない）。
 //  - 保存が無いときは order を一切付けない＝従来の見た目のまま。
 //  - HTML5 の drag&drop はタッチ端末では発火しない。並べ替えはデスクトップ専用で、
 //    order を効かせる CSS もデスクトップのメディアクエリ内だけに置いてある。
@@ -16,7 +16,7 @@
 //  - 各ボタンの自由配置は input-icon-position.ts が個別に管理する。
 
 import { onUiSideChange, toolsOnLeft } from './ui-side.js';
-import { initInputIconPositions, resetInputIconPositions, refreshInputIconPositions } from './input-icon-position.js';
+import { initInputIconPositions, resetInputIconPositions, resetInputIconScales, refreshInputIconPositions } from './input-icon-position.js';
 
 const STORAGE_KEY = 'inputToolsOrder';
 const CUSTOM_CLASS = 'custom-tool-order';
@@ -104,11 +104,9 @@ function applyOrder(): void {
   const wrap = wrapEl();
   if (!wrap) return;
   const saved = loadOrder();
-  const flip = document.getElementById('tools-flip-btn');
   if (saved.length === 0) {
     wrap.classList.remove(CUSTOM_CLASS);
     ITEM_IDS.forEach(id => document.getElementById(id)?.style.removeProperty('--tool-order'));
-    flip?.style.removeProperty('--tool-order');
     return;
   }
   const right = completeOrder(saved);
@@ -116,8 +114,6 @@ function applyOrder(): void {
   visual.forEach((id, i) => {
     document.getElementById(id)?.style.setProperty('--tool-order', String(i + 1));
   });
-  // ⇄ は常にツール列の外側の端（右側なら右端・左側なら左端）
-  flip?.style.setProperty('--tool-order', toolsOnLeft() ? '0' : String(visual.length + 1));
   wrap.classList.add(CUSTOM_CLASS);
   refreshInputIconPositions();
 }
@@ -210,6 +206,9 @@ export function initInputToolsOrder(): void {
     persistVisualOrder(visual);
   });
 
+  // 設定の「既定に戻す」は位置と大きさの両方を、生ログ左の「⌂ 初期位置」は位置だけを戻す。
   const resetBtn = document.getElementById('input-tools-order-reset-btn');
-  if (resetBtn) resetBtn.addEventListener('click', () => resetInputToolsOrder());
+  if (resetBtn) resetBtn.addEventListener('click', () => { resetInputToolsOrder(); resetInputIconScales(); });
+  const layoutResetBtn = document.getElementById('input-icon-reset-btn');
+  if (layoutResetBtn) layoutResetBtn.addEventListener('click', () => resetInputToolsOrder());
 }

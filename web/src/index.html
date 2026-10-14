@@ -168,7 +168,7 @@
             <span class="settings-label" data-i18n="settings_input_tools_order_label">入力欄ボタンの並び順</span>
             <button type="button" id="input-tools-order-reset-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_input_tools_order_reset">既定に戻す</button>
           </div>
-          <div class="settings-note" data-i18n="settings_input_tools_order_desc">入力欄の下のボタン（停止・マイク・クイックコマンド等）はドラッグで並べ替えできます（PC のみ）。並び順はこのブラウザにのみ保存されます。</div>
+          <div class="settings-note" data-i18n="settings_input_tools_order_desc">各ボタンの右上の取っ手（⠿）をドラッグして、アプリ内の好きな位置へ配置できます。ボタンの上で Ctrl（Mac は ⌘）を押しながらホイールを回すと、大きさを 50%〜400% で変えられます。PC では状態表示の右側が初期位置です。「既定に戻す」は位置と大きさの両方を戻します（生ログ左の「⌂ 初期位置」は位置だけ）。配置と大きさはこのブラウザに保存されます。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_provider_order_label">新規セッションの並び順</span>
             <button type="button" id="provider-order-reset-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_provider_order_reset">既定に戻す</button>
@@ -206,7 +206,7 @@
               <option value="left" data-i18n="settings_ui_side_approval_left">左カラム</option>
             </select>
           </div>
-          <div class="settings-note" data-i18n="settings_ui_side_desc">セッションカード・入力欄のツール群・開閉／閉じるボタン（⊟／⊞／✕）・確認ポップアップを、それぞれ独立して好きな側へ置けます。「既定」は更新前と同じ配置です。入力欄の ⇄ ボタンはこれらをまとめて反対側へ倒します（下ドックの確認ポップアップは動きません）。この設定はこのブラウザにのみ保存されます（スマホ幅ではカード列は常に左のドロワーで、確認ポップアップも必ず下に出ます）。</div>
+          <div class="settings-note" data-i18n="settings_ui_side_desc">セッションカード・入力欄のツール群・開閉／閉じるボタン（⊟／⊞／✕）・確認ポップアップを、それぞれ独立して好きな側へ置けます。「既定」は更新前と同じ配置です。この設定はこのブラウザにのみ保存されます（スマホ幅ではカード列は常に左のドロワーで、確認ポップアップも必ず下に出ます）。</div>
         </div>
       </details>
       <details class="settings-section" data-section="usage" data-group="basic">
@@ -1889,7 +1889,6 @@
         </div>
         <div id="input-bar">
           <div id="input-wrap">
-            <button id="tools-flip-btn" class="ui-button ui-button--secondary ui-button--regular ui-button--icon quick-cmd-btn" data-i18n-tooltip="tools_flip_tooltip" aria-label="Toggle control side">⇄</button>
             <button id="mobile-composer-attach-btn" class="ui-button ui-button--secondary ui-button--regular ui-button--icon quick-cmd-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-tooltip="mobile_composer_attach_tooltip" aria-label="Add attachment">＋</button>
             <div id="input-area">
               <div id="paste-chips"></div>
@@ -1957,6 +1956,7 @@
             <input type="file" id="attach-camera-input" accept="image/*" capture="environment" style="display:none">
             <button class="ui-button ui-button--secondary ui-button--regular" id="attach-camera-btn" type="button" data-i18n-tooltip="attach_camera_tooltip" aria-label="Camera">📷</button>
             <div id="session-inline-usage" role="status" aria-live="polite"></div>
+            <button class="ui-button ui-button--secondary ui-button--regular" id="input-icon-reset-btn" type="button" data-i18n="input_icon_reset_button" data-i18n-tooltip="input_icon_reset_tooltip">⌂ Reset layout</button>
             <button class="ui-button ui-button--secondary ui-button--regular" id="agent-log-btn" type="button" data-i18n="agent_log_button" data-i18n-tooltip="agent_log_tooltip" aria-haspopup="dialog" aria-expanded="false">📄 Raw log</button>
             <button class="ui-button ui-button--quiet ui-button--compact" id="attach-copy-cwd-btn" type="button" data-i18n-tooltip="attach_copy_cwd_tooltip" aria-label="Copy working directory path">📁</button>
           </div>

@@ -14,6 +14,12 @@ Release artifacts are published at
 - Input controls can be placed independently across the app. On desktop they
   start beside the live status display instead of occupying the composer;
   existing saved positions are retained and Reset restores the new default.
+  Only the small grip on each control's top-right corner starts a move, so
+  clicking the control itself never drags it. Ctrl+wheel (⌘+wheel on macOS)
+  over a control resizes that control from 50% to 400%. A "⌂ Reset layout"
+  button left of Raw log restores default positions (sizes are kept); Settings
+  → Reset to default restores both. The ⇄ side-flip button in the input bar is
+  removed; each side is still chosen in Settings.
 - The persistent footer now has one Settings entry. Each open starts at General, which stays in the Settings navigation; the new Usage and Hub destinations there keep provider links, exposure status, QR connection, shutdown confirmations, and bug reporting.
 - Shared Web UI buttons, modal frames, focus styles and general SVG icons now reuse the existing themes. Hub confirmation actions use shared localized labels such as "更新しない / 更新する"; shutdown keeps its distinct choices and the token footer keeps its dedicated palette. A CI guard prevents new appearance and confirmation-label duplication.
 - Paths inside work memos now open the same context menu as paths in the CLI screen (right-click).

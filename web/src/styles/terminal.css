@@ -413,8 +413,7 @@
 
   body.mobile-has-session:not(.mobile-home-view) #mobile-keyboard-toggle,
   body.mobile-has-session:not(.mobile-home-view) #input-tools,
-  body.mobile-has-session:not(.mobile-home-view) #voice-btn,
-  body.mobile-has-session:not(.mobile-home-view) #tools-flip-btn {
+  body.mobile-has-session:not(.mobile-home-view) #voice-btn {
     display: none !important;
   }
 
@@ -783,16 +782,6 @@ body.pc-input-tools-off #input-tools { display: none; }
   min-width: 0;
 }
 
-#tools-flip-btn {
-
-  opacity: 0.7;
-  flex: 0 0 var(--control-h-sm);
-  min-width: var(--ui-control-size, var(--ui-control-compact));
-  align-self: flex-end;
-  line-height: 1;
-}
-#tools-flip-btn:hover { opacity: 1  }
-
 /* 入力欄ツールの並べ替え（ドラッグ&ドロップ）— input-tools-order.ts
    並びを保存したときだけ .custom-tool-order が付き、各ボタンの --tool-order を order に使う。
    #input-tools を display: contents にして、中のボタンも外のボタンと混ぜて並べられるようにする
@@ -819,22 +808,38 @@ body.pc-input-tools-off #input-tools { display: none; }
   margin: 0;
   z-index: 40;
 }
-.input-icon-grip {
+/* Ctrl/⌘ + ホイールで決めた大きさ（input-icon-position.ts）。左上を起点に拡大縮小する。
+   自由配置されず並びの中にあるときは、増減した幅と高さを余白で足し引きして隣と重ねない。 */
+#input-wrap .input-icon-scaled {
+  scale: var(--input-icon-scale, 1);
+  transform-origin: top left;
+}
+#input-wrap .input-icon-scale-flow {
+  margin-right: var(--input-icon-scale-dx, 0px);
+  margin-bottom: var(--input-icon-scale-dy, 0px);
+}
+/* 取っ手はアイコンの右上の角にだけ小さく重ねる。アイコンと同じ大きさにすると、
+   アイコンを押したつもりのクリックが移動の開始になる。 */
+#input-wrap .input-icon-grip {
   position: fixed;
-  width: var(--ui-control-size, var(--ui-control-regular));
-  height: var(--ui-control-size, var(--ui-control-regular));
+  width: 14px;
+  height: 14px;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-
   padding: 0;
+  line-height: 1;
   z-index: 41;
-
   cursor: grab;
   touch-action: none;
   user-select: none;
 }
-.input-icon-grip[hidden] { display: none; }
+@media (pointer: coarse) {
+  #input-wrap .input-icon-grip { width: 24px; height: 24px; }
+}
+#input-wrap .input-icon-grip[hidden] { display: none; }
 .input-icon-grip:active { cursor: grabbing; }
 .input-icon-moving { outline: 2px solid var(--accent); }
 #input-tools:has(.input-icon-positioned) { overflow: visible; }
@@ -842,11 +847,6 @@ body.pc-input-tools-off #input-tools { display: none; }
   body.mobile-has-session:not(.mobile-home-view) #voice-btn.input-icon-movable:not([hidden]) {
     display: flex !important;
   }
-}
-
-/* スマホでは入力欄ツールバーの左右切替ボタンは用途がないため非表示 */
-@media (max-width: 720px), (pointer: coarse) {
-  #tools-flip-btn { display: none; }
 }
 
 /* ペーストチップ */
