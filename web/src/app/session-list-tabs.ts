@@ -7,7 +7,8 @@ import { SESSION_LIST_TAB_DRAG, SESSION_LIST_CARD_DRAG, SESSION_LIST_TABS_KEY,
   renameSessionListTab, deleteSessionListTab, reorderSessionListTab, reconcileSessionListTabs,
   sessionListIdentity, sessionListFamilies, sessionListOwners, canMoveSessionListFamily, moveSessionListFamily,
   filterSessionListTree, sessionListWaitingCounts, loadSessionListStopped, saveSessionListStopped,
-  noteSessionListStopped, settleSessionListStopped, type SessionListTabState } from './session-list-tab-state.js';
+  noteSessionListStopped, settleSessionListStopped, rememberSessionListActive, sessionListTabSession,
+  type SessionListTabState } from './session-list-tab-state.js';
 
 interface Callbacks {
   sessions: () => SessionSnapshot[];
@@ -15,6 +16,11 @@ interface Callbacks {
   cardMenu: (x: number, y: number, id: number, origin?: HTMLElement) => void;
   pending: (id: number) => boolean;
   resetDrag: () => void;
+  /** Open a session the same way a card click does. */
+  activate: (id: number) => void;
+  activeId: () => number | null;
+  /** Session IDs in sidebar order. */
+  order: () => number[];
 }
 let callbacks: Callbacks | null = null;
 let value: SessionListTabState | null = null;
@@ -114,13 +120,24 @@ function refresh(): void {
   restoreScroll = false;
   revealSelected();
 }
-function select(id: string, focus = false): void {
+// A tab the user switches to opens its own session, so the screen never keeps showing another
+// tab's conversation. An empty tab has nothing to open and leaves the screen as it is.
+function showSelected(): void {
+  if (!callbacks) return;
+  const sessions = all(), selected = state().selectedId, current = callbacks.activeId();
+  if (current !== null && sessionListOwners(state(), sessions).get(current) === selected) return;
+  const id = sessionListTabSession(state(), sessions, selected, callbacks.order());
+  if (id !== null) callbacks.activate(id);
+}
+function select(id: string, focus = false, show = false): void {
   if (!state().tabs.some(tab => tab.id === id)) return;
   rememberScroll();
   state().selectedId = id;
   restoreScroll = true;
   refresh();
   persist();
+  // Before focusing: opening a session focuses the input, and the tab keeps arrow-key navigation.
+  if (show) showSelected();
   if (focus) focusSelected();
 }
 
@@ -156,8 +173,10 @@ export function preserveSessionListSelection(action: () => void): void {
 }
 export function revealSessionListOwner(id: number): void {
   if (preserveSelectionDepth) return;
+  const remembered = rememberSessionListActive(state(), all(), id);
   const owner = sessionListOwners(state(), all()).get(id);
   if (owner && owner !== state().selectedId) select(owner);
+  else if (remembered) persist();
 }
 /** Called after the mobile caller makes the drawer visible (hidden elements clamp scrollTop). */
 export function restoreSessionListDrawerScroll(): void {
@@ -198,7 +217,7 @@ export function initializeSessionListTabs(options: Callbacks): void {
   });
   parent.addEventListener('click', event => {
     const button = (event.target as Element).closest<HTMLElement>('[data-session-list-tab]');
-    if (button && !sessionListTapSuppressed()) select(button.dataset.sessionListTab!, true);
+    if (button && !sessionListTapSuppressed()) select(button.dataset.sessionListTab!, true, true);
   });
   parent.addEventListener('keydown', event => {
     const button = (event.target as Element).closest<HTMLElement>('[data-session-list-tab]');
@@ -207,7 +226,7 @@ export function initializeSessionListTabs(options: Callbacks): void {
     const tabs = state().tabs, index = tabs.findIndex(tab => tab.id === button.dataset.sessionListTab);
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
       : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
-    select(tabs[next].id, true);
+    select(tabs[next].id, true, true);
   });
   sidebar.addEventListener('contextmenu', event => {
     const origin = menuTarget(event.target);

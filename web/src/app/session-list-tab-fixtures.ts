@@ -8,7 +8,8 @@ import { SESSION_LIST_TABS_KEY, normalizeSessionListTabs as normalize, loadSessi
   sessionListOwners as owners, moveSessionListFamily as move, filterSessionListTree as filter,
   sessionListWaitingCounts as waiting, SESSION_LIST_STOPPED_KEY, loadSessionListStopped as loadStopped,
   saveSessionListStopped as saveStopped, noteSessionListStopped as noteStopped,
-  settleSessionListStopped as settle } from './session-list-tab-state.js';
+  settleSessionListStopped as settle, rememberSessionListActive as remember,
+  sessionListTabSession as pick } from './session-list-tab-state.js';
 const session = (id: number, extra: Partial<SessionSnapshot> = {}): SessionSnapshot =>
   ({ id, started_at: `2026-10-08T01:00:${String(id).padStart(2, '0')}Z`, cwd: '/repos/example', ...extra } as SessionSnapshot);
 const state = () => { const value = normalize(null); add(value, 'Work', 'work'); return value; };
@@ -164,6 +165,23 @@ test('reload preserves names/order/memberships/selected tab/scroll; storage deni
   assert.equal(saveSessionListTabs(denied, s), false); assert.equal(s.selectedId, 'work');
 });
 
+test('each tab remembers its last opened session; moves, ID reuse and empty tabs fall back safely', () => {
+  const s = state(); const order = [1, 2, 3, 4];
+  const live = [session(1), session(2), session(3), session(4, { parent_session_id: 3 })];
+  move(s, live, 3, 'work');
+  assert.equal(pick(s, live, 'work', order), 3);
+  assert.equal(remember(s, live, 4), true); assert.equal(remember(s, live, 4), false);
+  assert.equal(pick(s, live, 'work', order), 4);
+  assert.equal(remember(s, live, 2), true); assert.equal(pick(s, live, 'tab-1', order), 2);
+  move(s, live, 2, 'work'); assert.equal(pick(s, live, 'tab-1', order), 1);
+  const reused = [session(1), session(2), session(3), session(4, { parent_session_id: 3, started_at: '2026-10-09T01:00:00Z' })];
+  assert.equal(pick(s, reused, 'work', order), 2);
+  assert.equal(remember(s, [session(5, { started_at: '' })], 5), false);
+  add(s, 'Empty', 'empty'); assert.equal(pick(s, live, 'empty', order), null);
+  assert.deepEqual(normalize(JSON.parse(JSON.stringify(s))).active, s.active);
+  assert.deepEqual({ ...normalize({ tabs: [{ id: 'a', name: 'A' }], active: { a: 7, b: identity(session(1)) } }).active }, {});
+  assert.equal(remove(s, 'work', s.defaultId), true); assert.ok(!('work' in s.active));
+});
 test('C2-R1: missing ancestor defers a child move and reconnect preserves the original family', () => {
   const s = state(); const root = session(1), child = session(2, { parent_session_id: 1 });
   move(s, [root, child], 1, 'work'); const before = JSON.stringify(s);

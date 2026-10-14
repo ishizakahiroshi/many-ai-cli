@@ -893,7 +893,12 @@ function projectGroupFullPath(key: string, groupSessions: any[]): string {
 
 export function renderSessionList() {
   initializeSessionListTabs({ sessions: () => Array.from(sessions.values()), render: renderSessionList,
-    cardMenu: openCardCtxMenu, resetDrag: () => { set_dragSrcId(null); set_dragSrcGroupKey(null); }, pending: id => isApprovalPending(id) || pendingSpawnConfirmationCount(id) > 0 });
+    cardMenu: openCardCtxMenu, resetDrag: () => { set_dragSrcId(null); set_dragSrcGroupKey(null); }, pending: id => isApprovalPending(id) || pendingSpawnConfirmationCount(id) > 0,
+    // On a phone the tabs live in the drawer for browsing; opening a session there would close it.
+    activate: id => { if (!isMobileViewport()) onSessionCardActivate(id); },
+    activeId: () => activeSessionId,
+    order: () => flattenSidebarTree(buildSidebarTree({ sessions: Array.from(sessions.values()) as any[], order: sessionOrder,
+      groupOrder, projectFavorites, colorFilter: activeSessionColorFilter })) });
   renderSessionListTabs();
   const root = document.getElementById('sessions');
   const scrollEl = document.getElementById('sessions');

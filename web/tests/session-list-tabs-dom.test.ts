@@ -76,13 +76,16 @@ function fixture(saved?:unknown) {
   runInNewContext(new Bun.Transpiler({loader:'ts'}).transformSync(source)+'\nglobalThis.ui={initializeSessionListTabs,renderSessionListTabs,visibleSessionListTree,revealSessionListOwner,preserveSessionListSelection,sessionListScrollBeforeRender,sessionListScrollAfterRender,restoreSessionListDrawerScroll,openSessionListMoveDialog,sessionListMoveLabel,sessionListCanMove,sessionListTapSuppressed,restoreSessionListFocus};',ctx);
   const ui=ctx.ui;
   const render=()=>{const top=ui.sessionListScrollBeforeRender(cards);cards.replaceChildren();for(const session of sessions){if(!ui.visibleSessionListTree([{key:'example',label:'example',favorite:false,children:[{id:session.id,depth:0,children:[]}]}],sessions).length)continue;const row=el('div','',cards);row.className='card';row.dataset.sessionId=String(session.id);}ui.sessionListScrollAfterRender(cards,top);};
-  ui.initializeSessionListTabs({sessions:()=>sessions,render,cardMenu:()=>{menus++;},resetDrag:()=>{},pending:()=>false});ui.renderSessionListTabs();render();
+  // Like activateSession: record through revealSessionListOwner, then take focus into the input.
+  const open=(id:number)=>{active=id;ui.revealSessionListOwner(id);new El('input',doc).focus();};
+  ui.initializeSessionListTabs({sessions:()=>sessions,render,cardMenu:()=>{menus++;},resetDrag:()=>{},pending:()=>false,
+    activate:open,activeId:()=>active,order:()=>sessions.map(session=>session.id)});ui.renderSessionListTabs();render();
   // Execute the existing product card pointerup/click delegates, rather than a hand-written substitute.
   const listSource=readFileSync(new URL('../src/app/session-list.ts',import.meta.url),'utf8');
   const listeners=listSource.slice(listSource.indexOf('  if (!_sessionListClickDelegated) {'),listSource.indexOf("  root.innerHTML = '';",listSource.indexOf('export function renderSessionList()')));
   Object.assign(ctx,{root:cards,_sessionListClickDelegated:false,_sessionCardPointerDown:null,isSessionCardInteractiveTarget:()=>false,sessionCardTapMoveLimit:()=>18,markSessionCardPointerActivated:()=>{},onSessionCardActivate:(id:number)=>{active=id;},consumeDuplicateSessionCardClick:()=>false,openCardCtxMenu:()=>{menus++;}});
   runInNewContext(new Bun.Transpiler({loader:'ts'}).transformSync(listeners),ctx);
-  return {ui,ctx,doc,sidebar,strip,add,cards,sessions,all,el,render,timers,frames,get storage(){return JSON.parse(storage);},get writes(){return writes;},get active(){return active;},get menus(){return menus;},flush(){for(const [id,fn]of [...frames]){frames.delete(id);fn();}},hold(){for(const[id,fn]of[...timers]){timers.delete(id);fn();}}};
+  return {ui,ctx,doc,sidebar,strip,add,cards,sessions,all,el,render,timers,frames,open,get storage(){return JSON.parse(storage);},get writes(){return writes;},get active(){return active;},get menus(){return menus;},flush(){for(const [id,fn]of [...frames]){frames.delete(id);fn();}},hold(){for(const[id,fn]of[...timers]){timers.delete(id);fn();}}};
 }
 
 test('actual UI: add/switch preserves active conversation; waiting badge, literal rename and blank rejection',()=>{
@@ -111,6 +114,20 @@ test('actual selection boundary preserves startup tab but reveals explicit sessi
   const f=fixture(saved);assert.equal(f.strip.children[1].getAttribute('aria-selected'),'true');
   f.ui.preserveSessionListSelection(()=>f.ui.revealSessionListOwner(1));assert.equal(f.strip.children[1].getAttribute('aria-selected'),'true');
   f.ui.revealSessionListOwner(1);assert.equal(f.strip.children[0].getAttribute('aria-selected'),'true');
+});
+test('actual tab switch opens the session last opened in that tab, else its first; an empty tab keeps the screen',()=>{
+  const saved=model.normalizeSessionListTabs(null);model.addSessionListTab(saved,'Other','other');model.addSessionListTab(saved,'Empty','empty');
+  saved.memberships['session:3:start-3']='other';saved.selectedId='tab-1';
+  const f=fixture(saved);f.flush();assert.equal(f.active,1);
+  f.strip.children[1].click();assert.equal(f.active,3);assert.equal(f.doc.activeElement,f.strip.children[1]);
+  f.strip.children[0].click();assert.equal(f.active,1);
+  f.open(2);f.strip.children[1].click();assert.equal(f.active,3);
+  f.strip.children[0].click();assert.equal(f.active,2);
+  f.strip.children[0].emit('keydown',{key:'ArrowRight'});assert.equal(f.active,3);assert.equal(f.doc.activeElement,f.strip.children[1]);
+  f.strip.children[2].click();assert.equal(f.active,3);assert.equal(f.strip.children[2].getAttribute('aria-selected'),'true');
+  // Startup/reconnect restores do not overwrite what a tab remembers.
+  f.ui.preserveSessionListSelection(()=>f.open(1));f.strip.children[1].click();f.strip.children[0].click();assert.equal(f.active,2);
+  assert.equal(f.storage.active['tab-1'],'session:2:start-2');assert.equal(f.storage.active.other,'session:3:start-3');
 });
 test('mobile restore survives hidden desktop rendering and first-open pre-class rendering',()=>{
   const saved=model.normalizeSessionListTabs(null);model.addSessionListTab(saved,'Other','other');saved.scroll.other=180;

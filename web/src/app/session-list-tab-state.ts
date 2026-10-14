@@ -15,6 +15,8 @@ export interface SessionListTabState {
   nextNumber: number;
   memberships: Record<string, string>;
   scroll: Record<string, number>;
+  /** Per tab, the lifecycle identity of the session last opened while it belonged to that tab. */
+  active: Record<string, string>;
 }
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 const own = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
@@ -59,10 +61,15 @@ export function normalizeSessionListTabs(raw: unknown, defaultName = 'Tab 1'): S
     const value = record(data.scroll)[tab.id];
     scroll[tab.id] = typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
   }
+  const active: Record<string, string> = Object.create(null);
+  for (const tab of tabs) {
+    const key = record(data.active)[tab.id];
+    if (typeof key === 'string' && validIdentity(key)) active[tab.id] = key;
+  }
   const nextNumber = typeof data.nextNumber === 'number' && Number.isSafeInteger(data.nextNumber) && data.nextNumber > 0
     ? Math.max(data.nextNumber, tabs.length + 1) : tabs.length + 1;
   return { version: 1, tabs, defaultId, selectedId: exists(data.selectedId) ? data.selectedId : defaultId,
-    nextNumber, memberships, scroll };
+    nextNumber, memberships, scroll, active };
 }
 export function loadSessionListTabs(storage: StorageLike, defaultName: string): SessionListTabState {
   try { return normalizeSessionListTabs(JSON.parse(storage.getItem(SESSION_LIST_TABS_KEY) || 'null'), defaultName); }
@@ -98,6 +105,7 @@ export function deleteSessionListTab(state: SessionListTabState, id: string, des
   if (state.selectedId === id) state.selectedId = destination;
   state.tabs = state.tabs.filter(tab => tab.id !== id);
   delete state.scroll[id];
+  delete state.active[id];
   return true;
 }
 export function reorderSessionListTab(state: SessionListTabState, id: string, target: string, after: boolean): boolean {
@@ -164,6 +172,25 @@ export function moveSessionListFamily(state: SessionListTabState, sessions: Sess
     if (key) state.memberships[key] = target;
   }
   return true;
+}
+/** Record an opened session under the tab that owns it. Without a lifecycle identity nothing is kept. */
+export function rememberSessionListActive(state: SessionListTabState, sessions: SessionSnapshot[], id: number): boolean {
+  const key = sessionListIdentity(sessions.find(session => session.id === id));
+  const owner = sessionListOwners(state, sessions).get(id);
+  if (!key || !owner || state.active[owner] === key) return false;
+  state.active[owner] = key;
+  return true;
+}
+/**
+ * The session a tab shows when the user switches to it: the one last opened there while it still
+ * belongs to the tab, otherwise the first in sidebar order. null only for a tab without sessions.
+ */
+export function sessionListTabSession(state: SessionListTabState, sessions: SessionSnapshot[], tabId: string, order: number[]): number | null {
+  const owners = sessionListOwners(state, sessions);
+  const key = state.active[tabId];
+  const remembered = key ? sessions.find(session => sessionListIdentity(session) === key) : undefined;
+  if (remembered && owners.get(remembered.id) === tabId) return remembered.id;
+  return order.find(id => owners.get(id) === tabId) ?? null;
 }
 export function filterSessionListTree(tree: SidebarProjectNode[], owners: Map<number, string>, tabId: string): SidebarProjectNode[] {
   return tree.map(project => ({ ...project, children: project.children
