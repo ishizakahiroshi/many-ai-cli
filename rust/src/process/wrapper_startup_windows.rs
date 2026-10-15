@@ -265,6 +265,9 @@ impl Child {
     pub(super) fn pid(&self) -> u32 {
         self.pid
     }
+    pub(super) fn recovery_identity(&self) -> io::Result<String> {
+        super::recovery_identity::from_owned_handle(&self.process)
+    }
     pub(super) fn terminate(&mut self) {
         if let Some(job) = &self.job {
             job.terminate();

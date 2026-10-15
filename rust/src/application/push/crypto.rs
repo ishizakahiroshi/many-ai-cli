@@ -135,19 +135,10 @@ fn encode_with(
     );
     let url = url::Url::parse(endpoint).map_err(|_| error())?;
     url.host_str().ok_or_else(error)?;
-    // net/url URL.Host retains explicit default ports and bracketed IPv6;
-    // URL's normalized host/port accessors would change the signed audience.
-    let authority = endpoint
-        .split_once("://")
-        .ok_or_else(error)?
-        .1
-        .split(['/', '?', '#'])
-        .next()
-        .ok_or_else(error)?
-        .rsplit('@')
-        .next()
-        .ok_or_else(error)?;
-    let claims = serde_json::json!({"aud":format!("{}://{authority}",url.scheme()),"exp":now.checked_add(12*3600).ok_or_else(error)?,"sub":format!("mailto:mailto:{}@{}", "many-ai-cli", "localhost.invalid")});
+    // RFC8292 uses the serialized origin, including URL host normalization and
+    // omission of the scheme's default port, rather than the endpoint spelling.
+    let audience = url.origin().unicode_serialization();
+    let claims = serde_json::json!({"aud":audience,"exp":now.checked_add(12*3600).ok_or_else(error)?,"sub":format!("mailto:{}@{}", "many-ai-cli", "localhost.invalid")});
     let signing_input = format!(
         "{}.{}",
         URL_SAFE_NO_PAD.encode(br#"{"alg":"ES256","typ":"JWT"}"#),

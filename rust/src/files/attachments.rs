@@ -173,7 +173,14 @@ impl FilesService {
                             event: HistoryEvent(obj.into_iter().collect()),
                         },
                     )
-                    .map_err(|_| {
+                    .map_err(|error| {
+                        // The production journal rejects a stale binding before
+                        // accepting the event. Only that definite rejection can
+                        // roll back this newly-created file. An arbitrary sink
+                        // may have committed before returning another error.
+                        if matches!(error, crate::proto::core::SessionError::StaleBinding) {
+                            let _ = dir.remove_file(&saved_name);
+                        }
                         err(
                             500,
                             "attachment_history_failed",

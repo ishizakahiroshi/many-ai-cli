@@ -49,6 +49,21 @@ impl Child {
     pub(super) fn pid(&self) -> u32 {
         self.child.id()
     }
+    pub(super) fn recovery_identity(&self) -> io::Result<String> {
+        // Called before this child is handed to the exclusive waiter. Its PID
+        // cannot be reused while the owned direct child remains unreaped.
+        #[cfg(target_os = "linux")]
+        {
+            super::recovery_identity::from_unreaped_child(self.child.id())
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "native process identity unavailable",
+            ))
+        }
+    }
     pub(super) fn terminate(&mut self) {
         if self.exit.is_none() && self.retained {
             // The direct child has not been reaped, so this owned session leader

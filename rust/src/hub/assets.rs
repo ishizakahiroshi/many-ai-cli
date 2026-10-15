@@ -151,6 +151,6 @@ fn reauth() -> Response {
     response
         .headers
         .insert("Cache-Control".into(), "no-store, must-revalidate".into());
-    response.headers.insert("Content-Security-Policy".into(),format!("default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"));
+    response.headers.insert("Content-Security-Policy".into(),format!("default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"));
     response
 }

@@ -121,6 +121,9 @@ fn safe_name(name: &str, detail: &str) -> Result<()> {
     super::safe_fs::basename(name).map_err(|_| err(400, "bad_request", detail))
 }
 fn save_file(q: Mutation, s: &Scope) -> Result<Response> {
+    save_file_after_check(q, s, || {})
+}
+fn save_file_after_check(q: Mutation, s: &Scope, after_check: impl FnOnce()) -> Result<Response> {
     let base = if q.base_mtime == "0001-01-01T00:00:00Z" {
         None
     } else {
@@ -148,6 +151,17 @@ fn save_file(q: Mutation, s: &Scope) -> Result<Response> {
             super::io_error(e, "open_failed")
         }
     })?;
+    // Lock the already validated handle, including aliases to the same file.
+    // Never block a Hub worker waiting for another save or an external lock.
+    // Dropping this handle releases the lock on every return path.
+    file.try_lock().map_err(|error| match error {
+        std::fs::TryLockError::WouldBlock => err(
+            409,
+            "conflict",
+            "file is currently being saved by another process",
+        ),
+        std::fs::TryLockError::Error(error) => super::io_error(error, "lock_failed"),
+    })?;
     let meta = file
         .metadata()
         .map_err(|e| super::io_error(e, "internal_error"))?;
@@ -162,6 +176,7 @@ fn save_file(q: Mutation, s: &Scope) -> Result<Response> {
             &json!({"ok":false,"error":"conflict","detail":"file was modified by another process","mtime":time::format_utc(current)?}),
         ));
     }
+    after_check();
     file.seek(SeekFrom::Start(0))
         .and_then(|_| file.write_all(q.content.as_bytes()))
         .and_then(|_| file.set_len(q.content.len() as u64))
@@ -175,6 +190,56 @@ fn save_file(q: Mutation, s: &Scope) -> Result<Response> {
         response["size"] = json!(meta.len());
     }
     Ok(Response::json(200, &response))
+}
+
+#[cfg(test)]
+mod save_audit_tests {
+    use super::*;
+    #[test]
+    fn audit_a04_competing_save_cannot_pass_the_same_mtime_check() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("project");
+        let runtime = temp.path().join("runtime");
+        std::fs::create_dir(&project).unwrap();
+        std::fs::create_dir(&runtime).unwrap();
+        let paths = crate::config::paths::RuntimePaths::trial(
+            &runtime,
+            49123,
+            &temp.path().join("installed"),
+        )
+        .unwrap();
+        let scope = Scope::new(project.clone(), paths);
+        let path = project.join("fixture.txt");
+        std::fs::write(&path, b"original").unwrap();
+        let base = time::format(std::fs::metadata(&path).unwrap().modified().unwrap()).unwrap();
+        let change = |content: &str| Mutation {
+            path: path.to_string_lossy().into_owned(),
+            base_mtime: base.clone(),
+            content: content.into(),
+            ..Default::default()
+        };
+        let first = change("first synthetic writer");
+        let second = change("second synthetic writer");
+        let (checked_tx, checked_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let first_scope = scope.clone();
+        let worker = std::thread::spawn(move || {
+            save_file_after_check(first, &first_scope, || {
+                checked_tx.send(()).unwrap();
+                release_rx
+                    .recv_timeout(std::time::Duration::from_secs(5))
+                    .unwrap();
+            })
+        });
+        checked_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        let competing = save_file(second, &scope).unwrap_or_else(|error| error);
+        release_tx.send(()).unwrap();
+        assert_eq!(worker.join().unwrap().unwrap().status, 200);
+        assert_eq!(competing.status, 409, "both saves accepted one base mtime");
+        assert_eq!(std::fs::read(&path).unwrap(), b"first synthetic writer");
+    }
 }
 fn create(q: Mutation, s: &Scope, mkdir: bool) -> Result<Response> {
     if q.dir.is_empty() || q.name.is_empty() {

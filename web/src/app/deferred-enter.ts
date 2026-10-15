@@ -1,4 +1,4 @@
-import { sendText } from '../app.js';
+import { sendText, type ApprovalInputIdentity } from '../app.js';
 import { sessions } from './state.js';
 
 // 複数行ペースト送信の確定 \r を「いつ送るか」を出力駆動で決めるモジュール。
@@ -104,8 +104,8 @@ function schedule(id: number, action: () => void | boolean, maxWaitMs: number, m
 // doSend の deferEnter 分岐から呼ぶ。確定 \r を出力静止後に 1 回だけ送る予約を張る。
 // minWaitMs に provider 別の最低待機（Codex/OpenCode は長め）を渡し、無出力で畳み込む CLI への
 // 早撃ち（\r 吸収による送信不発）を防ぐ。省略時は既定の MIN_WAIT。
-export function scheduleDeferredEnter(id: number, minWaitMs: number = MIN_WAIT_MS, onInjected?: () => void, onAcked?: () => void) {
-  schedule(id, () => sendText(id, '\r'), MAX_WAIT_MS, minWaitMs, onInjected, onAcked, 'enter');
+export function scheduleDeferredEnter(id: number, minWaitMs: number = MIN_WAIT_MS, onInjected?: () => void, onAcked?: () => void, approvalIdentity?: ApprovalInputIdentity) {
+  schedule(id, () => sendText(id, '\r', approvalIdentity), MAX_WAIT_MS, minWaitMs, onInjected, onAcked, 'enter');
 }
 
 // 画像 inject（@path）に複数行ペーストが続くケースで、画像取り込みが落ち着いてから

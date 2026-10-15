@@ -16,6 +16,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::watch;
+pub(crate) mod recovery_identity;
 
 #[cfg(unix)]
 #[path = "wrapper_startup_unix.rs"]
@@ -67,11 +68,16 @@ type ExitResult = Result<WrapperExit, Failure>;
 #[derive(Clone)]
 pub struct ReapReceipt {
     pid: u32,
+    recovery_identity: Option<String>,
     result: watch::Receiver<Option<ExitResult>>,
 }
 impl ReapReceipt {
     pub fn pid(&self) -> u32 {
         self.pid
+    }
+    /// Captured from the owned native child before handing it to the reaper.
+    pub(crate) fn recovery_identity(&self) -> Option<&str> {
+        self.recovery_identity.as_deref()
     }
     pub async fn wait(&self) -> io::Result<WrapperExit> {
         let mut receiver = self.result.clone();
@@ -170,11 +176,16 @@ impl WrapperStartup {
             })?;
         let child = native::Child::spawn(plan, stdout, stderr)?;
         let pid = child.pid();
+        let recovery_identity = child.recovery_identity().ok();
         lock(&state).child = Some(child);
         let owner = Self {
             attempt,
             state,
-            receipt: ReapReceipt { pid, result },
+            receipt: ReapReceipt {
+                pid,
+                recovery_identity,
+                result,
+            },
         };
         ready_tx
             .send(())

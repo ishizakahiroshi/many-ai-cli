@@ -6,6 +6,12 @@ pub trait SubscriptionProbeHooks: Send + Sync {
     fn dismiss<'a>(&'a self, binding: SessionBinding) -> CoreFuture<'a, Result<(), SessionError>>;
     fn wrapper_pid(&self, binding: SessionBinding) -> Option<u32>;
     fn recover_process(&self, pid: u32) -> io::Result<()>;
+    fn recover_identified_process(&self, _pid: u32, _identity: &str) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "identified recovery unavailable",
+        ))
+    }
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct Record {
@@ -17,6 +23,8 @@ struct Record {
     session_id: i64,
     #[serde(default, skip_serializing_if = "zero_pid")]
     pid: u32,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    process_identity: String,
     started_at: String,
     cwd: PathBuf,
 }
@@ -48,6 +56,10 @@ impl crate::proto::wire::GoWire for Record {
             crate::proto::wire::Field {
                 name: "pid",
                 kind: "int",
+            },
+            crate::proto::wire::Field {
+                name: "process_identity",
+                kind: "string",
             },
             crate::proto::wire::Field {
                 name: "started_at",
@@ -249,7 +261,7 @@ pub fn cleanup_transcripts(paths: &RuntimePaths, profile: &Path, cwd: &Path) -> 
     Ok(count)
 }
 impl SubscriptionService {
-    pub fn update_probe_pid(&self, label: &str, pid: u32) {
+    pub fn update_probe_pid(&self, label: &str, pid: u32, identity: Option<&str>) {
         if pid == 0 {
             return;
         }
@@ -262,6 +274,7 @@ impl SubscriptionService {
                 return;
             };
             active.record.pid = pid;
+            active.record.process_identity = identity.unwrap_or_default().into();
             active.record.clone()
         };
         if active_dir(&record.cwd)
@@ -317,7 +330,9 @@ impl SubscriptionService {
         )
         .ok_or_else(|| ServiceError::bad("invalid probe timestamp"))?;
         let record = Record {
-            version: 1,
+            // Older readers accept only version 1 and kill by numeric PID.
+            // They must never mistake an identity-bound marker for that format.
+            version: 2,
             provider: provider.into(),
             profile_id: id.clone(),
             label: format!(
@@ -328,6 +343,7 @@ impl SubscriptionService {
             ),
             session_id: 0,
             pid: 0,
+            process_identity: String::new(),
             started_at: crate::proto::time::format_rfc3339_nano(now).unwrap_or_default(),
             cwd: root.clone(),
         };
@@ -422,6 +438,11 @@ impl SubscriptionService {
                         let entry = active.get_mut(&key).expect("probe claim retained");
                         entry.record.session_id = binding.session.0;
                         if let Some(pid) = self.probe_hooks.wrapper_pid(binding) {
+                            // Registration supplies only a numeric PID. Never
+                            // manufacture an identity by reopening it later.
+                            if entry.record.pid != pid {
+                                entry.record.process_identity.clear();
+                            }
                             entry.record.pid = pid;
                         }
                         entry.record.clone()
@@ -580,7 +601,7 @@ impl SubscriptionService {
                 }
                 if let Ok(bytes) = dir.read(&name, 1024 * 1024)
                     && let Ok(record) = crate::proto::wire::decode::<Record>(&bytes)
-                    && record.version == 1
+                    && matches!(record.version, 1 | 2)
                     && record.provider == "claude"
                     && config::validate_subscription_id(&config::normalize_subscription_id(
                         &record.profile_id,
@@ -591,7 +612,18 @@ impl SubscriptionService {
                     && record.pid > 0
                     && record.pid != std::process::id()
                 {
-                    let _ = self.probe_hooks.recover_process(record.pid);
+                    if record.version != 2
+                        || record.process_identity.is_empty()
+                        || self
+                            .probe_hooks
+                            .recover_identified_process(record.pid, &record.process_identity)
+                            .is_err()
+                    {
+                        (self.warning)(
+                            "usage probe recovery skipped: recorded process ownership is unverified; inspect the prior probe manually",
+                        );
+                        continue;
+                    }
                 }
                 let _ = dir.remove_file(&name);
             }

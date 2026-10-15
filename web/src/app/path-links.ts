@@ -68,7 +68,7 @@ export async function copyPathText(text, anchor) {
 }
 
 export function isImagePath(filePath) {
-  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(String(filePath || '').trim());
+  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(String(filePath || '').trim());
 }
 
 export function isVideoPath(filePath) {

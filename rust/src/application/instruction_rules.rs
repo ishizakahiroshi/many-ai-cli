@@ -250,49 +250,32 @@ impl InstructionRules {
         }
         (merge(active), merge(legacy))
     }
-    fn persist(&self, known: &BTreeMap<String, Target>) {
+    fn persist(&self, known: &BTreeMap<String, Target>) -> io::Result<()> {
         if known.is_empty() {
-            if self.files.remove_file(&self.journal).is_err() {
-                (self.warning)("approval instruction journal removal failed");
-            }
-            return;
+            return self.files.remove_file(&self.journal);
         }
         let state = Journal {
             version: 1,
             targets: known.values().cloned().collect(),
         };
-        if serde_json::to_vec_pretty(&state)
-            .and_then(|v| {
-                self.files
-                    .write(&self.journal, &v, true)
-                    .map_err(serde_json::Error::io)
-            })
-            .is_err()
-        {
-            (self.warning)("approval instruction journal persistence failed");
-        }
+        let bytes = serde_json::to_vec_pretty(&state).map_err(io::Error::other)?;
+        self.files.write(&self.journal, &bytes, true)
     }
     fn remove(&self, targets: Vec<Target>, known: &mut BTreeMap<String, Target>, delegation: bool) {
         for target in merge(targets) {
             if self
                 .files
-                .remove(target.provider(), &target.path, false)
+                .remove(target.provider(), &target.path, delegation)
                 .is_err()
             {
                 (self.warning)("approval instruction removal failed");
                 continue;
             }
-            if delegation
-                && self
-                    .files
-                    .delegation(target.provider(), &target.path, false)
-                    .is_err()
-            {
-                (self.warning)("delegation instruction removal failed");
-            }
             known.remove(&key(&target.path));
         }
-        self.persist(known);
+        if self.persist(known).is_err() {
+            (self.warning)("approval instruction journal persistence failed");
+        }
     }
     /// Startup recovery occurs before accepting wrappers. Corrupt journals never
     /// authorize mutations, and failed targets remain for the next startup.
@@ -353,7 +336,7 @@ impl InstructionRules {
             known.insert(key(&target.path), target);
         }
         let targets = known.values().cloned().collect();
-        self.remove(targets, &mut known, false);
+        self.remove(targets, &mut known, true);
     }
     /// Register, reattach, settings publication and startup call the same sweep.
     pub async fn registered(&self, cancel: &Cancellation) {
@@ -368,6 +351,21 @@ impl InstructionRules {
             return;
         }
         let (active, legacy) = self.targets(cancel).await;
+        // Persist intent before touching any user's instruction file. A crash
+        // after an atomic replacement must leave a discoverable recovery target.
+        for target in &active {
+            let k = key(&target.path);
+            if let Some(existing) = known.get_mut(&k) {
+                existing.providers.extend(target.providers.clone());
+                existing.providers = providers(&existing.providers);
+            } else {
+                known.insert(k, target.clone());
+            }
+        }
+        if self.persist(&known).is_err() {
+            (self.warning)("approval instruction journal persistence failed; injection skipped");
+            return;
+        }
         for target in &active {
             if self.files.inject(target.provider(), &target.path).is_err() {
                 (self.warning)("approval instruction injection failed");
@@ -384,15 +382,7 @@ impl InstructionRules {
             {
                 (self.warning)("delegation instruction injection failed");
             }
-            let k = key(&target.path);
-            if let Some(existing) = known.get_mut(&k) {
-                existing.providers.extend(target.providers.clone());
-                existing.providers = providers(&existing.providers);
-            } else {
-                known.insert(k, target.clone());
-            }
         }
-        self.persist(&known);
         let keys = active.iter().map(|v| key(&v.path)).collect::<BTreeSet<_>>();
         let inactive = merge(legacy.into_iter().chain(known.values().cloned()).collect())
             .into_iter()

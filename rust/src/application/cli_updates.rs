@@ -46,13 +46,8 @@ impl UpdateExecutor for NativeUpdateExecutor {
         cancel: &'a Cancellation,
     ) -> CoreFuture<'a, std::io::Result<ProcessOutput>> {
         Box::pin(async move {
-            let process = normalize_process(
-                &plan.command.process,
-                crate::process::execpath::Platform::native(),
-                &crate::process::execpath::NativeFs,
-            );
             run_capped_with_options(
-                &process,
+                &plan.command.process,
                 cancel,
                 SpawnOptions {
                     combined_output: true,
@@ -262,18 +257,47 @@ impl CliUpdates {
             (self.dependencies.resolve)(name)
         })
         .map_err(|e| e.code().to_owned())?;
-        if self.dependencies.paths.is_trial() {
-            // trial の外にある本物の CLI は更新させない。入っていないわけではないので、
-            // 「未インストール」ではなく専用の理由（trial_scope）で画面へ伝える。
+        plan.command.process.env = update_environment(&self.dependencies.environment);
+        let selected_updater = plan.command.process.executable.clone();
+        let trial_root = if self.dependencies.paths.is_trial() {
             let root = std::fs::canonicalize(self.dependencies.paths.root())
                 .map_err(|_| "trial_scope".to_owned())?;
-            for path in [&plan.command.process.executable, &plan.launch_path] {
-                if !std::fs::canonicalize(path).is_ok_and(|path| path.starts_with(&root)) {
+            // Refuse external shims before their contents can be inspected.
+            for path in [&selected_updater, &plan.launch_path] {
+                if crate::profile::subscriptions::check_path(&self.dependencies.paths, path)
+                    .is_err()
+                    || !std::fs::canonicalize(path).is_ok_and(|path| path.starts_with(&root))
+                {
+                    return Err("trial_scope".into());
+                }
+            }
+            Some(root)
+        } else {
+            None
+        };
+        // Resolve Windows shims before admission and preview. The native
+        // executor must execute this exact plan without a later path rewrite.
+        plan.command.process = normalize_process(
+            &plan.command.process,
+            crate::process::execpath::Platform::native(),
+            &crate::process::execpath::NativeFs,
+        );
+        if let Some(root) = trial_root {
+            // trial の外にある本物の CLI は更新させない。入っていないわけではないので、
+            // 「未インストール」ではなく専用の理由（trial_scope）で画面へ伝える。
+            for path in [
+                &plan.command.process.executable,
+                &plan.launch_path,
+                &selected_updater,
+            ] {
+                if crate::profile::subscriptions::check_path(&self.dependencies.paths, path)
+                    .is_err()
+                    || !std::fs::canonicalize(path).is_ok_and(|path| path.starts_with(&root))
+                {
                     return Err("trial_scope".into());
                 }
             }
         }
-        plan.command.process.env = update_environment(&self.dependencies.environment);
         Ok((plan, definition))
     }
     pub fn eligibility(&self) -> Result<Vec<Eligibility>, Response> {
@@ -647,13 +671,5 @@ fn read_log(reader: &mut impl Read) -> Result<Vec<u8>, Response> {
     Ok(bytes)
 }
 fn display_argv(plan: &UpdatePlan) -> Vec<String> {
-    std::iter::once(plan.requested_executable.clone())
-        .chain(
-            plan.command
-                .process
-                .args
-                .iter()
-                .map(|a| a.to_string_lossy().into_owned()),
-        )
-        .collect()
+    plan.argv()
 }

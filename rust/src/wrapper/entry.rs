@@ -332,6 +332,23 @@ async fn run_headless(
             "provider has no headless definition",
         )
     })?;
+    let resolver = CommandResolver::new(context.paths, context.environment, context.cwd);
+    let argument_prompt = crate::config::normalize_headless_prompt_via(&def.prompt_via) == "arg";
+    let unsafe_prompt_transport = || {
+        io::Error::new(
+            io::ErrorKind::Unsupported,
+            "headless argument prompts cannot run through a Windows cmd shim; use a native executable or a provider with headless prompt_via=stdin",
+        )
+    };
+    // Refuse before registration: cmd.exe reparses CRT-escaped arguments as
+    // shell source. The interactive pointer transport is not a headless API.
+    if argument_prompt
+        && resolver
+            .launch_shell_shim(&launch.provider, launch.custom_argv.as_deref())?
+            .is_some()
+    {
+        return Err(unsafe_prompt_transport());
+    }
     let (socket, registered) =
         register(connector, &registration, proof.as_deref(), timeout, cancel).await?;
     proof.take();
@@ -343,9 +360,13 @@ async fn run_headless(
         registered.session_id,
     );
     args = headless::build_argv(def, &args, &prompt);
-    let resolver = CommandResolver::new(context.paths, context.environment, context.cwd);
     let command =
         resolver.resolve_provider(&launch.provider, launch.custom_argv.as_deref(), &args)?;
+    // Recheck the actual resolved command in case the shim changed while the
+    // registration/prompt preparation above was awaiting work.
+    if argument_prompt && command.shell_shim.is_some() {
+        return Err(unsafe_prompt_transport());
+    }
     process.executable = command.executable.into();
     process.args = command.args.into_iter().map(Into::into).collect();
     process.env.insert(

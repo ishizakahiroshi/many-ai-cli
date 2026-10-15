@@ -80,6 +80,11 @@ export const pasteChipsEl = document.getElementById('paste-chips');
 // ペースト折りたたみ状態
 export const pastedTexts = []; // [{id, text, lineCount}]
 export let pasteCounter = 0;
+const composerDraftVersions = new Map<number, number>();
+
+function noteComposerDraftChanged(sessionId = activeSessionId): void {
+  if (sessionId !== null) composerDraftVersions.set(sessionId, (composerDraftVersions.get(sessionId) || 0) + 1);
+}
 
 // Files タブは app.ts に依存しない。イベントで常に現在の入力欄へ @path を渡す。
 window.addEventListener('many-ai-cli:insert-file-prompt', (event: Event) => {
@@ -247,6 +252,7 @@ export function stagePastedText(text, opts: any = {}) {
   if (pastedTexts.length >= 3) pastedTexts.shift();
   set_pasteCounter(pasteCounter + 1);
   pastedTexts.push({ id: pasteCounter, text: cleaned, lineCount: lines.length });
+  noteComposerDraftChanged();
   renderPasteChips();
   updateInputAffordance();
   inputEl.focus();
@@ -258,6 +264,7 @@ export function expandPasteChip(idx) {
   if (!pt) return;
   inputEl.value = pt.text + (inputEl.value ? '\n' + inputEl.value : '');
   pastedTexts.splice(idx, 1);
+  noteComposerDraftChanged();
   renderPasteChips();
   autoExpand({ suppressPtyResize: true });
   inputEl.focus();
@@ -265,12 +272,14 @@ export function expandPasteChip(idx) {
 
 export function removePasteChip(idx) {
   pastedTexts.splice(idx, 1);
+  noteComposerDraftChanged();
   renderPasteChips();
   updateInputAffordance();
 }
 
 export function clearAllPastes() {
   pastedTexts.length = 0;
+  noteComposerDraftChanged();
   renderPasteChips();
   updateInputAffordance();
 }
@@ -279,6 +288,106 @@ export function buildSendText() {
   const parts = pastedTexts.map(pt => pt.text);
   if (inputEl.value) parts.push(inputEl.value);
   return parts.join('\n');
+}
+
+export interface ComposerOwner { sessionId: number; startedAt: string }
+export interface ComposerDraft extends ComposerOwner {
+  version: number;
+  inputValue: string;
+  pastedTextsData: any[];
+  pendingAttachFiles: any[];
+}
+
+export function captureComposerOwner(): ComposerOwner | null {
+  const session = activeSessionId === null ? null : sessions.get(activeSessionId);
+  return session ? { sessionId: activeSessionId, startedAt: String(session.started_at || '') } : null;
+}
+
+export function isComposerOwnerLive(owner: ComposerOwner | null): boolean {
+  const session = owner ? sessions.get(owner.sessionId) : null;
+  return !!session && String(session.started_at || '') === owner.startedAt;
+}
+
+export function captureComposerDraft(): ComposerDraft | null {
+  const owner = captureComposerOwner();
+  return owner ? { ...owner, version: composerDraftVersions.get(owner.sessionId) || 0, inputValue: inputEl.value, pastedTextsData: [...pastedTexts], pendingAttachFiles: [...pendingAttachFiles] } : null;
+}
+
+function composerStateFor(owner: ComposerOwner): any {
+  if (!isComposerOwnerLive(owner)) return null;
+  if (owner.sessionId === activeSessionId) return { inputValue: inputEl.value, pastedTextsData: pastedTexts, pendingAttachFiles };
+  return sessionInputState.get(owner.sessionId);
+}
+
+/** Apply an async result only to the draft that supplied its original input. */
+export function replaceComposerDraftInput(owner: ComposerOwner | null, expected: string, value: string): boolean {
+  if (!owner) return false;
+  const state = composerStateFor(owner);
+  if (!state || state.inputValue !== expected) return false;
+  noteComposerDraftChanged(owner.sessionId);
+  if (owner.sessionId === activeSessionId) {
+    inputEl.value = value;
+    autoExpand();
+    updateInputAffordance();
+    updateSlashMenu();
+  } else state.inputValue = value;
+  return true;
+}
+
+export function appendComposerAttachment(owner: ComposerOwner, attachment: any): boolean {
+  const state = composerStateFor(owner);
+  if (!state) return false;
+  state.pendingAttachFiles.push(attachment);
+  noteComposerDraftChanged(owner.sessionId);
+  if (owner.sessionId !== activeSessionId) attachment.wrapper?.remove();
+  else { updateAttachClearBtn(); updateInputAffordance(); }
+  return true;
+}
+
+export function removeComposerAttachment(owner: ComposerOwner, entry: any): void {
+  const state = composerStateFor(owner);
+  const index = state?.pendingAttachFiles.findIndex((item: any) => item.entry === entry) ?? -1;
+  if (index >= 0) { state.pendingAttachFiles.splice(index, 1); noteComposerDraftChanged(owner.sessionId); }
+  if (owner.sessionId === activeSessionId) { updateAttachClearBtn(); updateInputAffordance(); }
+}
+
+function detachComposerAttachments(draft: ComposerDraft): void {
+  const state = composerStateFor(draft);
+  if (!state) return;
+  for (const attachment of draft.pendingAttachFiles) {
+    const index = state.pendingAttachFiles.indexOf(attachment);
+    if (index >= 0) state.pendingAttachFiles.splice(index, 1);
+  }
+}
+
+function consumeComposerDraft(draft: ComposerDraft): void {
+  const state = composerStateFor(draft);
+  if (!state || (composerDraftVersions.get(draft.sessionId) || 0) !== draft.version) return;
+  if (state.inputValue === draft.inputValue) {
+    if (draft.sessionId === activeSessionId) inputEl.value = '';
+    else state.inputValue = '';
+  }
+  for (const paste of draft.pastedTextsData) {
+    const index = state.pastedTextsData.indexOf(paste);
+    if (index >= 0) state.pastedTextsData.splice(index, 1);
+  }
+  if (draft.sessionId === activeSessionId) {
+    autoExpand(); renderPasteChips(); updateInputAffordance(); hideSlashMenu();
+  }
+  noteComposerDraftChanged(draft.sessionId);
+}
+
+function prepareComposerSend(draft: ComposerDraft): { text: string; attachments: any[] } {
+  const parts: string[] = [];
+  const attachments = [...draft.pendingAttachFiles];
+  for (const paste of draft.pastedTextsData) {
+    const bytes = new TextEncoder().encode(paste.text);
+    if ((paste.lineCount >= PASTE_FILE_MIN_LINES || paste.text.length >= PASTE_FILE_MIN_CHARS) && bytes.byteLength <= MAX_ATTACH_BYTES) {
+      attachments.push({ buf: bytes.buffer, filename: `paste-${paste.id}.txt`, entry: {}, wrapper: null });
+    } else parts.push(paste.text);
+  }
+  if (draft.inputValue) parts.push(draft.inputValue);
+  return { text: parts.join('\n'), attachments };
 }
 
 // 長文ペースト（10行以上 または 1500字以上）を一時 .txt 添付へ変換して @path 参照で送るための閾値。
@@ -456,8 +565,10 @@ export function sendSubmittedBody(sessionId, bodyText, opts: any = {}) {
   cancelDeferredEnter(sessionId, 'send_body');
   const body = trimTrailingSpaceForSlashCommand(bodyText);
   const { textPart, deferEnter } = buildBodySubmitPart(sessionId, body);
-  if (!sendSubmittedText(sessionId, textPart, opts)) return false;
-  if (deferEnter) scheduleDeferredEnter(sessionId, effectiveDeferredEnterWait(sessionId));
+  const approvalIdentity = opts.approvalIdentity ? { ...opts.approvalIdentity, sentText: body } : undefined;
+  const submissionOpts = approvalIdentity ? { ...opts, approvalIdentity } : opts;
+  if (!sendSubmittedText(sessionId, textPart, submissionOpts)) return false;
+  if (deferEnter) scheduleDeferredEnter(sessionId, effectiveDeferredEnterWait(sessionId), undefined, undefined, approvalIdentity);
   scheduleResidueSweep(sessionId, body, deferEnter);
   return true;
 }
@@ -476,6 +587,9 @@ export async function doSend(sessionId) {
   // 直前の doSend（Enter/音声/ボタン）と async 中の再入を抑止
   if (Date.now() - lastDoSendAt < DOUBLE_SEND_GUARD_MS) return;
   if (doSendInFlight.has(sessionId)) return;
+  const draft = captureComposerDraft();
+  if (!draft || draft.sessionId !== sessionId) return false;
+  const originalText = [...draft.pastedTextsData.map(paste => paste.text), draft.inputValue].filter(Boolean).join('\n');
   // 畳んだ高リスクの承認があるときの空の送信は '\r' だけになり、CLI で選ばれている項目
   // （多くは Yes）を長押しも確認も無しに確定させる。送らずに帯を開くよう案内する
   // （approval-store.ts の emptySubmitHitsFoldedHighRiskApproval）。Enter・送信ボタン・
@@ -489,7 +603,7 @@ export async function doSend(sessionId) {
   cancelDeferredEnter(sessionId, 'do_send');
   clearDeferredSendStatus(sessionId);
   // Ollama route セッションで /model 始まりはブロック（spawn 時固定 env と不整合のため）
-  if (isOllamaModelCommandBlocked(sessionId, buildSendText())) {
+  if (isOllamaModelCommandBlocked(sessionId, originalText)) {
     showToast(t('toast_model_blocked_on_ollama'));
     return;
   }
@@ -502,18 +616,19 @@ export async function doSend(sessionId) {
   // shell セッション内で AI CLI 起動コマンドを検知 → 専用セッション spawn を誘導。
   // 「開く」を選べば起動コマンドは shell へ送らず spawn パネルへ切り替える（二重起動防止）。
   // flushPendingAttach より前に判定し、誘導採択時に画像 inject を無駄に消費しないようにする。
-  if (await maybeNudgeAiCliLaunchInShell(sessionId, buildSendText())) {
-    return;
-  }
   doSendInFlight.add(sessionId);
   set_lastDoSendAt(Date.now());
   try {
+    if (await maybeNudgeAiCliLaunchInShell(sessionId, originalText)) return;
+    if (!isComposerOwnerLive(draft)) return false;
     // 長文ペーストチップを一時 .txt 化して @path 参照で送る（Codex の畳み込みによる確定 \r 吸収を回避）。
     // flushPendingAttach より前に積むことで、画像添付と同一の inject 経路へ合流させる。
-    await stageLongPastesAsFiles();
-    const injects = await flushPendingAttach(sessionId);
+    const prepared = prepareComposerSend(draft);
+    detachComposerAttachments(draft);
+    const injects = await flushPendingAttach(sessionId, prepared.attachments);
+    if (!isComposerOwnerLive(draft)) return false;
     const injectPrefix = injects.join('');
-    let rawText = buildSendText();
+    let rawText = prepared.text;
     // トリガーフレーズを末尾から除去（PTY・AI には送らない）
     const _tp = getActiveTriggerPhrase();
     if (_tp && textEndsWithTriggerPhrase(rawText, _tp)) {
@@ -558,8 +673,7 @@ export async function doSend(sessionId) {
     // sendText は接続断や send() の例外を false で返すため、失敗時は doSend の
     // 後続状態更新にも入らず、ユーザーが同じ内容を再送できる。
     if (!sendSubmittedText(sessionId, textToSend)) return false;
-    clearInput();
-    hideSlashMenu();
+    consumeComposerDraft(draft);
     // 承認パネルを使わずに入力欄から答えた場合も、描いていた記録は回答済みにしてパネルを閉じる
     // （Hub の記録が閉じるまで同じ承認を描き直さない）。
     noteApprovalAnsweredByTyping(sessionId, rawText, textToSend);
@@ -659,6 +773,7 @@ export function restoreInputStateFor(id) {
 }
 
 export function cleanupSessionInputState(id) {
+  composerDraftVersions.delete(id);
   const state = sessionInputState.get(id);
   if (!state) return;
   for (const p of state.pendingAttachFiles ?? []) {
@@ -863,6 +978,7 @@ export function scrollSlashIntoView() {
 }
 
 inputEl.addEventListener('input', () => {
+  noteComposerDraftChanged();
   autoExpand({ suppressPtyResize: true }); updateSlashMenu();
   updateInputClearButton();
   updateInputAffordance();
@@ -1523,7 +1639,7 @@ export function focusInputForTerminalKeys() {
 }
 
 export function sendSubmittedText(sessionId, text, opts: any = {}) {
-  if (!sendText(sessionId, text)) return false;
+  if (!sendText(sessionId, text, opts.approvalIdentity)) return false;
   if (opts.recordMobileTranscript !== false) {
     recordMobileTranscriptUserSubmission(sessionId, text);
   }
@@ -1549,7 +1665,9 @@ export function sendSubmittedText(sessionId, text, opts: any = {}) {
   return true;
 }
 
-export function sendText(sessionId, text) {
+export interface ApprovalInputIdentity { candidateKey: string; sourceEpoch: number; sentText?: string }
+
+export function sendText(sessionId, text, approvalIdentity?: ApprovalInputIdentity) {
   // headless のセッションは provider 自身の非対話モードで動いていて、stdin は起動
   // 直後に閉じている。打った文字には届く先が無いので、ここで止める。止めるのは送信
   // 経路のこの 1 箇所だけで、入力欄の無効化（updateInputAffordance）はその見た目側
@@ -1564,7 +1682,13 @@ export function sendText(sessionId, text) {
     return false;
   }
   try {
-    ws.send(JSON.stringify({ type: 'pty_input', session_id: sessionId, text }));
+    const message: any = { type: 'pty_input', session_id: sessionId, text };
+    if (approvalIdentity) {
+      message.approval_candidate_key = approvalIdentity.candidateKey;
+      message.approval_source_epoch = approvalIdentity.sourceEpoch;
+      message.sent_text = approvalIdentity.sentText ?? text;
+    }
+    ws.send(JSON.stringify(message));
     return true;
   } catch (_) {
     notifySendFailure();

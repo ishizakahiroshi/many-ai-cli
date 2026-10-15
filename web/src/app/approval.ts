@@ -2,7 +2,7 @@
 import { t } from '../i18n.js';
 import { actionBarShownAt, activeSessionId, approvalCandidateShape, approvalSuppressedCache, batchActiveQ, batchFreeText, batchSelections, isStaleHistoryRepaint, lastActionBarRender, maybeAutoSwitchToNextApproval, multiSelectFocusIdx, multiSelectSelections, recordAnsweredApprovalIdentity, enqueueApprovalAutoSwitch, removeApprovalAutoSwitchTarget, sequentialChoiceCache, sequentialChoiceSig, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, _approvalCtxHash, type ApprovalCandidateIdentity } from './state.js';
 import { APPROVAL_KIND_OPENCODE_SHORTCUT, APPROVAL_ORIGIN_NATIVE, approvalRecordFor, approvalRecordToken, approvalViewFor, foldApproval, isApprovalFolded, isApprovalRecordAnswered, subscribeApprovalStore, unfoldApproval } from './approval-store.js';
-import { inputEl, sendSubmittedText, sendSubmittedBody } from '../app.js';
+import { inputEl, sendSubmittedText, sendSubmittedBody, type ApprovalInputIdentity } from '../app.js';
 import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
 import { ws } from './ws-client.js';
 import { isBatchOptions, isMultiSelectOptions } from './approval-parser.js';
@@ -16,6 +16,8 @@ import { probe } from '../debug/probe.js';
 
 const HIGH_RISK_HOLD_MS = 1200;
 const highRiskConfirmationInFlight = new Set<number>();
+const highRiskConfirmationAborts = new Map<number, AbortController>();
+const highRiskHoldCancels = new Map<number, Set<() => void>>();
 const singleFreeTextSendInFlight = new Set<number>();
 const NATIVE_APPROVAL_SEND_COOLDOWN_MS = 500;
 const nativeApprovalSendCooldowns = new Map<number, ReturnType<typeof setTimeout>>();
@@ -429,20 +431,25 @@ export function renderApprovalAfterSnapshot() {
  * （失敗したら記録を描き続け、同じ操作をやり直せるようにする）。
  *
  * 回答済みの印（approval-answered.ts）を記録の同一性で付けるので、Hub の閉じるが届くまでの
- * 間もこの記録は描かない。Hub へは approval_consumed を送り、Hub は記録を閉じる
+ * 間もこの記録は描かない。識別情報を付けた承認入力は Hub が書込み後に記録を閉じる。
+ * 通常の入力欄から回答した場合は approval_consumed を別送する
  * （マーカーの記録は、先に届く確定したユーザーターンで閉じていることが多い）。
  * 形（shape）も残すのは、ページ送りで CLI が過去の画面を描き直したときに、回答済みの中身を
  * 描かないため（approval-answered.ts の isStaleHistoryRepaint）。
  */
-export function noteApprovalAnswerSent(sessionId, sentText, shownOptions: any = undefined): boolean {
+export function noteApprovalAnswerSent(sessionId, sentText, shownOptions: any = undefined, guardedIdentity?: ApprovalInputIdentity): boolean {
   const record = approvalRecordFor(sessionId);
   if (!record || isApprovalRecordAnswered(sessionId, record)) return true;
+  if (guardedIdentity && (record.candidate_key !== guardedIdentity.candidateKey || Number(record.source_epoch) !== guardedIdentity.sourceEpoch)) return false;
   const options = shownOptions !== undefined ? shownOptions : pendingApprovalOptions(sessionId);
   const kind = record.origin === APPROVAL_ORIGIN_NATIVE ? 'native' : 'marker';
   const shape = answeredShapeOf(sessionId, record, options, kind);
   recordAnsweredApprovalIdentity(sessionId, record.candidate_key, Number(record.source_epoch) || 0, shape);
   notifyApprovalViewsChanged();
   maybeAutoSwitchToNextApproval();
+  // Identity-bound PTY input is consumed by the Hub only after its guarded write.
+  // A separate consume message could otherwise close the record before that write.
+  if (guardedIdentity) return true;
   if (!ws || ws.readyState !== WebSocket.OPEN) return false;
   try {
     ws.send(JSON.stringify({
@@ -498,6 +505,8 @@ function onApprovalStoreChanged(changes) {
   for (const change of changes) {
     const id = change.sessionId;
     if (approvalRecordToken(change.previous) !== approvalRecordToken(change.record)) {
+      highRiskConfirmationAborts.get(id)?.abort();
+      for (const cancel of highRiskHoldCancels.get(id) || []) cancel();
       // 別の記録へ変わった（閉じた・上書きされた）。前の記録のために画面が持っていた
       // 操作途中の状態（順次質問の進み具合・一括回答の選択・自由入力）を捨てる。
       // 畳み状態は記録の同一性ごとに持つので、ここでは触らない（approval-store.ts の「畳む」）。
@@ -854,11 +863,13 @@ export function sendSingleFreeText(sessionId) {
   singleFreeTextSendInFlight.add(sessionId);
   const cachedOpts = pendingApprovalOptions(sessionId);
   try {
+    const approvalIdentity = captureApprovalInputIdentity(sessionId);
+    if (!approvalIdentity) return false;
     // 本文が送れた後にだけ回答済みの印・チャット履歴・action-bar を更新する。
     // 接続断時は sendSubmittedBody が false を返し、入力 state を保持したまま戻る。
     // 自由回答は文章なのでチャット本文と同じ共通経路（ペースト包み＋確定 \r 別送）で送る。
     // 「本文+\r」同梱は内側 CLI に \r を吸収され送信不発になる（Grok 実測 2026-07-11）。
-    if (!sendSubmittedBody(sessionId, text)) return false;
+    if (!sendSubmittedBody(sessionId, text, { approvalIdentity })) return false;
     chatHistoryCommitOutput(sessionId);
     pushMessage(sessionId, {
       role: 'system',
@@ -867,7 +878,7 @@ export function sendSingleFreeText(sessionId) {
       meta: { kind: 'single', answer: null, label: text },
     });
     // Hub への知らせ（approval_consumed）の失敗は本文送信の成功と混同しない。
-    noteApprovalAnswerSent(sessionId, `${text}\r`, cachedOpts);
+    noteApprovalAnswerSent(sessionId, `${text}\r`, cachedOpts, approvalIdentity);
   } finally {
     singleFreeTextSendInFlight.delete(sessionId);
   }
@@ -1132,7 +1143,7 @@ function highRiskConfirmationMode() {
   }
 }
 
-function isHighRiskApprovalSelection(sessionId, targetNum) {
+export function isHighRiskApprovalSelection(sessionId, targetNum) {
   const cached = pendingApprovalOptions(sessionId);
   if (!Array.isArray(cached) || isBatchOptions(cached) || isMultiSelectOptions(cached)) return false;
   const summary = (cached as any)._summary;
@@ -1144,10 +1155,27 @@ function isHighRiskApprovalSelection(sessionId, targetNum) {
   return !/\b(no|deny|reject|skip|cancel|abort|decline)\b|don't\s+allow/i.test(String(opt.label || ''));
 }
 
-export function bindHighRiskApproval(btn, sessionId, targetNum) {
+function approvalSelectionToken(sessionId, targetNum): string {
+  const record = approvalRecordFor(sessionId);
+  const options = pendingApprovalOptions(sessionId);
+  const option = Array.isArray(options) ? options.find(item => item?.num === targetNum) : null;
+  if (!record || !option || isApprovalRecordAnswered(sessionId, record)) return '';
+  return JSON.stringify([approvalRecordToken(record), targetNum, option.label || '', option._sendText || '']);
+}
+
+function captureApprovalInputIdentity(sessionId): ApprovalInputIdentity | null {
+  const record = approvalRecordFor(sessionId);
+  if (!record?.candidate_key || isApprovalRecordAnswered(sessionId, record)) return null;
+  return { candidateKey: record.candidate_key, sourceEpoch: Number(record.source_epoch) || 0 };
+}
+
+export function bindHighRiskApproval(btn, sessionId, targetNum, onSent?: () => void) {
+  const expected = approvalSelectionToken(sessionId, targetNum);
+  const current = () => !!expected && btn.isConnected && approvalSelectionToken(sessionId, targetNum) === expected;
+  btn.classList.add('high-risk-approval');
   if (highRiskConfirmationMode() === 'dialog') {
-    btn.textContent += ' (confirm)';
-    btn.onclick = () => void requestHighRiskConfirmation(sessionId, targetNum);
+    btn.appendChild(document.createTextNode(' (confirm)'));
+    btn.onclick = () => { if (current()) void requestHighRiskConfirmation(sessionId, targetNum, expected, onSent); };
     return;
   }
 
@@ -1159,37 +1187,49 @@ export function bindHighRiskApproval(btn, sessionId, targetNum) {
     timer = null;
     btn.classList.remove('holding');
     btn.style.removeProperty('--hold-progress-duration');
+    highRiskHoldCancels.get(sessionId)?.delete(cancel);
+    if (highRiskHoldCancels.get(sessionId)?.size === 0) highRiskHoldCancels.delete(sessionId);
   };
   btn.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || timer !== null) return;
+    if (event.button !== 0 || timer !== null || !current()) return;
     event.preventDefault();
     btn.setPointerCapture?.(event.pointerId);
     btn.classList.add('holding');
     btn.style.setProperty('--hold-progress-duration', `${HIGH_RISK_HOLD_MS}ms`);
+    if (!highRiskHoldCancels.has(sessionId)) highRiskHoldCancels.set(sessionId, new Set());
+    highRiskHoldCancels.get(sessionId).add(cancel);
     timer = window.setTimeout(() => {
-      timer = null;
-      btn.classList.remove('holding');
-      btn.style.removeProperty('--hold-progress-duration');
-      sendChoice(sessionId, targetNum, true);
+      cancel();
+      if (current() && sendChoice(sessionId, targetNum, true) === true) onSent?.();
     }, HIGH_RISK_HOLD_MS);
   });
   btn.addEventListener('pointerup', cancel);
   btn.addEventListener('pointercancel', cancel);
+  btn.addEventListener('lostpointercapture', cancel);
   btn.addEventListener('pointerleave', (event) => { if (event.buttons === 0) cancel(); });
   btn.onclick = (event) => { event.preventDefault(); }; // suppress synthetic click after a released hold
 }
 
-async function requestHighRiskConfirmation(sessionId, targetNum) {
+async function requestHighRiskConfirmation(sessionId, targetNum, expected = approvalSelectionToken(sessionId, targetNum), onSent?: () => void) {
+  if (!expected) return false;
   if (highRiskConfirmationInFlight.has(sessionId)) return;
   highRiskConfirmationInFlight.add(sessionId);
+  const controller = new AbortController();
+  highRiskConfirmationAborts.set(sessionId, controller);
   try {
     const ok = await appConfirm({
       action: 'approve',
       message: 'This approval can run a destructive or externally visible operation. Continue only if you have checked the command and target paths.',
       kind: 'danger',
+      signal: controller.signal,
     });
-    if (ok) sendChoice(sessionId, targetNum, true);
+    if (ok && approvalSelectionToken(sessionId, targetNum) === expected && sendChoice(sessionId, targetNum, true) === true) {
+      onSent?.();
+      return true;
+    }
+    return false;
   } finally {
+    if (highRiskConfirmationAborts.get(sessionId) === controller) highRiskConfirmationAborts.delete(sessionId);
     highRiskConfirmationInFlight.delete(sessionId);
   }
 }
@@ -1634,9 +1674,11 @@ export function sendBatchChoices(sessionId) {
   if (!isBatchOptions(cached)) return;
   if (!batchAllAnswered(sessionId, cached)) return;
   const text = buildBatchPayload(sessionId);
+  const approvalIdentity = captureApprovalInputIdentity(sessionId);
+  if (!approvalIdentity) return false;
   // 本文送信に成功するまで、回答済みの印・確認モーダル・入力 state を変更しない。
-  if (!sendSubmittedBody(sessionId, text, { recordMobileTranscript: false })) return false;
-  noteApprovalAnswerSent(sessionId, text, cached);
+  if (!sendSubmittedBody(sessionId, text, { recordMobileTranscript: false, approvalIdentity })) return false;
+  noteApprovalAnswerSent(sessionId, text, cached, approvalIdentity);
   // 一括回答は改行区切りの複数行（buildBatchPayload）。本文は上で共通経路へ送っている。
   removeBatchConfirmModal();
   hideActionBar(sessionId);
@@ -1883,7 +1925,9 @@ export function sendMultiSelectChoices(sessionId) {
   // 選択番号をカンマ連結で返す（例 "1,3"）。エージェントが提示した実番号をそのまま使う。
   const text = nums.join(',');
   const labelMap = new Map((isMultiSelectOptions(prevOpts) ? prevOpts : []).map(o => [o.num, o.label]));
-  if (!sendSubmittedText(sessionId, `${text}\r`, { recordMobileTranscript: false })) return false;
+  const approvalIdentity = captureApprovalInputIdentity(sessionId);
+  if (!approvalIdentity) return false;
+  if (!sendSubmittedText(sessionId, `${text}\r`, { recordMobileTranscript: false, approvalIdentity })) return false;
   chatHistoryCommitOutput(sessionId);
   pushMessage(sessionId, {
     role: 'system',
@@ -1895,7 +1939,7 @@ export function sendMultiSelectChoices(sessionId) {
       labels: nums.map(n => labelMap.get(n) || null),
     },
   });
-  noteApprovalAnswerSent(sessionId, text, prevOpts);
+  noteApprovalAnswerSent(sessionId, text, prevOpts, approvalIdentity);
   hideActionBar(sessionId);
   setTimeout(() => inputEl.focus(), 0);
 }
@@ -1903,8 +1947,10 @@ export function sendMultiSelectChoices(sessionId) {
 export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
   if (!highRiskConfirmed && isHighRiskApprovalSelection(sessionId, targetNum)) {
     if (highRiskConfirmationMode() === 'dialog') void requestHighRiskConfirmation(sessionId, targetNum);
-    return;
+    return false;
   }
+  const approvalIdentity = captureApprovalInputIdentity(sessionId);
+  if (!approvalIdentity) return false;
   const seqState = sequentialChoiceCache.get(sessionId);
   if (seqState && seqState.index < seqState.prompts.length) {
     const previousIndex = seqState.index;
@@ -1921,7 +1967,7 @@ export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
       renderApprovalFromStore(sessionId);
       notifyApprovalViewsChanged();
       setTimeout(() => inputEl.focus(), 0);
-      return;
+      return true;
     }
 
     const response = seqState.prompts
@@ -1929,7 +1975,7 @@ export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
       .join('\n');
     // 改行区切りの複数行回答は共通経路（ペースト包み＋確定 \r 別送）で 1 メッセージとして送る。
     // 失敗時は回答 state を残し、再接続後に同じ確定操作をやり直せるようにする。
-    if (!sendSubmittedBody(sessionId, response, { recordMobileTranscript: false })) {
+    if (!sendSubmittedBody(sessionId, response, { recordMobileTranscript: false, approvalIdentity })) {
       seqState.index = previousIndex;
       seqState.answers.clear();
       previousAnswers.forEach((answer, key) => seqState.answers.set(key, answer));
@@ -1951,10 +1997,10 @@ export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
       },
     });
     clearSequentialChoiceState(sessionId);
-    noteApprovalAnswerSent(sessionId, response, null);
+    noteApprovalAnswerSent(sessionId, response, null, approvalIdentity);
     hideActionBar(sessionId);
     setTimeout(() => inputEl.focus(), 0);
-    return;
+    return true;
   }
 
   // 矢印移動ではなく番号直接入力で確定する（誤選択防止）
@@ -1968,7 +2014,7 @@ export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
   // キューへ複数回積まれるため、成功した送信に短い再送抑止を掛ける。
   const nativeShortcut = !!(targetOpt && targetOpt._sendText);
   if (nativeShortcut && !beginNativeApprovalSendCooldown(sessionId)) return false;
-  const submitted = sendSubmittedText(sessionId, choiceText, { recordMobileTranscript: false });
+  const submitted = sendSubmittedText(sessionId, choiceText, { recordMobileTranscript: false, approvalIdentity });
   if (!submitted) {
     if (nativeShortcut) cancelNativeApprovalSendCooldown(sessionId);
     return false;
@@ -1986,9 +2032,10 @@ export function sendChoice(sessionId, targetNum, highRiskConfirmed = false) {
     },
   });
   // 回答済みの印を付けて Hub へ知らせる。Hub の閉じるが届くまでの間もこの記録は描かない。
-  noteApprovalAnswerSent(sessionId, choiceText, cachedOpts);
+  noteApprovalAnswerSent(sessionId, choiceText, cachedOpts, approvalIdentity);
   hideActionBar(sessionId);
   setTimeout(() => inputEl.focus(), 0);
+  return true;
 }
 
 // 代替画面の CLI を遡っている間は、回答済みと同じ形の記録を描かない（approval-ui.ts の

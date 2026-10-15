@@ -1514,10 +1514,26 @@ pub struct InputFrame {
 #[derive(Clone)]
 pub enum InputAuthority {
     Ui(UiBinding),
+    /// Approval UI input retains its record identity through the input FIFO and
+    /// every delayed frame. This is internal state, not a new wire message.
+    UiApproval {
+        ui: UiBinding,
+        identity: CandidateIdentity,
+        /// Full answer retained across a bracketed body and its final Enter.
+        answer: String,
+    },
     Internal,
     /// Only the initial prompt may bypass older gated user input.
     InitialPrompt,
     NativeApproval(ApprovalActionBinding),
+}
+impl InputAuthority {
+    pub fn ui_binding(&self) -> Option<UiBinding> {
+        match self {
+            Self::Ui(ui) | Self::UiApproval { ui, .. } => Some(*ui),
+            _ => None,
+        }
+    }
 }
 #[derive(Clone)]
 pub struct InputRequest {
@@ -2022,12 +2038,33 @@ pub struct CoreEffects(pub Vec<CoreEffect>);
 
 /// C3 owns socket writers. A full binding is checked immediately before sending;
 /// transport writes are not PTY acknowledgement or provider acceptance.
+/// Validate and execute one synchronous dispatch in the same critical section.
+/// The callback never holds a state guard across a network await.
+pub type InputSendGuard<'a> = Box<
+    dyn FnOnce(&mut dyn FnMut() -> Result<(), SessionError>) -> Result<(), SessionError>
+        + Send
+        + 'a,
+>;
 pub trait WrapperTransport: Send + Sync {
     fn send<'a>(
         &'a self,
         binding: SessionBinding,
         message: super::Message,
     ) -> CoreFuture<'a, Result<(), SessionError>>;
+    /// Approval input must be revalidated after all asynchronous send waits,
+    /// immediately before dispatch. Adapters without this boundary fail closed.
+    fn send_guarded<'a>(
+        &'a self,
+        _binding: SessionBinding,
+        _message: super::Message,
+        _guard: InputSendGuard<'a>,
+    ) -> CoreFuture<'a, Result<(), SessionError>> {
+        Box::pin(async {
+            Err(SessionError::InvalidRequest(
+                "guarded input transport unavailable".into(),
+            ))
+        })
+    }
 }
 /// Earlier effects were applied in order. The failed effect may have performed
 /// partial external I/O; never retry the whole batch on this result.

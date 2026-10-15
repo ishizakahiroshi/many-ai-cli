@@ -95,6 +95,14 @@ impl NativeHostDispatch {
     /// The receiver owns no cancellation guard. Hub shutdown does not terminate
     /// a user's editor/terminal after a successful Start receipt.
     fn detached(&self, name: &str, args: Vec<OsString>) -> io::Result<()> {
+        self.detached_with_env(name, args, None)
+    }
+    fn detached_with_env(
+        &self,
+        name: &str,
+        args: Vec<OsString>,
+        extra: Option<(&str, &std::ffi::OsStr)>,
+    ) -> io::Result<()> {
         let executable = self.lookup(name)?;
         #[cfg(windows)]
         {
@@ -124,6 +132,9 @@ impl NativeHostDispatch {
             if let Some(value) = value {
                 cmd.env(key, value);
             }
+        }
+        if let Some((key, value)) = extra {
+            cmd.env(key, value);
         }
         let child = cmd.spawn()?;
         sender
@@ -238,14 +249,18 @@ impl HostDispatch for NativeHostDispatch {
                 OpenKind::Terminal => self
                     .detached("wt.exe", vec!["-d".into(), path.as_os_str().to_owned()])
                     .or_else(|_| {
-                        self.detached(
+                        // -Command joins following argv into PowerShell source.
+                        // Keep the path in a child-only environment value so
+                        // punctuation in a directory name remains literal data.
+                        self.detached_with_env(
                             "powershell.exe",
                             vec![
                                 "-NoExit".into(),
                                 "-Command".into(),
-                                "Set-Location -LiteralPath $args[0]".into(),
-                                path.as_os_str().to_owned(),
+                                "Set-Location -LiteralPath $env:MANY_AI_CLI_TERMINAL_DIRECTORY"
+                                    .into(),
                             ],
+                            Some(("MANY_AI_CLI_TERMINAL_DIRECTORY", path.as_os_str())),
                         )
                     }),
             }
@@ -333,7 +348,7 @@ pub fn terminal_description(app: &str) -> String {
         return format!("{app} <dir>");
     }
     if cfg!(windows) {
-        "wt.exe -d <dir> (fallback: powershell.exe -NoExit -Command \"Set-Location -LiteralPath $args[0]\" <dir>)".into()
+        "wt.exe -d <dir> (fallback: PowerShell with the directory passed as a literal environment value)".into()
     } else if cfg!(target_os = "macos") {
         "open -a Terminal <dir>".into()
     } else {

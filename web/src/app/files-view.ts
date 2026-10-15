@@ -17,9 +17,26 @@ import { openLightbox, terminalWrapper } from './attachments.js';
 // 生きているセッション」を選び直すことで、セッション入れ替えに追従させる。
 function isPathUnderOrEqual(child: any, parent: any): boolean {
   if (!child || !parent) return false;
-  const norm = (p: any) => String(p).replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
-  const c = norm(child), p = norm(parent);
+  const c = normalizeRepositoryPath(child), p = normalizeRepositoryPath(parent);
   return c === p || c.startsWith(p + '/');
+}
+
+function normalizeRepositoryPath(path: any): string {
+  const raw = String(path || '');
+  const normalized = raw.replace(/[\\/]+/g, '/').replace(/\/+$/, '');
+  return /^(?:[a-z]:|[\\/]{2})/i.test(raw) ? normalized.toLowerCase() : normalized;
+}
+
+function sessionMatchesRepository(session: any, root: any): boolean {
+  if (!session || !root) return false;
+  // A known repository root is authoritative, even when its cwd is nested
+  // beneath a different repository (for example, a submodule).
+  if (session.git_root) {
+    return normalizeRepositoryPath(session.git_root) === normalizeRepositoryPath(root);
+  }
+  // Without a resolved git_root, a descendant may be a nested repository.
+  // Keep the tab unavailable until repository identity is known.
+  return !!session.cwd && normalizeRepositoryPath(session.cwd) === normalizeRepositoryPath(root);
 }
 
 // capturedId が生存セッションならそれを返す。死んでいれば filesRoot / gitRoot 配下の
@@ -480,6 +497,8 @@ export const FilesTabManager = (function () {
     // kind 別の cleanup
     const kind = tabObj.kind || tabObj.type;
     if (kind === 'files') {
+      const preview = tabObj.contentEl?.querySelector('[data-files-preview]');
+      if (preview) FilesPreview.unbind(preview);
       if (tabObj.gitRoot) lsRemoveTab(tabObj.gitRoot, tabObj.filesRoot);
     } else if (kind === 'git') {
       if (tabObj.gitRoot) lsRemoveGitTab(tabObj.gitRoot);
@@ -931,8 +950,7 @@ export const FilesTabManager = (function () {
       if (tab.gitRoot && sessionsRef) {
         for (const s of sessionsRef.values()) {
           if (s.id === removedSessionId) continue;
-          const gr = s.git_root || s.cwd || '';
-          if (gr === tab.gitRoot || (gr && tab.gitRoot && gr.startsWith(tab.gitRoot))) {
+          if (sessionMatchesRepository(s, tab.gitRoot)) {
             candidate = s;
             break;
           }
@@ -1008,8 +1026,7 @@ export const FilesTabManager = (function () {
       for (const entry of data.git) {
         if (!entry || !entry.gitRoot) continue;
         const matched = sessions.find(s => {
-          const gr = s.git_root || s.cwd || '';
-          return gr === entry.gitRoot || (gr && gr.startsWith(entry.gitRoot));
+          return sessionMatchesRepository(s, entry.gitRoot);
         });
         if (matched) {
           restorableGitTabs.push(entry);
@@ -1026,7 +1043,7 @@ export const FilesTabManager = (function () {
     for (const [gitRoot, entries] of Object.entries(filesMap)) {
       if (!Array.isArray(entries)) continue;
       // gitRoot に対応するセッションを探す（cwd が gitRoot で始まるもの）
-      const matchedSession = sessions.find(s => s.cwd && (s.cwd === gitRoot || s.cwd.startsWith(gitRoot)));
+      const matchedSession = sessions.find(s => sessionMatchesRepository(s, gitRoot));
       // 対応するセッションが無い場合は復元しない。
       // セッションが無いまま Hub の cwd と localStorage の root が重なると、
       // probe が偶然通って `..` だけのゴーストタブが復元されてしまうため。
@@ -2295,17 +2312,15 @@ export const FilesPreview = (function () {
 
     let html;
     try { html = marked.parse(content, { renderer, gfm: true, breaks: false }); } catch (_) { return `<pre>${escapeHtml(content)}</pre>`; }
-    // DOMPurify でサニタイズ（href/src スキームは markdown プレビューで開く相対リンク/data-* も許容したいので
-    // 既定の許可リストで十分。許可外スキームの a[href] は DOMPurify が落とす）
-    if (typeof DOMPurify !== 'undefined') {
-      html = DOMPurify.sanitize(html, {
-        ADD_ATTR: ['target', 'data-files-rel-link', 'data-files-path-link', 'data-files-skip-search'],
-      });
-    } else {
-      // fail-closed: サニタイザ不在なら HTML を描画せずプレーンテキストで返す
+    // A read-only document must not create controls or styles in the Hub.
+    if (typeof DOMPurify === 'undefined' || DOMPurify.isSupported === false) {
       return `<pre class="files-preview-plain">${escapeHtml(content)}</pre>`;
     }
-    return html;
+    return DOMPurify.sanitize(html, {
+      ADD_ATTR: ['target', 'data-files-rel-link', 'data-files-path-link', 'data-files-skip-search'],
+      FORBID_TAGS: ['form', 'button', 'input', 'select', 'option', 'textarea', 'fieldset', 'style', 'link', 'base'],
+      FORBID_ATTR: ['action', 'method', 'form', 'formaction', 'formmethod', 'formenctype', 'formtarget', 'style'],
+    });
   }
 
   /**
@@ -2444,6 +2459,7 @@ export const FilesPreview = (function () {
   /** containerEl 内に右ペインを構築 */
   function bind(containerEl, opts) {
     const { sessionId, gitRoot, filesRoot } = opts;
+    containerEl._filesPreview?.dispose?.();
     containerEl.innerHTML = '';
     containerEl.style.removeProperty('align-items');
     containerEl.style.removeProperty('justify-content');
@@ -2563,6 +2579,8 @@ export const FilesPreview = (function () {
 
     let currentAbsPath = null;
     let currentRelPath = null;
+    let loadGeneration = 0;
+    let disposed = false;
     let highlightMatches = [];
     let highlightIndex = 0;
 
@@ -2797,13 +2815,20 @@ export const FilesPreview = (function () {
      */
     async function doSave(forceOverwrite, serverMtime = null) {
       if (!currentAbsPath || !editTextarea) return;
+      const generation = loadGeneration;
+      const textarea = editTextarea;
+      const editorValue = textarea.value;
+      const savePath = currentAbsPath;
+      const saveRelPath = currentRelPath;
+      const isCurrentEdit = () => !disposed && loadGeneration === generation
+        && currentAbsPath === savePath && editTextarea === textarea;
       if (editSaveBtn) editSaveBtn.disabled = true;
       if (editStatusEl) editStatusEl.textContent = t('files_preview_edit_saving') || '保存中…';
 
       const baseMtime = forceOverwrite ? serverMtime : editBaseMtime;
       const body: any = {
-        path: currentAbsPath,
-        content: restoreEditLineEnding(editTextarea.value),
+        path: savePath,
+        content: restoreEditLineEnding(editorValue),
       };
       if (baseMtime) body.baseMtime = baseMtime;
 
@@ -2817,10 +2842,19 @@ export const FilesPreview = (function () {
           body: JSON.stringify(body),
         });
         const data = await res.json().catch(() => ({}));
+        if (!isCurrentEdit()) return;
         if (res.ok && data.ok) {
+          if (textarea.value !== editorValue) {
+            // A successful save must preserve edits made while it was pending.
+            editBaseContent = normalizeEditLineEndings(editorValue);
+            editBaseMtime = data.mtime || null;
+            if (editStatusEl) editStatusEl.textContent = '';
+            if (editSaveBtn) editSaveBtn.disabled = false;
+            return;
+          }
           // 保存成功 → 編集モード終了してプレビュー再取得
           exitEditMode();
-          loadFile(currentAbsPath, currentRelPath);
+          loadFile(savePath, saveRelPath);
           return;
         }
         if (res.status === 409) {
@@ -2834,6 +2868,7 @@ export const FilesPreview = (function () {
         if (editStatusEl) editStatusEl.textContent = t('files_preview_edit_save_error') || ('保存失敗: ' + msg);
         if (editSaveBtn) editSaveBtn.disabled = false;
       } catch (err) {
+        if (!isCurrentEdit()) return;
         if (editStatusEl) editStatusEl.textContent = String(err);
         if (editSaveBtn) editSaveBtn.disabled = false;
       }
@@ -2873,8 +2908,20 @@ export const FilesPreview = (function () {
 
     // ──── ファイルロード ────
     async function loadFile(absPath, relPath) {
+      if (disposed) return;
+      const generation = ++loadGeneration;
+      const isCurrentLoad = () => !disposed && generation === loadGeneration && currentAbsPath === absPath;
       // 編集モード中なら先にリセット（別ファイルを選んだ場合等）
       if (editMode) exitEditMode();
+      currentAbsPath = absPath;
+      currentRelPath = relPath;
+      setBreadcrumb(relPath || absPath, absPath);
+      [openExternalBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn, closeBtn].forEach(b => { b.disabled = false; });
+      searchBtn.disabled = isMediaPath(absPath);
+      editBtn.hidden = true;
+      editBtn.disabled = true;
+      editBaseContent = null;
+      editBaseMtime = null;
 
       contentEl.innerHTML = `<div class="files-preview-loading">${escapeHtml(t('files_tab_loading') || 'Loading…')}</div>`;
       clearHighlights();
@@ -2925,9 +2972,11 @@ export const FilesPreview = (function () {
         const sessionQs = liveSid ? `&session=${encodeURIComponent(liveSid)}` : '';
         const url = `/api/files-content?path=${encodeURIComponent(absPath)}${sessionQs}`;
         const res = await apiFetch(url);
+        if (!isCurrentLoad()) return;
         if (!res.ok) {
           let detail = '';
           try { const ed = await res.json(); detail = (ed && (ed.detail || ed.error)) || ''; } catch (_) {}
+          if (!isCurrentLoad()) return;
           let msg;
           if (res.status === 403 && /secret-like file/i.test(detail)) {
             // 鍵・資格情報・Hub 設定など秘密情報 denylist 該当。
@@ -2944,6 +2993,7 @@ export const FilesPreview = (function () {
           return;
         }
         const data = await res.json();
+        if (!isCurrentLoad()) return;
         const content = data.content || '';
         const isMd = /\.md$/i.test(absPath);
 
@@ -3007,6 +3057,7 @@ export const FilesPreview = (function () {
         }
         bodyEl.scrollTop = 0;
       } catch (err) {
+        if (!isCurrentLoad()) return;
         contentEl.innerHTML = `<div class="files-preview-error">${escapeHtml(String(err))}</div>`;
       }
     }
@@ -3025,6 +3076,7 @@ export const FilesPreview = (function () {
       if (currentAbsPath) loadFile(currentAbsPath, currentRelPath);
     });
     closeBtn.addEventListener('click', () => {
+      ++loadGeneration;
       if (editMode) exitEditMode();
       currentAbsPath = null;
       currentRelPath = null;
@@ -3045,18 +3097,8 @@ export const FilesPreview = (function () {
 
     // 外部 API
     containerEl._filesPreview = {
-      loadFile: (absPath, relPath) => {
-        currentAbsPath = absPath;
-        currentRelPath = relPath;
-        const dispPath = relPath || absPath;
-        setBreadcrumb(dispPath, absPath);
-        [openExternalBtn, openFolderBtn, copyPathBtn, searchBtn, reloadBtn, closeBtn].forEach(b => { b.disabled = false; });
-        searchBtn.disabled = isMediaPath(absPath);
-        // 編集ボタンはロード後に truncated 判定で設定する（初期は非表示）
-        editBtn.hidden = true;
-        editBtn.disabled = true;
-        loadFile(absPath, relPath);
-      },
+      loadFile,
+      dispose: () => { disposed = true; ++loadGeneration; },
       // 別窓へ移す・別窓の中身を差し替えるときに見る（path-links.ts / detached-view.ts）。
       // 表示中のパスは、Markdown のリンクで移っていると開いたときのパスと違う。
       isEditing: () => editMode,
@@ -3065,6 +3107,7 @@ export const FilesPreview = (function () {
   }
 
   function unbind(containerEl) {
+    containerEl._filesPreview?.dispose?.();
     containerEl.innerHTML = '';
     delete containerEl._filesPreview;
   }

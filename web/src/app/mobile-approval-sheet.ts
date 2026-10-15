@@ -3,8 +3,10 @@ import { isBatchOptions, isMultiSelectOptions } from './approval-parser.js';
 import { sessionTitle, approvalQuestionContext } from './approval-queue-tab.js';
 import {
   BATCH_FREE,
+  bindHighRiskApproval,
   foldApprovalPanel,
   getSingleFreeText,
+  isHighRiskApprovalSelection,
   pendingApprovalOptions,
   sendBatchChoices,
   sendChoice,
@@ -230,11 +232,15 @@ function renderSingle(sessionId: number, options: any[]): void {
     const label = String(opt.label || opt.send_text || opt.num);
     const btn = optionButton(label + (isRecommendedOption(opt, options) ? ` (${t('approval_recommended')})` : ''), opt.num);
     if (isRecommendedOption(opt, options)) btn.classList.add('is-current');
-    btn.addEventListener('click', () => {
-      btn.disabled = true;
-      if (sendChoice(sessionId, opt.num) === false) btn.disabled = false;
-      else closeApprovalSheet();
-    });
+    if (isHighRiskApprovalSelection(sessionId, opt.num)) {
+      bindHighRiskApproval(btn, sessionId, opt.num, () => closeApprovalSheet());
+    } else {
+      btn.addEventListener('click', () => {
+        btn.disabled = true;
+        if (sendChoice(sessionId, opt.num) === true) closeApprovalSheet();
+        else btn.disabled = false;
+      });
+    }
     list.appendChild(btn);
   }
   contentEl.appendChild(list);

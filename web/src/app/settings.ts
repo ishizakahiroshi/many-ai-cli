@@ -580,23 +580,42 @@ export function initUsageSettings(): void {
   if (panel) initUsagePanel(panel);
 }
 
-export function appConfirm({ title, message, confirmText, cancelText, kind = 'default', action }: { title?: string; message: string; confirmText?: string; cancelText?: string; kind?: string; action?: ConfirmationAction }): Promise<boolean> {
+const appConfirmOwners = new WeakMap<HTMLElement, () => void>();
+
+export function appConfirm({ title, message, confirmText, cancelText, kind = 'default', action, signal }: { title?: string; message: string; confirmText?: string; cancelText?: string; kind?: string; action?: ConfirmationAction; signal?: AbortSignal }): Promise<boolean> {
   const labels = action ? confirmationLabels(action) : null;
   const heading = title ?? labels?.question ?? '';
   const decline = cancelText || labels?.decline || t('confirm_cancel');
   const accept = confirmText || labels?.accept || t('confirm_ok');
   return new Promise<boolean>((resolve) => {
+    if (signal?.aborted) { resolve(false); return; }
     const overlay = document.getElementById('model-picker-overlay');
     if (!overlay) { resolve(window.confirm(message)); return; }
+    appConfirmOwners.get(overlay)?.();
 
+    let settled = false;
+    let dialog: HTMLDivElement | null = null;
+    const ownsOverlay = () => dialog?.parentElement === overlay;
+    const observer = new MutationObserver(() => { if (!ownsOverlay()) close(false); });
+    const release = () => close(false);
     const close = (value) => {
+      if (settled) return;
+      const accepted = !!value && ownsOverlay();
+      settled = true;
+      signal?.removeEventListener('abort', onAbort);
       overlay.removeEventListener('click', onOverlayClick);
       document.removeEventListener('keydown', onKeyDown);
-      overlay.hidden = true;
-      overlay.innerHTML = '';
-      resolve(value);
+      observer.disconnect();
+      if (appConfirmOwners.get(overlay) === release) appConfirmOwners.delete(overlay);
+      if (ownsOverlay()) {
+        overlay.hidden = true;
+        overlay.innerHTML = '';
+      }
+      resolve(accepted);
     };
+    const onAbort = () => close(false);
     const onOverlayClick = (e) => {
+      if (!ownsOverlay()) { close(false); return; }
       // この確認ダイアログは設定パネルの外（model-picker-overlay）に出るため、
       // ここで止めないとクリックが document まで伝播し、設定パネルの
       // 「パネル外クリックで閉じる」ハンドラに拾われてパネルごと閉じてしまう。
@@ -604,14 +623,15 @@ export function appConfirm({ title, message, confirmText, cancelText, kind = 'de
       if (e.target === overlay) close(false);
     };
     const onKeyDown = (e) => {
+      if (!ownsOverlay()) { close(false); return; }
+      if (e.isComposing || e.keyCode === 229) return;
       if (e.key === 'Escape') close(false);
-      if (e.key === 'Enter') close(true);
     };
 
     overlay.innerHTML = '';
     overlay.hidden = false;
 
-    const dialog = document.createElement('div');
+    dialog = document.createElement('div');
     dialog.className = `confirm-dialog confirm-dialog--${kind} ${uiModalClass('sm')}`;
     dialog.innerHTML = `
       <div class="confirm-icon" aria-hidden="true">!</div>
@@ -625,15 +645,18 @@ export function appConfirm({ title, message, confirmText, cancelText, kind = 'de
       </div>
     `;
     overlay.appendChild(dialog);
+    appConfirmOwners.set(overlay, release);
+    observer.observe(overlay, { childList: true });
 
     // ボタン経路では close() が onOverlayClick を先に解除するため、overlay 側の
     // stopPropagation では止められない。各ボタンで直接伝播を止めて、document の
     // 「パネル外クリックで閉じる」ハンドラに届かないようにする。
-    document.getElementById('app-confirm-cancel').addEventListener('click', (e) => { e.stopPropagation(); close(false); });
-    document.getElementById('app-confirm-ok').addEventListener('click', (e) => { e.stopPropagation(); close(true); });
+    dialog.querySelector('#app-confirm-cancel').addEventListener('click', (e) => { e.stopPropagation(); close(false); });
+    dialog.querySelector('#app-confirm-ok').addEventListener('click', (e) => { e.stopPropagation(); close(true); });
     overlay.addEventListener('click', onOverlayClick);
     document.addEventListener('keydown', onKeyDown);
-    document.getElementById('app-confirm-ok').focus();
+    signal?.addEventListener('abort', onAbort, { once: true });
+    (dialog.querySelector('#app-confirm-ok') as HTMLButtonElement).focus();
   });
 }
 

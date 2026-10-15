@@ -383,12 +383,13 @@
   --ui-button-border: rgba(255,255,255,0.2);
 }
 
-.action-btn.high-risk-approval {
+.high-risk-approval {
   position: relative;
   overflow: hidden;
 }
 
-.action-btn.hold-to-approve::after {
+.hold-to-approve { touch-action: none; }
+.hold-to-approve::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -396,7 +397,7 @@
   background: rgba(239, 68, 68, 0.28);
   pointer-events: none;
 }
-.action-btn.hold-to-approve.holding::after {
+.hold-to-approve.holding::after {
   width: 100%;
   transition: width var(--hold-progress-duration, 1200ms) linear;
 }

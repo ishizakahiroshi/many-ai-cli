@@ -3,7 +3,7 @@ import { t } from '../i18n.js';
 import { showToast } from './util.js';
 import { STORAGE_VOICE_ENGINE_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, getVoiceEngine } from './user-prefs.js';
 import { activeSessionId, terminals } from './state.js';
-import { autoExpand, buildSendText, doSend, inputEl, set_voiceActive, set_voiceAudioActive, updateInputClearButton, updateSlashMenu, voiceAudioActive } from '../app.js';
+import { autoExpand, buildSendText, captureComposerOwner, doSend, inputEl, isComposerOwnerLive, replaceComposerDraftInput, set_voiceActive, set_voiceAudioActive, updateInputClearButton, updateSlashMenu, voiceAudioActive, type ComposerOwner } from '../app.js';
 import { isTerminalAtBottom, refitActiveTerminalAfterLayout } from './terminal.js';
 import { getActiveTriggerPhrase, textEndsWithTriggerPhrase } from './settings.js';
 import { joinTranscript } from '../vendor/vtype-core/index.js';
@@ -25,6 +25,8 @@ import { voiceInput } from './voice-engine.js';
   const supportsWhisperRecording = wh.support.supported;
 
   let preVoiceText = '';
+  let voiceOwner: ComposerOwner | null = null;
+  let expectedVoiceText = '';
   // 確定（送信）が失敗・取り消しで終わったことを error → stop の間だけ覚えておく。
   let finishFailed = false;
   let waveformRaf: number | null = null;
@@ -171,19 +173,19 @@ import { voiceInput } from './voice-engine.js';
   }
 
   function insertTranscribedText(text: string) {
-    inputEl.value = joinTranscript(preVoiceText, text);
-    autoExpand();
-    updateInputClearButton();
-    updateSlashMenu();
+    const owner = voiceOwner;
+    const next = joinTranscript(preVoiceText, text);
+    if (!replaceComposerDraftInput(owner, expectedVoiceText, next)) return;
+    expectedVoiceText = next;
 
     const triggerPhrase = getActiveTriggerPhrase();
     if (
       localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY) === '1' &&
       triggerPhrase &&
-      activeSessionId !== null &&
+      owner && isComposerOwnerLive(owner) && activeSessionId === owner.sessionId &&
       textEndsWithTriggerPhrase(buildSendText(), triggerPhrase)
     ) {
-      doSend(activeSessionId);
+      doSend(owner.sessionId);
     }
   }
 
@@ -211,8 +213,7 @@ import { voiceInput } from './voice-engine.js';
   wh.on('error', (e) => {
     if (e.phase === 'start') {
       // マイクを開けなかった（旧 startWhisperRecording の catch）
-      inputEl.value = preVoiceText;
-      autoExpand();
+      replaceComposerDraftInput(voiceOwner, expectedVoiceText, preVoiceText);
       showVoiceError(e.code);
       return;
     }
@@ -222,13 +223,13 @@ import { voiceInput } from './voice-engine.js';
     } else {
       showVoiceError(e.code);
     }
-    inputEl.value = preVoiceText;
-    autoExpand();
+    replaceComposerDraftInput(voiceOwner, expectedVoiceText, preVoiceText);
     finishFailed = true;
   });
 
   wh.on('stop', ({ reason }) => {
     if (reason === 'result') {
+      voiceOwner = null;
       voiceBar.classList.remove('voice-processing');
       hideVoiceBar();
       setRecordingUi(false);
@@ -237,6 +238,7 @@ import { voiceInput } from './voice-engine.js';
       return;
     }
     if (finishFailed) {
+      voiceOwner = null;
       finishFailed = false;
       voiceBar.classList.remove('voice-processing');
       hideVoiceBar();
@@ -245,9 +247,8 @@ import { voiceInput } from './voice-engine.js';
       return;
     }
     // 取り消しボタン・Escape（旧 cancelWhisperRecording）
-    inputEl.value = preVoiceText;
-    autoExpand();
-    updateSlashMenu();
+    replaceComposerDraftInput(voiceOwner, expectedVoiceText, preVoiceText);
+    voiceOwner = null;
     voiceBar.classList.remove('voice-processing');
     hideVoiceBar();
     setRecordingUi(false);
@@ -263,11 +264,14 @@ import { voiceInput } from './voice-engine.js';
     }
     // 録音中なら確定、文字起こし中なら「認識中です」を出すだけ（core の toggle が判断する）。
     if (!wh.isRecording() && !wh.isProcessing()) {
+      voiceOwner = captureComposerOwner();
+      if (!voiceOwner) return;
       preVoiceText = inputEl.value;
       if (preVoiceText.length > 0 && !/\s$/.test(preVoiceText)) {
         inputEl.value = preVoiceText + ' ';
         updateInputClearButton();
       }
+      expectedVoiceText = inputEl.value;
     }
     await wh.toggle();
   }

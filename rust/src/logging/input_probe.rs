@@ -54,7 +54,7 @@ pub(crate) fn init(log_dir: &Path) {
 /// Hub がラッパーへ `pty_input` を送る直前。送り元の種類で、画面からの入力か Hub 内部かを分ける。
 pub(crate) fn hub_input(session: i64, seq: i64, authority: &InputAuthority, bytes: &[u8]) {
     let source = match authority {
-        InputAuthority::Ui(_) => "ui",
+        InputAuthority::Ui(_) | InputAuthority::UiApproval { .. } => "ui",
         InputAuthority::Internal => "internal",
         InputAuthority::InitialPrompt => "initial_prompt",
         InputAuthority::NativeApproval(_) => "native_approval",

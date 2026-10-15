@@ -3,7 +3,7 @@ import { t } from '../i18n.js';
 import { apiFetch, showToast, token } from './util.js';
 import { activeSessionId, sessions, terminals } from './state.js';
 import { copyPathText } from './path-links.js';
-import { inputEl, isInteractiveFocusTarget, stagePastedText, updateInputAffordance } from '../app.js';
+import { appendComposerAttachment, captureComposerOwner, inputEl, isComposerOwnerLive, isInteractiveFocusTarget, removeComposerAttachment, stagePastedText, updateInputAffordance } from '../app.js';
 import { pushMessage } from './chat-history.js';
 import { openLightbox } from './lightbox.js';
 
@@ -311,38 +311,40 @@ if (chatPane) {
 }
 
 export async function stageAttach(file, opts: any = {}) {
+  const owner = captureComposerOwner();
+  if (!owner) return;
   const normalized = opts.normalize ? await normalizeAttachImage(file) : file;
   const buf = await normalized.arrayBuffer();
+  if (!isComposerOwnerLive(owner)) return;
   if (buf.byteLength > MAX_ATTACH_BYTES) {
     showToast(`Attachment too large: ${(buf.byteLength / (1024 * 1024)).toFixed(1)}MB (max 8MB)`);
     return;
   }
   const entry: any = {};
   const wrapper = addAttachThumbnail(normalized, () => {
-    const idx = pendingAttachFiles.findIndex(p => p.entry === entry);
-    if (idx !== -1) pendingAttachFiles.splice(idx, 1);
-    updateInputAffordance();
-  });
+    removeComposerAttachment(owner, entry);
+  }, owner.sessionId === activeSessionId);
   entry.wrapper = wrapper;
-  pendingAttachFiles.push({ buf, filename: normalized.name || '', entry, wrapper });
-  updateInputAffordance();
+  appendComposerAttachment(owner, { buf, filename: normalized.name || '', entry, wrapper });
+  updateAttachClearBtn();
 }
 
 export async function stageFileAttach(file) {
+  const owner = captureComposerOwner();
+  if (!owner) return;
   const buf = await file.arrayBuffer();
+  if (!isComposerOwnerLive(owner)) return;
   if (buf.byteLength > MAX_ATTACH_BYTES) {
     showToast(`Attachment too large: ${(buf.byteLength / (1024 * 1024)).toFixed(1)}MB (max 8MB)`);
     return;
   }
   const entry: any = {};
   const wrapper = addFileChip(file, () => {
-    const idx = pendingAttachFiles.findIndex(p => p.entry === entry);
-    if (idx !== -1) pendingAttachFiles.splice(idx, 1);
-    updateInputAffordance();
-  });
+    removeComposerAttachment(owner, entry);
+  }, owner.sessionId === activeSessionId);
   entry.wrapper = wrapper;
-  pendingAttachFiles.push({ buf, filename: file.name || '', entry, wrapper });
-  updateInputAffordance();
+  appendComposerAttachment(owner, { buf, filename: file.name || '', entry, wrapper });
+  updateAttachClearBtn();
 }
 
 // クリップボード画像は元ファイル名がないことが多いため、PNG として保存する。
@@ -409,9 +411,9 @@ export function arrayBufferToBase64(buf) {
   });
 }
 
-export async function flushPendingAttach(sessionId) {
-  if (pendingAttachFiles.length === 0) return [];
-  const toSend = pendingAttachFiles.splice(0);
+export async function flushPendingAttach(sessionId, capturedFiles?: any[]) {
+  const toSend = capturedFiles || pendingAttachFiles.splice(0);
+  if (toSend.length === 0) return [];
   const injects = [];
   // chatHistory 用: 送信に成功した添付の情報を集める
   const historyAttachments = [];
@@ -462,7 +464,7 @@ export async function flushPendingAttach(sessionId) {
   return injects;
 }
 
-export function addAttachThumbnail(file, onRemove) {
+export function addAttachThumbnail(file, onRemove, mount = true) {
   if (!attachThumbnails) return;
   const url = URL.createObjectURL(file);
 
@@ -489,18 +491,20 @@ export function addAttachThumbnail(file, onRemove) {
 
   wrapper.appendChild(img);
   wrapper.appendChild(removeBtn);
-  attachThumbnails.prepend(wrapper);
+  if (mount) attachThumbnails.prepend(wrapper);
 
-  const wrappers = attachThumbnails.querySelectorAll('.attach-thumb-wrapper');
-  for (let i = 10; i < wrappers.length; i++) {
-    URL.revokeObjectURL(wrappers[i].querySelector('img').src);
-    wrappers[i].remove();
+  if (mount) {
+    const wrappers = attachThumbnails.querySelectorAll('.attach-thumb-wrapper');
+    for (let i = 10; i < wrappers.length; i++) {
+      URL.revokeObjectURL(wrappers[i].querySelector('img').src);
+      wrappers[i].remove();
+    }
   }
   updateAttachClearBtn();
   return wrapper;
 }
 
-export function addFileChip(file, onRemove) {
+export function addFileChip(file, onRemove, mount = true) {
   if (!attachThumbnails) return;
   const wrapper = document.createElement('div');
   wrapper.className = 'attach-thumb-wrapper attach-file-chip';
@@ -523,7 +527,7 @@ export function addFileChip(file, onRemove) {
 
   wrapper.appendChild(label);
   wrapper.appendChild(removeBtn);
-  attachThumbnails.prepend(wrapper);
+  if (mount) attachThumbnails.prepend(wrapper);
   updateAttachClearBtn();
   return wrapper;
 }

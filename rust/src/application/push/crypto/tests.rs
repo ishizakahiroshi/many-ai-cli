@@ -11,6 +11,43 @@ fn fixture_store() -> Store {
     }
 }
 #[test]
+fn audit_a03_vapid_contact_contains_one_mailto_scheme() {
+    let cases: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/web-push/go-encryption-vectors.json"
+    ))
+    .unwrap();
+    let row = &cases[0];
+    let encoded = encode(
+        &fixture_store(),
+        &Keys {
+            auth: row["auth"].as_str().unwrap().into(),
+            p256dh: row["p256dh"].as_str().unwrap().into(),
+        },
+        "https://example.invalid/push",
+        b"synthetic",
+        "synthetic".into(),
+        1791158400,
+    )
+    .unwrap();
+    let jwt = encoded
+        .authorization
+        .strip_prefix("vapid t=")
+        .unwrap()
+        .split_once(", k=")
+        .unwrap()
+        .0;
+    let claims: serde_json::Value = serde_json::from_slice(
+        &URL_SAFE_NO_PAD
+            .decode(jwt.split('.').nth(1).unwrap())
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        claims["sub"],
+        format!("mailto:{}@{}", "many-ai-cli", "localhost.invalid")
+    );
+}
+#[test]
 fn source_go_ecdh_hkdf_aes128gcm_ciphertext_matches_independent_vectors() {
     let cases: serde_json::Value = serde_json::from_str(include_str!(
         "../../../../tests/fixtures/web-push/go-encryption-vectors.json"
@@ -40,7 +77,7 @@ fn source_go_ecdh_hkdf_aes128gcm_ciphertext_matches_independent_vectors() {
     }
 }
 #[test]
-fn vapid_jwt_signature_and_source_double_mailto_claim_are_real() {
+fn vapid_jwt_signature_and_contact_claim_are_real() {
     use p256::ecdsa::{VerifyingKey, signature::Verifier};
     let store = fixture_store();
     let cases: serde_json::Value = serde_json::from_str(include_str!(
@@ -70,11 +107,11 @@ fn vapid_jwt_signature_and_source_double_mailto_claim_are_real() {
     let parts = jwt.split('.').collect::<Vec<_>>();
     let claims: serde_json::Value =
         serde_json::from_slice(&URL_SAFE_NO_PAD.decode(parts[1]).unwrap()).unwrap();
-    assert_eq!(claims["aud"], "https://example.invalid:443");
+    assert_eq!(claims["aud"], "https://example.invalid");
     assert_eq!(claims["exp"], 1791201600i64);
     assert_eq!(
         claims["sub"],
-        format!("mailto:mailto:{}@{}", "many-ai-cli", "localhost.invalid")
+        format!("mailto:{}@{}", "many-ai-cli", "localhost.invalid")
     );
     let verifier =
         VerifyingKey::from_sec1_bytes(&decode_vapid(&store.vapid_public_key).unwrap()).unwrap();

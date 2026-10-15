@@ -319,6 +319,7 @@ function beginEdit(memo: Memo, rowBody: HTMLElement, textEl: HTMLElement): void 
     }
   };
   textarea.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Escape') { e.preventDefault(); finish(false); }
     else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finish(true); }
   });
@@ -573,6 +574,7 @@ function ensureDrawer(): HTMLElement {
   inputEl.rows = 2;
   inputEl.placeholder = t('memo_input_placeholder');
   inputEl.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submitNewMemo(); }
   });
   // スクリーンショットの貼り付け（Ctrl+V）。文字も一緒に入っているクリップボード

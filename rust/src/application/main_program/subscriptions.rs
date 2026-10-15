@@ -43,56 +43,20 @@ impl SubscriptionProbeHooks for ProbeHooks {
     fn wrapper_pid(&self, binding: SessionBinding) -> Option<u32> {
         self.core.upgrade()?.wrapper_pid(binding).ok().flatten()
     }
-    fn recover_process(&self, pid: u32) -> io::Result<()> {
+    fn recover_process(&self, _pid: u32) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "PID-only probe recovery is not permitted",
+        ))
+    }
+    fn recover_identified_process(&self, pid: u32, identity: &str) -> io::Result<()> {
         if self.trial {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
-                "trial refuses native PID recovery",
+                "trial refuses native process recovery",
             ));
         }
-        if pid == 0 || pid == std::process::id() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "invalid probe recovery PID",
-            ));
-        }
-        // Fixed Go recovery has only a validated recovery marker and recorded PID;
-        // PID reuse remains a source limitation. No process group is terminated.
-        #[cfg(unix)]
-        {
-            let pid = libc::pid_t::try_from(pid)
-                .map_err(|_| io::Error::other("invalid probe recovery PID"))?;
-            if unsafe { libc::kill(pid, libc::SIGKILL) } != 0 {
-                return Err(io::Error::last_os_error());
-            }
-            Ok(())
-        }
-        #[cfg(windows)]
-        {
-            use windows_sys::Win32::{
-                Foundation::CloseHandle,
-                System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess},
-            };
-            let process = unsafe { OpenProcess(PROCESS_TERMINATE, 0, pid) };
-            if process.is_null() {
-                return Err(io::Error::last_os_error());
-            }
-            let okay = unsafe { TerminateProcess(process, 1) };
-            let result = if okay == 0 {
-                Err(io::Error::last_os_error())
-            } else {
-                Ok(())
-            };
-            unsafe { CloseHandle(process) };
-            result
-        }
-        #[cfg(not(any(unix, windows)))]
-        {
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "probe process recovery unsupported",
-            ))
-        }
+        crate::process::wrapper_startup::recovery_identity::terminate(pid, identity)
     }
 }
 pub(super) struct LoginObserver {

@@ -188,6 +188,32 @@ Release artifacts are published at
   which now appear only in the details opened from the "…" button.
 
 ### Fixed
+- Approval confirmations and mobile hold controls stay attached to the approval
+  originally displayed. Enter activates the focused confirmation button.
+  Read-only Markdown removes interactive controls, and browser policy blocks
+  native form submission.
+- Sending text, preparing attachments and completing voice input retain the
+  originating session and preserve newer drafts when asynchronous work finishes.
+- Windows terminal fallback passes its directory as data. Headless argument
+  prompts require a native executable or a provider with stdin prompt transport
+  when an unresolved Windows command shim would otherwise interpret the prompt.
+  Trial CLI updates validate the executable selected after shim resolution.
+- Instruction injection records cleanup intent before changing user files.
+  Probe recovery checks identity captured from the owned process at startup;
+  older or unverifiable records are retained with a warning for manual recovery.
+- The Rust TLS dependency resolves to rustls 0.23.46.
+- Web Push signs a normalized origin and a single contact URI. Unauthenticated
+  WebSockets have a bounded wait and connection count. Concurrent in-app file
+  saves report a conflict, and attachments rejected before journal acceptance
+  remove only the newly created file.
+- Files previews discard superseded responses and keep saves attached to the
+  file and editor that started them. Git and Review tabs only reconnect to a
+  matching repository, including when restoring tabs after a restart.
+- History viewers discard results from closed or replaced views. Completing
+  an earlier AI icon upload preserves a newly opened provider form. Memo editors
+  keep IME conversion Enter separate from submitting or saving text.
+- SVG files use external-open or download actions instead of an unsupported
+  in-app image preview.
 - **Editing a minified dependency no longer marks its unchanged text as a new
   secret.** Staged scans retain the baseline only for occurrences entirely in
   identical parts of a single-line replacement; new occurrences still block.

@@ -13,7 +13,7 @@ use crate::{
 };
 use axum::extract::ws::{Message as WsMessage, WebSocket};
 use futures_util::{
-    SinkExt, StreamExt,
+    Sink, SinkExt, StreamExt,
     stream::{FuturesUnordered, SplitSink, SplitStream},
 };
 use std::{
@@ -48,6 +48,12 @@ impl Drop for RunGuard {
 
 pub const MAX_PAYLOAD_BYTES: usize = 4 * 1024 * 1024;
 pub const UI_PING_INTERVAL: Duration = Duration::from_secs(30);
+/// First complete JSON authentication must arrive within this absolute window;
+/// control frames do not extend it. Normal authenticated sessions have no such limit.
+pub const PREAUTH_TIMEOUT: Duration = Duration::from_secs(10);
+/// A shared bound on upgraded or upgrading sockets still awaiting authentication.
+/// HTTP connections and authenticated UI/wrapper sockets do not hold a permit.
+pub const MAX_PREAUTH_SOCKETS: usize = 64;
 type Warning = dyn Fn(&str, &SessionError) + Send + Sync;
 
 /// Preparation which the fixed registration caller completes before allowing
@@ -78,6 +84,7 @@ pub struct WebSocketService {
     registration_preparation: Option<Arc<dyn RegistrationPreparation>>,
     runs: Arc<RunOwner>,
     ordinary: Option<Arc<crate::application::ordinary_spawn::OrdinarySpawnService>>,
+    preauth: Arc<tokio::sync::Semaphore>,
 }
 impl WebSocketService {
     pub fn new(
@@ -100,6 +107,7 @@ impl WebSocketService {
             registration_preparation: None,
             runs: Arc::default(),
             ordinary: None,
+            preauth: Arc::new(tokio::sync::Semaphore::new(MAX_PREAUTH_SOCKETS)),
         }
     }
     pub fn with_startup_owner(
@@ -111,7 +119,10 @@ impl WebSocketService {
     }
     /// Called before upgrade. Unlike HTTP guards, WebSocket token authentication
     /// occurs only after receiving the first complete JSON frame.
-    pub fn handshake(&self, request: &Request) -> Result<(), Response> {
+    pub fn handshake(
+        &self,
+        request: &Request,
+    ) -> Result<tokio::sync::OwnedSemaphorePermit, Response> {
         let snapshot = self
             .services
             .config
@@ -121,9 +132,15 @@ impl WebSocketService {
             request,
             &snapshot.config,
             i64::from(self.services.bound_port()),
-        )
+        )?;
+        reserve_preauth(&self.preauth)
     }
-    pub async fn run(self: Arc<Self>, socket: WebSocket, request: Request) {
+    pub async fn run(
+        self: Arc<Self>,
+        socket: WebSocket,
+        request: Request,
+        preauth: tokio::sync::OwnedSemaphorePermit,
+    ) {
         let guard = {
             let mut state = self
                 .runs
@@ -136,7 +153,7 @@ impl WebSocketService {
             state.active += 1;
             RunGuard(self.runs.clone())
         };
-        if let Err(error) = self.run_inner(socket, request).await {
+        if let Err(error) = self.run_inner(socket, request, preauth).await {
             (self.warning)("websocket closed", &error);
         }
         drop(guard);
@@ -188,9 +205,14 @@ impl WebSocketService {
             notified.await;
         }
     }
-    async fn run_inner(&self, socket: WebSocket, request: Request) -> Result<(), SessionError> {
+    async fn run_inner(
+        &self,
+        socket: WebSocket,
+        request: Request,
+        preauth: tokio::sync::OwnedSemaphorePermit,
+    ) -> Result<(), SessionError> {
         let (writer, mut reader) = socket.split();
-        let first = receive(&mut reader, &self.shutdown)
+        let first = receive_first(&mut reader, &self.shutdown)
             .await?
             .ok_or(SessionError::Cancelled)?;
         // Capture before token checking; revoke between authentication and core
@@ -210,6 +232,7 @@ impl WebSocketService {
         ) {
             return Err(SessionError::AuthenticationExpired);
         }
+        drop(preauth);
         let writer = Box::new(WsWriter(writer));
         if first.role == "ui" {
             self.services
@@ -474,9 +497,24 @@ impl WebSocketService {
                                 Err(error) => break Err(error),
                             }
                             if let Some(details) = self.core.details(session) {
+                                let authority = if !message.approval_candidate_key.is_empty()
+                                    || message.approval_source_epoch != 0
+                                {
+                                    InputAuthority::UiApproval {
+                                        ui: binding,
+                                        answer: if message.sent_text.is_empty() { message.text.clone() } else { message.sent_text },
+                                        identity: CandidateIdentity {
+                                            key: message.approval_candidate_key,
+                                            source_epoch: ApprovalSourceEpoch(message.approval_source_epoch),
+                                            shape: String::new(),
+                                        },
+                                    }
+                                } else {
+                                    InputAuthority::Ui(binding)
+                                };
                                 // Invocation reserves the FIFO ticket synchronously;
                                 // polling concurrent futures cannot reorder the frames.
-                                if inputs.send(self.core.submit(details.binding, InputRequest { bytes: message.text.into_bytes(), authority: InputAuthority::Ui(binding) }, at, &cancel)).is_err() {
+                                if inputs.send(self.core.submit(details.binding, InputRequest { bytes: message.text.into_bytes(), authority }, at, &cancel)).is_err() {
                                     break Err(SessionError::Shutdown);
                                 }
                             }
@@ -692,18 +730,82 @@ impl FrameWriter for WsWriter {
                 .map_err(|error| SessionError::Transport(error.to_string()))
         })
     }
+    fn write_guarded<'a>(
+        &'a mut self,
+        frame: WireFrame,
+        guard: InputSendGuard<'a>,
+    ) -> CoreFuture<'a, Result<(), SessionError>> {
+        Box::pin(async move {
+            let message = match frame {
+                WireFrame::Text(text) => WsMessage::Text(text.into()),
+                WireFrame::Close => WsMessage::Close(None),
+            };
+            std::future::poll_fn(|cx| std::pin::Pin::new(&mut self.0).poll_ready(cx))
+                .await
+                .map_err(|error| SessionError::Transport(error.to_string()))?;
+            // The core validates and calls start_send under one state lock.
+            // Only this synchronous dispatch is inside that critical section;
+            // flushing the network occurs after the core releases its lock.
+            {
+                let mut message = Some(message);
+                let mut dispatch = || {
+                    let message = message.take().ok_or_else(|| {
+                        SessionError::InvalidRequest("approval frame dispatched twice".into())
+                    })?;
+                    std::pin::Pin::new(&mut self.0)
+                        .start_send(message)
+                        .map_err(|error| SessionError::Transport(error.to_string()))
+                };
+                guard(&mut dispatch)?;
+            }
+            self.0
+                .flush()
+                .await
+                .map_err(|error| SessionError::Transport(error.to_string()))
+        })
+    }
 }
-async fn receive(
-    reader: &mut SplitStream<WebSocket>,
+fn reserve_preauth(
+    capacity: &Arc<tokio::sync::Semaphore>,
+) -> Result<tokio::sync::OwnedSemaphorePermit, Response> {
+    capacity.clone().try_acquire_owned().map_err(|_| {
+        Response::error(
+            429,
+            "too_many_unauthenticated_sockets",
+            "WebSocket authentication capacity is full",
+        )
+    })
+}
+async fn receive_first<S>(
+    reader: &mut S,
     cancel: &Cancellation,
-) -> Result<Option<proto::Message>, SessionError> {
+) -> Result<Option<proto::Message>, SessionError>
+where
+    S: futures_util::Stream<Item = Result<WsMessage, axum::Error>> + Unpin,
+{
+    tokio::time::timeout(PREAUTH_TIMEOUT, receive(reader, cancel))
+        .await
+        .map_err(|_| SessionError::AuthenticationExpired)?
+}
+async fn receive<S>(
+    reader: &mut S,
+    cancel: &Cancellation,
+) -> Result<Option<proto::Message>, SessionError>
+where
+    S: futures_util::Stream<Item = Result<WsMessage, axum::Error>> + Unpin,
+{
     loop {
         let frame = tokio::select! { _ = cancel.cancelled() => return Ok(None), frame = reader.next() => match frame { Some(Ok(frame)) => frame, Some(Err(error)) => return Err(SessionError::Transport(error.to_string())), None => return Ok(None) } };
         let bytes = match frame {
             WsMessage::Text(text) => text.as_bytes().to_vec(),
             WsMessage::Binary(bytes) => bytes.to_vec(),
             WsMessage::Close(_) => return Ok(None),
-            WsMessage::Ping(_) | WsMessage::Pong(_) => continue,
+            WsMessage::Ping(_) | WsMessage::Pong(_) => {
+                // A continuously-ready control stream must still yield to the
+                // absolute authentication deadline and shutdown cancellation.
+                tokio::task::yield_now().await;
+                continue;
+            }
         };
         if bytes.len() > MAX_PAYLOAD_BYTES {
             return Err(SessionError::InvalidRequest(
@@ -728,6 +830,66 @@ fn decode_payload(bytes: &[u8]) -> Result<proto::Message, SessionError> {
 mod tests {
     use super::*;
     use crate::hub::pin::AuthService;
+    #[test]
+    fn audit_a01_preauth_capacity_is_released_by_permit_drop() {
+        let capacity = Arc::new(tokio::sync::Semaphore::new(MAX_PREAUTH_SOCKETS));
+        let mut permits = (0..MAX_PREAUTH_SOCKETS)
+            .map(|_| reserve_preauth(&capacity).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(reserve_preauth(&capacity).unwrap_err().status, 429);
+        drop(permits.pop());
+        assert!(reserve_preauth(&capacity).is_ok());
+        drop(permits);
+        assert_eq!(capacity.available_permits(), MAX_PREAUTH_SOCKETS);
+    }
+    #[tokio::test(start_paused = true)]
+    async fn audit_a01_first_message_keeps_payload_and_cancellation_guards() {
+        let cancel = Cancellation::default();
+        let mut valid = futures_util::stream::iter([Ok(WsMessage::Text(
+            "{\"type\":\"auth\",\"role\":\"ui\"}".into(),
+        ))]);
+        assert_eq!(
+            receive_first(&mut valid, &cancel)
+                .await
+                .unwrap()
+                .unwrap()
+                .role,
+            "ui"
+        );
+        let mut large = futures_util::stream::iter([Ok(WsMessage::Binary(
+            vec![b' '; MAX_PAYLOAD_BYTES + 1].into(),
+        ))]);
+        assert!(matches!(
+            receive_first(&mut large, &cancel).await,
+            Err(SessionError::InvalidRequest(_))
+        ));
+        cancel.cancel();
+        let mut silent = futures_util::stream::pending();
+        assert!(receive_first(&mut silent, &cancel).await.unwrap().is_none());
+    }
+    #[tokio::test(start_paused = true)]
+    async fn audit_a01_silent_and_control_only_peers_have_an_absolute_deadline() {
+        let cancel = Cancellation::default();
+        let mut silent = futures_util::stream::pending();
+        let result =
+            tokio::time::timeout(PREAUTH_TIMEOUT * 2, receive_first(&mut silent, &cancel)).await;
+        assert!(
+            matches!(result, Ok(Err(SessionError::AuthenticationExpired))),
+            "silent peer outlived authentication deadline"
+        );
+        let mut controls = Box::pin(futures_util::stream::unfold((), |()| async {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            Some((Ok(WsMessage::Ping(Vec::new().into())), ()))
+        }));
+        let started = tokio::time::Instant::now();
+        let result =
+            tokio::time::timeout(PREAUTH_TIMEOUT * 2, receive_first(&mut controls, &cancel)).await;
+        assert!(
+            matches!(result, Ok(Err(SessionError::AuthenticationExpired))),
+            "control peer extended authentication deadline"
+        );
+        assert_eq!(tokio::time::Instant::now() - started, PREAUTH_TIMEOUT);
+    }
     fn request() -> Request {
         Request {
             method: "GET".into(),

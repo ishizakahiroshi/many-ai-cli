@@ -789,6 +789,90 @@ fn attachment_binding() -> crate::proto::core::SessionBinding {
 }
 
 #[test]
+fn audit_a05_rejected_journal_binding_removes_only_the_new_attachment() {
+    use crate::{
+        proto::core::*,
+        terminal::journal::{JournalOptions, SessionJournal},
+    };
+    let (_temp, service, _) = setup();
+    let journal = std::sync::Arc::new(SessionJournal::new(
+        service.paths.clone(),
+        None,
+        JournalOptions {
+            session_enabled: false,
+            max_bytes: 0,
+        },
+    ));
+    journal
+        .open(
+            LiveSessionId(7),
+            "claude",
+            "synthetic",
+            crate::proto::time::Timestamp::now(),
+            false,
+        )
+        .unwrap();
+    let service = service.with_history(journal);
+    let dir = service
+        .paths
+        .resource(crate::config::Resource::Attachments)
+        .join("7");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("existing.txt"), b"keep synthetic attachment").unwrap();
+    let stale = SessionBinding {
+        wrapper: WrapperConnectionId(1),
+        ..attachment_binding()
+    };
+    let response = service
+        .save_attachment(stale, "claude", "rejected.txt", b"synthetic", |_| true)
+        .unwrap_err();
+    assert_eq!(response.status, 500);
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+    assert_eq!(
+        std::fs::read(dir.join("existing.txt")).unwrap(),
+        b"keep synthetic attachment"
+    );
+}
+
+#[test]
+fn audit_a05_ambiguous_journal_failure_keeps_a_possible_committed_reference() {
+    use crate::proto::core::*;
+    struct AmbiguousJournal(std::sync::Mutex<Option<PathBuf>>);
+    impl PersistenceEffectSink for AmbiguousJournal {
+        fn apply(&self, _: PersistenceEffect) -> std::result::Result<(), SessionError> {
+            unreachable!("attachment persistence must be bound")
+        }
+        fn apply_bound(
+            &self,
+            _: SessionBinding,
+            _: PersistenceBindingScope,
+            effect: PersistenceEffect,
+        ) -> std::result::Result<(), SessionError> {
+            let PersistenceEffect::Event { event, .. } = effect else {
+                unreachable!()
+            };
+            *self.0.lock().unwrap() = Some(PathBuf::from(event.0["path"].as_str().unwrap()));
+            Err(SessionError::Transport("synthetic ambiguous commit".into()))
+        }
+    }
+    let (_temp, service, _) = setup();
+    let journal = std::sync::Arc::new(AmbiguousJournal(Default::default()));
+    let service = service.with_history(journal.clone());
+    let response = service
+        .save_attachment(
+            attachment_binding(),
+            "claude",
+            "retained.txt",
+            b"synthetic",
+            |_| true,
+        )
+        .unwrap_err();
+    assert_eq!(response.status, 500);
+    let possible_reference = journal.0.lock().unwrap().clone().unwrap();
+    assert_eq!(fs::read(possible_reference).unwrap(), b"synthetic");
+}
+
+#[test]
 fn attachment_rejects_stale_core_and_journal_bindings() {
     use crate::{
         proto::core::*,

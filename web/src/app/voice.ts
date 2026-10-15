@@ -4,7 +4,7 @@ import { t } from '../i18n.js';
 import { showToast } from './util.js';
 import { STORAGE_VOICE_INPUT_DISABLED_KEY, getVoiceEngine } from './user-prefs.js';
 import { activeSessionId, terminals } from './state.js';
-import { autoExpand, buildSendText, doSend, inputEl, set_voiceActive, set_voiceAudioActive, updateInputClearButton, updateSlashMenu, voiceAudioActive } from '../app.js';
+import { autoExpand, buildSendText, captureComposerOwner, doSend, inputEl, isComposerOwnerLive, replaceComposerDraftInput, set_voiceActive, set_voiceAudioActive, updateInputClearButton, updateSlashMenu, voiceAudioActive, type ComposerOwner } from '../app.js';
 import { isTerminalAtBottom, refitActiveTerminalAfterLayout } from './terminal.js';
 import { getActiveTriggerPhrase, textEndsWithTriggerPhrase } from './settings.js';
 import { diagnosticSeverity, normalizeVoiceErrorCode, shouldShowRecoveryGuide } from '../vendor/vtype-core/index.js';
@@ -146,6 +146,9 @@ import { voiceInput } from './voice-engine.js';
 
   let interimStart = 0;
   let preVoiceText = '';
+  let voiceOwner: ComposerOwner | null = null;
+  let expectedVoiceText = '';
+  let recordingId: number | null = null;
 
   let animFrame = null;
   let wavePhase = 0;
@@ -287,8 +290,7 @@ import { voiceInput } from './voice-engine.js';
   }
 
   // ---- core のイベント → 既存の画面 ----
-  // 旧コードは古いインスタンスから遅れて届くイベントも区別せずに画面へ反映していたので、
-  // ここでも recognitionId / isCurrent で絞らない（確定直後の最後の言葉が消えないように）。
+  // 確定直後の遅い結果も同じ録音IDなら受け取り、次の録音や別セッションの入力とは分ける。
   rec.on('audioActive', setVoiceAudioActive);
 
   rec.on('start', () => {
@@ -325,7 +327,8 @@ import { voiceInput } from './voice-engine.js';
     }
   });
 
-  rec.on('result', ({ transcript, isFinal }) => {
+  rec.on('result', ({ transcript, isFinal, recognitionId }) => {
+    if (!voiceOwner || recognitionId !== recordingId) return;
     const finishProbe = probeSpan('ui.freeze', () => ({ phase: 'voice.result', size: transcript.length }));
     try {
       voiceBar.classList.remove('voice-processing');
@@ -334,19 +337,18 @@ import { voiceInput } from './voice-engine.js';
         voiceIntensityTarget = Math.max(voiceIntensityTarget, 0.85);
       }
       lastInterimLen = isFinal ? 0 : transcript.length;
-      inputEl.value = inputEl.value.slice(0, interimStart) + transcript;
+      const next = expectedVoiceText.slice(0, interimStart) + transcript + (isFinal ? ' ' : '');
+      if (!replaceComposerDraftInput(voiceOwner, expectedVoiceText, next)) return;
+      expectedVoiceText = next;
       if (isFinal) {
-        inputEl.value += ' ';
-        interimStart = inputEl.value.length;
+        interimStart = next.length;
         const _tp = getActiveTriggerPhrase();
-        if (_tp && activeSessionId !== null && textEndsWithTriggerPhrase(buildSendText(), _tp)) {
+        if (_tp && isComposerOwnerLive(voiceOwner) && activeSessionId === voiceOwner.sessionId && textEndsWithTriggerPhrase(buildSendText(), _tp)) {
           rec.requestStop();
-          doSend(activeSessionId);
+          doSend(voiceOwner.sessionId);
           return;
         }
       }
-      autoExpand();
-      updateSlashMenu();
     } finally { finishProbe?.(); }
   });
 
@@ -364,19 +366,24 @@ import { voiceInput } from './voice-engine.js';
     }
     // 設定で無効化されている場合は録音を開始しない（Alt+V 経由の click も含む）
     if (localStorage.getItem(STORAGE_VOICE_INPUT_DISABLED_KEY) === '1') return;
+    voiceOwner = captureComposerOwner();
+    if (!voiceOwner) return;
     preVoiceText = inputEl.value;
     if (preVoiceText.length > 0 && !/\s$/.test(preVoiceText)) {
       inputEl.value = preVoiceText + ' ';
       updateInputClearButton();
     }
     interimStart = inputEl.value.length;
+    expectedVoiceText = inputEl.value;
     // start() の例外は core が error イベント（notify=true）で返す。
     rec.start();
+    recordingId = rec.getRecognitionId();
   });
 
   cancelBtn.addEventListener('click', () => {
-    inputEl.value = preVoiceText;
-    autoExpand();
+    replaceComposerDraftInput(voiceOwner, expectedVoiceText, preVoiceText);
+    voiceOwner = null;
+    recordingId = null;
     rec.abort();
   });
 

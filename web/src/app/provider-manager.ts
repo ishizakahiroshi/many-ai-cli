@@ -1025,7 +1025,8 @@ function initProviderManager(): void {
     }
     // The picture goes to the Hub only now that the AI itself is saved (a new AI does not exist before that).
     const imageFailure = await applyIconImageDraft(savedId, submittedImage, submittedImageExisting);
-    hideForm();
+    // A newer form may have opened while the picture was uploading.
+    if (detailGuard.isCurrent(requestToken)) hideForm();
     document.dispatchEvent(new CustomEvent('provider-enrollment-saved', { detail: { id: savedId } }));
     await load();
     // load() rewrites the status line, so the warning is set after it.

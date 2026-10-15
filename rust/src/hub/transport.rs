@@ -237,9 +237,10 @@ async fn handle(
     if request.path == "/ws"
         && let Some(websockets) = state.websockets
     {
-        if let Err(error) = websockets.handshake(&request) {
-            return response(error);
-        }
+        let preauth = match websockets.handshake(&request) {
+            Ok(permit) => permit,
+            Err(error) => return response(error),
+        };
         let upgrade = match WebSocketUpgrade::from_request_parts(&mut parts, &()).await {
             Ok(upgrade) => upgrade,
             Err(error) => return error.into_response(),
@@ -247,7 +248,7 @@ async fn handle(
         return upgrade
             .max_message_size(super::websocket::MAX_PAYLOAD_BYTES)
             .max_frame_size(super::websocket::MAX_PAYLOAD_BYTES)
-            .on_upgrade(move |socket| websockets.run(socket, request))
+            .on_upgrade(move |socket| websockets.run(socket, request, preauth))
             .into_response();
     }
     let captured_at = crate::proto::time::Timestamp::now();

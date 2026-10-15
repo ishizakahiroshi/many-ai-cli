@@ -152,11 +152,12 @@ function gcvSyncOlderBtn() {
 }
 
 async function gcvLoadLatest(sid: number) {
-  if (gcvLoading) return;
+  if (!gcvState || gcvLoading) return;
+  const state = gcvState;
   gcvLoading = true;
   try {
     const resp = await gcvFetchPage(sid, -1, GCV_PAGE_MESSAGES);
-    if (!gcvState || gcvState.sid !== sid) return;
+    if (gcvState !== state) return;
     gcvState.total = resp.total || 0;
     gcvState.offset = resp.offset || 0;
     const list = gcvRoot ? gcvRoot.querySelector('.gcv-list') : null;
@@ -175,23 +176,25 @@ async function gcvLoadLatest(sid: number) {
     const body = gcvRoot.querySelector('.gcv-body');
     if (body) body.scrollTop = body.scrollHeight;
   } catch (err) {
+    if (gcvState !== state) return;
     console.warn('[grok-chat-viewer] load failed', err);
     showToast(gcvLabel('gcv_load_failed', 'Grok の会話履歴を取得できませんでした'));
     closeGrokChatViewer();
   } finally {
-    gcvLoading = false;
+    if (gcvState === state) gcvLoading = false;
   }
 }
 
 async function gcvLoadOlder() {
   if (!gcvState || gcvLoading || gcvState.offset <= 0) return;
+  const state = gcvState;
   gcvLoading = true;
   const sid = gcvState.sid;
   try {
     const limit = Math.min(GCV_PAGE_MESSAGES, gcvState.offset);
     const offset = gcvState.offset - limit;
     const resp = await gcvFetchPage(sid, offset, limit);
-    if (!gcvState) return;
+    if (gcvState !== state) return;
     gcvState.total = resp.total || gcvState.total;
     gcvState.offset = resp.offset ?? offset;
     const list = gcvRoot ? gcvRoot.querySelector('.gcv-list') : null;
@@ -206,10 +209,11 @@ async function gcvLoadOlder() {
     gcvSyncOlderBtn();
     gcvUpdateRangeLabel();
   } catch (err) {
+    if (gcvState !== state) return;
     console.warn('[grok-chat-viewer] load older failed', err);
     showToast(gcvLabel('gcv_load_failed', 'Grok の会話履歴を取得できませんでした'));
   } finally {
-    gcvLoading = false;
+    if (gcvState === state) gcvLoading = false;
   }
 }
 
@@ -220,6 +224,11 @@ export function openGrokChatViewer(sid: number) {
   gcvApplyLabels();
   root.hidden = false;
   gcvState = { sid, total: 0, offset: 0 };
+  gcvLoading = false;
+  const list = root.querySelector('.gcv-list');
+  if (list) list.textContent = '';
+  gcvSyncOlderBtn();
+  gcvUpdateRangeLabel();
   gcvLoadLatest(sid);
 }
 
@@ -230,6 +239,7 @@ export function isGrokChatViewerOpen(): boolean {
 export function closeGrokChatViewer() {
   if (gcvRoot) gcvRoot.hidden = true;
   gcvState = null;
+  gcvLoading = false;
 }
 
 // セッション切替とタブ切替の両方で閉じる（別セッションの履歴を誤表示しない）。

@@ -839,9 +839,9 @@ impl HubComposition {
         );
         {
             let service = Arc::downgrade(&subscriptions);
-            spawner.set_probe_start_observer(Arc::new(move |label, pid| {
+            spawner.set_probe_start_observer(Arc::new(move |label, pid, identity| {
                 if let Some(service) = service.upgrade() {
-                    service.update_probe_pid(label, pid);
+                    service.update_probe_pid(label, pid, identity);
                 }
             }))?;
         }

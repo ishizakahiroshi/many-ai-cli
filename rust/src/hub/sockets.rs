@@ -27,6 +27,17 @@ pub enum WireFrame {
 /// only synthetic writers; a successful call means the frame was flushed.
 pub trait FrameWriter: Send {
     fn write<'a>(&'a mut self, frame: WireFrame) -> CoreFuture<'a, Result<(), SessionError>>;
+    fn write_guarded<'a>(
+        &'a mut self,
+        _frame: WireFrame,
+        _guard: InputSendGuard<'a>,
+    ) -> CoreFuture<'a, Result<(), SessionError>> {
+        Box::pin(async {
+            Err(SessionError::InvalidRequest(
+                "guarded frame writer unavailable".into(),
+            ))
+        })
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Binding {
@@ -288,6 +299,17 @@ impl SocketRegistry {
         timeout: Option<Duration>,
         check_authority: bool,
     ) -> Result<(), SessionError> {
+        self.send_frame_guarded(binding, frame, timeout, check_authority, None)
+            .await
+    }
+    async fn send_frame_guarded<'a>(
+        &'a self,
+        binding: Binding,
+        frame: WireFrame,
+        timeout: Option<Duration>,
+        check_authority: bool,
+        guard: Option<InputSendGuard<'a>>,
+    ) -> Result<(), SessionError> {
         let socket = self.socket(binding)?;
         let send = async {
             socket.wait_ready().await?;
@@ -302,9 +324,15 @@ impl SocketRegistry {
                     _ => SessionError::StaleBinding,
                 });
             }
+            let write = async {
+                match guard {
+                    Some(guard) => writer.write_guarded(frame, guard).await,
+                    None => writer.write(frame).await,
+                }
+            };
             tokio::select! {
                 _ = socket.closed.cancelled() => Err(SessionError::Cancelled),
-                result = writer.write(frame) => result,
+                result = write => result,
             }
         };
         let result = match timeout {
@@ -438,6 +466,23 @@ impl WrapperTransport for SocketRegistry {
         Box::pin(async move {
             self.send_frame(Binding::Wrapper(binding), encode(&message)?, None, true)
                 .await
+        })
+    }
+    fn send_guarded<'a>(
+        &'a self,
+        binding: SessionBinding,
+        message: proto::Message,
+        guard: InputSendGuard<'a>,
+    ) -> CoreFuture<'a, Result<(), SessionError>> {
+        Box::pin(async move {
+            self.send_frame_guarded(
+                Binding::Wrapper(binding),
+                encode(&message)?,
+                None,
+                true,
+                Some(guard),
+            )
+            .await
         })
     }
 }

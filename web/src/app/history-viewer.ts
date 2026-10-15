@@ -150,6 +150,16 @@ function ensureViewerTerm() {
   return hvTerm;
 }
 
+function disposeViewerTerm() {
+  // reset() does not discard xterm's queued asynchronous writes. A replaced
+  // view must never reuse the terminal receiving a previous view's bytes.
+  const previous = hvTerm;
+  hvTerm = null;
+  hvFit = null;
+  try { previous?.dispose(); } catch (_) {}
+  hvRoot?.querySelector('.hv-body')?.replaceChildren();
+}
+
 function hvDecodeChunk(b64: string): string {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
@@ -192,24 +202,28 @@ async function hvFetchPage(sid: number, offset: number) {
 
 async function hvGoto(offset: number) {
   if (!hvState || hvLoading) return;
+  const state = hvState;
   hvLoading = true;
   try {
-    const resp = await hvFetchPage(hvState.sid, offset);
+    const resp = await hvFetchPage(state.sid, offset);
+    if (hvState !== state) return;
     hvState.size = resp.size || 0;
     hvState.offset = resp.offset || 0;
+    disposeViewerTerm();
     const term = ensureViewerTerm();
     if (!term) return;
-    term.reset();
+    try { hvFit?.fit(); } catch (_) {}
     const text = hvSanitize(hvDecodeChunk(resp.data_b64 || ''), hvState.offset);
     if (text) {
-      term.write(text, () => { try { term.scrollToTop(); } catch (_) {} });
+      term.write(text, () => { if (hvState === state && hvTerm === term) { try { term.scrollToTop(); } catch (_) {} } });
     }
     hvUpdateRangeLabel();
   } catch (err) {
+    if (hvState !== state) return;
     console.warn('[history-viewer] load failed', err);
     showToast(hvLabel('hv_load_failed', 'ログの取得に失敗しました'));
   } finally {
-    hvLoading = false;
+    if (hvState === state) hvLoading = false;
   }
 }
 
@@ -221,9 +235,14 @@ export function openHistoryViewer(sid: number, opts: { offset?: number } = {}) {
   root.hidden = false;
   hideHistoryHint();
   hvState = { sid, size: 0, offset: 0 };
+  hvLoading = false;
+  hvUpdateRangeLabel();
+  disposeViewerTerm();
   const term = ensureViewerTerm();
+  const state = hvState;
+  const fit = hvFit;
   if (term && hvFit) {
-    requestAnimationFrame(() => { try { hvFit.fit(); } catch (_) {} });
+    requestAnimationFrame(() => { if (hvState === state && hvTerm === term) { try { fit.fit(); } catch (_) {} } });
   }
   // 既定（ボタン経由）: 先頭ページ。
   // offset=-1: 末尾ページ（ホイール上自動展開時の「直近の過去」起点）。
@@ -237,7 +256,8 @@ export function isHistoryViewerOpen(): boolean {
 export function closeHistoryViewer() {
   if (hvRoot) hvRoot.hidden = true;
   hvState = null;
-  if (hvTerm) { try { hvTerm.reset(); } catch (_) {} }
+  hvLoading = false;
+  disposeViewerTerm();
 }
 
 // セッション切替とタブ切替の両方で閉じる（別セッションのログを誤表示しない）。

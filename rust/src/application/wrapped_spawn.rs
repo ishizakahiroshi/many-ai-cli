@@ -29,7 +29,7 @@ use tokio::sync::watch;
 
 pub type SpawnFailureCallback =
     Arc<dyn Fn(SpawnAttemptId, &str) -> Result<(), SessionError> + Send + Sync>;
-pub type NativeProbeStartObserver = Arc<dyn Fn(&str, u32) + Send + Sync>;
+pub type NativeProbeStartObserver = Arc<dyn Fn(&str, u32, Option<&str>) + Send + Sync>;
 pub type SpawnWarningCallback = Arc<dyn Fn(&'static str) + Send + Sync>;
 
 // Destructor paths must not inherit a panic from application callbacks. Forget
@@ -582,7 +582,8 @@ async fn lifecycle(
             entry.notify();
             if spec.usage_probe
                 && let Some(observer) = inner.probe_started.get()
-                && contained(|| observer(&spec.label, receipt.pid())).is_none()
+                && contained(|| observer(&spec.label, receipt.pid(), receipt.recovery_identity()))
+                    .is_none()
             {
                 warn_safely(&inner.warn, "probe native start observer panicked");
             }

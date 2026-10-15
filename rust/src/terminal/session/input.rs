@@ -11,6 +11,20 @@ struct FrameReservationGuard<'a> {
     engine: &'a SessionEngine,
     reservation: Option<InputReservation>,
 }
+impl Session {
+    fn ui_approval_matches(&self, identity: &CandidateIdentity) -> bool {
+        !identity.key.is_empty()
+            && identity.source_epoch.0 != 0
+            && self
+                .approval
+                .record()
+                .is_some_and(|record| record.data().candidate.same_candidate(identity))
+            && !self
+                .approval
+                .consumed()
+                .is_some_and(|answered| answered.same_candidate(identity))
+    }
+}
 impl Drop for FrameReservationGuard<'_> {
     fn drop(&mut self) {
         if let Some(reservation) = self.reservation.take() {
@@ -42,12 +56,42 @@ impl SessionEngine {
         if !s.connected {
             return Err(SessionError::Transport("wrapper not connected".into()));
         }
+        // UiApproval holds an accepted UI-work lease over delivery. Membership
+        // may detach while that lease drains; the approval identity must remain
+        // valid even for an already accepted, delayed Enter.
+        if let InputAuthority::UiApproval { identity, .. } = authority
+            && !s.ui_approval_matches(identity)
+        {
+            return Err(SessionError::StaleBinding);
+        }
         if let InputAuthority::NativeApproval(action) = authority
             && !s.approval_action_matches(action)
         {
             return Err(SessionError::StaleBinding);
         }
         Ok(())
+    }
+    fn dispatch_ui_approval(
+        &self,
+        binding: SessionBinding,
+        authority: &InputAuthority,
+        dispatch: &mut dyn FnMut() -> Result<(), SessionError>,
+    ) -> Result<(), SessionError> {
+        let InputAuthority::UiApproval { identity, .. } = authority else {
+            return Err(SessionError::InvalidRequest(
+                "missing approval input identity".into(),
+            ));
+        };
+        let mut state = lock(&self.state);
+        let session = state.session(binding)?;
+        if !session.connected || !session.ui_approval_matches(identity) {
+            return Err(SessionError::StaleBinding);
+        }
+        // Keep this guard through synchronous start_send. Another runtime
+        // thread cannot replace the approval between validation and dispatch.
+        let result = dispatch();
+        drop(state);
+        result
     }
     pub(super) async fn write_frame(
         &self,
@@ -73,6 +117,25 @@ impl SessionEngine {
                 },
                 frame,
             )
+        } else if let InputAuthority::UiApproval { identity, .. } = authority {
+            // Validate and reserve the exact frame under the same state lock.
+            let mut state = lock(&self.state);
+            let s = state.session(binding)?;
+            if !s.connected || !s.ui_approval_matches(identity) {
+                return Err(SessionError::StaleBinding);
+            }
+            let frame = s.input.reserve(binding.wrapper, bytes);
+            // Approval consent is never replayed without its identity after a
+            // disconnect. Keep the sequence/ACK protocol, but do not retain a
+            // raw-byte inflight entry that reattach could resend as Internal.
+            s.input.release(binding.wrapper, frame.seq);
+            (
+                InputReservation {
+                    binding,
+                    sequence: frame.seq,
+                },
+                frame,
+            )
         } else {
             self.reserve_frame(binding, bytes)?
         };
@@ -86,19 +149,26 @@ impl SessionEngine {
             authority,
             &frame.bytes,
         );
-        let result = self
-            .transport
-            .send(
-                binding,
-                proto::Message {
-                    r#type: "pty_input".into(),
-                    session_id: binding.session.0,
-                    data: frame.bytes,
-                    input_seq: frame.seq.0,
-                    ..Default::default()
-                },
-            )
-            .await;
+        let message = proto::Message {
+            r#type: "pty_input".into(),
+            session_id: binding.session.0,
+            data: frame.bytes,
+            input_seq: frame.seq.0,
+            ..Default::default()
+        };
+        let result = if matches!(authority, InputAuthority::UiApproval { .. }) {
+            self.transport
+                .send_guarded(
+                    binding,
+                    message,
+                    Box::new(move |dispatch| {
+                        self.dispatch_ui_approval(binding, authority, dispatch)
+                    }),
+                )
+                .await
+        } else {
+            self.transport.send(binding, message).await
+        };
         result?;
         guard.reservation = None;
         Ok(frame.seq)
@@ -319,7 +389,7 @@ impl SessionEngine {
         let mut title_meta = None;
         let raw = proto::wire::go_utf8_lossy(&request.bytes);
         if let Some(text) = confirmed_turn_text(&raw) {
-            if matches!(request.authority, InputAuthority::Ui(_)) {
+            if request.authority.ui_binding().is_some() {
                 s.completion.discard_text_question();
                 if text == "/clear" {
                     s.snapshot.first_message.clear();
@@ -378,7 +448,10 @@ impl SessionEngine {
                     s.summary_update(true)
                 });
             }
-            if !matches!(request.authority, InputAuthority::NativeApproval(_)) {
+            if !matches!(
+                request.authority,
+                InputAuthority::NativeApproval(_) | InputAuthority::UiApproval { .. }
+            ) {
                 let closure = s.approval.submitted_turn(&text, now);
                 if !closure.0.is_empty() {
                     effects.0.extend(closure.0);
@@ -388,7 +461,7 @@ impl SessionEngine {
                 }
             }
         }
-        if matches!(request.authority, InputAuthority::Ui(_)) {
+        if request.authority.ui_binding().is_some() {
             post.0.push(history(
                 binding.session,
                 now,
@@ -423,6 +496,36 @@ impl SessionEngine {
         if let Err(error) = self.apply_effects(effects).await {
             self.warn("post-input effects", &error);
         }
+    }
+    fn finish_ui_approval(
+        &self,
+        binding: SessionBinding,
+        identity: &CandidateIdentity,
+        text: &str,
+        now: Timestamp,
+    ) -> CoreEffects {
+        let mut state = lock(&self.state);
+        let Ok(s) = state.session(binding) else {
+            return CoreEffects::default();
+        };
+        if !s.ui_approval_matches(identity) {
+            return CoreEffects::default();
+        }
+        let consumed = s
+            .approval
+            .record()
+            .expect("checked approval record")
+            .data()
+            .candidate
+            .clone();
+        s.approval.mark_consumed(consumed);
+        // Match the UI consume policy, including its bounded answer text;
+        // native action commits have a separate untruncated-answer contract.
+        let mut effects = s.approval.close(ApprovalCloseReason::Answered, text, now);
+        if let Some(update) = s.refresh_approval_activity(now) {
+            effects.0.push(CoreEffect::Broadcast(update));
+        }
+        state.route(effects)
     }
     /// Read the canonical input gate for this exact wrapper incarnation.
     /// Observing an expired gate does not clear or otherwise mutate it.
@@ -490,7 +593,7 @@ impl InputQueue for SessionEngine {
             // Go holds an authorization read guard over accepted handleInput,
             // including persistence/Git capture and deferred Enter. Revocation
             // removes membership immediately but drains this guard before ACK.
-            let _accepted_ui = if let InputAuthority::Ui(ui) = request.authority {
+            let _accepted_ui = if let Some(ui) = request.authority.ui_binding() {
                 match self.authorize_ui_work(ui) {
                     Ok(guard) => Some(guard),
                     Err(_) => {
@@ -501,6 +604,22 @@ impl InputQueue for SessionEngine {
             } else {
                 None
             };
+            // The ticket may have waited while a different UI answered or
+            // replaced the approval. Reject before applying user-turn effects.
+            if let InputAuthority::UiApproval { .. } = &request.authority {
+                if self.input_valid(binding, &request.authority).is_err() {
+                    return receipt;
+                }
+                let mut state = lock(&self.state);
+                let Ok(s) = state.session(binding) else {
+                    return receipt;
+                };
+                // Deferred byte queues do not carry approval identities. A
+                // guarded answer must never be replayed later as free text.
+                if s.input.gated(now) || s.input.pending_len() > 0 {
+                    return receipt;
+                }
+            }
             let delivery_authority = if matches!(request.authority, InputAuthority::Ui(_)) {
                 InputAuthority::Internal
             } else {
@@ -529,6 +648,9 @@ impl InputQueue for SessionEngine {
                 };
                 let bypass = matches!(request.authority, InputAuthority::InitialPrompt);
                 if (!bypass && (s.input.gated(now) || s.input.pending_len() > 0)) || !s.connected {
+                    if matches!(request.authority, InputAuthority::UiApproval { .. }) {
+                        return receipt;
+                    }
                     let reason = if s.input.initial_prompt_phase() {
                         DeferredReason::InitialPrompt
                     } else {
@@ -555,13 +677,37 @@ impl InputQueue for SessionEngine {
             let result = self
                 .send_combined(binding, request.bytes.clone(), &delivery_authority, cancel)
                 .await;
+            if result.error.is_none()
+                && result.remainder.is_empty()
+                && !result.sequences.is_empty()
+                && !request.bytes.ends_with(b"\x1b[201~")
+                && let InputAuthority::UiApproval {
+                    identity, answer, ..
+                } = &request.authority
+            {
+                // A bracketed body keeps its record until the guarded Enter.
+                // The frontend sends no separate approval_consumed for these
+                // inputs, so it cannot close its own record ahead of delivery.
+                let effects = self.finish_ui_approval(binding, identity, answer, now);
+                if let Err(error) = self.apply_effects(effects).await {
+                    self.warn("approval input completion", &error);
+                }
+            }
             receipt.submit = result.submit;
+            if matches!(request.authority, InputAuthority::UiApproval { .. })
+                && matches!(result.error, Some(SessionError::StaleBinding))
+                && let Ok(session) = lock(&self.state).session(binding)
+            {
+                session.awaiting_submit_enter = false;
+            }
             if !result.remainder.is_empty() {
                 // Revoked/cancelled work is never silently resurrected on reconnect.
-                if !matches!(
-                    result.error,
-                    Some(SessionError::AuthenticationExpired | SessionError::Cancelled)
-                ) {
+                if !matches!(request.authority, InputAuthority::UiApproval { .. })
+                    && !matches!(
+                        result.error,
+                        Some(SessionError::AuthenticationExpired | SessionError::Cancelled)
+                    )
+                {
                     let mut state = lock(&self.state);
                     if let Some(s) = state
                         .sessions
