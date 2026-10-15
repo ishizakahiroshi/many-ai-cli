@@ -611,19 +611,17 @@ impl SubscriptionService {
                     && record.label.starts_with("usage-probe-")
                     && record.pid > 0
                     && record.pid != std::process::id()
-                {
-                    if record.version != 2
+                    && (record.version != 2
                         || record.process_identity.is_empty()
                         || self
                             .probe_hooks
                             .recover_identified_process(record.pid, &record.process_identity)
-                            .is_err()
-                    {
-                        (self.warning)(
-                            "usage probe recovery skipped: recorded process ownership is unverified; inspect the prior probe manually",
-                        );
-                        continue;
-                    }
+                            .is_err())
+                {
+                    (self.warning)(
+                        "usage probe recovery skipped: recorded process ownership is unverified; inspect the prior probe manually",
+                    );
+                    continue;
                 }
                 let _ = dir.remove_file(&name);
             }
