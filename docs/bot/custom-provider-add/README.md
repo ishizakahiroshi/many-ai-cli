@@ -132,10 +132,20 @@ Another session is editing these on the build branch. Touching them causes merge
 - `rust/src/application/main_program/context.rs`
 - `rust/src/application/session_workers/branch_refresh.rs`
 - `rust/src/files/branch.rs`, `rust/src/logging/` (all files), `rust/src/process/mod.rs`
-- `rust/src/terminal/session/` (all files)
+- `rust/src/terminal/session/` (all files), except `rust/src/terminal/session/observations.rs`, which Supplement 1 below allows
 - `rust/Cargo.toml`, `instrumentation.json`, `scripts/rust-local.ps1`
 
 Also: do not edit `.omitnix/index.json`. The owner's side regenerates it when taking your commits. Do not add dependencies, do not change CI workflows, and do not edit Go code.
+
+## Supplement 1 (2026-10-16): custom providers in approval detection
+
+This answers the stop report https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6213695185. It is a supplement, not a restart. Keep your local work and continue from where you stopped.
+
+- Finding confirmed on the owner's side: in `rust/src/terminal/session/observations.rs` (lines 82 to 86 at `34974b3a`), `eligible` contains `!s.custom_provider`, so custom provider sessions get no marker extraction and no native approval detection. The flag is set in `rust/src/terminal/session/lifecycle.rs` line 361.
+- The frozen Go version treats this differently, and Go is the behavior oracle here: `sessionApprovalDetectionEligible` in `internal/hub/approval_handler.go` (line 110) returns true for a built-in AI CLI or a registered custom provider, and false for `shell` and unknown providers. `internal/hub/custom_provider_approval_test.go` (`TestSessionApprovalDetectionEligible`) pins it. The Rust exclusion came with the first port of the session code and is a divergence, not a decision.
+- Owner's decision: you may edit `rust/src/terminal/session/observations.rs`, and only that file under `rust/src/terminal/session/`. Remove the custom-provider exclusion from `eligible` so that custom provider sessions get the same marker extraction and native approval detection as built-in providers, using the phrases from their own `<id>.json` plus `common` (`approval_phrases_for`). Keep the `usage_probe`, `shell`, terminal-state and resize-debounce conditions. Do not edit `lifecycle.rs` (another session has uncommitted changes there). Keep the `custom_provider` flag itself and its other uses.
+- If an existing Rust test pins the exclusion, change it to the Go rule and say so in the PR. Add a test: a custom provider session whose patterns include its approval text produces an approval candidate, and a `shell` session still does not.
+- If anything else under `rust/src/terminal/session/` would need to change, stop again and report it.
 
 ## How to proceed (one approval, then automatic)
 

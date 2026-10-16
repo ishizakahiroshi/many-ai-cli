@@ -25,7 +25,7 @@ Updated by the owner's side only. The record of each state change is the managem
 | Step | Owner | State in the Issue | Evidence, remaining work, next action |
 |---|---|---|---|
 | Acceptance | dots | [accepted](https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6213547116), [checked](https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6213561296) | No Rust, cargo, bun or crates in the dots environment, so nothing is built there. The owner's side compiles and runs the full suite on the PR head |
-| Stage 1 (C3) implementation | dots | started after acceptance | |
+| Stage 1 (C3) implementation | dots | [stopped: instruction vs code](https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6213695185), answered by Supplement 1 in README | Custom providers were excluded from approval detection in `observations.rs`; the owner allowed that one file, with Go as the oracle |
 | Stage 2 (C4) implementation | dots | not started | |
 | Independent review | dots (a different agent) | not started | |
 | Full-line review and Windows suite | owner's side | not started | |
