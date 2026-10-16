@@ -19,12 +19,13 @@ Updated by the owner's side only. The record of each state change is the managem
 - Draft PR base: `dots/custom-provider-add`
 - Behavior baseline: `aa9c0505`
 - First instruction commit: `20fcc4e5a6b957d25446b96302113244a1f5ddf7`
-- Final instruction commit: the commit that added the Issue link to this folder (see the branch history and the Slack message)
+- Final instruction commit: `34974b3a2afde431730947063803c94563bea016`
 - Updated: 2026-10-16
 
 | Step | Owner | State in the Issue | Evidence, remaining work, next action |
 |---|---|---|---|
-| Stage 1 (C3) implementation | dots | not started | |
+| Acceptance | dots | [accepted](https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6213547116), [checked](https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6213561296) | No Rust, cargo, bun or crates in the dots environment, so nothing is built there. The owner's side compiles and runs the full suite on the PR head |
+| Stage 1 (C3) implementation | dots | started after acceptance | |
 | Stage 2 (C4) implementation | dots | not started | |
 | Independent review | dots (a different agent) | not started | |
 | Full-line review and Windows suite | owner's side | not started | |
