@@ -26,13 +26,14 @@ Updated by the owner's side only. The record of each state change is the managem
 |---|---|---|---|
 | Acceptance | dots | [accepted](https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6213547116), [checked](https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6213561296) | No Rust, cargo, bun or crates in the dots environment, so nothing is built there. The owner's side compiles and runs the full suite on the PR head |
 | Stage 1 (C3) implementation | dots | [stopped: instruction vs code](https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6213695185), answered by Supplement 1 in README | Custom providers were excluded from approval detection in `observations.rs`; the owner allowed that one file, with Go as the oracle |
-| Stage 2 (C4) implementation | dots | not started | |
-| Independent review | dots (a different agent) | not started | |
-| Full-line review and Windows suite | owner's side | not started | |
+| Stage 1 (C3) commit | dots | [submitted](https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6213926177) | `6d13aa52` |
+| Stage 2 (C4) implementation | dots | [submitted](https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6214145619) | `de7e9bd9`, Draft PR #23. CI `web-check` and `govulncheck` fail for reasons that exist on the base too ([note](https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6214231734)) |
+| Independent review | dots (a different agent) | [5 findings fixed, re-reviewed](https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6214387681), [final submission](https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6214536282) | Final head `4532bb90`. Drive v1 checked against its manifest ([receipt](https://github.com/ishizakahiroshi/many-ai-cli/issues/22#issuecomment-6214575307)) |
+| Full-line review and Windows suite | owner's side | in progress | Compiling and running the full suite on Windows; a separate reviewer reads every line |
 | Hub screen and muse start check | owner | not started | |
 
 | Item | Value |
 |---|---|
-| Drive version and manifest SHA256 | |
-| Code SHA | |
-| Reviewed SHA | |
+| Drive version and manifest SHA256 | `bot/blob/2026/10/P-20261016-012/v1/`, manifest 932 bytes, `fc27a6b1f266eedb87fb0014513c82ceeb7e57fdee4dff2003db7f573dc4d3b0` |
+| Code SHA | `4532bb908fea76f3e5b0a06c8338c03d003a0021` (dots' final head) |
+| Reviewed SHA | dots: `4532bb90` (static review only). Owner's side: in progress |
