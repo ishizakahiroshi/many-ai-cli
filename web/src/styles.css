@@ -2031,11 +2031,17 @@ color: var(--warn);
 }
 
 #input-icon-reset-btn,
-#agent-log-btn {
+#agent-log-btn,
+#attach-remote-btn,
+#attach-fetch-btn {
   margin-left: 0;
   flex-shrink: 0;
   align-self: center;
 }
+#attach-remote-btn,
+#attach-fetch-btn { white-space: nowrap; }
+.remote-attach-hint { margin-bottom: 8px; line-height: 1.45; }
+.remote-attach-input { width: 100%; }
 
 #attach-copy-cwd-btn {
   margin-left: 2px;

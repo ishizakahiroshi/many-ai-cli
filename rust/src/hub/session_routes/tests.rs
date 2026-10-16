@@ -184,12 +184,15 @@ fn now() -> Timestamp {
     Timestamp::UNIX_EPOCH + Duration::from_secs(1_700_000_000)
 }
 async fn register(f: &Fixture) -> LiveSessionId {
+    register_provider(f, "claude").await
+}
+async fn register_provider(f: &Fixture, provider: &str) -> LiveSessionId {
     let registration = f
         .core
         .register(
             RegisterRequest {
                 message: proto::Message {
-                    provider: "claude".into(),
+                    provider: provider.into(),
                     cwd: f._root.path().to_string_lossy().into_owned(),
                     pid: 7,
                     cols: 80,
@@ -314,6 +317,96 @@ async fn attachment_http_and_ws_use_real_bound_journal() {
             if enabled { 3 } else { 0 }
         );
     }
+}
+#[tokio::test]
+async fn attachment_remote_target_is_shell_only_and_a_failed_transfer_saves_nothing() {
+    let f = fixture(true);
+    let claude = register(&f).await;
+    let shell = register_provider(&f, "shell").await;
+    let mut service = crate::files::FilesService::new(f._root.path().into(), f.paths.clone())
+        .with_history(f.sink.journal.clone());
+    service.ssh_executable = f._root.path().join("missing-ssh-for-test.exe");
+    let request = |id: LiveSessionId, target: &str| {
+        Request {
+        method: "POST".into(),
+        path: "/api/attach".into(),
+        query: format!("remote_target={target}"),
+        headers: vec![(
+            "Content-Type".into(),
+            "multipart/form-data; boundary=bound".into(),
+        )],
+        body: format!("--bound\r\nContent-Disposition: form-data; name=\"session_id\"\r\n\r\n{}\r\n--bound\r\nContent-Disposition: form-data; name=\"file\"; filename=\"shot.png\"\r\n\r\nsynthetic\r\n--bound--\r\n", id.0).into_bytes(),
+        ..Default::default()
+    }
+    };
+    async fn send(service: &crate::files::FilesService, f: &Fixture, request: Request) -> Response {
+        service
+            .handle(&request, f.core.as_ref(), None, false, &AttachmentWorkspace)
+            .await
+            .unwrap()
+    }
+    error(
+        send(&service, &f, request(claude, "myserver")).await,
+        400,
+        "remote target is only available for shell sessions",
+    );
+    error(
+        send(&service, &f, request(shell, "-oProxyCommand=calc")).await,
+        400,
+        "remote target must be an ssh destination such as myserver or user@host",
+    );
+    let failed = send(&service, &f, request(shell, "myserver")).await;
+    assert_eq!(failed.status, 502);
+    assert!(!f.paths.resource(Resource::Attachments).exists());
+}
+
+#[tokio::test]
+async fn remote_download_is_shell_only_and_reports_ssh_failures() {
+    let f = fixture(true);
+    let claude = register(&f).await;
+    let shell = register_provider(&f, "shell").await;
+    let mut service = crate::files::FilesService::new(f._root.path().into(), f.paths.clone())
+        .with_history(f.sink.journal.clone());
+    service.ssh_executable = f._root.path().join("missing-ssh-for-test.exe");
+    let download = |id: LiveSessionId, target: &str, path: &str| Request {
+        method: "GET".into(),
+        path: "/api/files-download".into(),
+        query: format!("session={}&remote_target={target}&path={path}", id.0),
+        ..Default::default()
+    };
+    let send = |request: Request| {
+        let service = &service;
+        let f = &f;
+        async move {
+            service
+                .handle(&request, f.core.as_ref(), None, false, &AttachmentWorkspace)
+                .await
+                .unwrap()
+        }
+    };
+    error(
+        send(download(claude, "myserver", "%2Ftmp%2Fa.png")).await,
+        400,
+        "remote target is only available for shell sessions",
+    );
+    error(
+        send(download(shell, "-oProxyCommand=calc", "%2Ftmp%2Fa.png")).await,
+        400,
+        "remote target must be an ssh destination such as myserver or user@host",
+    );
+    error(
+        send(download(shell, "myserver", "a.png")).await,
+        400,
+        "remote path must start with / or ~/",
+    );
+    error(
+        send(download(LiveSessionId(999), "myserver", "%2Ftmp%2Fa.png")).await,
+        404,
+        "session not found",
+    );
+    let failed = send(download(shell, "myserver", "%2Ftmp%2Fa.png")).await;
+    assert_eq!(failed.status, 502);
+    assert!(String::from_utf8_lossy(&failed.body).contains("remote_fetch_failed"));
 }
 struct AttachmentWorkspace;
 impl crate::files::WorkspaceReads for AttachmentWorkspace {

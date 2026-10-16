@@ -5,6 +5,7 @@ pub mod branch;
 mod content;
 mod git;
 mod mutation;
+mod remote_attach;
 pub mod safe_fs;
 pub mod scope;
 #[cfg(test)]
@@ -30,6 +31,9 @@ pub struct FilesService {
     /// Explicit per-command environment overlays, useful for isolated Git runners.
     pub git_environment: std::collections::BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>>,
     pub turns: std::sync::Mutex<GitTurnState>,
+    /// Sends shell-session attachments to the ssh destination the user chose,
+    /// and fetches files from it.
+    pub ssh_executable: PathBuf,
     #[cfg(test)]
     pub(crate) expire_next_git_resolution: std::sync::atomic::AtomicBool,
     #[cfg(test)]
@@ -44,6 +48,11 @@ impl FilesService {
             git_executable: resolve_git(),
             git_environment: Default::default(),
             turns: std::sync::Mutex::new(GitTurnState::default()),
+            ssh_executable: if cfg!(windows) {
+                "ssh.exe".into()
+            } else {
+                "ssh".into()
+            },
             #[cfg(test)]
             expire_next_git_resolution: Default::default(),
             #[cfg(test)]
@@ -109,7 +118,9 @@ impl FilesService {
         let result = if path.starts_with("/api/git-") {
             self.git_handle(request, core).await
         } else if path == "/api/attach" {
-            self.attach(request, core, storage)
+            self.attach(request, core, storage).await
+        } else if path == "/api/files-download" && !request.query("remote_target").is_empty() {
+            self.remote_download(request, core).await
         } else if path == "/api/attachments/purge" {
             self.purge_attachments(core)
         } else {

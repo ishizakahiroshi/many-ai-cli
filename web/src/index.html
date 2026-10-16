@@ -1955,6 +1955,10 @@
                  PC では非表示（mobile-home.css の @media クエリで attach-camera-btn のみ表示する）。 -->
             <input type="file" id="attach-camera-input" accept="image/*" capture="environment" style="display:none">
             <button class="ui-button ui-button--secondary ui-button--regular" id="attach-camera-btn" type="button" data-i18n-tooltip="attach_camera_tooltip" aria-label="Camera">📷</button>
+            <!-- シェルのセッションだけ表示。ssh 先へ添付を送る送り先を選ぶ（app/attachments.ts）。 -->
+            <button class="ui-button ui-button--secondary ui-button--regular" id="attach-remote-btn" type="button" data-i18n-tooltip="remote_attach_tooltip" aria-haspopup="dialog" aria-expanded="false" hidden></button>
+            <!-- 送り先を決めたシェルのセッションだけ表示。送り先にあるファイルをダウンロードとして取ってくる（app/attachments.ts）。 -->
+            <button class="ui-button ui-button--secondary ui-button--regular" id="attach-fetch-btn" type="button" data-i18n="remote_fetch_button" data-i18n-tooltip="remote_fetch_tooltip" aria-haspopup="dialog" aria-expanded="false" hidden>⬇ Fetch</button>
             <div id="session-inline-usage" role="status" aria-live="polite"></div>
             <button class="ui-button ui-button--secondary ui-button--regular" id="input-icon-reset-btn" type="button" data-i18n="input_icon_reset_button" data-i18n-tooltip="input_icon_reset_tooltip">⌂ Reset layout</button>
             <button class="ui-button ui-button--secondary ui-button--regular" id="agent-log-btn" type="button" data-i18n="agent_log_button" data-i18n-tooltip="agent_log_tooltip" aria-haspopup="dialog" aria-expanded="false">📄 Raw log</button>

@@ -2,7 +2,7 @@
 import { t } from '../i18n.js';
 import { apiFetch, showToast, token } from './util.js';
 import { activeSessionId, sessions, terminals } from './state.js';
-import { copyPathText } from './path-links.js';
+import { basenameForPath, copyPathText } from './path-links.js';
 import { appendComposerAttachment, captureComposerOwner, inputEl, isComposerOwnerLive, isInteractiveFocusTarget, removeComposerAttachment, stagePastedText, updateInputAffordance } from '../app.js';
 import { pushMessage } from './chat-history.js';
 import { openLightbox } from './lightbox.js';
@@ -152,6 +152,382 @@ if (agentLogBtn) {
   });
   document.addEventListener('click', closeAgentLogPopup);
   window.addEventListener('resize', closeAgentLogPopup);
+}
+
+// ---- 添付の送り先（シェルのセッションで ssh した先） ----
+// シェルのセッションで ssh して入った先へ、添付（画像・ファイル・長文ペースト）を届けるための「送り先」。
+// Hub のある PC に保存したパスは ssh 先からは開けないので、送り先を決めたセッションだけ、
+// Hub が ssh で同じ内容を送り、送り先のパスを入力欄へ入れる（rust/src/files/remote_attach.rs）。
+//
+// 送り先はこのブラウザに「セッション番号＋開始時刻」の組で覚える。番号だけで覚えると、
+// Hub の再起動で番号が使い回されたとき、無関係なセッションの添付が ssh 先へ送られてしまう。
+const REMOTE_TARGETS_KEY = 'remoteAttachTargetsV1';
+const MAX_REMOTE_TARGETS = 50;
+
+type RemoteTargetEntry = { key: string; target: string };
+
+function remoteTargetKey(sessionId: number): string | null {
+  const session = sessions.get(sessionId);
+  if (!session || session.provider !== 'shell') return null;
+  return `${sessionId}|${String(session.started_at || '')}`;
+}
+
+function loadRemoteTargets(): RemoteTargetEntry[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(REMOTE_TARGETS_KEY) || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((e) => e && typeof e.key === 'string' && typeof e.target === 'string');
+  } catch (_) {
+    return [];
+  }
+}
+
+function storeRemoteTargets(entries: RemoteTargetEntry[]): void {
+  try {
+    localStorage.setItem(REMOTE_TARGETS_KEY, JSON.stringify(entries.slice(-MAX_REMOTE_TARGETS)));
+  } catch (_) {}
+}
+
+/** 送り先が無い（このPCで読む）ときは空文字。シェル以外のセッションは常に空文字。 */
+export function remoteAttachTarget(sessionId: number | null): string {
+  if (sessionId === null) return '';
+  const key = remoteTargetKey(sessionId);
+  if (!key) return '';
+  return loadRemoteTargets().find((e) => e.key === key)?.target || '';
+}
+
+function setRemoteAttachTarget(sessionId: number, target: string): void {
+  const key = remoteTargetKey(sessionId);
+  if (!key) return;
+  const entries = loadRemoteTargets().filter((e) => e.key !== key);
+  if (target) entries.push({ key, target });
+  storeRemoteTargets(entries);
+}
+
+function recentRemoteTargets(): string[] {
+  const seen = new Set<string>();
+  for (const entry of loadRemoteTargets().reverse()) seen.add(entry.target);
+  return [...seen];
+}
+
+// Hub 側（remote_attach.rs の validate_target）と同じ規則。ここでは送る前に打ち間違いを見せるためだけに使う。
+export function isValidRemoteTarget(target: string): boolean {
+  const host = target.startsWith('ssh://') ? target.slice('ssh://'.length) : target;
+  return host.length > 0 && target.length <= 255 && !host.startsWith('-') && /^[A-Za-z0-9._@:[\]-]+$/.test(host);
+}
+
+export const attachRemoteBtn = document.getElementById('attach-remote-btn') as HTMLButtonElement | null;
+let remoteAttachPopup: HTMLDivElement | null = null;
+export const attachFetchBtn = document.getElementById('attach-fetch-btn') as HTMLButtonElement | null;
+let remoteFetchPopup: HTMLDivElement | null = null;
+
+function closeRemoteAttachPopup(): void {
+  if (remoteAttachPopup) remoteAttachPopup.hidden = true;
+  attachRemoteBtn?.setAttribute('aria-expanded', 'false');
+}
+
+function closeRemoteFetchPopup(): void {
+  if (remoteFetchPopup) remoteFetchPopup.hidden = true;
+  attachFetchBtn?.setAttribute('aria-expanded', 'false');
+}
+
+function syncRemoteAttachButton(): void {
+  if (!attachRemoteBtn) return;
+  const session = activeSessionId !== null ? sessions.get(activeSessionId) : undefined;
+  const isShell = session?.provider === 'shell';
+  attachRemoteBtn.hidden = !isShell;
+  const target = remoteAttachTarget(activeSessionId);
+  if (attachFetchBtn) attachFetchBtn.hidden = !target;
+  if (!target) closeRemoteFetchPopup();
+  if (!isShell) {
+    closeRemoteAttachPopup();
+    return;
+  }
+  // 長い接続先で添付欄を押し広げない。全体は押して開く窓の入力欄で見える。
+  const shown = target.length > 24 ? `${target.slice(0, 23)}…` : target;
+  attachRemoteBtn.textContent = target
+    ? t('remote_attach_button_remote', { target: shown })
+    : t('remote_attach_button_local');
+}
+
+function openRemoteAttachPopup(anchor: HTMLButtonElement, sessionId: number): void {
+  if (!remoteAttachPopup) {
+    remoteAttachPopup = document.createElement('div');
+    remoteAttachPopup.className = 'agent-log-popup remote-attach-popup';
+    remoteAttachPopup.hidden = true;
+    remoteAttachPopup.setAttribute('role', 'dialog');
+    remoteAttachPopup.setAttribute('aria-label', t('remote_attach_title'));
+    remoteAttachPopup.addEventListener('click', (e) => e.stopPropagation());
+    document.body.appendChild(remoteAttachPopup);
+  }
+  const box = remoteAttachPopup;
+  box.replaceChildren();
+
+  const title = document.createElement('div');
+  title.className = 'agent-log-popup-title';
+  title.textContent = t('remote_attach_title');
+  const hint = document.createElement('div');
+  hint.className = 'agent-log-popup-title remote-attach-hint';
+  hint.textContent = t('remote_attach_hint');
+
+  const listId = 'remote-attach-recent';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'ui-input remote-attach-input';
+  input.value = remoteAttachTarget(sessionId);
+  input.placeholder = t('remote_attach_placeholder');
+  input.spellcheck = false;
+  input.autocomplete = 'off';
+  input.setAttribute('list', listId);
+  input.setAttribute('aria-label', t('remote_attach_title'));
+  const recent = document.createElement('datalist');
+  recent.id = listId;
+  for (const target of recentRemoteTargets()) {
+    const option = document.createElement('option');
+    option.value = target;
+    recent.appendChild(option);
+  }
+
+  const save = () => {
+    const target = input.value.trim();
+    if (target && !isValidRemoteTarget(target)) {
+      input.setAttribute('aria-invalid', 'true');
+      showToast(t('remote_attach_invalid'), input);
+      return;
+    }
+    setRemoteAttachTarget(sessionId, target);
+    closeRemoteAttachPopup();
+    syncRemoteAttachButton();
+    showToast(target ? t('remote_attach_saved', { target }) : t('remote_attach_cleared'), anchor);
+  };
+  input.addEventListener('input', () => input.removeAttribute('aria-invalid'));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) {
+      e.preventDefault();
+      save();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeRemoteAttachPopup();
+      anchor.focus();
+    }
+  });
+
+  const actions = document.createElement('div');
+  actions.className = 'agent-log-popup-actions';
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'ui-button ui-button--primary ui-button--compact';
+  saveBtn.textContent = t('remote_attach_save');
+  saveBtn.addEventListener('click', save);
+  const localBtn = document.createElement('button');
+  localBtn.type = 'button';
+  localBtn.className = 'ui-button ui-button--quiet ui-button--compact';
+  localBtn.textContent = t('remote_attach_use_local');
+  localBtn.addEventListener('click', () => {
+    input.value = '';
+    save();
+  });
+  actions.append(saveBtn, localBtn);
+
+  box.append(title, hint, input, recent, actions);
+  box.hidden = false;
+  const rect = anchor.getBoundingClientRect();
+  const width = box.offsetWidth;
+  box.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, rect.left))}px`;
+  box.style.top = `${Math.max(8, rect.top - box.offsetHeight - 8)}px`;
+  anchor.setAttribute('aria-expanded', 'true');
+  input.focus();
+  input.select();
+}
+
+if (attachRemoteBtn) {
+  attachRemoteBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (remoteAttachPopup && !remoteAttachPopup.hidden) {
+      closeRemoteAttachPopup();
+      return;
+    }
+    const sessionId = activeSessionId;
+    if (sessionId === null || sessions.get(sessionId)?.provider !== 'shell') return;
+    closeRemoteFetchPopup();
+    openRemoteAttachPopup(attachRemoteBtn, sessionId);
+  });
+  document.addEventListener('click', closeRemoteAttachPopup);
+  window.addEventListener('resize', closeRemoteAttachPopup);
+  document.addEventListener('session-usage-target-changed', syncRemoteAttachButton);
+  document.addEventListener('i18n-ready', syncRemoteAttachButton);
+}
+
+// ---- 送り先から取ってくる ----
+// 送り先の AI が「ここに置いた」と答えたファイルを、送るときと同じ ssh で読み、ブラウザのダウンロードとして保存する
+// （/api/files-download に remote_target を付けたときだけ Hub が ssh で取る。rust/src/files/remote_attach.rs）。
+// Hub のある PC には何も書かない。保存先はこのブラウザのダウンロードの設定に従う。
+const MAX_RECENT_FETCH_PATHS = 10;
+const recentFetchPaths: string[] = [];
+
+// Hub 側（remote_attach.rs の validate_remote_path）と同じ規則。相対パスは送り先の作業フォルダが分からないので受けない。
+export function isFetchableRemotePath(path: string): boolean {
+  const rest = path.startsWith('~/') ? path.slice(2) : path.startsWith('/') ? path : '';
+  return rest !== '' && rest !== '/' && !rest.endsWith('/') && path.length <= 4096 && !/[\u0000-\u001f\u007f-\u009f]/.test(path);
+}
+
+function rememberFetchPath(path: string): void {
+  const index = recentFetchPaths.indexOf(path);
+  if (index >= 0) recentFetchPaths.splice(index, 1);
+  recentFetchPaths.unshift(path);
+  recentFetchPaths.length = Math.min(recentFetchPaths.length, MAX_RECENT_FETCH_PATHS);
+}
+
+/** 成功したら true。失敗の理由（鍵・パス違い・大きすぎ）は利用者が直すものなので、Hub の detail をそのまま見せる。 */
+export async function fetchRemoteFile(sessionId: number, remotePath: string, anchor: HTMLElement | null = null): Promise<boolean> {
+  const target = remoteAttachTarget(sessionId);
+  const path = remotePath.trim();
+  if (!target) {
+    showToast(t('remote_fetch_no_target'), anchor);
+    return false;
+  }
+  if (!isFetchableRemotePath(path)) {
+    showToast(t('remote_fetch_invalid'), anchor);
+    return false;
+  }
+  rememberFetchPath(path);
+  showToast(t('remote_fetch_started', { target }), anchor);
+  try {
+    const res = await apiFetch(
+      `/api/files-download?session=${encodeURIComponent(sessionId)}&remote_target=${encodeURIComponent(target)}&path=${encodeURIComponent(path)}`
+    );
+    if (!res.ok) {
+      const detail = await res.json().then((body) => String(body?.detail || ''), () => '');
+      showToast(t('remote_fetch_failed', { target, detail: detail || `HTTP ${res.status}` }), undefined, 8000);
+      return false;
+    }
+    const blob = await res.blob();
+    const name = basenameForPath(path) || 'download';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.hidden = true;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // クリック直後に解放すると、保存が始まる前に URL が消えるブラウザがある。
+    setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+    showToast(t('remote_fetch_done', { name }), anchor);
+    return true;
+  } catch (_) {
+    showToast(t('remote_fetch_failed', { target, detail: 'network error' }), undefined, 8000);
+    return false;
+  }
+}
+
+/** 端末に出たパスのメニューへ足す項目。送り先を決めたシェルのセッションで、送り先のパスとして読めるものだけ。 */
+export function remoteFetchMenuItems(sessionId: number | null, path: string): any[] {
+  if (sessionId === null) return [];
+  const target = remoteAttachTarget(sessionId);
+  if (!target || !isFetchableRemotePath(path)) return [];
+  // メニューは押した時点で閉じる（取り終わるまで開いたままにしない）。経過と結果はトーストで出す。
+  return [{ icon: '⬇️', label: t('remote_fetch_menu', { target }), action: () => { void fetchRemoteFile(sessionId, path); } }];
+}
+
+function openRemoteFetchPopup(anchor: HTMLButtonElement, sessionId: number): void {
+  if (!remoteFetchPopup) {
+    remoteFetchPopup = document.createElement('div');
+    remoteFetchPopup.className = 'agent-log-popup remote-attach-popup';
+    remoteFetchPopup.hidden = true;
+    remoteFetchPopup.setAttribute('role', 'dialog');
+    remoteFetchPopup.addEventListener('click', (e) => e.stopPropagation());
+    document.body.appendChild(remoteFetchPopup);
+  }
+  const box = remoteFetchPopup;
+  box.setAttribute('aria-label', t('remote_fetch_title'));
+  box.replaceChildren();
+
+  const title = document.createElement('div');
+  title.className = 'agent-log-popup-title';
+  title.textContent = t('remote_fetch_title');
+  const hint = document.createElement('div');
+  hint.className = 'agent-log-popup-title remote-attach-hint';
+  hint.textContent = t('remote_fetch_hint', { target: remoteAttachTarget(sessionId) });
+
+  const listId = 'remote-fetch-recent';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'ui-input remote-attach-input';
+  input.value = recentFetchPaths[0] || '';
+  input.placeholder = t('remote_fetch_placeholder');
+  input.spellcheck = false;
+  input.autocomplete = 'off';
+  input.setAttribute('list', listId);
+  input.setAttribute('aria-label', t('remote_fetch_title'));
+  const recent = document.createElement('datalist');
+  recent.id = listId;
+  for (const path of recentFetchPaths) {
+    const option = document.createElement('option');
+    option.value = path;
+    recent.appendChild(option);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'agent-log-popup-actions';
+  const fetchBtn = document.createElement('button');
+  fetchBtn.type = 'button';
+  fetchBtn.className = 'ui-button ui-button--primary ui-button--compact';
+  fetchBtn.textContent = t('remote_fetch_submit');
+  actions.append(fetchBtn);
+
+  const submit = async () => {
+    if (fetchBtn.disabled) return;
+    const path = input.value.trim();
+    if (!isFetchableRemotePath(path)) {
+      input.setAttribute('aria-invalid', 'true');
+      showToast(t('remote_fetch_invalid'), input);
+      return;
+    }
+    fetchBtn.disabled = true;
+    fetchBtn.textContent = t('remote_fetch_busy');
+    const ok = await fetchRemoteFile(sessionId, path, anchor);
+    fetchBtn.disabled = false;
+    fetchBtn.textContent = t('remote_fetch_submit');
+    if (ok) closeRemoteFetchPopup();
+  };
+  fetchBtn.addEventListener('click', () => { void submit(); });
+  input.addEventListener('input', () => input.removeAttribute('aria-invalid'));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) {
+      e.preventDefault();
+      void submit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeRemoteFetchPopup();
+      anchor.focus();
+    }
+  });
+
+  box.append(title, hint, input, recent, actions);
+  box.hidden = false;
+  const rect = anchor.getBoundingClientRect();
+  const width = box.offsetWidth;
+  box.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, rect.left))}px`;
+  box.style.top = `${Math.max(8, rect.top - box.offsetHeight - 8)}px`;
+  anchor.setAttribute('aria-expanded', 'true');
+  input.focus();
+  input.select();
+}
+
+if (attachFetchBtn) {
+  attachFetchBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (remoteFetchPopup && !remoteFetchPopup.hidden) {
+      closeRemoteFetchPopup();
+      return;
+    }
+    const sessionId = activeSessionId;
+    if (sessionId === null || !remoteAttachTarget(sessionId)) return;
+    closeRemoteAttachPopup();
+    openRemoteFetchPopup(attachFetchBtn, sessionId);
+  });
+  document.addEventListener('click', closeRemoteFetchPopup);
+  window.addEventListener('resize', closeRemoteFetchPopup);
 }
 
 // 下の入力欄以外の文字入力欄（作業メモ・ファイル編集・コミット本文など）への貼り付けは
@@ -417,16 +793,25 @@ export async function flushPendingAttach(sessionId, capturedFiles?: any[]) {
   const injects = [];
   // chatHistory 用: 送信に成功した添付の情報を集める
   const historyAttachments = [];
+  // シェルのセッションで送り先（ssh 先）が決まっていれば、Hub が ssh で送って送り先のパスを返す。
+  const remoteTarget = remoteAttachTarget(sessionId);
+  const remoteQuery = remoteTarget ? `&remote_target=${encodeURIComponent(remoteTarget)}` : '';
   for (const { buf, filename, wrapper } of toSend) {
     try {
       const formData = new FormData();
       formData.append('file', new Blob([buf]), filename || 'blob');
       const res = await apiFetch(
-        `/api/attach?session_id=${encodeURIComponent(sessionId)}`,
+        `/api/attach?session_id=${encodeURIComponent(sessionId)}${remoteQuery}`,
         { method: 'POST', body: formData }
       );
       if (!res.ok) {
-        showToast(`Attachment failed: HTTP ${res.status}`);
+        if (remoteTarget) {
+          // ssh の失敗理由（鍵が無い・ホスト名違い等）は利用者が直すものなので、Hub の detail をそのまま見せる。
+          const detail = await res.json().then((body) => String(body?.detail || ''), () => '');
+          showToast(t('remote_attach_failed', { target: remoteTarget, detail: detail || `HTTP ${res.status}` }), undefined, 8000);
+        } else {
+          showToast(`Attachment failed: HTTP ${res.status}`);
+        }
       } else {
         try {
           const data = await res.json();

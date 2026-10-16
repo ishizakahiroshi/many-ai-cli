@@ -780,6 +780,57 @@ fn attachment_history_uses_injected_journal_once() {
     assert_eq!(events[0].0["filename"], "fixture.txt");
     assert!(!events[0].0.contains_key("data"));
 }
+#[test]
+fn remote_copy_is_injected_while_the_local_copy_stays_in_history() {
+    use crate::proto::core::{
+        HistoryEvent, PersistenceEffect, PersistenceEffectSink, SessionError,
+    };
+    use std::sync::{Arc, Mutex};
+    struct Journal(Mutex<Vec<HistoryEvent>>);
+    impl PersistenceEffectSink for Journal {
+        fn apply(&self, _: PersistenceEffect) -> std::result::Result<(), SessionError> {
+            panic!("unbound attachment persistence")
+        }
+        fn apply_bound(
+            &self,
+            _: crate::proto::core::SessionBinding,
+            _: crate::proto::core::PersistenceBindingScope,
+            effect: PersistenceEffect,
+        ) -> std::result::Result<(), SessionError> {
+            let PersistenceEffect::Event { event, .. } = effect else {
+                panic!("attachment emits one event")
+            };
+            self.0.lock().unwrap().push(event);
+            Ok(())
+        }
+    }
+    let (_dir, service, _) = setup();
+    let journal = Arc::new(Journal(Mutex::new(vec![])));
+    let service = service.with_history(journal.clone());
+    let remote = attachments::RemoteCopy {
+        target: "myserver".into(),
+        path: "/home/u/.many-ai-cli/remote-attachments/20261015_000000001_shot.png".into(),
+    };
+    let saved = service
+        .save_attachment_with(
+            attachment_binding(),
+            "shell",
+            "shot.png",
+            b"\x89PNG\r\n\x1a\nsynthetic",
+            Some(&remote),
+            |_| true,
+        )
+        .unwrap();
+    assert_eq!(saved["inject"], format!("{} ", remote.path));
+    assert_eq!(saved["remote_target"], "myserver");
+    assert_eq!(saved["remote_path"], remote.path.as_str());
+    assert!(Path::new(saved["saved_path"].as_str().unwrap()).is_file());
+    let events = journal.0.lock().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].0["path"], saved["saved_path"]);
+    assert_eq!(events[0].0["remote_target"], "myserver");
+    assert_eq!(events[0].0["remote_path"], remote.path.as_str());
+}
 fn attachment_binding() -> crate::proto::core::SessionBinding {
     crate::proto::core::SessionBinding {
         session: LiveSessionId(7),

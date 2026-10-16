@@ -9,6 +9,7 @@ import { restoreTerminalView, terminalViewFollows } from './session-view-positio
 import { isApprovalPending } from './approval-store.js';
 import { autoExpand, inputEl, sendQuickCommand, sendText, updateInputClearButton } from '../app.js';
 import { resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup } from './path-links.js';
+import { remoteFetchMenuItems } from './attachments.js';
 import {
   ABS_UNIX_PATH_RE,
   ABS_WIN_PATH_RE,
@@ -366,7 +367,8 @@ export function ensureTerminal(id) {
             activate(_event, _text) {
               _event.preventDefault();
               _event.stopPropagation();
-              showPathPopup(capturedPath, _event.clientX, _event.clientY, id);
+              // ssh 先のパスは、送り先を決めたシェルなら送り先から取ってこられる（attachments.ts）。
+              showPathPopup(capturedPath, _event.clientX, _event.clientY, id, 'file', remoteFetchMenuItems(id, pathStr));
             }
           });
         };

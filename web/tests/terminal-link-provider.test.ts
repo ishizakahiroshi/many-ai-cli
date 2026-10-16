@@ -48,6 +48,8 @@ async function detect(input: string, cols = 120, y = 1, activate = false, emptyF
         resolveTerminalPathCandidate: path.trimTerminalPathCandidate,
         scheduleHidePathPopup() {},
         showPathPopup: value => actions.push(['path', value]),
+        // No ssh destination in these fixtures, so the path menu gets no "fetch from" items.
+        remoteFetchMenuItems: () => [],
         showUrlPopup: value => actions.push(['url', value]),
         handleCrunchLinkClick: id => actions.push(['crunch', id]),
       };

@@ -1,4 +1,4 @@
-use super::{FilesService, Result, content, err, safe_fs::Dir, time};
+use super::{FilesService, Result, content, err, remote_attach, safe_fs::Dir, time};
 use crate::{
     config::paths::Resource,
     hub::http::{Request, Response},
@@ -15,8 +15,13 @@ use std::{
 };
 pub const UPLOAD_MAX: usize = 10 * 1024 * 1024;
 pub const MULTIPART_MAX: usize = UPLOAD_MAX + 1024 * 1024;
+/// The copy written to the shell session's ssh destination.
+pub(super) struct RemoteCopy {
+    pub target: String,
+    pub path: String,
+}
 impl FilesService {
-    pub(super) fn attach(
+    pub(super) async fn attach(
         &self,
         r: &Request,
         core: &dyn SessionCore,
@@ -28,14 +33,77 @@ impl FilesService {
             .details(LiveSessionId(session))
             .filter(|s| s.connected && !s.snapshot.provider.is_empty())
             .ok_or_else(|| err(404, "not_found", "session not found"))?;
-        let saved = self.save_attachment(
+        let target = r.query("remote_target");
+        let remote = if target.is_empty() {
+            None
+        } else {
+            // A provider session runs its CLI on this machine, which reads the
+            // local path. Only a shell can have ssh'd somewhere else.
+            if details.snapshot.provider != "shell" {
+                return Err(err(
+                    400,
+                    "bad_request",
+                    "remote target is only available for shell sessions",
+                ));
+            }
+            let target = remote_attach::validate_target(&target)?;
+            let name = format!(
+                "{}_{}",
+                stamp_prefix(SystemTime::now())?,
+                sanitized_filename(&filename, &data)
+            );
+            let path =
+                remote_attach::upload(&self.ssh_executable, &self.hub_cwd, target, &name, &data)
+                    .await?;
+            Some(RemoteCopy {
+                target: target.to_owned(),
+                path,
+            })
+        };
+        let saved = self.save_attachment_with(
             details.binding,
             &details.snapshot.provider,
             &filename,
             &data,
+            remote.as_ref(),
             |binding| core.is_current(binding),
         )?;
         Ok(Response::json(200, &saved))
+    }
+    /// The reverse of `attach` with a remote target: a file on the shell
+    /// session's ssh destination, handed to the browser as a download. Nothing
+    /// is written on this machine.
+    pub(super) async fn remote_download(
+        &self,
+        r: &Request,
+        core: &dyn SessionCore,
+    ) -> Result<Response> {
+        let session = r
+            .query("session")
+            .parse::<i64>()
+            .map_err(|_| err(400, "bad_request", "invalid session"))?;
+        let details = core
+            .details(LiveSessionId(session))
+            .filter(|s| s.connected && !s.snapshot.provider.is_empty())
+            .ok_or_else(|| err(404, "not_found", "session not found"))?;
+        if details.snapshot.provider != "shell" {
+            return Err(err(
+                400,
+                "bad_request",
+                "remote target is only available for shell sessions",
+            ));
+        }
+        let target = r.query("remote_target");
+        let target = remote_attach::validate_target(&target)?;
+        let path = r.query("path");
+        let data =
+            remote_attach::download(&self.ssh_executable, &self.hub_cwd, target, &path).await?;
+        let name = path.rsplit('/').next().unwrap_or_default();
+        let mut response = Response::bytes(200, "application/octet-stream", data).no_store();
+        response
+            .headers
+            .insert("Content-Disposition".into(), content::disposition(name));
+        Ok(response)
     }
     /// Authenticated UI WS attachment caller. The Hub intentionally sends no
     /// attachment reply; the immutable history event feeds its normal history.
@@ -98,6 +166,19 @@ impl FilesService {
         data: &[u8],
         is_current: impl FnOnce(SessionBinding) -> bool,
     ) -> Result<serde_json::Value> {
+        self.save_attachment_with(binding, provider, filename, data, None, is_current)
+    }
+    /// The local copy is always kept (history and the chat preview read it).
+    /// With `remote`, the inject names the destination's copy instead.
+    pub(super) fn save_attachment_with(
+        &self,
+        binding: SessionBinding,
+        provider: &str,
+        filename: &str,
+        data: &[u8],
+        remote: Option<&RemoteCopy>,
+        is_current: impl FnOnce(SessionBinding) -> bool,
+    ) -> Result<serde_json::Value> {
         let session = binding.session.0;
         if data.len() > UPLOAD_MAX {
             return Err(err(400, "bad_request", "file too large"));
@@ -112,14 +193,7 @@ impl FilesService {
             .map_err(|e| super::io_error(e, "save_failed"))?;
         let now = SystemTime::now();
         let name = sanitized_filename(filename, data);
-        let stamp = time::format(now)?;
-        let date: String = stamp[..19].chars().filter(|c| c.is_ascii_digit()).collect();
-        let prefix = format!(
-            "{date}_{:09}",
-            now.duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .subsec_nanos()
-        );
+        let prefix = stamp_prefix(now)?;
         let mut saved_name = String::new();
         for i in 0..1000 {
             let n = if i == 0 {
@@ -144,7 +218,11 @@ impl FilesService {
             ));
         }
         let saved = dir.path().join(&saved_name);
-        let inject = match inject(provider, &saved) {
+        let injected_path = match remote {
+            Some(remote) => Path::new(&remote.path).to_path_buf(),
+            None => saved.clone(),
+        };
+        let inject = match inject(provider, &injected_path) {
             Ok(s) => s,
             Err(e) => {
                 let _ = dir.remove_file(&saved_name);
@@ -162,7 +240,11 @@ impl FilesService {
             ));
         }
         if let Some(history) = &self.history {
-            let value = json!({"ts":crate::proto::time::Timestamp::from_system_time(now).and_then(crate::proto::time::format_rfc3339).map_err(|_|err(500,"invalid_timestamp","invalid attachment timestamp"))?,"type":"attach","session_id":session,"path":saved,"filename":filename,"provider":provider});
+            let mut value = json!({"ts":crate::proto::time::Timestamp::from_system_time(now).and_then(crate::proto::time::format_rfc3339).map_err(|_|err(500,"invalid_timestamp","invalid attachment timestamp"))?,"type":"attach","session_id":session,"path":saved,"filename":filename,"provider":provider});
+            if let (Some(remote), Some(obj)) = (remote, value.as_object_mut()) {
+                obj.insert("remote_target".into(), json!(remote.target));
+                obj.insert("remote_path".into(), json!(remote.path));
+            }
             if let serde_json::Value::Object(obj) = value {
                 history
                     .apply_bound(
@@ -189,7 +271,13 @@ impl FilesService {
                     })?;
             }
         }
-        Ok(json!({"ok":true,"inject":inject,"saved_path":saved,"filename":filename}))
+        let mut response =
+            json!({"ok":true,"inject":inject,"saved_path":saved,"filename":filename});
+        if let (Some(remote), Some(obj)) = (remote, response.as_object_mut()) {
+            obj.insert("remote_target".into(), json!(remote.target));
+            obj.insert("remote_path".into(), json!(remote.path));
+        }
+        Ok(response)
     }
     pub(super) fn purge_attachments(&self, core: &dyn SessionCore) -> Result<Response> {
         self.purge_attachment_ids(&core.active_ids())
@@ -272,6 +360,16 @@ impl FilesService {
         }
         Ok(count)
     }
+}
+fn stamp_prefix(now: SystemTime) -> Result<String> {
+    let stamp = time::format(now)?;
+    let date: String = stamp[..19].chars().filter(|c| c.is_ascii_digit()).collect();
+    Ok(format!(
+        "{date}_{:09}",
+        now.duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_nanos()
+    ))
 }
 fn parameter(value: &str, key: &str) -> Option<String> {
     let mut rest = value.split_once(';')?.1;

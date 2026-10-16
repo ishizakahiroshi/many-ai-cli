@@ -11,6 +11,21 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Attachments reach the machine a shell session ssh'd into.** In a shell
+  session, the new "📤 Send to" button next to the attachment area takes an ssh
+  destination (a `~/.ssh/config` alias, `user@host` or `ssh://user@host:port`).
+  Images, files and long pastes are then also written to
+  `~/.many-ai-cli/remote-attachments/` on that machine over ssh, and the
+  destination's path is put in the input instead of a path on this PC. Key-based
+  login only (`BatchMode`); ssh's own error is shown when the transfer fails.
+  Files there that are 7 days old are removed by the next transfer. The setting
+  is kept per session in the browser; provider sessions are unchanged.
+- **Files can be fetched back from that machine.** With a destination set,
+  clicking a path the remote AI printed (starting with `/` or `~/`) offers
+  "⬇️ Fetch from <destination>", and the new "⬇ Fetch" button takes a pasted
+  path. The Hub reads the file over the same ssh and hands it to the browser as
+  a download; nothing is kept on this PC. Up to 50 MB per file; relative paths
+  are refused because the Hub cannot know the remote working directory.
 - Input controls can be placed independently across the app. On desktop they
   start beside the live status display instead of occupying the composer;
   existing saved positions are retained and Reset restores the new default.
