@@ -123,11 +123,14 @@ pub fn log_clean(context: &MainContext, args: &[String]) -> Result<PathBuf, Stri
     maintenance_cli::log_clean(&context.paths, &input, output.as_deref()).map_err(|e| e.to_string())
 }
 pub fn provider(context: &MainContext, args: &[String]) -> io::Result<String> {
+    if maintenance_cli::custom_provider::handles(args) {
+        return maintenance_cli::custom_provider::run(&context.config, args);
+    }
     let store = Arc::new(
         crate::profile::store::ProviderRegistryStore::new(&context.paths, context.config.clone())
             .map_err(io::Error::other)?,
     );
-    maintenance_cli::provider_command(&store, args)
+    maintenance_cli::provider_command(&store, &context.config, args)
 }
 #[cfg(test)]
 mod tests {

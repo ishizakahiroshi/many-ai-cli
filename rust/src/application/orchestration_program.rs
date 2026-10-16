@@ -412,21 +412,36 @@ impl OrchestrationProgram {
             .map(|s| s.config)
             .map_err(|_| SessionError::Transport("orchestration configuration unavailable".into()))
     }
+    pub fn provider_registry(&self) -> Result<crate::profile::registry::Registry, SessionError> {
+        (self.deps.registry)()
+            .map_err(|_| SessionError::Transport("provider registry unavailable".into()))
+    }
     pub fn reserve_conductor(
         &self,
         label: &mut String,
         roles: Option<&BTreeMap<String, Option<RoleSettings>>>,
         now: Timestamp,
     ) -> Result<OrchestrationId, SessionError> {
+        let registry = self.provider_registry()?;
         let mut assigned = BTreeMap::new();
         for (role, settings) in roles.into_iter().flatten() {
             if let Some(settings) = settings {
                 if !settings.provider.is_empty()
-                    && !crate::orchestration::child_options::ORCHESTRATION_PROVIDERS
-                        .contains(&settings.provider.as_str())
+                    && !crate::orchestration::child_options::provider_is_usable(
+                        &registry,
+                        &settings.provider,
+                    )
                 {
                     return Err(SessionError::InvalidRequest(
-                        "invalid orchestration role provider".into(),
+                        super::left_out_provider::explain_for_children(
+                            &self.deps.config,
+                            &settings.provider,
+                            &format!(
+                                "invalid orchestration role provider {}",
+                                crate::proto::go_quote::quote(&settings.provider)
+                            ),
+                            &crate::orchestration::child_options::usable_provider_ids(&registry),
+                        ),
                     ));
                 }
                 if settings.model.starts_with('-')
@@ -486,8 +501,9 @@ impl OrchestrationProgram {
             .as_ref()
             .map(|role| role.provider.as_str())
             .unwrap_or("");
+        let registry = self.provider_registry()?;
         let valid = |provider: &str| {
-            crate::orchestration::child_options::ORCHESTRATION_PROVIDERS.contains(&provider)
+            crate::orchestration::child_options::provider_is_usable(&registry, provider)
         };
         let (provider, source) = if !body.provider.trim().is_empty() {
             (body.provider.clone(), "explicit")
@@ -820,6 +836,9 @@ impl OrchestrationProgram {
     }
 }
 impl ChildLaunchServices for OrchestrationProgram {
+    fn provider_registry(&self) -> Result<crate::profile::registry::Registry, SessionError> {
+        OrchestrationProgram::provider_registry(self)
+    }
     fn launch_arg_usable(&self, provider: &str) -> Result<bool, SessionError> {
         let registry = (self.deps.registry)()
             .map_err(|_| SessionError::Transport("provider registry unavailable".into()))?;

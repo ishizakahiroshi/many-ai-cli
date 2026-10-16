@@ -76,7 +76,7 @@ Terminal pane #1              Terminal pane #2
 
 **Ollama** は独立したラッパーではありません。`claude` または `codex` のラッパー経由で Ollama のモデルを使います（spawn フォームのモデルピッカーで **Ollama Cloud / Ollama Local** を選ぶと、Hub が Anthropic / OpenAI 互換エンドポイントを Ollama に向けます。「主な機能」の「モデルピッカー + Ollama route 自動切替」参照）。
 
-Gemini CLI は意図的に対象外です。
+Gemini CLI は未対応です。対応を実装する前に利用規約を確認する必要があります。
 
 ## NVIDIA NIM trial route（OpenCode 専用）
 
@@ -236,6 +236,38 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 **profile の削除**は `many-ai-cli` の登録解除だけを行い、公式 CLI の認証は残します。認証も消すかどうかは別の明示的な確認になっており、`profile_dir` で自分で指定した外部ディレクトリには適用されません。
 
 この欄を一度も開かなければ、動作は今までと変わりません。セッションは従来と 1 バイトも変わらない環境で起動します。
+
+---
+
+## カスタムプロバイダー
+
+**`config.yaml` を開かずに AI CLI を追加できます（Rust 版）。** まず `many-ai-cli provider add --help` を確認してください。追加前に、その CLI の公式ドキュメントで非対話（headless）実行のコマンドやフラグ、プロンプトの渡し方（引数か標準入力）、承認画面の選択肢の正確な文字列、モデル指定フラグ、読み込まれる指示ファイルを調べます。AI に追加を任せる場合は、実行前に「公式ドキュメントで確認できた事実」と「記載がなく未確認の点」を利用者へ示してください。
+
+Muse Code の[公式ドキュメント](https://dev.meta.ai/docs/muse-code)には、`muse exec "<prompt>"`、`--model` フラグ、下記の承認選択肢、および `AGENTS.md`、`CLAUDE.md`、`.agents/AGENTS.md`、`.claude/CLAUDE.md` のうち最初に見つかった指示ファイルを読むことが記載されています。実行ファイルが PATH 上にある状態で、次のように登録します。
+
+```text
+many-ai-cli provider add --id muse --label "Muse Code" --command muse \
+  --headless-args exec --headless-format text --prompt-via arg \
+  --approval-option "Allow once" --approval-option "Always allow in this workspace" --approval-option "Reject"
+```
+
+`--headless-args` は引数 1 個につき 1 回、渡す順に指定します。各値は argv の 1 要素で、シェルコマンドとして分割しません。headless 設定には `--headless-format text` と、CLI に合わせて `--prompt-via arg` または `--prompt-via stdin` を指定してください。`--approval-option` は承認画面に表示される選択肢ごとに繰り返します。登録時は実行ファイルの存在を確認するだけで、その CLI 自体は起動しません。
+
+```text
+many-ai-cli provider list
+many-ai-cli provider list --json
+many-ai-cli provider remove muse
+```
+
+- `list` は組み込み provider を明示し、カスタム provider の id、表示名、コマンド、headless 設定の有無、有効か読み込み時に除外されたかを表示します。除外理由は `many-ai-cli config check` と同じ文言です。
+- `add` は書き込む前に id、コマンド、headless 設定、実行ファイルを検証します。id は重複不可で 64 文字以内、先頭は英小文字か数字、使える文字は英小文字・数字・`.`・`_`・`-` です。組み込み id、`shell`、`provider`・`config`・`serve` などの最上位サブコマンド名は追加できません。検証失敗時は見つかった問題をまとめて表示し、`config.yaml` は 1 バイトも変えず、バックアップも作りません。
+- `add`・`remove` が成功するたびに、既存の `config.yaml` を必ず 1 個だけバックアップし、その id を表示します。元のファイルがまだなければバックアップは不要で、その旨を表示します。書き戻しでコメントとレイアウトは失われます。コメントがあった場合は、元のファイルを保存したバックアップ id を案内します。確認と復元には `many-ai-cli config backup list` と `many-ai-cli config backup restore <id>` を使えます。
+- `remove` はカスタム provider 専用で、不正な設定として読み込み時に除外された id も削除できます。組み込み id や存在しない id は拒否し、書き込みもバックアップも行いません。承認パターンのファイルは残し、そのパスを表示します。同じ id を追加し直すと、新しい選択肢を指定しない限り以前のパターンを再利用します。
+- `add`・`remove` の後は、起動中の Hub を再起動してください。ファイルの変更は自動では読み直しません。これらのコマンドは Hub token や無関係な設定値を表示せず、利用者や AI が token を扱う必要もありません。
+
+`--approval-option` の文字列は `~/.many-ai-cli/approval-patterns/custom-providers/<id>.json` に JSON の文字列配列として保存され、カスタム provider の承認検出に使われます。後からリモート同期が走っても上書きされません。手書きの `custom_providers` 設定で `approval_pattern_source` を指定する方法もあります。指定できるのは `~/.many-ai-cli/` 配下の絶対パス（`~` の展開はしません）または `https://raw.githubusercontent.com/...` の URL で、箇条書きの各行にバッククォートで囲んだ語句を持つ Markdown を読み込みます。`--approval-option` で保存したローカルの選択肢が優先されます。
+
+カスタム登録には、組み込み provider と同じ審査はありません。連携前に、その CLI 自身の利用規約を確認してください。**Gemini CLI は未対応であり、対応を実装する前に利用規約の確認が必要です。**
 
 ---
 

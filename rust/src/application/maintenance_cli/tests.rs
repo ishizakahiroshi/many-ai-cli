@@ -130,15 +130,16 @@ fn native_trial_refuses_arbitrary_pid_without_sending_a_signal() {
 #[test]
 fn provider_cli_actual_history_reset_and_recover_keep_revision_receipts() {
     let f = fixture();
-    let store = Arc::new(ProviderRegistryStore::new(&f.paths, f.config).unwrap());
+    let store = Arc::new(ProviderRegistryStore::new(&f.paths, f.config.clone()).unwrap());
     let strings = |args: &[&str]| {
         args.iter()
             .map(|value| value.to_string())
             .collect::<Vec<_>>()
     };
-    assert!(provider_command(&store, &strings(&["reset", "--distributed", "claude"])).is_err());
+    assert!(provider_command(&store, &f.config, &strings(&["reset", "--distributed", "claude"])).is_err());
     let output = provider_command(
         &store,
+        &f.config,
         &strings(&[
             "reset",
             "--distributed",
@@ -153,6 +154,7 @@ fn provider_cli_actual_history_reset_and_recover_keep_revision_receipts() {
     assert!(
         provider_command(
             &store,
+            &f.config,
             &strings(&[
                 "reset",
                 "--distributed",
@@ -168,11 +170,11 @@ fn provider_cli_actual_history_reset_and_recover_keep_revision_receipts() {
         .child_dir("claude", false)
         .unwrap();
     dir.replace("HEAD", b"missing-revision", 0o600).unwrap();
-    let candidates = provider_command(&store, &strings(&["recover", "claude", "--list"])).unwrap();
+    let candidates = provider_command(&store, &f.config, &strings(&["recover", "claude", "--list"])).unwrap();
     assert!(candidates.contains(&first.revision));
     assert!(candidates.ends_with("candidate\tbase\n"));
     let recovered =
-        provider_command(&store, &strings(&["recover", "claude", &first.revision])).unwrap();
+        provider_command(&store, &f.config, &strings(&["recover", "claude", &first.revision])).unwrap();
     assert!(recovered.starts_with("recovered\t"));
     assert_eq!(store.history.current("claude").unwrap().reason, "restore");
 }

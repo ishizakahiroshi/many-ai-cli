@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    config::{Config, RuntimePaths},
+    config::{self, Config, RuntimePaths},
     files::FilesService,
     hub::task_owner::HubTaskOwner,
     terminal::{
@@ -93,11 +93,14 @@ struct Fixture {
     path: PathBuf,
 }
 async fn fixture() -> Fixture {
+    fixture_with(Config::default()).await
+}
+async fn fixture_with(cfg: Config) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let runtime = root.path().join("trial");
     std::fs::create_dir(&runtime).unwrap();
     let paths = RuntimePaths::trial(&runtime, 49674, &root.path().join("installed")).unwrap();
-    let config = Arc::new(ConfigStore::new(paths.clone(), Config::default()).unwrap());
+    let config = Arc::new(ConfigStore::new(paths.clone(), cfg).unwrap());
     let tasks = HubTaskOwner::new(tokio::runtime::Handle::current());
     let io = Arc::new(Io {
         sent: Mutex::new(Vec::new()),
@@ -150,14 +153,21 @@ async fn fixture() -> Fixture {
     workers
         .bind(Arc::downgrade(&core), Arc::downgrade(&effects))
         .unwrap();
+    let registry_config = config.clone();
     let owner = OrchestrationProgram::new(OrchestrationDependencies {
         core: Arc::downgrade(&core),
         effects: Arc::downgrade(&effects),
         config,
         paths: paths.clone(),
-        registry: Arc::new(|| {
-            Err(std::io::Error::other(
-                "test rejects native provider discovery",
+        registry: Arc::new(move || {
+            let cfg = registry_config.snapshot().unwrap().config;
+            Ok(crate::profile::registry::Registry::build(
+                crate::proto::provider::Layers {
+                    embedded: Some(crate::profile::registry::embedded_definitions().unwrap()),
+                    legacy: Some(config::provider_definitions_for_app(&cfg.custom_providers).0),
+                    ..Default::default()
+                },
+                &crate::profile::registry::default_adapters(),
             ))
         }),
         environment: Vec::new(),
@@ -795,4 +805,72 @@ async fn request_resolution_uses_runtime_mapping_even_with_explicit_provider_and
     );
     assert_eq!(body.model, "mapped-model");
     assert!(body.permission_preset.is_empty());
+}
+
+
+fn custom_config() -> Config {
+    Config {
+        custom_providers: vec![
+            config::CustomProvider {
+                id: "synthetic-custom".into(),
+                command: "synthetic-cli".into(),
+                ..Default::default()
+            },
+            config::CustomProvider {
+                id: "dropped".into(),
+                command: "synthetic-cli \"unclosed".into(),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn conductor_roles_accept_usable_custom_and_explain_dropped_and_unknown_ids() {
+    let f = fixture_with(custom_config()).await;
+    for provider in ["synthetic-custom", "dropped", "unknown"] {
+        let roles = BTreeMap::from([(
+            "review".into(),
+            Some(RoleSettings { provider: provider.into(), ..Default::default() }),
+        )]);
+        let result = f.owner.reserve_conductor(&mut String::new(), Some(&roles), Timestamp::now());
+        if provider == "synthetic-custom" {
+            let id = result.unwrap();
+            assert_eq!(f.owner.roles(&id)["review"].provider, provider);
+            assert!(f.owner.conductor_prompt(&id).contains("provider=synthetic-custom"));
+        } else {
+            let Err(SessionError::InvalidRequest(detail)) = result else {
+                panic!("unusable custom role was not refused");
+            };
+            assert!(detail.contains("valid providers are: claude, codex"));
+            assert!(detail.contains("command-code, synthetic-custom"));
+            if provider == "dropped" {
+                assert!(detail.contains("double quote"));
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn remembered_and_parent_custom_providers_use_the_live_registry() {
+    let f = fixture_with(custom_config()).await;
+    configure(&f, |cfg| {
+        cfg.user_prefs.spawn.role_provider.insert("review".into(), "synthetic-custom".into());
+    });
+    let mut parent = f.core.snapshot(f.binding.session).unwrap();
+    let mut body = ChildSpawnRequest { role: "review".into(), ..Default::default() };
+    assert_eq!(f.owner.resolve_child_request(&parent, &mut body).unwrap(), "remembered");
+    assert_eq!(body.provider, "synthetic-custom");
+    configure(&f, |cfg| {
+        cfg.user_prefs.spawn.role_provider.insert("review".into(), "dropped".into());
+    });
+    parent.provider = "synthetic-custom".into();
+    let mut body = ChildSpawnRequest { role: "review".into(), ..Default::default() };
+    assert_eq!(f.owner.resolve_child_request(&parent, &mut body).unwrap(), "parent");
+    assert_eq!(body.provider, "synthetic-custom");
+    configure(&f, |cfg| cfg.custom_providers.clear());
+    let mut body = ChildSpawnRequest { role: "review".into(), ..Default::default() };
+    assert_eq!(f.owner.resolve_child_request(&parent, &mut body).unwrap(), "default");
+    assert_eq!(body.provider, "codex");
 }

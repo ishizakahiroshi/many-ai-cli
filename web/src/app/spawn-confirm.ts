@@ -21,7 +21,7 @@ import {
 } from './spawn-model-groups.js';
 import { activeSessionId, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
-import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
+import { fillOrchestrationProviderSelect, getOrchestrationCLIOptions, onOrchestrationProvidersChanged, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import {
   clearAllSpawnConfirmationsForHubRestart,
   closeSpawnConfirmation,
@@ -214,7 +214,7 @@ export function headlessUnsupportedNoticeHtml(): string {
 // 「このフォルダを信頼済みとして登録する」の文言に入れる CLI 名。provider の select と
 // 同じ表示名を使う（名前を 2 か所に書かない）。
 function folderTrustCliName(provider: string): string {
-  const option = ORCHESTRATION_CLI_OPTIONS.find((o) => o.value === provider);
+  const option = getOrchestrationCLIOptions().find((o) => o.value === provider);
   return option?.label || provider;
 }
 
@@ -260,14 +260,6 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   const shownPrompt = prompt.slice(0, SPAWN_CONFIRM_PROMPT_LIMIT);
   const truncated = prompt.length > shownPrompt.length;
   const provider = record.provider;
-  const providerOptions = ORCHESTRATION_CLI_OPTIONS.filter((o) => o.value);
-  const knownProvider = providerOptions.some((o) => o.value === provider);
-  const optionHtml = (value: string, label: string) =>
-    `<option value="${escapeHtml(value)}"${value === provider ? ' selected' : ''}>${escapeHtml(label)}</option>`;
-  const optionsHtml = [
-    ...(provider && !knownProvider ? [optionHtml(provider, provider)] : []),
-    ...providerOptions.map((o) => optionHtml(o.value, o.label || t(o.labelKey || ''))),
-  ].join('');
 
   const repoLabel = repoNameFromParent(parent) || '—';
   const branchStr = String(parent?.branch || '').trim();
@@ -298,7 +290,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_role_table_cli'))}</span>
         <span class="spawn-confirm-provider-row">
           <span class="spawn-confirm-provider-icon" data-spawn-confirm-icon>${providerIconHtml(provider)}</span>
-          <select name="provider" class="ui-input spawn-select">${optionsHtml}</select>
+          <select name="provider" class="ui-input spawn-select"></select>
         </span>
       </label>
       <label class="spawn-confirm-field">
@@ -343,6 +335,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
 </form>`;
 
   const providerSelect = dialog.querySelector('[name=provider]') as HTMLSelectElement | null;
+  if (providerSelect) fillOrchestrationProviderSelect(providerSelect, t, provider, false);
   const modelInput = dialog.querySelector('[name=model]') as HTMLInputElement | null;
   const modelDatalist = dialog.querySelector('datalist') as HTMLDataListElement | null;
   const providerIcon = dialog.querySelector('[data-spawn-confirm-icon]');
@@ -396,8 +389,8 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     }
   }
 
-  if (providerSelect) {
-    providerSelect.addEventListener('change', () => {
+  function refreshProviderFields(): void {
+    if (providerSelect) {
       if (providerIcon) providerIcon.innerHTML = providerIconHtml(providerSelect.value);
       // provider を差し替えたら渡る権限も変わる。アイコンだけ追従して権限欄が
       // 前の provider のまま残ると、承認する人が見ている情報が実物と食い違う。
@@ -412,8 +405,9 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
         if (effortField) effortField.hidden = levels.length === 0;
       }
       void refreshModelChoices();
-    });
+    }
   }
+  providerSelect?.addEventListener('change', refreshProviderFields);
   if (presetSelect) {
     presetSelect.addEventListener('change', refreshApprovalDisplay);
   }
@@ -428,6 +422,11 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   //             spawn_failed / expired / decided_elsewhere / submit_failed はユーザーが
   //             閉じるまで残す。
   let state: 'open' | 'deciding' | 'terminal' = 'open';
+  const unsubscribeProviders = onOrchestrationProvidersChanged(() => {
+    if (state !== 'open' || !providerSelect) return;
+    fillOrchestrationProviderSelect(providerSelect, t, providerSelect.value, false);
+    refreshProviderFields();
+  });
   let closing = false;
   // Set after HTTP 200 if spawn_confirmation_closed never arrives, so Escape
   // and Close can dismiss the overlay without a second POST.
@@ -452,6 +451,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     if (closing) return;
     closing = true;
     stopTimers();
+    unsubscribeProviders();
     unregisterDialogController(record.id);
     const shouldChain = state !== 'open';
     try { dialog.close(); } catch (_) {}
@@ -613,6 +613,6 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   });
 
   document.body.appendChild(dialog);
-  void refreshModelChoices();
+  refreshProviderFields();
   dialog.showModal();
 }

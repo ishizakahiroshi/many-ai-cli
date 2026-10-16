@@ -172,10 +172,11 @@ impl ChildHttp {
         {
             return session_error(error);
         }
-        if !crate::orchestration::child_options::ORCHESTRATION_PROVIDERS
-            .contains(&body.provider.as_str())
-        {
-            // A custom provider whose setting was left out says why.
+        let registry = match self.program.provider_registry() {
+            Ok(registry) => registry,
+            Err(error) => return session_error(error),
+        };
+        if !crate::orchestration::child_options::provider_is_usable(&registry, &body.provider) {
             return Response::error(
                 400,
                 "bad_request",
@@ -183,11 +184,10 @@ impl ChildHttp {
                     &self.config,
                     &body.provider,
                     &format!(
-                        "invalid provider {}; valid providers are: {}",
-                        crate::proto::go_quote::quote(&body.provider),
-                        crate::orchestration::child_options::ORCHESTRATION_PROVIDERS.join(", ")
+                        "invalid provider {}",
+                        crate::proto::go_quote::quote(&body.provider)
                     ),
-                    crate::orchestration::child_options::ORCHESTRATION_PROVIDERS,
+                    &crate::orchestration::child_options::usable_provider_ids(&registry),
                 ),
             );
         }

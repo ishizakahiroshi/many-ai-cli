@@ -2654,7 +2654,7 @@ impl OrchestrationConfig {
 }
 
 impl Config {
-    /// Pure defaults. Token creation and all IO belong to `ConfigStore::load_or_create`.
+    /// Pure defaults. Token creation and all IO belong to `ConfigStore`.
     pub fn defaults(paths: &RuntimePaths) -> Self {
         let mut cfg = Self::default();
         cfg.hub.port = i64::from(paths.port());
@@ -3909,6 +3909,15 @@ impl ConfigStore {
         }
     }
     fn write_config(&self, payload: &[u8]) -> Result<(), ConfigError> {
+        self.write_config_with_backup(payload, false).map(|_| ())
+    }
+    /// One write path for both normal saves and provider mutations. A forced
+    /// backup replaces, rather than precedes, the usual loss-prevention backup.
+    fn write_config_with_backup(
+        &self,
+        payload: &[u8],
+        always_backup: bool,
+    ) -> Result<(Option<super::backup::BackupRecord>, bool), ConfigError> {
         let directory = self.directory()?;
         let mut disk = self.disk.lock().map_err(|_| ConfigError::Poisoned)?;
         // Read whole: a file over the backup limit stops the save with an
@@ -3934,9 +3943,15 @@ impl ConfigStore {
         {
             return Err(ConfigError::Invalid(unreadable.save_refused_en()));
         }
-        if let Some(current) = current.as_deref()
-            && current != payload
-            && (disk.lossy || disk.known.as_deref() != Some(current))
+        // A provider-only load is read-only, including directory permissions.
+        // Restore privacy here, after validation, before any private files are
+        // created under the directory capability that load retained.
+        directory.restrict_private()?;
+        let had_comments = current.as_deref().is_some_and(has_yaml_comments);
+        let backup = if let Some(current) = current.as_deref()
+            && (always_backup
+                || (current != payload
+                    && (disk.lossy || disk.known.as_deref() != Some(current))))
         {
             let backups = super::backup::ConfigBackups::new(&self.paths);
             let record = backups.create_in(&directory, current)?;
@@ -3959,12 +3974,15 @@ impl ConfigStore {
             if let Some(observer) = observer {
                 observer(&record);
             }
-        }
+            Some(record)
+        } else {
+            None
+        };
         directory.replace("config.yaml", payload, 0o600)?;
         disk.known = Some(payload.to_vec());
         disk.lossy = false;
         disk.written = true;
-        Ok(())
+        Ok((backup, had_comments))
     }
     /// Per-entry mistakes found when the file was read at startup, with their
     /// positions in the file. The entries named here were left out. To follow
@@ -3991,6 +4009,84 @@ impl ConfigStore {
     pub fn current_problems(&self) -> Result<Vec<super::safety::ConfigProblem>, ConfigError> {
         Ok(self.snapshot()?.config.custom_provider_problems())
     }
+    /// Safe display rows for every custom-provider entry, including entries
+    /// whose field types prevented loading. Original positions, rather than
+    /// ids, associate dropped entries with their reasons, so duplicate ids do
+    /// not hide malformed rows. No unrelated settings are returned.
+    pub fn provider_listing(&self) -> Result<Vec<Value>, ConfigError> {
+        let state = self.state.lock().map_err(|_| ConfigError::Poisoned)?;
+        let disk = self.disk.lock().map_err(|_| ConfigError::Poisoned)?;
+        let entries = raw_custom_provider_entries(&disk, &state.config)?;
+        let problems = if disk.known.is_some() && !disk.written {
+            self.startup_problems.clone()
+        } else {
+            state.config.custom_provider_problems()
+        };
+        let mut by_index = BTreeMap::<Option<usize>, Vec<&super::safety::ConfigProblem>>::new();
+        for problem in problems.iter().filter(|problem| problem.is_provider_entry()) {
+            by_index.entry(problem.index).or_default().push(problem);
+        }
+        // Redact strings before JSON encoding, including tokens containing
+        // quotes or line breaks that would be escaped in the printed JSON.
+        let redact = |text: &str| {
+            let mut text = text.to_owned();
+            for secret in [
+                &state.config.token,
+                &state.config.auth_cookie_secret,
+                &state.config.remote_pin_hash,
+            ] {
+                if !secret.is_empty() {
+                    text = text.replace(secret.as_str(), "[redacted]");
+                }
+            }
+            text
+        };
+        let row = |entry: &Value, index: Option<usize>| {
+            let relevant = by_index.get(&index).map_or(&[][..], Vec::as_slice);
+            let field = |name: &str| entry.get(name).and_then(Value::as_str).map(&redact);
+            serde_json::json!({
+                "id": field("id"),
+                "label": field("label"),
+                "command": field("command"),
+                "headless": entry.get("headless").is_some_and(|value| !value.is_null()),
+                "builtin": false,
+                "status": if relevant.iter().any(|problem| problem.dropped) {
+                    "dropped"
+                } else {
+                    "in-use"
+                },
+                "reasons": relevant.iter()
+                    .map(|problem| redact(&problem.text_en().reason))
+                    .collect::<Vec<_>>(),
+            })
+        };
+        Ok(match &entries {
+            Value::Array(entries) => entries
+                .iter()
+                .enumerate()
+                .map(|(index, entry)| row(entry, Some(index + 1)))
+                .collect(),
+            Value::Null => Vec::new(),
+            _ => vec![row(&Value::Null, None)],
+        })
+    }
+    /// Match the actual configured id, not ConfigProblem's shortened display
+    /// id. This also finds an entry dropped for an incompatible field type.
+    /// An explicitly empty id can be matched; an absent/non-text id cannot.
+    pub fn contains_custom_provider_id(&self, id: &str) -> Result<bool, ConfigError> {
+        let state = self.state.lock().map_err(|_| ConfigError::Poisoned)?;
+        let disk = self.disk.lock().map_err(|_| ConfigError::Poisoned)?;
+        let entries = raw_custom_provider_entries(&disk, &state.config)?;
+        let id = normalize_subscription_id(id);
+        Ok(entries.as_array().is_some_and(|entries| {
+            entries.iter().any(|entry| {
+                entry
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .is_some_and(|raw| normalize_subscription_id(raw) == id)
+            })
+        }))
+    }
     fn directory(&self) -> Result<Arc<crate::files::safe_fs::Dir>, ConfigError> {
         let mut directory = self.directory.lock().map_err(|_| ConfigError::Poisoned)?;
         if let Some(held) = &*directory {
@@ -4012,8 +4108,47 @@ impl ConfigStore {
     pub fn persist(
         &self,
         expected_revision: u64,
-        mut next: Config,
+        next: Config,
     ) -> Result<ConfigSnapshot, ConfigError> {
+        self.persist_with_policy(expected_revision, next, false, |_| Ok(()))
+            .map(|(snapshot, _, _)| snapshot)
+    }
+    /// A successful provider add/remove keeps exactly one byte-for-byte backup
+    /// of an existing config, even when it was written by this store. A missing
+    /// file needs no backup. The final bool says whether the previous file had
+    /// YAML comments, which re-serialization does not retain.
+    ///
+    /// The caller first validates all command arguments. Revision and config
+    /// validation run before the token factory and before any filesystem write.
+    /// The factory is used only if the accepted replacement lacks a Hub token.
+    pub fn persist_with_backup<F>(
+        &self,
+        expected_revision: u64,
+        next: Config,
+        mut token_factory: F,
+    ) -> Result<(ConfigSnapshot, Option<super::backup::BackupRecord>, bool), ConfigError>
+    where
+        F: FnMut() -> Result<String, ConfigError>,
+    {
+        self.persist_with_policy(expected_revision, next, true, |next| {
+            if next.token.is_empty() {
+                next.token = token_factory()?;
+                if next.token.is_empty() {
+                    return Err(ConfigError::invalid(
+                        "token generator returned an empty token",
+                    ));
+                }
+            }
+            Ok(())
+        })
+    }
+    fn persist_with_policy(
+        &self,
+        expected_revision: u64,
+        mut next: Config,
+        always_backup: bool,
+        prepare: impl FnOnce(&mut Config) -> Result<(), ConfigError>,
+    ) -> Result<(ConfigSnapshot, Option<super::backup::BackupRecord>, bool), ConfigError> {
         let mut guard = self.state.lock().map_err(|_| ConfigError::Poisoned)?;
         if expected_revision != guard.revision {
             return Err(ConfigError::Conflict {
@@ -4028,13 +4163,15 @@ impl ConfigStore {
         next.apply_defaults(&self.paths);
         next.validate()?;
         next.validate_paths(&self.paths)?;
+        prepare(&mut next)?;
         let payload = next.to_private_yaml()?;
-        self.write_config(payload.as_bytes())?;
+        let (backup, had_comments) =
+            self.write_config_with_backup(payload.as_bytes(), always_backup)?;
         *guard = ConfigSnapshot {
             revision,
             config: next,
         };
-        Ok(guard.clone())
+        Ok((guard.clone(), backup, had_comments))
     }
     /// Reserves source-visible state before asynchronous profile seeding. The
     /// revision receipt prevents a failed seed from rolling back another writer.
@@ -4126,6 +4263,51 @@ impl ConfigStore {
         let payload = guard.config.to_private_yaml()?;
         self.write_config(payload.as_bytes())?;
         Ok(guard.clone())
+    }
+    /// Read settings for provider commands without creating or rewriting files,
+    /// migrating backups, repairing permissions, or generating a token. Missing
+    /// settings remain absent until a validated mutation calls `persist_with_backup`.
+    pub fn load_for_provider(paths: RuntimePaths) -> Result<Self, ConfigError> {
+        let path = paths.resource(Resource::Config);
+        if paths.is_trial() {
+            checked_trial_path(&paths, &path)?;
+        }
+        let directory = match crate::files::safe_fs::Dir::open(paths.root()) {
+            Ok(directory) => Some(Arc::new(directory)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        let bytes = match directory.as_deref() {
+            Some(directory) => match super::safety::read_settings_file(directory)? {
+                super::safety::SettingsFile::Missing => None,
+                super::safety::SettingsFile::Bytes(bytes) => Some(bytes),
+                super::safety::SettingsFile::TooLarge => {
+                    return Err(ConfigError::Unreadable(Box::new(
+                        super::safety::ConfigUnreadable::too_large(&paths),
+                    )));
+                }
+            },
+            None => None,
+        };
+        let (config, problems) = match bytes.as_deref() {
+            Some(bytes) => super::safety::parse_config_bytes(bytes, &paths)
+                .map_err(|unreadable| ConfigError::Unreadable(Box::new(unreadable)))?,
+            None => (Config::defaults(&paths), Vec::new()),
+        };
+        let mut store = Self::new(paths, config)?;
+        let lossy = if let Some(bytes) = bytes.as_deref() {
+            store.snapshot()?.config.to_private_yaml()?.as_bytes() != bytes
+        } else {
+            false
+        };
+        *store.disk.lock().map_err(|_| ConfigError::Poisoned)? = DiskState {
+            known: bytes,
+            lossy,
+            written: false,
+        };
+        store.directory = Mutex::new(directory);
+        store.startup_problems = problems;
+        Ok(store)
     }
     /// Uses only the explicit runtime root and an injected cryptographic token source.
     /// A file that cannot be read stops the load with `ConfigError::Unreadable`
@@ -4226,6 +4408,39 @@ impl ConfigStore {
         Ok(store)
     }
 }
+/// Retain raw list positions and readable fields that normalization cannot
+/// preserve. Known bytes were validated when loaded or produced by this store.
+fn raw_custom_provider_entries(disk: &DiskState, config: &Config) -> Result<Value, ConfigError> {
+    if let Some(bytes) = disk.known.as_deref() {
+        let text = std::str::from_utf8(bytes).map_err(|_| {
+            ConfigError::invalid("stored config is not valid UTF-8 (content redacted)")
+        })?;
+        let raw = super::yaml_nodes::decode_config(text)
+            .map_err(|error| ConfigError::Parse(error.to_string()))?;
+        Ok(raw.get("custom_providers").cloned().unwrap_or(Value::Null))
+    } else {
+        serde_json::to_value(&config.custom_providers).map_err(|_| {
+            ConfigError::invalid("custom provider serialization failed (content redacted)")
+        })
+    }
+}
+/// Ask the YAML scanner so a `#` inside a quoted or block scalar is not
+/// reported as a lost comment. Never expose the comment's content.
+fn has_yaml_comments(bytes: &[u8]) -> bool {
+    use serde_saphyr::granit_parser::{Event, Options, Parser};
+    let Ok(text) = std::str::from_utf8(bytes) else {
+        return false;
+    };
+    let mut options = Options::default();
+    options.emit_comments = true;
+    Parser::new_from_str_with_options(text, options)
+        .any(|event| matches!(event, Ok((Event::Comment(..), _))))
+}
+
+#[cfg(test)]
+#[path = "provider_persistence_tests.rs"]
+mod provider_persistence_tests;
+
 // Pure launch/config helpers ported from internal/config/{effort,headless,
 // child_permission,launch_prompt,custom_provider_command}.go.
 // Integration: append inside config/model.rs, with Config, OrchestrationConfig,

@@ -6,8 +6,8 @@
 //! place that refuses an unknown provider id asks this module for the reason.
 //!
 //! The wording is never made here: the reason is the problem's own
-//! `ConfigProblem::warning_en` (built from `text_en`), and the only addition is
-//! a pointer to `many-ai-cli config check`. Nothing from the settings file
+//! `ConfigProblem::warning_en` (built from `text_en`), with pointers to
+//! `many-ai-cli config check` and, for child requests, the live valid ids. Nothing from the settings file
 //! (no line, no token) can reach the text, because a problem carries none.
 use crate::config::{CHECK_COMMAND, ConfigProblem, ConfigStore, normalize_subscription_id};
 
@@ -117,39 +117,19 @@ fn is_used_custom_provider(store: &ConfigStore, requested: &str) -> bool {
         .is_ok_and(|snapshot| snapshot.config.is_custom_provider_id(&id))
 }
 
-/// Orchestration children (conductor roles, relay roles, `orchestrate spawn`)
-/// can only be built-in providers for now. A custom provider that works is
-/// therefore refused for a different reason than a left-out one: nothing in the
-/// settings file is wrong, and fixing it would not help.
-pub fn not_for_children_en(provider: &str, allowed: &[&str]) -> String {
-    let shown = shown_id(provider).unwrap_or_default();
-    format!(
-        "custom provider `{shown}` cannot be used for an orchestration child yet: only the built-in providers can ({}). Nothing in config.yaml needs fixing for this.",
-        allowed.join(", ")
-    )
-}
-
-/// Why an orchestration child cannot use `provider`: a custom provider that is
-/// in use is not usable for children yet; a left-out one gets its reason.
-/// `None`: nothing specific to say (the caller's plain message stands).
-pub fn role_refusal(store: &ConfigStore, provider: &str, allowed: &[&str]) -> Option<String> {
-    if is_used_custom_provider(store, provider) {
-        return Some(not_for_children_en(provider, allowed));
-    }
-    reason_en(store.startup_problems(), provider).or_else(|| removed_reason_en(store, provider))
-}
-
-/// `explain_from` for the places that choose an orchestration child.
+/// Child launch refusals keep the dropped-entry explanation and always list
+/// ids that the caller verified against its live registry snapshot.
 pub fn explain_for_children(
     store: &ConfigStore,
     requested: &str,
     plain: &str,
-    allowed: &[&str],
+    allowed: &[String],
 ) -> String {
-    if is_used_custom_provider(store, requested) {
-        return not_for_children_en(requested, allowed);
-    }
-    explain_from(store, requested, plain)
+    format!(
+        "{}; valid providers are: {}",
+        explain_from(store, requested, plain),
+        allowed.join(", ")
+    )
 }
 
 /// The id as written by a person, as the one value every later step uses: a
@@ -307,34 +287,25 @@ mod tests {
     }
 
     #[test]
-    fn a_used_id_is_never_called_left_out_and_children_get_the_plain_fact() {
+    fn child_refusals_keep_dropped_reasons_and_live_valid_ids_without_categorical_ban() {
         let dir = tempfile::tempdir().unwrap();
         let trial = dir.path().join("trial");
         std::fs::create_dir(&trial).unwrap();
         let paths = RuntimePaths::trial(&trial, 48888, &dir.path().join("installed")).unwrap();
         let store = ConfigStore::new(paths, config()).unwrap();
-        let allowed = ["claude", "codex"];
-        // `good` works (its second entry is the repeat that was left out).
-        let message = role_refusal(&store, "good", &allowed).unwrap();
-        assert!(
-            message.contains("cannot be used for an orchestration child yet"),
-            "{message}"
-        );
-        assert!(message.contains("claude, codex"));
-        assert!(message.contains("Nothing in config.yaml needs fixing"));
-        assert!(!message.contains("left out") && !message.contains("config check"));
-        assert_eq!(
-            explain_for_children(&store, "good", "invalid provider", &allowed),
-            message
-        );
-        // An id that was really left out keeps its reason; an unknown id has nothing specific.
-        assert!(
-            role_refusal(&store, "quote", &allowed)
-                .unwrap()
-                .contains("double quote")
-        );
-        assert!(role_refusal(&store, "nothing-like-it", &allowed).is_none());
-        // The id is typed once and used as one value everywhere.
+        let allowed = vec!["claude".into(), "codex".into(), "good".into()];
+        for id in ["good", "quote", "nothing-like-it"] {
+            let message = explain_for_children(&store, id, "invalid provider", &allowed);
+            assert!(message.ends_with("valid providers are: claude, codex, good"));
+            assert!(!message.contains("cannot be used for an orchestration child yet"));
+            assert!(!message.contains("synthetic-token-marker"));
+            assert!(!message.contains("synthetic-command-marker"));
+            if id == "quote" {
+                assert!(message.contains("double quote"));
+            } else {
+                assert!(message.starts_with("invalid provider"));
+            }
+        }
         assert_eq!(canonical_provider(&store, " GOOD "), "good");
         assert_eq!(canonical_provider(&store, "claude"), "claude");
         assert_eq!(canonical_provider(&store, "shell"), "shell");

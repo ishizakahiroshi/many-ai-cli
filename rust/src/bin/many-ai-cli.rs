@@ -571,6 +571,18 @@ async fn run() -> Result<(), String> {
             );
         }
         Command::Provider(args) => {
+            if many_ai_cli::application::maintenance_cli::custom_provider::handles(&args) {
+                let home = runtime_context::user_home().map_err(|e| e.to_string())?;
+                let paths = runtime_context::runtime_paths(invocation.trial.as_ref(), &home)
+                    .map_err(|e| e.to_string())?;
+                let store = std::sync::Arc::new(
+                    many_ai_cli::config::ConfigStore::load_for_provider(paths)
+                        .map_err(|e| e.to_string())?,
+                );
+                print!("{}", many_ai_cli::application::maintenance_cli::custom_provider::run(&store, &args)
+                    .map_err(|e| e.to_string())?);
+                return Ok(());
+            }
             let context = main_program::MainContext::load(invocation.trial.as_ref())
                 .map_err(|e| e.to_string())?;
             print!(

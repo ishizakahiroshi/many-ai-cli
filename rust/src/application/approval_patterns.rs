@@ -7,6 +7,7 @@ use crate::{
 use std::{
     collections::BTreeMap,
     io,
+    path::PathBuf,
     sync::{Arc, Mutex, Weak},
 };
 #[cfg(test)]
@@ -22,8 +23,27 @@ pub const PROVIDERS: &[&str] = &[
     "common",
 ];
 pub type Warning = dyn Fn(&'static str) + Send + Sync;
+const PATTERN_FILE_CAP: usize = 2 * 1024 * 1024;
+
+/// Validate the exact bytes that the writer and bounded reader share.
+pub(crate) fn encode_pattern_file(list: &[String]) -> io::Result<Vec<u8>> {
+    let body = serde_json::to_string_pretty(list)
+        .map_err(io::Error::other)?
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026")
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029");
+    let bytes = format!("{body}\n").into_bytes();
+    if bytes.len() > PATTERN_FILE_CAP {
+        return Err(io::Error::other("approval pattern file exceeds size limit"));
+    }
+    Ok(bytes)
+}
+
 pub struct ApprovalPatterns {
     dir: Dir,
+    custom_dir: Dir,
     config: Arc<ConfigStore>,
     core: Weak<SessionEngine>,
     gate: Mutex<()>,
@@ -37,6 +57,15 @@ fn defaults(provider: &str) -> Vec<String> {
 }
 pub fn known(provider: &str) -> bool {
     PROVIDERS.contains(&provider)
+}
+/// CLI-owned patterns are separate from legacy mirrors and built-in profiles.
+/// In particular, a custom id such as `claude.custom` must not name a profile.
+pub fn custom_pattern_path(paths: &RuntimePaths, provider: &str) -> PathBuf {
+    paths
+        .root()
+        .join("approval-patterns")
+        .join("custom-providers")
+        .join(format!("{provider}.json"))
 }
 fn json(bytes: &[u8]) -> io::Result<Vec<String>> {
     if bytes.is_empty() {
@@ -60,8 +89,10 @@ impl ApprovalPatterns {
         warning: Arc<Warning>,
     ) -> io::Result<Arc<Self>> {
         let dir = Dir::open(paths.root())?.child_dir("approval-patterns", true)?;
+        let custom_dir = dir.child_dir("custom-providers", true)?;
         Ok(Arc::new(Self {
             dir,
+            custom_dir,
             config,
             core,
             gate: Mutex::new(()),
@@ -69,16 +100,55 @@ impl ApprovalPatterns {
         }))
     }
     fn read_file(&self, name: &str) -> io::Result<Vec<u8>> {
-        const CAP: usize = 2 * 1024 * 1024;
-        let bytes = self.dir.read(name, CAP + 1)?;
-        if bytes.len() > CAP {
+        Self::read_in(&self.dir, name)
+    }
+    fn read_in(dir: &Dir, name: &str) -> io::Result<Vec<u8>> {
+        let bytes = dir.read(name, PATTERN_FILE_CAP + 1)?;
+        if bytes.len() > PATTERN_FILE_CAP {
             return Err(io::Error::other("approval pattern file exceeds size limit"));
         }
         Ok(bytes)
     }
+    fn custom_provider(&self, provider: &str) -> io::Result<bool> {
+        let snapshot = self.config.snapshot().map_err(io::Error::other)?;
+        Ok(
+            crate::config::effective_custom_providers(&snapshot.config.custom_providers)
+                .iter()
+                .any(|p| p.id == provider),
+        )
+    }
+    fn custom_active_bytes(&self, provider: &str) -> io::Result<Vec<u8>> {
+        let name = format!("{provider}.json");
+        match Self::read_in(&self.custom_dir, &name) {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => self.read_file(&name),
+            result => result,
+        }
+    }
+    fn custom_active(&self, provider: &str) -> io::Result<Vec<String>> {
+        match self.custom_active_bytes(provider) {
+            Ok(bytes) => json(&bytes),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(vec![]),
+            Err(e) => Err(e),
+        }
+    }
     fn read(&self, provider: &str, profile: &str) -> io::Result<Vec<String>> {
-        if !known(provider) {
+        if !known(provider) && !self.custom_provider(provider)? {
             return Err(io::Error::other("unknown provider"));
+        }
+        if !known(provider) {
+            // Existing custom sources use the raw file as their official copy.
+            // A user override never writes that file or a built-in profile.
+            let name = format!("{provider}.json");
+            let bytes = if profile == "custom" {
+                Self::read_in(&self.custom_dir, &name)
+            } else {
+                self.read_file(&name)
+            };
+            return match bytes {
+                Ok(bytes) => json(&bytes),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(vec![]),
+                Err(e) => Err(e),
+            };
         }
         let suffix = if profile == "custom" {
             "custom"
@@ -96,15 +166,10 @@ impl ApprovalPatterns {
         }
     }
     fn write(&self, name: &str, list: &[String]) -> io::Result<()> {
-        let body = serde_json::to_string_pretty(list)
-            .map_err(io::Error::other)?
-            .replace('<', "\\u003c")
-            .replace('>', "\\u003e")
-            .replace('&', "\\u0026")
-            .replace('\u{2028}', "\\u2028")
-            .replace('\u{2029}', "\\u2029");
-        self.dir
-            .replace(name, format!("{body}\n").as_bytes(), 0o600)
+        Self::write_in(&self.dir, name, list)
+    }
+    fn write_in(dir: &Dir, name: &str, list: &[String]) -> io::Result<()> {
+        dir.replace(name, &encode_pattern_file(list)?, 0o600)
     }
     pub fn sync(&self) -> io::Result<()> {
         let _guard = self.gate.lock().unwrap_or_else(|e| e.into_inner());
@@ -129,13 +194,19 @@ impl ApprovalPatterns {
     }
     pub fn active(&self) -> io::Result<BTreeMap<String, Vec<String>>> {
         let snapshot = self.config.snapshot().map_err(io::Error::other)?;
-        PROVIDERS
+        let mut active = PROVIDERS
             .iter()
             .map(|p| {
                 self.read(p, snapshot.config.approval_profiles.for_provider(p))
                     .map(|v| ((*p).into(), v))
             })
-            .collect()
+            .collect::<io::Result<BTreeMap<_, _>>>()?;
+        for provider in crate::config::effective_custom_providers(&snapshot.config.custom_providers) {
+            if !known(&provider.id) {
+                active.insert(provider.id.clone(), self.custom_active(&provider.id)?);
+            }
+        }
+        Ok(active)
     }
     fn refresh_inner(&self) -> io::Result<()> {
         let snapshot = self.config.snapshot().map_err(io::Error::other)?;
@@ -170,8 +241,12 @@ impl ApprovalPatterns {
             if set.contains_key(&provider) {
                 continue;
             }
-            let list = self
-                .read_file(&format!("{provider}.json"))
+            let bytes = if known(&provider) {
+                self.read_file(&format!("{provider}.json"))
+            } else {
+                self.custom_active_bytes(&provider)
+            };
+            let list = bytes
                 .ok()
                 .and_then(|b| json(&b).ok())
                 .unwrap_or_default();
@@ -188,8 +263,14 @@ impl ApprovalPatterns {
         }
     }
     pub fn write_custom(&self, provider: &str, list: &[String]) -> io::Result<()> {
-        if !known(provider) {
+        if !known(provider) && !self.custom_provider(provider)? {
             return Err(io::Error::other("unknown provider"));
+        }
+        if !known(provider) {
+            let _guard = self.gate.lock().unwrap_or_else(|e| e.into_inner());
+            Self::write_in(&self.custom_dir, &format!("{provider}.json"), list)?;
+            self.reload();
+            return Ok(());
         }
         self.write(&format!("{provider}.custom.json"), list)?;
         self.refresh();
@@ -213,13 +294,12 @@ impl ApprovalPatterns {
             .strip_suffix(".official")
             .or_else(|| raw_provider.strip_suffix(".custom"))
             .unwrap_or(raw_provider);
-        let custom = self
-            .config
-            .snapshot()
-            .ok()
-            .is_some_and(|s| s.config.is_custom_provider_id(raw_provider));
+        let custom = self.custom_provider(raw_provider).unwrap_or(false);
         if !known(provider) && !custom {
             return Err(io::Error::from(io::ErrorKind::NotFound));
+        }
+        if !known(provider) && custom {
+            return self.custom_active_bytes(raw_provider);
         }
         self.read_file(name)
     }
@@ -292,6 +372,19 @@ impl ApprovalPatterns {
             let list = parse_markdown(&crate::proto::wire::go_utf8_lossy(&body));
             if list.is_empty() {
                 continue;
+            }
+            // Recheck after the fetch under the same gate as write_custom:
+            // an override saved while the source was in flight wins as well.
+            let _guard = self.gate.lock().unwrap_or_else(|e| e.into_inner());
+            if !official {
+                match self.custom_dir.metadata(&format!("{provider}.json")) {
+                    Ok(_) => continue,
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                    Err(_) => {
+                        (self.warning)("approval pattern profile unavailable");
+                        continue;
+                    }
+                }
             }
             let current = if official {
                 self.read(&provider, "official")
