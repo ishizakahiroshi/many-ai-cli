@@ -1285,7 +1285,10 @@ header {
 
 /* セッションカード */
 /* 右上の ⋯ と × の幅だけタイトル行の右を空ける（重なるとタイトルが隠れる）。2 行目は .card-meta-row が取り戻す。 */
-.card { --card-actions-reserve: calc(2 * var(--ui-control-compact) + var(--space-1) + 10px); position: relative; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 9px var(--card-actions-reserve) 9px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; overflow: hidden; }
+/* 1 画面に並ぶ枚数を増やすため、上下の余白とカード間を詰めてある（2026-10-16 利用者指定。旧値 padding 9px /
+   margin-bottom 8px から 1 枚あたり 12px 低い）。2 行の中身は変えない。.card-actions の top と ::before の
+   top/bottom はこの padding に連動させてある（⋯ × とタイトル行・2 行目の位置関係は旧値と同じ）。 */
+.card { --card-actions-reserve: calc(2 * var(--ui-control-compact) + var(--space-1) + 10px); position: relative; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 5px var(--card-actions-reserve) 5px 14px; margin-bottom: 4px; cursor: pointer; transition: border-color 0.15s, background 0.15s; overflow: hidden; }
 .card:hover { border-color: var(--line-soft); background: var(--bg-deep); }
 .card.waiting { border-color: rgba(245,158,11,0.35); }
 .card.awaiting-approval { background: color-mix(in srgb, var(--warn-bg) 12%, var(--bg-elev)); }
@@ -1316,8 +1319,8 @@ header {
   content: '';
   position: absolute;
   left: 0;
-  top: 8px;
-  bottom: 8px;
+  top: 5px;
+  bottom: 5px;
   width: 3px;
   border-radius: 0 3px 3px 0;
   background: var(--badge-standby-bg);
@@ -1327,7 +1330,7 @@ header {
 .card.waiting::before { background: var(--warn); opacity: 1; }
 .card.awaiting-approval::before { background: var(--warn); opacity: 1; width: 5px; }
 .card.pending-spawn-confirm::before { background: var(--perm); opacity: 1; width: 5px; }
-.card.active::before  { background: var(--accent); opacity: 1; width: 5px; top: 4px; bottom: 4px; }
+.card.active::before  { background: var(--accent); opacity: 1; width: 5px; top: 3px; bottom: 3px; }
 /* 1 行に並ぶ文字は baseline で揃える。align-items:center だと各項目の baseline が
    その項目の中心から (ascent-descent)/2 ＝ 約 0.41em ずれるため、font-size が違う
    #N(16px) / モデル名(0.68rem) / タイトル(0.75rem) が 1〜2px ずつ段違いに見える。
@@ -1603,7 +1606,7 @@ header {
 .card-end-reason { min-width: 0; flex-shrink: 1; font-size: var(--fs-xs); color: var(--danger); font-weight: 500; white-space: nowrap; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; }
 .card-actions {
   position: absolute;
-  top: 6px;
+  top: 2px;
   right: 6px;
   display: flex;
   align-items: center;
