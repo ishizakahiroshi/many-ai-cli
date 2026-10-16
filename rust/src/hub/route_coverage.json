@@ -1737,6 +1737,32 @@
         "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
       },
       {
+        "pattern": "/api/sessions/{id}/close-child",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleCloseChild",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/child_control.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/child_control.rs",
+            "line": 72
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_child_controls",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1170
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
         "pattern": "/api/sessions/{id}/inject",
         "methods": [
           "POST"
@@ -3844,6 +3870,16 @@
         "POST"
       ],
       "source_handler": "handleSendChild",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/close-child",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleCloseChild",
       "status": "unresolved",
       "implementation": null,
       "fixture": null

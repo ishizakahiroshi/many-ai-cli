@@ -114,7 +114,7 @@ pub fn parse(args: &[String], custom_providers: &[String]) -> Result<Invocation,
         "log-clean" => Command::LogClean(rest),
         "uninstall" => Command::Uninstall(rest),
         "usage-relay" => Command::UsageRelay(rest),
-        "orchestrate" if rest.is_empty() => return Err("orchestrate <spawn|send>".into()),
+        "orchestrate" if rest.is_empty() => return Err("orchestrate <spawn|send|close|relay>".into()),
         "orchestrate" => Command::Orchestrate(rest),
         "wrap" if rest.is_empty() => return Err("wrap <provider>".into()),
         "wrap" => Command::Wrap {
@@ -169,7 +169,10 @@ mod tests {
                 .command,
             Command::UsageRelay(_)
         ));
-        assert!(parse(&args(&["orchestrate"]), &[]).is_err());
+        assert_eq!(
+            parse(&args(&["orchestrate"]), &[]).unwrap_err(),
+            "orchestrate <spawn|send|close|relay>"
+        );
         assert!(parse(&args(&["wrap"]), &[]).is_err());
         assert!(parse(&args(&["gemini"]), &[]).is_err());
     }

@@ -124,6 +124,8 @@ The install-status list (first-run screen, and Settings → AI CLI integrations)
 
 ## Light orchestration
 
+A conductor can use `many-ai-cli orchestrate close --role <role> [--id <child session id>]` to close only its own children, even while they are working; without `--id`, it closes the newest child with that role. Closing follows the dashboard ✕ path, frees the child’s slot, and records the conductor’s action and the child’s previous state on the board.
+
 `POST /api/sessions/:id/spawn-child` lets a conductor session create a child session with a role, provider, model, initial prompt, and optional cwd. The Hub creates `~/.many-ai-cli/orchestration/<orchestration_id>/board.md`, injects the board path into the child prompt, and watches the board for appended progress and `## DONE <role> session=<child_id>` markers.
 
 By default, child sessions run in separate git worktrees under `.many-ai-cli/worktrees/<orchestration_id>/<role>` when the parent cwd is a git repository. The Hub does not auto-merge child branches; the conductor or user decides what to merge after reviewing the board and branch.
