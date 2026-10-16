@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "aae60ef46ba2d8294059f0e66ac3f5fea8969af9",
+    "commit": "aa9c0505fdcc486fabc2261f09fae98f607311d8",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1992,
+    "discovered": 1996,
     "analyzed": 1551,
     "unresolved": 9,
     "unknown": 0,
-    "unclaimed": 432,
+    "unclaimed": 436,
     "skipped_by_config": 0
   },
   "files": [
@@ -797,6 +797,38 @@
     },
     {
       "path": "docs/bot/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/custom-provider-add/FACTS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/custom-provider-add/PROGRESS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/custom-provider-add/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/custom-provider-add/REVIEW.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
