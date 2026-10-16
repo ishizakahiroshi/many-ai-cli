@@ -11,6 +11,11 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Use registered custom providers as orchestration children.** (Rust)
+  Spawn, conductor and relay roles accept usable custom provider ids, and the
+  approval dialog includes them. Interactive relay works without a headless
+  definition; explicit headless execution requires one. Invalid or dropped ids
+  are refused with the currently available choices.
 - **Register another AI CLI without editing the settings file.** (Rust)
   `many-ai-cli provider add` validates the id, executable and headless settings,
   and saves exact approval-option labels without exposing the Hub token.

@@ -2,7 +2,7 @@ import { t } from '../i18n.js';
 import type { SessionSnapshot } from '../types/proto.js';
 import { sessions } from './state.js';
 import { apiFetch, showToast } from './util.js';
-import { ORCHESTRATION_CLI_OPTIONS } from './orchestration-roles.js';
+import { fillOrchestrationProviderSelect, onOrchestrationProvidersChanged } from './orchestration-roles.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 import { permissionPresetLabel } from './spawn-confirm.js';
 import { PERMISSION_PRESET_SCHEMA, isPermissionPresetAvailable } from './spawn-confirm-store.js';
@@ -116,17 +116,6 @@ function savePrefs(): void {
   try { localStorage.setItem(RELAY_PREFS_KEY, JSON.stringify(prefs)); } catch (_) { /* private mode等は無視 */ }
 }
 
-function appendSelectOptions(select: HTMLSelectElement, selected: string): void {
-  select.replaceChildren();
-  ORCHESTRATION_CLI_OPTIONS.forEach((choice) => {
-    const option = document.createElement('option');
-    option.value = choice.value;
-    option.textContent = choice.label || translated(choice.labelKey || '', choice.labelKey || choice.value);
-    option.selected = choice.value === selected;
-    select.appendChild(option);
-  });
-}
-
 function buildRoleTable(prefs: RelayDialogPrefs): void {
   if (!roleTableBody) return;
   roleTableBody.replaceChildren();
@@ -147,7 +136,7 @@ function buildRoleTable(prefs: RelayDialogPrefs): void {
     const cli = document.createElement('select');
     cli.className = 'ui-input relay-role-cli';
     cli.setAttribute('aria-label', `${labelCell.textContent || definition.key} CLI`);
-    appendSelectOptions(cli, prefs.roles?.[definition.key]?.provider || '');
+    fillOrchestrationProviderSelect(cli, t, prefs.roles?.[definition.key]?.provider || '');
 
     const modelCell = document.createElement('td');
     const model = document.createElement('input');
@@ -550,6 +539,15 @@ export function openRelayDialog(sessionID: number): void {
 }
 
 setupListeners();
+onOrchestrationProvidersChanged(() => {
+  if (currentSessionID === null || submitting) return;
+  roleTableBody?.querySelectorAll<HTMLSelectElement>('.relay-role-cli').forEach((select) => {
+    const previous = select.value;
+    fillOrchestrationProviderSelect(select, t);
+    if (select.value !== previous) select.dispatchEvent(new Event('change'));
+  });
+  updateFormState();
+});
 onSubscriptionsChanged(() => {
   if (currentSessionID !== null) buildRoleTable(readPrefs());
 });

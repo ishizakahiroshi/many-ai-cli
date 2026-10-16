@@ -284,6 +284,7 @@ fn orchestration_id(parent: &SessionSnapshot, now: Timestamp) -> OrchestrationId
 /// prompt task owner. None has a default implementation. Implementations must
 /// retain restart data and schedule typed prompts once, not silently drop them.
 pub trait ChildLaunchServices: Send + Sync {
+    fn provider_registry(&self) -> Result<crate::profile::registry::Registry, SessionError>;
     fn launch_arg_usable(&self, provider: &str) -> Result<bool, SessionError>;
     fn role_subscription(
         &self,
@@ -476,20 +477,18 @@ impl ChildLaunchExecutor {
         {
             return Err(ChildLaunchError::new(503, "config_unreadable", reason).into());
         }
-        if !super::child_options::ORCHESTRATION_PROVIDERS.contains(&raw.provider.as_str()) {
-            // A custom provider whose setting was left out says why.
+        // Recheck after confirmation: the selected provider or registry may
+        // have changed while the dialog was open.
+        let registry = self.services.provider_registry()?;
+        if !super::child_options::provider_is_usable(&registry, &raw.provider) {
             return Err(ChildLaunchError::new(
                 400,
                 "bad_request",
                 crate::application::left_out_provider::explain_for_children(
                     &self.config,
                     &raw.provider,
-                    &format!(
-                        "invalid provider {}; valid providers are: {}",
-                        go_quote(&raw.provider),
-                        super::child_options::ORCHESTRATION_PROVIDERS.join(", ")
-                    ),
-                    super::child_options::ORCHESTRATION_PROVIDERS,
+                    &format!("invalid provider {}", go_quote(&raw.provider)),
+                    &super::child_options::usable_provider_ids(&registry),
                 ),
             )
             .into());
@@ -1064,7 +1063,8 @@ fn replace_memory(
 fn remember_provider(cfg: &mut Config, body: &ChildSpawnRequest) -> bool {
     let role = body.role.trim();
     let provider = body.provider.trim();
-    if role.is_empty() || !super::child_options::ORCHESTRATION_PROVIDERS.contains(&provider) {
+    // Called only after successful launch of a live-registry-validated id.
+    if role.is_empty() || provider.is_empty() {
         return false;
     }
     replace_memory(&mut cfg.user_prefs.spawn.role_provider, role, provider)

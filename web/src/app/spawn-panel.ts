@@ -10,7 +10,7 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
 import { hasProviderCapability, loadProviderSummaries } from './provider-store.js';
 import { commandMissingIds, isAiLaunchProvider, spawnLaunchBlockReason } from './cli-availability.js';
 import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
-import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
+import { fillOrchestrationProviderSelect, onOrchestrationProvidersChanged, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
 import { compareCwdByBasename, filterCwdSubdirItems, joinCwdChild, splitCwdPath, splitCwdTypeahead } from './cwd-path.js';
 import { effortForSpawnBody, effortLevelsFor, resolveSpawnEffortSelection, setLaunchOptionChoices } from './spawn-confirm-store.js';
@@ -425,19 +425,17 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
   function buildOrchestrationRoleTable(): void {
     if (!spawnRoleTableBody) return;
     spawnRoleTableBody.innerHTML = ORCHESTRATION_ROLE_DEFS.map(r => {
-      const cliOptions = ORCHESTRATION_CLI_OPTIONS.map(o =>
-        `<option value="${o.value}">${escapeHtml(o.label || t(o.labelKey || ''))}</option>`
-      ).join('');
       return (
         `<tr data-role="${r.key}">` +
         `<td>${escapeHtml(t(r.labelKey))}</td>` +
-        `<td><select class="ui-input spawn-role-cli">${cliOptions}</select></td>` +
+        `<td><select class="ui-input spawn-role-cli"></select></td>` +
         `<td><input type="text" class="ui-input spawn-role-model" data-i18n-placeholder="spawn_role_model_placeholder" placeholder="${escapeHtml(t('spawn_role_model_placeholder'))}" disabled></td>` +
         `<td><select class="ui-input spawn-role-subscription" hidden disabled></select></td>` +
         `</tr>`
       );
     }).join('');
-    spawnRoleTableBody.querySelectorAll('.spawn-role-cli').forEach(sel => {
+    spawnRoleTableBody.querySelectorAll<HTMLSelectElement>('.spawn-role-cli').forEach(sel => {
+      fillOrchestrationProviderSelect(sel, t);
       sel.addEventListener('change', () => {
         syncRoleModelDisabledState();
         syncRoleSubscriptionOptions(sel.closest('tr'));
@@ -451,6 +449,15 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
     syncAllRoleSubscriptionOptions();
     updateOrchestrationSummary();
   }
+
+  onOrchestrationProvidersChanged(() => {
+    spawnRoleTableBody?.querySelectorAll<HTMLSelectElement>('.spawn-role-cli').forEach((select) => {
+      fillOrchestrationProviderSelect(select, t);
+    });
+    syncRoleModelDisabledState();
+    syncAllRoleSubscriptionOptions();
+    updateOrchestrationSummary();
+  });
 
   function setSpawnOrchestrationMode(on: boolean): void {
     spawnOrchestrationMode = on;

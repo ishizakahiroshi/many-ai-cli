@@ -444,6 +444,19 @@ struct Fixture {
     paths: RuntimePaths,
 }
 async fn fixture(limit: i64) -> Fixture {
+    fixture_with_config(limit, |_| {}).await
+}
+fn registry_for_config(cfg: &Config) -> Registry {
+    Registry::build(
+        Layers {
+            embedded: Some(embedded_definitions().unwrap()),
+            legacy: Some(config::provider_definitions_for_app(&cfg.custom_providers).0),
+            ..Default::default()
+        },
+        &default_adapters(),
+    )
+}
+async fn fixture_with_config(limit: i64, configure: impl FnOnce(&mut Config)) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let runtime = root.path().join("trial");
     std::fs::create_dir(&runtime).unwrap();
@@ -454,6 +467,7 @@ async fn fixture(limit: i64) -> Fixture {
     cfg.orchestration.child_timeout_seconds = 0;
     cfg.orchestration.idle_done_threshold_sec = 0;
     cfg.orchestration.child_startup_fail = Some(false);
+    configure(&mut cfg);
     let config = Arc::new(ConfigStore::new(paths.clone(), cfg).unwrap());
     let tasks = HubTaskOwner::new(tokio::runtime::Handle::current());
     let io = Arc::new(Io::default());
@@ -505,13 +519,7 @@ async fn fixture(limit: i64) -> Fixture {
     workers
         .bind(Arc::downgrade(&core), Arc::downgrade(&effects))
         .unwrap();
-    let registry = Registry::build(
-        Layers {
-            embedded: Some(embedded_definitions().unwrap()),
-            ..Default::default()
-        },
-        &default_adapters(),
-    );
+    let registry = registry_for_config(&config.snapshot().unwrap().config);
     let orchestration = OrchestrationProgram::new(OrchestrationDependencies {
         core: Arc::downgrade(&core),
         effects: Arc::downgrade(&effects),
@@ -2137,28 +2145,276 @@ async fn resume_rejects_old_launch_identity_even_without_restored_relay_metadata
 #[test]
 fn only_the_role_that_failed_gets_the_left_out_reason() {
     let cfg = config::Config::default();
+    let registry = registry_for_config(&cfg);
     let role = |provider: &str| Role {
         provider: provider.into(),
         ..Default::default()
     };
-    let why = |provider: &str| (provider == "quote").then(|| "REASON-FOR-QUOTE".to_owned());
+    let why = |provider: &str, plain: &str, allowed: &[String]| {
+        format!(
+            "{}; valid providers are: {}",
+            if provider == "quote" {
+                "REASON-FOR-QUOTE"
+            } else {
+                plain
+            },
+            allowed.join(", ")
+        )
+    };
     // `review` is the role that fails and it names the left-out id: its reason.
     let roles = BTreeMap::from([
         (IMPLEMENTATION.to_owned(), role("claude")),
         (REVIEW.to_owned(), role("quote")),
     ]);
-    let error = validate_roles(roles, &cfg, &why).unwrap_err();
-    assert_eq!(error.detail, "REASON-FOR-QUOTE");
+    let error = validate_roles(roles, &cfg, &registry, &why).unwrap_err();
+    assert!(
+        error
+            .detail
+            .starts_with("REASON-FOR-QUOTE; valid providers are: ")
+    );
     // `implementation` fails first with an id that is not left out; `review`
     // naming a left-out id did not fail, so its reason is not given.
     let roles = BTreeMap::from([
         (IMPLEMENTATION.to_owned(), role("not-a-provider")),
         (REVIEW.to_owned(), role("quote")),
     ]);
-    let error = validate_roles(roles, &cfg, &why).unwrap_err();
-    assert_eq!(error.detail, "missing role: implementation");
+    let error = validate_roles(roles, &cfg, &registry, &why).unwrap_err();
+    assert!(error.detail.starts_with(
+        "role \"implementation\": invalid provider \"not-a-provider\"; valid providers are: "
+    ));
+    assert!(!error.detail.contains("REASON-FOR-QUOTE"));
     // A role that is simply missing keeps the plain message.
     let roles = BTreeMap::from([(IMPLEMENTATION.to_owned(), role("claude"))]);
-    let error = validate_roles(roles, &cfg, &why).unwrap_err();
+    let error = validate_roles(roles, &cfg, &registry, &why).unwrap_err();
     assert_eq!(error.detail, "missing role: review");
+}
+
+fn custom_provider(headless: bool) -> config::CustomProvider {
+    config::CustomProvider {
+        id: "muse".into(),
+        command: "synthetic-muse".into(),
+        headless: headless.then(|| config::HeadlessDef {
+            args: vec!["exec".into()],
+            format: "text".into(),
+            prompt_via: "arg".into(),
+        }),
+        ..Default::default()
+    }
+}
+
+fn custom_request(f: &Fixture, name: &str, mode: &str) -> RelayStartRequest {
+    let mut request = request(f, name, false, false);
+    for role in request.roles.values_mut().flatten() {
+        role.provider = "muse".into();
+        role.execution_mode = mode.into();
+    }
+    request.acknowledge_child_full_bypass = false;
+    request
+}
+
+#[tokio::test]
+async fn custom_relay_roles_use_interactive_and_configured_headless_modes() {
+    for (headless, requested, expected) in [
+        (false, "interactive", "interactive"),
+        (false, "auto", "interactive"),
+        (true, "interactive", "interactive"),
+        (true, "auto", "headless"),
+        (true, "headless", "headless"),
+    ] {
+        let f = fixture_with_config(4, |cfg| {
+            cfg.custom_providers = vec![custom_provider(headless)];
+        })
+        .await;
+        let (status, _) = f
+            .program
+            .start_relay(
+                f.parent.session,
+                custom_request(&f, "custom-relay", requested),
+                Timestamp::now(),
+                TaskCancellation::default(),
+            )
+            .await
+            .unwrap();
+        let child = f
+            .core
+            .details(LiveSessionId(status.implementation_session_id))
+            .unwrap();
+        assert_eq!(child.snapshot.provider, "muse");
+        assert_eq!(child.snapshot.execution_mode, expected);
+        assert_eq!(f.io.starts.load(Ordering::SeqCst), 1);
+        let specs = lock(&f.io.specs);
+        let spec = specs.last().unwrap();
+        assert!(spec.permission_mode.is_empty());
+        assert!(spec.sandbox.is_empty());
+        assert!(spec.ask_for_approval.is_empty());
+        assert!(!spec.risk_confirmed);
+    }
+}
+
+#[tokio::test]
+async fn custom_relay_explicit_headless_without_definition_gives_the_mode_reason() {
+    let f = fixture_with_config(4, |cfg| {
+        cfg.custom_providers = vec![custom_provider(false)];
+    })
+    .await;
+    let error = f
+        .program
+        .start_relay(
+            f.parent.session,
+            custom_request(&f, "custom-headless-refusal", "headless"),
+            Timestamp::now(),
+            TaskCancellation::default(),
+        )
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(error.status, 400);
+    assert_eq!(error.code, "relay_execution_mode");
+    assert_eq!(
+        error.detail,
+        "role \"implementation\" (muse): execution_mode headless is not supported for this provider"
+    );
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn custom_relay_refuses_dropped_and_unknown_ids_with_the_live_valid_list() {
+    let f = fixture_with_config(4, |cfg| {
+        cfg.custom_providers = vec![
+            custom_provider(false),
+            config::CustomProvider {
+                id: "quote".into(),
+                command: "synthetic-private-marker \"unclosed".into(),
+                ..Default::default()
+            },
+        ];
+    })
+    .await;
+    for provider in ["quote", "unknown-provider", "MUSE"] {
+        let mut request = custom_request(&f, "custom-provider-refusal", "interactive");
+        request
+            .roles
+            .get_mut(IMPLEMENTATION)
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .provider = provider.into();
+        // A built-in sibling would require acknowledgment, but an invalid
+        // provider must first get its own reason and the valid provider list.
+        request.roles.get_mut(REVIEW).unwrap().as_mut().unwrap().provider = "claude".into();
+        let error = f
+            .program
+            .start_relay(
+                f.parent.session,
+                request,
+                Timestamp::now(),
+                TaskCancellation::default(),
+            )
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(error.status, 400);
+        let (_, allowed) = error.detail.split_once("; valid providers are: ").unwrap();
+        let allowed = allowed.split(", ").collect::<Vec<_>>();
+        assert!(allowed.contains(&"muse"));
+        assert!(allowed.contains(&"claude"));
+        assert!(!allowed.contains(&provider));
+        if provider == "quote" {
+            assert!(
+                error
+                    .detail
+                    .contains("custom provider `quote` is not available")
+            );
+            assert!(error.detail.contains("double quote"));
+            assert!(error.detail.contains("many-ai-cli config check"));
+        } else {
+            assert!(error.detail.starts_with(&format!(
+                "role \"implementation\": invalid provider {provider:?}"
+            )));
+        }
+        assert!(!error.detail.contains("synthetic-private-marker"));
+    }
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn relay_roles_refuse_disabled_and_launchless_registry_entries() {
+    use crate::proto::provider::{Definition, LaunchDefinition};
+
+    let cfg = Config {
+        custom_providers: vec![custom_provider(false)],
+        ..Default::default()
+    };
+    let registry = Registry::build(
+        Layers {
+            embedded: Some(embedded_definitions().unwrap()),
+            legacy: Some(config::provider_definitions_for_app(&cfg.custom_providers).0),
+            user: Some(vec![
+                Definition {
+                    schema_version: 1,
+                    id: "disabled-custom".into(),
+                    display_name: "Disabled custom".into(),
+                    enabled: Some(false),
+                    launch: Some(LaunchDefinition {
+                        executable: "synthetic-disabled".into(),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                Definition {
+                    schema_version: 1,
+                    id: "launchless-custom".into(),
+                    display_name: "Launchless custom".into(),
+                    ..Default::default()
+                },
+            ]),
+            ..Default::default()
+        },
+        &default_adapters(),
+    );
+    for provider in ["disabled-custom", "launchless-custom"] {
+        assert!(registry.lookup(provider).is_some());
+        let roles = [IMPLEMENTATION, REVIEW]
+            .into_iter()
+            .map(|role| {
+                (
+                    role.to_owned(),
+                    Role {
+                        provider: provider.into(),
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect();
+        let error = validate_roles(roles, &cfg, &registry, &|_, plain, allowed| {
+            assert!(allowed.iter().any(|id| id == "muse"));
+            assert!(!allowed.iter().any(|id| id == provider));
+            plain.to_owned()
+        })
+        .unwrap_err();
+        assert_eq!(error.status, 400);
+        assert!(error.detail.contains(provider));
+    }
+}
+
+#[test]
+fn bypass_ack_only_describes_built_in_relay_children() {
+    let cfg = OrchestrationConfig::default();
+    let mut roles = [IMPLEMENTATION, REVIEW]
+        .into_iter()
+        .map(|role| {
+            (
+                role.to_owned(),
+                Role {
+                    provider: "muse".into(),
+                    ..Default::default()
+                },
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    assert!(!requires_bypass_ack(&cfg, &roles));
+    roles.get_mut(REVIEW).unwrap().provider = "claude".into();
+    assert!(requires_bypass_ack(&cfg, &roles));
+    roles.get_mut(REVIEW).unwrap().permission_preset = "attended".into();
+    assert!(!requires_bypass_ack(&cfg, &roles));
 }
