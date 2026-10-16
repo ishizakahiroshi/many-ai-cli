@@ -18,7 +18,8 @@ Updated: 2026-10-16. Read [facts](FACTS.md), [independent review](REVIEW.md) and
 - Work branch: create `dots/custom-provider-add-P-20261016-012` from the final instruction commit given in the Slack message.
 - Draft PR base: `dots/custom-provider-add`.
 - Behavior baseline (oracle): `aa9c0505`. The implementation review diff starts at the first instruction commit, which is a different commit.
-- Management Issue: see the Slack message and [PROGRESS.md](PROGRESS.md).
+- Management Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/22
+- First instruction commit (start of the implementation review diff): `20fcc4e5a6b957d25446b96302113244a1f5ddf7`.
 - Only the Rust crate (`rust/`), the web UI (`web/`) where stated, and the docs listed below are in scope. The Go code is frozen. Do not edit it.
 
 ## Purpose
