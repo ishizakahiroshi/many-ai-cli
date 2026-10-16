@@ -778,51 +778,73 @@ pub(crate) mod windows_job {
         }
     }
     /// A CREATE_SUSPENDED child has only its primary thread until resumed.
-    /// Enumeration is filtered to our still-owned child PID, and the thread is
-    /// resumed only after the process is attached to the kill-on-close Job.
+    /// The thread is found by snapshotting only our still-owned child process
+    /// (not every thread on the machine), and it is resumed only after the
+    /// process is attached to the kill-on-close Job.
     pub fn resume_primary(child: &tokio::process::Child) -> io::Result<()> {
         use windows_sys::Win32::{
-            Foundation::INVALID_HANDLE_VALUE,
+            Foundation::ERROR_NO_MORE_ITEMS,
             System::{
-                Diagnostics::ToolHelp::*,
-                Threading::{OpenThread, ResumeThread, THREAD_SUSPEND_RESUME},
+                Diagnostics::ProcessSnapshotting::*,
+                Threading::{GetCurrentProcess, OpenThread, ResumeThread, THREAD_SUSPEND_RESUME},
             },
         };
-        let pid = child
-            .id()
-            .ok_or_else(|| io::Error::other("missing suspended child PID"))?;
-        // SAFETY: snapshot/thread handles are closed on every path; only our own
-        // suspended child's primary thread is selected.
+        let process = child
+            .raw_handle()
+            .ok_or_else(|| io::Error::other("missing suspended child handle"))?;
+        // SAFETY: `process` is the child's handle, owned by `child` for this whole
+        // call. The snapshot and walk marker are freed on every path before the
+        // thread is touched; the thread handle is closed on every path; only our
+        // own suspended child's primary thread is selected.
         unsafe {
-            let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-            if snapshot == INVALID_HANDLE_VALUE {
+            let mut snapshot: HPSS = std::ptr::null_mut();
+            let status = PssCaptureSnapshot(process, PSS_CAPTURE_THREADS, 0, &mut snapshot);
+            if status != 0 {
+                return Err(io::Error::from_raw_os_error(status as i32));
+            }
+            let mut marker: HPSSWALK = std::ptr::null_mut();
+            let mut status = PssWalkMarkerCreate(std::ptr::null(), &mut marker);
+            let mut entry: PSS_THREAD_ENTRY = mem::zeroed();
+            if status == 0 {
+                status = PssWalkSnapshot(
+                    snapshot,
+                    PSS_WALK_THREADS,
+                    marker,
+                    &mut entry as *mut _ as _,
+                    size_of::<PSS_THREAD_ENTRY>() as u32,
+                );
+                PssWalkMarkerFree(marker);
+            }
+            // The snapshot is allocated in this process, so it is freed through this
+            // process's handle. Passing the child's handle fails with
+            // ERROR_PARTIAL_COPY (299) and leaves a 4 KiB section handle behind on
+            // every spawn. A failed free is not worth refusing to start the child, so
+            // only test builds treat it as fatal.
+            let freed = PssFreeSnapshot(GetCurrentProcess(), snapshot);
+            #[cfg(test)]
+            assert_eq!(freed, 0, "PssFreeSnapshot failed; the snapshot leaks");
+            #[cfg(not(test))]
+            let _ = freed;
+            if status == ERROR_NO_MORE_ITEMS {
+                return Err(io::Error::other("suspended child primary thread not found"));
+            }
+            if status != 0 {
+                return Err(io::Error::from_raw_os_error(status as i32));
+            }
+            let thread = OpenThread(THREAD_SUSPEND_RESUME, 0, entry.ThreadId);
+            if thread.is_null() {
                 return Err(io::Error::last_os_error());
             }
-            let mut entry: THREADENTRY32 = mem::zeroed();
-            entry.dwSize = size_of::<THREADENTRY32>() as u32;
-            let mut more = Thread32First(snapshot, &mut entry);
-            while more != 0 {
-                if entry.th32OwnerProcessID == pid {
-                    let thread = OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID);
-                    CloseHandle(snapshot);
-                    if thread.is_null() {
-                        return Err(io::Error::last_os_error());
-                    }
-                    let previous = ResumeThread(thread);
-                    let error = io::Error::last_os_error();
-                    CloseHandle(thread);
-                    return if previous == 1 {
-                        Ok(())
-                    } else if previous == u32::MAX {
-                        Err(error)
-                    } else {
-                        Err(io::Error::other("unexpected child suspension state"))
-                    };
-                }
-                more = Thread32Next(snapshot, &mut entry);
+            let previous = ResumeThread(thread);
+            let error = io::Error::last_os_error();
+            CloseHandle(thread);
+            if previous == 1 {
+                Ok(())
+            } else if previous == u32::MAX {
+                Err(error)
+            } else {
+                Err(io::Error::other("unexpected child suspension state"))
             }
-            CloseHandle(snapshot);
-            Err(io::Error::other("suspended child primary thread not found"))
         }
     }
 }

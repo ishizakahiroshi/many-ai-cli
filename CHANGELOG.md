@@ -203,6 +203,11 @@ Release artifacts are published at
   which now appear only in the details opened from the "…" button.
 
 ### Fixed
+- The Windows Hub no longer builds a machine-wide thread snapshot every time it
+  starts a child process (for example each `git` call that refreshes the branch
+  display), which took more than half of the Hub's CPU. It now looks only at the
+  child it just started, and releases that snapshot correctly so Hub handles do
+  not accumulate.
 - `orchestrate spawn` for a role that already has a live child is refused
   right away with the existing 409, before the spawn confirmation dialog opens.
   Previously the dialog opened, and the refusal came only after the user had
