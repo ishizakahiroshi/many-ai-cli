@@ -1055,3 +1055,75 @@ async fn custom_launch_retains_prompt_and_neutral_permissions_after_provider_cha
         "provider changed at confirmation: requested=claude decided=synthetic-custom"
     ));
 }
+
+#[tokio::test]
+async fn registry_only_custom_headless_metadata_reaches_the_child_launch() {
+    for (mode, confirmed, expected) in [
+        ("headless", false, "headless"),
+        ("auto", true, "headless"),
+        ("auto", false, "interactive"),
+        ("interactive", true, "interactive"),
+    ] {
+        let f = executor_fixture().await;
+        assert!(f.config.snapshot().unwrap().config.custom_providers.is_empty());
+        let (definitions, _) = config::provider_definitions_for_app(&[config::CustomProvider {
+            id: "registry-custom".into(),
+            command: "synthetic-registry-cli".into(),
+            headless: Some(config::HeadlessDef {
+                args: vec!["exec".into()],
+                format: "text".into(),
+                prompt_via: "arg".into(),
+            }),
+            ..Default::default()
+        }]);
+        *f.services.registry.lock().unwrap() = crate::profile::registry::Registry::build(
+            crate::proto::provider::Layers {
+                embedded: Some(crate::profile::registry::embedded_definitions().unwrap()),
+                user: Some(definitions),
+                ..Default::default()
+            },
+            &crate::profile::registry::default_adapters(),
+        );
+        let mut request = launch_request(
+            &f,
+            ChildSpawnRequest {
+                provider: "registry-custom".into(),
+                execution_mode: mode.into(),
+                initial_prompt: "synthetic registry-only task".into(),
+                ..Default::default()
+            },
+        );
+        if confirmed {
+            request.body = request
+                .body
+                .approve(
+                    &SpawnConfirmationResponse {
+                        approved: true,
+                        confirmation_id: SpawnConfirmationId("synthetic-headless".into()),
+                        ..Default::default()
+                    },
+                    VerifiedConfirmationRequest::after_server_authentication(AuthEpoch(0)),
+                )
+                .unwrap();
+        }
+        f.executor
+            .spawn(request, TaskCancellation::default())
+            .await
+            .unwrap();
+        let seen = f.spawner.seen.lock().unwrap();
+        let spec = seen.last().unwrap();
+        assert_eq!(spec.provider, "registry-custom");
+        assert_eq!(spec.execution_mode, expected);
+        assert!(spec.permission_mode.is_empty());
+        assert!(spec.sandbox.is_empty());
+        assert!(spec.ask_for_approval.is_empty());
+        assert!(!spec.risk_confirmed);
+        if expected == "headless" {
+            assert!(spec.initial_prompt.contains("synthetic registry-only task"));
+            assert!(f.services.children.lock().unwrap()[0].inject_after_registration.is_none());
+        } else {
+            assert!(spec.initial_prompt.is_empty());
+            assert!(f.services.children.lock().unwrap()[0].inject_after_registration.is_some());
+        }
+    }
+}

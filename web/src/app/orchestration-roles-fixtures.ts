@@ -4,6 +4,7 @@ import {
   fillOrchestrationProviderSelect,
   getOrchestrationCLIOptions,
   onOrchestrationProvidersChanged,
+  setOrchestrationRegistryProviders,
   ORCHESTRATION_CLI_OPTIONS,
 } from './orchestration-roles.js';
 import {
@@ -37,9 +38,13 @@ class SelectFixture {
 const translate = (key: string): string => `translated:${key}`;
 const cleanups: Array<() => void> = [];
 describe('orchestration custom provider choices', () => {
-  beforeEach(() => { setLaunchOptionChoices({ custom_providers: [] }); });
+  beforeEach(() => {
+    setOrchestrationRegistryProviders([]);
+    setLaunchOptionChoices({ custom_providers: [] });
+  });
   afterEach(() => {
     for (const cleanup of cleanups.splice(0)) cleanup();
+    setOrchestrationRegistryProviders([]);
     setLaunchOptionChoices({ custom_providers: [] });
   });
 
@@ -108,8 +113,8 @@ describe('orchestration custom provider choices', () => {
       assert.equal(select.options.find((option) => option.value === 'muse')?.textContent, 'Updated Muse');
     }
     setLaunchOptionChoices({ custom_providers: [] });
-    assert.deepEqual(selectors.map((select) => select.value), ['claude', '', '']);
-    assert.equal(selectors.some((select) => select.options.some((option) => option.value === 'muse')), false);
+    assert.deepEqual(selectors.map((select) => select.value), ['muse', '', '']);
+    assert.equal(selectors.slice(1).some((select) => select.options.some((option) => option.value === 'muse')), false);
   });
 
   test('late provider notifications see the accompanying effort and permission data', () => {
@@ -151,4 +156,88 @@ describe('orchestration custom provider choices', () => {
     setLaunchOptionChoices({ custom_providers: [] });
     assert.equal(updates, 1);
   });
+
+  test('Settings registry providers survive config-only refreshes in all three selectors', () => {
+    const registry = [
+      { id: 'ui-cli', display_name: 'UI CLI', enabled: true, capabilities: { launch: true } },
+      { id: 'muse', display_name: 'Registry Muse', enabled: true, capabilities: { launch: true } },
+    ];
+    setLaunchOptionChoices({ custom_providers: [{ id: 'muse', label: 'Config Muse' }] });
+    setOrchestrationRegistryProviders(registry);
+    const selectors = [false, true, true].map((includeUnset) => {
+      const select = new SelectFixture();
+      fillOrchestrationProviderSelect(select.element(), translate, 'ui-cli', includeUnset);
+      cleanups.push(onOrchestrationProvidersChanged(() => {
+        fillOrchestrationProviderSelect(select.element(), translate, select.value, includeUnset);
+      }));
+      return select;
+    });
+    // The derive dialog can publish another /api/info independently of the
+    // spawn panel's registry request; it must not erase Settings-added choices.
+    setLaunchOptionChoices({ custom_providers: [{ id: 'muse', label: 'Config Muse' }] });
+    setOrchestrationRegistryProviders(undefined); // Failed registry request.
+    setOrchestrationRegistryProviders(null);
+    for (const select of selectors) {
+      assert.equal(select.value, 'ui-cli');
+      assert.equal(select.options.find((option) => option.value === 'ui-cli')?.textContent, 'UI CLI');
+      assert.equal(select.options.filter((option) => option.value === 'muse').length, 1);
+      assert.equal(select.options.find((option) => option.value === 'muse')?.textContent, 'Registry Muse');
+    }
+  });
+
+  test('registry excludes disabled and non-launch providers, including config duplicates', () => {
+    setLaunchOptionChoices({ custom_providers: [{ id: 'disabled-cli' }, { id: 'no-launch' }] });
+    setOrchestrationRegistryProviders([
+      null, { id: 'shell', enabled: true, capabilities: { launch: true } },
+      { id: 'disabled-cli', enabled: false, capabilities: { launch: true } },
+      { id: 'no-launch', enabled: true, capabilities: { launch: false } },
+      { id: 'missing-capability', enabled: true },
+      { id: 'ui-cli', display_name: 'UI CLI', enabled: true, capabilities: { launch: true } },
+      { id: 'ui-cli', display_name: 'Duplicate', enabled: true, capabilities: { launch: true } },
+      { id: 'codex', display_name: 'Codex CLI', enabled: true, capabilities: { launch: true } },
+    ]);
+    const values = getOrchestrationCLIOptions().map((option) => option.value);
+    for (const id of ['shell', 'disabled-cli', 'no-launch', 'missing-capability']) assert.equal(values.includes(id), false);
+    assert.equal(values.filter((id) => id === 'ui-cli').length, 1);
+    assert.equal(values.filter((id) => id === 'codex').length, 1);
+  });
+
+  test('pending registry-only provider is never replaced by a discovery response', () => {
+    const select = new SelectFixture();
+    // /api/info may already have arrived when the valid pending request opens.
+    setLaunchOptionChoices({ custom_providers: [] });
+    fillOrchestrationProviderSelect(select.element(), translate, 'ui-cli', false);
+    assert.equal(select.value, 'ui-cli');
+    cleanups.push(onOrchestrationProvidersChanged(() => {
+      fillOrchestrationProviderSelect(select.element(), translate, select.value, false);
+    }));
+    setLaunchOptionChoices({ custom_providers: [] });
+    assert.equal(select.value, 'ui-cli');
+    setOrchestrationRegistryProviders([
+      { id: 'ui-cli', display_name: 'UI CLI', enabled: true, capabilities: { launch: true } },
+    ]);
+    assert.equal(select.value, 'ui-cli');
+    assert.equal(select.options.find((option) => option.value === 'ui-cli')?.textContent, 'UI CLI');
+    // Even deletion after the request was accepted must not approve a different
+    // CLI. The Hub will reject the original id if it is no longer usable.
+    setOrchestrationRegistryProviders([]);
+    assert.equal(select.value, 'ui-cli');
+  });
+
+  test('registry removals clear stale role choices without changing a pending confirmation', () => {
+    setOrchestrationRegistryProviders([
+      { id: 'ui-cli', enabled: true, capabilities: { launch: true } },
+    ]);
+    const selectors = [false, true, true].map((includeUnset) => {
+      const select = new SelectFixture();
+      fillOrchestrationProviderSelect(select.element(), translate, 'ui-cli', includeUnset);
+      cleanups.push(onOrchestrationProvidersChanged(() => {
+        fillOrchestrationProviderSelect(select.element(), translate, select.value, includeUnset);
+      }));
+      return select;
+    });
+    setOrchestrationRegistryProviders([]);
+    assert.deepEqual(selectors.map((select) => select.value), ['ui-cli', '', '']);
+  });
+
 });

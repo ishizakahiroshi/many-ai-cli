@@ -1,6 +1,6 @@
 //! Custom provider commands. Validation finishes before any private file is written.
 use crate::{
-    application::approval_patterns::{ApprovalPatterns, custom_pattern_path},
+    application::approval_patterns::{ApprovalPatterns, custom_pattern_path, encode_pattern_file},
     config::{self, ConfigStore, CustomProvider, HeadlessDef},
     process::execpath::{NativeFs, Platform, Resolver},
 };
@@ -77,7 +77,11 @@ fn run_with(
         text.replace(&token, "[redacted]")
             .replace(&encoded[1..encoded.len() - 1], "[redacted]")
     };
-    result.map(redact).map_err(|e| io::Error::new(e.kind(), redact(e.to_string())))
+    // List redacts data before encoding; editing encoded JSON could replace
+    // its quotes or newlines when an existing token contains those characters.
+    result.map(|text| {
+        if args.first().is_some_and(|arg| arg == "list") { text } else { redact(text) }
+    }).map_err(|e| io::Error::new(e.kind(), redact(e.to_string())))
 }
 
 #[derive(Default)]
@@ -188,7 +192,7 @@ fn add(
     if flags.approval.iter().any(|s| s.trim().is_empty() || s.chars().any(char::is_control)) {
         errors.push("--approval-option: use a nonempty literal prompt phrase without control characters".into());
     }
-    if serde_json::to_vec(&flags.approval).map_or(true, |bytes| bytes.len() > 2 * 1024 * 1024 - 1024) {
+    if encode_pattern_file(&flags.approval).is_err() {
         errors.push("--approval-option: combined phrases exceed the 2 MiB pattern-file limit; shorten them".into());
     }
     if flags.id == "common" && !flags.approval.is_empty() {
@@ -265,6 +269,17 @@ fn list(store: &ConfigStore, cfg: &config::Config, args: &[String]) -> io::Resul
         }, true, false, Vec::new()));
     }
     rows.extend(store.provider_listing().map_err(io::Error::other)?);
+    fn redact_fields(value: &mut Value, token: &str) {
+        match value {
+            Value::String(text) => *text = text.replace(token, "[redacted]"),
+            Value::Array(items) => items.iter_mut().for_each(|item| redact_fields(item, token)),
+            Value::Object(fields) => fields.values_mut().for_each(|field| redact_fields(field, token)),
+            _ => {}
+        }
+    }
+    if !cfg.token.is_empty() {
+        rows.iter_mut().for_each(|row| redact_fields(row, &cfg.token));
+    }
     if args.is_empty() {
         Ok(rows.iter().map(|r| format!("{r}\n")).collect())
     } else {

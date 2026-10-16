@@ -673,3 +673,21 @@ async fn custom_options_saved_during_remote_fetch_win_when_fetch_finishes() {
     assert_eq!(owner.active().unwrap()["muse"], ["Allow once"]);
     assert!(owner.dir.metadata("muse.json").is_err());
 }
+
+#[test]
+fn encoded_pattern_limit_counts_pretty_escaping_and_final_newline() {
+    let overhead = encode_pattern_file(&[String::new()]).unwrap().len();
+    let at_limit = vec!["a".repeat(PATTERN_FILE_CAP - overhead)];
+    let bytes = encode_pattern_file(&at_limit).unwrap();
+    assert_eq!(bytes.len(), PATTERN_FILE_CAP);
+    assert_eq!(json(&bytes).unwrap(), at_limit);
+    assert!(encode_pattern_file(&["a".repeat(PATTERN_FILE_CAP - overhead + 1)]).is_err());
+    for character in ['<', '>', '&', '\u{2028}', '\u{2029}'] {
+        let list = vec![character.to_string().repeat(PATTERN_FILE_CAP / 6 + 1)];
+        assert!(serde_json::to_vec(&list).unwrap().len() < PATTERN_FILE_CAP);
+        assert!(encode_pattern_file(&list).is_err());
+    }
+    let many_short = vec!["a".to_owned(); PATTERN_FILE_CAP / 7 + 1];
+    assert!(serde_json::to_vec(&many_short).unwrap().len() < PATTERN_FILE_CAP);
+    assert!(encode_pattern_file(&many_short).is_err());
+}

@@ -511,7 +511,7 @@ impl ChildLaunchExecutor {
         let parent_binding = details.binding;
         let parent = details.snapshot;
         let cfg = self.cfg()?;
-        let resolved = super::child_options::prepare(request.body, &cfg)
+        let resolved = super::child_options::prepare(request.body, &cfg, &registry)
             .map_err(|e| ChildLaunchError::new(400, "bad_request", e.to_string()))?;
         let body = resolved.request();
         if parent.depth >= cfg.orchestration.max_depth {

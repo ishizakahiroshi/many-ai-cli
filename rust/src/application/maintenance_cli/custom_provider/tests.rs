@@ -161,3 +161,34 @@ fn windows_path_finds_muse_cmd_without_running_it() {
     assert!(result.is_ok());
     assert_eq!(f.backups(), 1);
 }
+
+#[test]
+fn expanded_approval_file_limit_is_checked_before_config_or_backup_write() {
+    let f = fixture();
+    let original = f.bytes();
+    for character in ['<', '>', '&', '\u{2028}', '\u{2029}'] {
+        let option = character.to_string().repeat(350_000);
+        let mut args = add();
+        args.extend(["--approval-option", option.as_str()]);
+        let error = f.run(&args).unwrap_err().to_string();
+        assert!(error.contains("--approval-option") && error.contains("2 MiB"));
+        assert_eq!(f.bytes(), original);
+        assert_eq!(f.backups(), 0);
+        assert!(!custom_pattern_path(&f.paths, "muse").exists());
+    }
+}
+
+#[test]
+fn list_json_redacts_data_without_rewriting_json_structural_characters() {
+    for token in ["\"", "\n", "claude"] {
+        let body = format!("token: {}\ncustom_providers:\n  - id: muse\n    label: {}\n    command: fake-cli\n", serde_json::to_string(token).unwrap(), serde_json::to_string(&format!("Label {token}")).unwrap());
+        let f = Fixture::new(Some(&body));
+        let output = f.run(&["list", "--json"]).unwrap();
+        let rows: Vec<Value> = serde_json::from_str(&output).unwrap();
+        let custom = rows.iter().find(|row| row["id"] == "muse").unwrap();
+        assert_eq!(custom["label"], "Label [redacted]");
+        for line in f.run(&["list"]).unwrap().lines() {
+            let _: Value = serde_json::from_str(line).unwrap();
+        }
+    }
+}

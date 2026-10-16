@@ -457,6 +457,13 @@ fn registry_for_config(cfg: &Config) -> Registry {
     )
 }
 async fn fixture_with_config(limit: i64, configure: impl FnOnce(&mut Config)) -> Fixture {
+    fixture_with_registry(limit, configure, None).await
+}
+async fn fixture_with_registry(
+    limit: i64,
+    configure: impl FnOnce(&mut Config),
+    registry: Option<Registry>,
+) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let runtime = root.path().join("trial");
     std::fs::create_dir(&runtime).unwrap();
@@ -519,7 +526,8 @@ async fn fixture_with_config(limit: i64, configure: impl FnOnce(&mut Config)) ->
     workers
         .bind(Arc::downgrade(&core), Arc::downgrade(&effects))
         .unwrap();
-    let registry = registry_for_config(&config.snapshot().unwrap().config);
+    let registry =
+        registry.unwrap_or_else(|| registry_for_config(&config.snapshot().unwrap().config));
     let orchestration = OrchestrationProgram::new(OrchestrationDependencies {
         core: Arc::downgrade(&core),
         effects: Arc::downgrade(&effects),
@@ -2244,6 +2252,45 @@ async fn custom_relay_roles_use_interactive_and_configured_headless_modes() {
         assert_eq!(f.io.starts.load(Ordering::SeqCst), 1);
         let specs = lock(&f.io.specs);
         let spec = specs.last().unwrap();
+        assert!(spec.permission_mode.is_empty());
+        assert!(spec.sandbox.is_empty());
+        assert!(spec.ask_for_approval.is_empty());
+        assert!(!spec.risk_confirmed);
+    }
+}
+
+#[tokio::test]
+async fn registry_only_custom_relay_supports_explicit_and_auto_headless() {
+    for requested in ["headless", "auto"] {
+        let registry = registry_for_config(&Config {
+            custom_providers: vec![custom_provider(true)],
+            ..Default::default()
+        });
+        let f = fixture_with_registry(4, |_| {}, Some(registry)).await;
+        let cfg = f.config.snapshot().unwrap().config;
+        assert!(cfg.custom_providers.is_empty());
+        assert!(config::headless_def_for("muse", Some(&cfg)).is_none());
+        let (status, _) = f
+            .program
+            .start_relay(
+                f.parent.session,
+                custom_request(&f, "registry-only-custom-relay", requested),
+                Timestamp::now(),
+                TaskCancellation::default(),
+            )
+            .await
+            .unwrap();
+        let child = f
+            .core
+            .details(LiveSessionId(status.implementation_session_id))
+            .unwrap();
+        assert_eq!(child.snapshot.provider, "muse");
+        assert_eq!(child.snapshot.execution_mode, "headless");
+        assert_eq!(f.io.starts.load(Ordering::SeqCst), 1);
+        let specs = lock(&f.io.specs);
+        let spec = specs.last().unwrap();
+        assert_eq!(spec.execution_mode, "headless");
+        assert!(!spec.initial_prompt.is_empty());
         assert!(spec.permission_mode.is_empty());
         assert!(spec.sandbox.is_empty());
         assert!(spec.ask_for_approval.is_empty());

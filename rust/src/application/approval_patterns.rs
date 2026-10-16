@@ -23,6 +23,24 @@ pub const PROVIDERS: &[&str] = &[
     "common",
 ];
 pub type Warning = dyn Fn(&'static str) + Send + Sync;
+const PATTERN_FILE_CAP: usize = 2 * 1024 * 1024;
+
+/// Validate the exact bytes that the writer and bounded reader share.
+pub(crate) fn encode_pattern_file(list: &[String]) -> io::Result<Vec<u8>> {
+    let body = serde_json::to_string_pretty(list)
+        .map_err(io::Error::other)?
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026")
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029");
+    let bytes = format!("{body}\n").into_bytes();
+    if bytes.len() > PATTERN_FILE_CAP {
+        return Err(io::Error::other("approval pattern file exceeds size limit"));
+    }
+    Ok(bytes)
+}
+
 pub struct ApprovalPatterns {
     dir: Dir,
     custom_dir: Dir,
@@ -85,9 +103,8 @@ impl ApprovalPatterns {
         Self::read_in(&self.dir, name)
     }
     fn read_in(dir: &Dir, name: &str) -> io::Result<Vec<u8>> {
-        const CAP: usize = 2 * 1024 * 1024;
-        let bytes = dir.read(name, CAP + 1)?;
-        if bytes.len() > CAP {
+        let bytes = dir.read(name, PATTERN_FILE_CAP + 1)?;
+        if bytes.len() > PATTERN_FILE_CAP {
             return Err(io::Error::other("approval pattern file exceeds size limit"));
         }
         Ok(bytes)
@@ -152,14 +169,7 @@ impl ApprovalPatterns {
         Self::write_in(&self.dir, name, list)
     }
     fn write_in(dir: &Dir, name: &str, list: &[String]) -> io::Result<()> {
-        let body = serde_json::to_string_pretty(list)
-            .map_err(io::Error::other)?
-            .replace('<', "\\u003c")
-            .replace('>', "\\u003e")
-            .replace('&', "\\u0026")
-            .replace('\u{2028}', "\\u2028")
-            .replace('\u{2029}', "\\u2029");
-        dir.replace(name, format!("{body}\n").as_bytes(), 0o600)
+        dir.replace(name, &encode_pattern_file(list)?, 0o600)
     }
     pub fn sync(&self) -> io::Result<()> {
         let _guard = self.gate.lock().unwrap_or_else(|e| e.into_inner());

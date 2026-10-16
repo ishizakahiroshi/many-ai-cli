@@ -10,7 +10,7 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
 import { hasProviderCapability, loadProviderSummaries } from './provider-store.js';
 import { commandMissingIds, isAiLaunchProvider, spawnLaunchBlockReason } from './cli-availability.js';
 import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
-import { fillOrchestrationProviderSelect, onOrchestrationProvidersChanged, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
+import { fillOrchestrationProviderSelect, onOrchestrationProvidersChanged, setOrchestrationRegistryProviders, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
 import { compareCwdByBasename, filterCwdSubdirItems, joinCwdChild, splitCwdPath, splitCwdTypeahead } from './cwd-path.js';
 import { effortForSpawnBody, effortLevelsFor, resolveSpawnEffortSelection, setLaunchOptionChoices } from './spawn-confirm-store.js';
@@ -784,6 +784,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
       syncEffortField((spawnProviderEl as HTMLSelectElement).value);
       const providerResponse = await loadProviderSummaries({ includeDisabled: true });
       if (generation !== providerOptionsGeneration) return;
+      setOrchestrationRegistryProviders(providerResponse?.providers);
       const list = providerResponse
         ? providerResponse.providers
           .filter((entry) => !registryBuiltinProviderIds.has(entry.id))

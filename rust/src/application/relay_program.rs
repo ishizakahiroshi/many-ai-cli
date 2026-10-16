@@ -13,7 +13,10 @@ use crate::{
             ChildLaunchExecutor, ChildLaunchServices, ChildPreparation, board::BoardStore,
             worktree::WorktreeGit,
         },
-        child_options::{ORCHESTRATION_PROVIDERS, provider_is_usable, usable_provider_ids},
+        child_options::{
+            ORCHESTRATION_PROVIDERS, provider_is_usable, provider_supports_headless,
+            usable_provider_ids,
+        },
         relay::{
             self, IMPLEMENTATION, REVIEW, ROLES, RelayFile, Role, Run, STRONG, store::RelayStore,
             worktree::RelayGit,
@@ -1417,7 +1420,7 @@ fn validate_roles(
         }
         assignment.execution_mode = config::resolve_execution_mode(
             &mode,
-            config::headless_def_for(&assignment.provider, Some(cfg)).is_some(),
+            provider_supports_headless(registry, &assignment.provider, cfg),
             config::LAUNCH_ORIGIN_CONDUCTOR,
             true,
         )

@@ -25,14 +25,21 @@ export const ORCHESTRATION_CLI_OPTIONS: readonly OrchestrationCLIOption[] = [
   { value: 'command-code', label: 'Command Code' },
 ] as const;
 
-// /api/info contains only usable custom providers. Keep the built-in list above
-// as the old-Hub fallback; never infer availability from saved form values.
+// /api/info covers config customs; /api/providers also covers Settings-added
+// providers. Keep these sources separate so a later config-only response cannot
+// remove live registry choices. Registry exclusions override the config fallback.
 let customCLIOptions: OrchestrationCLIOption[] = [];
-let customProvidersLoaded = false;
+let registryCLIOptions: OrchestrationCLIOption[] = [];
+let unavailableRegistryIDs = new Set<string>();
+let registryProvidersLoaded = false;
 const providerChoiceListeners = new Set<() => void>();
 
 export function getOrchestrationCLIOptions(): readonly OrchestrationCLIOption[] {
-  return [...ORCHESTRATION_CLI_OPTIONS, ...customCLIOptions];
+  const choices = new Map<string, OrchestrationCLIOption>();
+  for (const choice of [...ORCHESTRATION_CLI_OPTIONS, ...customCLIOptions, ...registryCLIOptions]) {
+    if (!unavailableRegistryIDs.has(choice.value)) choices.set(choice.value, choice);
+  }
+  return [...choices.values()];
 }
 
 export function setOrchestrationCustomProviders(entries: unknown): void {
@@ -47,7 +54,31 @@ export function setOrchestrationCustomProviders(entries: unknown): void {
     next.push({ value, label });
   }
   customCLIOptions = next;
-  customProvidersLoaded = true;
+  for (const listener of providerChoiceListeners) listener();
+}
+
+// Feed the same generation-checked registry response used by ordinary spawn.
+// A failed request leaves the last successful snapshot intact. An explicit empty
+// list clears registry extras, while config fallback remains available.
+export function setOrchestrationRegistryProviders(entries: unknown): void {
+  if (!Array.isArray(entries)) return;
+  const next: OrchestrationCLIOption[] = [];
+  const unavailable = new Set<string>();
+  const seen = new Set(['', 'shell']);
+  for (const entry of entries) {
+    const value = typeof entry?.id === 'string' ? entry.id.trim() : '';
+    if (seen.has(value)) continue;
+    seen.add(value);
+    if (entry.enabled === false || entry.capabilities?.launch !== true) {
+      unavailable.add(value);
+      continue;
+    }
+    const label = typeof entry.display_name === 'string' && entry.display_name.trim() ? entry.display_name : value;
+    next.push({ value, label });
+  }
+  registryCLIOptions = next;
+  unavailableRegistryIDs = unavailable;
+  registryProvidersLoaded = true;
   for (const listener of providerChoiceListeners) listener();
 }
 
@@ -58,7 +89,9 @@ export function onOrchestrationProvidersChanged(listener: () => void): () => voi
 
 // Use DOM properties, not HTML interpolation: custom labels and ids are data.
 // Replacing only options leaves the select, its listeners and the other fields
-// intact. A removed role choice falls back to unset; approval requires a CLI.
+// intact. A removed role choice falls back to unset. A pending confirmation
+// retains its exact selection even when a discovery response does not list it:
+// the Hub validates approval, and discovery must never silently change its CLI.
 export function fillOrchestrationProviderSelect(
   select: HTMLSelectElement,
   translate: (key: string) => string,
@@ -66,10 +99,9 @@ export function fillOrchestrationProviderSelect(
   includeUnset = true,
 ): void {
   const choices = getOrchestrationCLIOptions().filter((choice) => includeUnset || choice.value);
-  // A confirmation or saved role can arrive before /api/info. Keep its exact
-  // provider until the authoritative list arrives instead of silently choosing
-  // a built-in. Older Hubs without custom_providers retain this compatibility.
-  if (!customProvidersLoaded && selected && selected !== 'shell' && !choices.some((choice) => choice.value === selected)) {
+  // Saved roles can arrive before the registry response. Confirmation choices
+  // are also kept after discovery, including across removals or failed refreshes.
+  if ((!registryProvidersLoaded || !includeUnset) && selected && selected !== 'shell' && !choices.some((choice) => choice.value === selected)) {
     choices.unshift({ value: selected, label: selected });
   }
   const options = choices.map((choice) => {
