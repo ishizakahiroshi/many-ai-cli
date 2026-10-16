@@ -302,3 +302,163 @@ async fn relay_get_timeout_is_not_reported_as_a_pending_spawn_confirmation() {
     assert_eq!(error.kind(), io::ErrorKind::TimedOut);
     assert!(!error.to_string().contains("spawn confirmation pending"));
 }
+
+#[tokio::test]
+async fn close_posts_optional_id_and_prints_normalized_role_and_previous_state() {
+    for (arguments, expected_body) in [
+        (
+            args(&["close", "--role", " Implementation "]),
+            json!({"role":"Implementation"}),
+        ),
+        (
+            args(&["close", "--role", "implementation", "--id", "12"]),
+            json!({"role":"implementation","id":12}),
+        ),
+    ] {
+        let f = fixture();
+        *f.io.response.lock().unwrap() = Ok(HttpReply {
+            status: 200,
+            body: br#"{"ok":true,"session_id":12,"role":"implementation","state_before":"working","board_path":"board.md"}"#.to_vec(),
+        });
+        let output = f.cli.run(&arguments, &Cancellation::default()).await.unwrap();
+        assert_eq!(
+            output,
+            "closed child session #12 role=implementation state_before=working\n"
+        );
+        assert_eq!(output.lines().count(), 1);
+        let receipts = f.io.receipts.lock().unwrap();
+        assert_eq!(receipts.len(), 1);
+        assert_eq!(receipts[0].path, "/api/sessions/11/close-child");
+        assert_eq!(receipts[0].body, Some(expected_body));
+        assert_eq!(receipts[0].timeout, Duration::from_secs(30));
+    }
+}
+
+#[tokio::test]
+async fn close_requires_role_and_rejects_invalid_ids_and_extra_arguments_without_http() {
+    let f = fixture();
+    for arguments in [
+        args(&["close"]),
+        args(&["close", "--role", ""]),
+        args(&["close", "--role", " "]),
+        args(&["close", "--role", "review", "extra"]),
+    ] {
+        let error = f
+            .cli
+            .run(&arguments, &Cancellation::default())
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), CLOSE_USAGE);
+    }
+    for id in ["", "0", "-1", "1.5", "invalid", "9223372036854775808"] {
+        let error = f
+            .cli
+            .run(
+                &args(&["close", "--role", "review", "--id", id]),
+                &Cancellation::default(),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("--id must be a positive integer"));
+    }
+    for arguments in [
+        args(&["close", "--role"]),
+        args(&["close", "--role", "review", "--id"]),
+        args(&["close", "--unknown"]),
+    ] {
+        assert!(
+            f.cli
+                .run(&arguments, &Cancellation::default())
+                .await
+                .is_err()
+        );
+    }
+    assert!(f.io.receipts.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn orchestration_usage_and_help_include_close_without_environment_or_http() {
+    let mut f = fixture();
+    f.cli.environment.clear();
+    for arguments in [args(&[]), args(&["invalid"])] {
+        let error = f
+            .cli
+            .run(&arguments, &Cancellation::default())
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("spawn|send|close|relay"));
+    }
+    for arguments in [args(&["--help"]), args(&["-h"]), args(&["help"])] {
+        let help = f
+            .cli
+            .run(&arguments, &Cancellation::default())
+            .await
+            .unwrap();
+        assert!(help.contains("spawn|send|close|relay"));
+        assert!(help.contains("close --role <role> [--id <child session id>]"));
+        assert!(help.contains("newest child"));
+    }
+    let help = f
+        .cli
+        .run(&args(&["close", "--help"]), &Cancellation::default())
+        .await
+        .unwrap();
+    assert!(help.starts_with(CLOSE_USAGE));
+    assert!(help.contains("even while working"));
+    assert!(f.io.receipts.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn close_refusal_and_parse_errors_never_expose_hub_token() {
+    let f = fixture();
+    for status in [404, 409] {
+        *f.io.response.lock().unwrap() = Ok(HttpReply {
+            status,
+            body: br#"{"ok":false,"error":"close_refused","detail":"pending spawn confirmations synthetic-private-hub-token"}"#.to_vec(),
+        });
+        let error = f
+            .cli
+            .run(&args(&["close", "--role", "review"]), &Cancellation::default())
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains(&format!("hub returned {status}:")));
+        assert!(error.to_string().contains("pending spawn confirmations"));
+        assert!(!error.to_string().contains("synthetic-private-hub-token"));
+    }
+    for arguments in [
+        args(&["synthetic-private-hub-token"]),
+        args(&["close", "--synthetic-private-hub-token"]),
+    ] {
+        let error = f
+            .cli
+            .run(&arguments, &Cancellation::default())
+            .await
+            .unwrap_err();
+        assert!(!error.to_string().contains("synthetic-private-hub-token"));
+    }
+    *f.io.response.lock().unwrap() = Ok(HttpReply {
+        status: 200,
+        body: br#"{"ok":true,"session_id":12,"role":"synthetic-private-hub-token","state_before":"working"}"#.to_vec(),
+    });
+    let output = f
+        .cli
+        .run(&args(&["close", "--role", "review"]), &Cancellation::default())
+        .await
+        .unwrap();
+    assert!(!output.contains("synthetic-private-hub-token"));
+}
+
+#[tokio::test]
+async fn close_timeout_does_not_claim_spawn_confirmation_is_pending() {
+    let f = fixture();
+    *f.io.response.lock().unwrap() = Err(RequestError::Timeout);
+    let error = f
+        .cli
+        .run(&args(&["close", "--role", "review"]), &Cancellation::default())
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+    assert!(error.to_string().contains("child may already be closed"));
+    assert!(!error.to_string().contains("spawn confirmation pending"));
+    assert_eq!(f.io.receipts.lock().unwrap().len(), 1);
+}

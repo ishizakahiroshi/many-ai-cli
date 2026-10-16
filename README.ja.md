@@ -122,6 +122,8 @@ NVIDIA API の trial 利用は、別途適用される subscription がない限
 
 ## 軽量オーケストレーション
 
+指揮者は `many-ai-cli orchestrate close --role <role> [--id <child session id>]` で、自分の子だけを作業中でも閉じられます（`--id` を省略すると、そのロールの最新の子を閉じます）。ダッシュボードの ✕ と同じ経路で子の枠を解放し、指揮者が閉じたことと閉じる前の状態を board に記録します。
+
 `POST /api/sessions/:id/spawn-child` により、指揮者セッションはロール・provider・モデル・初期プロンプト・任意の cwd を指定して子セッションを spawn できます。Hub は `~/.many-ai-cli/orchestration/<orchestration_id>/board.md` を作成し、そのパスを子プロンプトへ注入して、追記される進捗と `## DONE <role> session=<child_id>` マーカーを監視します。
 
 親 cwd が git リポジトリのとき、子セッションは既定で `.many-ai-cli/worktrees/<orchestration_id>/<role>` の独立した git worktree で動作します。Hub は子ブランチを自動 merge しません。指揮者またはユーザーが board とブランチを確認したうえで、何を merge するかを決めます。
@@ -157,7 +159,7 @@ relay loop は 1 つの plan を implementation → review → fix の順で、C
 入口は 2 つです。
 
 - 指揮者 CLI: `many-ai-cli orchestrate relay --plan docs/local/plan_example.md`（role mapping が無いときは `--impl provider[/model][@effort]` と `--review provider[/model][@effort]` を渡す。`--strong provider[/model][@effort]` は任意）。`@effort` は子の思考の深さで省略可。`--execution-mode` と `--permission`（権限の段）は全 role 共通で 1 つ。子 1 つだけを起こす `many-ai-cli orchestrate spawn` には `--effort` / `--execution-mode` / `--permission` がある。受理値は `--help` が正典。
-- `orchestrate` のサブコマンドは `spawn` / `send` / `relay` の 3 つ。名前を間違えると使える名前を並べて返す。
+- `orchestrate` のサブコマンドは `spawn` / `send` / `close` / `relay` の 4 つ。名前を間違えると使える名前を並べて返す。
 - Hub UI: 指揮者セッションカードまたは orchestration dashboard の relay dialog を開く。役割表で CLI・モデル・subscription profile・権限の段を役割ごとに選べ、次の relay まで記憶される。
 
 既定では専用 git worktree を作り、branch `many-ai-cli/relay/<orchestration_id>` で動かします。各 C の commit はその branch に積まれます。Hub は自動 merge しないので、branch を確認してから利用者の branch へ自分で merge してください。1 つの親から複数 relay を走らせられますが、自動生成の上限 `orchestration.max_children_per_parent` が適用されます（初期値10、通常の relay なら5本分。設定画面で1〜256に変更可能）。個別に人が承認した子や画面から直接起動した子は、自動生成の上限や全体セッション枠とは独立して、親ごとに256まで起動できます。枠には開いたままの子（完了済みで未終了の子を含む）と起動予約を数えます。既存の保存済み設定値は維持します。2 本の relay が同じファイルを編集した場合、その競合は merge 時に解決します。

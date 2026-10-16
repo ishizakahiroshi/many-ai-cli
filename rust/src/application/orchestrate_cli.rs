@@ -49,6 +49,8 @@ struct ChildReply {
     ok: bool,
     session_id: i64,
     board_path: String,
+    role: String,
+    state_before: String,
     cwd: String,
     relay: Option<RelayStatus>,
     relays: Option<Vec<RelayItem>>,
@@ -85,6 +87,8 @@ impl GoWire for ChildReply {
                 f("ok", "bool"),
                 f("session_id", "int"),
                 f("board_path", "string"),
+                f("role", "string"),
+                f("state_before", "string"),
                 f("cwd", "string"),
                 f("relay", "*RelayStatus"),
                 f("relays", "[]RelayItem"),
@@ -230,11 +234,28 @@ fn timeout_value(raw: &str) -> Duration {
         Duration::from_nanos(total as u64)
     }
 }
+const CLOSE_USAGE: &str = "orchestrate close --role <role> [--id <child session id>]";
+const ORCHESTRATE_HELP: &str = "orchestrate <spawn|send|close|relay>\n\n  spawn --role <role> \"<prompt>\"\n  send --role <role> \"<text>\"\n  close --role <role> [--id <child session id>]\n  relay --plan <path>\n  relay status [--id <orchestration-id>]\n  relay stop [--id <orchestration-id>]\n\nclose stops your own child, even while working, and records it on the board.\nWithout --id, close selects the newest child with that role.\n";
 impl OrchestrateCli {
     pub async fn run(&self, args: &[String], cancel: &Cancellation) -> io::Result<String> {
+        self.run_inner(args, cancel).await.map_err(|err| {
+            let token = environment(&self.environment, "MANY_AI_CLI_HUB_TOKEN");
+            let message = err.to_string();
+            let message = if token.is_empty() {
+                message
+            } else {
+                message.replace(token, "<REDACTED_SECRET>")
+            };
+            io::Error::new(err.kind(), report::redact(&message))
+        })
+    }
+    async fn run_inner(&self, args: &[String], cancel: &Cancellation) -> io::Result<String> {
         let command = args
             .first()
-            .ok_or_else(|| error("orchestrate <spawn|send|relay>"))?;
+            .ok_or_else(|| error("orchestrate <spawn|send|close|relay>"))?;
+        if matches!(command.as_str(), "--help" | "-h" | "help") {
+            return Ok(ORCHESTRATE_HELP.into());
+        }
         let rest = &args[1..];
         let mut warning = String::new();
         let (body, suffix, role, cwd_requested, filter, status_kind) = match command.as_str() {
@@ -317,10 +338,44 @@ impl OrchestrateCli {
                     "send",
                 )
             }
+            "close" => {
+                let flags = flags::parse(
+                    rest,
+                    &[("role", flags::Kind::String), ("id", flags::Kind::String)],
+                )
+                .map_err(error)?;
+                if flags.help {
+                    return Ok(format!("{CLOSE_USAGE}\nClose your own child, even while working; without --id, select the newest matching child.\n"));
+                }
+                let role = flags.value("role").trim();
+                if role.is_empty() || !flags.positional.is_empty() {
+                    return Err(error(CLOSE_USAGE));
+                }
+                let mut body = Map::from_iter([("role".into(), role.into())]);
+                let raw_id = flags.value("id");
+                if flags.values.contains_key("id") {
+                    let id = raw_id
+                        .parse::<i64>()
+                        .ok()
+                        .filter(|id| *id > 0)
+                        .ok_or_else(|| {
+                            error(format!("{CLOSE_USAGE}: --id must be a positive integer"))
+                        })?;
+                    body.insert("id".into(), id.into());
+                }
+                (
+                    Some(Value::Object(body)),
+                    "close-child",
+                    role.to_owned(),
+                    String::new(),
+                    String::new(),
+                    "close",
+                )
+            }
             "relay" => self.relay_plan(rest, &mut warning)?,
             _ => {
                 return Err(error(format!(
-                    "orchestrate: unknown subcommand {command:?} (want spawn|send|relay)"
+                    "orchestrate: unknown subcommand {command:?} (want spawn|send|close|relay)"
                 )));
             }
         };
@@ -345,13 +400,13 @@ impl OrchestrateCli {
                 "orchestrate {command}: MANY_AI_CLI_HUB_TOKEN is not set"
             )));
         }
-        let timeout = if body.is_none() {
+        let timeout = if body.is_none() || status_kind == "close" {
             Duration::from_secs(30)
         } else {
             timeout_value(environment(&self.environment, "MANY_AI_CLI_SPAWN_TIMEOUT"))
         };
         let post = body.is_some();
-        let reply=self.io.exchange(HttpRequest{port,path:format!("/api/sessions/{session}/{suffix}"),token,body,timeout},cancel).await.map_err(|error|match error{RequestError::Timeout if !post=>io::Error::new(io::ErrorKind::TimedOut,"orchestration HTTP get timed out"),RequestError::Timeout=>io::Error::new(io::ErrorKind::TimedOut,"spawn confirmation pending in Hub: user has not yet decided in browser. DO NOT retry spawn (duplicate request will be rejected). The child will start once approved, and its session ID will be delivered via orchestration notification. Once running, instruct it via `orchestrate send`"),RequestError::Cancelled=>io::Error::new(io::ErrorKind::Interrupted,"orchestration request cancelled"),RequestError::Transport=>io::Error::other("orchestration HTTP request failed")})?;
+        let reply=self.io.exchange(HttpRequest{port,path:format!("/api/sessions/{session}/{suffix}"),token,body,timeout},cancel).await.map_err(|error|match error{RequestError::Timeout if status_kind == "close"=>io::Error::new(io::ErrorKind::TimedOut,"orchestrate close timed out; the child may already be closed; check its state before retrying"),RequestError::Timeout if !post=>io::Error::new(io::ErrorKind::TimedOut,"orchestration HTTP get timed out"),RequestError::Timeout=>io::Error::new(io::ErrorKind::TimedOut,"spawn confirmation pending in Hub: user has not yet decided in browser. DO NOT retry spawn (duplicate request will be rejected). The child will start once approved, and its session ID will be delivered via orchestration notification. Once running, instruct it via `orchestrate send`"),RequestError::Cancelled=>io::Error::new(io::ErrorKind::Interrupted,"orchestration request cancelled"),RequestError::Transport=>io::Error::other("orchestration HTTP request failed")})?;
         let result = crate::proto::decode_wire::<ChildReply>(&reply.body)
             .map_err(|_| error(format!("parse response (status {})", reply.status)))?;
         if reply.status != 200 || !result.ok {
@@ -382,6 +437,10 @@ impl OrchestrateCli {
             "send" => format!(
                 "sent instruction to child session #{} role={role} board={}\n",
                 result.session_id, result.board_path
+            ),
+            "close" => format!(
+                "closed child session #{} role={} state_before={}\n",
+                result.session_id, result.role, result.state_before
             ),
             "relay-start" => {
                 let relay = result

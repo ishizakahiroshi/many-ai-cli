@@ -11,6 +11,13 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+
+- **A conductor can close its own child, even while it is working.**
+  `many-ai-cli orchestrate close --role <role> [--id <child session id>]`
+  uses the dashboard dismissal path and frees the child's slot. Without
+  `--id`, it selects the newest child with that role. The board and conductor
+  notice record who closed it and its previous state; other conductors' children
+  cannot be closed.
 - **Attachments reach the machine a shell session ssh'd into.** In a shell
   session, the new "📤 Send to" button next to the attachment area takes an ssh
   destination (a `~/.ssh/config` alias, `user@host` or `ssh://user@host:port`).

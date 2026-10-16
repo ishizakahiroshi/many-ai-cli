@@ -15,6 +15,31 @@ use crate::{
 };
 use serde::Deserialize;
 use std::{path::Path, sync::Arc};
+#[cfg(test)]
+mod tests;
+
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct CloseRequest {
+    role: String,
+    id: Option<i64>,
+}
+impl GoWire for CloseRequest {
+    const GO_TYPE: &'static str = "closeChildRequest";
+    const SCHEMAS: &'static [Schema] = &[Schema {
+        name: "closeChildRequest",
+        fields: &[
+            Field {
+                name: "role",
+                kind: "string",
+            },
+            Field {
+                name: "id",
+                kind: "*int",
+            },
+        ],
+    }];
+}
 #[derive(Default, Deserialize)]
 #[serde(default)]
 struct SendRequest {
@@ -73,7 +98,7 @@ pub fn is_control_route(path: &str) -> bool {
     path.starts_with("/api/sessions/")
         && matches!(
             path.trim_end_matches('/').rsplit('/').next(),
-            Some("send-child" | "inject" | "children")
+            Some("send-child" | "close-child" | "inject" | "children")
         )
 }
 pub struct ChildControl {
@@ -118,6 +143,7 @@ impl ChildControl {
             return error;
         }
         match parts[1] {
+            "close-child" => self.close_child(request, id, now),
             "children" => Response::json(
                 200,
                 &serde_json::json!({"ok":true,"children":self.core.snapshots().into_iter().filter(|child|child.parent_session_id==id).collect::<Vec<_>>()}),
@@ -263,6 +289,67 @@ impl ChildControl {
             _ => Response::error(404, "not_found", "not found"),
         }
     }
+    fn close_child(&self, request: &Request, parent: LiveSessionId, now: Timestamp) -> Response {
+        let body: CloseRequest = match decode_json(request) {
+            Ok(body) => body,
+            Err(error) => return error,
+        };
+        if body.role.trim().is_empty() {
+            return Response::error(400, "bad_request", "role is required");
+        }
+        if body.id.is_some_and(|id| id <= 0) {
+            return Response::error(400, "bad_request", "id must be a positive session id");
+        }
+        let role = crate::orchestration::child_launch::safe_token(
+            &crate::proto::unicode::simple_lower(body.role.trim()),
+        );
+        let Some(parent_details) = self.core.details(parent) else {
+            return Response::error(404, "not_found", "parent session not found");
+        };
+        let children: Vec<_> = self
+            .core
+            .snapshots()
+            .into_iter()
+            .filter(|child| child.parent_session_id == parent)
+            .collect();
+        let missing = || {
+            let current = children
+                .iter()
+                .map(|child| format!("role={} id={} state={}", child.role, child.id.0, child.state))
+                .collect::<Vec<_>>()
+                .join(", ");
+            Response::error(
+                404,
+                "no_child",
+                &format!("no matching child; current children: {current}"),
+            )
+        };
+        let Some(child) = children
+            .iter()
+            .filter(|child| child.role == role && body.id.is_none_or(|id| child.id.0 == id))
+            .filter_map(|child| self.core.details(child.id))
+            .max_by_key(|child| child.binding.session)
+        else {
+            return missing();
+        };
+        match self
+            .program
+            .close_child_by_conductor(parent, child.binding, now)
+        {
+            Ok(Some(state_before)) => Response::json(
+                200,
+                &serde_json::json!({"ok":true,"session_id":child.binding.session.0,"role":child.snapshot.role,"state_before":state_before,"board_path":parent_details.snapshot.board_path}),
+            ),
+            Ok(None) => Response::error(
+                409,
+                "child_close_refused",
+                "child has pending spawn confirmations as a parent; resolve them before closing it",
+            ),
+            Err(SessionError::NotFound(_) | SessionError::StaleBinding) => missing(),
+            Err(_) => Response::error(503, "child_close_unavailable", "child close unavailable"),
+        }
+    }
+
     fn enqueue(
         &self,
         binding: SessionBinding,

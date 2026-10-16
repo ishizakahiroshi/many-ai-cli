@@ -11,6 +11,57 @@ struct Timer {
     blocker: String,
 }
 impl OrchestrationProgram {
+    /// Keep attribution and the engine's dismissal in one critical section.
+    /// A concurrent dashboard dismissal either wins first (stale binding), or
+    /// observes this exact child's mark after the successful conductor close.
+    pub fn close_child_by_conductor(
+        &self,
+        parent: LiveSessionId,
+        binding: SessionBinding,
+        now: Timestamp,
+    ) -> Result<Option<String>, SessionError> {
+        let core = self.core()?;
+        let sink = self.deps.effects.upgrade().ok_or(SessionError::Shutdown)?;
+        let permit = self.deps.tasks.effect_permit()?;
+        let (effects, state_before, closed) = {
+            let mut owned = lock(&self.state);
+            let details = core
+                .details(binding.session)
+                .ok_or(SessionError::StaleBinding)?;
+            if details.binding != binding || details.snapshot.parent_session_id != parent {
+                return Err(SessionError::StaleBinding);
+            }
+            let state_before = details.snapshot.state;
+            let effects = core.dismiss_bound(binding, now)?;
+            // Broadcast refusal frames may be expanded away when no UI is
+            // connected. Dismissed is emitted only by a successful dismissal.
+            let closed = effects.0.iter().any(|effect| {
+                matches!(effect, CoreEffect::Notify(CoreEvent::Dismissed(id)) if *id == binding.session)
+            });
+            if closed {
+                // Warm reattach replaces the wrapper connection, while the
+                // registered child retains its session/incarnation identity.
+                for board in owned.boards.values_mut() {
+                    if let Some(child) = board.children.get_mut(&binding.session)
+                        && child.registration.binding.incarnation == binding.incarnation
+                        && child.registration.parent.session == parent
+                    {
+                        child.conductor_closed_state = Some(state_before.clone());
+                        break;
+                    }
+                }
+            }
+            (effects, state_before, closed)
+        };
+        let warning = self.deps.warning.clone();
+        drop(permit.start(async move {
+            if let Err(failure) = sink.apply(effects).await {
+                (warning)("conductor child close effects", &failure.error);
+            }
+        }));
+        Ok(closed.then_some(state_before))
+    }
+
     pub async fn session_ended(
         &self,
         session: LiveSessionId,
@@ -22,7 +73,13 @@ impl OrchestrationProgram {
             owned
                 .boards
                 .iter_mut()
-                .filter(|(id, _)| !relay_boards.contains(*id))
+                .filter(|(id, board)| {
+                    !relay_boards.contains(*id)
+                        || (state == "dismissed"
+                            && board.children.get(&session).is_some_and(|child| {
+                                child.conductor_closed_state.is_some()
+                            }))
+                })
                 .find_map(|(id, board)| {
                     let child = board.children.get_mut(&session)?;
                     child.done = true;
@@ -31,14 +88,24 @@ impl OrchestrationProgram {
                         board.path.clone(),
                         child.registration.parent.session,
                         child.registration.role.clone(),
+                        if state == "dismissed" {
+                            child.conductor_closed_state.take()
+                        } else {
+                            None
+                        },
                     ))
                 })
         };
-        let Some((id, path, parent, role)) = record else {
+        let Some((id, path, parent, role, conductor_closed_state)) = record else {
             return Ok(());
         };
         let dismissed = state == "dismissed";
-        let evidence = if dismissed {
+        let evidence = if let Some(state_before) = &conductor_closed_state {
+            format!(
+                "child closed by the conductor: role={role} session={} (state when closed: {state_before}; its work may be unfinished)\n",
+                session.0
+            )
+        } else if dismissed {
             format!(
                 "child dismissed from the dashboard: role={role} session={} (closed by the user; its work may be unfinished)\n",
                 session.0
@@ -52,7 +119,12 @@ impl OrchestrationProgram {
         self.boards
             .append(&path, "hub", &evidence, Timestamp::now())
             .map_err(|e| SessionError::Transport(e.to_string()))?;
-        let text = if dismissed {
+        let text = if let Some(state_before) = &conductor_closed_state {
+            format!(
+                "\n[orchestration] child closed by you role={role} id={} state_before={state_before} (treat its work as unfinished unless it reported DONE)\n",
+                session.0
+            )
+        } else if dismissed {
             format!(
                 "\n[orchestration] child dismissed role={role} id={} (closed from the dashboard by the user; treat its work as unfinished)\n",
                 session.0
