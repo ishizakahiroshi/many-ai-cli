@@ -11,6 +11,14 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Register another AI CLI without editing the settings file.** (Rust)
+  `many-ai-cli provider add` validates the id, executable and headless settings,
+  and saves exact approval-option labels without exposing the Hub token.
+  `provider list [--json]` shows built-in and custom entries, including dropped
+  entries and their reasons; `provider remove <id>` keeps approval patterns for
+  reuse. Each successful add or remove backs up an existing `config.yaml` exactly
+  once; validation failures leave it unchanged. Restart the Hub after changes.
+  `provider add --help` includes a Muse Code example and a checklist for AIs.
 - **Attachments reach the machine a shell session ssh'd into.** In a shell
   session, the new "📤 Send to" button next to the attachment area takes an ssh
   destination (a `~/.ssh/config` alias, `user@host` or `ssh://user@host:port`).

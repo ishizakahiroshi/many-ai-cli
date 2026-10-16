@@ -17,7 +17,14 @@ fn expected(args: &[String], allow_empty: bool) -> io::Result<&str> {
         .filter(|value| allow_empty || !value.is_empty())
         .ok_or_else(|| error("--expected-revision is required"))
 }
-pub fn provider_command(store: &Arc<ProviderRegistryStore>, args: &[String]) -> io::Result<String> {
+pub fn provider_command(
+    store: &Arc<ProviderRegistryStore>,
+    config: &Arc<crate::config::ConfigStore>,
+    args: &[String],
+) -> io::Result<String> {
+    if super::custom_provider::handles(args) {
+        return super::custom_provider::run(config, args);
+    }
     let command = args
         .first()
         .ok_or_else(|| error("provider <backup|reset|recover>"))?;

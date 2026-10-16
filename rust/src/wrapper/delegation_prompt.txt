@@ -5,6 +5,7 @@ many-ai-cli: you can delegate work to child AI sessions on this machine.
   (spawning again for a role that already has a live child is rejected with 409 — use send)
 - Run a plan file through implementation -> review -> fix rounds: many-ai-cli orchestrate relay --plan <path>
 - Details: many-ai-cli orchestrate --help
+- To add another AI CLI: many-ai-cli provider add --help
 
 Do not call the Hub HTTP API or handle its auth token directly; these subcommands do it for you.
 

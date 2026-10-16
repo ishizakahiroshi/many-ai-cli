@@ -76,7 +76,7 @@ Each pane can run any supported provider — `claude`, `codex`, `copilot`, `curs
 
 **Ollama** is not a separate wrapper. Run Ollama models *through* the `claude` or `codex` wrapper — pick **Ollama Cloud / Ollama Local** in the spawn form's model picker, and the Hub points the Anthropic/OpenAI-compatible endpoint at Ollama (see "Model picker with Ollama routing" in Features).
 
-Gemini CLI is intentionally out of scope.
+Gemini CLI is unsupported. Its terms of service must be checked before support is built.
 
 ## NVIDIA NIM trial route (OpenCode only)
 
@@ -88,7 +88,7 @@ NVIDIA API trial access is for internal testing and evaluation, not production u
 
 The model picker reflects NVIDIA's catalog, which can include models that do not support Chat Completions. Catalog presence and a successful `/v1/models` check do not establish prompt, streaming, tool-use, file-edit, shell, or resume compatibility. Verify a specific model with a public, non-sensitive test repository before relying on it. The [NVIDIA LLM API reference](https://docs.api.nvidia.com/nim/re/reference/llm-apis) documents the Chat Completions endpoint.
 
-Want to run a CLI `many-ai-cli` does not wrap out of the box — including one it deliberately excludes here? You can register it yourself; see [Custom providers](#custom-providers-power-users) below.
+To register another AI CLI, see [Custom providers](#custom-providers-power-users) below. Check that CLI's terms of service before integrating it.
 
 The install-status list (first-run screen, and Settings → AI CLI integrations) can check each CLI's version and update it from the Hub — on demand only, never on startup or on a schedule. Update runs the command from that provider's own "Version and update" settings, showing you the exact command in a confirmation dialog first; a CLI with a running session cannot be updated until the session ends. The bundled 7 providers ship with a default update command, except Cursor Agent CLI and Command Code, which default to update *off* because updating can ask you to log in again. Change any provider's update command, or turn it on for a CLI you added yourself, in Settings → AI CLI integrations → edit → *Version and update*. This only ever sees a CLI the Hub itself launched or found on `PATH` — a copy running in a terminal window you opened yourself is invisible to it.
 
@@ -242,6 +242,30 @@ If you never open this section, nothing changes: sessions launch with the enviro
 
 ## Custom providers (power users)
 
+**Add a CLI without editing `config.yaml` (Rust).** Start with `many-ai-cli provider add --help`. Before adding a CLI, check its official documentation for the non-interactive command or flags, whether the prompt is an argument or stdin, the exact approval-option labels, the model flag, and the instruction files it reads. If an AI is doing this for you, it should first show you which facts are officially documented and which remain undocumented.
+
+For Muse Code, the [official documentation](https://dev.meta.ai/docs/muse-code) describes `muse exec "<prompt>"`, the `--model` flag, the approval labels below, and the first matching instruction file among `AGENTS.md`, `CLAUDE.md`, `.agents/AGENTS.md`, and `.claude/CLAUDE.md`. With the executable already on PATH, register it with:
+
+```text
+many-ai-cli provider add --id muse --label "Muse Code" --command muse \
+  --headless-args exec --headless-format text --prompt-via arg \
+  --approval-option "Allow once" --approval-option "Always allow in this workspace" --approval-option "Reject"
+```
+
+Repeat `--headless-args` once per argument, in order; each value is one argv element, not a shell command. For headless mode, use `--headless-format text` and `--prompt-via arg` or `--prompt-via stdin`, as required by that CLI. Repeat `--approval-option` for each exact label shown in its approval prompt. Registration checks the executable without running it.
+
+```text
+many-ai-cli provider list
+many-ai-cli provider list --json
+many-ai-cli provider remove muse
+```
+
+- `list` marks the built-in providers and shows each custom provider's id, label, command, headless availability, and whether it is in use or dropped. Dropped entries include the same reason as `many-ai-cli config check`.
+- `add` validates the id, command, headless definition, and executable before writing. Ids must be unique, at most 64 characters, start with a lowercase letter or digit, and contain only lowercase letters, digits, `.`, `_`, or `-`. Built-in ids, `shell`, and top-level command names such as `provider`, `config`, and `serve` cannot be added. Validation failures report all detected problems together, leave `config.yaml` byte-identical, and create no backup.
+- Each successful `add` or `remove` creates exactly one backup of the existing `config.yaml` and prints its backup id. If the file does not exist yet, no backup is needed and the command says so. Rewriting the file loses comments and layout; if comments were present, a notice points to the backup containing the previous file. Use `many-ai-cli config backup list` and `many-ai-cli config backup restore <id>` to inspect the backup list or restore one.
+- `remove` unregisters custom providers, including invalid entries dropped by the loader. Built-in or missing ids are refused without a write or backup. Approval patterns are kept, their path is printed, and adding the same id again reuses them unless you supply new options.
+- Restart a running Hub after `add` or `remove`; it does not automatically reload these file changes. These commands do not print the Hub token or unrelated settings, and you do not need to open `config.yaml` or handle the token.
+
 Beyond the [seven built-in CLIs](#supported-providers), you can register your own AI CLI from the Hub UI. Open **Settings → AI CLI integrations**, or choose **Add AI CLI** at the end of the **+ New Session** provider list. Enter a display name and executable, press Validate, then Save. If validation or save fails, the dialog keeps your input so you can correct it. After a save from New Session, the new CLI is selected. JSON editing is not required. Each provider row also has a **Duplicate** action that adds a new CLI using that row as a starting point; the copy's name gets an " (copy)" suffix.
 
 Editing a built-in provider (or disabling/re-enabling it) saves your change as an override on top of the built-in definition; the built-in definition itself is never modified. A field that the built-in definition fills in can't currently be saved empty — for example an empty argument list or an empty text field. The save is refused and the edit dialog names the fields, so you can keep the value or enter a different one. Each save creates a new revision and an automatic backup, so a bad edit or a corrupted file never loses the last good state. Open **History** on a provider row to see revisions and backups, verify a backup's integrity, or restore from it; the same actions are available without the UI via `many-ai-cli provider backup list|verify|restore` and `many-ai-cli provider reset --distributed`. If a provider's config file itself is corrupted, History shows a recovery notice — "This CLI's config file is broken. The broken file has been preserved. Choose what to restore to." — with candidates such as the last readable version of your own config; when the UI isn't reachable, use `many-ai-cli provider recover <provider-id> [revision|--list]`.
@@ -271,11 +295,13 @@ Leave `custom_providers:` out entirely — the default — and nothing about `ma
 
 **Nothing built-in gets attached to a custom provider.** No `--model`, permission-mode/sandbox/ask-for-approval flags, `ANTHROPIC_*` / `OPENAI_*` environment presets, Ollama/LM Studio routing, or subscription profile selection — none of that has a defined meaning for an arbitrary CLI, so the spawn form hides the model field for a custom provider and the Hub never adds any of it. Only `command`'s own arguments and the common `MANY_AI_CLI*` session environment reach the process.
 
-**Approval detection works for a custom provider two ways.** A generic text heuristic — approval-shaped wording and option labels (Yes/No/Allow/Deny and similar) — runs for every custom session automatically, the same as it does server-side for the built-in ones. On top of that, `approval_pattern_source` lets you add your CLI's own trigger phrases: point it at a markdown file with one backtick-quoted phrase per bullet (the same format the built-in `resources/approval-patterns/*.md` files use), and the Hub fetches or reads it once at startup into `~/.many-ai-cli/approval-patterns/<id>.json`, which the browser then loads the same way it already loads the 7 built-in providers' pattern files. The source itself is constrained the same way the built-in pattern-source override is: either an absolute local path under `~/.many-ai-cli/` (no `~` expansion — write the real path) or an `https://raw.githubusercontent.com/...` URL; anything else is rejected. `many-ai-cli doctor` reports whether a configured source has actually synced yet — restart the Hub if it hasn't, and check `hub.log` if it stays missing. The **hook** that writes an approval-rules block into `CLAUDE.md` / `AGENTS.md` is built-in only and is never applied to a custom provider.
+**Approval detection works for a custom provider two ways.** A generic text heuristic — approval-shaped wording and option labels (Yes/No/Allow/Deny and similar) — runs for every custom session automatically, the same as it does server-side for the built-in ones. `provider add --approval-option` also saves the exact labels as a JSON string array in `~/.many-ai-cli/approval-patterns/custom-providers/<id>.json`. The loader uses these local patterns, and later remote synchronization does not overwrite them.
+
+Alternatively, `approval_pattern_source` lets you supply a markdown file with one backtick-quoted phrase per bullet (the same format the built-in `resources/approval-patterns/*.md` files use). The Hub fetches or reads it at startup into `~/.many-ai-cli/approval-patterns/<id>.json`; locally saved options take precedence. The source must be either an absolute local path under `~/.many-ai-cli/` (no `~` expansion — write the real path) or an `https://raw.githubusercontent.com/...` URL; anything else is rejected. `many-ai-cli doctor` reports whether a configured source has synced yet — restart the Hub if it hasn't, and check `hub.log` if it stays missing. The **hook** that writes an approval-rules block into `CLAUDE.md` / `AGENTS.md` is built-in only and is never applied to a custom provider.
 
 If `command`'s executable is not on PATH, the session ends the same way a missing built-in CLI would (`... not found in PATH`); `many-ai-cli doctor` checks PATH for every configured custom provider without ever running it.
 
-**This is a power-user setting, and it carries none of the review that goes into the built-in list.** The terms-of-service judgment calls described under [Security / Privacy](#security--privacy) — including why Gemini CLI is out of scope — are about the *built-in* provider list only. Whatever CLI you point `command` at is entirely your own choice, and checking that CLI's own terms of service before you wire it in is on you. `many-ai-cli doctor` reports how many custom providers are configured, as a standing reminder; it does not warn you again on every spawn.
+**A custom registration does not carry the review that goes into the built-in list.** Check the CLI's own terms of service before integrating it; see [Security / Privacy](#security--privacy). Gemini CLI remains unsupported, and its terms of service must be checked before support is built. `many-ai-cli doctor` reports how many custom providers are configured, as a standing reminder; it does not warn you again on every spawn.
 
 ---
 
