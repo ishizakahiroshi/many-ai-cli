@@ -9,7 +9,7 @@ import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLoca
 import { migratePinnedSessionsOnce, activateSession, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
 import { applyRemotePtyResize, ensureTerminal, forgetSentPtySize, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup, isSessionCurrentlyViewed, playNotificationSound, showDesktopTurnEndNotification } from './settings.js';
-import { forgetTurnEndNotify, observeTurnEndCandidate, shouldNotifyTurnEnd, turnEndRunningStartedAt } from './turn-end-notify-store.js';
+import { forgetTurnEndNotify, observeStoppedMarkCandidate, observeTurnEndCandidate, shouldNotifyTurnEnd, turnEndRunningStartedAt } from './turn-end-notify-store.js';
 import { clearAllTurnEndBellMutes, isTurnEndBellOff, isTurnEndNotifyEnabled } from './user-prefs.js';
 import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed } from './approval-ui.js';
 import { hideActionBar, isAIProvider, renderApprovalAfterSnapshot } from './approval.js';
@@ -662,11 +662,16 @@ export function _connectWs() {
       // 実測できないため観測に渡さない — cur.state への代入自体はこの下で行うので、
       // 次回以降の session_update からは正しく遷移を追える。
       if (!isNew) {
-        const isCandidate = observeTurnEndCandidate(m.session_id, cur.state, m.state, Date.now());
+        const now = Date.now();
+        // 見ていないセッションが作業を終えて止まったら「新しく止まった」印を付ける。タブの数字と
+        // カードの黄色い●になり、そのセッションを開くと消える。ベルや通知設定とは独立で、
+        // 通知より短い作業も拾う（turn-end-notify-store.ts の STOPPED_MARK_MIN_WORK_MS）。
+        if (observeStoppedMarkCandidate(m.session_id, cur.state, m.state, now) &&
+            !isSessionCurrentlyViewed(m.session_id)) {
+          noteSessionListTurnEnd(m.session_id);
+        }
+        const isCandidate = observeTurnEndCandidate(m.session_id, cur.state, m.state, now);
         if (isCandidate) {
-          // 同じ作業終了の合図で、見ていないセッションの所属タブに「新しく止まった」印を付ける
-          // （ベルや通知設定とは独立。タブを開くと消える）。
-          if (!isSessionCurrentlyViewed(m.session_id)) noteSessionListTurnEnd(m.session_id);
           const decision = shouldNotifyTurnEnd(
             isCandidate,
             isTurnEndBellOff(m.session_id),

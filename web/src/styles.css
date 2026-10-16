@@ -73,6 +73,9 @@
   --accent-glow:         rgba(99,102,241,0.25);
   --warn:                #f59e0b;
   --yellow:              #eab308;
+  /* 作業を終えて止まった後、まだ開いていないセッションの ●。承認待ちのアンバー（--warn）と
+     見分けられるよう、橙に寄らない黄色にする。 */
+  --stopped-unseen:      #facc15;
   --warn-bg:             #92400e;
   --warn-text:           #fde68a;
   --danger:              #fda4af;
@@ -192,6 +195,7 @@
   --accent-glow:         rgba(79,70,229,0.15);
   --warn:                #d97706;
   --yellow:              #ca8a04;
+  --stopped-unseen:      #ca8a04;
   --warn-bg:             #fef3c7;
   --warn-text:           #92400e;
   --danger:              #be123c;
@@ -1398,6 +1402,8 @@ header {
 .card-state-pill.pending-spawn-confirm { color: var(--ui-warning-ink); background: var(--perm); border-radius: var(--radius-sm); }
 .card-state-pill.awaiting-input { color: var(--accent); }
 .card-state-pill.workflow-active { color: var(--muted-2); }
+/* 止まった後まだ開いていない ●。開くと上の standby のグレーに戻る。 */
+.card-state-pill.stopped-unseen { color: var(--stopped-unseen); }
 .card-started-at { flex-shrink: 0; font-size: var(--fs-xs); color: var(--muted-2); margin-left: 3px; }
 .card-ctx { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .card-ctx-gauge { display: inline-block; width: 38px; height: 6px; background: var(--bg-deep); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; vertical-align: middle; }

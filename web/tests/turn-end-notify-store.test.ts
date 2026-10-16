@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  STOPPED_MARK_MIN_WORK_MS,
   TURN_END_MIN_RUNNING_MS,
   forgetTurnEndNotify,
+  observeStoppedMarkCandidate,
   observeTurnEndCandidate,
   shouldNotifyTurnEnd,
   turnEndRunningStartedAt,
@@ -107,5 +109,67 @@ describe('shouldNotifyTurnEnd', () => {
 
   test('「作業が終わったときも通知する」設定が OFF なら偽', () => {
     expect(shouldNotifyTurnEnd(true, false, false, false)).toBe(false);
+  });
+});
+
+// タブの数字とカードの黄色い●（止まった後まだ開いていない）の合図。通知より短い作業も
+// 拾い、再描画だけの running（Hub の idle_after による約 3 秒）は拾わない。
+describe('observeStoppedMarkCandidate', () => {
+  test('通知の閾値に満たない作業でも、印の閾値以上なら候補になる', () => {
+    const id = 101;
+    const t0 = 11_000_000;
+    expect(STOPPED_MARK_MIN_WORK_MS).toBeLessThan(TURN_END_MIN_RUNNING_MS);
+    expect(observeStoppedMarkCandidate(id, 'standby', 'running', t0)).toBe(false);
+    expect(observeStoppedMarkCandidate(id, 'running', 'standby', t0 + STOPPED_MARK_MIN_WORK_MS)).toBe(true);
+  });
+
+  test('再描画だけの約 3 秒の running は候補にならない', () => {
+    const id = 102;
+    const t0 = 12_000_000;
+    observeStoppedMarkCandidate(id, 'standby', 'running', t0);
+    expect(observeStoppedMarkCandidate(id, 'running', 'standby', t0 + 3200)).toBe(false);
+  });
+
+  test('承認待ちを挟んだ作業は、最初に動き出した時刻から測る', () => {
+    const id = 103;
+    const t0 = 13_000_000;
+    observeStoppedMarkCandidate(id, 'standby', 'running', t0);
+    expect(observeStoppedMarkCandidate(id, 'running', 'waiting', t0 + 2000)).toBe(false);
+    observeStoppedMarkCandidate(id, 'waiting', 'running', t0 + 4000);
+    expect(observeStoppedMarkCandidate(id, 'running', 'standby', t0 + 5000)).toBe(true);
+  });
+
+  test('同じ standby が重ねて届いても 2 回目は候補にならない', () => {
+    const id = 104;
+    const t0 = 14_000_000;
+    observeStoppedMarkCandidate(id, 'standby', 'running', t0);
+    expect(observeStoppedMarkCandidate(id, 'running', 'standby', t0 + STOPPED_MARK_MIN_WORK_MS)).toBe(true);
+    expect(observeStoppedMarkCandidate(id, 'standby', 'standby', t0 + STOPPED_MARK_MIN_WORK_MS + 1000)).toBe(false);
+  });
+
+  test('画面を開いた時点で既に動いていたセッションは、長さを測れないので候補にする', () => {
+    expect(observeStoppedMarkCandidate(105, 'running', 'standby', 15_000_000)).toBe(true);
+  });
+
+  test('running を経ずに standby へ来たセッションは候補にならない', () => {
+    expect(observeStoppedMarkCandidate(106, undefined, 'standby', 16_000_000)).toBe(false);
+    expect(observeStoppedMarkCandidate(106, 'waiting', 'standby', 16_000_100)).toBe(false);
+  });
+
+  test('error / disconnected へ移ったら作業の記録を捨てる', () => {
+    const id = 107;
+    const t0 = 17_000_000;
+    observeStoppedMarkCandidate(id, 'standby', 'running', t0);
+    expect(observeStoppedMarkCandidate(id, 'running', 'disconnected', t0 + STOPPED_MARK_MIN_WORK_MS)).toBe(false);
+    expect(observeStoppedMarkCandidate(id, 'disconnected', 'standby', t0 + STOPPED_MARK_MIN_WORK_MS + 1)).toBe(false);
+  });
+
+  test('forgetTurnEndNotify で印の作業記録も破棄する', () => {
+    const id = 108;
+    const t0 = 18_000_000;
+    observeStoppedMarkCandidate(id, 'standby', 'running', t0);
+    forgetTurnEndNotify(id);
+    // 開始時刻が無く、直前も running ではない扱いになる経路を確かめるため waiting から戻す。
+    expect(observeStoppedMarkCandidate(id, 'waiting', 'standby', t0 + STOPPED_MARK_MIN_WORK_MS)).toBe(false);
   });
 });
