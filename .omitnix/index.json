@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "04c397922641f61fa6869023ed763aa3031ba150",
+    "commit": "aae60ef46ba2d8294059f0e66ac3f5fea8969af9",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1980,
+    "discovered": 1984,
     "analyzed": 1539,
     "unresolved": 9,
     "unknown": 0,
-    "unclaimed": 432,
+    "unclaimed": 436,
     "skipped_by_config": 0
   },
   "files": [
@@ -797,6 +797,38 @@
     },
     {
       "path": "docs/bot/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/orchestrate-close-child/FACTS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/orchestrate-close-child/PROGRESS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/orchestrate-close-child/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/orchestrate-close-child/REVIEW.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
