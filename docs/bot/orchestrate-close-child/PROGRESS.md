@@ -12,7 +12,7 @@ last_reviewed: 2026-10-16
 The owner's side updates this board. Do not edit it. The state of each step and every report live in the management Issue comments.
 
 - Task: #P-20261016-013 many-ai-cli — `orchestrate close` for the conductor's own children, also while they are working
-- Management Issue: (added after the Issue is created)
+- Management Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/24
 - Instructions are stored in: `ishizakahiroshi/many-ai-cli`, `docs/bot/orchestrate-close-child/` on branch `dots/orchestrate-close-child`
 - Work target: `ishizakahiroshi/many-ai-cli`, work branch `dots/orchestrate-close-child-P-20261016-013`, Draft PR base `dots/orchestrate-close-child`
 - Behavior baseline: `aae60ef4`
@@ -26,8 +26,8 @@ The owner's side updates this board. Do not edit it. The state of each step and 
 
 ## Records
 
-- First instruction commit: (recorded after publication)
-- Final instruction commit: (recorded after publication)
+- First instruction commit: `226c9bf150d11aad475501608c962627e17e3fa5`
+- Final instruction commit: the commit that added the Issue URL to these files (given in the Slack message and the Issue body)
 - Drive version and manifest SHA256: —
 - Code SHA: —
 - Reviewed SHA: —

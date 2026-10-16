@@ -18,7 +18,8 @@ Updated: 2026-10-16. Read [facts](FACTS.md), [independent review](REVIEW.md) and
 - Work branch: create `dots/orchestrate-close-child-P-20261016-013` from the final instruction commit given in the Slack message.
 - Draft PR base: `dots/orchestrate-close-child`.
 - Behavior baseline (oracle): `aae60ef4`. The implementation review diff starts at the first instruction commit, which is a different commit.
-- Management Issue: given in the Slack message and in [PROGRESS.md](PROGRESS.md).
+- Management Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/24
+- First instruction commit (start of the implementation review diff): `226c9bf150d11aad475501608c962627e17e3fa5`.
 - Only the Rust crate (`rust/`) and the docs listed below are in scope. The Go code is frozen. Do not edit it.
 
 ## Purpose
