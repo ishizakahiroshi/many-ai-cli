@@ -36,7 +36,7 @@ impl SpawnHttp {
                 Response::json(200, &serde_json::json!({"ok":true,"orchestration_id":id.0}))
             }
             Ok(None) => Response::json(200, &serde_json::json!({"ok":true})),
-            Err(error) => Response::error(error.status, error.code, error.detail),
+            Err(error) => Response::error(error.status, error.code, &error.detail),
         }
     }
 }

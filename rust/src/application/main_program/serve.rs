@@ -137,7 +137,9 @@ impl HubComposition {
             // Go's serve override is in memory for this process, not saved to
             // config.yaml. Rebuild before owners/readers are published.
             context.config = Arc::new(
-                ConfigStore::new(context.paths.clone(), config.clone())
+                context
+                    .config
+                    .derive(config.clone())
                     .map_err(io::Error::other)?,
             );
         }
@@ -194,6 +196,18 @@ impl HubComposition {
             config.log.clone(),
             options.debug,
         )?;
+        {
+            // A save that would destroy the user's file copies it to
+            // backups/config first. The log names the copy, never its content.
+            let logger = logger.clone();
+            context.config.set_backup_observer(Arc::new(move |backup| {
+                logger.write(
+                    "INFO",
+                    "settings file backed up before it was replaced",
+                    &format!("backup={}", backup.file_name),
+                )
+            }));
+        }
         if storage.is_none() {
             logger.write(
                 "WARN",
@@ -1131,6 +1145,7 @@ impl HubComposition {
                     home: context.vendor_home.clone(),
                     environment: context.environment.clone(),
                     tasks: tasks.clone(),
+                    config: Some(context.config.clone()),
                 },
             )),
         )))

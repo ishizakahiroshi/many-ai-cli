@@ -22,6 +22,9 @@ fn main() {
         .and_then(|runtime| runtime.block_on(run()));
     let code = match result {
         Ok(()) => 0,
+        // An empty message means the command already printed everything it
+        // had to say (for example `config check` listing mistakes).
+        Err(error) if error.is_empty() => 1,
         Err(error) => {
             eprintln!("{error}");
             1
@@ -66,6 +69,7 @@ async fn run() -> Result<(), String> {
                     | "help"
                     | "--help"
                     | "-h"
+                    | "config"
                     | "serve"
                     | "connect"
                     | "setup"
@@ -101,7 +105,35 @@ async fn run() -> Result<(), String> {
         .transpose()
         .map_err(|error| error.to_string())?
         .unwrap_or_default();
-    let invocation = cli::parse(&args, &custom)?;
+    // A custom provider id is compared trimmed and lower-cased by the refusal,
+    // the registry and the launch alike; turn what was typed into that one form
+    // here, once, so all of them see the same value (`Twin` and ` twin `
+    // are `twin`).
+    let mut parse_args = args.clone();
+    if let Some(context) = &loaded
+        && let Some(position) = args.len().checked_sub(command_args.len())
+        && let Some(first) = parse_args.get_mut(position)
+    {
+        *first =
+            many_ai_cli::application::left_out_provider::canonical_provider(&context.config, first);
+    }
+    let invocation = match cli::parse(&parse_args, &custom) {
+        Ok(invocation) => invocation,
+        // `many-ai-cli <custom id>` where that id's setting was left out: say why,
+        // instead of "unknown command".
+        Err(error) => {
+            return Err(loaded
+                .as_ref()
+                .zip(command_args.first())
+                .and_then(|(context, command)| {
+                    many_ai_cli::application::left_out_provider::wrap_refusal(
+                        &context.config,
+                        command,
+                    )
+                })
+                .unwrap_or(error));
+        }
+    };
     match invocation.command {
         Command::Default => {
             let context = main_program::MainContext::load(invocation.trial.as_ref())
@@ -142,7 +174,18 @@ async fn run() -> Result<(), String> {
             }
         }
         Command::Version => println!("{}", env!("MANY_AI_BUILD_VERSION")),
-        Command::Help => println!("{}", cli::USAGE),
+        Command::Help => println!("{}\n{}", cli::USAGE, cli::EXTRA_USAGE),
+        Command::Config(args) => {
+            // Only the runtime paths: this must work when config.yaml cannot be read.
+            let home = runtime_context::user_home().map_err(|error| error.to_string())?;
+            let paths = runtime_context::runtime_paths(invocation.trial.as_ref(), &home)
+                .map_err(|error| error.to_string())?;
+            let code =
+                many_ai_cli::application::config_cli::run(&paths, &args, &mut std::io::stdout())?;
+            if code != 0 {
+                return Err(String::new());
+            }
+        }
         Command::Serve(args) => {
             let options = main_program::ServeOptions::parse(&args)?;
             let context = main_program::MainContext::load(invocation.trial.as_ref())
@@ -163,6 +206,17 @@ async fn run() -> Result<(), String> {
                 None => main_program::MainContext::load(invocation.trial.as_ref())
                     .map_err(|error| error.to_string())?,
             };
+            let provider = many_ai_cli::application::left_out_provider::canonical_provider(
+                &context.config,
+                &provider,
+            );
+            // A custom provider whose setting was left out says why, before a Hub is started for it.
+            if let Some(reason) = many_ai_cli::application::left_out_provider::wrap_refusal(
+                &context.config,
+                &provider,
+            ) {
+                return Err(reason);
+            }
             let cancel = Cancellation::default();
             let _signals = runtime_context::ShutdownSignals::install(cancel.clone())
                 .map_err(|error| error.to_string())?;
@@ -236,8 +290,23 @@ async fn run() -> Result<(), String> {
             .map_err(|error| error.to_string())?;
         }
         Command::Doctor(args) => {
-            let context = main_program::MainContext::load(invocation.trial.as_ref())
-                .map_err(|error| error.to_string())?;
+            let context = match main_program::MainContext::load(invocation.trial.as_ref()) {
+                Ok(context) => context,
+                // doctor is how an unreadable settings file gets diagnosed:
+                // report that instead of stopping with the same message.
+                Err(error) => match many_ai_cli::config::unreadable_from_io(&error) {
+                    Some(unreadable) => {
+                        many_ai_cli::application::diagnostic_cli::run_unreadable_config(
+                            &args,
+                            unreadable,
+                            &mut std::io::stdout(),
+                            &mut std::io::stderr(),
+                        )?;
+                        return Ok(());
+                    }
+                    None => return Err(error.to_string()),
+                },
+            };
             let cancel = Cancellation::default();
             let _signals = runtime_context::ShutdownSignals::install(cancel.clone())
                 .map_err(|error| error.to_string())?;
@@ -372,18 +441,69 @@ async fn run() -> Result<(), String> {
             if flags.help {
                 return Ok(());
             }
-            let context = main_program::MainContext::load(invocation.trial.as_ref())
+            // Uninstalling needs only the paths and the executable, not the
+            // settings, so it also runs when config.yaml cannot be read.
+            let (context, unreadable) =
+                main_program::MainContext::load_tolerating_unreadable_config(
+                    invocation.trial.as_ref(),
+                )
                 .map_err(|e| e.to_string())?;
             let cancel = Cancellation::default();
             let _signals = runtime_context::ShutdownSignals::install(cancel.clone())
                 .map_err(|e| e.to_string())?;
-            if main_program::running_port(&context)
+            let record_unreadable =
+                many_ai_cli::application::maintenance_entry::hub_record_unreadable(&context)
+                    .map_err(|e| e.to_string())?;
+            if let Some(unreadable) = &unreadable {
+                // Without the settings there is no Hub token, so the Hub cannot
+                // be asked to stop, and killing a pid from the ledger could hit
+                // an unrelated process. Refuse only if a Hub looks alive.
+                if let Some(pid) =
+                    many_ai_cli::application::maintenance_entry::live_hub_pid(&context)
+                        .map_err(|e| e.to_string())?
+                {
+                    return Err(format!(
+                        "A Hub appears to be running (pid {pid}), but the settings file cannot be read ({}), so it cannot be asked to stop. Stop that process yourself, or fix the file (`many-ai-cli config check`), then run uninstall again.",
+                        unreadable.summary_en()
+                    ));
+                }
+                if record_unreadable {
+                    println!(
+                        "The settings file cannot be read ({}), and the Hub's record (hub-runtime.json) is damaged, so it cannot be told whether a Hub is running.",
+                        unreadable.summary_en()
+                    );
+                } else {
+                    println!(
+                        "The settings file cannot be read ({}); continuing without it. No Hub is running.",
+                        unreadable.summary_en()
+                    );
+                }
+            } else if record_unreadable {
+                println!(
+                    "The Hub's record (hub-runtime.json) is damaged, so it cannot be told whether a Hub is running."
+                );
+            } else if main_program::running_port(&context)
                 .await
                 .map_err(|e| e.to_string())?
                 .is_some()
             {
                 println!("Hub を停止中...");
                 let _ = many_ai_cli::application::maintenance_entry::stop(&context, &cancel).await;
+            }
+            // Nothing says whether a Hub is running, and killing a process on
+            // a guess could hit an unrelated one: leave the stopping to the
+            // person and make them say it is done.
+            if record_unreadable
+                && !many_ai_cli::application::maintenance_entry::confirm_hub_stopped(
+                    &mut std::io::stdin().lock(),
+                    &mut std::io::stdout(),
+                )
+                .map_err(|e| e.to_string())?
+            {
+                println!(
+                    "\nUninstall was cancelled. Stop the Hub yourself (end its many-ai-cli process), then run uninstall again."
+                );
+                return Ok(());
             }
             let native = std::sync::Arc::new(
                 many_ai_cli::application::platform_cli::native::NativePlatformIo {

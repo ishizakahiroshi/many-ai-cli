@@ -191,7 +191,7 @@ pub struct LaunchPlan {
 
 pub fn provider_registry_for_config(cfg: &Config) -> Result<Registry, LaunchError> {
     let embedded = registry::embedded_definitions().map_err(|e| LaunchError(e.to_string()))?;
-    let (legacy, _) = config::legacy_provider_definitions(&cfg.custom_providers);
+    let (legacy, _) = config::provider_definitions_for_app(&cfg.custom_providers);
     Ok(Registry::build(
         Layers {
             embedded: Some(embedded),

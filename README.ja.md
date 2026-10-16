@@ -944,6 +944,7 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 | `command-code [args...]` | Command Code を Hub 経由で起動 |
 | `wrap <provider> [args...]` | 任意 provider をラップ（デバッグ用） |
 | `shell-init` | 透過モード用のシェル関数スニペットを出力 |
+| `config check\|reset\|backup` | 設定ファイルの誤りの確認・既定値でのやり直し・バックアップの一覧と復元（[設定ファイルに誤りがあるとき](#設定ファイルに誤りがあるとき)） |
 | `status` | Hub の起動状態を表示 |
 | `stop` | Hub を停止 |
 | `log-clean <session.jsonl>` | セッション履歴からクリーン transcript を生成 |
@@ -1171,7 +1172,32 @@ log:                        # hub.log のローテーション設定（lumberjac
 token: ""                   # 空 = 起動時にランダム生成（再起動しても URL は変わらない）
 ```
 
-`token` をリセットしたい場合は `token:` 行を削除して Hub を再起動してください。
+`token` をリセットしたい場合は `token:` 行を削除して Hub を再起動してください（`many-ai-cli config reset --new-token` でもできます。下記）。
+
+### 設定ファイルに誤りがあるとき
+
+`config.yaml` が、黙って既定値に置き換わることはありません。困り方が 2 通りあり、扱いが違います。
+
+**ファイル全体が読めないとき**（YAML の文法エラーなど）。many-ai-cli は、既定値と新しい token で起動し直すのではなく止まります。そうすると Hub の URL が変わり、問題も隠れてしまうためです。ファイルのパスと、行・列の位置を出します（その行の中身は出しません。token の行かもしれないためです）。ファイルには触りません。ファイルを直すか、`many-ai-cli config reset` でやり直してください。
+
+**`custom_providers` の 1 件だけが誤っているとき**（予約された `id`・重複した `id`・`command` の閉じていない引用符・誤った `headless` の値など）。Hub は止まらず、その 1 件だけを外して起動します。外した理由は、人と AI のどちらが見る場所にも出ます。
+
+- **Hub の画面**: 誤りが直るまで消えない帯。開くと 1 件ごとに、どの項目（`id`）の・どの欄が・なぜ駄目か・いまどうなっているか・正しい書き方の例・確かめるコマンドを表示します。画面を開いたとき・タブに戻ったとき・開いている間は約 30 秒ごとにファイルを読み直すので、直せば帯は消えます。動いている Hub は自分の設定として `config.yaml` を読み直さないため、直した分を使うには Hub の再起動が要ります（帯がそう案内します）。
+- **`many-ai-cli config check [--json]`**: 誤りの一覧（読むだけ。誤りがあれば終了コード 1、無ければ 0）。`--json` は AI が読むための形です。
+- **`many-ai-cli doctor`**: 同じ一覧。
+- **外された `id` を起動しようとしたとき**（Hub からの spawn・`many-ai-cli wrap <id>`・`many-ai-cli <id>`・`orchestrate spawn --provider <id>`）: 「invalid provider」「unknown command」ではなく、外した理由と確かめるコマンドを返します。
+- **子 AI のセッション**（Claude・Grok）: 設定に誤りがあるあいだ、委任の案内文に 1 行が加わります。誤りの件数と、`many-ai-cli config check --json` で確かめて利用者に伝えてから直すこと。項目名や値は入りません。
+
+コマンド（ファイルが読めなくても動きます）:
+
+| コマンド | 説明 |
+|---|---|
+| `many-ai-cli config check [--json]` | ファイルを読んで誤りを一覧する。何も変更しない |
+| `many-ai-cli config reset [--new-token] [--yes]` | 今のファイルをバックアップ置き場へコピーしてから、既定値でやり直す。Hub の token は引き継ぐので、Hub の URL とブックマークはそのまま使える（`--new-token` で作り直す。読めないファイルは token も読めないので新しく作り、`--yes` で了承する） |
+| `many-ai-cli config backup list [--json]` | 保存したコピーの一覧 |
+| `many-ai-cli config backup restore <id>` | 保存したコピーを戻す（戻す前の今のファイルも保存する） |
+
+バックアップは `~/.many-ai-cli/backups/config/config.yaml.bak_YYYYMMDD_HHmmss` に、本人だけが読める権限で書きます（token を含むため）。同名のバックアップは上書きせず、自動では削除しません。
 
 `ollama.base_url` は、Hub プロセスから見た Ollama daemon の接続先です。Hyper-V / WSL / Docker / 別 PC など方式は問いません。many-ai-cli が動く側から HTTP で到達できる URL を指定すると、モデルピッカーの `[Ollama Local]` 一覧取得は `<base_url>/api/tags` を使い、Ollama route で起動した Claude Code / Codex も同じ接続先へ向かいます。`base_url` には `/v1` や `/api/tags` を付けないでください。Codex 用の `/v1` は Hub が自動で付けます。
 

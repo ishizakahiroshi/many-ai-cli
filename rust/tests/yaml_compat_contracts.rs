@@ -115,7 +115,7 @@ fn ignored_yaml_only_values_never_backup_valid_config_or_rotate_token() {
         panic!("valid historical YAML must never regenerate its token")
     })
     .unwrap();
-    assert!(!store.recovered_from_invalid_yaml());
+    assert!(store.startup_problems().is_empty());
     let loaded = store.snapshot().unwrap().config;
     assert_eq!(loaded.token, "00123");
     assert_eq!(loaded.auth_cookie_secret, "0xFF");
@@ -123,6 +123,7 @@ fn ignored_yaml_only_values_never_backup_valid_config_or_rotate_token() {
     assert_eq!(loaded.hub.port, 83);
     assert_eq!(std::fs::read_to_string(config_file).unwrap(), original);
     assert!(!paths.root().join("config.yaml.bak").exists());
+    assert!(!paths.resource(Resource::ConfigBackups).exists());
 }
 
 #[test]
@@ -147,6 +148,7 @@ fn decoding_limits_are_non_destructive_and_errors_contain_no_input() {
     assert!(!error.to_string().contains(synthetic_secret));
     assert_eq!(std::fs::read_to_string(config_file).unwrap(), oversized);
     assert!(!paths.root().join("config.yaml.bak").exists());
+    assert!(!paths.resource(Resource::ConfigBackups).exists());
     let nested = format!(
         "token: {synthetic_secret}\nfuture: {}0{}\n",
         "[".repeat(140),

@@ -26,6 +26,23 @@ Release artifacts are published at
   path. The Hub reads the file over the same ssh and hands it to the browser as
   a download; nothing is kept on this PC. Up to 50 MB per file; relative paths
   are refused because the Hub cannot know the remote working directory.
+- **A mistake in the settings file is now shown where a person or an AI will see it, and can be undone.** (Rust)
+  If one `custom_providers` entry is wrong, the Hub does not stop: it leaves out
+  only that entry and starts. The Hub screen keeps a banner up until the file is
+  fixed (open it for each mistake: which entry and `id`, which field, why it is
+  wrong, what that means now, a correct example, and the check command; wording in
+  English, Japanese and Vietnamese). `many-ai-cli config check [--json]` and
+  `many-ai-cli doctor` list the same mistakes (`config check` exits 1 when there
+  are any). Starting the left-out `id` (a spawn from the Hub, `wrap <id>`,
+  `many-ai-cli <id>`, `orchestrate spawn --provider <id>`, a grid, or a conductor
+  or relay role) answers with that reason instead of "invalid provider". While the
+  settings have mistakes, Claude and Grok child sessions get one extra line in the
+  delegation prompt (a count and `many-ai-cli config check --json`, nothing else).
+  `config reset [--new-token] [--yes]` starts over from the defaults after copying
+  the current file to `~/.many-ai-cli/backups/config/config.yaml.bak_YYYYMMDD_HHmmss`
+  (owner-only, never overwritten, never deleted automatically) and keeps the Hub
+  token so the Hub URL stays the same; `config backup list|restore <id>` brings a
+  copy back. `/api/info` gains a `config_problems` object for the banner.
 - Input controls can be placed independently across the app. On desktop they
   start beside the live status display instead of occupying the composer;
   existing saved positions are retained and Reset restores the new default.
@@ -171,6 +188,13 @@ Release artifacts are published at
   open memo count.
 
 ### Changed
+- **A settings file that cannot be read now stops many-ai-cli instead of being replaced.** (Rust) Before, an
+  unreadable `config.yaml` was moved aside to a single `config.yaml.bak` and the
+  Hub started with default settings and a new token, which changed the Hub URL
+  without telling you. Now the command stops, prints the file path and the line and
+  column (never the content of the line), and leaves the file untouched. Fix the
+  file or run `many-ai-cli config reset`; `config`, `doctor`, `version` and `help`
+  still run. An old `config.yaml.bak` is moved into the new backup folder.
 - Work memo rows are now a single compact line with an explicit edit (✎) button; clicking a text memo also starts editing.
 - **Daily local Rust builds use the repair worktree, including uncommitted Web
   and Rust changes.** The local build helper no longer fetches an older trial copy
@@ -203,6 +227,40 @@ Release artifacts are published at
   which now appear only in the details opened from the "…" button.
 
 ### Fixed
+- **Settings-file safety (Rust): nothing the file holds is lost without a copy, and the
+  messages tell the truth.** A start-up that only adds a missing token now copies the
+  file to the backup folder first (and stops, leaving it untouched, if it cannot); a
+  backup, a restore and the copy made before a save are whole files (a file over 256
+  MiB is refused instead of being cut off); restoring a copy identical to the current
+  file no longer adds another copy; when a Hub save leaves out a `custom_providers`
+  item it could not load (or a second YAML document), the whole file is copied first and
+  a notice (entry number, id, reason, the backup name and `many-ai-cli config backup
+  restore <id>`) is kept in a file of its own next to that backup (at most 50 items
+  per file, "and N more" for the rest, never changed after it is written). It is shown
+  by `config check`, `doctor`, the banner and the child-AI notice until the backup is
+  restored (so is a notice about a copy with the same bytes) or `config check
+  --dismiss-removed` is run; a notice record that cannot be read is listed as a mistake
+  instead of being taken for "nothing", and is never overwritten or deleted (the banner
+  no longer says "fixed" or "restart" while one stands, and also not when the file is
+  gone); the Hub refuses to save over a settings file it cannot read, on the settings
+  screen's save path too (the file stays as it is, and the Hub keeps its settings and
+  revision); an id that contains the Hub token is never shown or recorded; and `config reset` / `config backup restore`
+  settle the notices before they replace the file and put them back if the replacement
+  fails; a file over 256 MiB is treated as unreadable and `config reset` moves it into
+  the backups; no new session starts from any entry point while the file cannot be
+  read (decided before a subscription is chosen); `command: '""'` or a command whose
+  first word is blank is refused as an empty command; an id in use is never called
+  "left out"; a Hub started with `serve --port` keeps the positions and reasons
+  of the mistakes it found; a repeated `id` whose first `command` is broken uses the
+  same entry in the spawn list, `wrap`, the registry and `orchestrate`, and
+  `config check` says which entry that is; `config reset` keeps a readable token even
+  when a value in the file is refused; a repeated key is reported with its line and
+  column; a second YAML document, which is never read, is listed as a mistake; ids
+  are shown without invisible formatting characters; while the file cannot be read the
+  banner and the refusals say that no new session can start (running ones go on);
+  `uninstall` asks whether the Hub is stopped when `hub-runtime.json` is damaged
+  instead of saying none is running; a conductor or relay role refusal explains the
+  role that failed, not another one.
 - Approval confirmations and mobile hold controls stay attached to the approval
   originally displayed. Enter activates the focused confirmation button.
   Read-only Markdown removes interactive controls, and browser policy blocks

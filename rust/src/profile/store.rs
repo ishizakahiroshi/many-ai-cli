@@ -15,7 +15,7 @@ use super::{
     validation::{valid_id, validate_definition},
 };
 use crate::{
-    config::{ConfigStore, Resource, RuntimePaths, legacy_provider_definitions},
+    config::{ConfigStore, Resource, RuntimePaths, provider_definitions_for_app},
     files::safe_fs::Dir,
     proto::provider::*,
 };
@@ -380,7 +380,7 @@ impl ProviderRegistryStore {
             .snapshot()
             .map_err(|_| StoreError::Unavailable("configuration unavailable"))?;
         let (legacy, legacy_diagnostics) =
-            legacy_provider_definitions(&cfg.config.custom_providers);
+            provider_definitions_for_app(&cfg.config.custom_providers);
         let embedded = embedded_definitions()?;
         let mut embedded_diagnostics = vec![];
         for definition in &embedded {

@@ -36,6 +36,72 @@ pub fn parse(args: &[String]) -> Result<Option<bool>, String> {
     }
     Ok(Some(json))
 }
+/// The doctor report when the settings file cannot be read as a whole: the
+/// other checks all need the settings, so this one finding is the report.
+pub fn unreadable_config_report(unreadable: &crate::config::ConfigUnreadable) -> DoctorReport {
+    let fix = format!(
+        "Correct the file at the position shown, then run `{}`; or run `{} --yes` to start over from the defaults (the current file is saved to {} first)",
+        crate::config::CHECK_COMMAND,
+        "many-ai-cli config reset",
+        unreadable.backups.display()
+    );
+    let message = format!(
+        "The settings file cannot be read: {} ({})",
+        unreadable.summary_en(),
+        unreadable.path.display()
+    );
+    DoctorReport {
+        checks: vec![Check::new(
+            "config",
+            "FAIL",
+            report::redact(&message),
+            &report::redact(&fix),
+        )],
+    }
+}
+pub fn run_unreadable_config(
+    args: &[String],
+    unreadable: &crate::config::ConfigUnreadable,
+    output: &mut dyn io::Write,
+    errors: &mut dyn io::Write,
+) -> Result<(), String> {
+    let Some(json) = parse(args)? else {
+        errors
+            .write_all(USAGE.as_bytes())
+            .map_err(|e| e.to_string())?;
+        return Err("flag: help requested".into());
+    };
+    write_report(unreadable_config_report(unreadable), json, output)
+}
+fn write_report(
+    report: DoctorReport,
+    json: bool,
+    output: &mut dyn io::Write,
+) -> Result<(), String> {
+    if json {
+        let json = serde_json::to_string(&report)
+            .map_err(|e| e.to_string())?
+            .replace('<', "\\u003c")
+            .replace('>', "\\u003e")
+            .replace('&', "\\u0026")
+            .replace('\u{2028}', "\\u2028")
+            .replace('\u{2029}', "\\u2029");
+        writeln!(output, "{json}").map_err(|e| e.to_string())?;
+    } else {
+        for check in report.checks {
+            writeln!(
+                output,
+                "[{}] {}: {}",
+                check.level, check.name, check.message
+            )
+            .map_err(|e| e.to_string())?;
+            if !check.fix.is_empty() {
+                writeln!(output, "      -> {}", check.fix).map_err(|e| e.to_string())?;
+            }
+        }
+    }
+    Ok(())
+}
 pub async fn run(
     context: &MainContext,
     args: &[String],
@@ -83,29 +149,7 @@ pub async fn run(
         .run(cancel)
         .await
         .map_err(|_| "doctor was cancelled or unavailable".to_string())?;
-    if json {
-        let json = serde_json::to_string(&report)
-            .map_err(|e| e.to_string())?
-            .replace('<', "\\u003c")
-            .replace('>', "\\u003e")
-            .replace('&', "\\u0026")
-            .replace('\u{2028}', "\\u2028")
-            .replace('\u{2029}', "\\u2029");
-        writeln!(output, "{json}").map_err(|e| e.to_string())?;
-    } else {
-        for check in report.checks {
-            writeln!(
-                output,
-                "[{}] {}: {}",
-                check.level, check.name, check.message
-            )
-            .map_err(|e| e.to_string())?;
-            if !check.fix.is_empty() {
-                writeln!(output, "      -> {}", check.fix).map_err(|e| e.to_string())?;
-            }
-        }
-    }
-    Ok(())
+    write_report(report, json, output)
 }
 #[cfg(test)]
 mod tests {

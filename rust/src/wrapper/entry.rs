@@ -167,7 +167,21 @@ fn apply_hooks(
             },
             LaunchHook::DelegationPrompt { config_default } => {
                 if launch::delegation_prompt_enabled(*config_default, context.environment) {
-                    match hooks.delegation(context.paths, &launch.provider, registered.session_id) {
+                    // While the settings have mistakes, the child AI is told once (a count only).
+                    let notice =
+                        crate::config::inspect_file(context.paths)
+                            .ok()
+                            .and_then(|state| {
+                                let removed = crate::config::removed::list(context.paths)
+                                    .map_or(0, |notices| notices.len());
+                                super::hooks::config_state_notice(&state, removed)
+                            });
+                    match hooks.delegation_with_notice(
+                        context.paths,
+                        &launch.provider,
+                        registered.session_id,
+                        notice.as_deref(),
+                    ) {
                         Ok(extra) => args.extend(extra),
                         Err(_) => eprintln!("wrapper: delegation prompt setup failed"),
                     }

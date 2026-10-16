@@ -1013,6 +1013,7 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 | `command-code [args...]` | Launch Command Code through the Hub |
 | `wrap <provider> [args...]` | Wrap an arbitrary provider (for debugging) |
 | `shell-init` | Emit shell function snippets for transparent mode |
+| `config check\|reset\|backup` | Check the settings file for mistakes, start over from the defaults, list/restore backups — see [When the settings file has a mistake](#when-the-settings-file-has-a-mistake) |
 | `status` | Show whether the Hub is running |
 | `stop` | Stop the Hub |
 | `log-clean <session.jsonl>` | Generate a clean transcript from session history |
@@ -1240,7 +1241,32 @@ log:                        # hub.log rotation (lumberjack)
 token: ""                   # empty = randomly generated on startup (URL stays stable across restarts)
 ```
 
-To reset the `token`, delete the `token:` line and restart the Hub.
+To reset the `token`, delete the `token:` line and restart the Hub (or run `many-ai-cli config reset --new-token`, below).
+
+### When the settings file has a mistake
+
+`config.yaml` is never silently replaced by defaults. There are two kinds of trouble, handled differently.
+
+**The whole file cannot be read** (for example a YAML syntax error). many-ai-cli stops instead of starting with default settings and a new token, because that would change the Hub URL and hide the problem. It prints the file path and the line and column (never the content of the line, which can be the token) and leaves the file untouched. Fix the file, or start over with `many-ai-cli config reset`.
+
+**One entry in `custom_providers` is wrong** (a reserved or repeated `id`, an unclosed quote in `command`, a bad `headless` value, ...). The Hub does not stop: it leaves out just that entry and starts. The reason is shown in every place a person or an AI looks:
+
+- **Hub screen**: a banner that stays until the mistake is fixed. Open it for each mistake: which entry (and `id`), which field, why it is wrong, what that means now, a correct example, and the check command. It re-reads the file about every 30 seconds and when you return to the tab, so it disappears once the file is fixed. A running Hub does not re-read `config.yaml` for its own settings, so the banner then asks you to restart the Hub to use the fix.
+- **`many-ai-cli config check [--json]`**: lists the mistakes (read-only; exit code 1 if there are any, 0 if not). `--json` is the form for an AI to read.
+- **`many-ai-cli doctor`**: the same list.
+- **Launching the left-out `id`** (a spawn from the Hub, `many-ai-cli wrap <id>`, `many-ai-cli <id>`, `orchestrate spawn --provider <id>`) answers with the reason and the check command instead of "invalid provider" or "unknown command".
+- **Child AI sessions** (Claude, Grok) get one extra line in the delegation prompt while the settings have mistakes: how many, and to run `many-ai-cli config check --json` and tell you before fixing. It carries no entry names and no values.
+
+Commands (they work even when the file cannot be read):
+
+| Command | Description |
+|---|---|
+| `many-ai-cli config check [--json]` | Read the file and list the mistakes. Changes nothing |
+| `many-ai-cli config reset [--new-token] [--yes]` | Copy the current file to the backup folder, then start over from the defaults. The Hub token is carried over, so the Hub URL and bookmarks keep working (`--new-token` makes a new one; an unreadable file has no readable token, so a new one is made and `--yes` confirms that) |
+| `many-ai-cli config backup list [--json]` | List the saved copies |
+| `many-ai-cli config backup restore <id>` | Put a saved copy back (the file in place now is saved first) |
+
+Backups are written to `~/.many-ai-cli/backups/config/config.yaml.bak_YYYYMMDD_HHmmss`, readable only by you (they can contain the token). An existing backup is never overwritten and none is deleted automatically.
 
 `ollama.base_url` is the Ollama daemon endpoint as seen from the Hub process. It is not specific to Hyper-V, WSL, Docker, or another VM setup: any host/guest relationship works as long as the Hub can reach that HTTP URL. The model picker reads `<base_url>/api/tags`, Claude Code Ollama sessions receive `ANTHROPIC_BASE_URL=<base_url>`, and Codex Ollama sessions receive `OPENAI_BASE_URL=<base_url>/v1`. Do not include `/v1` or `/api/tags` in `base_url`; the Hub appends the provider-specific suffix when needed.
 

@@ -701,6 +701,49 @@ fn risk_gate_requires_confirmation_except_usage_probe() {
     assert!(launch::prepare(&t.options, t.policy.as_ref(), &request, &|_| {}).is_ok());
 }
 
+#[test]
+fn no_new_session_is_prepared_while_the_settings_file_cannot_be_read() {
+    // The one point every start passes (UI, grid, orchestrate, relay, routines,
+    // subscription login, usage probes): a child `wrap` would stop on the file.
+    let t = runtime(8, false);
+    let request = spec(t.root.path(), 1);
+    let file = t.options.paths.resource(crate::config::Resource::Config);
+    std::fs::write(&file, "token: synthetic-token-marker\nhub: [unterminated").unwrap();
+    for start in [
+        launch::prepare(&t.options, t.policy.as_ref(), &request, &|_| {}).err(),
+        launch::prepare_start(
+            &t.options,
+            t.policy.as_ref(),
+            &request,
+            &ResolvedSpawnPolicy {
+                base_environment: vec![],
+                route_environment: vec![],
+                subscription_environment: vec![],
+                effective_route: String::new(),
+                current_model: String::new(),
+                resolved_model: String::new(),
+                effort_args: vec![],
+                ordinary_model_args: vec![],
+            },
+            WrappedStartKind::Bare,
+            &|_| {},
+        )
+        .err(),
+    ] {
+        let error = start.expect("refused").to_string();
+        assert!(error.contains("a new session cannot be started"), "{error}");
+        assert!(error.contains("config reset"), "{error}");
+        assert!(!error.contains("synthetic-token-marker"));
+        assert!(!error.contains("unterminated"));
+    }
+    // The refusal comes before the policy chooses a subscription or seeds a
+    // profile: those have effects a refused start must not leave behind.
+    assert_eq!(t.policy.resolves.load(Ordering::SeqCst), 0);
+    // Readable again: the same request prepares.
+    std::fs::write(&file, "token: synthetic-token-marker\n").unwrap();
+    assert!(launch::prepare(&t.options, t.policy.as_ref(), &request, &|_| {}).is_ok());
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn dropping_http_future_preserves_owner_and_same_label_can_register_twice() {

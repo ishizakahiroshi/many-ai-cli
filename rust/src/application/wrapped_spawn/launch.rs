@@ -216,12 +216,26 @@ fn prompt(paths: &RuntimePaths, body: &str) -> io::Result<Option<PromptFile>> {
         remove: true,
     }))
 }
+/// Every new session passes `prepare` or `prepare_start` (UI, grid,
+/// orchestrate, relay, routines, subscription login and usage probes): the
+/// child `wrap` would stop on a settings file it cannot read, so do not start
+/// it. This is decided FIRST, before the policy chooses a subscription or
+/// seeds a profile: those have effects of their own that a refused start must
+/// not leave behind. The callers that can say more (a 503 with the reason)
+/// check earlier still.
+fn refuse_while_settings_unreadable(options: &WrapperSpawnOptions) -> io::Result<()> {
+    match crate::config::safety::new_sessions_blocker(&options.paths) {
+        Some(reason) => Err(io::Error::other(reason)),
+        None => Ok(()),
+    }
+}
 pub(super) fn prepare(
     options: &WrapperSpawnOptions,
     policy: &dyn SpawnLaunchPolicy,
     spec: &WrappedSpawnSpec,
     warn: &(dyn Fn(&'static str) + Send + Sync),
 ) -> io::Result<PreparedSpawn> {
+    refuse_while_settings_unreadable(options)?;
     if !spec.cwd.is_absolute() {
         return Err(invalid("invalid wrapper working directory"));
     }
@@ -241,6 +255,7 @@ pub(super) fn prepare_start(
     kind: WrappedStartKind,
     warn: &(dyn Fn(&'static str) + Send + Sync),
 ) -> io::Result<PreparedSpawn> {
+    refuse_while_settings_unreadable(options)?;
     prepare_resolved(options, policy, spec, resolved, Some(kind), warn)
 }
 fn prepare_resolved(

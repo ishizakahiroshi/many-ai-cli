@@ -2360,17 +2360,32 @@ pub enum ConfigError {
     Invalid(String),
     Parse(String),
     Io(io::Error),
-    Conflict { expected: u64, actual: u64 },
+    Conflict {
+        expected: u64,
+        actual: u64,
+    },
     Poisoned,
+    /// config.yaml exists but cannot be read as a whole. The file was left
+    /// untouched; the message names it and the two ways forward. It never
+    /// contains a line of the file (a line may be the Hub token).
+    Unreadable(Box<super::safety::ConfigUnreadable>),
 }
 impl ConfigError {
     pub fn invalid(message: impl Into<String>) -> Self {
         Self::Invalid(message.into())
     }
+    /// The whole-file failure behind this error, if it is one.
+    pub fn unreadable(&self) -> Option<&super::safety::ConfigUnreadable> {
+        match self {
+            Self::Unreadable(unreadable) => Some(unreadable),
+            _ => None,
+        }
+    }
 }
 impl fmt::Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Unreadable(unreadable) => f.write_str(&unreadable.message_en()),
             Self::Invalid(message) | Self::Parse(message) => f.write_str(message),
             Self::Io(error) => write!(f, "config filesystem operation failed: {error}"),
             Self::Conflict { expected, actual } => write!(
@@ -2677,6 +2692,15 @@ impl Config {
         cfg
     }
     pub fn from_yaml(text: &str, paths: &RuntimePaths) -> Result<Self, ConfigError> {
+        Self::from_yaml_inspected(text, paths).map(|(config, _)| config)
+    }
+    /// Like `from_yaml`, and also reports the `custom_providers` entries that
+    /// are wrong, with their positions in the file (the loaded `Config` has
+    /// already lost the ones that could not be kept).
+    pub fn from_yaml_inspected(
+        text: &str,
+        paths: &RuntimePaths,
+    ) -> Result<(Self, Vec<super::safety::ConfigProblem>), ConfigError> {
         // Never surface YAML parser excerpts: they may contain tokens or PIN hashes.
         let raw = super::yaml_nodes::decode_config(text).map_err(|error| match error {
             super::yaml_nodes::YamlDecodeError::Syntax => ConfigError::Parse(error.to_string()),
@@ -2684,6 +2708,7 @@ impl Config {
                 ConfigError::Invalid(error.to_string())
             }
         })?;
+        let problems = super::safety::analyze_raw_custom_providers(raw.get("custom_providers"));
         let normalized = normalize_node(raw, "Config", "config", false)?;
         let mut merged = Self::defaults(paths).private_value();
         overlay(&mut merged, normalized);
@@ -2710,7 +2735,7 @@ impl Config {
         cfg.apply_defaults(paths);
         cfg.validate()?;
         cfg.validate_paths(paths)?;
-        Ok(cfg)
+        Ok((cfg, problems))
     }
     pub fn apply_defaults(&mut self, paths: &RuntimePaths) {
         self.user_prefs.usage_probe_model =
@@ -2794,7 +2819,8 @@ impl Config {
     }
     /// A detached serialization payload. Calling this never mutates the live configuration.
     pub fn to_private_yaml(&self) -> Result<String, ConfigError> {
-        serde_saphyr::to_string(&project(self.private_value(), "Config", false)).map_err(|_| {
+        let value = project(self.private_value(), "Config", false);
+        serde_saphyr::to_string(&value).map_err(|_| {
             ConfigError::invalid("config YAML serialization failed (content redacted)")
         })
     }
@@ -2951,7 +2977,7 @@ fn zero(kind: &str) -> Value {
         _ => Value::String(String::new()),
     }
 }
-fn normalize_node(
+pub(super) fn normalize_node(
     value: Value,
     kind: &str,
     path: &str,
@@ -3006,18 +3032,7 @@ fn normalize_node(
         let mut kept = vec![];
         if let Value::Array(list) = value {
             for profile in list {
-                if !profile.is_object() {
-                    continue;
-                }
-                if let Ok(profile) =
-                    normalize_node(profile, "CustomProvider", "custom_providers.entry", false)
-                    && ["id", "command"].iter().all(|key| {
-                        profile
-                            .get(key)
-                            .and_then(Value::as_str)
-                            .is_some_and(|v| !v.trim().is_empty())
-                    })
-                {
+                if let Some(profile) = loadable_custom_provider(profile) {
                     kept.push(profile);
                 }
             }
@@ -3286,20 +3301,11 @@ impl Config {
             }
         }
         out.extend(subscription_warnings(&self.subscriptions));
-        let (kept, invalid, duplicate) = filter_custom_providers(&self.custom_providers);
-        for p in kept {
-            if let Some(def) = &p.headless
-                && let Err(e) = validate_headless_def(def)
-            {
-                out.push(format!("custom_providers entry {:?} has an invalid headless definition ({e}) and can only be launched interactively", p.id));
-            }
-        }
-        for id in invalid {
-            out.push(format!("custom_providers entry {id:?} is invalid (bad id, collides with a built-in provider, or missing command) and will not appear as a spawn option"));
-        }
-        for id in duplicate {
-            out.push(format!("custom_providers entry {id:?} duplicates another custom provider id and will not appear as a spawn option"));
-        }
+        out.extend(
+            self.custom_provider_problems()
+                .iter()
+                .map(super::safety::ConfigProblem::warning_en),
+        );
         out.extend(self.orchestration.launch_warnings());
         let raw = self.handoff.note_on_threshold.trim();
         if !matches!(raw, "" | "ask" | "auto" | "off") {
@@ -3312,6 +3318,16 @@ impl Config {
         effective_custom_providers(&self.custom_providers)
             .iter()
             .any(|p| p.id == id)
+    }
+    /// Per-entry mistakes in the loaded `custom_providers`, positions counted
+    /// in the loaded list. Entries that could not even be loaded are reported
+    /// by `from_yaml_inspected` / `safety::inspect_file` instead.
+    pub fn custom_provider_problems(&self) -> Vec<super::safety::ConfigProblem> {
+        let mut problems =
+            super::safety::analyze_custom_providers(self.custom_providers.iter().enumerate(), true)
+                .1;
+        super::safety::hide_token_ids(&mut problems, &self.token);
+        problems
     }
 }
 fn valid_hostname(host: &str) -> bool {
@@ -3510,26 +3526,42 @@ pub fn is_builtin_provider_id(id: &str) -> bool {
 pub fn is_reserved_provider_id(id: &str) -> bool {
     is_builtin_provider_id(id) || normalize_subscription_id(id) == "shell"
 }
-pub fn validate_custom_provider_id(id: &str) -> Result<(), ConfigError> {
+/// Why a custom provider id is refused. One classification feeds both the
+/// error text below and the per-entry problems shown to the user.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum IdProblem {
+    Empty,
+    TooLong,
+    BadShape,
+    Reserved,
+}
+pub(super) fn custom_provider_id_problem(id: &str) -> Option<IdProblem> {
     if id.is_empty() {
-        return Err(ConfigError::invalid("custom provider id is required"));
+        Some(IdProblem::Empty)
+    } else if id.len() > 64 {
+        Some(IdProblem::TooLong)
+    } else if !valid_id_shape(id) {
+        Some(IdProblem::BadShape)
+    } else if is_reserved_provider_id(id) {
+        Some(IdProblem::Reserved)
+    } else {
+        None
     }
-    if id.len() > 64 {
-        return Err(ConfigError::invalid(
+}
+pub fn validate_custom_provider_id(id: &str) -> Result<(), ConfigError> {
+    match custom_provider_id_problem(id) {
+        None => Ok(()),
+        Some(IdProblem::Empty) => Err(ConfigError::invalid("custom provider id is required")),
+        Some(IdProblem::TooLong) => Err(ConfigError::invalid(
             "custom provider id is longer than 64 characters",
-        ));
-    }
-    if !valid_id_shape(id) {
-        return Err(ConfigError::invalid(
+        )),
+        Some(IdProblem::BadShape) => Err(ConfigError::invalid(
             "custom provider id has an invalid shape",
-        ));
-    }
-    if is_reserved_provider_id(id) {
-        return Err(ConfigError::invalid(
+        )),
+        Some(IdProblem::Reserved) => Err(ConfigError::invalid(
             "custom provider id collides with a built-in provider or a reserved id",
-        ));
+        )),
     }
-    Ok(())
 }
 impl SubscriptionProfile {
     pub fn dir_name(&self) -> String {
@@ -3679,6 +3711,25 @@ fn subscription_warnings(profiles: &SubscriptionProfiles) -> Vec<String> {
     }
     out
 }
+/// The one rule for which `custom_providers` items the loader keeps: a mapping
+/// whose fields have the right types and that has a non-empty `id` and
+/// `command`. Anything else is not loaded, so a save does not write it (see
+/// `removed`, which records that).
+pub(super) fn loadable_custom_provider(entry: Value) -> Option<Value> {
+    if !entry.is_object() {
+        return None;
+    }
+    let entry = normalize_node(entry, "CustomProvider", "custom_providers.entry", false).ok()?;
+    ["id", "command"]
+        .iter()
+        .all(|key| {
+            entry
+                .get(key)
+                .and_then(Value::as_str)
+                .is_some_and(|v| !v.trim().is_empty())
+        })
+        .then_some(entry)
+}
 impl CustomProvider {
     pub fn effective_label(&self) -> &str {
         if self.label.trim().is_empty() {
@@ -3688,29 +3739,16 @@ impl CustomProvider {
         }
     }
 }
-fn filter_custom_providers(
-    raw: &[CustomProvider],
-) -> (Vec<CustomProvider>, Vec<String>, Vec<String>) {
-    let mut seen = BTreeSet::new();
-    let (mut kept, mut invalid, mut duplicate) = (vec![], vec![], vec![]);
-    for p in raw {
-        let id = normalize_subscription_id(&p.id);
-        if validate_custom_provider_id(&id).is_err() || p.command.trim().is_empty() {
-            invalid.push(p.id.clone());
-            continue;
-        }
-        if !seen.insert(id.clone()) {
-            duplicate.push(p.id.clone());
-            continue;
-        }
-        let mut normalized = p.clone();
-        normalized.id = id;
-        kept.push(normalized);
-    }
-    (kept, invalid, duplicate)
-}
+/// The custom providers a user can actually launch: a usable id (not reserved,
+/// not repeated) and a command that can be split into a program and arguments.
+/// Every entry left out here is reported by `Config::custom_provider_problems`.
 pub fn effective_custom_providers(raw: &[CustomProvider]) -> Vec<CustomProvider> {
-    filter_custom_providers(raw).0
+    super::safety::analyze_custom_providers(raw.iter().enumerate(), true).0
+}
+/// Same, without requiring the command to be splittable. The historical
+/// registry adapter reports such commands itself (`legacy_command_invalid`).
+pub(super) fn legacy_custom_providers(raw: &[CustomProvider]) -> Vec<CustomProvider> {
+    super::safety::analyze_custom_providers(raw.iter().enumerate(), false).0
 }
 
 pub fn sanitize_custom_themes(raw: &[UserPrefsCustomTheme]) -> Vec<UserPrefsCustomTheme> {
@@ -3763,23 +3801,190 @@ pub struct ConfigSnapshot {
 pub struct ConfigStore {
     paths: RuntimePaths,
     state: Mutex<ConfigSnapshot>,
-    recovered_from_invalid_yaml: bool,
+    startup_problems: Vec<super::safety::ConfigProblem>,
     directory: Mutex<Option<Arc<crate::files::safe_fs::Dir>>>,
+    disk: Mutex<DiskState>,
+    backup_observer: Mutex<Option<BackupObserver>>,
 }
+/// What this store knows about the bytes of config.yaml on disk, so a save can
+/// tell whether it would destroy something that exists nowhere else.
+#[derive(Clone, Default)]
+struct DiskState {
+    /// The bytes this store last read or wrote. `None`: unknown (a store built
+    /// in memory), so an existing file is treated as the user's.
+    known: Option<Vec<u8>>,
+    /// The bytes read at startup are not what saving them back would produce
+    /// (comments, layout, entries that could not be kept, normalised values):
+    /// the first save would lose that, so it is backed up first.
+    lossy: bool,
+    /// This store has written config.yaml itself (a save, or the start-up
+    /// rewrite that adds a token): the file now holds what the store holds, so
+    /// the mistakes it shows are the store's own (`ConfigStore::held_problems`).
+    written: bool,
+}
+/// Called with the new backup each time a save first copies the file.
+pub type BackupObserver = Arc<dyn Fn(&super::backup::BackupRecord) + Send + Sync>;
 impl ConfigStore {
     pub fn new(paths: RuntimePaths, mut config: Config) -> Result<Self, ConfigError> {
         config.apply_defaults(&paths);
         config.validate()?;
         config.validate_paths(&paths)?;
+        let startup_problems = config.custom_provider_problems();
         Ok(Self {
             paths,
             state: Mutex::new(ConfigSnapshot {
                 revision: 0,
                 config,
             }),
-            recovered_from_invalid_yaml: false,
+            startup_problems,
             directory: Mutex::new(None),
+            disk: Mutex::new(DiskState::default()),
+            backup_observer: Mutex::new(None),
         })
+    }
+    /// A store for `config` that continues this one's knowledge of the file on
+    /// disk (used when the process overrides a value in memory only). What
+    /// this store recorded when it read the file (the mistakes with their
+    /// positions in the file, the items kept for writing back) is carried over:
+    /// `Self::new` could only recount them from the loaded list.
+    pub fn derive(&self, config: Config) -> Result<Self, ConfigError> {
+        let mut derived = Self::new(self.paths.clone(), config)?;
+        derived.startup_problems = self.startup_problems.clone();
+        *derived.disk.lock().map_err(|_| ConfigError::Poisoned)? =
+            self.disk.lock().map_err(|_| ConfigError::Poisoned)?.clone();
+        *derived
+            .backup_observer
+            .lock()
+            .map_err(|_| ConfigError::Poisoned)? = self
+            .backup_observer
+            .lock()
+            .map_err(|_| ConfigError::Poisoned)?
+            .clone();
+        Ok(derived)
+    }
+    /// Where this store's files are.
+    pub fn paths(&self) -> &RuntimePaths {
+        &self.paths
+    }
+    /// Be told (for the Hub log) whenever a save backs the file up first.
+    pub fn set_backup_observer(&self, observer: BackupObserver) {
+        if let Ok(mut slot) = self.backup_observer.lock() {
+            *slot = Some(observer);
+        }
+    }
+    /// Write `payload` as config.yaml. If the file on disk holds something the
+    /// write would destroy, it is copied to `backups/config` first and the
+    /// write does not happen if that copy cannot be made. Destroyed means:
+    /// the file differs from what this store last read or wrote (the user
+    /// edited it, even into something unreadable), or what was read at startup
+    /// could not be written back as it was (see `DiskState::lossy`). A file
+    /// identical to what this store wrote, or to the new payload, loses nothing
+    /// and adds no backup.
+    /// The refusal that guards every save: the file on disk is not what this
+    /// store wrote and cannot be read, so replacing it would destroy something a
+    /// person wrote that nobody can read back. `Ok` when saving may go on. The
+    /// save paths that publish to memory before writing (`*_legacy*`) call this
+    /// FIRST, so a refused save changes nothing the Hub holds.
+    fn ensure_file_is_not_a_broken_edit(&self) -> Result<(), ConfigError> {
+        let directory = self.directory()?;
+        let disk = self.disk.lock().map_err(|_| ConfigError::Poisoned)?;
+        match super::backup::read_whole(&directory, "config.yaml") {
+            Ok(current) if disk.known.as_deref() != Some(current.as_slice()) => {
+                match super::safety::parse_config_bytes(&current, &self.paths) {
+                    Ok(_) => Ok(()),
+                    Err(unreadable) => Err(ConfigError::Invalid(unreadable.save_refused_en())),
+                }
+            }
+            Ok(_) => Ok(()),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(e) if super::backup::is_too_large(&e) => Err(ConfigError::Invalid(
+                super::safety::ConfigUnreadable::too_large(&self.paths).save_refused_en(),
+            )),
+            Err(e) => Err(e.into()),
+        }
+    }
+    fn write_config(&self, payload: &[u8]) -> Result<(), ConfigError> {
+        let directory = self.directory()?;
+        let mut disk = self.disk.lock().map_err(|_| ConfigError::Poisoned)?;
+        // Read whole: a file over the backup limit stops the save with an
+        // error rather than being copied cut off (see `backup::read_whole`).
+        let current = match super::backup::read_whole(&directory, "config.yaml") {
+            Ok(bytes) => Some(bytes),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+            Err(e) if super::backup::is_too_large(&e) => {
+                return Err(ConfigError::Invalid(
+                    super::safety::ConfigUnreadable::too_large(&self.paths).save_refused_en(),
+                ));
+            }
+            Err(e) => return Err(e.into()),
+        };
+        // A file this store did not write and that cannot be read is something a
+        // person wrote or broke. The Hub does not know what it meant, so it does
+        // not replace it: the save is refused, the file stays as it is, and the
+        // Hub keeps running with the settings it holds.
+        if let Some(current) = current.as_deref()
+            && current != payload
+            && disk.known.as_deref() != Some(current)
+            && let Err(unreadable) = super::safety::parse_config_bytes(current, &self.paths)
+        {
+            return Err(ConfigError::Invalid(unreadable.save_refused_en()));
+        }
+        if let Some(current) = current.as_deref()
+            && current != payload
+            && (disk.lossy || disk.known.as_deref() != Some(current))
+        {
+            let backups = super::backup::ConfigBackups::new(&self.paths);
+            let record = backups.create_in(&directory, current)?;
+            // What this save leaves out of the file (items that could not be
+            // loaded) is recorded before the file is replaced, so it keeps
+            // being reported after a restart. If it cannot be recorded the
+            // save does not happen.
+            super::removed::record_replaced(
+                &backups,
+                &directory,
+                &self.paths,
+                current,
+                &record.id,
+            )?;
+            let observer = self
+                .backup_observer
+                .lock()
+                .map_err(|_| ConfigError::Poisoned)?
+                .clone();
+            if let Some(observer) = observer {
+                observer(&record);
+            }
+        }
+        directory.replace("config.yaml", payload, 0o600)?;
+        disk.known = Some(payload.to_vec());
+        disk.lossy = false;
+        disk.written = true;
+        Ok(())
+    }
+    /// Per-entry mistakes found when the file was read at startup, with their
+    /// positions in the file. The entries named here were left out. To follow
+    /// the file as it is now, use `safety::inspect_file`.
+    pub fn startup_problems(&self) -> &[super::safety::ConfigProblem] {
+        &self.startup_problems
+    }
+    /// The mistakes `config.yaml` has, as far as this Hub knows it: what it
+    /// found when it read the file, until the Hub writes the file itself. After
+    /// that the file holds what the Hub holds, so they are the mistakes of the
+    /// settings in memory (`current_problems`). A fix a person makes in the file
+    /// is the difference between this and `safety::inspect_file`.
+    pub fn held_problems(&self) -> Vec<super::safety::ConfigProblem> {
+        let written = self.disk.lock().map(|disk| disk.written).unwrap_or(false);
+        if written {
+            self.current_problems()
+                .unwrap_or_else(|_| self.startup_problems.clone())
+        } else {
+            self.startup_problems.clone()
+        }
+    }
+    /// Per-entry mistakes in the settings currently in memory (positions are
+    /// counted in the loaded list).
+    pub fn current_problems(&self) -> Result<Vec<super::safety::ConfigProblem>, ConfigError> {
+        Ok(self.snapshot()?.config.custom_provider_problems())
     }
     fn directory(&self) -> Result<Arc<crate::files::safe_fs::Dir>, ConfigError> {
         let mut directory = self.directory.lock().map_err(|_| ConfigError::Poisoned)?;
@@ -3819,8 +4024,7 @@ impl ConfigStore {
         next.validate()?;
         next.validate_paths(&self.paths)?;
         let payload = next.to_private_yaml()?;
-        self.directory()?
-            .replace("config.yaml", payload.as_bytes(), 0o600)?;
+        self.write_config(payload.as_bytes())?;
         *guard = ConfigSnapshot {
             revision,
             config: next,
@@ -3841,6 +4045,7 @@ impl ConfigStore {
                 actual: guard.revision,
             });
         }
+        self.ensure_file_is_not_a_broken_edit()?;
         let revision = guard
             .revision
             .checked_add(1)
@@ -3866,10 +4071,10 @@ impl ConfigStore {
                 actual: guard.revision,
             });
         }
+        self.ensure_file_is_not_a_broken_edit()?;
         guard.config.validate()?;
         let payload = guard.config.to_private_yaml()?;
-        self.directory()?
-            .replace("config.yaml", payload.as_bytes(), 0o600)?;
+        self.write_config(payload.as_bytes())?;
         Ok(guard.clone())
     }
     /// Source-specific Go handlers assign shared memory before calling Save.
@@ -3899,6 +4104,8 @@ impl ConfigStore {
                 actual: guard.revision,
             });
         }
+        // Refused before anything is published: the Hub keeps its settings and revision.
+        self.ensure_file_is_not_a_broken_edit()?;
         let revision = guard
             .revision
             .checked_add(1)
@@ -3912,13 +4119,13 @@ impl ConfigStore {
         published(&guard.config);
         guard.config.validate()?;
         let payload = guard.config.to_private_yaml()?;
-        self.directory()?
-            .replace("config.yaml", payload.as_bytes(), 0o600)?;
+        self.write_config(payload.as_bytes())?;
         Ok(guard.clone())
     }
     /// Uses only the explicit runtime root and an injected cryptographic token source.
-    /// Malformed YAML is backed up privately before regeneration, matching Go.
-    /// Optional-section type errors are handled before reaching this recovery path.
+    /// A file that cannot be read stops the load with `ConfigError::Unreadable`
+    /// and is left exactly as it was (it is never replaced by defaults).
+    /// Optional-section type errors are tolerated before reaching that error.
     pub fn load_or_create<F>(paths: RuntimePaths, mut token_factory: F) -> Result<Self, ConfigError>
     where
         F: FnMut() -> Result<String, ConfigError>,
@@ -3941,29 +4148,30 @@ impl ConfigStore {
         if paths.is_trial() {
             checked_trial_path(&paths, &path)?;
         }
-        let mut recovered = false;
-        let text = directory
-            .read("config.yaml", 8 * 1024 * 1024 + 1)
-            .and_then(|bytes| {
-                String::from_utf8(bytes).map_err(|_| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "config YAML contains invalid UTF-8",
-                    )
-                })
-            });
-        let (mut config, missing) = match text {
-            Ok(text) => match Config::from_yaml(&text, &paths) {
-                Ok(config) => (config, false),
-                Err(ConfigError::Parse(_)) => {
-                    directory.replace("config.yaml.bak", text.as_bytes(), 0o600)?;
-                    recovered = true;
-                    (Config::defaults(&paths), true)
-                }
-                Err(error) => return Err(error),
+        // The single `config.yaml.bak` an older version wrote moves to the
+        // numbered backups. Best effort: a failure here must not stop startup.
+        let _ = super::backup::ConfigBackups::new(&paths).migrate_legacy_in(&directory);
+        let bytes = match super::safety::read_settings_file(&directory)? {
+            super::safety::SettingsFile::Missing => None,
+            super::safety::SettingsFile::Bytes(bytes) => Some(bytes),
+            // Too large to read at all: reported like any file that cannot be read.
+            super::safety::SettingsFile::TooLarge => {
+                return Err(ConfigError::Unreadable(Box::new(
+                    super::safety::ConfigUnreadable::too_large(&paths),
+                )));
+            }
+        };
+        let bytes_read = bytes.clone();
+        let mut lossy = bytes_read.is_some();
+        let (mut config, missing, problems) = match bytes {
+            Some(bytes) => match super::safety::parse_config_bytes(&bytes, &paths) {
+                // A file that cannot be read is never rewritten, moved or
+                // replaced here: the caller stops and tells the user how to
+                // fix it or reset it (`many-ai-cli config reset`).
+                Err(unreadable) => return Err(ConfigError::Unreadable(Box::new(unreadable))),
+                Ok((config, problems)) => (config, false, problems),
             },
-            Err(e) if e.kind() == io::ErrorKind::NotFound => (Config::defaults(&paths), true),
-            Err(e) => return Err(e.into()),
+            None => (Config::defaults(&paths), true, Vec::new()),
         };
         let needs_token = config.token.is_empty();
         if needs_token {
@@ -3974,16 +4182,43 @@ impl ConfigStore {
                 ));
             }
         }
+        let mut known = bytes_read;
         if missing || needs_token {
-            directory.replace("config.yaml", config.to_private_yaml()?.as_bytes(), 0o600)?;
+            let payload = config.to_private_yaml()?;
+            // A file that is already there (it only lacks a token) is the
+            // user's: whatever this rewrite does not carry over (comments,
+            // layout, ...) stays in a backup. If the backup cannot be made the
+            // file is not touched and startup stops.
+            if let Some(existing) = known.as_deref() {
+                let backups = super::backup::ConfigBackups::new(&paths);
+                let record = backups.create_in(&directory, existing)?;
+                // Items that could not be loaded are not in the new file: keep
+                // reporting them (see `removed`).
+                super::removed::record_replaced(
+                    &backups, &directory, &paths, existing, &record.id,
+                )?;
+            }
+            directory.replace("config.yaml", payload.as_bytes(), 0o600)?;
+            known = Some(payload.into_bytes());
+            lossy = false;
         }
         let mut store = Self::new(paths, config)?;
+        if lossy {
+            // Would saving what was read give the same bytes back? If not,
+            // the first save changes the user's file (see `write_config`).
+            let snapshot = store.snapshot()?;
+            lossy =
+                snapshot.config.to_private_yaml()?.as_bytes() != known.as_deref().unwrap_or(&[]);
+        }
+        *store.disk.lock().map_err(|_| ConfigError::Poisoned)? = DiskState {
+            known,
+            lossy,
+            written: missing || needs_token,
+        };
         store.directory = Mutex::new(Some(directory));
-        store.recovered_from_invalid_yaml = recovered;
+        // Positions in the file, which the loaded list no longer has.
+        store.startup_problems = problems;
         Ok(store)
-    }
-    pub fn recovered_from_invalid_yaml(&self) -> bool {
-        self.recovered_from_invalid_yaml
     }
 }
 // Pure launch/config helpers ported from internal/config/{effort,headless,
@@ -4239,53 +4474,88 @@ pub fn normalize_headless_prompt_via(via: &str) -> String {
     }
 }
 
-pub fn validate_headless_def(def: &HeadlessDef) -> Result<(), ConfigError> {
+/// Which part of a headless definition is wrong. The classification is shared
+/// by the error text below and by the per-entry problems shown to the user
+/// (which never repeat the offending value).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum HeadlessProblem {
+    FormatRequired,
+    FormatUnknown,
+    PromptViaUnknown,
+    TooManyArgs,
+    ArgEmpty,
+    ArgTooLong,
+    ArgControl,
+}
+pub(super) fn headless_problem(def: &HeadlessDef) -> Option<HeadlessProblem> {
     let format = def.format.trim();
     if format.is_empty() {
-        return Err(ConfigError::invalid("headless.format is required"));
+        return Some(HeadlessProblem::FormatRequired);
     }
     if !known_headless_formats().iter().any(|name| name == format) {
-        return Err(ConfigError::invalid(format!(
-            "headless.format {format:?} is not one of {}",
-            known_headless_formats().join(", ")
-        )));
+        return Some(HeadlessProblem::FormatUnknown);
     }
-    match def.prompt_via.trim() {
-        "" | HEADLESS_PROMPT_VIA_STDIN | HEADLESS_PROMPT_VIA_ARG => {}
-        _ => {
-            return Err(ConfigError::invalid(format!(
-                "headless.prompt_via {:?} is not {} or {}",
-                def.prompt_via, HEADLESS_PROMPT_VIA_STDIN, HEADLESS_PROMPT_VIA_ARG
-            )));
-        }
+    if !matches!(
+        def.prompt_via.trim(),
+        "" | HEADLESS_PROMPT_VIA_STDIN | HEADLESS_PROMPT_VIA_ARG
+    ) {
+        return Some(HeadlessProblem::PromptViaUnknown);
     }
     if def.args.len() > MAX_HEADLESS_ARGS {
-        return Err(ConfigError::invalid(format!(
-            "headless.args has more than {MAX_HEADLESS_ARGS} entries"
-        )));
+        return Some(HeadlessProblem::TooManyArgs);
     }
     for arg in &def.args {
-        valid_headless_arg(arg)?;
+        if arg.is_empty() {
+            return Some(HeadlessProblem::ArgEmpty);
+        }
+        // The source uses Go len(string), so this limit counts UTF-8 bytes.
+        if arg.len() > MAX_HEADLESS_ARG_LEN {
+            return Some(HeadlessProblem::ArgTooLong);
+        }
+        if arg.bytes().any(|c| c < 0x20 || c == 0x7f) {
+            return Some(HeadlessProblem::ArgControl);
+        }
     }
-    Ok(())
+    None
 }
 
+#[cfg(test)]
 fn valid_headless_arg(arg: &str) -> Result<(), ConfigError> {
-    if arg.is_empty() {
-        return Err(ConfigError::invalid("headless.args has an empty entry"));
-    }
-    // The source uses Go len(string), so this limit counts UTF-8 bytes.
-    if arg.len() > MAX_HEADLESS_ARG_LEN {
-        return Err(ConfigError::invalid(format!(
+    validate_headless_def(&HeadlessDef {
+        args: vec![arg.into()],
+        format: HEADLESS_FORMAT_TEXT.into(),
+        prompt_via: String::new(),
+    })
+}
+
+pub fn validate_headless_def(def: &HeadlessDef) -> Result<(), ConfigError> {
+    match headless_problem(def) {
+        None => Ok(()),
+        Some(HeadlessProblem::FormatRequired) => {
+            Err(ConfigError::invalid("headless.format is required"))
+        }
+        Some(HeadlessProblem::FormatUnknown) => Err(ConfigError::invalid(format!(
+            "headless.format {:?} is not one of {}",
+            def.format.trim(),
+            known_headless_formats().join(", ")
+        ))),
+        Some(HeadlessProblem::PromptViaUnknown) => Err(ConfigError::invalid(format!(
+            "headless.prompt_via {:?} is not {} or {}",
+            def.prompt_via, HEADLESS_PROMPT_VIA_STDIN, HEADLESS_PROMPT_VIA_ARG
+        ))),
+        Some(HeadlessProblem::TooManyArgs) => Err(ConfigError::invalid(format!(
+            "headless.args has more than {MAX_HEADLESS_ARGS} entries"
+        ))),
+        Some(HeadlessProblem::ArgEmpty) => {
+            Err(ConfigError::invalid("headless.args has an empty entry"))
+        }
+        Some(HeadlessProblem::ArgTooLong) => Err(ConfigError::invalid(format!(
             "headless.args entry is longer than {MAX_HEADLESS_ARG_LEN} characters"
-        )));
-    }
-    if arg.bytes().any(|c| c < 0x20 || c == 0x7f) {
-        return Err(ConfigError::invalid(
+        ))),
+        Some(HeadlessProblem::ArgControl) => Err(ConfigError::invalid(
             "headless.args entry contains a control character",
-        ));
+        )),
     }
-    Ok(())
 }
 
 fn clone_headless_def(def: &HeadlessDef) -> HeadlessDef {
@@ -4545,6 +4815,23 @@ pub fn launch_prompt_via_arg(provider: &str) -> bool {
 /// doubled quotes inside a quoted span encode one literal quote. Backslashes
 /// and single quotes are literal. Only ASCII space and tab delimit tokens.
 pub fn split_command_line(command: &str) -> Result<Vec<String>, ConfigError> {
+    split_command_typed(command).map_err(|problem| match problem {
+        CommandProblem::Unterminated => {
+            ConfigError::invalid("custom provider command has an unterminated \"")
+        }
+        CommandProblem::Control(code) => command_control_error(code),
+        CommandProblem::Empty => ConfigError::invalid("custom provider command is empty"),
+    })
+}
+/// Why a custom provider command cannot be split (shared with the per-entry
+/// problems shown to the user; never carries any part of the command).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CommandProblem {
+    Unterminated,
+    Control(u32),
+    Empty,
+}
+pub(super) fn split_command_typed(command: &str) -> Result<Vec<String>, CommandProblem> {
     let mut tokens = Vec::new();
     let mut current = String::new();
     let mut token_started = false;
@@ -4562,7 +4849,7 @@ pub fn split_command_line(command: &str) -> Result<Vec<String>, ConfigError> {
                 continue;
             }
             if is_command_control_rune(c) {
-                return Err(command_control_error(c));
+                return Err(CommandProblem::Control(u32::from(c)));
             }
             current.push(c);
             continue;
@@ -4580,7 +4867,7 @@ pub fn split_command_line(command: &str) -> Result<Vec<String>, ConfigError> {
             }
             _ => {
                 if is_command_control_rune(c) {
-                    return Err(command_control_error(c));
+                    return Err(CommandProblem::Control(u32::from(c)));
                 }
                 token_started = true;
                 current.push(c);
@@ -4588,15 +4875,13 @@ pub fn split_command_line(command: &str) -> Result<Vec<String>, ConfigError> {
         }
     }
     if in_quotes {
-        return Err(ConfigError::invalid(
-            "custom provider command has an unterminated \"",
-        ));
+        return Err(CommandProblem::Unterminated);
     }
     if token_started {
         tokens.push(current);
     }
     if tokens.is_empty() {
-        return Err(ConfigError::invalid("custom provider command is empty"));
+        return Err(CommandProblem::Empty);
     }
     Ok(tokens)
 }
@@ -4605,10 +4890,9 @@ fn is_command_control_rune(c: char) -> bool {
     c < '\u{20}' || c == '\u{7f}'
 }
 
-fn command_control_error(c: char) -> ConfigError {
+fn command_control_error(code: u32) -> ConfigError {
     ConfigError::invalid(format!(
-        "custom provider command contains a control character (0x{:02x})",
-        u32::from(c)
+        "custom provider command contains a control character (0x{code:02x})"
     ))
 }
 

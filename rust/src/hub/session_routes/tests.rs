@@ -567,6 +567,7 @@ fn info_context<'a>() -> InfoContext<'a> {
         net_hint_host: "",
         net_hint_env_kind: "",
         registry: None,
+        config_problems: Value::Null,
     }
 }
 

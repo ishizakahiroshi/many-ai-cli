@@ -586,6 +586,11 @@ impl RelayProgram {
                 roles.entry(role.clone()).or_default().overlay(value);
             }
         }
+        // The settings file became unreadable while this Hub runs: the children
+        // are started by `wrap`, which would stop on it. Say so up front.
+        if let Some(reason) = super::left_out_provider::new_sessions_refusal(&self.deps.config) {
+            return Err(RelayError::new(503, "config_unreadable", reason));
+        }
         let cfg = self.cfg()?;
         if requires_bypass_ack(&cfg.orchestration, &roles) && !request.acknowledge_child_full_bypass
         {
@@ -595,7 +600,17 @@ impl RelayProgram {
                 "relay children default to full permission bypass; set acknowledge_child_full_bypass:true to confirm (or set orchestration.child_full_bypass:false / child_permission_default / per-role permission_preset)",
             ));
         }
-        let roles = validate_roles(roles, &cfg)?;
+        // The role that fails because its provider is a custom provider whose
+        // setting was left out says why, instead of the generic "missing role".
+        // Only the role that actually failed is explained, not any role that
+        // happens to name a left-out id.
+        let roles = validate_roles(roles, &cfg, &|provider| {
+            super::left_out_provider::role_refusal(
+                &self.deps.config,
+                provider,
+                crate::orchestration::child_options::ORCHESTRATION_PROVIDERS,
+            )
+        })?;
         if parent.snapshot.depth >= cfg.orchestration.max_depth {
             return Err(RelayError::new(
                 429,
@@ -1356,6 +1371,7 @@ pub fn requires_bypass_ack(
 fn validate_roles(
     mut roles: BTreeMap<String, Role>,
     cfg: &config::Config,
+    why_left_out: &dyn Fn(&str) -> Option<String>,
 ) -> Result<BTreeMap<String, Role>, RelayError> {
     roles.retain(|role, _| ROLES.contains(&role.as_str()));
     for role in [IMPLEMENTATION, REVIEW, STRONG] {
@@ -1371,15 +1387,23 @@ fn validate_roles(
         };
         assignment.provider = assignment.provider.trim().into();
         assignment.model = assignment.model.trim().into();
-        if !crate::orchestration::child_options::ORCHESTRATION_PROVIDERS
-            .contains(&assignment.provider.as_str())
+        let provider_ok = crate::orchestration::child_options::ORCHESTRATION_PROVIDERS
+            .contains(&assignment.provider.as_str());
+        if !provider_ok
             || assignment.model.starts_with('-')
             || !crate::profile::validation::valid_spawn_model_label(&assignment.model)
         {
+            // This role failed. If its provider is a custom provider that was
+            // left out, the reason is more useful than "missing role".
+            let reason = if provider_ok {
+                None
+            } else {
+                why_left_out(&assignment.provider)
+            };
             return Err(RelayError::new(
                 400,
                 "relay_roles_missing",
-                format!("missing role: {role}"),
+                reason.unwrap_or_else(|| format!("missing role: {role}")),
             ));
         }
         let mut mode = config::normalize_execution_mode(&assignment.execution_mode);

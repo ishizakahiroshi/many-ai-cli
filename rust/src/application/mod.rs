@@ -1,6 +1,7 @@
 //! Main application composition and shared runtime ledger. Binary dispatch is
 //! integrated only when every invoked component owns its real side effects.
 pub mod agent_history;
+pub mod config_cli;
 pub mod diagnostic_cli;
 pub mod diagnostics;
 pub mod hub_runtime;
@@ -11,6 +12,7 @@ pub mod nvidia_nim;
 pub mod orchestrate_cli;
 
 pub mod launcher_program;
+pub mod left_out_provider;
 pub mod runtime_context;
 
 pub mod wrapped_spawn;

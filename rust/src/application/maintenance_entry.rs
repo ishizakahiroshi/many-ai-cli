@@ -40,6 +40,39 @@ pub fn stop_command(context: &MainContext) -> io::Result<maintenance_cli::stop::
     };
     Ok(command)
 }
+/// The pid of a Hub that the runtime ledger says is alive, if any. Reads only
+/// the ledger, never the settings, so it works when config.yaml is unreadable.
+pub fn live_hub_pid(context: &MainContext) -> io::Result<Option<i64>> {
+    Ok(super::hub_runtime::RuntimeLedger::open(&context.paths)?
+        .read()?
+        .map(|data| data.pid)
+        .filter(|pid| crate::process::pid_alive(*pid)))
+}
+/// True when the runtime ledger (`hub-runtime.json`) exists but cannot be
+/// understood. Then nothing says whether a Hub is running: the usual "no
+/// record" answer would be a guess.
+pub fn hub_record_unreadable(context: &MainContext) -> io::Result<bool> {
+    Ok(
+        super::hub_runtime::RuntimeLedger::open(&context.paths)?.state()?
+            == super::hub_runtime::LedgerState::Unreadable,
+    )
+}
+/// Ask the person whether the Hub is stopped, when the program cannot tell. It
+/// never stops anything itself (a pid cannot be trusted without the record).
+/// Only `y` / `yes` is a yes; end of input is a no.
+pub fn confirm_hub_stopped(
+    input: &mut impl io::BufRead,
+    out: &mut impl io::Write,
+) -> io::Result<bool> {
+    write!(
+        out,
+        "Has the Hub been stopped (no many-ai-cli process is serving it)? [y/N]: "
+    )?;
+    out.flush()?;
+    let mut line = String::new();
+    input.read_line(&mut line)?;
+    Ok(matches!(line.trim().to_lowercase().as_str(), "y" | "yes"))
+}
 pub async fn stop(context: &MainContext, cancel: &Cancellation) -> io::Result<()> {
     stop_command(context)?.run(cancel).await
 }

@@ -175,13 +175,19 @@ impl ChildHttp {
         if !crate::orchestration::child_options::ORCHESTRATION_PROVIDERS
             .contains(&body.provider.as_str())
         {
+            // A custom provider whose setting was left out says why.
             return Response::error(
                 400,
                 "bad_request",
-                &format!(
-                    "invalid provider {}; valid providers are: {}",
-                    crate::proto::go_quote::quote(&body.provider),
-                    crate::orchestration::child_options::ORCHESTRATION_PROVIDERS.join(", ")
+                &crate::application::left_out_provider::explain_for_children(
+                    &self.config,
+                    &body.provider,
+                    &format!(
+                        "invalid provider {}; valid providers are: {}",
+                        crate::proto::go_quote::quote(&body.provider),
+                        crate::orchestration::child_options::ORCHESTRATION_PROVIDERS.join(", ")
+                    ),
+                    crate::orchestration::child_options::ORCHESTRATION_PROVIDERS,
                 ),
             );
         }

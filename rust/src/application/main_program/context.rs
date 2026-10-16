@@ -23,6 +23,22 @@ pub struct MainContext {
 }
 impl MainContext {
     pub fn load(trial: Option<&TrialOptions>) -> io::Result<Self> {
+        Self::load_inner(trial, false).map(|(context, _)| context)
+    }
+    /// For the one command that must still run when config.yaml cannot be
+    /// read (`uninstall`). When the file is unreadable the context holds
+    /// in-memory default settings with NO token, and the unreadable report is
+    /// returned next to it. That placeholder must never be saved: nothing is
+    /// written to the settings file by anything built from it.
+    pub fn load_tolerating_unreadable_config(
+        trial: Option<&TrialOptions>,
+    ) -> io::Result<(Self, Option<crate::config::ConfigUnreadable>)> {
+        Self::load_inner(trial, true)
+    }
+    fn load_inner(
+        trial: Option<&TrialOptions>,
+        tolerate_unreadable: bool,
+    ) -> io::Result<(Self, Option<crate::config::ConfigUnreadable>)> {
         let application_home = runtime_context::user_home()?;
         let paths = runtime_context::runtime_paths(trial, &application_home)?;
         crate::logging::input_probe::init(&paths.resource(crate::config::Resource::Logs));
@@ -43,27 +59,38 @@ impl MainContext {
             .collect();
         let (vendor_home, environment) =
             isolate_trial_environment(&paths, &application_home, environment)?;
+        let mut unreadable = None;
         let config = Arc::new(
-            ConfigStore::load_or_create(paths.clone(), || {
+            match ConfigStore::load_or_create(paths.clone(), || {
                 crate::process::random_token().map_err(ConfigError::from)
-            })
-            .map_err(io::Error::other)?,
+            }) {
+                Ok(store) => store,
+                Err(ConfigError::Unreadable(found)) if tolerate_unreadable => {
+                    unreadable = Some(*found);
+                    ConfigStore::new(paths.clone(), crate::config::Config::defaults(&paths))
+                        .map_err(io::Error::other)?
+                }
+                Err(error) => return Err(io::Error::other(error)),
+            },
         );
         let shell = environment_value(&environment, "SHELL")
             .or_else(|| environment_value(&environment, "COMSPEC"))
             .unwrap_or(if cfg!(windows) { "cmd.exe" } else { "/bin/sh" })
             .into();
-        Ok(Self {
-            config,
-            paths,
-            cwd,
-            executable: std::env::current_exe()?,
-            application_home,
-            vendor_home,
-            environment,
-            shell,
-            terminal_size: terminal_size(),
-        })
+        Ok((
+            Self {
+                config,
+                paths,
+                cwd,
+                executable: std::env::current_exe()?,
+                application_home,
+                vendor_home,
+                environment,
+                shell,
+                terminal_size: terminal_size(),
+            },
+            unreadable,
+        ))
     }
 }
 pub(super) fn environment_value<'a>(environment: &'a [String], key: &str) -> Option<&'a str> {

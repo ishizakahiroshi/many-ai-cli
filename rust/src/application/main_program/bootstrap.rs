@@ -2,7 +2,6 @@
 use super::{MainContext, context::environment_value, logger::write_stderr};
 use crate::{
     application::hub_runtime::{RuntimeLedger, probe_hub_info},
-    config::ConfigStore,
     process::Cancellation,
 };
 use std::{
@@ -21,8 +20,7 @@ pub async fn running_port(context: &MainContext) -> io::Result<Option<u16>> {
 fn set_port(context: &mut MainContext, port: u16) -> io::Result<()> {
     let mut config = context.config.snapshot().map_err(io::Error::other)?.config;
     config.hub.port = i64::from(port);
-    context.config =
-        Arc::new(ConfigStore::new(context.paths.clone(), config).map_err(io::Error::other)?);
+    context.config = Arc::new(context.config.derive(config).map_err(io::Error::other)?);
     Ok(())
 }
 struct PendingHub(Option<Child>);

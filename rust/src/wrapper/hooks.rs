@@ -12,6 +12,34 @@ use std::{
 };
 
 pub const DELEGATION_PROMPT: &str = include_str!("delegation_prompt.txt");
+/// The one line added to a child AI's delegation prompt while many-ai-cli's own
+/// settings have mistakes. It carries a count only: neither what the mistakes
+/// are nor any setting value, because the prompt goes to the AI vendor.
+pub fn config_problems_notice(count: usize) -> Option<String> {
+    (count > 0).then(|| {
+        format!(
+            "many-ai-cli: its settings have {count} mistake{}. Run `many-ai-cli config check --json` to see them, tell the user, and fix them only after that.",
+            if count == 1 { "" } else { "s" }
+        )
+    })
+}
+/// The same one line for the whole file state: a settings file that cannot be
+/// read at all is not "0 mistakes", it is its own message (still a fixed
+/// sentence, with no position or value from the file).
+pub fn config_state_notice(
+    state: &crate::config::ConfigFileState,
+    removed_by_save: usize,
+) -> Option<String> {
+    match state {
+        crate::config::ConfigFileState::Unreadable(_) => Some(
+            "many-ai-cli: its settings file cannot be read, so no new session can be started. Run `many-ai-cli config check --json` to see why, tell the user, and fix it only after that."
+                .to_owned(),
+        ),
+        // Items a save by the Hub took out of the file count as mistakes too: they
+        // are still waiting for someone to look at them.
+        other => config_problems_notice(other.problems().len() + removed_by_save),
+    }
+}
 pub const OPENCODE_CONFIG: &str = "opencode.json";
 pub const OPENCODE_LOCK: &str = "opencode.json.many-ai-cli.lock";
 struct OwnedFile {
@@ -155,21 +183,30 @@ impl SessionHooks {
         provider: &str,
         session_id: i64,
     ) -> io::Result<Vec<String>> {
+        self.delegation_with_notice(paths, provider, session_id, None)
+    }
+    /// `notice` is one extra line appended to the delegation prompt (see
+    /// `config_problems_notice`).
+    pub fn delegation_with_notice(
+        &mut self,
+        paths: &RuntimePaths,
+        provider: &str,
+        session_id: i64,
+        notice: Option<&str>,
+    ) -> io::Result<Vec<String>> {
+        let prompt = match notice {
+            Some(line) => format!("{DELEGATION_PROMPT}\n{line}\n"),
+            None => DELEGATION_PROMPT.to_owned(),
+        };
         match provider {
             "claude" => {
-                let path = self.write(
-                    paths,
-                    "delegation",
-                    session_id,
-                    "md",
-                    DELEGATION_PROMPT.as_bytes(),
-                )?;
+                let path = self.write(paths, "delegation", session_id, "md", prompt.as_bytes())?;
                 Ok(vec![
                     "--append-system-prompt-file".into(),
                     path.to_string_lossy().into_owned(),
                 ])
             }
-            "grok" => Ok(vec!["--rules".into(), DELEGATION_PROMPT.into()]),
+            "grok" => Ok(vec!["--rules".into(), prompt]),
             _ => Ok(vec![]),
         }
     }
@@ -417,6 +454,74 @@ mod tests {
         hooks.finish().unwrap();
         assert!(!file.exists());
         assert!(!Path::new(&delegation[1]).exists());
+    }
+    #[test]
+    fn delegation_prompt_gets_one_count_only_line_while_settings_have_mistakes() {
+        assert_eq!(config_problems_notice(0), None);
+        let one = config_problems_notice(1).unwrap();
+        assert!(one.contains("1 mistake."));
+        assert!(config_problems_notice(3).unwrap().contains("3 mistakes."));
+        assert!(one.contains("many-ai-cli config check --json"));
+        assert!(!one.contains('\n'));
+        let root = tempfile::tempdir().unwrap();
+        let paths = paths(root.path());
+        let mut hooks = SessionHooks::default();
+        let with = hooks
+            .delegation_with_notice(&paths, "claude", 8, Some(&one))
+            .unwrap();
+        let text = String::from_utf8(std::fs::read(&with[1]).unwrap()).unwrap();
+        assert!(text.starts_with(DELEGATION_PROMPT));
+        assert_eq!(text.lines().filter(|l| l.contains(&one)).count(), 1);
+        let grok = hooks
+            .delegation_with_notice(&paths, "grok", 8, Some(&one))
+            .unwrap();
+        assert!(grok[1].contains(&one));
+        // Without mistakes the prompt is exactly the fixed text.
+        let plain = hooks.delegation(&paths, "grok", 8).unwrap();
+        assert_eq!(plain[1], DELEGATION_PROMPT);
+        hooks.finish().unwrap();
+    }
+    #[test]
+    fn an_unreadable_settings_file_is_not_reported_as_zero_mistakes() {
+        use crate::config::{ConfigFileState, ConfigUnreadable};
+        let unreadable = ConfigFileState::Unreadable(ConfigUnreadable {
+            path: PathBuf::from("synthetic-config.yaml"),
+            backups: PathBuf::from("synthetic-backups"),
+            line: Some(3),
+            column: Some(1),
+            reason: "YAML syntax error".into(),
+            token_readable: false,
+        });
+        // The count is 0 (an unreadable file lists no entries), yet the child AI is told.
+        assert_eq!(unreadable.problems().len(), 0);
+        let notice = config_state_notice(&unreadable, 0).unwrap();
+        assert!(notice.contains("cannot be read"), "{notice}");
+        assert!(notice.contains("many-ai-cli config check --json"));
+        assert!(!notice.contains('\n'));
+        // No position, path or value from the file reaches the prompt.
+        assert!(!notice.contains("synthetic-config.yaml"));
+        assert!(!notice.contains("line 3"));
+        // Entries with mistakes keep the count line; a clean file adds nothing.
+        let clean = ConfigFileState::Readable {
+            path: PathBuf::from("c.yaml"),
+            problems: vec![],
+        };
+        assert_eq!(config_state_notice(&clean, 0), None);
+        // Two items a save took out of the file: counted, though the file reads cleanly.
+        assert!(
+            config_state_notice(&clean, 2)
+                .unwrap()
+                .contains("2 mistakes.")
+        );
+        assert_eq!(
+            config_state_notice(
+                &ConfigFileState::Missing {
+                    path: PathBuf::from("c.yaml")
+                },
+                0
+            ),
+            None
+        );
     }
     #[test]
     fn opencode_overlay_restores_original_and_preserves_concurrent_edit() {

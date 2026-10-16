@@ -151,11 +151,123 @@ pub(super) fn decode_config(text: &str) -> Result<Value, YamlDecodeError> {
     decode_yaml_schema(text, "Config", &[])
 }
 
-pub fn decode_yaml_schema(
-    text: &str,
-    root_kind: &str,
-    schemas: &'static [YamlSchema],
-) -> Result<Value, YamlDecodeError> {
+/// Where the YAML scanner first gave up: 1-based line and column. Only the
+/// position is returned, never the parser's message or any part of the text.
+/// `None` when the failure is not a scanner error (for example a value of the
+/// wrong type) or the document is too large to scan.
+pub(super) fn syntax_error_location(text: &str) -> Option<(usize, usize)> {
+    if text.len() > MAX_BYTES {
+        return None;
+    }
+    let mut options = serde_saphyr::granit_parser::Options::default();
+    options.emit_comments = false;
+    for event in Parser::new_from_str_with_options(text, options) {
+        if let Err(error) = event {
+            return matches!(parser_error(error.clone()), YamlDecodeError::Syntax).then(|| {
+                let marker = error.marker();
+                (marker.line(), marker.col() + 1)
+            });
+        }
+    }
+    None
+}
+
+/// Where the first key that repeats inside one mapping is written: 1-based line
+/// and column of the second use. Only a position is returned, never the key.
+/// `None` when no key repeats or the text is too large to scan.
+pub(super) fn duplicate_key_location(text: &str) -> Option<(usize, usize)> {
+    if text.len() > MAX_BYTES {
+        return None;
+    }
+    enum Frame {
+        Sequence,
+        Mapping {
+            expect_key: bool,
+            seen: BTreeSet<String>,
+        },
+    }
+    // Each node that starts inside a mapping flips key/value in that mapping.
+    fn enter(stack: &mut [Frame], key_text: Option<&str>) -> Option<bool> {
+        match stack.last_mut() {
+            Some(Frame::Mapping { expect_key, seen }) => {
+                let was_key = *expect_key;
+                *expect_key = !*expect_key;
+                match (was_key, key_text) {
+                    (true, Some(text)) => Some(!seen.insert(text.to_owned())),
+                    _ => Some(false),
+                }
+            }
+            _ => None,
+        }
+    }
+    let mut options = serde_saphyr::granit_parser::Options::default();
+    options.emit_comments = false;
+    let mut stack: Vec<Frame> = Vec::new();
+    for event in Parser::new_from_str_with_options(text, options) {
+        let Ok((event, span)) = event else {
+            return None;
+        };
+        match event {
+            Event::Scalar(scalar_text, ..) => {
+                if enter(&mut stack, Some(scalar_text.as_ref())) == Some(true) {
+                    return Some((span.start.line(), span.start.col() + 1));
+                }
+            }
+            Event::Alias(_) => {
+                enter(&mut stack, None);
+            }
+            Event::SequenceStart(..) => {
+                enter(&mut stack, None);
+                stack.push(Frame::Sequence);
+            }
+            Event::MappingStart(..) => {
+                enter(&mut stack, None);
+                stack.push(Frame::Mapping {
+                    expect_key: true,
+                    seen: BTreeSet::new(),
+                });
+            }
+            Event::SequenceEnd | Event::MappingEnd => {
+                stack.pop();
+            }
+            Event::DocumentEnd => return None,
+            _ => {}
+        }
+    }
+    None
+}
+
+/// True when a YAML document after the first one has content (a `---` line and then
+/// something; a bare trailing `---` does not count).
+/// yaml.v3 reads the first document only, so whatever comes after is never
+/// used, whether or not it is valid YAML. Call it after the first document
+/// was read successfully.
+pub(super) fn has_extra_documents(text: &str) -> bool {
+    if text.len() > MAX_BYTES {
+        return false;
+    }
+    let mut options = serde_saphyr::granit_parser::Options::default();
+    options.emit_comments = false;
+    let mut starts = 0usize;
+    for event in Parser::new_from_str_with_options(text, options) {
+        match event {
+            Ok((Event::DocumentStart(..), _)) => starts += 1,
+            Ok((Event::StreamEnd, _)) => return false,
+            // A later document with nothing in it (a trailing `---`) ignores nothing.
+            Ok((Event::DocumentEnd | Event::StreamStart, _)) => {}
+            // An empty document is reported by the parser as a lone null (`~`).
+            Ok((Event::Scalar(scalar, ..), _)) if starts > 1 && matches!(&*scalar, "" | "~") => {}
+            Ok(_) if starts > 1 => return true,
+            Ok(_) => {}
+            // The scanner gave up after the first document was complete.
+            Err(_) => return starts >= 1,
+        }
+    }
+    false
+}
+
+/// Read the first document into nodes. `None`: the stream has no content.
+fn parse_first_document(text: &str) -> Result<Option<(Document, usize)>, YamlDecodeError> {
     if text.len() > MAX_BYTES {
         return Err(YamlDecodeError::ResourceLimit);
     }
@@ -166,7 +278,7 @@ pub fn decode_yaml_schema(
     let root = loop {
         match next_event(&mut events)? {
             Some(Event::StreamStart | Event::DocumentStart(..)) => {}
-            Some(Event::StreamEnd) | None => return Ok(Value::Null),
+            Some(Event::StreamEnd) | None => return Ok(None),
             Some(event) => break document.parse_node(event, &mut events, 0)?,
         }
     };
@@ -174,6 +286,17 @@ pub fn decode_yaml_schema(
     if !matches!(next_event(&mut events)?, Some(Event::DocumentEnd)) {
         return Err(YamlDecodeError::Syntax);
     }
+    Ok(Some((document, root)))
+}
+
+pub fn decode_yaml_schema(
+    text: &str,
+    root_kind: &str,
+    schemas: &'static [YamlSchema],
+) -> Result<Value, YamlDecodeError> {
+    let Some((document, root)) = parse_first_document(text)? else {
+        return Ok(Value::Null);
+    };
     Decoder {
         document: &document,
         steps: 0,

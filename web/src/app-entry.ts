@@ -55,6 +55,7 @@ import { initInputToolsOrder } from './app/input-tools-order.js';
 import { initUiSide } from './app/ui-side.js';
 import { initSessionStrip } from './app/session-strip.js';
 import { initJevOptIn } from './app/jev-opt-in.js';
+import { initConfigProblems } from './app/config-problems.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
 // detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
@@ -96,6 +97,8 @@ initUiSide();
 // 端末の上のセッション帯（いま開いている箱のセッション一覧 + 高さの掴み帯）
 initSessionStrip();
 initJevOptIn();
+// config.yaml の誤りを、直るまで消えない帯で出す（Hub は誤りの 1 件だけを外して起動している）
+initConfigProblems();
 initFlexiblePaneViews();
 // ここまで評価が届いたら初期化は完了。これより後に文を足さない（足した文の例外は、
 // 「画面を読み込めませんでした」の表示に乗らない）。

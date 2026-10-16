@@ -81,6 +81,10 @@ pub(super) fn factory(
     hints: Arc<crate::hub::runtime_routes::NetHints>,
 ) -> io::Result<Arc<InfoFactory>> {
     let guard = BinaryGuard::new(context.executable.clone());
+    let health = crate::hub::config_problems::ConfigHealth::new(
+        context.paths.clone(),
+        context.config.clone(),
+    );
     let cwd = context.cwd.to_string_lossy().into_owned();
     let environment = context.environment.clone();
     let ssh = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"]
@@ -141,6 +145,7 @@ pub(super) fn factory(
             net_hint_host: &hint.host_label,
             net_hint_env_kind: &hint.env_kind,
             registry: Some(registry.registry.as_ref()),
+            config_problems: health.view(),
         };
         Ok(http.handle_info_authenticated(config, &context))
     }))

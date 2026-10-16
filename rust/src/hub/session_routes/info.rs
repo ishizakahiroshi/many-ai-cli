@@ -31,6 +31,9 @@ pub struct InfoContext<'a> {
     pub net_hint_env_kind: &'a str,
     /// None is the source's genuinely absent registry, not an empty fallback.
     pub registry: Option<&'a Registry>,
+    /// Mistakes in `config.yaml` as of this read (`hub::config_problems`); the
+    /// screen keeps a banner up while it lists any. `Null` when not observed.
+    pub config_problems: serde_json::Value,
 }
 impl SessionHttp {
     /// Router MUST also set no-store on method/auth/Host/Origin/PIN failures.
@@ -122,6 +125,7 @@ impl SessionHttp {
             "child_permission_preview":crate::orchestration::child_options::preview_ui_tiers(config),
             "child_permission_default":config.orchestration.child_permission_default_tier(),
             "role_permission":role_permission,
+            "config_problems":context.config_problems,
         })).no_store() }
     }
 }

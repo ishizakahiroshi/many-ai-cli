@@ -53,6 +53,15 @@ impl GoWire for RuntimeData {
         ],
     }];
 }
+/// What `hub-runtime.json` holds.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LedgerState {
+    /// No file: no Hub has recorded itself.
+    Missing,
+    /// A file that cannot be understood (damaged, or with no usable pid/port).
+    Unreadable,
+    Valid(RuntimeData),
+}
 #[derive(Clone)]
 pub struct RuntimeLedger {
     dir: Arc<Dir>,
@@ -71,9 +80,18 @@ impl RuntimeLedger {
         Ok(file)
     }
     pub fn read(&self) -> io::Result<Option<RuntimeData>> {
+        Ok(match self.state()? {
+            LedgerState::Valid(data) => Some(data),
+            LedgerState::Missing | LedgerState::Unreadable => None,
+        })
+    }
+    /// Like `read`, but tells "there is no record" from "there is a record that
+    /// cannot be used" (`read` treats both as no Hub). A caller that must not
+    /// guess whether a Hub is running (uninstall) needs the difference.
+    pub fn state(&self) -> io::Result<LedgerState> {
         let bytes = match self.dir.read(FILE, MAX_BYTES + 1) {
             Ok(b) => b,
-            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(LedgerState::Missing),
             Err(e) => return Err(e),
         };
         if bytes.len() > MAX_BYTES {
@@ -83,12 +101,12 @@ impl RuntimeLedger {
             ));
         }
         let Ok(data) = crate::proto::decode_wire::<RuntimeData>(&bytes) else {
-            return Ok(None);
+            return Ok(LedgerState::Unreadable);
         };
         if data.pid <= 0 || data.port <= 0 {
-            return Ok(None);
+            return Ok(LedgerState::Unreadable);
         }
-        Ok(Some(data))
+        Ok(LedgerState::Valid(data))
     }
     pub fn write(&self, port: u16, pid: i64, now: Timestamp) -> io::Result<()> {
         if port == 0 || pid <= 0 || self.trial_port.is_some_and(|p| p != port) {

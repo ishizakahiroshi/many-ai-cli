@@ -113,6 +113,9 @@ pub(super) struct Fixture {
     pub io: Arc<FakeIo>,
 }
 pub(super) fn fixture() -> Fixture {
+    fixture_with(|_| {})
+}
+pub(super) fn fixture_with(edit: impl FnOnce(&mut Config)) -> Fixture {
     let t = tempfile::tempdir().unwrap();
     let run = t.path().join("runtime");
     let old = t.path().join("installed");
@@ -132,6 +135,7 @@ pub(super) fn fixture() -> Fixture {
             ..Default::default()
         }],
     );
+    edit(&mut cfg);
     let config = Arc::new(ConfigStore::new(paths.clone(), cfg).unwrap());
     let io = Arc::new(FakeIo {
         calls: Mutex::new(vec![]),
@@ -208,6 +212,114 @@ async fn real_checks_have_source_order_bounded_probes_and_disabled_profile_never
             .unwrap()
             .contains("synthetic-private-token")
     );
+}
+#[tokio::test]
+async fn wrong_custom_provider_entries_are_listed_with_position_reason_and_fix() {
+    let f = fixture_with(|cfg| {
+        cfg.custom_providers = vec![
+            crate::config::CustomProvider {
+                id: "shell".into(),
+                command: "synthetic-command-marker".into(),
+                ..Default::default()
+            },
+            crate::config::CustomProvider {
+                id: "muse".into(),
+                command: "muse".into(),
+                ..Default::default()
+            },
+        ];
+    });
+    // The doctor reads the file as it is now (the same view the screen has).
+    std::fs::write(
+        f.paths.resource(crate::config::Resource::Config),
+        "token: synthetic-private-token\ncustom_providers:\n  - id: shell\n    command: synthetic-command-marker\n  - id: muse\n    command: muse\n",
+    )
+    .unwrap();
+    let result = f.doctor.run(&Cancellation::default()).await.unwrap();
+    let found: Vec<_> = result
+        .checks
+        .iter()
+        .filter(|check| check.name == "config")
+        .collect();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].level, "WARN");
+    assert!(
+        found[0]
+            .message
+            .contains("custom_providers entry #1 (id: shell), field `id`")
+    );
+    assert!(found[0].message.contains("spawn option"));
+    assert!(found[0].fix.contains("many-ai-cli config check"));
+    let wire = serde_json::to_string(&result).unwrap();
+    assert!(!wire.contains("synthetic-private-token"));
+    assert!(!wire.contains("synthetic-command-marker"));
+    // No mistakes, no finding.
+    let clean = fixture();
+    let result = clean.doctor.run(&Cancellation::default()).await.unwrap();
+    assert!(result.checks.iter().all(|check| check.name != "config"));
+}
+#[tokio::test]
+async fn the_doctor_follows_the_file_as_it_is_now_not_what_the_hub_found_at_startup() {
+    let config_file = |f: &Fixture| f.paths.resource(crate::config::Resource::Config);
+    let config_checks = |result: &DoctorReport| -> Vec<(String, String)> {
+        result
+            .checks
+            .iter()
+            .filter(|check| check.name == "config")
+            .map(|check| (check.message.clone(), check.fix.clone()))
+            .collect()
+    };
+    // Mistakes this Hub found at startup, since fixed in the file: nothing to say,
+    // and no advice to fix what is no longer there.
+    let f = fixture();
+    let bad = "token: synthetic-private-token\ncustom_providers:\n  - id: shell\n    command: x\n";
+    std::fs::write(config_file(&f), bad).unwrap();
+    let store =
+        crate::config::ConfigStore::load_or_create(
+            f.paths.clone(),
+            || Ok("synthetic-fresh".into()),
+        )
+        .unwrap();
+    assert_eq!(store.startup_problems().len(), 1);
+    let doctor = Diagnostics::new(DiagnosticsDependencies {
+        config: Arc::new(store),
+        paths: f.paths.clone(),
+        cwd: f.paths.root().to_path_buf(),
+        home: f.paths.root().join("home"),
+        environment: vec![],
+        platform: "windows".into(),
+        io: f.io.clone(),
+        subscription_cli: f.io.clone(),
+        nvidia_key_configured: Arc::new(|| Ok(false)),
+    });
+    std::fs::write(
+        config_file(&f),
+        "token: synthetic-private-token\ncustom_providers:\n  - id: ok\n    command: ok\n",
+    )
+    .unwrap();
+    let result = doctor.run(&Cancellation::default()).await.unwrap();
+    assert!(
+        config_checks(&result).is_empty(),
+        "{:?}",
+        config_checks(&result)
+    );
+    // The file becomes unreadable while the Hub runs: one finding, no repeat of an old one.
+    std::fs::write(
+        config_file(&f),
+        "token: synthetic-private-token\nhub: [unterminated",
+    )
+    .unwrap();
+    let result = doctor.run(&Cancellation::default()).await.unwrap();
+    let found = config_checks(&result);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].0.contains("cannot be read"), "{found:?}");
+    assert!(
+        found[0].0.contains("no new session can be started"),
+        "{found:?}"
+    );
+    assert!(found[0].1.contains("config reset"), "{found:?}");
+    let wire = serde_json::to_string(&result).unwrap();
+    assert!(!wire.contains("synthetic-private-token") && !wire.contains("unterminated"));
 }
 #[tokio::test]
 async fn cancellation_propagates_without_launching_new_work() {

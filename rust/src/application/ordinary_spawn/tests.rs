@@ -126,6 +126,9 @@ struct Fixture {
 }
 impl Fixture {
     fn new(outcome: SpawnStartOutcome) -> Self {
+        Self::with_config(outcome, |_| {})
+    }
+    fn with_config(outcome: SpawnStartOutcome, tweak: impl FnOnce(&mut Config)) -> Self {
         let root = tempfile::tempdir().unwrap();
         let home = root.path().join("isolated-home");
         let repo = root.path().join("repository");
@@ -208,7 +211,9 @@ impl Fixture {
             );
         }
         let paths = RuntimePaths::trial(&trial, 49181, &installed).unwrap();
-        let config = Arc::new(ConfigStore::new(paths.clone(), Config::defaults(&paths)).unwrap());
+        let mut settings = Config::defaults(&paths);
+        tweak(&mut settings);
+        let config = Arc::new(ConfigStore::new(paths.clone(), settings).unwrap());
         let bus = CoreEventBus::new(32).unwrap();
         let capture = Arc::new(Capture {
             requests: Mutex::new(vec![]),
@@ -561,7 +566,10 @@ fn ordinary_risk_matches_pinned_provider_switch_without_preset_confirmation() {
 }
 
 fn conductor_fixture(outcome: SpawnStartOutcome) -> Fixture {
-    let mut f = Fixture::new(outcome);
+    conductor_fixture_with(outcome, |_| {})
+}
+fn conductor_fixture_with(outcome: SpawnStartOutcome, tweak: impl FnOnce(&mut Config)) -> Fixture {
+    let mut f = Fixture::with_config(outcome, tweak);
     let service = Arc::get_mut(&mut f.service).unwrap();
     let workers = super::super::session_workers::SessionWorkers::new(
         service.config.clone(),
@@ -758,4 +766,128 @@ async fn spawn_correlation_orchestration_keeps_authenticated_request_metadata() 
         request.spec.registration_metadata.client_request_id,
         "request_conductor-1"
     );
+}
+
+#[tokio::test]
+async fn a_custom_provider_left_out_of_the_settings_is_refused_with_its_reason() {
+    let f = Fixture::with_config(SpawnStartOutcome::Started { pid: 42 }, |settings| {
+        settings.custom_providers = vec![
+            config::CustomProvider {
+                id: "quote".into(),
+                command: "synthetic-command-marker \"unclosed".into(),
+                ..Default::default()
+            },
+            config::CustomProvider {
+                id: "works".into(),
+                command: "works".into(),
+                ..Default::default()
+            },
+        ];
+    });
+    let mut body = f.body();
+    body.provider = "quote".into();
+    let error = f.spawn(body).await.unwrap_err();
+    assert_eq!((error.status, error.code), (400, "bad_request"));
+    assert!(
+        error
+            .detail
+            .contains("custom provider `quote` is not available"),
+        "{}",
+        error.detail
+    );
+    assert!(error.detail.contains("double quote"), "{}", error.detail);
+    assert!(
+        error.detail.contains("many-ai-cli config check"),
+        "{}",
+        error.detail
+    );
+    assert!(!error.detail.contains("synthetic-command-marker"));
+    // An id nobody defined keeps the plain message, with a pointer to the left-out entry.
+    let mut body = f.body();
+    body.provider = "no-such-provider".into();
+    let error = f.spawn(body).await.unwrap_err();
+    assert!(
+        error.detail.starts_with("invalid provider ("),
+        "{}",
+        error.detail
+    );
+    assert!(error.detail.contains("config check"));
+    assert!(f.capture.requests.lock().unwrap().is_empty());
+}
+
+fn role(provider: &str) -> Option<request::RoleAssignment> {
+    Some(request::RoleAssignment {
+        provider: provider.into(),
+        ..Default::default()
+    })
+}
+fn conductor_with_a_left_out_provider() -> Fixture {
+    conductor_fixture_with(SpawnStartOutcome::Started { pid: 42 }, |settings| {
+        settings.custom_providers = vec![config::CustomProvider {
+            id: "quote".into(),
+            command: "synthetic-command-marker \"unclosed".into(),
+            ..Default::default()
+        }];
+    })
+}
+
+#[tokio::test]
+async fn a_refused_role_gets_its_own_reason_and_not_the_reason_of_another_role() {
+    let f = conductor_with_a_left_out_provider();
+    // Role `a` is the one the reservation refuses; `b` merely names a left-out id.
+    let mut body = f.body();
+    body.orchestration = true;
+    body.orchestration_roles = Some(BTreeMap::from([
+        ("a".into(), role("invalid-provider")),
+        ("b".into(), role("quote")),
+    ]));
+    let error = f.spawn(body).await.unwrap_err();
+    assert_eq!(error.detail, "invalid orchestration role provider");
+    // When the refused role is the one with the left-out id, its reason is given.
+    let mut body = f.body();
+    body.label = "synthetic-ordinary-second".into();
+    body.orchestration = true;
+    body.orchestration_roles = Some(BTreeMap::from([
+        ("a".into(), role("quote")),
+        ("b".into(), role("invalid-provider")),
+    ]));
+    let error = f.spawn(body).await.unwrap_err();
+    assert!(
+        error
+            .detail
+            .contains("custom provider `quote` is not available"),
+        "{}",
+        error.detail
+    );
+    assert!(!error.detail.contains("synthetic-command-marker"));
+    assert!(f.capture.requests.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn while_the_settings_file_cannot_be_read_a_new_session_says_so() {
+    let f = Fixture::new(SpawnStartOutcome::Started { pid: 42 });
+    std::fs::write(
+        f.paths.resource(config::Resource::Config),
+        "token: synthetic-token-marker\nhub: [unterminated",
+    )
+    .unwrap();
+    let error = f.spawn(f.body()).await.unwrap_err();
+    assert_eq!((error.status, error.code), (503, "config_unreadable"));
+    assert!(
+        error.detail.contains("cannot be read") && error.detail.contains("new session"),
+        "{}",
+        error.detail
+    );
+    assert!(error.detail.contains("many-ai-cli config reset"));
+    assert!(error.detail.contains("already running"));
+    assert!(!error.detail.contains("synthetic-token-marker"));
+    assert!(!error.detail.contains("unterminated"));
+    assert!(f.capture.requests.lock().unwrap().is_empty());
+    // Once the file reads again, spawning works as before.
+    std::fs::write(
+        f.paths.resource(config::Resource::Config),
+        "token: synthetic-token-marker\n",
+    )
+    .unwrap();
+    f.spawn(f.body()).await.unwrap();
 }

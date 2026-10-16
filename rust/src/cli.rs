@@ -11,12 +11,36 @@ pub const BUILTIN_PROVIDERS: &[&str] = &[
     "command-code",
 ];
 pub const USAGE: &str = "many-ai-cli <serve|connect|setup|doctor|issue|wrap|claude|codex|copilot|cursor-agent|opencode|grok|command-code|shell-init|stop|status|tray|profile-export|log-clean|uninstall|version>";
+/// Commands added in the Rust version. `USAGE` above stays the Go-compatible line.
+pub const EXTRA_USAGE: &str = "many-ai-cli config <check|reset|backup>   (settings file safety; `many-ai-cli config help` lists them)";
+
+/// Commands that must run when the settings file cannot be read, because they
+/// are how that gets diagnosed or fixed. Every other command stops with the
+/// message that names the file and the two ways forward. `uninstall` needs
+/// only the paths, so it runs on placeholder settings (and refuses only if a
+/// Hub looks alive, since without the token it cannot be asked to stop).
+/// `stop` and `status`
+/// are not here: both need the Hub token from that file (`stop` for the
+/// graceful shutdown request, `status` to authenticate to the running Hub and
+/// to print its URL), so without it they cannot do their job.
+pub const WORKS_WITHOUT_READABLE_CONFIG: &[&str] = &[
+    "config",
+    "doctor",
+    "uninstall",
+    "version",
+    "--version",
+    "-v",
+    "help",
+    "--help",
+    "-h",
+];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
     Default,
     Version,
     Help,
+    Config(Vec<String>),
     Serve(Vec<String>),
     Connect(Vec<String>),
     Setup(Vec<String>),
@@ -100,6 +124,7 @@ pub fn parse(args: &[String], custom_providers: &[String]) -> Result<Invocation,
     let command = match cmd.as_str() {
         "version" | "--version" | "-v" => Command::Version,
         "help" | "--help" | "-h" => Command::Help,
+        "config" => Command::Config(rest),
         "serve" => Command::Serve(rest),
         "connect" => Command::Connect(rest),
         "setup" => Command::Setup(rest),
@@ -172,6 +197,21 @@ mod tests {
         assert!(parse(&args(&["orchestrate"]), &[]).is_err());
         assert!(parse(&args(&["wrap"]), &[]).is_err());
         assert!(parse(&args(&["gemini"]), &[]).is_err());
+    }
+    #[test]
+    fn config_is_a_command_that_runs_without_a_readable_settings_file() {
+        assert_eq!(
+            parse(&args(&["config", "check", "--json"]), &[])
+                .unwrap()
+                .command,
+            Command::Config(args(&["check", "--json"]))
+        );
+        for name in ["config", "doctor", "uninstall", "version", "help"] {
+            assert!(WORKS_WITHOUT_READABLE_CONFIG.contains(&name));
+        }
+        for name in ["stop", "status", "serve", "wrap", "orchestrate"] {
+            assert!(!WORKS_WITHOUT_READABLE_CONFIG.contains(&name));
+        }
     }
     #[test]
     fn trial_is_explicit_and_complete() {

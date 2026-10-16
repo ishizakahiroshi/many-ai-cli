@@ -222,6 +222,7 @@ async fn native_start_only_partial_failure_retains_exact_pending_proof() {
         home,
         environment: vec!["SYNTHETIC_GRID=1".into()],
         tasks: tasks.handle(),
+        config: None,
     }));
     let body = GridRequest {
         preset: "ai+shell".into(),
@@ -305,6 +306,7 @@ async fn spawn_correlation_grid_partial_failure_retains_all_accepted_starts() {
         home,
         environment: vec!["SYNTHETIC_GRID=1".into()],
         tasks: tasks.handle(),
+        config: None,
     }));
     let body = GridRequest {
         client_request_id: "request_grid-1".into(),
@@ -424,4 +426,117 @@ fn spawn_correlation_grid_schema_and_validation_precede_registry() {
             .detail,
         "invalid client_request_id"
     );
+}
+
+#[tokio::test]
+async fn a_grid_gives_the_same_reason_as_an_ordinary_spawn_for_an_id_a_save_took_out() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cwd = tmp.path().join("project");
+    let home = tmp.path().join("home");
+    let trial = tmp.path().join("trial");
+    let installed = tmp.path().join("installed");
+    for path in [&cwd, &home, &trial, &installed] {
+        std::fs::create_dir(path).unwrap();
+    }
+    let paths = RuntimePaths::trial(&trial, 49182, &installed).unwrap();
+    // A setting that cannot be loaded; a first run saves over it (and records that),
+    // a second run (this Hub) starts from the file the save left.
+    std::fs::write(
+        paths.resource(crate::config::Resource::Config),
+        "token: synthetic-grid-token\ncustom_providers:\n  - id: half\n  - id: ok\n    command: ok\n",
+    )
+    .unwrap();
+    let first = crate::config::ConfigStore::load_or_create(paths.clone(), || {
+        Ok("synthetic-grid-fresh".into())
+    })
+    .unwrap();
+    let snapshot = first.snapshot().unwrap();
+    let mut next = snapshot.config;
+    next.user_prefs.display_name = "changed".into();
+    first.persist(snapshot.revision, next).unwrap();
+    let store = Arc::new(
+        crate::config::ConfigStore::load_or_create(paths.clone(), || {
+            Ok("synthetic-grid-fresh".into())
+        })
+        .unwrap(),
+    );
+    assert!(store.startup_problems().is_empty());
+    let core = Arc::new(SessionEngine::new(
+        EngineOptions::default(),
+        Arc::new(SessionJournal::new(
+            paths,
+            None,
+            JournalOptions {
+                session_enabled: false,
+                max_bytes: 0,
+            },
+        )),
+        Arc::new(Boundary),
+        Arc::new(Boundary),
+        Arc::new(Capture {
+            requests: Mutex::new(vec![]),
+            fail_at: 0,
+        }),
+        CoreEventBus::new(16).unwrap(),
+    ));
+    let registry = Registry::build(
+        Layers {
+            embedded: Some(embedded_definitions().unwrap()),
+            ..Default::default()
+        },
+        &default_adapters(),
+    );
+    let tasks = crate::hub::task_owner::HubTaskOwner::new(tokio::runtime::Handle::current());
+    let service = Arc::new(GridSpawn::new(Dependencies {
+        core: core.clone(),
+        registry: Arc::new(move || Ok(registry.clone())),
+        hub_cwd: cwd,
+        home,
+        environment: vec![],
+        tasks: tasks.handle(),
+        config: Some(store.clone()),
+    }));
+    let verified = VerifiedConfirmationRequest::after_server_authentication(core.auth_epoch());
+    let refused = service
+        .spawn(
+            GridRequest {
+                preset: "ai+shell".into(),
+                provider: "half".into(),
+                count: 3,
+                ..Default::default()
+            },
+            &verified,
+        )
+        .await
+        .err()
+        .unwrap();
+    assert_eq!((refused.status, refused.code), (400, "bad_request"));
+    let detail = refused.detail.to_string();
+    assert!(detail.contains("custom provider `half`"), "{detail}");
+    assert!(
+        detail.contains("took its setting out of config.yaml"),
+        "{detail}"
+    );
+    assert!(detail.contains("config backup restore"), "{detail}");
+    assert!(!detail.contains("synthetic-grid-token"), "{detail}");
+    // An id nothing knows keeps the plain message.
+    let unknown = service
+        .spawn(
+            GridRequest {
+                preset: "ai+shell".into(),
+                provider: "never-heard-of".into(),
+                count: 3,
+                ..Default::default()
+            },
+            &verified,
+        )
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(
+        unknown.detail.to_string(),
+        "invalid ai provider for ai+shell preset"
+    );
+    tasks.stop_requests();
+    tasks.drain_requests().await;
 }

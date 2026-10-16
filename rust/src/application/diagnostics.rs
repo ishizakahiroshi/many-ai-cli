@@ -111,6 +111,7 @@ impl Diagnostics {
         checks.extend(self.command_code(cancel).await);
         checks.extend(supplemental::subscriptions(self, &cfg, cancel).await);
         checks.extend(supplemental::custom(self, &cfg));
+        checks.extend(supplemental::config_problems(self));
         if cancel.is_cancelled() {
             return Err(SessionError::Cancelled);
         }

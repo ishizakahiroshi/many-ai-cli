@@ -41,6 +41,73 @@ fn read(owner: &Diagnostics, path: &Path) -> io::Result<Vec<u8>> {
     }
     Ok(bytes)
 }
+/// One finding per mistake in a `custom_providers` entry (the entry is left
+/// out, or works in a reduced way). The wording is the shared English text;
+/// it names the entry by position and id and never repeats the file. The
+/// mistakes are those of the file as it is now (the same view the screen and
+/// `config check` have), not what this process found when it started: an entry
+/// that was fixed, or that a save took out, is not advised to be fixed again.
+pub(super) fn config_problems(owner: &Diagnostics) -> Vec<Check> {
+    let in_file = match config::inspect_file(&owner.deps.paths) {
+        Ok(config::ConfigFileState::Readable { problems, .. }) => problems
+            .iter()
+            .map(|problem| {
+                let text = problem.text_en();
+                let fix = match &text.fix_command {
+                    Some(command) => format!("Run `{command}`, then `{}`", text.check_command),
+                    None if problem.is_provider_entry() => format!(
+                        "Edit the entry in config.yaml like this, then run `{}`:\n{}",
+                        text.check_command, text.example
+                    ),
+                    None => format!(
+                        "Edit config.yaml so it is a single YAML document, like this, then run `{}`:\n{}",
+                        text.check_command, text.example
+                    ),
+                };
+                Check::new(
+                    "config",
+                    "WARN",
+                    format!("{}: {} {}", text.summary, text.reason, text.effect),
+                    &fix,
+                )
+            })
+            .collect::<Vec<_>>(),
+        // The Hub keeps the settings it loaded; a new session cannot start.
+        Ok(config::ConfigFileState::Unreadable(unreadable)) => vec![Check::new(
+            "config",
+            "WARN",
+            format!(
+                "The settings file cannot be read ({}). Sessions that are running are not affected, but no new session can be started.",
+                unreadable.summary_en()
+            ),
+            &format!(
+                "Fix the file (`{}` shows where), or run `{} --yes` to start over from the defaults (the current file is saved as a backup)",
+                config::CHECK_COMMAND,
+                config::safety::RESET_COMMAND
+            ),
+        )],
+        Ok(config::ConfigFileState::Missing { .. }) | Err(_) => Vec::new(),
+    };
+    // What saves by the Hub took out of the file stays reported (across restarts)
+    // until the backup is restored or the person says they have seen it.
+    let removed = config::removed::list(&owner.deps.paths)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|notice| {
+            let fix = match notice.restore_command() {
+                Some(restore) => format!(
+                    "Bring it back with `{restore}`, or run `{}` once you have seen this",
+                    config::removed::RemovedNotice::dismiss_command()
+                ),
+                None => format!(
+                    "Run `{}` once you have looked at it (the record file is renamed, not deleted)",
+                    config::removed::RemovedNotice::dismiss_command()
+                ),
+            };
+            Check::new("config", "WARN", notice.warning_en(), &fix)
+        });
+    in_file.into_iter().chain(removed).collect()
+}
 pub(super) fn custom(owner: &Diagnostics, cfg: &Config) -> Vec<Check> {
     let effective = config::effective_custom_providers(&cfg.custom_providers);
     if effective.is_empty() {

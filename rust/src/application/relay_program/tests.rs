@@ -2133,3 +2133,32 @@ async fn resume_rejects_old_launch_identity_even_without_restored_relay_metadata
     assert_eq!(f.io.starts.load(Ordering::SeqCst), 1);
     assert!(f.core.details(old.binding.session).unwrap().connected);
 }
+
+#[test]
+fn only_the_role_that_failed_gets_the_left_out_reason() {
+    let cfg = config::Config::default();
+    let role = |provider: &str| Role {
+        provider: provider.into(),
+        ..Default::default()
+    };
+    let why = |provider: &str| (provider == "quote").then(|| "REASON-FOR-QUOTE".to_owned());
+    // `review` is the role that fails and it names the left-out id: its reason.
+    let roles = BTreeMap::from([
+        (IMPLEMENTATION.to_owned(), role("claude")),
+        (REVIEW.to_owned(), role("quote")),
+    ]);
+    let error = validate_roles(roles, &cfg, &why).unwrap_err();
+    assert_eq!(error.detail, "REASON-FOR-QUOTE");
+    // `implementation` fails first with an id that is not left out; `review`
+    // naming a left-out id did not fail, so its reason is not given.
+    let roles = BTreeMap::from([
+        (IMPLEMENTATION.to_owned(), role("not-a-provider")),
+        (REVIEW.to_owned(), role("quote")),
+    ]);
+    let error = validate_roles(roles, &cfg, &why).unwrap_err();
+    assert_eq!(error.detail, "missing role: implementation");
+    // A role that is simply missing keeps the plain message.
+    let roles = BTreeMap::from([(IMPLEMENTATION.to_owned(), role("claude"))]);
+    let error = validate_roles(roles, &cfg, &why).unwrap_err();
+    assert_eq!(error.detail, "missing role: review");
+}

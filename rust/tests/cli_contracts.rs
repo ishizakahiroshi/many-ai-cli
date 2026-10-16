@@ -28,6 +28,7 @@ fn route(command: Command) -> (&'static str, String, Vec<String>) {
         Command::Default => no_args("default"),
         Command::Version => no_args("version"),
         Command::Help => no_args("help"),
+        Command::Config(args) => delegated("config", args),
         Command::Serve(args) => delegated("serve", args),
         Command::Connect(args) => delegated("connect", args),
         Command::Setup(args) => delegated("setup", args),

@@ -83,6 +83,7 @@ pub enum Resource {
     ProviderDefinitions,
     ProviderOverrides,
     ProviderBackups,
+    ConfigBackups,
     ProviderDistributions,
     ProviderIcons,
     ApprovalPatterns,
@@ -306,6 +307,7 @@ impl RuntimePaths {
             Resource::WhisperBin => return self.root.join("whisper").join("bin"),
             Resource::WhisperTemporary => return self.root.join("whisper").join("tmp"),
             Resource::ProviderBackups => return self.root.join("backups").join("providers"),
+            Resource::ConfigBackups => return self.root.join("backups").join("config"),
             _ => {}
         }
         let name = match resource {
@@ -336,6 +338,7 @@ impl RuntimePaths {
             Resource::ProviderDefinitions => "providers.d",
             Resource::ProviderOverrides => "provider-overrides",
             Resource::ProviderBackups => unreachable!("handled above"),
+            Resource::ConfigBackups => unreachable!("handled above"),
             Resource::ProviderDistributions => "provider-distributions",
             Resource::ProviderIcons => "provider_icons",
             Resource::ApprovalPatterns => "approval-patterns",

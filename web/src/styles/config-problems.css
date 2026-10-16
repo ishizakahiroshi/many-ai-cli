@@ -1,0 +1,66 @@
+/* config-problems-banner: config.yaml の誤りを、直るまで出し続ける帯（app/config-problems.ts）。
+   stale-binary-banner と同じ置き方（フローの中・入力欄や端末を覆わない）。色は既存の変数だけを使う。 */
+#config-problems-banner {
+  flex-shrink: 0;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 8px 12px;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--line);
+  border-left: 3px solid var(--warn);
+  color: var(--text);
+  font-size: var(--fs-body);
+}
+#config-problems-banner[hidden] { display: none; }
+#config-problems-banner[data-kind="fixed"] { border-left-color: var(--line-soft); }
+.config-problems-summary {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.config-problems-title { font-weight: 600; }
+.config-problems-hint {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+.config-problems-body {
+  margin-top: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.config-problems-list {
+  margin: 0;
+  padding-left: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.config-problems-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  overflow-wrap: anywhere;
+}
+.config-problems-heading { font-weight: 600; }
+.config-problems-label {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  margin-right: var(--space-2);
+}
+.config-problems-example {
+  margin: 0;
+  padding: var(--space-2);
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  overflow-x: auto;
+  white-space: pre;
+}
+.config-problems-note {
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}

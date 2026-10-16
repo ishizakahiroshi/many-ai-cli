@@ -24,14 +24,14 @@ mod tests;
 pub struct SpawnError {
     pub status: u16,
     pub code: &'static str,
-    pub detail: &'static str,
+    pub detail: std::borrow::Cow<'static, str>,
 }
 impl SpawnError {
     fn bad(detail: &'static str) -> Self {
         Self {
             status: 400,
             code: "bad_request",
-            detail,
+            detail: detail.into(),
         }
     }
 }
@@ -142,7 +142,7 @@ impl OrdinarySpawnService {
             return Err(SpawnError {
                 status: 401,
                 code: "unauthorized",
-                detail: "authentication expired",
+                detail: "authentication expired".into(),
             });
         }
         body.validate()?;
@@ -162,7 +162,7 @@ impl OrdinarySpawnService {
                 Err(SpawnError {
                     status: 500,
                     code: "spawn_error",
-                    detail: "spawn workflow failed",
+                    detail: "spawn workflow failed".into(),
                 })
             })
     }
@@ -176,6 +176,15 @@ impl OrdinarySpawnService {
         if body.orchestration && self.orchestration.is_none() {
             return Err(unavailable("conductor launch composition is unavailable"));
         }
+        // The settings file became unreadable while this Hub runs: the child
+        // `wrap` of a new session would stop on it. Say so up front.
+        if let Some(reason) = super::left_out_provider::new_sessions_refusal(&self.config) {
+            return Err(SpawnError {
+                status: 503,
+                code: "config_unreadable",
+                detail: reason.into(),
+            });
+        }
         let registry =
             (self.registry)().map_err(|_| unavailable("provider registry unavailable"))?;
         let definition = registry.lookup(&body.provider);
@@ -184,7 +193,18 @@ impl OrdinarySpawnService {
                 d.definition.enabled.unwrap_or(true) && d.definition.launch.is_some()
             })
         {
-            return Err(SpawnError::bad("invalid provider"));
+            // A custom provider whose setting was left out says why, instead of
+            // "invalid provider" (the reason never carries a settings value).
+            return Err(SpawnError {
+                status: 400,
+                code: "bad_request",
+                detail: super::left_out_provider::explain_from(
+                    &self.config,
+                    &body.provider,
+                    "invalid provider",
+                )
+                .into(),
+            });
         }
         let lease = self
             .core
@@ -192,7 +212,7 @@ impl OrdinarySpawnService {
             .map_err(|_| SpawnError {
                 status: 409,
                 code: "provider_updating",
-                detail: "provider is currently updating",
+                detail: "provider is currently updating".into(),
             })?;
         let mut ownership = PreparationOwnership {
             core: self.core.clone(),
@@ -244,7 +264,7 @@ impl OrdinarySpawnService {
                 Err(SpawnError {
                     status: 499,
                     code: "request_cancelled",
-                    detail: "request observer cancelled",
+                    detail: "request observer cancelled".into(),
                 })
             }
             SpawnStartOutcome::Failed(_) | SpawnStartOutcome::HubStopped => {
@@ -253,7 +273,7 @@ impl OrdinarySpawnService {
                 Err(SpawnError {
                     status: 500,
                     code: "spawn_error",
-                    detail: "spawn error",
+                    detail: "spawn error".into(),
                 })
             }
         }
@@ -359,7 +379,7 @@ impl OrdinarySpawnService {
             return Err(SpawnError {
                 status: 400,
                 code: "risk_confirmation_required",
-                detail: "risk confirmation required",
+                detail: "risk confirmation required".into(),
             });
         }
         let prefs = self
@@ -393,7 +413,7 @@ impl OrdinarySpawnService {
                 .map_err(|_| SpawnError {
                     status: 400,
                     code: "worktree_error",
-                    detail: "worktree error",
+                    detail: "worktree error".into(),
                 })?;
             ownership.tree = Some(tree.clone());
             spec.cwd = PathBuf::from(&tree.path);
@@ -431,7 +451,35 @@ impl OrdinarySpawnService {
                     SessionError::InvalidRequest(detail)
                         if detail == "invalid orchestration role provider" =>
                     {
-                        SpawnError::bad("invalid orchestration role provider")
+                        // The role that was refused (the first, in the order the
+                        // reservation checks them, whose provider is not an
+                        // orchestration provider) says why when its provider is a
+                        // custom provider whose setting was left out. Another
+                        // role naming a left-out id is not what failed.
+                        let left_out = roles
+                            .iter()
+                            .flatten()
+                            .filter_map(|(_, settings)| settings.as_ref())
+                            .find(|settings| {
+                                !settings.provider.is_empty()
+                                    && !crate::orchestration::child_options::ORCHESTRATION_PROVIDERS
+                                        .contains(&settings.provider.as_str())
+                            })
+                            .and_then(|failed| {
+                                super::left_out_provider::role_refusal(
+                                    &self.config,
+                                    &failed.provider,
+                                    crate::orchestration::child_options::ORCHESTRATION_PROVIDERS,
+                                )
+                            });
+                        match left_out {
+                            Some(reason) => SpawnError {
+                                status: 400,
+                                code: "bad_request",
+                                detail: reason.into(),
+                            },
+                            None => SpawnError::bad("invalid orchestration role provider"),
+                        }
                     }
                     SessionError::InvalidRequest(_) => {
                         SpawnError::bad("invalid orchestration role model")
@@ -510,12 +558,12 @@ pub(crate) fn policy_error(error: std::io::Error) -> SpawnError {
         Some(PolicyFailureStage::Route) => SpawnError {
             status: 400,
             code: "route_error",
-            detail: "route error",
+            detail: "route error".into(),
         },
         _ => SpawnError {
             status: 400,
             code: "invalid_subscription",
-            detail: "subscription profile error",
+            detail: "subscription profile error".into(),
         },
     }
 }
@@ -523,7 +571,7 @@ fn unavailable(detail: &'static str) -> SpawnError {
     SpawnError {
         status: 503,
         code: "not_ready",
-        detail,
+        detail: detail.into(),
     }
 }
 fn risk(spec: &WrappedSpawnSpec, policy: &ResolvedSpawnPolicy) -> bool {

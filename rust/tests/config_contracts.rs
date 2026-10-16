@@ -346,26 +346,32 @@ fn guarded_store_publishes_only_successful_writes_and_rejects_stale_snapshots() 
 }
 
 #[test]
-fn invalid_yaml_is_privately_backed_up_and_recovered_but_errors_are_redacted() {
+fn invalid_yaml_stops_loading_and_leaves_the_file_alone_with_a_redacted_error() {
     let (_root, _installed, paths) = trial();
     let path = paths.resource(Resource::Config);
-    let backup = paths.root().join("config.yaml.bak");
     let original = "token: synthetic-private-marker\nhub: [unterminated";
     std::fs::write(&path, original).unwrap();
     let error = Config::from_yaml(original, &paths).unwrap_err();
     assert!(!error.to_string().contains("synthetic-private-marker"));
-    let store = ConfigStore::load_or_create(paths, || Ok("synthetic-replacement".into())).unwrap();
-    assert!(store.recovered_from_invalid_yaml());
-    assert_eq!(
-        store.snapshot().unwrap().config.token,
-        "synthetic-replacement"
-    );
-    assert_eq!(std::fs::read_to_string(backup).unwrap(), original);
-    assert!(
-        std::fs::read_to_string(path)
-            .unwrap()
-            .contains("synthetic-replacement")
-    );
+    let error = match ConfigStore::load_or_create(paths.clone(), || {
+        panic!("an unreadable file must not get a new token")
+    }) {
+        Ok(_) => panic!("an unreadable file must stop the load"),
+        Err(error) => error,
+    };
+    // The error names the file, the position, and both ways forward.
+    let unreadable = error.unreadable().expect("whole-file error");
+    assert_eq!(unreadable.path, path);
+    assert!(unreadable.line.is_some() && unreadable.column.is_some());
+    let message = error.to_string();
+    assert!(message.contains(&path.display().to_string()));
+    assert!(message.contains("config reset"));
+    assert!(message.contains("config.yaml.bak_<date>_<time>"));
+    assert!(!message.contains("synthetic-private-marker"));
+    // Nothing was rewritten, moved or replaced.
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+    assert!(!paths.root().join("config.yaml.bak").exists());
+    assert!(!paths.resource(Resource::ConfigBackups).exists());
 }
 
 #[test]
@@ -431,7 +437,6 @@ fn loading_tolerated_sections_never_regenerates_or_rewrites_the_file() {
     let store =
         ConfigStore::load_or_create(paths, || panic!("existing token must not be regenerated"))
             .unwrap();
-    assert!(!store.recovered_from_invalid_yaml());
     assert_eq!(
         store.snapshot().unwrap().config.token,
         "synthetic-stable-token"
@@ -488,10 +493,18 @@ fn validation_and_backup_failures_preserve_existing_bytes() {
     assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
     let broken = "token: synthetic-unchanged\nhub: [broken";
     std::fs::write(&path, broken).unwrap();
+    assert!(
+        ConfigStore::load_or_create(paths.clone(), || panic!(
+            "an unreadable file must stop before generating a token"
+        ))
+        .is_err()
+    );
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), broken);
+    // A leftover directory where the old single backup used to go changes nothing either.
     std::fs::create_dir(paths.root().join("config.yaml.bak")).unwrap();
     assert!(
         ConfigStore::load_or_create(paths, || panic!(
-            "failed backup must stop before generating a token"
+            "an unreadable file must stop before generating a token"
         ))
         .is_err()
     );
@@ -555,7 +568,6 @@ fn historical_reads_and_new_write_validation_are_separate() {
     let snapshot = store.snapshot().unwrap();
     assert_eq!(snapshot.config.user_prefs.session_order, [7, 11]);
     assert_eq!(snapshot.config.token, "synthetic-historical-token");
-    assert!(!store.recovered_from_invalid_yaml());
     assert_eq!(std::fs::read_to_string(&file).unwrap(), historical);
     let mut invalid = snapshot.config.clone();
     invalid.hub.allowed_hosts = vec!["-invalid.example".into()];

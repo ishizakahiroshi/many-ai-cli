@@ -66,6 +66,8 @@ pub struct Dependencies {
     pub home: PathBuf,
     pub environment: Vec<String>,
     pub tasks: HubTaskHandle,
+    /// Used only to say why a provider whose setting was left out is refused.
+    pub config: Option<Arc<crate::config::ConfigStore>>,
 }
 pub struct GridSpawn {
     deps: Dependencies,
@@ -85,7 +87,7 @@ fn error(status: u16, code: &'static str, detail: &'static str) -> SpawnError {
     SpawnError {
         status,
         code,
-        detail,
+        detail: detail.into(),
     }
 }
 fn bad(detail: &'static str) -> SpawnError {
@@ -200,12 +202,35 @@ impl GridSpawn {
         if verified.auth_epoch() != self.deps.core.auth_epoch() {
             return Err(error(401, "unauthorized", "authentication expired"));
         }
+        if let Some(store) = &self.deps.config
+            && let Some(reason) = super::left_out_provider::new_sessions_refusal(store)
+        {
+            return Err(SpawnError {
+                status: 503,
+                code: "config_unreadable",
+                detail: reason.into(),
+            });
+        }
         let plan = body.plan(&self.deps.hub_cwd, &self.deps.home, |provider| {
             let registry = (self.deps.registry)()
                 .map_err(|_| error(503, "unavailable", "provider registry unavailable"))?;
-            Ok(registry
+            let valid = registry
                 .lookup(provider)
-                .is_some_and(|d| d.definition.enabled.unwrap_or(true)))
+                .is_some_and(|d| d.definition.enabled.unwrap_or(true));
+            // The same explanation an ordinary spawn gives (a setting left out of
+            // the file, or taken out of it by a save), in place of the plain message.
+            if !valid && let Some(store) = &self.deps.config {
+                let plain = "invalid ai provider for ai+shell preset";
+                let detail = super::left_out_provider::explain_from(store, provider, plain);
+                if detail != plain {
+                    return Err(SpawnError {
+                        status: 400,
+                        code: "bad_request",
+                        detail: detail.into(),
+                    });
+                }
+            }
+            Ok(valid)
         })?;
         if body.preset == "ai+shell" && self.deps.core.provider_updating(&plan.specs[0].0) {
             return Err(error(

@@ -26,7 +26,7 @@ impl GridHttp {
                 200,
                 &serde_json::json!({"ok":true,"layout":result.layout,"count":result.count}),
             ),
-            Err(error) => Response::error(error.status, error.code, error.detail),
+            Err(error) => Response::error(error.status, error.code, &error.detail),
         }
     }
 }

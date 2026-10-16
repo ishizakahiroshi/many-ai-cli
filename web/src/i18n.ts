@@ -9,6 +9,14 @@ export function setLang(v: string): void | undefined {
   return (typeof window.setLang === 'function') ? window.setLang(v) : undefined;
 }
 
+// {name} の置き換え。第 2 引数を文字列で渡すと、値に含まれる `$'` `$&` などが特殊記号として
+// 解釈され文面が壊れる（config.yaml の id など利用者が書いた値が入りうる）ので、関数で渡す。
+export function interpolate(text: string, vars: I18nVars): string {
+  let s = text;
+  Object.entries(vars).forEach(([k, v]) => { s = s.replaceAll('{' + k + '}', () => String(v)); });
+  return s;
+}
+
 (async () => {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
   const stored = localStorage.getItem('ai_cli_hub_lang');
@@ -34,9 +42,8 @@ export function setLang(v: string): void | undefined {
   }
 
   window.t = (key: string, vars?: I18nVars | string) => {
-    let s = String(dict[key] ?? key);
-    if (vars && typeof vars === 'object') Object.entries(vars).forEach(([k, v]) => { s = s.replaceAll('{' + k + '}', String(v)); });
-    return String(s);
+    const s = String(dict[key] ?? key);
+    return vars && typeof vars === 'object' ? interpolate(s, vars) : s;
   };
 
   window.setLang = (lang: string) => {

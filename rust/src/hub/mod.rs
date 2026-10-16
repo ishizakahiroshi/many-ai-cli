@@ -28,6 +28,7 @@ pub mod approval_status_routes;
 pub mod auto_approval;
 pub mod child_control;
 pub mod child_routes;
+pub mod config_problems;
 pub mod confirmations;
 pub mod diagnostic_routes;
 pub mod distribution_routes;

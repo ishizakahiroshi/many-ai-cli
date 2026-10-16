@@ -469,14 +469,27 @@ impl ChildLaunchExecutor {
                 &option_note,
             );
         }
+        // The settings file became unreadable while this Hub runs: the child
+        // `wrap` of a new session would stop on it. Say so up front.
+        if let Some(reason) =
+            crate::application::left_out_provider::new_sessions_refusal(&self.config)
+        {
+            return Err(ChildLaunchError::new(503, "config_unreadable", reason).into());
+        }
         if !super::child_options::ORCHESTRATION_PROVIDERS.contains(&raw.provider.as_str()) {
+            // A custom provider whose setting was left out says why.
             return Err(ChildLaunchError::new(
                 400,
                 "bad_request",
-                format!(
-                    "invalid provider {}; valid providers are: {}",
-                    go_quote(&raw.provider),
-                    super::child_options::ORCHESTRATION_PROVIDERS.join(", ")
+                crate::application::left_out_provider::explain_for_children(
+                    &self.config,
+                    &raw.provider,
+                    &format!(
+                        "invalid provider {}; valid providers are: {}",
+                        go_quote(&raw.provider),
+                        super::child_options::ORCHESTRATION_PROVIDERS.join(", ")
+                    ),
+                    super::child_options::ORCHESTRATION_PROVIDERS,
                 ),
             )
             .into());
