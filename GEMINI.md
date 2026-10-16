@@ -1,6 +1,7 @@
 # Gemini Entry Point (many-ai-cli)
 
-> 最終更新: 2026-09-30(水) 10:00:53 — 見送り台帳へのリンク切れと、対応 CLI を 2 つに限る記述を直した
+> 最終更新: 2026-10-16(金) 11:56:03 — 見送り台帳の撤廃に合わせ、Gemini CLI の扱いを「未対応・作る前に規約を確認」に改めた
+> 2026-09-30(水) 10:00:53 — 見送り台帳へのリンク切れと、対応 CLI を 2 つに限る記述を直した
 > 2026-09-21(月) 21:31:33 — v0.3.x 設計書の退避に合わせて正本の記述を改めた
 
 このリポジトリの運用ガイドは `CLAUDE.md` にある。
@@ -19,6 +20,6 @@
 
 ## Gemini 特記
 
-- **本リポジトリでは Gemini CLI を wrap 対象外とした**（2026-05-06 決定 / ToS グレーゾーンのため）。
-- 詳細: [docs/local/reference/reference_declined-directions.md](docs/local/reference/reference_declined-directions.md) の D-01
+- **Gemini CLI は現在 wrap 対象に入っていない（未対応）。** 2026-05-06 に規約上の理由で見送ったが、見送り台帳は 2026-10-16 に全件撤廃した。対応するかは利用者の使いやすさで決め、作る前に現行の規約で利用者のアカウントが止められないかを一次資料で確かめる（`CLAUDE.md` の「機能の採否は利用者の使いやすさで決める」）。
+- 過去の調査記録: [docs/local/reference/reference_declined-directions.md](docs/local/reference/reference_declined-directions.md) の D-01
 - 本リポジトリ自体は `many-ai-cli`（複数の AI コーディング CLI 向けの承認ハブ）の開発リポジトリであり、開発補助に Gemini CLI を使う場合の手引きとして本ファイルを残置している。

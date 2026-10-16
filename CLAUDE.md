@@ -1,6 +1,7 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-10-09(金) 19:36:22 — 全修正の普段のビルド元への反映を明文化
+> 最終更新: 2026-10-16(金) 11:56:03 — 利用者指定で見送り台帳 D-01〜D-13 と custom_providers の制限を全件撤廃し、判断基準を利用者の使いやすさに改めた
+> 2026-10-09(金) 19:36:22 — 全修正の普段のビルド元への反映を明文化
 > 2026-09-29(火) 21:14:45 — prompt-audit の指摘で、古くなった版数の段落を削り、サブコマンド表を現行の分岐に合わせ、`internal/` の列挙を索引への参照に替えた
 > 2026-09-28(月) 19:34:08 — 設計原則の索引「引き継ぎ看板と…」の行に、作業メモ（`memo_store.go`）に書かれたパスも `isPathMentionedInMemos` 経由で読み取り専用に開ける旨を追記（plan_memo-panel.md C4）
 > 2026-09-26(土) 01:08:47 — 引き継ぎメモの表示を、記録済みパスに対する明示的な Markdown プレビューとして設計原則の索引へ反映。索引化の経緯（2026-08-19）: 常時ロード分が 5 週間で 129 → 269 行に倍増したため「制定」節の本文を正本へ移した。再肥大は `scripts/check-claude-md.mjs` が CI で止める
@@ -33,7 +34,7 @@
 | 設定ファイル | `~/.many-ai-cli/config.yaml`（Win: `%USERPROFILE%\.many-ai-cli\config.yaml`） |
 | ログ | `~/.many-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl/.txt` |
 | 透過化環境変数 | `MANY_AI_CLI_AUTO=1` |
-| Provider | `claude` / `codex` / `copilot` / `cursor-agent` / `opencode` / `grok` / `command-code`（`command-code` は承認検出が未検証・`gemini` は対象外で見送り台帳 D-01・任意の CLI は `config.yaml` の `custom_providers`） |
+| Provider | `claude` / `codex` / `copilot` / `cursor-agent` / `opencode` / `grok` / `command-code`（`command-code` は承認検出が未検証・`gemini` は未対応・任意の CLI は `config.yaml` の `custom_providers`） |
 
 > **grep 注意**: 旧名 `any-ai-cli` は新名 `many-ai-cli` の部分文字列（`m` + `any-ai-cli`）。旧名マーカーの残骸を新名パターンで grep すると **0 件に見える**。旧名側のパターンで grep すれば新旧どちらにも当たる。また `docs/local` と `docs/obsidian` はジャンクションで、AI の Glob / Grep ツールは中を辿らず同じく **0 件に見える**。この 2 つの列挙・検索は PowerShell で行う。
 
@@ -90,27 +91,16 @@ docs/local/               設計書・plan 等（非公開）
 
 **新しいルールを足したくなったら、まずこの表に 1 行足せる形にできないかを考える。** できないもの（機械検査も、決まったファイルも無いもの）だけが本文を持ってよい。
 
-## 見送った方針は台帳で管理する（提案の前に読む）
+## 機能の採否は利用者の使いやすさで決める（2026-10-16 改定）
 
-**台帳: [`docs/local/reference/reference_declined-directions.md`](docs/local/reference/reference_declined-directions.md)。** 各項目に「再検討してよい条件」と「再検討の根拠にしてはいけないもの」が書いてある。見送りは永久否定ではないので、条件が満たされているなら再検討してよい。**新しい見送りは台帳に行を足す。ここに節を作らない。**
+**提案・採否の基準は「利用者が使いやすくなるか」だけにする。** 2026-10-16 の利用者指定で、見送り台帳 D-01〜D-13 と `custom_providers` の制限（玄人設定・手書きのみ・UI から追加させない・フックは built-in のみ・サンプル限定。2026-08-31 決定）を全件撤廃した。[`docs/local/reference/reference_declined-directions.md`](docs/local/reference/reference_declined-directions.md) は過去の調査記録として読むだけにし、提案を止める根拠には使わない。「作者が使うまで作らない」「規模が小さいので採否を決められない」も根拠にしない。
 
-| ID | 見送った方針 |
-|---|---|
-| D-01 | Gemini CLI を wrap 対象に入れる（利用規約上の制約・2026-05-06 決定。Antigravity `agy` の wrap 追加も同じ判断・2026-08-25 に一次資料で再確認） |
-| D-02 | 新規 provider を増やす（20 製品を調査し全件見送り） |
-| D-03 | セッション カンバンビュー |
-| D-04 | Windows デスクトップアプリ化（Tauri）と Microsoft Store 提出 |
-| D-05 | Copilot / Cursor Agent の複数サブスクリプション対応 |
-| D-06 | OpenRouter を route（接続先）として載せる |
-| D-07 | NVIDIA NIM（build.nvidia.com）を route として載せる（規約が trial / 非 production 限定・2026-08-29 決定） |
-| D-08 | 作者個人の指示ファイル走査を `wrap` の共通入口に埋める（公開製品に個人パスが入る・2026-08-29 決定） |
-| D-09 | ChatGPT Web を Codex の計画・レビュー用バックエンドとして自動操作する（利用者へ規約・アカウントリスクを負わせるため導入しない・2026-08-30 決定） |
-| D-10 | agenttrail 型のエージェント観察ボード（`PLAN.md` 規約 + ファイル監視 + hook 注入）を取り込む（軸が承認管理と違い、宣言と観測の突き合わせは relay 内で済む・2026-08-30 決定） |
-| D-11 | 認証済み Hub token をユーザー等価より狭める（capability token・遠隔 deny・PIN 必須化・query token 廃止。信頼境界は「token 保持者 = OS ユーザー本人」・2026-09-01 決定） |
-| D-12 | orchestration 子の全許可バイパスを既定 off にする（`child_full_bypass` を既定 `false` へ。relay が無人で回らなくなる・spawn 確認は既に必須・2026-09-08 決定） |
-| D-13 | Command Code Desktop 由来の 4 案（内蔵ブラウザ + Design mode / Taste 学習の Hub 再実装 / Desktop へ開く導線 / 活動タイムライン専用ペイン。どれも 1 エージェントを深く使う面で承認管理の軸に乗らない・2026-09-20 決定） |
+作る前に確かめるのは、利用者に害が出るかどうかだけ。
 
-**共通する却下理由**（個別に蒸し返さないため 1 度だけ書く）: 候補の人気・伸び・他社の対応状況・利用者増の見込みを根拠にしない。本ツールの規模（star 6 / npm 週次 11・2026-08-14 実測）では、それらを根拠に採否を決める枠組みが成立しない。起点は「作者が実際に使っていて、日常の並列運用に入っているか」。
+- 規約上、利用者のアカウントが止められるおそれがある連携（旧 D-01 Gemini・Antigravity / D-07 NVIDIA NIM / D-09 ChatGPT Web の自動操作など）は、作る前に現行の規約を一次資料で確かめる
+- 公開版に作者の個人パス・秘密を入れない（旧 D-08）。Hub token を画面・ログ・会話へ出さない
+
+上の「設計原則の索引」は不具合の再発を止める実装上の約束で、撤廃の対象外。進行中の作業は [`docs/local/plan_user-first-config-and-providers.md`](docs/local/plan_user-first-config-and-providers.md)。
 
 ## AI 作業共通ルール
 
