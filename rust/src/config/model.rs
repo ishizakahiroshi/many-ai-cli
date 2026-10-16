@@ -3900,7 +3900,12 @@ impl ConfigStore {
             Err(e) if super::backup::is_too_large(&e) => Err(ConfigError::Invalid(
                 super::safety::ConfigUnreadable::too_large(&self.paths).save_refused_en(),
             )),
-            Err(e) => Err(e.into()),
+            // The file could not be examined at all (a folder in its place, a
+            // lock, a permission). That is not a broken edit, so this check does
+            // not refuse: the save goes on and `write_config` reports its own
+            // I/O error, keeping the publish-before-failed-save behaviour the
+            // legacy callers rely on. Same rule as `new_sessions_blocker`.
+            Err(_) => Ok(()),
         }
     }
     fn write_config(&self, payload: &[u8]) -> Result<(), ConfigError> {
