@@ -790,3 +790,76 @@ async fn null_id_is_optional_but_blank_string_id_is_invalid() {
     assert_eq!(body(&response)["session_id"], binding.session.0);
     observed_dismissals(&f, 1).await;
 }
+
+#[tokio::test]
+async fn warm_reattach_preserves_close_attribution_without_accepting_stale_wrapper() {
+    for from_dashboard in [false, true] {
+        let f = fixture().await;
+        let original = child(&f, "worker", Timestamp::now()).await;
+        let snapshot = f.core.snapshot(original.session).unwrap();
+        let current = f
+            .core
+            .reattach(
+                ReattachRequest {
+                    restored_metadata: None,
+                    message: crate::proto::Message {
+                        session_id: original.session.0,
+                        provider: snapshot.provider,
+                        cwd: snapshot.cwd,
+                        // The synthetic spawner uses its wrapper number as PID.
+                        pid: original.wrapper.0 as i64,
+                        cols: 120,
+                        rows: 30,
+                        ..Default::default()
+                    },
+                },
+                WrapperConnectionId(900),
+                Timestamp::now(),
+            )
+            .await
+            .unwrap()
+            .binding;
+        assert!(current != original);
+        assert_eq!(current.session, original.session);
+        assert_eq!(current.incarnation, original.incarnation);
+        assert!(f.core.details(current.session).unwrap().binding == current);
+        // The board still owns the launch-time registration. Attribution must
+        // follow this incarnation, while dismissal still rejects stale wrappers.
+        assert!(matches!(
+            f.owner.close_child_by_conductor(
+                f.binding.session,
+                original,
+                Timestamp::now(),
+            ),
+            Err(SessionError::StaleBinding)
+        ));
+        assert!(f.core.snapshot(current.session).is_some());
+        let state = f.core.snapshot(current.session).unwrap().state;
+        if from_dashboard {
+            dashboard_dismiss(&f, current).await;
+        } else {
+            let response = close(&f, "worker", Some(current.session.0));
+            assert_eq!(response.status, 200);
+            assert_eq!(body(&response)["state_before"], state);
+        }
+        assert!(f.core.snapshot(current.session).is_none());
+        observed_dismissals(&f, 1).await;
+        assert_eq!(*lock(&f.io.stopped), vec![current.session]);
+        if from_dashboard {
+            let board = evidence(&f);
+            assert!(board.contains("closed by the user; its work may be unfinished"));
+            assert!(!board.contains("closed by the conductor"));
+            let notice = delivered_notices(&f, 1).await;
+            assert!(notice.contains("closed from the dashboard by the user"));
+            assert!(!notice.contains("child closed by you"));
+        } else {
+            assert_conductor_record(&f, current, "worker", &state);
+            let notice = delivered_notices(&f, 1).await;
+            assert!(notice.contains(&format!(
+                "child closed by you role=worker id={} state_before={state}",
+                current.session.0
+            )));
+            assert!(!notice.contains("closed from the dashboard"));
+        }
+    }
+}

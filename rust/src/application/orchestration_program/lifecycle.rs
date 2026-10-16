@@ -39,9 +39,11 @@ impl OrchestrationProgram {
                 matches!(effect, CoreEffect::Notify(CoreEvent::Dismissed(id)) if *id == binding.session)
             });
             if closed {
+                // Warm reattach replaces the wrapper connection, while the
+                // registered child retains its session/incarnation identity.
                 for board in owned.boards.values_mut() {
                     if let Some(child) = board.children.get_mut(&binding.session)
-                        && child.registration.binding == binding
+                        && child.registration.binding.incarnation == binding.incarnation
                         && child.registration.parent.session == parent
                     {
                         child.conductor_closed_state = Some(state_before.clone());
