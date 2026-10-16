@@ -79,7 +79,7 @@ fn forced_backup_happens_once_for_lossy_add_and_clean_remove() {
         .unwrap();
     assert!(comments);
     let backup = backup.unwrap();
-    assert_eq!(fixture.backups(), [backup.clone()]);
+    assert_eq!(fixture.backups(), std::slice::from_ref(&backup));
     assert_eq!(std::fs::read(backup.path).unwrap(), original.as_bytes());
     assert_eq!(added.config.custom_providers, [provider()]);
     assert_eq!(added.config.token, TOKEN);
@@ -280,7 +280,9 @@ fn ordinary_persist_still_avoids_redundant_backups() {
 
 #[test]
 fn comment_notice_uses_yaml_comments_instead_of_hashes_inside_values() {
-    assert!(has_yaml_comments(b"# top-level comment\ntoken: synthetic\n"));
+    assert!(has_yaml_comments(
+        b"# top-level comment\ntoken: synthetic\n"
+    ));
     assert!(has_yaml_comments(b"token: synthetic # inline comment\n"));
     assert!(!has_yaml_comments(b"token: 'synthetic # quoted text'\n"));
     assert!(!has_yaml_comments(
@@ -471,8 +473,7 @@ fn read_only_load_preserves_permissions_and_valid_save_makes_private_files() {
     let fixture = Fixture::new();
     fixture.write(format!("token: {TOKEN}\n"));
     let file = fixture.paths.resource(Resource::Config);
-    std::fs::set_permissions(fixture.paths.root(), std::fs::Permissions::from_mode(0o755))
-        .unwrap();
+    std::fs::set_permissions(fixture.paths.root(), std::fs::Permissions::from_mode(0o755)).unwrap();
     std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
     let store = fixture.load();
     let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;

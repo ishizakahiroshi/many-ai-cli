@@ -260,7 +260,10 @@ pub fn prepare(
         body.origin(),
         &cfg.orchestration,
     );
-    if !TABLE.iter().any(|row| row.provider == body.request().provider) {
+    if !TABLE
+        .iter()
+        .any(|row| row.provider == body.request().provider)
+    {
         let request = body.request_mut();
         request.permission_mode.clear();
         request.sandbox.clear();
@@ -548,7 +551,6 @@ mod tests {
         }
     }
 
-
     fn custom(id: &str, command: &str) -> config::CustomProvider {
         config::CustomProvider {
             id: id.into(),
@@ -565,11 +567,13 @@ mod tests {
             custom("disabled", "synthetic-cli"),
             custom("no-launch", "synthetic-cli"),
         ]);
-        definitions.iter_mut().for_each(|definition| match definition.id.as_str() {
-            "disabled" => definition.enabled = Some(false),
-            "no-launch" => definition.launch = None,
-            _ => {}
-        });
+        definitions
+            .iter_mut()
+            .for_each(|definition| match definition.id.as_str() {
+                "disabled" => definition.enabled = Some(false),
+                "no-launch" => definition.launch = None,
+                _ => {}
+            });
         let registry = Registry::build(
             crate::proto::provider::Layers {
                 embedded: Some(crate::profile::registry::embedded_definitions().unwrap()),
@@ -580,12 +584,23 @@ mod tests {
         );
         assert!(provider_is_usable(&registry, "claude"));
         assert!(provider_is_usable(&registry, "synthetic-custom"));
-        for provider in ["dropped", "disabled", "no-launch", "unknown", "shell", "Synthetic-custom"] {
+        for provider in [
+            "dropped",
+            "disabled",
+            "no-launch",
+            "unknown",
+            "shell",
+            "Synthetic-custom",
+        ] {
             assert!(!provider_is_usable(&registry, provider), "{provider}");
         }
         let valid = usable_provider_ids(&registry);
         assert!(valid.contains(&"synthetic-custom".to_owned()));
-        assert!(!valid.iter().any(|id| ["dropped", "disabled", "no-launch"].contains(&id.as_str())));
+        assert!(
+            !valid
+                .iter()
+                .any(|id| ["dropped", "disabled", "no-launch"].contains(&id.as_str()))
+        );
     }
 
     #[test]
@@ -620,7 +635,8 @@ mod tests {
                 "ask_for_approval": "never"
             })),
             &cfg,
-        ).unwrap();
+        )
+        .unwrap();
         assert!(prepared.request().permission_mode.is_empty());
         assert!(prepared.request().sandbox.is_empty());
         assert!(prepared.request().ask_for_approval.is_empty());

@@ -1016,7 +1016,6 @@ async fn confirmation_changes_record_original_resolved_provider_on_the_real_boar
     assert!(notes[0].contains("permission_preset: requested=\"full\" decided=\"attended\""));
 }
 
-
 #[tokio::test]
 async fn custom_launch_retains_prompt_and_neutral_permissions_after_provider_change() {
     let f = executor_fixture_with(Config {
@@ -1028,18 +1027,25 @@ async fn custom_launch_retains_prompt_and_neutral_permissions_after_provider_cha
         ..Default::default()
     })
     .await;
-    let mut request = launch_request(&f, ChildSpawnRequest {
-        provider: "synthetic-custom".into(),
-        initial_prompt: "synthetic custom task".into(),
-        permission_preset: "full".into(),
-        permission_mode: "bypassPermissions".into(),
-        sandbox: "danger-full-access".into(),
-        ask_for_approval: "never".into(),
-        risk_confirmed: true,
-        ..Default::default()
-    });
+    let mut request = launch_request(
+        &f,
+        ChildSpawnRequest {
+            provider: "synthetic-custom".into(),
+            initial_prompt: "synthetic custom task".into(),
+            permission_preset: "full".into(),
+            permission_mode: "bypassPermissions".into(),
+            sandbox: "danger-full-access".into(),
+            ask_for_approval: "never".into(),
+            risk_confirmed: true,
+            ..Default::default()
+        },
+    );
     request.original_body.request_mut().provider = "claude".into();
-    let out = f.executor.spawn(request, TaskCancellation::default()).await.unwrap();
+    let out = f
+        .executor
+        .spawn(request, TaskCancellation::default())
+        .await
+        .unwrap();
     let children = f.services.children.lock().unwrap();
     let child = children.last().unwrap();
     assert_eq!(child.restart_spec.provider, "synthetic-custom");
@@ -1049,9 +1055,26 @@ async fn custom_launch_retains_prompt_and_neutral_permissions_after_provider_cha
     assert!(!child.restart_spec.risk_confirmed);
     assert!(!child.prompt_via_launch_arg);
     assert!(child.initial_prompt.contains("synthetic custom task"));
-    assert!(child.inject_after_registration.as_ref().unwrap().contains("synthetic custom task"));
-    assert_eq!(f.config.snapshot().unwrap().config.user_prefs.spawn.role_provider["review"], "synthetic-custom");
-    assert!(fs::read_to_string(out.board_path).unwrap().contains(
-        "provider changed at confirmation: requested=claude decided=synthetic-custom"
-    ));
+    assert!(
+        child
+            .inject_after_registration
+            .as_ref()
+            .unwrap()
+            .contains("synthetic custom task")
+    );
+    assert_eq!(
+        f.config
+            .snapshot()
+            .unwrap()
+            .config
+            .user_prefs
+            .spawn
+            .role_provider["review"],
+        "synthetic-custom"
+    );
+    assert!(
+        fs::read_to_string(out.board_path).unwrap().contains(
+            "provider changed at confirmation: requested=claude decided=synthetic-custom"
+        )
+    );
 }

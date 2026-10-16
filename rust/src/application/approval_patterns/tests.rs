@@ -552,7 +552,9 @@ fn custom_options_load_without_sync_and_survive_owner_recreation() {
     ];
     assert!(crate::approval::detect::detect_native("muse", &lines, &[]).is_none());
     assert!(crate::approval::detect::detect_native("muse", &lines, &phrases).is_some());
-    assert!(crate::approval::detect::detect_native("muse", &lines, &["allow.*once".into()]).is_none());
+    assert!(
+        crate::approval::detect::detect_native("muse", &lines, &["allow.*once".into()]).is_none()
+    );
 }
 
 #[test]
@@ -610,7 +612,14 @@ fn unknown_dropped_and_nonexact_custom_ids_cannot_write_patterns() {
     config.custom_providers[1].command = "\"unclosed".into();
     let fixture = fixture_with_config(config);
     let owner = &fixture.owner;
-    for provider in ["missing", "dropped", "MUSE", " muse ", "../muse", "muse/child"] {
+    for provider in [
+        "missing",
+        "dropped",
+        "MUSE",
+        " muse ",
+        "../muse",
+        "muse/child",
+    ] {
         assert!(owner.read(provider, "custom").is_err(), "{provider}");
         assert!(
             owner.write_custom(provider, &["phrase".into()]).is_err(),

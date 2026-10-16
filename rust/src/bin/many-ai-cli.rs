@@ -579,8 +579,11 @@ async fn run() -> Result<(), String> {
                     many_ai_cli::config::ConfigStore::load_for_provider(paths)
                         .map_err(|e| e.to_string())?,
                 );
-                print!("{}", many_ai_cli::application::maintenance_cli::custom_provider::run(&store, &args)
-                    .map_err(|e| e.to_string())?);
+                print!(
+                    "{}",
+                    many_ai_cli::application::maintenance_cli::custom_provider::run(&store, &args)
+                        .map_err(|e| e.to_string())?
+                );
                 return Ok(());
             }
             let context = main_program::MainContext::load(invocation.trial.as_ref())

@@ -868,8 +868,7 @@ mod custom_approval_tests {
         terminal::journal::JournalOptions,
     };
 
-    const NATIVE_PROMPT: &str =
-        "Run synthetic command\r\n❯ 1. Allow once\r\n2. Always allow in this workspace\r\n3. Reject\r\n";
+    const NATIVE_PROMPT: &str = "Run synthetic command\r\n❯ 1. Allow once\r\n2. Always allow in this workspace\r\n3. Reject\r\n";
 
     async fn fixture(provider: &str) -> (tempfile::TempDir, Arc<SessionEngine>, SessionBinding) {
         let root = tempfile::tempdir().unwrap();
@@ -966,7 +965,10 @@ mod custom_approval_tests {
 
     #[tokio::test]
     async fn registered_custom_provider_detects_its_saved_options_and_common_phrases() {
-        for prompt in [NATIVE_PROMPT, "Synthetic shared gate\r\n❯ 1. Yes\r\n2. No\r\n"] {
+        for prompt in [
+            NATIVE_PROMPT,
+            "Synthetic shared gate\r\n❯ 1. Yes\r\n2. No\r\n",
+        ] {
             let (_root, core, binding) = fixture("muse").await;
             let effects = output(&core, binding, prompt);
             assert!(effects.0.iter().any(|effect| matches!(

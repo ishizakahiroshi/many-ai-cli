@@ -2301,7 +2301,13 @@ async fn custom_relay_refuses_dropped_and_unknown_ids_with_the_live_valid_list()
             .provider = provider.into();
         // A built-in sibling would require acknowledgment, but an invalid
         // provider must first get its own reason and the valid provider list.
-        request.roles.get_mut(REVIEW).unwrap().as_mut().unwrap().provider = "claude".into();
+        request
+            .roles
+            .get_mut(REVIEW)
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .provider = "claude".into();
         let error = f
             .program
             .start_relay(

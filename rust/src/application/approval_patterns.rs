@@ -191,7 +191,8 @@ impl ApprovalPatterns {
                     .map(|v| ((*p).into(), v))
             })
             .collect::<io::Result<BTreeMap<_, _>>>()?;
-        for provider in crate::config::effective_custom_providers(&snapshot.config.custom_providers) {
+        for provider in crate::config::effective_custom_providers(&snapshot.config.custom_providers)
+        {
             if !known(&provider.id) {
                 active.insert(provider.id.clone(), self.custom_active(&provider.id)?);
             }
@@ -236,10 +237,7 @@ impl ApprovalPatterns {
             } else {
                 self.custom_active_bytes(&provider)
             };
-            let list = bytes
-                .ok()
-                .and_then(|b| json(&b).ok())
-                .unwrap_or_default();
+            let list = bytes.ok().and_then(|b| json(&b).ok()).unwrap_or_default();
             set.insert(
                 provider,
                 list.into_iter()

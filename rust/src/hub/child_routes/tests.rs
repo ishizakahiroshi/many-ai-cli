@@ -122,19 +122,17 @@ struct Fixture {
 async fn fixture(confirm: &str, limit: i64) -> Fixture {
     fixture_with(confirm, limit, Vec::new()).await
 }
-async fn fixture_with(
-    confirm: &str,
-    limit: i64,
-    custom: Vec<config::CustomProvider>,
-) -> Fixture {
+async fn fixture_with(confirm: &str, limit: i64, custom: Vec<config::CustomProvider>) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let runtime = root.path().join("trial");
     std::fs::create_dir(&runtime).unwrap();
     let project = runtime.join("project");
     std::fs::create_dir(&project).unwrap();
     let paths = RuntimePaths::trial(&runtime, 49677, &root.path().join("installed")).unwrap();
-    let mut cfg = Config::default();
-    cfg.custom_providers = custom;
+    let mut cfg = Config {
+        custom_providers: custom,
+        ..Config::default()
+    };
     cfg.orchestration.spawn_confirm_mode = confirm.into();
     cfg.orchestration.max_children_per_parent = limit;
     let config = Arc::new(ConfigStore::new(paths.clone(), cfg).unwrap());
@@ -552,7 +550,6 @@ async fn children_query_includes_terminal_children_and_unknown_parent_is_empty()
     assert!(json["children"].as_array().unwrap().is_empty());
 }
 
-
 fn custom_entries() -> Vec<config::CustomProvider> {
     vec![
         config::CustomProvider {
@@ -645,37 +642,71 @@ async fn confirmation_provider_changes_revalidate_custom_ids_and_remember_succes
         if removed {
             let mut snapshot = f.route.config.snapshot().unwrap();
             snapshot.config.custom_providers.clear();
-            f.route.config
+            f.route
+                .config
                 .publish_then_persist_legacy(snapshot.revision, snapshot.config)
                 .unwrap();
         }
-        let decision = f.core.clone().accept_decision(
-            SpawnConfirmationResponse {
-                confirmation_id: pending.id,
-                approved: true,
-                provider: selected.into(),
-                permission_preset: Some("full".into()),
-                ..Default::default()
-            },
-            VerifiedConfirmationRequest::after_server_authentication(AuthEpoch(0)),
-            Timestamp::now(),
-        )
-        .unwrap();
+        let decision = f
+            .core
+            .clone()
+            .accept_decision(
+                SpawnConfirmationResponse {
+                    confirmation_id: pending.id,
+                    approved: true,
+                    provider: selected.into(),
+                    permission_preset: Some("full".into()),
+                    ..Default::default()
+                },
+                VerifiedConfirmationRequest::after_server_authentication(AuthEpoch(0)),
+                Timestamp::now(),
+            )
+            .unwrap();
         f.io.release.add_permits(1);
         let outcome = bounded(decision.run(TaskCancellation::default()).unwrap()).await;
         let response = bounded(http).await.unwrap();
         if selected == "synthetic-custom" && !removed {
             assert!(matches!(outcome, ConfirmationOutcome::Approved(_)));
             assert_eq!(response.status, 200);
-            assert_eq!(f.route.config.snapshot().unwrap().config.user_prefs.spawn.role_provider["worker"], selected);
-            assert!(f.core.snapshots().iter().any(|child| child.provider == selected));
+            assert_eq!(
+                f.route
+                    .config
+                    .snapshot()
+                    .unwrap()
+                    .config
+                    .user_prefs
+                    .spawn
+                    .role_provider["worker"],
+                selected
+            );
+            assert!(
+                f.core
+                    .snapshots()
+                    .iter()
+                    .any(|child| child.provider == selected)
+            );
         } else {
             assert!(matches!(outcome, ConfirmationOutcome::SpawnFailed(_)));
             assert_eq!(response.status, 400);
             let json: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
-            assert!(json["detail"].as_str().unwrap().contains("valid providers are:"));
+            assert!(
+                json["detail"]
+                    .as_str()
+                    .unwrap()
+                    .contains("valid providers are:")
+            );
             assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
-            assert!(!f.route.config.snapshot().unwrap().config.user_prefs.spawn.role_provider.contains_key("worker"));
+            assert!(
+                !f.route
+                    .config
+                    .snapshot()
+                    .unwrap()
+                    .config
+                    .user_prefs
+                    .spawn
+                    .role_provider
+                    .contains_key("worker")
+            );
         }
         assert!(f.core.pending().is_empty());
     }

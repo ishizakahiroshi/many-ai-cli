@@ -807,7 +807,6 @@ async fn request_resolution_uses_runtime_mapping_even_with_explicit_provider_and
     assert!(body.permission_preset.is_empty());
 }
 
-
 fn custom_config() -> Config {
     Config {
         custom_providers: vec![
@@ -832,13 +831,22 @@ async fn conductor_roles_accept_usable_custom_and_explain_dropped_and_unknown_id
     for provider in ["synthetic-custom", "dropped", "unknown"] {
         let roles = BTreeMap::from([(
             "review".into(),
-            Some(RoleSettings { provider: provider.into(), ..Default::default() }),
+            Some(RoleSettings {
+                provider: provider.into(),
+                ..Default::default()
+            }),
         )]);
-        let result = f.owner.reserve_conductor(&mut String::new(), Some(&roles), Timestamp::now());
+        let result = f
+            .owner
+            .reserve_conductor(&mut String::new(), Some(&roles), Timestamp::now());
         if provider == "synthetic-custom" {
             let id = result.unwrap();
             assert_eq!(f.owner.roles(&id)["review"].provider, provider);
-            assert!(f.owner.conductor_prompt(&id).contains("provider=synthetic-custom"));
+            assert!(
+                f.owner
+                    .conductor_prompt(&id)
+                    .contains("provider=synthetic-custom")
+            );
         } else {
             let Err(SessionError::InvalidRequest(detail)) = result else {
                 panic!("unusable custom role was not refused");
@@ -856,21 +864,45 @@ async fn conductor_roles_accept_usable_custom_and_explain_dropped_and_unknown_id
 async fn remembered_and_parent_custom_providers_use_the_live_registry() {
     let f = fixture_with(custom_config()).await;
     configure(&f, |cfg| {
-        cfg.user_prefs.spawn.role_provider.insert("review".into(), "synthetic-custom".into());
+        cfg.user_prefs
+            .spawn
+            .role_provider
+            .insert("review".into(), "synthetic-custom".into());
     });
     let mut parent = f.core.snapshot(f.binding.session).unwrap();
-    let mut body = ChildSpawnRequest { role: "review".into(), ..Default::default() };
-    assert_eq!(f.owner.resolve_child_request(&parent, &mut body).unwrap(), "remembered");
+    let mut body = ChildSpawnRequest {
+        role: "review".into(),
+        ..Default::default()
+    };
+    assert_eq!(
+        f.owner.resolve_child_request(&parent, &mut body).unwrap(),
+        "remembered"
+    );
     assert_eq!(body.provider, "synthetic-custom");
     configure(&f, |cfg| {
-        cfg.user_prefs.spawn.role_provider.insert("review".into(), "dropped".into());
+        cfg.user_prefs
+            .spawn
+            .role_provider
+            .insert("review".into(), "dropped".into());
     });
     parent.provider = "synthetic-custom".into();
-    let mut body = ChildSpawnRequest { role: "review".into(), ..Default::default() };
-    assert_eq!(f.owner.resolve_child_request(&parent, &mut body).unwrap(), "parent");
+    let mut body = ChildSpawnRequest {
+        role: "review".into(),
+        ..Default::default()
+    };
+    assert_eq!(
+        f.owner.resolve_child_request(&parent, &mut body).unwrap(),
+        "parent"
+    );
     assert_eq!(body.provider, "synthetic-custom");
     configure(&f, |cfg| cfg.custom_providers.clear());
-    let mut body = ChildSpawnRequest { role: "review".into(), ..Default::default() };
-    assert_eq!(f.owner.resolve_child_request(&parent, &mut body).unwrap(), "default");
+    let mut body = ChildSpawnRequest {
+        role: "review".into(),
+        ..Default::default()
+    };
+    assert_eq!(
+        f.owner.resolve_child_request(&parent, &mut body).unwrap(),
+        "default"
+    );
     assert_eq!(body.provider, "codex");
 }

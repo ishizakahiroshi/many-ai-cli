@@ -3950,8 +3950,7 @@ impl ConfigStore {
         let had_comments = current.as_deref().is_some_and(has_yaml_comments);
         let backup = if let Some(current) = current.as_deref()
             && (always_backup
-                || (current != payload
-                    && (disk.lossy || disk.known.as_deref() != Some(current))))
+                || (current != payload && (disk.lossy || disk.known.as_deref() != Some(current))))
         {
             let backups = super::backup::ConfigBackups::new(&self.paths);
             let record = backups.create_in(&directory, current)?;
@@ -4023,7 +4022,10 @@ impl ConfigStore {
             state.config.custom_provider_problems()
         };
         let mut by_index = BTreeMap::<Option<usize>, Vec<&super::safety::ConfigProblem>>::new();
-        for problem in problems.iter().filter(|problem| problem.is_provider_entry()) {
+        for problem in problems
+            .iter()
+            .filter(|problem| problem.is_provider_entry())
+        {
             by_index.entry(problem.index).or_default().push(problem);
         }
         // Redact strings before JSON encoding, including tokens containing

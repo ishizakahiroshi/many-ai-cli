@@ -682,7 +682,11 @@ async fn conductor_invalid_role_after_worktree_preparation_rolls_back_before_res
     )]));
     let error = f.spawn(body).await.unwrap_err();
     assert_eq!(error.status, 400);
-    assert!(error.detail.contains("invalid orchestration role provider \"invalid-provider\""));
+    assert!(
+        error
+            .detail
+            .contains("invalid orchestration role provider \"invalid-provider\"")
+    );
     assert!(error.detail.contains("valid providers are: claude, codex"));
     assert!(f.capture.requests.lock().unwrap().is_empty());
     assert!(f.service.core.begin_provider_update("copilot").is_ok());
@@ -851,7 +855,11 @@ async fn a_refused_role_gets_its_own_reason_and_not_the_reason_of_another_role()
     ]));
     let error = f.spawn(body).await.unwrap_err();
     assert_eq!(error.status, 400);
-    assert!(error.detail.contains("invalid orchestration role provider \"invalid-provider\""));
+    assert!(
+        error
+            .detail
+            .contains("invalid orchestration role provider \"invalid-provider\"")
+    );
     assert!(error.detail.contains("valid providers are: claude, codex"));
     // When the refused role is the one with the left-out id, its reason is given.
     let mut body = f.body();
@@ -902,7 +910,6 @@ async fn while_the_settings_file_cannot_be_read_a_new_session_says_so() {
     f.spawn(f.body()).await.unwrap();
 }
 
-
 #[tokio::test]
 async fn conductor_accepts_custom_role_and_lists_it_when_another_role_is_invalid() {
     let f = conductor_fixture_with(SpawnStartOutcome::Started { pid: 42 }, |cfg| {
@@ -914,16 +921,26 @@ async fn conductor_accepts_custom_role_and_lists_it_when_another_role_is_invalid
     });
     let mut body = f.body();
     body.orchestration = true;
-    body.orchestration_roles = Some(BTreeMap::from([("review".into(), role("synthetic-custom"))]));
+    body.orchestration_roles = Some(BTreeMap::from([(
+        "review".into(),
+        role("synthetic-custom"),
+    )]));
     let id = f.spawn(body).await.unwrap().unwrap();
-    assert_eq!(f.service.orchestration.as_ref().unwrap().roles(&id)["review"].provider, "synthetic-custom");
+    assert_eq!(
+        f.service.orchestration.as_ref().unwrap().roles(&id)["review"].provider,
+        "synthetic-custom"
+    );
     let mut body = f.body();
     body.orchestration = true;
     body.label = "synthetic-second-conductor".into();
     body.orchestration_roles = Some(BTreeMap::from([("review".into(), role("unknown"))]));
     let error = f.spawn(body).await.unwrap_err();
     assert_eq!(error.status, 400);
-    assert!(error.detail.contains("invalid orchestration role provider \"unknown\""));
+    assert!(
+        error
+            .detail
+            .contains("invalid orchestration role provider \"unknown\"")
+    );
     assert!(error.detail.contains("valid providers are: claude, codex"));
     assert!(error.detail.contains("command-code, synthetic-custom"));
 }
