@@ -1,4 +1,4 @@
-import { initializeSessionListTabs, renderSessionListTabs, isSessionInSelectedListTab, preserveSessionListSelection, visibleSessionListTree, revealSessionListOwner, sessionListScrollBeforeRender, sessionListScrollAfterRender } from './session-list-tabs.js';
+import { initializeSessionListTabs, renderSessionListTabs, isSessionInSelectedListTab, preserveSessionListSelection, visibleSessionListTree, revealSessionListOwner, sessionListScrollBeforeRender, sessionListScrollAfterRender, isSessionListStopped, noteSessionListOpened } from './session-list-tabs.js';
 import { isApprovalPending } from './approval-store.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
@@ -153,6 +153,10 @@ function appendSessionColorFilters(root: HTMLElement): void {
 }
 
 export function updateSessionListActiveCard(id) {
+  // 開いたセッションの「止まった後まだ開いていない」印（タブの数字・黄色い●）を消す。
+  // セッションを開く 2 つの経路（activateSession / activateSessionForMultiPane）が
+  // どちらもここを通る。
+  const stoppedMarkCleared = noteSessionListOpened(id);
   revealSessionListOwner(id);
   const root = document.getElementById('sessions');
   if (!root) return;
@@ -160,10 +164,18 @@ export function updateSessionListActiveCard(id) {
     const cid = parseInt(card.dataset.sessionId, 10);
     card.classList.toggle('active', cid === id);
   });
+  if (stoppedMarkCleared) updateSessionCardStateInPlace(id);
   // 帯の「いま開いているセッション」の印も同じタイミングで付け替える
   // （activateSession / activateSessionForMultiPane の両方がここを通る）。
   renderSessionStrip();
 }
+
+// 開いたまま別のアプリやタブへ移っている間に止まったセッションは、見ていないので印が付く。
+// 画面へ戻った時点で目の前に出ているので、開いたのと同じに扱う。
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || activeSessionId === null) return;
+  if (noteSessionListOpened(activeSessionId)) updateSessionCardStateInPlace(activeSessionId);
+});
 
 // C4: focusSlot → activateSession → focusSlot の無限ループ防止フラグ
 export let _multiPaneFocusSyncing = false;
@@ -426,6 +438,13 @@ export function stateActivityDecoration(s) {
     return { className: 'workflow-active', iconKind: 'ring', label: `${baseLabel}: ${activityLabel}` };
   }
   if (state === 'error' || state === 'disconnected') return { className: '', iconKind: 'cross', label: baseLabel };
+  // 作業を終えて止まった後、まだ開いていないセッションは同じ ● を黄色で描く（開くと従来の
+  // グレーに戻る）。タブの枠付きの数字と同じ記録（session-list-tabs.ts）を見るので、
+  // タブの数字とカードの黄色い●は常に同じセッションを指す。
+  if (isSessionListStopped(s)) {
+    const activityLabel = ti18n('card_activity_stopped_unseen', 'Finished, not opened yet');
+    return { className: 'stopped-unseen', iconKind: 'dot', label: `${baseLabel}: ${activityLabel}` };
+  }
   // standby は塗りつぶし ● のまま。同じ状態を出す他の 2 箇所（サマリーチップの
   // .chip-dot / ステータスバーの .tsb-pdot）はどちらも state によらず塗りつぶしの
   // 丸で、色だけで区別している。ここだけ中空 ○ だと同じ状態が画面内で別の形になる。

@@ -12,7 +12,6 @@ export interface SessionListTabState {
   tabs: SessionListTab[];
   defaultId: string;
   selectedId: string;
-  nextNumber: number;
   memberships: Record<string, string>;
   scroll: Record<string, number>;
   /** Per tab, the lifecycle identity of the session last opened while it belonged to that tab. */
@@ -66,10 +65,16 @@ export function normalizeSessionListTabs(raw: unknown, defaultName = 'Tab 1'): S
     const key = record(data.active)[tab.id];
     if (typeof key === 'string' && validIdentity(key)) active[tab.id] = key;
   }
-  const nextNumber = typeof data.nextNumber === 'number' && Number.isSafeInteger(data.nextNumber) && data.nextNumber > 0
-    ? Math.max(data.nextNumber, tabs.length + 1) : tabs.length + 1;
+  // An older nextNumber field (a lifetime counter) is dropped here and disappears on the next save.
   return { version: 1, tabs, defaultId, selectedId: exists(data.selectedId) ? data.selectedId : defaultId,
-    nextNumber, memberships, scroll, active };
+    memberships, scroll, active };
+}
+/** Numbered after the tabs that remain, so deleted tabs never push a fourth tab to "Tab 10"; a name still in use is skipped. */
+export function nextSessionListTabName(state: SessionListTabState, format: (number: number) => string): string {
+  const names = new Set(state.tabs.map(tab => tab.name));
+  let number = state.tabs.length + 1;
+  while (names.has(format(number))) number++;
+  return format(number);
 }
 export function loadSessionListTabs(storage: StorageLike, defaultName: string): SessionListTabState {
   try { return normalizeSessionListTabs(JSON.parse(storage.getItem(SESSION_LIST_TABS_KEY) || 'null'), defaultName); }
@@ -83,7 +88,6 @@ export function addSessionListTab(state: SessionListTabState, name: string, uniq
   if (!name.trim() || !validTabId(uniqueId) || state.tabs.some(tab => tab.id === uniqueId)) return null;
   const tab = { id: uniqueId, name: name.trim() };
   state.tabs.push(tab);
-  state.nextNumber++;
   state.selectedId = tab.id;
   state.scroll[tab.id] = 0;
   return tab;
@@ -214,8 +218,9 @@ export function sessionListWaitingCounts(state: SessionListTabState, sessions: S
   return counts;
 }
 
-// Turns that ended while their tab was not shown ("newly stopped"). Browser-local like the tabs,
-// keyed by lifecycle identity so a reused numeric ID never inherits a mark.
+// Sessions that finished a turn and have not been opened since ("newly stopped"). The tab badge
+// counts them and their cards draw the standby dot yellow, so both always agree. Browser-local like
+// the tabs, keyed by lifecycle identity so a reused numeric ID never inherits a mark.
 export const SESSION_LIST_STOPPED_KEY = 'many-ai-cli-session-list-stopped-v1';
 const STOPPED_LIMIT = 200;
 export function loadSessionListStopped(storage: StorageLike): Set<string> {
@@ -229,20 +234,34 @@ export function saveSessionListStopped(storage: StorageLike, unseen: Set<string>
   try { storage.setItem(SESSION_LIST_STOPPED_KEY, JSON.stringify([...unseen])); return true; }
   catch { return false; }
 }
-/** Record one observed turn end. The selected tab is already in view, so it never collects a mark. */
-export function noteSessionListStopped(state: SessionListTabState, sessions: SessionSnapshot[], unseen: Set<string>, id: number): boolean {
+/**
+ * Record one observed turn end of a session the user is not looking at (the caller decides that).
+ * Sessions in the selected tab are marked too: seeing the list is not opening the session.
+ */
+export function noteSessionListStopped(sessions: SessionSnapshot[], unseen: Set<string>, id: number): boolean {
   const key = sessionListIdentity(sessions.find(session => session.id === id));
   if (!key) return false;
-  if ((sessionListOwners(state, sessions).get(id) || state.defaultId) === state.selectedId) return false;
   unseen.delete(key);
   unseen.add(key);
   while (unseen.size > STOPPED_LIMIT) unseen.delete(unseen.values().next().value!);
   return true;
 }
+/** The session was opened (shown in the terminal). Returns whether a mark was removed. */
+export function clearSessionListStopped(sessions: SessionSnapshot[], unseen: Set<string>, id: number): boolean {
+  const key = sessionListIdentity(sessions.find(session => session.id === id));
+  return !!key && unseen.delete(key);
+}
+/** A marked session shows the mark only while it is plain standby (not running, not waiting on the user). */
+export function isSessionListStoppedShown(session: SessionSnapshot | undefined, unseen: Set<string>,
+    pending: (id: number) => boolean = () => false): boolean {
+  const key = sessionListIdentity(session);
+  return !!key && unseen.has(key) && (session!.state || 'standby') === 'standby' && !sessionListWaiting(session!, pending);
+}
 /**
- * One pass per render: a mark ends when its tab is selected (seen), the session leaves plain standby
- * (running again or waiting on the user), or its ID is reused. Absent sessions keep their mark,
- * like memberships, because startup/reconnect maps can be incomplete.
+ * One pass per render. A mark ends only when the session is opened (clearSessionListStopped) or its
+ * ID is reused. Running again or waiting on the user hides it without ending it: a short redraw
+ * must not erase it, and a session nobody opened is still unopened when it stops again.
+ * Absent sessions keep their mark, like memberships, because startup/reconnect maps can be incomplete.
  */
 export function settleSessionListStopped(state: SessionListTabState, sessions: SessionSnapshot[], unseen: Set<string>,
     pending: (id: number) => boolean = () => false): { counts: Map<string, number>; changed: boolean } {
@@ -253,13 +272,13 @@ export function settleSessionListStopped(state: SessionListTabState, sessions: S
   for (const key of [...unseen]) {
     const session = live.get(Number(key.split(':')[1]));
     if (!session) continue;
-    const owner = owners.get(session.id) || state.defaultId;
-    if (sessionListIdentity(session) !== key || (session.state || 'standby') !== 'standby' ||
-        sessionListWaiting(session, pending) || owner === state.selectedId) {
+    if (sessionListIdentity(session) !== key) {
       unseen.delete(key);
       changed = true;
       continue;
     }
+    if (!isSessionListStoppedShown(session, unseen, pending)) continue;
+    const owner = owners.get(session.id) || state.defaultId;
     counts.set(owner, (counts.get(owner) || 0) + 1);
   }
   return { counts, changed };

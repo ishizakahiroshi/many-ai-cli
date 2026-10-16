@@ -72,6 +72,7 @@ export function turnEndRunningStartedAt(id: number): number | undefined {
 /** Hub 再起動でセッション ID が振り直されたときに、そのセッションの記憶を破棄する。 */
 export function forgetTurnEndNotify(id: number): void {
   runningWindows.delete(id);
+  stoppedMarkWorkSince.delete(id);
 }
 
 /**
@@ -93,4 +94,50 @@ export function shouldNotifyTurnEnd(
   settingEnabled: boolean,
 ): boolean {
   return isCandidate && !bellOff && !isCurrentlyViewedSession && settingEnabled;
+}
+
+// ---- 「作業を終えて止まった」印（サイドバーのタブの数字とカードの黄色い●） ----
+//
+// 印は音や OS 通知と違って目に入るだけなので、通知より短い作業も拾う。拾い損ねると、
+// 開いていないのにグレーのままのカードができ、「黄色でなければ見た」と読めなくなる
+// （2026-10-16 利用者要望: 止まったセッションが 3 つあると、どれを見に行けばよいか
+// 分からない）。
+
+/**
+ * 作業とみなす長さの下限。Hub は出力が 3 秒途切れるまで running のままにする
+ * （rust/src/terminal/session.rs の idle_after）ため、画面の大きさを変えたときの
+ * 再描画のような一瞬の出力でも running が約 3 秒立つ。それを落とす値にする。
+ */
+export const STOPPED_MARK_MIN_WORK_MS = 5000;
+
+const stoppedMarkWorkSince = new Map<number, number>();
+
+/**
+ * セッションの状態遷移を観測し、「作業を終えて止まった印を付ける候補か」を返す。
+ *
+ * - running へ入ったら作業の開始時刻を記録する（作業中に入り直しても上書きしない）
+ * - waiting（承認待ち）は作業の途中として扱い、開始時刻を保つ。承認の後の短い仕上げで
+ *   止まったときに、作業の長さを最後の running だけで測らないため
+ * - standby へ来たときだけ判定し、作業の長さが {@link STOPPED_MARK_MIN_WORK_MS}
+ *   以上なら真。1 つの作業につき 1 回だけ
+ * - 直前が running なのに開始時刻が無いのは、画面を開いた時点で既に動いていた
+ *   セッション。長さを測れないので作業とみなす
+ * - それ以外の状態（error / disconnected など）へ移ったら記録を捨てる
+ */
+export function observeStoppedMarkCandidate(
+  id: number,
+  prevState: string | undefined,
+  nextState: string | undefined,
+  now: number,
+): boolean {
+  if (nextState === 'running') {
+    if (!stoppedMarkWorkSince.has(id)) stoppedMarkWorkSince.set(id, now);
+    return false;
+  }
+  if (nextState === 'waiting') return false;
+  const since = stoppedMarkWorkSince.get(id);
+  stoppedMarkWorkSince.delete(id);
+  if (nextState !== 'standby') return false;
+  if (since === undefined) return prevState === 'running';
+  return now - since >= STOPPED_MARK_MIN_WORK_MS;
 }

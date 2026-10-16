@@ -3,12 +3,12 @@ import { t } from '../i18n.js';
 import type { SessionSnapshot } from '../types/proto.js';
 import type { SidebarProjectNode } from './sidebar-tree.js';
 import { SESSION_LIST_TAB_DRAG, SESSION_LIST_CARD_DRAG, SESSION_LIST_TABS_KEY,
-  loadSessionListTabs, normalizeSessionListTabs, saveSessionListTabs, addSessionListTab,
+  loadSessionListTabs, normalizeSessionListTabs, saveSessionListTabs, addSessionListTab, nextSessionListTabName,
   renameSessionListTab, deleteSessionListTab, reorderSessionListTab, reconcileSessionListTabs,
   sessionListIdentity, sessionListFamilies, sessionListOwners, canMoveSessionListFamily, moveSessionListFamily,
   filterSessionListTree, sessionListWaitingCounts, loadSessionListStopped, saveSessionListStopped,
-  noteSessionListStopped, settleSessionListStopped, rememberSessionListActive, sessionListTabSession,
-  type SessionListTabState } from './session-list-tab-state.js';
+  noteSessionListStopped, clearSessionListStopped, isSessionListStoppedShown, settleSessionListStopped,
+  rememberSessionListActive, sessionListTabSession, type SessionListTabState } from './session-list-tab-state.js';
 
 interface Callbacks {
   sessions: () => SessionSnapshot[];
@@ -83,7 +83,18 @@ function persistStopped(): void {
 }
 /** Called by ws-client for an observed running→standby turn end the user is not looking at. */
 export function noteSessionListTurnEnd(id: number): void {
-  if (noteSessionListStopped(state(), all(), unseenStopped(), id)) persistStopped();
+  if (noteSessionListStopped(all(), unseenStopped(), id)) persistStopped();
+}
+/** Called when a session is shown in the terminal (opened). Returns whether its mark was removed. */
+export function noteSessionListOpened(id: number): boolean {
+  if (!clearSessionListStopped(all(), unseenStopped(), id)) return false;
+  persistStopped();
+  renderSessionListTabs();
+  return true;
+}
+/** Whether the card draws the yellow "stopped, not opened yet" dot. The tab badge counts the same sessions. */
+export function isSessionListStopped(session: SessionSnapshot | undefined): boolean {
+  return isSessionListStoppedShown(session, unseenStopped(), callbacks?.pending);
 }
 function rememberScroll(): void {
   const element = scrollElement();
@@ -212,7 +223,7 @@ export function initializeSessionListTabs(options: Callbacks): void {
   document.getElementById('session-list-tab-add')?.addEventListener('click', () => {
     rememberScroll();
     const id = `tab-${Array.from(crypto.getRandomValues(new Uint32Array(4)), word => word.toString(16).padStart(8, '0')).join('')}`;
-    addSessionListTab(state(), tx('session_list_tab_name', 'Tab {number}', { number: state().nextNumber }), id);
+    addSessionListTab(state(), nextSessionListTabName(state(), number => tx('session_list_tab_name', 'Tab {number}', { number })), id);
     restoreScroll = true; refresh(); persist(); focusSelected();
   });
   parent.addEventListener('click', event => {
@@ -330,7 +341,7 @@ export function renderSessionListTabs(): void {
     const stoppedCount = stoppedCounts.get(tab.id) || 0;
     if (stoppedCount && !selected) {
       const badge = document.createElement('span'); badge.className = 'session-list-tab-stopped'; badge.textContent = String(stoppedCount);
-      const label = tx('session_list_tab_stopped', '{count} newly stopped', { count: stoppedCount });
+      const label = tx('session_list_tab_stopped', '{count} finished, not opened yet', { count: stoppedCount });
       badge.setAttribute('aria-label', label); button.title += ` · ${label}`; button.append(badge);
     }
     parent.append(button);

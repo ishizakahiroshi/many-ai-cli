@@ -90,6 +90,7 @@
 .session-strip-item.awaiting-input .session-strip-state { color: var(--accent-text); }
 .session-strip-item.workflow-active .session-strip-state { color: var(--muted-2); }
 .session-strip-item.pending-spawn-confirm .session-strip-state { color: var(--perm); }
+.session-strip-item.stopped-unseen .session-strip-state { color: var(--yellow); }
 
 .session-strip-id { font-weight: 600; color: var(--text-dim); }
 .session-strip-item.active .session-strip-id { color: var(--text); }

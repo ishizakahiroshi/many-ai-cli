@@ -3,11 +3,12 @@ import test from 'node:test';
 import type { SessionSnapshot } from '../types/proto.js';
 import { buildSidebarTree, flattenSidebarTree } from './sidebar-tree.js';
 import { SESSION_LIST_TABS_KEY, normalizeSessionListTabs as normalize, loadSessionListTabs, saveSessionListTabs,
-  addSessionListTab as add, renameSessionListTab as rename, deleteSessionListTab as remove,
+  addSessionListTab as add, nextSessionListTabName as nextName, renameSessionListTab as rename, deleteSessionListTab as remove,
   reorderSessionListTab as reorder, sessionListIdentity as identity, reconcileSessionListTabs as reconcile,
   sessionListOwners as owners, moveSessionListFamily as move, filterSessionListTree as filter,
   sessionListWaitingCounts as waiting, SESSION_LIST_STOPPED_KEY, loadSessionListStopped as loadStopped,
   saveSessionListStopped as saveStopped, noteSessionListStopped as noteStopped,
+  clearSessionListStopped as clearStopped, isSessionListStoppedShown as shown,
   settleSessionListStopped as settle, rememberSessionListActive as remember,
   sessionListTabSession as pick } from './session-list-tab-state.js';
 const session = (id: number, extra: Partial<SessionSnapshot> = {}): SessionSnapshot =>
@@ -44,12 +45,18 @@ test('add/rename reject blanks and duplicate IDs; names remain text data', () =>
   assert.equal(rename(s, 'work', '<img src=x onerror=alert(1)>'), true);
   assert.equal(s.tabs[1].name, '<img src=x onerror=alert(1)>');
 });
-test('delete never reuses persisted ordinal; UUID IDs stay distinct after reload', () => {
-  let s = state(); assert.equal(remove(s, 'work', s.defaultId), true);
-  s = normalize(JSON.parse(JSON.stringify(s)));
-  assert.equal(s.nextNumber, 3);
+test('a new tab is numbered after the tabs that remain, skipping names in use; UUID IDs stay distinct after reload', () => {
+  const format = (n: number) => `Tab ${n}`;
+  let s = normalize(null, 'Tab 1');
+  for (let i = 0; i < 8; i++) { add(s, nextName(s, format), `tab-x${i}`); remove(s, `tab-x${i}`, s.defaultId); }
+  s = normalize({ ...JSON.parse(JSON.stringify(s)), nextNumber: 10 });
+  assert.ok(!('nextNumber' in s));
+  for (const name of ['🚀', '🏢']) add(s, name, `tab-${name.codePointAt(0)}`);
+  assert.equal(nextName(s, format), 'Tab 4');
+  rename(s, s.defaultId, 'Tab 4');
+  assert.equal(nextName(s, format), 'Tab 5');
   const id = `tab-${crypto.randomUUID()}`;
-  add(s, 'Tab 3', id); assert.notEqual(id, 'work'); assert.equal(s.selectedId, id);
+  add(s, nextName(s, format), id); assert.notEqual(id, 'work'); assert.equal(s.selectedId, id);
 });
 test('last-tab deletion and invalid destination/cancel do not mutate state', () => {
   const s = normalize(null); const before = JSON.stringify(s);
@@ -120,29 +127,38 @@ test('waiting/approval counts derive from live state and count each session once
   assert.equal(waiting(s, live, id => id === 3).get('tab-1'), 1);
   assert.ok(!JSON.stringify(s).includes('awaiting'));
 });
-test('newly stopped: only hidden tabs collect a mark, and selecting the tab clears it', () => {
+test('newly stopped: a mark waits for its session to be opened, not for its tab to be selected', () => {
   const s = state(); const live = [session(1, { state: 'standby' }), session(2, { state: 'standby' })];
   move(s, live, 2, 'work'); const unseen = new Set<string>();
-  assert.equal(noteStopped(s, live, unseen, 2), false);
-  assert.equal(noteStopped(s, live, unseen, 1), true);
+  // Seeing the list is not opening the session, so the selected tab collects a mark too.
+  assert.equal(noteStopped(live, unseen, 2), true);
+  assert.equal(noteStopped(live, unseen, 1), true);
   const hidden = settle(s, live, unseen);
-  assert.equal(hidden.counts.get('tab-1'), 1); assert.equal(hidden.counts.get('work'), 0); assert.equal(hidden.changed, false);
+  assert.equal(hidden.counts.get('tab-1'), 1); assert.equal(hidden.counts.get('work'), 1); assert.equal(hidden.changed, false);
   s.selectedId = 'tab-1';
-  const opened = settle(s, live, unseen);
-  assert.equal(opened.changed, true); assert.equal(opened.counts.get('tab-1'), 0); assert.equal(unseen.size, 0);
+  const selected = settle(s, live, unseen);
+  assert.equal(selected.changed, false); assert.equal(selected.counts.get('tab-1'), 1); assert.equal(unseen.size, 2);
+  assert.equal(clearStopped(live, unseen, 1), true); assert.equal(clearStopped(live, unseen, 1), false);
+  assert.equal(settle(s, live, unseen).counts.get('tab-1'), 0); assert.equal(unseen.size, 1);
+  assert.equal(shown(live[0], unseen), false); assert.equal(shown(live[1], unseen), true);
 });
-test('newly stopped ends on running/waiting and ID reuse, but survives an incomplete startup map', () => {
+test('newly stopped hides while running/waiting, ends on ID reuse, and survives an incomplete startup map', () => {
   const s = state(); const live = [session(1, { state: 'standby' })]; const unseen = new Set<string>();
-  noteStopped(s, live, unseen, 1);
-  assert.equal(settle(s, [session(1, { state: 'running' })], unseen).changed, true); assert.equal(unseen.size, 0);
-  noteStopped(s, live, unseen, 1);
-  assert.equal(settle(s, live, unseen, id => id === 1).counts.get('tab-1'), 0); assert.equal(unseen.size, 0);
-  noteStopped(s, live, unseen, 1);
+  noteStopped(live, unseen, 1);
+  // A short redraw makes a session "running" for ~3 s; it must not erase a mark nobody has opened.
+  const running = settle(s, [session(1, { state: 'running' })], unseen);
+  assert.equal(running.changed, false); assert.equal(running.counts.get('tab-1'), 0); assert.equal(unseen.size, 1);
+  assert.equal(shown(session(1, { state: 'running' }), unseen), false);
+  assert.equal(settle(s, live, unseen, id => id === 1).counts.get('tab-1'), 0); assert.equal(unseen.size, 1);
+  assert.equal(shown(live[0], unseen, id => id === 1), false);
+  assert.equal(settle(s, [session(1, { state: 'standby', awaiting_user: true })], unseen).counts.get('tab-1'), 0);
+  assert.equal(settle(s, live, unseen).counts.get('tab-1'), 1); assert.equal(shown(live[0], unseen), true);
   assert.equal(settle(s, [session(1, { started_at: '2026-10-09T01:00:00Z', state: 'standby' })], unseen).counts.get('tab-1'), 0);
   assert.equal(unseen.size, 0);
-  noteStopped(s, live, unseen, 1);
+  noteStopped(live, unseen, 1);
   assert.equal(settle(s, [], unseen).changed, false); assert.equal(unseen.size, 1);
-  assert.equal(noteStopped(s, [session(1, { started_at: '' })], new Set(), 1), false);
+  assert.equal(noteStopped([session(1, { started_at: '' })], new Set(), 1), false);
+  assert.equal(clearStopped([session(1, { started_at: '' })], unseen, 1), false); assert.equal(unseen.size, 1);
 });
 test('newly stopped marks reload as identities only; storage denial stays usable', () => {
   let saved = ''; const storage = { getItem: (key: string) => { assert.equal(key, SESSION_LIST_STOPPED_KEY); return saved; },
