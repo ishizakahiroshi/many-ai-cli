@@ -203,6 +203,10 @@ Release artifacts are published at
   which now appear only in the details opened from the "…" button.
 
 ### Fixed
+- `orchestrate spawn` for a role that already has a live child is refused
+  right away with the existing 409, before the spawn confirmation dialog opens.
+  Previously the dialog opened, and the refusal came only after the user had
+  chosen options and approved. `--force` still opens the dialog.
 - Approval confirmations and mobile hold controls stay attached to the approval
   originally displayed. Enter activates the focused confirmation button.
   Read-only Markdown removes interactive controls, and browser policy blocks

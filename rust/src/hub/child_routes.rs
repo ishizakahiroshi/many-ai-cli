@@ -226,6 +226,15 @@ impl ChildHttp {
                 _ => true,
             };
         if confirmation {
+            if !body.request().force
+                && let Some(error) = crate::orchestration::child_launch::duplicate_role_child(
+                    &self.core,
+                    parent.binding.session,
+                    &body.request().role,
+                )
+            {
+                return session_error(error);
+            }
             let registration = match SpawnConfirmations::register(
                 self.core.as_ref(),
                 ConfirmationRequest {

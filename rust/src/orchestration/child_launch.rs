@@ -576,9 +576,9 @@ impl ChildLaunchExecutor {
             admission: admission.clone(),
         });
         if !body.force
-            && let Some(id) = live_child_for_role(&engine, parent.id, &body.role)
+            && let Some(error) = duplicate_role_child(&engine, parent.id, &body.role)
         {
-            return Err(ChildLaunchError::new(409, "duplicate_role_child", format!("live child #{} already exists for role {:?}; use `many-ai-cli orchestrate send --role {} \"<text>\"` to instruct it, or pass --force to spawn another", id.0, body.role, body.role)).into());
+            return Err(error);
         }
         let prep = if let Some(preparation) = relay_preparation {
             preparation
@@ -987,6 +987,18 @@ fn live_child_for_role(
         })
         .map(|session| session.id)
         .max()
+}
+/// The spawn route also runs this before publishing a confirmation, so the user
+/// is not asked to choose options for a launch this check would refuse. The
+/// launch keeps its own call for a child that appears while the dialog is open.
+pub(crate) fn duplicate_role_child(
+    engine: &SessionEngine,
+    parent: LiveSessionId,
+    role: &str,
+) -> Option<SessionError> {
+    live_child_for_role(engine, parent, role).map(|id| {
+        ChildLaunchError::new(409, "duplicate_role_child", format!("live child #{} already exists for role {:?}; use `many-ai-cli orchestrate send --role {} \"<text>\"` to instruct it, or pass --force to spawn another", id.0, role, role)).into()
+    })
 }
 pub(crate) fn admission_error(error: AdmissionError) -> SessionError {
     let detail = match error {

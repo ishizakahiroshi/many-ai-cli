@@ -393,6 +393,61 @@ async fn bound_ui_and_approved_confirmation_reuse_source_human_capacity() {
     assert!(f.core.pending().is_empty());
 }
 #[tokio::test]
+async fn duplicate_role_is_refused_before_publishing_a_confirmation() {
+    let f = fixture("on", 4).await;
+    let route = f.route.clone();
+    let req = request(f.parent, "ui");
+    let first = tokio::spawn(async move {
+        route
+            .spawn_authenticated(
+                &req,
+                Some(VerifiedUiOrigin::after_server_verification(AuthEpoch(0))),
+                &HttpWaitCancellation::default(),
+                Timestamp::now(),
+            )
+            .await
+    });
+    bounded(f.io.entered.acquire()).await.unwrap().forget();
+    f.io.release.add_permits(1);
+    assert_eq!(bounded(first).await.unwrap().status, 200);
+    let response = bounded(f.route.spawn_authenticated(
+        &request(f.parent, ""),
+        None,
+        &HttpWaitCancellation::default(),
+        Timestamp::now(),
+    ))
+    .await;
+    assert_eq!(response.status, 409);
+    let json: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
+    assert_eq!(json["error"], "duplicate_role_child");
+    assert!(f.core.pending().is_empty());
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 1);
+    let mut forced = request(f.parent, "");
+    forced.body = serde_json::to_vec(
+        &serde_json::json!({"role":"worker","provider":"copilot","same_tree":true,"force":true}),
+    )
+    .unwrap();
+    let route = f.route.clone();
+    let http = tokio::spawn(async move {
+        route
+            .spawn_authenticated(
+                &forced,
+                None,
+                &HttpWaitCancellation::default(),
+                Timestamp::now(),
+            )
+            .await
+    });
+    bounded(async {
+        while f.core.pending().is_empty() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await;
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 1);
+    http.abort();
+}
+#[tokio::test]
 async fn actual_inject_queue_preserves_raw_controls_and_interrupt_order() {
     let f = fixture("off", 4).await;
     let control = crate::hub::child_control::ChildControl::new(
