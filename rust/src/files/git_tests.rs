@@ -183,6 +183,73 @@ async fn git_diff_from_subdirectory_uses_repo_root_pathspec() {
     assert!(diff["files"][0]["diff"].as_str().unwrap().contains("+new"));
 }
 #[tokio::test]
+async fn display_reads_leave_the_index_and_its_lock_alone() {
+    let (_dir, service, root) = repo().await;
+    let git = Git::new(&service, 20);
+    fs::write(root.join("same.md"), "same\n").unwrap();
+    fs::write(root.join("edit.md"), "old\n").unwrap();
+    fs::write(root.join("rename-me.md"), "a\nb\nc\nd\ne\n").unwrap();
+    git.commit(
+        &root,
+        &root,
+        &GitRequest {
+            subject: "initial".into(),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    git.run(&root, &["mv", "rename-me.md", "renamed.md"])
+        .await
+        .unwrap();
+    fs::write(root.join("renamed.md"), "a\nb\nc\nd\ne\nf\n").unwrap();
+    fs::write(root.join("edit.md"), "new\n").unwrap();
+    // Same content, newer stat data: a refresh would rewrite the index.
+    fs::File::options()
+        .write(true)
+        .open(root.join("same.md"))
+        .unwrap()
+        .set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(30))
+        .unwrap();
+    let index = root.join(".git").join("index");
+    let before = fs::read(&index).unwrap();
+    let status = git.status(&root, &root).await.unwrap();
+    let paths: Vec<_> = status["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["path"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(paths, ["edit.md", "renamed.md"]);
+    assert_eq!(status["files"][0]["added"], 1);
+    assert_eq!(status["files"][1]["added"], 1);
+    let diff = git.diff(&root, &root, None).await.unwrap();
+    assert!(diff["files"][0]["diff"].as_str().unwrap().contains("+new"));
+    let (stat, patch, numstat) = git.message_inputs(&root).await;
+    assert!(stat.contains("edit.md") && !stat.contains("same.md"));
+    assert!(patch.contains("+new") && !patch.contains("same.md"));
+    assert_eq!(fs::read(&index).unwrap(), before);
+    assert!(!root.join(".git").join("index.lock").exists());
+    // Control: the porcelain reads used before rewrite it in the same state,
+    // so the unchanged index above is the display reads' doing. Their counts
+    // must still match what the plumbing reads returned.
+    let porcelain = git
+        .run(&root, &["diff", "--numstat", "HEAD", "--"])
+        .await
+        .unwrap();
+    assert_ne!(fs::read(&index).unwrap(), before);
+    let plumbing = git
+        .observe(&root, &["diff-index", "-M", "--numstat", "HEAD", "--"])
+        .await
+        .unwrap();
+    assert_eq!(parse_numstat(&plumbing), parse_numstat(&porcelain));
+    let unrenamed = git
+        .run(&root, &["diff", "--numstat", "--no-renames", "HEAD", "--"])
+        .await
+        .unwrap();
+    assert_eq!(parse_numstat(&numstat), parse_numstat(&unrenamed));
+}
+#[tokio::test]
 async fn turn_snapshot_uses_private_temporary_index_and_preserves_real_index() {
     let (_dir, service, root) = repo().await;
     fs::write(root.join("a.md"), "one\n").unwrap();

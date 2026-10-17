@@ -211,6 +211,12 @@ Release artifacts are published at
   which now appear only in the details opened from the "…" button.
 
 ### Fixed
+- The Git panel's read-only views (changed files, diffs and the commit-message
+  suggestion) no longer take `.git/index.lock`. They now run `git status` with
+  `GIT_OPTIONAL_LOCKS=0` and compare HEAD with the work tree through
+  `git diff-index`, which never rewrites the index, so a read stopped at its
+  5-second limit can no longer leave a 0-byte `index.lock` that blocks your own
+  `git add` / `git commit`. Commit, push, pull and fetch are unchanged.
 - The Windows Hub no longer builds a machine-wide thread snapshot every time it
   starts a child process (for example each `git` call that refreshes the branch
   display), which took more than half of the Hub's CPU. It now looks only at the

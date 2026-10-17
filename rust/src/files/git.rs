@@ -92,6 +92,31 @@ impl<'a> Git<'a> {
     async fn run(&self, cwd: &Path, args: &[&str]) -> std::result::Result<String, String> {
         self.env(cwd, args, BTreeMap::new(), false).await
     }
+    /// Display reads only observe, like branch.rs lookups. Skipping optional
+    /// locks keeps `status` from taking `.git/index.lock` for its opportunistic
+    /// refresh, so a read stopped at the deadline cannot strand the lock. Reads
+    /// that compare HEAD with the work tree use plumbing `diff-index`: porcelain
+    /// `git diff` rewrites the index for stat-only changes even with this set.
+    async fn observe(&self, cwd: &Path, args: &[&str]) -> std::result::Result<String, String> {
+        let env = BTreeMap::from([("GIT_OPTIONAL_LOCKS".into(), Some("0".into()))]);
+        self.env(cwd, args, env, false).await
+    }
+    /// Commit-message context: stat, patch and unrenamed numstat against HEAD.
+    async fn message_inputs(&self, cwd: &Path) -> (String, String, String) {
+        let stat = self
+            .observe(cwd, &["diff-index", "--stat", "-M", "HEAD", "--"])
+            .await
+            .unwrap_or_default();
+        let diff = self
+            .observe(cwd, &["diff-index", "-p", "-M", "HEAD", "--"])
+            .await
+            .unwrap_or_default();
+        let numstat = self
+            .observe(cwd, &["diff-index", "--numstat", "HEAD", "--"])
+            .await
+            .unwrap_or_default();
+        (stat, diff, numstat)
+    }
     async fn env(
         &self,
         cwd: &Path,
@@ -341,7 +366,7 @@ impl FilesService {
             "/api/git-commit-all" => git.commit(&root, &cwd, &q).await?,
             "/api/git-commit-message" => {
                 let status = git
-                    .run(&cwd, &["status", "--short", "--porcelain=v1", "-z"])
+                    .observe(&cwd, &["status", "--short", "--porcelain=v1", "-z"])
                     .await
                     .map_err(command_error)?;
                 let files = parse_status(&status);
@@ -351,25 +376,14 @@ impl FilesService {
                 if q.mode.eq_ignore_ascii_case("ai") {
                     return self.start_ai_commit(core, q.session, &q.language).await;
                 }
-                let stat = git
-                    .run(&cwd, &["diff", "--stat", "HEAD", "--"])
-                    .await
-                    .unwrap_or_default();
-                let mut diff = git
-                    .run(&cwd, &["diff", "HEAD", "--"])
-                    .await
-                    .unwrap_or_default();
+                let (stat, mut diff, numstat) = git.message_inputs(&cwd).await;
                 let notice = if diff.len() > 48 * 1024 {
                     truncate(&mut diff, 48 * 1024);
                     "Diff context truncated to 48 KiB."
                 } else {
                     ""
                 };
-                let weights = parse_numstat(
-                    &git.run(&cwd, &["diff", "--numstat", "--no-renames", "HEAD", "--"])
-                        .await
-                        .unwrap_or_default(),
-                );
+                let weights = parse_numstat(&numstat);
                 let mut weights: BTreeMap<String, i64> =
                     weights.into_iter().map(|(k, (a, b))| (k, a + b)).collect();
                 for f in &files {
@@ -507,13 +521,13 @@ impl Git<'_> {
     }
     async fn status(&self, root: &Path, cwd: &Path) -> Result<Value> {
         let out = self
-            .run(cwd, &["status", "--short", "--porcelain=v1", "-z"])
+            .observe(cwd, &["status", "--short", "--porcelain=v1", "-z"])
             .await
             .map_err(command_error)?;
         let mut files = parse_status(&out);
         let stats = parse_numstat(
             &self
-                .run(cwd, &["diff", "--numstat", "HEAD", "--"])
+                .observe(cwd, &["diff-index", "-M", "--numstat", "HEAD", "--"])
                 .await
                 .unwrap_or_default(),
         );
@@ -624,7 +638,7 @@ impl Git<'_> {
         } else {
             parse_status(
                 &self
-                    .run(
+                    .observe(
                         cwd,
                         &[
                             "status",
@@ -657,7 +671,7 @@ impl Git<'_> {
         } else if !head.is_empty() {
             parse_numstat(
                 &self
-                    .run(cwd, &["diff", "--numstat", "HEAD", "--"])
+                    .observe(cwd, &["diff-index", "-M", "--numstat", "HEAD", "--"])
                     .await
                     .unwrap_or_default(),
             )
@@ -678,9 +692,9 @@ impl Git<'_> {
                 let args = if let Some((a, b)) = trees {
                     vec!["diff", a, b, "--", &f.path]
                 } else {
-                    vec!["diff", "HEAD", "--", &f.path]
+                    vec!["diff-index", "-p", "-M", "HEAD", "--", &f.path]
                 };
-                if let Ok(out) = self.run(root, &args).await {
+                if let Ok(out) = self.observe(root, &args).await {
                     f.diff = cap_diff(out);
                 }
             }
@@ -695,7 +709,7 @@ impl Git<'_> {
         let body = sanitize_message(&q.body, 8192);
         let changed = parse_status(
             &self
-                .run(cwd, &["status", "--short", "--porcelain=v1", "-z"])
+                .observe(cwd, &["status", "--short", "--porcelain=v1", "-z"])
                 .await
                 .map_err(command_error)?,
         )
