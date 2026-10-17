@@ -67,3 +67,8 @@ tokio = { version = "=1.53.1", features = ["test-util"] }
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
+
+# 増分ビルドのキャッシュ（target/debug/incremental）は target の約 4 割を占める。
+# 作業コピーやタスクごとに target ができるので、ドライブの空きを守るために切る。
+[profile.dev]
+incremental = false
