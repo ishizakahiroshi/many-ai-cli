@@ -1484,6 +1484,7 @@ impl HubComposition {
         let result = tokio::select! {
             result = &mut serve => result,
             _ = shutdown.cancelled() => {
+                self.shutdown_owner.record_reason("signal");
                 self.owner.stop_requests();
                 self.dependencies.core.shutdown_confirmations();
                 if let Err(error) = self.shutdown_owner.announce("signal").await { (self.warning)("shutdown notice", &error); }
@@ -1491,6 +1492,18 @@ impl HubComposition {
                 serve.await
             }
         };
+        let stop_reason = crate::hub::lifecycle::stop_reason(
+            self.shutdown_owner.reason(),
+            result
+                .as_ref()
+                .err()
+                .map(|error| error as &dyn std::fmt::Display),
+        );
+        self.logger.write(
+            "INFO",
+            "MANY-AI-CLI stopping",
+            &format!("reason={stop_reason}"),
+        );
         self.owner.stop_requests();
         self.dependencies.core.shutdown_confirmations();
         self.service_cancel.cancel();
@@ -1536,8 +1549,11 @@ impl HubComposition {
             ShutdownReport::default()
         };
         let remove = self.ledger.remove_if_pid(pid);
-        self.logger
-            .write("INFO", "MANY-AI-CLI stopped", &format!("pid={pid}"));
+        self.logger.write(
+            "INFO",
+            "MANY-AI-CLI stopped",
+            &format!("pid={pid} reason={stop_reason}"),
+        );
         if self.logger.close().is_err() {
             crate::logging::write_diagnostic("Hub diagnostic log close unavailable\n");
         }

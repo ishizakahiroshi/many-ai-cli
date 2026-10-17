@@ -49,7 +49,7 @@ pub async fn post_hub_endpoint(
         client(Duration::from_secs(3)).map_err(|_| format!("{path}: HTTP client unavailable"))?;
     let result = tokio::select! {
         _=cancel.cancelled()=>return Err(format!("{path}: cancelled")),
-        result=client.post(url).send()=>result,
+        result=client.post(url).header(crate::hub::lifecycle::STOP_SOURCE_HEADER,"launcher").send()=>result,
     };
     let response = result.map_err(|error| format!("{path}: {}", error.without_url()))?;
     if !response.status().is_success() {

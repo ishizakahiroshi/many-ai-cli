@@ -198,6 +198,10 @@ async fn restart_stale(
     }
     if client
         .post(endpoint("/api/shutdown")?)
+        .header(
+            crate::hub::lifecycle::STOP_SOURCE_HEADER,
+            "stale_binary_restart",
+        )
         .send()
         .await
         .is_err()

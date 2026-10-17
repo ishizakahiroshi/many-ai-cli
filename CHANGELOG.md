@@ -169,6 +169,14 @@ Release artifacts are published at
   prompt. Paths written in a memo open in the existing file preview. Small
   badges on the button and on matching session cards show each project's
   open memo count.
+- **The Hub log says why the Hub stopped.** The Rust Hub writes
+  `MANY-AI-CLI stopping reason=...` when it begins to stop and adds the same
+  reason to the final `MANY-AI-CLI stopped` line: `stop_command`
+  (`many-ai-cli stop` or the tray), `web_ui` (the ⏻ button),
+  `stale_binary_restart` (automatic restart after a rebuild), `launcher`,
+  `signal` (Ctrl+C), `server_error`, or `api_unspecified` for a
+  `/api/shutdown` request that did not name its sender. Previously the log
+  ended with only the process ID, so an unexpected stop could not be traced.
 
 ### Changed
 - Work memo rows are now a single compact line with an explicit edit (✎) button; clicking a text memo also starts editing.

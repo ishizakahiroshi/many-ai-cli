@@ -780,8 +780,10 @@ impl ServiceRouter {
             });
         }
         if request.path == "/api/shutdown" {
+            let source =
+                super::lifecycle::stop_source(request.header(super::lifecycle::STOP_SOURCE_HEADER));
             return Dispatch::response(match &self.shutdown {
-                Some(shutdown) => match shutdown.request().await {
+                Some(shutdown) => match shutdown.request(source).await {
                     Ok(()) => Response::json(200, &json!({"ok":true})),
                     Err(_) => {
                         Response::error(503, "shutdown_unavailable", "Hub shutdown is unavailable")

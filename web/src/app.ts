@@ -1978,13 +1978,15 @@ inputEl.addEventListener('blur', (e) => {
       try { await disableExpose(); } catch (_) {}
     }
 
+    // Hub のログに止まった理由（web_ui）を残すため、送り元を名乗る。
+    const shutdownInit: RequestInit = { method: 'POST', headers: { 'X-Many-Ai-Cli-Stop-Source': 'web_ui' } };
     if (result.action === 'sessions') {
       try { await apiFetch('/api/kill-all', { method: 'POST' }); } catch (_) {}
-      try { await apiFetch('/api/shutdown', { method: 'POST' }); } catch (_) {}
+      try { await apiFetch('/api/shutdown', shutdownInit); } catch (_) {}
       window.close();
     } else {
       try {
-        await apiFetch('/api/shutdown', { method: 'POST' });
+        await apiFetch('/api/shutdown', shutdownInit);
       } catch (_) {}
       window.close();
     }

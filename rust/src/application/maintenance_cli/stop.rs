@@ -95,7 +95,7 @@ impl StopIo for NativeStopIo {
                 .timeout(Duration::from_secs(2))
                 .build()
                 .map_err(io::Error::other)?;
-            tokio::select! {_=cancel.cancelled()=>Err(io::Error::new(io::ErrorKind::Interrupted,"stop cancelled")),reply=client.post(url).query(&[("token",token)]).header(reqwest::header::CONTENT_TYPE,"application/json").send()=>reply.map(|response|response.status()==200).map_err(|_|io::Error::other("shutdown request failed"))}
+            tokio::select! {_=cancel.cancelled()=>Err(io::Error::new(io::ErrorKind::Interrupted,"stop cancelled")),reply=client.post(url).query(&[("token",token)]).header(reqwest::header::CONTENT_TYPE,"application/json").header(crate::hub::lifecycle::STOP_SOURCE_HEADER,"stop_command").send()=>reply.map(|response|response.status()==200).map_err(|_|io::Error::other("shutdown request failed"))}
         })
     }
     fn kill(&self, pid: i64) -> io::Result<()> {
