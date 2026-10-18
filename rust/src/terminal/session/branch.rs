@@ -91,7 +91,10 @@ impl SessionEngine {
             if session.snapshot.cwd != cwd {
                 continue;
             }
-            if session.apply_branch_observation(&observation) {
+            let changed = session.apply_branch_observation(&observation);
+            // 一時観測 rust-branch-probe: 画面へ送る更新を作ったかを記録するだけ。
+            crate::logging::branch_probe::note_applied(id.0, changed);
+            if changed {
                 effects
                     .0
                     .push(CoreEffect::Broadcast(session.branch_update_message()));

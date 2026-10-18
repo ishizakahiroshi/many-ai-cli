@@ -486,6 +486,34 @@
       ],
       "removalCondition": "再発時の記録と Codex の logs_2.sqlite を突き合わせて、Enter が改行として吸われた経路と中断のキーの出どころを確定し、修正と回帰テストを入れた後に、files を消し sharedFiles の空実装と input_probe:: の呼び出し点 5 か所を単独の撤去 commit で除去する。リリース前に必ず撤去する",
       "reason": "Codex 0.161.0 の会話ログ・history.jsonl・logs_2.sqlite で、19:04:58 に入力欄が @パス を貼り付けとして受け取り、7 秒後の 19:05:05 に送信、19:05:06.685 に op: Interrupt が出たことは確認した。一方 Rust 版 Hub は PTY 入力を記録しておらず、180ms 遅らせた Enter がいつ書かれたか、中断のキーがどこから来たかを観測できない。利用者が普段使う中で再発を待つため、debug ビルドで既定記録とし、保存は 7 日・合計 20MB・1 ファイル 4MB で自動的に消す"
+    },
+    {
+      "id": "rust-branch-probe",
+      "status": "active",
+      "purpose": "Rust 版のサイドバーで、git リポジトリのセッションのカードが「(no git)」のまま残る件（2026-10-16・docs/local/bugfix_session-branch-no-git-on-start_2026-10-16.md）を、ブランチ取得が空になった理由と所要時間で切り分ける。起動時・再接続時の取得は毎回 1 行、2 秒ごとの再取得は空・手順の失敗・画面へ送る更新・取得か枠待ちが 200ms 以上のどれかに当たる回だけ 1 行残す",
+      "addedIn": "pending",
+      "gate": "Rust cfg(debug_assertions) のビルドだけに本体を組み込み、--release の成果物は空実装になる。debug ビルドでは既定で記録し、MANY_AI_CLI_BRANCH_PROBE=0 で止まる。テスト（cfg(test)）では書かない。生のパス・ブランチ名・git の出力本文は保存せず、作業フォルダのハッシュ・セッション番号・結果の種類（branch / detached / empty）・失敗の理由（LookupError の種類、終了コード、時間切れ、出力の打ち切り、pipe の強制クローズ）・所要時間・枠の待ち時間・画面へ送ったかだけを残す",
+      "due": "2026-10-30",
+      "files": [
+        "rust/src/logging/branch_probe.rs"
+      ],
+      "sharedFiles": [
+        "rust/src/logging/mod.rs",
+        "rust/src/application/main_program/context.rs",
+        "rust/src/files/branch.rs",
+        "rust/src/application/session_workers/branch_refresh.rs",
+        "rust/src/terminal/session/lifecycle.rs",
+        "rust/src/terminal/session/branch.rs"
+      ],
+      "channels": [
+        "logs/branch-probe/<日付>_<pid>.jsonl"
+      ],
+      "artifactNeedles": [
+        "MANY_AI_CLI_BRANCH_PROBE",
+        "branch-probe"
+      ],
+      "removalCondition": "再発時の記録を読んで原因を確定し、修正と回帰テストを入れた後に、利用者が調査をやめると決めたときも同じく、files を消し sharedFiles の空実装・branch_probe:: の呼び出し点・files/branch.rs の BranchLookupDetail と branch_detailed（branch() の本体へ戻す）を単独の撤去 commit で除去する。共有ファイルのフックは手で外す。リリース前に必ず撤去する",
+      "reason": "「(no git)」の原因が確定していない。起動時の取得は 250ms の制限で git rev-parse を 1 回打つだけで、時間切れ・起動失敗・0 以外の終了のどれでも同じ空の文字列になり、Hub は理由を残していない。同じ端末で同じコマンドが 250ms を超える回があることは測れたが、起動時に空になった本当の理由と、その後 40 秒以上直らなかった理由は確かめられていない。利用者が普段使う中で再発を待つため、debug ビルドで既定記録とし、保存は 7 日・合計 20MB・1 ファイル 4MB で自動的に消す"
     }
   ]
 }

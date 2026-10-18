@@ -64,6 +64,112 @@ impl FilesService {
     }
 }
 
+/// 一時観測 `rust-branch-probe` 用: `branch()` が空を返した理由と所要時間。
+/// 返り値や `GitBranchSource` は変えず、`branch()` が内部で作って観測へ渡すだけで、動作には使わない。
+/// 撤去するときは、この 3 つの型と `branch_detailed` を `branch()` の本体へ戻す。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(not(debug_assertions), allow(dead_code))]
+pub(crate) struct BranchLookupDetail {
+    pub blank_cwd: bool,
+    /// `rev-parse --abbrev-ref HEAD`。
+    pub first: Option<LookupStep>,
+    /// `rev-parse --short HEAD`。1 回目が `HEAD`（detached）だったときだけ打つ。
+    pub second: Option<LookupStep>,
+    pub elapsed: Duration,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(not(debug_assertions), allow(dead_code))]
+pub(crate) struct LookupStep {
+    pub outcome: StepOutcome,
+    pub elapsed: Duration,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(not(debug_assertions), allow(dead_code))]
+pub(crate) enum StepOutcome {
+    Ok,
+    MissingExecutable,
+    Start,
+    Expired,
+    Output {
+        exit_code: Option<i32>,
+        signal: Option<i32>,
+        timed_out: bool,
+        cancelled: bool,
+        stdout_truncated: bool,
+        stderr_truncated: bool,
+        pipes_forced_closed: bool,
+    },
+}
+
+impl LookupStep {
+    fn new(result: &Result<String, LookupError>, elapsed: Duration) -> Self {
+        let outcome = match result {
+            Ok(_) => StepOutcome::Ok,
+            Err(LookupError::MissingExecutable) => StepOutcome::MissingExecutable,
+            Err(LookupError::Start) => StepOutcome::Start,
+            Err(LookupError::Expired) => StepOutcome::Expired,
+            Err(LookupError::Output(output)) => {
+                let (exit_code, signal) = match output.outcome {
+                    ExitOutcome::Exited { code, signal } => (code, signal),
+                    _ => (None, None),
+                };
+                StepOutcome::Output {
+                    exit_code,
+                    signal,
+                    timed_out: matches!(output.outcome, ExitOutcome::TimedOut),
+                    cancelled: matches!(output.outcome, ExitOutcome::Cancelled),
+                    stdout_truncated: output.stdout_truncated,
+                    stderr_truncated: output.stderr_truncated,
+                    pipes_forced_closed: output.pipes_forced_closed,
+                }
+            }
+        };
+        Self { outcome, elapsed }
+    }
+}
+
+impl FilesService {
+    /// `branch()` の本体。値は従来と同じで、空になった理由と時間を一緒に返す。
+    async fn branch_detailed(&self, cwd: &str) -> (String, BranchLookupDetail) {
+        let started = Instant::now();
+        let mut detail = BranchLookupDetail::default();
+        if cwd.trim().is_empty() {
+            detail.blank_cwd = true;
+            detail.elapsed = started.elapsed();
+            return (String::new(), detail);
+        }
+        // Read from HEAD: no Git step ran, so `first` stays empty.
+        if let Some(name) = head_file_branch(cwd).await {
+            detail.elapsed = started.elapsed();
+            return (name, detail);
+        }
+        let git = Lookup::new(self);
+        let first_started = Instant::now();
+        let first = git.run(cwd, &["rev-parse", "--abbrev-ref", "HEAD"]).await;
+        detail.first = Some(LookupStep::new(&first, first_started.elapsed()));
+        let Ok(output) = first else {
+            detail.elapsed = started.elapsed();
+            return (String::new(), detail);
+        };
+        let branch = output.trim();
+        if branch != "HEAD" {
+            detail.elapsed = started.elapsed();
+            return (branch.into(), detail);
+        }
+        let second_started = Instant::now();
+        let second = git.run(cwd, &["rev-parse", "--short", "HEAD"]).await;
+        detail.second = Some(LookupStep::new(&second, second_started.elapsed()));
+        let branch = match second {
+            Ok(hash) if !hash.trim().is_empty() => format!("detached:{}", hash.trim()),
+            _ => String::new(),
+        };
+        detail.elapsed = started.elapsed();
+        (branch, detail)
+    }
+}
+
 /// The branch the repository's HEAD file names, read without starting Git.
 /// Every card refresh asks for the branch, and starting Git for it took
 /// longer than the 250 ms budget often enough to show "(no git)" for a
@@ -117,24 +223,9 @@ fn head_branch(content: &str) -> Option<String> {
 impl GitBranchSource for FilesService {
     fn branch<'a>(&'a self, cwd: &'a str) -> CoreFuture<'a, String> {
         Box::pin(async move {
-            if cwd.trim().is_empty() {
-                return String::new();
-            }
-            if let Some(name) = head_file_branch(cwd).await {
-                return name;
-            }
-            let git = Lookup::new(self);
-            let Ok(output) = git.run(cwd, &["rev-parse", "--abbrev-ref", "HEAD"]).await else {
-                return String::new();
-            };
-            let branch = output.trim();
-            if branch != "HEAD" {
-                return branch.into();
-            }
-            match git.run(cwd, &["rev-parse", "--short", "HEAD"]).await {
-                Ok(hash) if !hash.trim().is_empty() => format!("detached:{}", hash.trim()),
-                _ => String::new(),
-            }
+            let (branch, detail) = self.branch_detailed(cwd).await;
+            crate::logging::branch_probe::note_lookup(&detail);
+            branch
         })
     }
 
@@ -905,6 +996,155 @@ mod tests {
             assert_eq!(fixture.service.branch(blank).await, "");
             assert_eq!(fixture.service.changes(blank).await, (0, 0, 0));
         }
+    }
+
+    #[tokio::test]
+    async fn branch_detail_explains_an_empty_result_without_changing_the_value() {
+        let mut fixture = Fixture::new();
+        // 空白だけの作業フォルダは git を呼ばない。
+        let (value, detail) = fixture.service.branch_detailed(" \t").await;
+        assert_eq!(value, "");
+        assert!(detail.blank_cwd && detail.first.is_none() && detail.second.is_none());
+
+        // git のリポジトリの外では 1 回目の rev-parse が 0 以外で終わる。
+        // （2026-10-18 から最初のコミット前の repo は HEAD から名前が取れるので、外のフォルダで確かめる。
+        //   plan_git-invocation-index-lock.md の C5）
+        // 250ms を超えて時間切れになる回もあるので、git 自身の答えが出るまで繰り返す。
+        let mut answered = None;
+        for _ in 0..40 {
+            let (value, detail) = fixture.service.branch_detailed(fixture.cwd()).await;
+            assert_eq!(value, "");
+            assert!(detail.second.is_none());
+            // 時間切れは Expired ではなく timed_out の Output で届く。ここでは git 自身の答えだけを待つ。
+            if let Some(StepOutcome::Output {
+                exit_code: Some(_), ..
+            }) = detail.first.as_ref().map(|s| &s.outcome)
+            {
+                answered = detail.first;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        let Some(LookupStep {
+            outcome:
+                StepOutcome::Output {
+                    exit_code,
+                    timed_out,
+                    cancelled,
+                    ..
+                },
+            ..
+        }) = answered
+        else {
+            panic!("non-repository folder never produced an answered lookup");
+        };
+        assert_ne!(exit_code, Some(0));
+        assert!(!timed_out && !cancelled);
+        // 観測を通す trait 経由の branch() も同じ空を返す。
+        assert_eq!(fixture.service.branch(fixture.cwd()).await, "");
+
+        // HEAD から名前が取れた回は git を打たないので、手順はどちらも空のまま届く。
+        fixture.init().await;
+        let (value, detail) = fixture.service.branch_detailed(fixture.cwd()).await;
+        assert_eq!(value, "synthetic");
+        assert!(detail.first.is_none() && detail.second.is_none() && !detail.blank_cwd);
+
+        // detached の HEAD は git に聞く。1 回目（--abbrev-ref）と 2 回目（--short）が成功する。
+        fs::write(fixture.root.join("a.txt"), "x\n").unwrap();
+        fixture.commit().await;
+        fixture
+            .git(&fixture.root, &["checkout", "--detach", "HEAD"])
+            .await;
+        let mut seen = None;
+        for _ in 0..40 {
+            let (value, detail) = fixture.service.branch_detailed(fixture.cwd()).await;
+            if value.starts_with("detached:") {
+                seen = Some(detail);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        let detail = seen.expect("detached repo never reported its commit");
+        assert!(matches!(
+            detail.first.map(|s| s.outcome),
+            Some(StepOutcome::Ok)
+        ));
+        assert!(matches!(
+            detail.second.map(|s| s.outcome),
+            Some(StepOutcome::Ok)
+        ));
+        assert!(!detail.blank_cwd);
+
+        // PATH に git が無いとき（Go の exec.ErrNotFound 相当）。HEAD は detached のままなので git に聞きに行く。
+        let empty_path = fixture.owned.path().join("empty-path");
+        fs::create_dir(&empty_path).unwrap();
+        fixture.service.git_executable = "synthetic-nonexistent-git-command".into();
+        fixture
+            .service
+            .git_environment
+            .insert("PATH".into(), Some(empty_path.into_os_string()));
+        let (value, detail) = fixture.service.branch_detailed(fixture.cwd()).await;
+        assert_eq!(value, "");
+        assert_eq!(
+            detail.first.map(|s| s.outcome),
+            Some(StepOutcome::MissingExecutable)
+        );
+    }
+
+    #[test]
+    fn lookup_steps_keep_timeout_exit_code_and_pipe_state_apart() {
+        let base = ProcessOutput {
+            stdout: vec![],
+            stderr: vec![],
+            stdout_truncated: false,
+            stderr_truncated: false,
+            pipes_forced_closed: false,
+            outcome: ExitOutcome::Exited {
+                code: Some(128),
+                signal: None,
+            },
+        };
+        let step = |output: ProcessOutput| {
+            LookupStep::new(&Err(LookupError::Output(output)), Duration::from_millis(7)).outcome
+        };
+        let output = |exit_code, timed_out, cancelled, forced| StepOutcome::Output {
+            exit_code,
+            signal: None,
+            timed_out,
+            cancelled,
+            stdout_truncated: false,
+            stderr_truncated: false,
+            pipes_forced_closed: forced,
+        };
+        assert_eq!(step(base.clone()), output(Some(128), false, false, false));
+        assert_eq!(
+            step(ProcessOutput {
+                outcome: ExitOutcome::TimedOut,
+                ..base.clone()
+            }),
+            output(None, true, false, false)
+        );
+        assert_eq!(
+            step(ProcessOutput {
+                outcome: ExitOutcome::Cancelled,
+                pipes_forced_closed: true,
+                ..base
+            }),
+            output(None, false, true, true)
+        );
+        let ms = Duration::from_millis(7);
+        assert_eq!(
+            LookupStep::new(&Ok(String::new()), ms).outcome,
+            StepOutcome::Ok
+        );
+        assert_eq!(
+            LookupStep::new(&Err(LookupError::Expired), ms).outcome,
+            StepOutcome::Expired
+        );
+        assert_eq!(
+            LookupStep::new(&Err(LookupError::Start), ms).outcome,
+            StepOutcome::Start
+        );
     }
 
     #[test]

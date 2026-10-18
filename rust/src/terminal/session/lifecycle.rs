@@ -48,7 +48,20 @@ impl SessionEngine {
     ) -> Result<Registration, SessionError> {
         // Like Go registration, resolve the initial branch before publishing the
         // card, without holding the session-state or admission locks.
-        let branch = (self.options.branch_lookup)(request.message.cwd.clone()).await;
+        // 一時観測 rust-branch-probe: 取得の理由と時間を記録するだけ。
+        let lookup_started = std::time::Instant::now();
+        let (branch, probe) = crate::logging::branch_probe::scope((self.options.branch_lookup)(
+            request.message.cwd.clone(),
+        ))
+        .await;
+        crate::logging::branch_probe::record_register(
+            "register",
+            None,
+            &request.message.cwd,
+            &branch,
+            &probe,
+            lookup_started.elapsed(),
+        );
         let _registration = self.registration.lock().await;
         let persistence_order = { lock(&self.state).persistence_lane.reserve() };
         persistence_order.wait_ordered().await;
@@ -133,6 +146,7 @@ impl SessionEngine {
                 pending.metadata,
             )
         };
+        crate::logging::branch_probe::record_assigned(binding.session.0, &m.cwd, &branch);
         let mut session =
             match self.initialize(binding, &m, &branch, size, &started, now, false, &metadata) {
                 Ok(session) => session,
@@ -381,7 +395,20 @@ impl SessionEngine {
         {
             return Err(SessionError::InvalidRequest("session dismissed".into()));
         }
-        let branch = (self.options.branch_lookup)(request.message.cwd.clone()).await;
+        // 一時観測 rust-branch-probe: 取得の理由と時間を記録するだけ。
+        let lookup_started = std::time::Instant::now();
+        let (branch, probe) = crate::logging::branch_probe::scope((self.options.branch_lookup)(
+            request.message.cwd.clone(),
+        ))
+        .await;
+        crate::logging::branch_probe::record_register(
+            "reattach",
+            Some(request.message.session_id),
+            &request.message.cwd,
+            &branch,
+            &probe,
+            lookup_started.elapsed(),
+        );
         let _registration = self.registration.lock().await;
         let persistence_order = { lock(&self.state).persistence_lane.reserve() };
         persistence_order.wait_ordered().await;
