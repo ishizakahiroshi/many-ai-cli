@@ -551,3 +551,72 @@ async fn register_ack_and_registered_publication_wait_for_preparation_but_reatta
     drop(reattach);
     fixture.stop().await;
 }
+
+struct FailOncePreparation {
+    fail_next: std::sync::atomic::AtomicBool,
+}
+impl RegistrationPreparation for FailOncePreparation {
+    fn prepare<'a>(&'a self) -> CoreFuture<'a, Result<(), SessionError>> {
+        let fail = self
+            .fail_next
+            .swap(false, std::sync::atomic::Ordering::SeqCst);
+        Box::pin(async move {
+            if fail {
+                Err(SessionError::Transport(
+                    "synthetic preparation failure".into(),
+                ))
+            } else {
+                Ok(())
+            }
+        })
+    }
+}
+
+#[tokio::test]
+async fn failed_registration_preparation_releases_persistence_ticket_for_disconnect_and_dismiss() {
+    let preparation = Arc::new(FailOncePreparation {
+        fail_next: std::sync::atomic::AtomicBool::new(true),
+    });
+    let fixture = fixture_with_preparation(Arc::new(SyntheticObserver), Some(preparation)).await;
+    let (mut ui, _) = Client::connect(fixture.port, "").await;
+    ui.json(
+        serde_json::json!({"role":"ui","cols":120,"rows":40,"token":"synthetic-websocket-token"}),
+    )
+    .await;
+    assert_eq!(ui.frame().await.unwrap()["type"], "snapshot");
+
+    let (mut failed_wrapper, _) = Client::connect(fixture.port, "").await;
+    failed_wrapper
+        .json(serde_json::json!({"type":"register","provider":"shell",
+        "cwd":fixture._root.path(),"pid":321,"token":"synthetic-websocket-token"}))
+        .await;
+    let ended = tokio::time::timeout(Duration::from_secs(2), ui.until("session_end"))
+        .await
+        .unwrap();
+    assert_eq!(ended["session_id"], 1);
+    assert_eq!(ended["state"], "disconnected");
+
+    ui.json(serde_json::json!({"type":"session_dismiss","session_id":1}))
+        .await;
+    let removed = tokio::time::timeout(Duration::from_secs(2), ui.until("session_removed"))
+        .await
+        .unwrap();
+    assert_eq!(removed["session_id"], 1);
+
+    let (mut next_wrapper, _) = Client::connect(fixture.port, "").await;
+    next_wrapper
+        .json(serde_json::json!({"type":"register","provider":"shell",
+        "cwd":fixture._root.path(),"pid":322,"token":"synthetic-websocket-token"}))
+        .await;
+    let ack = tokio::time::timeout(Duration::from_secs(2), next_wrapper.frame())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(ack["type"], "registered");
+    assert_eq!(ack["session_id"], 2);
+
+    drop(failed_wrapper);
+    drop(next_wrapper);
+    drop(ui);
+    fixture.stop().await;
+}

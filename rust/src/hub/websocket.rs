@@ -333,6 +333,7 @@ impl WebSocketService {
             }
             .await;
             if let Err(error) = prepared {
+                drop(effects);
                 self.sockets.close_pending_wrapper(connection).await?;
                 if let Ok(effects) = self.core.disconnected(binding, Timestamp::now())
                     && let Err(failure) = self.apply(effects).await
@@ -354,6 +355,7 @@ impl WebSocketService {
                 match prepared {
                     Ok(guard) => Some(guard),
                     Err(error) => {
+                        drop(effects);
                         self.sockets.close_pending_wrapper(connection).await?;
                         if let Ok(effects) = self.core.disconnected(binding, Timestamp::now())
                             && let Err(failure) = self.apply(effects).await
@@ -367,6 +369,7 @@ impl WebSocketService {
                 None
             };
             if let Err(error) = self.sockets.bind_wrapper(binding) {
+                drop(effects);
                 if let Some(guard) = startup.take() {
                     guard.reject_before_ack();
                 }
