@@ -122,6 +122,153 @@ fn decorations_and_github_urls_preserve_shapes() {
     assert!(github_url("https://not-github.invalid/owner/repo").is_none());
 }
 #[tokio::test]
+async fn leftover_lock_is_listed_and_removed_only_on_request() {
+    let (_dir, service, root) = repo().await;
+    let lock = root.join(".git").join("index.lock");
+    fs::write(&lock, b"137 synthetic bytes").unwrap();
+    let since = std::time::SystemTime::now() - Duration::from_secs(60);
+    let found = service
+        .locks
+        .inspect(
+            &root,
+            since,
+            std::time::SystemTime::now(),
+            "session",
+            3,
+            crate::process::live_git::using,
+        )
+        .unwrap();
+    let listed = serde_json::to_value(service.locks.list()).unwrap();
+    assert_eq!(listed[0]["id"], found.id);
+    assert_eq!(listed[0]["session"], 3);
+    assert!(listed[0].get("modified").is_none());
+    let post = |body: &str| Request {
+        method: "POST".into(),
+        path: "/api/git-lock-remove".into(),
+        body: body.as_bytes().to_vec(),
+        ..Default::default()
+    };
+    assert_eq!(
+        service
+            .remove_leftover_lock(&post("{}"))
+            .unwrap_err()
+            .status,
+        400
+    );
+    assert!(lock.exists());
+    let removed = service
+        .remove_leftover_lock(&post(&format!("{{\"id\":{}}}", found.id)))
+        .unwrap();
+    assert_eq!(removed.status, 200);
+    assert!(!lock.exists());
+    let again = service
+        .remove_leftover_lock(&post(&format!("{{\"id\":{}}}", found.id)))
+        .unwrap_err();
+    assert_eq!(
+        (again.status, value_of(&again)["error"].clone()),
+        (404, json!("lock_gone"))
+    );
+}
+fn value_of(response: &Response) -> Value {
+    serde_json::from_slice(&response.body).unwrap()
+}
+/// The whole path with a real Git: a commit held by its pre-commit hook is
+/// stopped at its limit, leaves index.lock, is not listed while it still runs,
+/// is listed after, and removing it lets the next `git add` work.
+#[tokio::test]
+async fn a_commit_stopped_at_its_limit_leaves_a_lock_that_is_listed_and_removed() {
+    let (_dir, service, root) = repo().await;
+    let git = Git::new(&service, 20);
+    fs::write(root.join("a.txt"), b"one\n").unwrap();
+    git.run(&root, &["add", "a.txt"]).await.unwrap();
+    git.run(&root, &["commit", "-m", "synthetic"])
+        .await
+        .unwrap();
+    fs::write(root.join("a.txt"), b"two\n").unwrap();
+    let hook = root.join(".git").join("hooks").join("pre-commit");
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    fs::write(&hook, "#!/bin/sh\nsleep 30\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let plan = crate::process::git::GitCommand {
+        executable: service.git_executable.clone(),
+        args: ["-C", &root.to_string_lossy(), "commit", "-a", "-m", "held"]
+            .into_iter()
+            .map(std::ffi::OsString::from)
+            .collect(),
+        cwd: root.clone(),
+        env: service.git_environment.clone(),
+        stdin: vec![],
+        timeout: Duration::from_secs(4),
+        output_cap: 64 * 1024,
+        pipe_drain_timeout: Duration::from_millis(250),
+    }
+    .plan()
+    .unwrap();
+    let lock = root.join(".git").join("index.lock");
+    let started = std::time::SystemTime::now();
+    let running = tokio::spawn({
+        let plan = plan.clone();
+        async move { crate::process::run_capped(&plan, &Cancellation::default()).await }
+    });
+    for _ in 0..100 {
+        if lock.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(
+        lock.exists(),
+        "the hook holds the commit with index.lock taken"
+    );
+    // The commit is still working, so its lock is not listed.
+    assert_eq!(
+        service.locks.inspect(
+            &root,
+            started,
+            std::time::SystemTime::now(),
+            "timeout",
+            0,
+            crate::process::live_git::using
+        ),
+        None
+    );
+    let out = running.await.unwrap().unwrap();
+    assert_eq!(out.outcome, ExitOutcome::TimedOut);
+    let stopped = crate::process::git::stopped(&plan, &out.outcome, started).unwrap();
+    assert!(
+        lock.exists(),
+        "a commit stopped at its limit leaves index.lock"
+    );
+    let found = service
+        .locks
+        .inspect(
+            &stopped.directory,
+            stopped.started,
+            stopped.stopped,
+            "timeout",
+            0,
+            crate::process::live_git::using,
+        )
+        .expect("the leftover is listed once no Git works in the repository");
+    let blocked = git.run(&root, &["add", "a.txt"]).await.unwrap_err();
+    assert!(blocked.contains("index.lock"), "{blocked}");
+    let removed = service
+        .remove_leftover_lock(&Request {
+            method: "POST".into(),
+            path: "/api/git-lock-remove".into(),
+            body: format!("{{\"id\":{}}}", found.id).into_bytes(),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(removed.status, 200);
+    assert!(!lock.exists());
+    git.run(&root, &["add", "a.txt"]).await.unwrap();
+}
+#[tokio::test]
 async fn empty_repository_log_is_successful_empty_array() {
     let (_dir, service, root) = repo().await;
     let git = Git::new(&service, 5);

@@ -735,6 +735,33 @@ header {
 .handoff-notify-note:disabled { opacity: 0.6; cursor: default; }
 .handoff-notify-dismiss { --close-btn-fs: var(--fs-lg); --close-btn-pad: 2px 7px; }
 
+/* 止まった git が残した index.lock の知らせ（plan_git-invocation-index-lock.md C4）。
+   引き継ぎの帯と同じ寸法・配色。消すまで残るので自動では閉じない。パスは折り返す。 */
+.git-lock-banner {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2100;
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.4);
+}
+.git-lock-head { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+.git-lock-body { flex: 1; font-size: var(--fs-sm); line-height: 1.5; }
+.git-lock-dismiss { --close-btn-fs: var(--fs-lg); --close-btn-pad: 2px 7px; }
+.git-lock-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.git-lock-row { padding: 8px 0 0; border-top: 1px solid var(--border); }
+.git-lock-repo { font-size: var(--fs-sm); word-break: break-all; }
+.git-lock-cause, .git-lock-status { font-size: var(--fs-xs); line-height: 1.5; color: var(--muted-2); margin-top: 2px; word-break: break-all; }
+.git-lock-row-actions { display: flex; justify-content: flex-end; margin-top: 6px; }
+.git-lock-remove:disabled { opacity: 0.6; cursor: default; }
+
 /* C3: plan_derived-session-launch_c3_derive-launch.md — 派生起動ダイアログ
    （種別 = 引き継ぎ / 子）。handoff-dialog と同じ寸法・同じ配色で、欄が多い分だけ
    少し広い。.aac-wheel-overlay は derive-dialog.ts 側で付ける

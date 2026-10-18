@@ -263,6 +263,16 @@ pub fn sanitize_error(s: &str) -> String {
 }
 impl FilesService {
     pub(super) async fn git_handle(&self, r: &Request, core: &dyn SessionCore) -> Result<Response> {
+        match r.path.as_str() {
+            "/api/git-lock-leftovers" => {
+                return Ok(Response::json(
+                    200,
+                    &json!({"leftovers": self.locks.list()}),
+                ));
+            }
+            "/api/git-lock-remove" => return self.remove_leftover_lock(r),
+            _ => {}
+        }
         let post = r.method == "POST";
         let q: GitRequest = if post {
             let body = &r.body[..r.body.len().min(1024 * 1024)];
@@ -406,6 +416,26 @@ impl FilesService {
             _ => return Err(err(404, "not_found", "not found")),
         };
         Ok(Response::json(200, &value))
+    }
+    /// The user's button on a leftover-lock notice. `files::git_lock` decides.
+    fn remove_leftover_lock(&self, r: &Request) -> Result<Response> {
+        #[derive(Deserialize)]
+        struct Body {
+            id: u64,
+        }
+        let body: Body = serde_json::from_slice(&r.body[..r.body.len().min(4096)])
+            .map_err(|_| err(400, "bad_request", "id is required"))?;
+        match self.locks.remove(body.id, crate::process::live_git::using) {
+            Ok(removed) => Ok(Response::json(200, &json!({"ok":true,"removed":removed}))),
+            Err(refusal) => {
+                let status = match refusal {
+                    super::git_lock::Refusal::Failed(_) => 500,
+                    super::git_lock::Refusal::Gone => 404,
+                    _ => 409,
+                };
+                Err(err(status, refusal.code(), &refusal.message()))
+            }
+        }
     }
 }
 impl Git<'_> {

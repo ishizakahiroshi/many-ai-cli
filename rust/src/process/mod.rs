@@ -1,6 +1,7 @@
 //! Owned, cancellable subprocesses. Output readers start before prompt writes.
 pub mod execpath;
 pub mod git;
+pub mod live_git;
 pub mod pty;
 #[cfg(unix)]
 mod pty_unix;
@@ -406,7 +407,25 @@ pub async fn run_capped_with_options(
 ) -> io::Result<ProcessOutput> {
     run_observed(plan, cancel, None, options, None, None).await
 }
+/// Every owned run ends here, so a writing Git stopped before it finished is
+/// reported once (`git::report`; the Hub then looks for a stranded lock).
 async fn run_observed(
+    plan: &ProcessPlan,
+    cancel: &Cancellation,
+    events: Option<broadcast::Sender<ProcessEvent>>,
+    options: SpawnOptions,
+    interactive_input: Option<tokio::sync::mpsc::Receiver<InputCommand>>,
+    log_file: Option<std::fs::File>,
+) -> io::Result<ProcessOutput> {
+    let ran = !cancel.is_cancelled();
+    let started = std::time::SystemTime::now();
+    let result = run_contained(plan, cancel, events, options, interactive_input, log_file).await;
+    if ran && let Ok(output) = &result {
+        git::report(plan, &output.outcome, started);
+    }
+    result
+}
+async fn run_contained(
     plan: &ProcessPlan,
     cancel: &Cancellation,
     events: Option<broadcast::Sender<ProcessEvent>>,

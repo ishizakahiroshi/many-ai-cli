@@ -181,6 +181,17 @@ Release artifacts are published at
   `signal` (Ctrl+C), `server_error`, or `api_unspecified` for a
   `/api/shutdown` request that did not name its sender. Previously the log
   ended with only the process ID, so an unexpected stop could not be traced.
+- **A leftover `.git/index.lock` is shown, and can be removed with one
+  button.** When a session ends while its `git commit` / `git add` is still
+  working, or the Hub stops a writing `git` (commit, pull, worktree cleanup) at
+  its time limit, the Hub looks at that repository 3 seconds later. A lock still
+  there and written after the work started appears in a notice at the bottom
+  right; until it goes, `git add` / `git commit` there fails with "File
+  exists". Nothing is removed on its own. "Remove lock" removes it only if it
+  has not changed since it was listed and no `git` process is working in that
+  repository; otherwise the notice says why it was kept. On macOS the lock is
+  listed but always kept, because running `git` processes cannot be checked
+  there yet.
 
 ### Changed
 - Work memo rows are now a single compact line with an explicit edit (✎) button; clicking a text memo also starts editing.

@@ -4,6 +4,7 @@ mod attachments;
 pub mod branch;
 mod content;
 mod git;
+pub mod git_lock;
 mod mutation;
 mod remote_attach;
 pub mod safe_fs;
@@ -31,6 +32,8 @@ pub struct FilesService {
     /// Explicit per-command environment overlays, useful for isolated Git runners.
     pub git_environment: std::collections::BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>>,
     pub turns: std::sync::Mutex<GitTurnState>,
+    /// `index.lock` files stopped Git work left behind, for the UI notice.
+    pub locks: git_lock::LockWatch,
     /// Sends shell-session attachments to the ssh destination the user chose,
     /// and fetches files from it.
     pub ssh_executable: PathBuf,
@@ -48,6 +51,7 @@ impl FilesService {
             git_executable: resolve_git(),
             git_environment: Default::default(),
             turns: std::sync::Mutex::new(GitTurnState::default()),
+            locks: Default::default(),
             ssh_executable: if cfg!(windows) {
                 "ssh.exe".into()
             } else {
@@ -95,6 +99,7 @@ impl FilesService {
                     | "/api/git-fetch"
                     | "/api/git-pull"
                     | "/api/git-push"
+                    | "/api/git-lock-remove"
             ) {
                 "POST"
             } else {
@@ -168,6 +173,8 @@ pub const ROUTES: &[&str] = &[
     "/api/git-fetch",
     "/api/git-pull",
     "/api/git-push",
+    "/api/git-lock-leftovers",
+    "/api/git-lock-remove",
     "/api/attach",
     "/api/attachments/purge",
 ];

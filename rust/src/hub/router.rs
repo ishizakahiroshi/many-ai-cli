@@ -1768,6 +1768,7 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
                     | "/api/git-diff"
                     | "/api/git-turns"
                     | "/api/git-turn-diff"
+                    | "/api/git-lock-leftovers"
             ) {
                 &["GET"]
             } else {
