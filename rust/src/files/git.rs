@@ -4,7 +4,7 @@ use super::{FilesService, Result, err, scope};
 use crate::proto::time::Timestamp;
 use crate::{
     hub::http::{Request, Response},
-    process::{Cancellation, ExitOutcome, ProcessPlan},
+    process::{Cancellation, ExitOutcome, git::GitCommand},
     proto::{
         core::*,
         wire::{Field, GoWire, Schema},
@@ -89,30 +89,26 @@ impl<'a> Git<'a> {
                 .fetch_add(1, Ordering::SeqCst);
         }
     }
+    /// Every plan comes from `process::git`, which skips optional locks, so a
+    /// read stopped at the deadline cannot strand `.git/index.lock`. Reads that
+    /// compare HEAD with the work tree use plumbing `diff-index`: porcelain
+    /// `git diff` rewrites the index for stat-only changes regardless, and the
+    /// entry refuses it.
     async fn run(&self, cwd: &Path, args: &[&str]) -> std::result::Result<String, String> {
         self.env(cwd, args, BTreeMap::new(), false).await
-    }
-    /// Display reads only observe, like branch.rs lookups. Skipping optional
-    /// locks keeps `status` from taking `.git/index.lock` for its opportunistic
-    /// refresh, so a read stopped at the deadline cannot strand the lock. Reads
-    /// that compare HEAD with the work tree use plumbing `diff-index`: porcelain
-    /// `git diff` rewrites the index for stat-only changes even with this set.
-    async fn observe(&self, cwd: &Path, args: &[&str]) -> std::result::Result<String, String> {
-        let env = BTreeMap::from([("GIT_OPTIONAL_LOCKS".into(), Some("0".into()))]);
-        self.env(cwd, args, env, false).await
     }
     /// Commit-message context: stat, patch and unrenamed numstat against HEAD.
     async fn message_inputs(&self, cwd: &Path) -> (String, String, String) {
         let stat = self
-            .observe(cwd, &["diff-index", "--stat", "-M", "HEAD", "--"])
+            .run(cwd, &["diff-index", "--stat", "-M", "HEAD", "--"])
             .await
             .unwrap_or_default();
         let diff = self
-            .observe(cwd, &["diff-index", "-p", "-M", "HEAD", "--"])
+            .run(cwd, &["diff-index", "-p", "-M", "HEAD", "--"])
             .await
             .unwrap_or_default();
         let numstat = self
-            .observe(cwd, &["diff-index", "--numstat", "HEAD", "--"])
+            .run(cwd, &["diff-index", "--numstat", "HEAD", "--"])
             .await
             .unwrap_or_default();
         (stat, diff, numstat)
@@ -137,7 +133,7 @@ impl<'a> Git<'a> {
         all.extend(args.iter().map(std::ffi::OsString::from));
         let mut command_env = self.service.git_environment.clone();
         command_env.extend(env);
-        let plan = ProcessPlan {
+        let plan = GitCommand {
             executable: self.service.git_executable.clone(),
             args: all,
             cwd: cwd.into(),
@@ -146,7 +142,9 @@ impl<'a> Git<'a> {
             timeout,
             output_cap: 16 * 1024 * 1024,
             pipe_drain_timeout: Duration::from_millis(250),
-        };
+        }
+        .plan()
+        .map_err(|e| format!("git {}: {e}", args.join(" ")))?;
         let out = crate::process::run_capped(&plan, &Cancellation::default())
             .await
             .map_err(|e| format!("git {}: {e}", args.join(" ")))?;
@@ -366,7 +364,7 @@ impl FilesService {
             "/api/git-commit-all" => git.commit(&root, &cwd, &q).await?,
             "/api/git-commit-message" => {
                 let status = git
-                    .observe(&cwd, &["status", "--short", "--porcelain=v1", "-z"])
+                    .run(&cwd, &["status", "--short", "--porcelain=v1", "-z"])
                     .await
                     .map_err(command_error)?;
                 let files = parse_status(&status);
@@ -521,13 +519,13 @@ impl Git<'_> {
     }
     async fn status(&self, root: &Path, cwd: &Path) -> Result<Value> {
         let out = self
-            .observe(cwd, &["status", "--short", "--porcelain=v1", "-z"])
+            .run(cwd, &["status", "--short", "--porcelain=v1", "-z"])
             .await
             .map_err(command_error)?;
         let mut files = parse_status(&out);
         let stats = parse_numstat(
             &self
-                .observe(cwd, &["diff-index", "-M", "--numstat", "HEAD", "--"])
+                .run(cwd, &["diff-index", "-M", "--numstat", "HEAD", "--"])
                 .await
                 .unwrap_or_default(),
         );
@@ -638,7 +636,7 @@ impl Git<'_> {
         } else {
             parse_status(
                 &self
-                    .observe(
+                    .run(
                         cwd,
                         &[
                             "status",
@@ -671,7 +669,7 @@ impl Git<'_> {
         } else if !head.is_empty() {
             parse_numstat(
                 &self
-                    .observe(cwd, &["diff-index", "-M", "--numstat", "HEAD", "--"])
+                    .run(cwd, &["diff-index", "-M", "--numstat", "HEAD", "--"])
                     .await
                     .unwrap_or_default(),
             )
@@ -694,7 +692,7 @@ impl Git<'_> {
                 } else {
                     vec!["diff-index", "-p", "-M", "HEAD", "--", &f.path]
                 };
-                if let Ok(out) = self.observe(root, &args).await {
+                if let Ok(out) = self.run(root, &args).await {
                     f.diff = cap_diff(out);
                 }
             }
@@ -709,7 +707,7 @@ impl Git<'_> {
         let body = sanitize_message(&q.body, 8192);
         let changed = parse_status(
             &self
-                .observe(cwd, &["status", "--short", "--porcelain=v1", "-z"])
+                .run(cwd, &["status", "--short", "--porcelain=v1", "-z"])
                 .await
                 .map_err(command_error)?,
         )

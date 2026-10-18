@@ -66,7 +66,10 @@ impl RelayGit {
         )
         .map_err(|error| error.to_string())?;
         let args = args.iter().map(OsString::from).collect::<Vec<_>>();
-        let mut plan = self.git.command_plan(&self.cwd, cwd, &args, timeout);
+        let mut plan = self
+            .git
+            .command_plan(&self.cwd, cwd, &args, timeout)
+            .map_err(|error| error.to_string())?;
         let _policy = super::trial_git::configure(&self.paths, &mut plan)
             .map_err(|error| error.to_string())?;
         plan.output_cap = 16 * 1024 * 1024;
@@ -188,7 +191,8 @@ impl RelayGit {
             .map_err(|error| error.to_string())?;
         let mut plan = self
             .git
-            .command_plan(&self.cwd, parent, &[], Duration::from_secs(3));
+            .command_plan(&self.cwd, parent, &[], Duration::from_secs(3))
+            .map_err(|error| error.to_string())?;
         let _policy = super::trial_git::configure(&self.paths, &mut plan)
             .map_err(|error| error.to_string())?;
         WorktreeGit::new(plan.executable, plan.env)
@@ -1075,6 +1079,39 @@ esac
         assert_eq!(f.git.head(&f.repo, &cancel).await.unwrap(), initial);
         assert!(f.paths.relative_to_selected_root(&path).is_ok());
     }
+    #[tokio::test]
+    async fn change_count_without_a_base_leaves_the_index_and_its_lock_alone() {
+        let f = fixture().await;
+        let cancel = TaskCancellation::default();
+        // Same content, newer stat data: a refreshing status rewrites the index.
+        fs::File::options()
+            .write(true)
+            .open(f.repo.join("plan.md"))
+            .unwrap()
+            .set_modified(std::time::SystemTime::now() + Duration::from_secs(30))
+            .unwrap();
+        fs::write(f.repo.join("untracked.md"), "new\n").unwrap();
+        let index = f.repo.join(".git").join("index");
+        let before = fs::read(&index).unwrap();
+        // No base revision takes the `status --short` path.
+        assert_eq!(f.git.changed(&f.repo, "", &cancel).await.unwrap(), 1);
+        assert_eq!(fs::read(&index).unwrap(), before);
+        assert!(!f.repo.join(".git").join("index.lock").exists());
+        // Control: the same status outside the entry rewrites it in this state.
+        let empty = f.repo.parent().unwrap().join("control-empty-git-config");
+        fs::write(&empty, "").unwrap();
+        let control = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&f.repo)
+            .args(["status", "--short"])
+            .env_remove("GIT_OPTIONAL_LOCKS")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_GLOBAL", &empty)
+            .output()
+            .unwrap();
+        assert!(control.status.success());
+        assert_ne!(fs::read(&index).unwrap(), before);
+    }
     #[cfg(unix)]
     #[tokio::test]
     async fn exclude_append_keeps_existing_file_mode_and_creates_private_file() {
@@ -1784,7 +1821,8 @@ mod trial_boundary_tests {
         let (_root, paths, git, repo) = fixture();
         let mut plan = git
             .git
-            .command_plan(&repo, &repo, &[], Duration::from_secs(1));
+            .command_plan(&repo, &repo, &[], Duration::from_secs(1))
+            .unwrap();
         plan.env.insert("GIT_DIR".into(), Some("outside".into()));
         plan.env
             .insert("GIT_CONFIG_PARAMETERS".into(), Some("unsafe".into()));

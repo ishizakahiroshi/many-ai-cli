@@ -6,6 +6,7 @@ use crate::{
     process::{
         Cancellation, ExitOutcome, ProcessOutput, ProcessPlan,
         execpath::{NativeFs, Platform, Resolver},
+        git::GitCommand,
     },
     proto::core::CoreFuture,
 };
@@ -176,23 +177,23 @@ impl<'a> Lookup<'a> {
         }
         let mut argv = vec![OsString::from("-C"), OsString::from(cwd)];
         argv.extend(args.iter().map(OsString::from));
-        let mut env = self.service.git_environment.clone();
-        // Display lookups only observe. Skipping optional locks (status's
-        // opportunistic index refresh) means a stopped lookup cannot strand
-        // `.git/index.lock` and block the user's own Git commands.
-        env.insert("GIT_OPTIONAL_LOCKS".into(), Some("0".into()));
-        Ok(ProcessPlan {
+        // Display lookups only observe. The entry skips optional locks
+        // (status's opportunistic index refresh), so a stopped lookup cannot
+        // strand `.git/index.lock` and block the user's own Git commands.
+        GitCommand {
             executable,
             args: argv,
             // Go passes only -C; a nonexistent target must reach Git, rather
             // than becoming an indistinguishable pre-exec chdir failure.
             cwd: self.service.hub_cwd.clone(),
-            env,
+            env: self.service.git_environment.clone(),
             stdin: vec![],
             timeout,
             output_cap: OUTPUT_CAP,
             pipe_drain_timeout: LOOKUP_TIMEOUT,
-        })
+        }
+        .plan()
+        .map_err(|_| LookupError::Start)
     }
 
     async fn run(&self, cwd: &str, args: &[&str]) -> Result<String, LookupError> {

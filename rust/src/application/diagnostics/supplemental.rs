@@ -395,13 +395,11 @@ async fn git(
     args: &[&str],
     cancel: &Cancellation,
 ) -> Option<Vec<u8>> {
-    let exe = owner.deps.io.look_path("git").ok()?;
-    let mut argv = vec!["-C".into(), cwd.to_string_lossy().into_owned()];
-    argv.extend(args.iter().map(|s| s.to_string()));
+    let argv = args.iter().map(|s| s.to_string()).collect();
     let out = owner
         .deps
         .io
-        .command(&exe, argv, cwd, Duration::from_secs(3), cancel)
+        .git(cwd, argv, Duration::from_secs(3), cancel)
         .await
         .ok()?;
     out.success.then_some(out.bytes)

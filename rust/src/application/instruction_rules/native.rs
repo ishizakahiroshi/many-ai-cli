@@ -2,8 +2,9 @@ use super::InstructionRootResolver;
 use crate::{
     config::RuntimePaths,
     process::{
-        Cancellation, ExitOutcome, ManagedProcess, ProcessPlan, SpawnOptions,
+        Cancellation, ExitOutcome, ManagedProcess, SpawnOptions,
         execpath::{NativeFs, Platform, Resolver},
+        git::{self, GitCommand},
     },
     proto::core::CoreFuture,
 };
@@ -57,7 +58,7 @@ impl InstructionRootResolver for NativeInstructionRootResolver {
             }
             let resolver =
                 Resolver::new(Platform::native(), &self.environment, &self.cwd, &NativeFs);
-            let Ok(executable) = resolver.look_path("git") else {
+            let Ok(executable) = resolver.look_path(git::COMMAND) else {
                 return fallback;
             };
             let env = self
@@ -66,7 +67,7 @@ impl InstructionRootResolver for NativeInstructionRootResolver {
                 .filter_map(|v| v.split_once('='))
                 .map(|(k, v)| (OsString::from(k), Some(OsString::from(v))))
                 .collect();
-            let plan = ProcessPlan {
+            let Ok(plan) = (GitCommand {
                 executable: executable.into(),
                 args: vec!["rev-parse".into(), "--show-toplevel".into()],
                 cwd: fallback.clone(),
@@ -75,6 +76,9 @@ impl InstructionRootResolver for NativeInstructionRootResolver {
                 timeout: Duration::from_millis(250),
                 output_cap: 64 * 1024,
                 pipe_drain_timeout: Duration::from_millis(100),
+            })
+            .plan() else {
+                return fallback;
             };
             let (mut process, _events) = ManagedProcess::spawn_owned_with_options(
                 plan,

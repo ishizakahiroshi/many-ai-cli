@@ -486,3 +486,38 @@ async fn locked_worktree_is_retained_with_source_remove_error() {
     f.git(&repo, &["worktree", "unlock", &tree.path]).await;
     f.lifecycle.cleanup(&tree, "delete").await.unwrap();
 }
+#[tokio::test]
+async fn cleanup_clean_check_leaves_the_worktree_index_and_its_lock_alone() {
+    let f = Fixture::new();
+    let repo = f.repo("parent").await;
+    let tree = f.prepare(&repo, "stat-only").await;
+    let path = PathBuf::from(&tree.path);
+    let gitdir = PathBuf::from(f.git(&path, &["rev-parse", "--absolute-git-dir"]).await);
+    // Same content, newer stat data: a refreshing status rewrites the index.
+    fs::File::options()
+        .write(true)
+        .open(path.join("base.txt"))
+        .unwrap()
+        .set_modified(std::time::SystemTime::now() + Duration::from_secs(30))
+        .unwrap();
+    // An untracked file keeps the tree, so its index remains to compare.
+    fs::write(path.join("untracked.txt"), "new\n").unwrap();
+    let index = gitdir.join("index");
+    let before = fs::read(&index).unwrap();
+    let error = f.lifecycle.cleanup(&tree, "delete").await.unwrap_err();
+    assert_eq!(error, "worktree retained: uncommitted changes");
+    assert_eq!(fs::read(&index).unwrap(), before);
+    assert!(!gitdir.join("index.lock").exists());
+    // Control: the same status outside the entry rewrites it in this state.
+    let control = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&path)
+        .args(["status", "--porcelain"])
+        .env_remove("GIT_OPTIONAL_LOCKS")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", f.root.join("empty-git-config"))
+        .output()
+        .unwrap();
+    assert!(control.status.success());
+    assert_ne!(fs::read(&index).unwrap(), before);
+}
