@@ -177,6 +177,95 @@ impl GitCommand {
 /// The bare command name callers resolve through PATH.
 pub const COMMAND: &str = "git";
 
+/// A writing Git the Hub stopped before it finished (deadline or cancel). It
+/// may have left `.git/index.lock`; the Hub looks (`files::git_lock`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Stopped {
+    /// The `-C` directory, or the process directory without one.
+    pub directory: PathBuf,
+    pub started: std::time::SystemTime,
+    pub stopped: std::time::SystemTime,
+}
+
+type StopSink = std::sync::Arc<dyn Fn(Stopped) + Send + Sync>;
+static STOP_SINK: std::sync::Mutex<Option<StopSink>> = std::sync::Mutex::new(None);
+
+/// Receive every [`Stopped`] writing Git from now on (the Hub sets one).
+pub fn on_stopped(sink: StopSink) {
+    *STOP_SINK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(sink);
+}
+
+/// The [`Stopped`] a finished plan reports, if it is a writing Git from this
+/// entry that did not finish on its own.
+pub fn stopped(
+    plan: &ProcessPlan,
+    outcome: &super::ExitOutcome,
+    started: std::time::SystemTime,
+) -> Option<Stopped> {
+    if !matches!(
+        outcome,
+        super::ExitOutcome::TimedOut | super::ExitOutcome::Cancelled
+    ) {
+        return None;
+    }
+    let ours = plan.env.get(std::ffi::OsStr::new(OPTIONAL_LOCKS)) == Some(&Some("0".into()));
+    let git = plan
+        .executable
+        .file_stem()
+        .is_some_and(|stem| stem.eq_ignore_ascii_case(COMMAND));
+    if !ours || !git || access(&plan.args) != Access::Write {
+        return None;
+    }
+    let mut directory = plan.cwd.clone();
+    let mut index = 0;
+    while index < plan.args.len() {
+        let arg = plan.args[index].to_string_lossy();
+        if !arg.starts_with('-') {
+            break;
+        }
+        if arg == "-C"
+            && let Some(next) = plan.args.get(index + 1)
+        {
+            let next = PathBuf::from(next);
+            directory = if next.is_absolute() {
+                next
+            } else {
+                directory.join(next)
+            };
+        }
+        index += if GLOBAL_WITH_VALUE.contains(&arg.as_ref()) {
+            2
+        } else {
+            1
+        };
+    }
+    Some(Stopped {
+        directory,
+        started,
+        stopped: std::time::SystemTime::now(),
+    })
+}
+
+/// Tell the Hub's sink about a stopped writing Git (no sink: nothing happens).
+pub(super) fn report(
+    plan: &ProcessPlan,
+    outcome: &super::ExitOutcome,
+    started: std::time::SystemTime,
+) {
+    let Some(stopped) = stopped(plan, outcome, started) else {
+        return;
+    };
+    let sink = STOP_SINK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone();
+    if let Some(sink) = sink {
+        sink(stopped);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -292,6 +381,43 @@ mod tests {
         ] {
             assert!(command(allowed).plan().is_ok(), "{allowed:?}");
         }
+    }
+
+    #[test]
+    fn only_a_writing_git_from_this_entry_that_was_stopped_is_reported() {
+        let started = std::time::SystemTime::now();
+        let write = command(&["-C", "repo dir", "-c", "a=b", "commit", "-a"])
+            .plan()
+            .unwrap();
+        let reported = stopped(&write, &crate::process::ExitOutcome::TimedOut, started).unwrap();
+        assert_eq!(reported.directory, PathBuf::from(".").join("repo dir"));
+        assert_eq!(reported.started, started);
+        assert!(stopped(&write, &crate::process::ExitOutcome::Cancelled, started).is_some());
+        let finished = crate::process::ExitOutcome::Exited {
+            code: Some(1),
+            signal: None,
+        };
+        assert!(stopped(&write, &finished, started).is_none());
+        // Reads are harmless to stop; plans not built here are not ours.
+        let read = command(&["status"]).plan().unwrap();
+        assert!(stopped(&read, &crate::process::ExitOutcome::TimedOut, started).is_none());
+        let mut foreign = write.clone();
+        foreign
+            .env
+            .remove(OsString::from(OPTIONAL_LOCKS).as_os_str());
+        assert!(stopped(&foreign, &crate::process::ExitOutcome::TimedOut, started).is_none());
+        let mut other = write;
+        other.executable = "ssh".into();
+        assert!(stopped(&other, &crate::process::ExitOutcome::TimedOut, started).is_none());
+        // Without -C the process directory is the repository.
+        let mut plain = command(&["add", "-A"]).plan().unwrap();
+        plain.cwd = "work".into();
+        assert_eq!(
+            stopped(&plain, &crate::process::ExitOutcome::TimedOut, started)
+                .unwrap()
+                .directory,
+            PathBuf::from("work")
+        );
     }
 
     // ---- the single-entry check ----

@@ -276,6 +276,55 @@ impl ApplicationEventObserver {
             SessionError::InvalidRequest("event observer owners are already bound".into())
         })
     }
+    /// A session that went down mid-commit leaves `index.lock` in its
+    /// repository. Look a moment later, off the event chain; whatever is found
+    /// is only listed for the user (`files::git_lock`).
+    fn look_for_git_lock(&self, binding: SessionBinding) {
+        let Some(snapshot) = self
+            .owners
+            .get()
+            .and_then(|owners| owners.core.upgrade())
+            .and_then(|core| core.snapshot(binding.session))
+        else {
+            return;
+        };
+        let Ok(since) = parse_rfc3339(&snapshot.started_at)
+            .and_then(crate::proto::time::utc)
+            .map(std::time::SystemTime::from)
+        else {
+            return;
+        };
+        if snapshot.cwd.is_empty() {
+            return;
+        }
+        let Ok(permit) = self.tasks.effect_permit() else {
+            return;
+        };
+        let cancel = permit.cancellation();
+        let files = Arc::downgrade(&self.files);
+        let stopped = std::time::SystemTime::now();
+        let cwd = std::path::PathBuf::from(snapshot.cwd);
+        drop(permit.start(async move {
+            tokio::select! {
+                _ = tokio::time::sleep(crate::files::git_lock::SETTLE) => {}
+                _ = cancel.token().cancelled() => return,
+            }
+            let Some(files) = files.upgrade() else {
+                return;
+            };
+            let _ = tokio::task::spawn_blocking(move || {
+                files.locks.inspect(
+                    &cwd,
+                    since,
+                    stopped,
+                    "session",
+                    binding.session.0,
+                    process::live_git::using,
+                )
+            })
+            .await;
+        }));
+    }
     async fn git_turn(
         &self,
         binding: SessionBinding,
@@ -503,6 +552,7 @@ impl OrderedEventObserver for ApplicationEventObserver {
                     if let Some(hooks) = self.usage_hooks.get().and_then(Weak::upgrade) {
                         hooks.ended("codex");
                     }
+                    self.look_for_git_lock(*binding);
                     if let Some(owner) = self.orchestration.get().and_then(Weak::upgrade) {
                         owner
                             .session_ended(binding.session, &end.declared_state)

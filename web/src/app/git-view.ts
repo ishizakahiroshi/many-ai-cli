@@ -3,6 +3,7 @@ import { apiFetch, token } from './util.js';
 import { STORAGE_LANG_KEY } from './user-prefs.js';
 import { appConfirm } from './settings.js';
 import { showPathPopup, joinPath, isAbsolutePath } from './path-links.js';
+import { scheduleGitLockCheck } from './git-lock-notice.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -420,6 +421,8 @@ export class GitCommitModal {
       if (typeof this.opts.onCommitted === 'function') await this.opts.onCommitted(data);
     } catch (err) {
       st.error = err && err.message ? err.message : String(err);
+      // 時間切れで止まった commit は index.lock を残すことがある（Hub が調べて知らせる）。
+      scheduleGitLockCheck();
     } finally {
       st.busy = false;
       this._renderState();
@@ -1309,6 +1312,7 @@ export function updatePushButtonLabel(btn, wt) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.ok === false) {
           const detail = data && data.detail ? data.detail : `HTTP ${res.status}`;
+          scheduleGitLockCheck();
           if (data && data.error === 'not_fast_forward') {
             _toast(_gt('git_pull_diverged', 'Branch has diverged — manual merge needed'), detail);
           } else {

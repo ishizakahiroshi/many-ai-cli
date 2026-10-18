@@ -287,6 +287,38 @@ impl HubComposition {
         )?);
         let owner = HubTaskOwner::new(tokio::runtime::Handle::current());
         let tasks = owner.handle();
+        {
+            // A writing Git the Hub stops at its deadline may leave index.lock.
+            let files = Arc::downgrade(&files);
+            let tasks = tasks.clone();
+            crate::process::git::on_stopped(Arc::new(move |stopped| {
+                let Ok(permit) = tasks.effect_permit() else {
+                    return;
+                };
+                let cancel = permit.cancellation();
+                let files = files.clone();
+                drop(permit.start(async move {
+                    tokio::select! {
+                        _ = tokio::time::sleep(crate::files::git_lock::SETTLE) => {}
+                        _ = cancel.token().cancelled() => return,
+                    }
+                    let Some(files) = files.upgrade() else {
+                        return;
+                    };
+                    let _ = tokio::task::spawn_blocking(move || {
+                        files.locks.inspect(
+                            &stopped.directory,
+                            stopped.started,
+                            stopped.stopped,
+                            "timeout",
+                            0,
+                            crate::process::live_git::using,
+                        )
+                    })
+                    .await;
+                }));
+            }));
+        }
         let push = match crate::application::push::PushManager::new(
             &paths,
             tasks.clone(),

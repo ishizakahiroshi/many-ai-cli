@@ -20,6 +20,7 @@ import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed, isTranscriptBac
 import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } from './chat-payload.js';
 import { handleUsageStatMessage, removeUsageCacheEntry, resetUsageCache } from './token-statusbar.js';
 import { checkHandoffNotifyFromUsageStat, handleHandoffNoteMessage } from './handoff.js';
+import { refreshGitLockNotice, scheduleGitLockCheck } from './git-lock-notice.js';
 import { receiveSubagentTree, receiveWorkflowProgress, removeWorkflowSnapshot } from './workflow-modal.js';
 import { removeSubagentTree, setSubagentTree } from './workflow-store.js';
 import { dropDoneSummary, setDoneSummary } from './done-summary.js';
@@ -297,6 +298,8 @@ export function _connectWs() {
       resetAllLocalSessionHistory();
     }
     _sendRegister();
+    // 止まった git が残したロックは Hub が覚えている。つながるたびに一覧を取り直す。
+    void refreshGitLockNotice();
   };
   _ws.onmessage = (ev) => {
     // 任意のメッセージ受信（ping 含む）で死活タイマを更新する。
@@ -776,6 +779,8 @@ export function _connectWs() {
     }
   } else if (m.type === 'session_end') {
     window.multiPaneManager?.onSessionEnded?.(m.session_id);
+    // commit の途中で終わったセッションは index.lock を残す。Hub が調べた後に一覧を取る。
+    scheduleGitLockCheck();
     if ((m.state || 'disconnected') === 'completed') {
       requestSessionDismiss(m.session_id);
       removeLocalSession(m.session_id);
