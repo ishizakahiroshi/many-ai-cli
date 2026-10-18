@@ -10,6 +10,10 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Fixed
+- The inline Usage meter now gives its remaining-quota bar the width left after
+  its value and reset text, so the fill is easier to read on narrow rows.
+
 ### Added
 - **Attachments reach the machine a shell session ssh'd into.** In a shell
   session, the new "📤 Send to" button next to the attachment area takes an ssh
