@@ -41,6 +41,27 @@ impl SessionEngine {
         }
     }
 
+    /// The working directory of every session that has not ended, for the
+    /// repositories to watch and match changes to (`files::change_watch`).
+    pub(crate) fn branch_refresh_cwds(&self) -> Vec<(LiveSessionId, String)> {
+        lock(&self.state)
+            .sessions
+            .values()
+            .filter(|session| !terminal(&session.snapshot.state))
+            .map(|session| (session.binding.session, session.snapshot.cwd.clone()))
+            .collect()
+    }
+
+    /// Make these sessions due now: their repository changed.
+    pub(crate) fn restart_branch_refresh_for(&self, ids: &[LiveSessionId]) {
+        let mut state = lock(&self.state);
+        for id in ids {
+            if let Some(session) = state.sessions.get_mut(id) {
+                session.branch_refresh.checked_at = None;
+            }
+        }
+    }
+
     pub(crate) fn branch_project_needed(&self, cwd: &str, ids: &[LiveSessionId]) -> bool {
         let state = lock(&self.state);
         ids.iter().any(|id| {
