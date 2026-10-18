@@ -242,7 +242,13 @@ impl NormalWorktreeLifecycle {
                 output: String::new(),
                 detail: "context deadline exceeded".into(),
             })?;
-        let plan = self.git.command_plan(&self.process_cwd, cwd, argv, timeout);
+        let plan = self
+            .git
+            .command_plan(&self.process_cwd, cwd, argv, timeout)
+            .map_err(|error| GitFailure {
+                output: String::new(),
+                detail: error.to_string(),
+            })?;
         let (mut process, events) = ManagedProcess::spawn_owned_with_options(
             plan,
             1,

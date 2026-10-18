@@ -3,7 +3,10 @@
 use super::{board::private_dirs, clean_path, safe_token};
 use crate::{
     config::OrchestrationConfig,
-    process::{self, ExitOutcome, ProcessPlan},
+    process::{
+        self, ExitOutcome, ProcessPlan,
+        git::{GitCommand, Refused},
+    },
     proto::core::TaskCancellation,
 };
 use std::{
@@ -42,15 +45,19 @@ impl WorktreeGit {
         Self { executable, env }
     }
     /// Keep the process directory independent of Git's `-C` operand so a
-    /// relative repository spelling is resolved exactly once by Git.
+    /// relative repository spelling is resolved exactly once by Git. Plans
+    /// come from `process::git`, which skips optional locks: relay's change
+    /// count (`status --short`) and the clean check before removing a worktree
+    /// (`status --porcelain`) only observe, so a stopped one cannot strand
+    /// `.git/index.lock` in the user's repository.
     pub fn command_plan(
         &self,
         process_cwd: &Path,
         git_cwd: &Path,
         argv: &[OsString],
         timeout: Duration,
-    ) -> ProcessPlan {
-        ProcessPlan {
+    ) -> Result<ProcessPlan, Refused> {
+        GitCommand {
             executable: self.executable.clone(),
             args: [
                 vec![OsString::from("-C"), git_cwd.as_os_str().to_owned()],
@@ -64,6 +71,7 @@ impl WorktreeGit {
             output_cap: usize::MAX,
             pipe_drain_timeout: Duration::from_secs(1),
         }
+        .plan()
     }
     async fn run(
         &self,
@@ -72,20 +80,12 @@ impl WorktreeGit {
         timeout: Duration,
         cancel: &TaskCancellation,
     ) -> Result<String, GitFailure> {
-        let plan = ProcessPlan {
-            executable: self.executable.clone(),
-            args: [
-                vec![OsString::from("-C"), cwd.as_os_str().to_owned()],
-                args.to_vec(),
-            ]
-            .concat(),
-            cwd: cwd.to_owned(),
-            env: self.env.clone(),
-            stdin: Vec::new(),
-            timeout,
-            output_cap: usize::MAX,
-            pipe_drain_timeout: Duration::from_secs(1),
-        };
+        let plan = self
+            .command_plan(cwd, cwd, args, timeout)
+            .map_err(|e| GitFailure {
+                output: String::new(),
+                detail: e.to_string(),
+            })?;
         let output = process::run_capped(&plan, cancel.token())
             .await
             .map_err(|e| GitFailure {

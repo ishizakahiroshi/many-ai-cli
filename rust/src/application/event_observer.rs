@@ -10,7 +10,7 @@ use crate::{
     files::{FilesService, GitTurnCompleted, GitTurnSnapshot},
     hub::{sockets::OrderedEventObserver, task_owner::HubTaskHandle},
     orchestration::handoff::{HandoffStore, KIND_GIT_TURN, Record},
-    process::{self, Cancellation, ExitOutcome, ProcessPlan},
+    process::{self, Cancellation, ExitOutcome, git::GitCommand},
     proto::{
         core::*,
         time::{Timestamp, parse_rfc3339},
@@ -451,7 +451,7 @@ impl ApplicationEventObserver {
         }
     }
     async fn latest_commit(&self, completed: &GitTurnCompleted) -> (String, String) {
-        let plan = ProcessPlan {
+        let Ok(plan) = (GitCommand {
             executable: self.files.git_executable.clone(),
             args: ["log", "-1", "--pretty=format:%H%x09%s"]
                 .into_iter()
@@ -463,6 +463,9 @@ impl ApplicationEventObserver {
             timeout: Duration::from_secs(5),
             output_cap: 1024 * 1024,
             pipe_drain_timeout: Duration::from_secs(2),
+        })
+        .plan() else {
+            return Default::default();
         };
         let Ok(out) = process::run_capped(&plan, &Cancellation::default()).await else {
             return Default::default();

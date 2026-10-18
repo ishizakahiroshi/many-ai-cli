@@ -71,6 +71,16 @@ impl DiagnosticIo for FakeIo {
             })
         })
     }
+    // As before the Git entry: the fixture has no Git on its PATH.
+    fn git<'a>(
+        &'a self,
+        _: &'a Path,
+        _: Vec<String>,
+        _: Duration,
+        _: &'a Cancellation,
+    ) -> CoreFuture<'a, io::Result<ProbeOutput>> {
+        Box::pin(async { Err(io::Error::new(io::ErrorKind::NotFound, "synthetic absent")) })
+    }
     fn http_status<'a>(
         &'a self,
         _: &'a str,

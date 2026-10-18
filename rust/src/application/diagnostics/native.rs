@@ -2,11 +2,61 @@ use super::*;
 use crate::process::{
     self, ExitOutcome, ProcessPlan, SpawnOptions,
     execpath::{NativeFs, Platform, Resolver},
+    git::{self as git_entry, GitCommand},
 };
 pub struct NativeDiagnosticIo {
     pub paths: RuntimePaths,
     pub cwd: PathBuf,
     pub environment: Vec<String>,
+}
+impl NativeDiagnosticIo {
+    /// A trial owner runs only a synthetic CLI inside its own root.
+    fn contained(&self, executable: &str, cwd: &Path) -> io::Result<()> {
+        if !self.paths.is_trial() {
+            return Ok(());
+        }
+        let root = self.paths.root().canonicalize()?;
+        if !crate::files::scope::under_roots(Path::new(executable), std::slice::from_ref(&root)) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "trial diagnostic requires contained synthetic CLI",
+            ));
+        }
+        let executable_path = Path::new(executable).canonicalize()?;
+        let working_directory = cwd.canonicalize()?;
+        if !executable_path.starts_with(&root) || !working_directory.starts_with(&root) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "trial diagnostic requires contained synthetic CLI",
+            ));
+        }
+        Ok(())
+    }
+    fn env(&self) -> std::collections::BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>> {
+        self.environment
+            .iter()
+            .filter_map(|s| s.split_once('='))
+            .map(|(k, v)| (k.into(), Some(v.into())))
+            .collect()
+    }
+    async fn probe(plan: ProcessPlan, cancel: &Cancellation) -> io::Result<ProbeOutput> {
+        let output = process::run_capped_with_options(
+            &plan,
+            cancel,
+            SpawnOptions {
+                no_window: true,
+                env_clear: true,
+                stdin_null: true,
+                ..Default::default()
+            },
+        )
+        .await?;
+        Ok(ProbeOutput {
+            success: matches!(output.outcome, ExitOutcome::Exited { code: Some(0), .. })
+                && !output.stdout_truncated,
+            bytes: output.stdout,
+        })
+    }
 }
 impl DiagnosticIo for NativeDiagnosticIo {
     fn look_path(&self, name: &str) -> io::Result<String> {
@@ -21,59 +71,49 @@ impl DiagnosticIo for NativeDiagnosticIo {
         cancel: &'a Cancellation,
     ) -> CoreFuture<'a, io::Result<ProbeOutput>> {
         Box::pin(async move {
-            if self.paths.is_trial() {
-                let root = self.paths.root().canonicalize()?;
-                if !crate::files::scope::under_roots(
-                    Path::new(executable),
-                    std::slice::from_ref(&root),
-                ) {
-                    return Err(io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        "trial diagnostic requires contained synthetic CLI",
-                    ));
-                }
-                let executable_path = Path::new(executable).canonicalize()?;
-                let working_directory = cwd.canonicalize()?;
-                if !executable_path.starts_with(&root) || !working_directory.starts_with(&root) {
-                    return Err(io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        "trial diagnostic requires contained synthetic CLI",
-                    ));
-                }
-            }
+            self.contained(executable, cwd)?;
             let resolved = Resolver::new(Platform::native(), &self.environment, cwd, &NativeFs)
                 .resolve(executable, &args);
             let plan = ProcessPlan {
                 executable: resolved.executable.into(),
                 args: resolved.args.into_iter().map(Into::into).collect(),
                 cwd: cwd.into(),
-                env: self
-                    .environment
-                    .iter()
-                    .filter_map(|s| s.split_once('='))
-                    .map(|(k, v)| (k.into(), Some(v.into())))
-                    .collect(),
+                env: self.env(),
                 stdin: vec![],
                 timeout,
                 output_cap: 1024 * 1024,
                 pipe_drain_timeout: Duration::from_secs(2),
             };
-            let output = process::run_capped_with_options(
-                &plan,
-                cancel,
-                SpawnOptions {
-                    no_window: true,
-                    env_clear: true,
-                    stdin_null: true,
-                    ..Default::default()
-                },
-            )
-            .await?;
-            Ok(ProbeOutput {
-                success: matches!(output.outcome, ExitOutcome::Exited { code: Some(0), .. })
-                    && !output.stdout_truncated,
-                bytes: output.stdout,
-            })
+            Self::probe(plan, cancel).await
+        })
+    }
+    fn git<'a>(
+        &'a self,
+        cwd: &'a Path,
+        args: Vec<String>,
+        timeout: Duration,
+        cancel: &'a Cancellation,
+    ) -> CoreFuture<'a, io::Result<ProbeOutput>> {
+        Box::pin(async move {
+            let executable = self.look_path(git_entry::COMMAND)?;
+            self.contained(&executable, cwd)?;
+            let mut argv = vec!["-C".to_string(), cwd.to_string_lossy().into_owned()];
+            argv.extend(args);
+            let resolved = Resolver::new(Platform::native(), &self.environment, cwd, &NativeFs)
+                .resolve(&executable, &argv);
+            let plan = GitCommand {
+                executable: resolved.executable.into(),
+                args: resolved.args.into_iter().map(Into::into).collect(),
+                cwd: cwd.into(),
+                env: self.env(),
+                stdin: vec![],
+                timeout,
+                output_cap: 1024 * 1024,
+                pipe_drain_timeout: Duration::from_secs(2),
+            }
+            .plan()
+            .map_err(io::Error::other)?;
+            Self::probe(plan, cancel).await
         })
     }
     fn http_status<'a>(

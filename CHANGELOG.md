@@ -221,6 +221,13 @@ Release artifacts are published at
   `git diff-index`, which never rewrites the index, so a read stopped at its
   5-second limit can no longer leave a 0-byte `index.lock` that blocks your own
   `git add` / `git commit`. Commit, push, pull and fetch are unchanged.
+- Relay's change count and the clean check before an automatic worktree is
+  removed no longer take `.git/index.lock` either: they ran `git status` without
+  `GIT_OPTIONAL_LOCKS=0` and are stopped after 3 and 5 seconds. Every `git` the
+  Hub starts (the Git panel, the branch display, relay, worktrees, turn records,
+  the approval-rule location and `doctor`) is now planned in one place that
+  sets `GIT_OPTIONAL_LOCKS=0` and refuses a porcelain `git diff` against the
+  work tree, and a test fails when new code starts `git` without it.
 - The Windows Hub no longer builds a machine-wide thread snapshot every time it
   starts a child process (for example each `git` call that refreshes the branch
   display), which took more than half of the Hub's CPU. It now looks only at the

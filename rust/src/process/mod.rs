@@ -1,5 +1,6 @@
 //! Owned, cancellable subprocesses. Output readers start before prompt writes.
 pub mod execpath;
+pub mod git;
 pub mod pty;
 #[cfg(unix)]
 mod pty_unix;

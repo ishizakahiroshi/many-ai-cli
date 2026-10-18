@@ -56,6 +56,15 @@ pub trait DiagnosticIo: Send + Sync {
         timeout: Duration,
         cancel: &'a Cancellation,
     ) -> CoreFuture<'a, io::Result<ProbeOutput>>;
+    /// Read-only `git -C <cwd> <args>` for the residue checks. The native
+    /// owner plans it through `process::git`, like every Hub-launched Git.
+    fn git<'a>(
+        &'a self,
+        cwd: &'a Path,
+        args: Vec<String>,
+        timeout: Duration,
+        cancel: &'a Cancellation,
+    ) -> CoreFuture<'a, io::Result<ProbeOutput>>;
     fn http_status<'a>(
         &'a self,
         url: &'a str,

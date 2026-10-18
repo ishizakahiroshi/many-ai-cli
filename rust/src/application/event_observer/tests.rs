@@ -2,6 +2,7 @@ use super::*;
 use crate::{
     config::{Config, RuntimePaths},
     hub::task_owner::HubTaskOwner,
+    process::ProcessPlan,
     proto,
     terminal::{
         events::CoreEventBus,

@@ -1,5 +1,28 @@
 use super::*;
 use std::fs;
+/// Porcelain Git outside `process::git`, for controls that show what the entry
+/// refuses: it rewrites the index even with optional locks skipped.
+fn porcelain(service: &FilesService, root: &Path, args: &[&str]) -> String {
+    let mut command = std::process::Command::new(&service.git_executable);
+    command
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .env("GIT_OPTIONAL_LOCKS", "0");
+    for (key, value) in &service.git_environment {
+        match value {
+            Some(value) => command.env(key, value),
+            None => command.env_remove(key),
+        };
+    }
+    let out = command.output().unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8(out.stdout).unwrap()
+}
 async fn repo() -> (tempfile::TempDir, FilesService, PathBuf) {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("synthetic repo 日本語");
@@ -230,23 +253,28 @@ async fn display_reads_leave_the_index_and_its_lock_alone() {
     assert!(patch.contains("+new") && !patch.contains("same.md"));
     assert_eq!(fs::read(&index).unwrap(), before);
     assert!(!root.join(".git").join("index.lock").exists());
+    // The entry refuses the porcelain read that would rewrite it.
+    let refused = git
+        .run(&root, &["diff", "--numstat", "HEAD", "--"])
+        .await
+        .unwrap_err();
+    assert!(refused.contains("diff-index"), "{refused}");
+    assert_eq!(fs::read(&index).unwrap(), before);
     // Control: the porcelain reads used before rewrite it in the same state,
     // so the unchanged index above is the display reads' doing. Their counts
     // must still match what the plumbing reads returned.
-    let porcelain = git
-        .run(&root, &["diff", "--numstat", "HEAD", "--"])
-        .await
-        .unwrap();
+    let porcelain_numstat = porcelain(&service, &root, &["diff", "--numstat", "HEAD", "--"]);
     assert_ne!(fs::read(&index).unwrap(), before);
     let plumbing = git
-        .observe(&root, &["diff-index", "-M", "--numstat", "HEAD", "--"])
+        .run(&root, &["diff-index", "-M", "--numstat", "HEAD", "--"])
         .await
         .unwrap();
-    assert_eq!(parse_numstat(&plumbing), parse_numstat(&porcelain));
-    let unrenamed = git
-        .run(&root, &["diff", "--numstat", "--no-renames", "HEAD", "--"])
-        .await
-        .unwrap();
+    assert_eq!(parse_numstat(&plumbing), parse_numstat(&porcelain_numstat));
+    let unrenamed = porcelain(
+        &service,
+        &root,
+        &["diff", "--numstat", "--no-renames", "HEAD", "--"],
+    );
     assert_eq!(parse_numstat(&numstat), parse_numstat(&unrenamed));
 }
 #[tokio::test]
