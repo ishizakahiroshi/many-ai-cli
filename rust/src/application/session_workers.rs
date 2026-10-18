@@ -134,6 +134,7 @@ impl SessionWorkers {
                 files.branch_reader(),
                 this.clone(),
                 tasks.clone(),
+                crate::files::change_watch::ChangeWatch::native(),
             ),
             config,
             boards: Arc::new(BoardStore::new(&paths)),

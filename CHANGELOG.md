@@ -194,6 +194,16 @@ Release artifacts are published at
   there yet.
 
 ### Changed
+- On Windows, session cards count changed files and lines again only after a
+  file in the repository changes (2 seconds after the first change), and at
+  least once a minute in case a change notification was lost. Counts are no
+  longer taken with `git status` and `git diff-index` on every refresh, and
+  sessions in the same repository share one count. Changes inside `.git` other
+  than the index, HEAD and refs, and changes under paths Git ignores (such as
+  build output), do not trigger a count. While a session that has not ended
+  works in a repository, its folder and the folders above it cannot be renamed,
+  the same as with the session's own working directory; the Hub lets go of the
+  folder as soon as the last such session ends. macOS and Linux are unchanged.
 - While no browser is connected to the Hub, session cards are not refreshed, so
   the Hub starts no `git` for their branch name and change counts. When a
   browser connects again, every session is counted once right away.

@@ -28,11 +28,28 @@ const LOOKUP_TIMEOUT: Duration = Duration::from_millis(250);
 const CHANGES_TIMEOUT: Duration = Duration::from_secs(5);
 const OUTPUT_CAP: usize = 16 * 1024 * 1024;
 
+/// `check-ignore` for a batch of changed paths (`files::change_watch`).
+const IGNORE_TIMEOUT: Duration = Duration::from_secs(2);
+
 /// `Some("")` is a definitive absence of a project; `None` must be retried.
 pub trait GitBranchSource: Send + Sync {
     fn branch<'a>(&'a self, cwd: &'a str) -> CoreFuture<'a, String>;
     fn changes<'a>(&'a self, cwd: &'a str) -> CoreFuture<'a, (i64, i64, i64)>;
     fn project<'a>(&'a self, cwd: &'a str) -> CoreFuture<'a, Option<String>>;
+    /// `changes`, and whether Git answered both counts. Only answered counts
+    /// are reused until the repository changes.
+    fn changes_counted<'a>(&'a self, cwd: &'a str) -> CoreFuture<'a, ((i64, i64, i64), bool)> {
+        Box::pin(async move { (self.changes(cwd).await, true) })
+    }
+    /// Which of `paths` (relative to the work tree `root`; directories end in
+    /// `/`) Git ignores. `None` when Git did not answer.
+    fn ignored<'a>(
+        &'a self,
+        _root: &'a Path,
+        _paths: &'a [String],
+    ) -> CoreFuture<'a, Option<std::collections::BTreeSet<String>>> {
+        Box::pin(async { None })
+    }
 }
 
 impl FilesService {
@@ -122,30 +139,48 @@ impl GitBranchSource for FilesService {
     }
 
     fn changes<'a>(&'a self, cwd: &'a str) -> CoreFuture<'a, (i64, i64, i64)> {
+        Box::pin(async move { self.count_changes(cwd).await.0 })
+    }
+
+    fn changes_counted<'a>(&'a self, cwd: &'a str) -> CoreFuture<'a, ((i64, i64, i64), bool)> {
+        Box::pin(self.count_changes(cwd))
+    }
+
+    fn ignored<'a>(
+        &'a self,
+        root: &'a Path,
+        paths: &'a [String],
+    ) -> CoreFuture<'a, Option<std::collections::BTreeSet<String>>> {
         Box::pin(async move {
-            if cwd.trim().is_empty() {
-                return (0, 0, 0);
+            if paths.is_empty() {
+                return Some(Default::default());
             }
-            let git = Lookup::with_budget(self, CHANGES_TIMEOUT);
-            let Ok(status) = git.run(cwd, &["status", "--porcelain"]).await else {
-                return (0, 0, 0);
-            };
-            let files = status
-                .split('\n')
-                .filter(|line| !line.trim().is_empty())
-                .count() as i64;
-            // Porcelain `git diff` rewrites the index (taking index.lock) to
-            // record refreshed stat data even with GIT_OPTIONAL_LOCKS=0. The
-            // plumbing equivalent compares the same HEAD/worktree pair without
-            // writing; -M keeps porcelain's default rename pairing.
-            let Ok(numstat) = git
-                .run(cwd, &["diff-index", "-M", "--numstat", "HEAD"])
+            let git = Lookup::with_budget(self, IGNORE_TIMEOUT);
+            let mut plan = git
+                .plan(&root.to_string_lossy(), &["check-ignore", "--stdin", "-z"])
+                .ok()?;
+            plan.stdin = paths
+                .iter()
+                .flat_map(|path| path.bytes().chain([0]))
+                .collect();
+            let output = crate::process::run_capped(&plan, &Cancellation::default())
                 .await
-            else {
-                return (files, 0, 0);
-            };
-            let (added, deleted) = change_lines(&numstat);
-            (files, added, deleted)
+                .ok()?;
+            if output.stdout_truncated || output.stderr_truncated || output.pipes_forced_closed {
+                return None;
+            }
+            // 0: some are ignored (listed), 1: none are.
+            match output.outcome {
+                ExitOutcome::Exited { code: Some(0), .. } => Some(
+                    String::from_utf8_lossy(&output.stdout)
+                        .split('\0')
+                        .filter(|path| !path.is_empty())
+                        .map(str::to_owned)
+                        .collect(),
+                ),
+                ExitOutcome::Exited { code: Some(1), .. } => Some(Default::default()),
+                _ => None,
+            }
         })
     }
 
@@ -172,6 +207,35 @@ impl GitBranchSource for FilesService {
             };
             project_path(cwd, &output)
         })
+    }
+}
+
+impl FilesService {
+    /// Changed files and line counts, and whether both Git answers arrived.
+    async fn count_changes(&self, cwd: &str) -> ((i64, i64, i64), bool) {
+        if cwd.trim().is_empty() {
+            return ((0, 0, 0), false);
+        }
+        let git = Lookup::with_budget(self, CHANGES_TIMEOUT);
+        let Ok(status) = git.run(cwd, &["status", "--porcelain"]).await else {
+            return ((0, 0, 0), false);
+        };
+        let files = status
+            .split('\n')
+            .filter(|line| !line.trim().is_empty())
+            .count() as i64;
+        // Porcelain `git diff` rewrites the index (taking index.lock) to
+        // record refreshed stat data even with GIT_OPTIONAL_LOCKS=0. The
+        // plumbing equivalent compares the same HEAD/worktree pair without
+        // writing; -M keeps porcelain's default rename pairing.
+        let Ok(numstat) = git
+            .run(cwd, &["diff-index", "-M", "--numstat", "HEAD"])
+            .await
+        else {
+            return ((files, 0, 0), false);
+        };
+        let (added, deleted) = change_lines(&numstat);
+        ((files, added, deleted), true)
     }
 }
 

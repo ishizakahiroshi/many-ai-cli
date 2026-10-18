@@ -2,6 +2,7 @@
 //! guards run in Hub before this service; this module applies file scope policy.
 mod attachments;
 pub mod branch;
+pub mod change_watch;
 mod content;
 mod git;
 pub mod git_lock;

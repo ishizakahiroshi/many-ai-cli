@@ -1,7 +1,10 @@
 //! Per-cwd refresh ownership mirrors Go's pending-ID queue and four worker
 //! slots. Queued work is Hub-owned, never tied to a WebSocket request future.
 use super::*;
-use crate::files::branch::GitBranchSource;
+use crate::files::{
+    branch::GitBranchSource,
+    change_watch::{ChangeWatch, Lease},
+};
 use std::sync::Mutex;
 use tokio::sync::Semaphore;
 
@@ -11,6 +14,9 @@ pub(super) struct Owner {
     tasks: HubTaskHandle,
     slots: Arc<Semaphore>,
     pending: Mutex<BTreeMap<String, Vec<LiveSessionId>>>,
+    /// Windows: counts are taken only after the repository changed
+    /// (plan_git-invocation-index-lock C7). `None` counts every time.
+    watch: Option<Arc<ChangeWatch>>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -24,6 +30,7 @@ impl Owner {
         source: Arc<dyn GitBranchSource>,
         worker: Weak<SessionWorkers>,
         tasks: HubTaskHandle,
+        watch: Option<Arc<ChangeWatch>>,
     ) -> Arc<Self> {
         Arc::new(Self {
             source,
@@ -31,7 +38,50 @@ impl Owner {
             tasks,
             slots: Arc::new(Semaphore::new(4)),
             pending: Mutex::new(BTreeMap::new()),
+            watch,
         })
+    }
+
+    /// Sort the change notifications (asking Git which paths it ignores),
+    /// and make the sessions of repositories that changed due now.
+    async fn watch_changes(&self, core: &SessionEngine) {
+        let Some(watch) = &self.watch else {
+            return;
+        };
+        for pending in watch.take() {
+            let asked = pending.asked();
+            let ignored = self.source.ignored(pending.root(), &asked).await;
+            watch.learn(pending, ignored);
+        }
+        let roots = watch.due();
+        if roots.is_empty() {
+            return;
+        }
+        let ids: Vec<LiveSessionId> = core
+            .branch_refresh_cwds()
+            .into_iter()
+            .filter(|(_, cwd)| watch.root_of(cwd).is_some_and(|root| roots.contains(&root)))
+            .map(|(id, _)| id)
+            .collect();
+        core.restart_branch_refresh_for(&ids);
+    }
+
+    async fn changes(&self, cwd: &str) -> (i64, i64, i64) {
+        let Some(watch) = &self.watch else {
+            return self.source.changes(cwd).await;
+        };
+        match watch.lease(cwd) {
+            Lease::Reuse(counts) => counts,
+            Lease::Count(ticket) => {
+                let (counts, answered) = self.source.changes_counted(cwd).await;
+                if let Some(ticket) = ticket
+                    && answered
+                {
+                    watch.store(ticket, counts);
+                }
+                counts
+            }
+        }
     }
 
     pub async fn run_timer(self: Arc<Self>, cancel: HubShutdownCancellation) {
@@ -44,6 +94,16 @@ impl Owner {
                 _ = tick.tick() => {
                     let Some(worker) = self.worker.upgrade() else { break; };
                     let Ok(core) = worker.core() else { break; };
+                    // A watch holds its folders (they cannot be renamed), so
+                    // only repositories of live sessions stay watched.
+                    if let Some(watch) = &self.watch {
+                        let live = core
+                            .branch_refresh_cwds()
+                            .iter()
+                            .filter_map(|(_, cwd)| watch.root_of(cwd))
+                            .collect();
+                        watch.keep(&live);
+                    }
                     // The counts are only shown on a screen. With no browser
                     // attached no Git starts; one that attaches gets every
                     // session counted again (plan_git-invocation-index-lock C6).
@@ -55,6 +115,7 @@ impl Owner {
                         watched = true;
                         core.restart_branch_refresh();
                     }
+                    self.watch_changes(&core).await;
                     if let Err(error) = self.queue(core.branch_refresh_requests(Timestamp::now())) {
                         (worker.warning)("branch refresh admission", &error);
                     }
@@ -120,7 +181,7 @@ impl Owner {
                     return;
                 };
                 let branch = self.source.branch(&cwd).await;
-                let changes = self.source.changes(&cwd).await;
+                let changes = self.changes(&cwd).await;
                 // Go checks the current sessions after branch/stats finish.
                 let project_id = if core.branch_project_needed(&cwd, &ids) {
                     self.source.project(&cwd).await

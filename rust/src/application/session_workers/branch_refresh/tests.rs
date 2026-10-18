@@ -198,7 +198,12 @@ async fn fixture() -> Fixture {
         state: Arc::new(Mutex::new(SourceState::default())),
         entered,
     });
-    let owner = Owner::new(source.clone(), Arc::downgrade(&workers), tasks.handle());
+    let owner = Owner::new(
+        source.clone(),
+        Arc::downgrade(&workers),
+        tasks.handle(),
+        None,
+    );
     Fixture {
         owner,
         tasks,
@@ -534,6 +539,64 @@ async fn timer_starts_no_lookup_without_a_browser_and_recounts_when_one_attaches
     timer.await.unwrap();
     f.drain().await;
     assert_eq!(f.core.snapshot(id).unwrap().branch, "main");
+}
+
+#[tokio::test]
+async fn watched_repository_is_counted_again_only_after_it_changes() {
+    use crate::files::change_watch::{Origin, Raw, Watching};
+    let mut f = fixture().await;
+    let repo = f._root.path().join("synthetic watched repo");
+    std::fs::create_dir_all(repo.join(".git")).unwrap();
+    let cwd = repo.to_string_lossy().into_owned();
+    let slot: Arc<Mutex<Option<Arc<Raw>>>> = Arc::new(Mutex::new(None));
+    let captured = slot.clone();
+    let watch = Arc::new(ChangeWatch::new(
+        Duration::ZERO,
+        crate::files::change_watch::SAFETY,
+        Box::new(move |_, raw| {
+            *lock(&captured) = Some(raw);
+            Ok(Watching {
+                alive: Arc::new(AtomicBool::new(true)),
+                stop: Box::new(()),
+            })
+        }),
+    ));
+    let owner = Owner::new(
+        f.source.clone(),
+        Arc::downgrade(&f._workers),
+        f.tasks.handle(),
+        Some(watch.clone()),
+    );
+    let id = register(&f, 1, &cwd).await;
+    let changes = |f: &Fixture| {
+        lock(&f.source.state)
+            .calls
+            .iter()
+            .filter(|(_, stage)| *stage == "changes")
+            .count()
+    };
+    for expected in [1, 1] {
+        owner.queue(vec![(id, cwd.clone())]).unwrap();
+        f.next_call().await.release.send("main".into()).unwrap();
+        f.drain().await;
+        assert_eq!(changes(&f), expected, "nothing changed, so no second count");
+    }
+    assert_eq!(f.core.snapshot(id).unwrap().branch, "main");
+    // The index changed: the timer's sorting makes the session due and the
+    // next refresh counts.
+    lock(&slot)
+        .as_ref()
+        .unwrap()
+        .push(Origin::WorkTree, ".git/index".into());
+    f.core.branch_refresh_requests(Timestamp::now());
+    assert!(f.core.branch_refresh_requests(Timestamp::now()).is_empty());
+    owner.watch_changes(&f.core).await;
+    let due = f.core.branch_refresh_requests(Timestamp::now());
+    assert_eq!(due, vec![(id, cwd.clone())]);
+    owner.queue(due).unwrap();
+    f.next_call().await.release.send("main".into()).unwrap();
+    f.drain().await;
+    assert_eq!(changes(&f), 2);
 }
 
 #[tokio::test]
