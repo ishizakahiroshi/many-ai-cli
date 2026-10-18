@@ -97,6 +97,14 @@ import { probe } from '../debug/probe.js';
     return label && label !== key ? label : t('approval_suppressed_reason_client_corrupt');
   }
 
+  // 告知文は理由で分ける。client_corrupt は「画面の解析器が記録を読めなかった」ことしか
+  // 表さず、端末の再描画で壊れたとは限らない（AI が選択肢を付けずに印を書いた例が大半）ため、
+  // 原因を断定しない専用の文を使う。ほかの理由は理由名を差し込む従来の文のまま。
+  function approvalSuppressedBannerText(reason) {
+    if (reason === 'client_corrupt') return t('approval_suppressed_banner_unreadable');
+    return t('approval_suppressed_banner').replace('{reason}', approvalSuppressedReasonLabel(reason));
+  }
+
   // このバナーは通常フローの要素（approval.css の flex-shrink: 0）なので、出し入れの
   // たびに #terminal-area の高さが変わり、terminal.ts の ResizeObserver が rAF ごとに
   // sendResize を撃つ。SIGWINCH を受けた TUI は画面全体を描き直すため、Hub の VT ミラーが
@@ -125,7 +133,7 @@ import { probe } from '../debug/probe.js';
     banner.innerHTML = '';
     const msg = document.createElement('span');
     msg.className = 'multi-question-banner-text';
-    msg.textContent = t('approval_suppressed_banner').replace('{reason}', approvalSuppressedReasonLabel(reason));
+    msg.textContent = approvalSuppressedBannerText(reason);
     const retryBtn = document.createElement('button');
     retryBtn.type = 'button';
     retryBtn.className = 'ui-button ui-button--secondary ui-button--regular multi-question-banner-action';

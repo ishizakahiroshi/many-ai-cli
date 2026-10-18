@@ -959,6 +959,7 @@
   "stale_binary_banner": "⚠ This Hub is running an OLD build — the on-disk executable has changed since it started. Your rebuild won't take effect until the Hub is restarted (e.g. `many-ai-cli stop`, then relaunch).",
   "stale_binary_banner_close_tooltip": "Dismiss",
   "approval_suppressed_banner": "⚠ An approval panel was withheld ({reason}) — the block arrived corrupted by a terminal redraw. It stays hidden so you cannot send the wrong option number. The full text is still in the terminal, so you can answer there directly. ↻ Re-detect may recover it.",
+  "approval_suppressed_banner_unreadable": "⚠ Could not show the approval panel — the screen could not read the form of the question the AI wrote. The full text is still in the terminal, so you can answer there directly.",
   "approval_suppressed_banner_retry": "↻ Re-detect",
   "approval_suppressed_banner_retry_tooltip": "Ask the Hub to look for the approval on the current terminal screen again",
   "approval_suppressed_banner_close_tooltip": "Dismiss",

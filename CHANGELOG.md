@@ -13,6 +13,12 @@ Release artifacts are published at
 ### Fixed
 - The inline Usage meter now gives its remaining-quota bar the width left after
   its value and reset text, so the fill is easier to read on narrow rows.
+- An approval question that the AI wrote without numbered options or
+  `(Y:1/N:0)` (for example a single "May I push this?") is now shown as a
+  Yes / No panel instead of the "corrupted structure" notice, and a plain report
+  wrapped in the approval marker no longer leaves the session waiting for
+  approval. When the screen still cannot read an approval, the notice no longer
+  blames a terminal redraw.
 
 ### Added
 - **Attachments reach the machine a shell session ssh'd into.** In a shell

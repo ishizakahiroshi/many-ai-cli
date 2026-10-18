@@ -733,3 +733,109 @@ async fn reattachment_preserves_done_marker_gate_and_rejects_stale_worker_bindin
         "fixed"
     );
 }
+fn marker_text(body: &str) -> String {
+    format!(
+        "{} {body} {}",
+        crate::approval::marker::OPEN,
+        crate::approval::marker::CLOSE
+    )
+}
+fn observe_body(
+    engine: &SessionEngine,
+    binding: SessionBinding,
+    body: &str,
+    at: Timestamp,
+) -> CoreEffects {
+    let marker = crate::approval::marker::extract(&marker_text(body)).unwrap();
+    engine
+        .observe_transcript_marker(binding, Some(marker), at)
+        .unwrap()
+}
+fn suppressed_broadcasts(effects: &CoreEffects) -> usize {
+    effects
+        .0
+        .iter()
+        .filter(|effect| {
+            matches!(effect, CoreEffect::SendUiBestEffort { message, .. }
+                if message.r#type == "approval_marker_suppressed")
+        })
+        .count()
+}
+#[tokio::test]
+async fn marker_with_question_only_opens_a_yes_no_record_not_a_broken_marker() {
+    let (_root, engine, binding, at) = fixture("claude").await;
+    let body = "この形でpush・Issue作成・dotsへの送信まで進めていいですか？";
+    let effects = observe_body(&engine, binding, body, at);
+    assert_eq!(suppressed_broadcasts(&effects), 0);
+    let record = engine
+        .details(binding.session)
+        .unwrap()
+        .approval
+        .record
+        .expect("a question inside the marker must open a record");
+    let data = record.data();
+    assert_eq!(data.kind, "plain_yes_no");
+    assert_eq!(data.origin, "marker");
+    assert_eq!(data.source, "transcript");
+    assert_eq!(data.question, body);
+    assert_eq!(
+        data.block,
+        marker_text(body),
+        "block stays the marker block"
+    );
+    let options = data
+        .options
+        .iter()
+        .map(|o| (o.num, o.label.as_str(), o.is_current, o.preserve_order))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        options,
+        [(1, "Yes (1)", true, true), (0, "No (0)", false, true)]
+    );
+}
+#[tokio::test]
+async fn marker_without_question_or_choices_opens_no_record_and_no_suppression_notice() {
+    let (_root, engine, binding, at) = fixture("claude").await;
+    let effects = observe_body(
+        &engine,
+        binding,
+        "決まりを直しました。\n- 1億円以上は億で書きます",
+        at,
+    );
+    assert_eq!(suppressed_broadcasts(&effects), 0);
+    assert!(
+        engine
+            .details(binding.session)
+            .unwrap()
+            .approval
+            .record
+            .is_none()
+    );
+}
+#[tokio::test]
+async fn marker_with_numbered_choices_keeps_the_marker_record_and_bad_start_is_still_suppressed() {
+    let (_root, engine, binding, at) = fixture("claude").await;
+    let body = "どちらにしますか?\n1. A (Recommended)\n2. B\nN. User specifies";
+    let effects = observe_body(&engine, binding, body, at);
+    assert_eq!(suppressed_broadcasts(&effects), 0);
+    let record = engine
+        .details(binding.session)
+        .unwrap()
+        .approval
+        .record
+        .unwrap();
+    assert_eq!(record.data().kind, "marker");
+    assert!(record.data().options.is_empty());
+    assert!(record.data().question.is_empty());
+    let (_root, engine, binding, at) = fixture("claude").await;
+    let effects = observe_body(&engine, binding, "どれにしますか?\n3. A\n4. B", at);
+    assert_eq!(suppressed_broadcasts(&effects), 1);
+    assert!(
+        engine
+            .details(binding.session)
+            .unwrap()
+            .approval
+            .record
+            .is_none()
+    );
+}

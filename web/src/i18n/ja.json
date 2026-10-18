@@ -959,6 +959,7 @@
   "stale_binary_banner": "⚠ この Hub は古いビルドで動いています — 起動後にディスク上の実行ファイルが差し替わりました。Hub を再起動するまで再ビルドは反映されません（例: `many-ai-cli stop` 後に再起動）。",
   "stale_binary_banner_close_tooltip": "閉じる",
   "approval_suppressed_banner": "⚠ 承認パネルの表示を見送りました（{reason}）— 端末の再描画でブロックが壊れて届いたためです。誤った番号を送らないよう非表示にしています。本文はターミナルに残っているので、そちらへ直接入力して回答できます。↻ 再検出 で拾い直せることもあります。",
+  "approval_suppressed_banner_unreadable": "⚠ 承認パネルを表示できませんでした — AI が書いた質問の形を画面で読み取れなかったためです。本文はターミナルに残っているので、そちらへ直接入力して回答できます。",
   "approval_suppressed_banner_retry": "↻ 再検出",
   "approval_suppressed_banner_retry_tooltip": "Hub に、端末の今の表示から承認をもう一度探してもらう",
   "approval_suppressed_banner_close_tooltip": "閉じる",

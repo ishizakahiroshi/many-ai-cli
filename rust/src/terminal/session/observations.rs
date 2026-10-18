@@ -738,6 +738,21 @@ impl Session {
             MarkerSuppressionDecision::Empty => Ok((effects, None)),
             MarkerSuppressionDecision::Valid => {
                 let marker = marker.expect("valid admission requires a marker");
+                // A marker without choices is not a broken choice screen: a bare
+                // question gets the fixed Yes/No, a bare report gets no record.
+                let (kind, question, options) =
+                    match crate::approval::text_question::marker_form(&marker.block) {
+                        crate::approval::text_question::MarkerForm::Choice => {
+                            ("marker", String::new(), Vec::new())
+                        }
+                        crate::approval::text_question::MarkerForm::Question {
+                            question,
+                            options,
+                        } => ("plain_yes_no", question, options),
+                        crate::approval::text_question::MarkerForm::Report => {
+                            return Ok((effects, None));
+                        }
+                    };
                 let candidate = identity::marker_candidate(
                     &self.snapshot.provider,
                     &marker.block,
@@ -751,11 +766,11 @@ impl Session {
                                 sig: marker.sig,
                                 origin: "marker".into(),
                                 source: source.into(),
-                                kind: "marker".into(),
+                                kind: kind.into(),
                                 block: marker.block,
-                                question: String::new(),
+                                question,
                                 context: String::new(),
-                                options: Vec::new(),
+                                options,
                                 summary: Default::default(),
                                 detected_at: now,
                             },

@@ -202,3 +202,77 @@ fn unglue_preserves_proper_lines_and_quote_literal_headings() {
     );
     assert_eq!(unglued_lines(&lines(&["Q123: literal"])), ["Q123: literal"]);
 }
+fn marked(body: &str) -> String {
+    format!("{} {body} {}", marker::OPEN, marker::CLOSE)
+}
+fn question_of(body: &str) -> Option<String> {
+    match marker_form(&marked(body)) {
+        MarkerForm::Question { question, options } => {
+            assert_eq!(options.iter().map(|o| o.num).collect::<Vec<_>>(), [1, 0]);
+            assert_eq!(options[0].label, "Yes (1)");
+            assert!(options[0].is_current && options[0].preserve_order);
+            assert_eq!(options[1].label, "No (0)");
+            assert!(!options[1].is_current && options[1].preserve_order);
+            Some(question)
+        }
+        _ => None,
+    }
+}
+#[test]
+fn marker_form_bare_questions_become_yes_no_with_the_whole_text_as_question() {
+    let q = "この形でpush・Issue作成・dotsへの送信まで進めていいですか？";
+    assert_eq!(question_of(q).as_deref(), Some(q));
+    let q = "1 回試しますか？（おすすめ：任せる。手で送るほうがよければ言ってください）";
+    assert_eq!(question_of(q).as_deref(), Some(q));
+    assert_eq!(
+        question_of("前置きです。\n補足もあります。\n追記していいですか？").as_deref(),
+        Some("前置きです。 補足もあります。 追記していいですか？")
+    );
+    let q = "Is it OK to put it into the note draft?";
+    assert_eq!(question_of(q).as_deref(), Some(q));
+}
+#[test]
+fn marker_form_report_without_question_is_not_an_approval() {
+    assert!(matches!(
+        marker_form(&marked("決まりを直しました。\n- 1億円以上は億で書きます")),
+        MarkerForm::Report
+    ));
+}
+#[test]
+fn marker_form_yes_no_token_and_numbered_choices_keep_the_marker_record() {
+    assert!(matches!(
+        marker_form(&marked("進めますか? (Y:1/N:0)")),
+        MarkerForm::Choice
+    ));
+    assert!(matches!(
+        marker_form(&marked(
+            "どちらにしますか?\n1. A (Recommended)\n2. B\nN. User specifies"
+        )),
+        MarkerForm::Choice
+    ));
+    // (h) choices glued to the question, (i) dotless redraw form: the screen
+    // parser still builds a choice panel from both.
+    for body in [
+        "このまま進めますか？1. A (Recommended) 2. B N. User specifies",
+        "どれにしますか?\n1  A\n2  B",
+    ] {
+        assert!(
+            matches!(marker_form(&marked(body)), MarkerForm::Choice),
+            "{body}"
+        );
+    }
+    // A number inside a bare question is not a choice.
+    assert_eq!(
+        question_of("2 件追記していいですか？").as_deref(),
+        Some("2 件追記していいですか？")
+    );
+    assert_eq!(
+        question_of("前置き 3 点です。\n1 回試しますか？").as_deref(),
+        Some("前置き 3 点です。 1 回試しますか？")
+    );
+    // Choice detection wins over the question mark, whatever the numbers are.
+    assert!(matches!(
+        marker_form(&marked("どれにしますか?\n3. A\n4. B")),
+        MarkerForm::Choice
+    ));
+}

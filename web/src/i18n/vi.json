@@ -959,6 +959,7 @@
   "stale_binary_banner": "⚠ Hub đang chạy bản build CŨ — file thực thi trên đĩa đã đổi từ khi khởi động. Bản build lại chỉ có hiệu lực sau khi khởi động lại Hub (vd. `many-ai-cli stop`, rồi chạy lại).",
   "stale_binary_banner_close_tooltip": "Bỏ qua",
   "approval_suppressed_banner": "⚠ Đã tạm ẩn một bảng phê duyệt ({reason}) — khối lệnh đến trong trạng thái hỏng do terminal vẽ lại. Ẩn đi để bạn không gửi nhầm số lựa chọn. Nội dung đầy đủ vẫn còn trong terminal, bạn có thể trả lời trực tiếp ở đó. ↻ Dò lại có thể khôi phục được.",
+  "approval_suppressed_banner_unreadable": "⚠ Không thể hiển thị bảng phê duyệt — màn hình không đọc được dạng câu hỏi mà AI đã viết. Nội dung đầy đủ vẫn còn trong terminal, bạn có thể trả lời trực tiếp ở đó.",
   "approval_suppressed_banner_retry": "↻ Dò lại",
   "approval_suppressed_banner_retry_tooltip": "Yêu cầu Hub tìm lại phê duyệt trên màn hình terminal hiện tại",
   "approval_suppressed_banner_close_tooltip": "Bỏ qua",

@@ -99,27 +99,65 @@ fn looks_yesno(text: &str) -> bool {
             .take(120)
             .any(|c| matches!(c, '?' | '？'))
 }
+fn yesno_options() -> Vec<ApprovalOption> {
+    vec![
+        ApprovalOption {
+            num: 1,
+            label: "Yes (1)".into(),
+            is_current: true,
+            preserve_order: true,
+            ..Default::default()
+        },
+        ApprovalOption {
+            num: 0,
+            label: "No (0)".into(),
+            preserve_order: true,
+            ..Default::default()
+        },
+    ]
+}
 fn yesno(text: &str) -> TextQuestion {
     new(
         "plain_yes_no",
         fields(&remove_tokens(text)),
         yesno_question(text),
-        vec![
-            ApprovalOption {
-                num: 1,
-                label: "Yes (1)".into(),
-                is_current: true,
-                preserve_order: true,
-                ..Default::default()
-            },
-            ApprovalOption {
-                num: 0,
-                label: "No (0)".into(),
-                preserve_order: true,
-                ..Default::default()
-            },
-        ],
+        yesno_options(),
     )
+}
+// Aligned with web approval-parser.ts parseHubBlock: optionRe `^(\d+)\.\s*(.+?)\s*$`
+// and dotlessOptionRe `^(\d{1,2})[ \t]{2,}(\S.*?)\s*$`, on lines split by unglued_lines.
+re!(MARKER_OPTION, r"^\d{1,2}\.\s*\S");
+re!(MARKER_DOTLESS_OPTION, r"^\d{1,2}[ \t]{2,}\S");
+/// What a marker block that already passed `marker::classify` asks of the user.
+pub enum MarkerForm {
+    /// `(Y:1/N:0)` or numbered choice lines: the marker record as before.
+    Choice,
+    /// Only a question, no choices: answered with the fixed Yes (1) / No (0).
+    Question {
+        question: String,
+        options: Vec<ApprovalOption>,
+    },
+    /// Neither choices nor a question (a report wrapped in a marker): nothing to answer.
+    Report,
+}
+pub fn marker_form(block: &str) -> MarkerForm {
+    let body = remove_tokens(&identity::strip_ansi(block));
+    let lines = unglued_lines(&body.split('\n').map(str::to_owned).collect::<Vec<_>>());
+    if YESNO.is_match(&body)
+        || lines.iter().any(|line| {
+            let line = line.trim();
+            MARKER_OPTION.is_match(line) || MARKER_DOTLESS_OPTION.is_match(line)
+        })
+    {
+        MarkerForm::Choice
+    } else if body.contains(['?', '？']) {
+        MarkerForm::Question {
+            question: fields(&body),
+            options: yesno_options(),
+        }
+    } else {
+        MarkerForm::Report
+    }
 }
 fn plain(lines: &[String]) -> Option<TextQuestion> {
     let start = lines.len().saturating_sub(20);
