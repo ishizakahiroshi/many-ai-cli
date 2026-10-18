@@ -3,6 +3,10 @@ impl SessionEngine {
     pub fn subscribe_ui_presence(&self) -> tokio::sync::watch::Receiver<super::UiPresence> {
         self.ui_presence.subscribe()
     }
+    /// Whether a browser is attached now, for work only a screen needs.
+    pub(crate) fn ui_attached(&self) -> bool {
+        self.ui_presence.borrow().count > 0
+    }
     /// A timer's generation and current UI membership are checked under the
     /// same lock as attach/detach. A stale timer cannot select new wrappers.
     pub fn expire_ui_idle(&self, generation: u64) -> CoreEffects {

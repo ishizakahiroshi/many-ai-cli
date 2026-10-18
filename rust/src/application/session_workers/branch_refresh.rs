@@ -37,12 +37,24 @@ impl Owner {
     pub async fn run_timer(self: Arc<Self>, cancel: HubShutdownCancellation) {
         let mut tick = tokio::time::interval(Duration::from_millis(200));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut watched = false;
         loop {
             tokio::select! { biased;
                 _ = cancel.token().cancelled() => break,
                 _ = tick.tick() => {
                     let Some(worker) = self.worker.upgrade() else { break; };
                     let Ok(core) = worker.core() else { break; };
+                    // The counts are only shown on a screen. With no browser
+                    // attached no Git starts; one that attaches gets every
+                    // session counted again (plan_git-invocation-index-lock C6).
+                    if !core.ui_attached() {
+                        watched = false;
+                        continue;
+                    }
+                    if !watched {
+                        watched = true;
+                        core.restart_branch_refresh();
+                    }
                     if let Err(error) = self.queue(core.branch_refresh_requests(Timestamp::now())) {
                         (worker.warning)("branch refresh admission", &error);
                     }
