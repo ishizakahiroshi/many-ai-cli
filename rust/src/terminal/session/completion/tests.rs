@@ -227,6 +227,208 @@ fn schedule(engine: &SessionEngine, binding: SessionBinding, at: Timestamp) -> S
     )));
     timestamp(end).unwrap()
 }
+
+fn codex_activity_record(
+    engine: &SessionEngine,
+    binding: SessionBinding,
+    parser: &mut crate::approval::transcript::parser::ParseState,
+    kind: &str,
+    turn_id: &str,
+    at: Timestamp,
+) -> CoreEffects {
+    parser.begin_batch();
+    parser.parse_record(
+        crate::approval::transcript::parser::ProviderFormat::Codex,
+        serde_json::json!({"type":"event_msg", "timestamp":timestamp(at).unwrap(),
+            "payload":{"type":kind, "turn_id":turn_id}})
+        .to_string()
+        .as_bytes(),
+    );
+    engine
+        .observe_codex_turn_activity(binding, parser.codex_turn_active().unwrap(), at)
+        .unwrap()
+}
+
+#[tokio::test]
+async fn codex_turn_activity_keeps_silent_work_running_and_real_completion_stops_it() {
+    let (_root, engine, binding, at) = fixture("codex").await;
+    output(&engine, binding, "working", at);
+    // Original failure: terminal silence alone still means standby without
+    // provider evidence. A task_started must keep the same quiet turn running.
+    engine.evaluate_idle(at + Duration::from_secs(4));
+    assert_eq!(engine.snapshot(binding.session).unwrap().state, "standby");
+    let mut parser = crate::approval::transcript::parser::ParseState::default();
+    codex_activity_record(&engine, binding, &mut parser, "task_started", "turn-1", at);
+    engine.evaluate_idle(at + Duration::from_secs(60));
+    let snapshot = engine.snapshot(binding.session).unwrap();
+    assert!(snapshot.activity.output_idle);
+    assert!(snapshot.activity.workflow_active);
+    assert_eq!(snapshot.state, "running");
+    // Existing initial/reconnect snapshots contain the authoritative state.
+    let priming = engine
+        .attach_ui(
+            UiBinding {
+                connection: UiConnectionId(42),
+                auth_epoch: engine.auth_epoch(),
+            },
+            None,
+            None,
+        )
+        .unwrap();
+    assert_eq!(
+        priming
+            .sessions
+            .iter()
+            .find(|s| s.id == binding.session)
+            .unwrap()
+            .state,
+        "running"
+    );
+    codex_activity_record(
+        &engine,
+        binding,
+        &mut parser,
+        "task_complete",
+        "turn-1",
+        at + Duration::from_secs(61),
+    );
+    assert_eq!(engine.snapshot(binding.session).unwrap().state, "standby");
+}
+
+#[tokio::test]
+async fn codex_turn_activity_rejects_old_end_and_handles_native_next_turn_and_abort() {
+    let (_root, engine, binding, at) = fixture("codex").await;
+    let mut parser = crate::approval::transcript::parser::ParseState::default();
+    codex_activity_record(&engine, binding, &mut parser, "task_started", "old", at);
+    codex_activity_record(
+        &engine,
+        binding,
+        &mut parser,
+        "task_started",
+        "new",
+        at + Duration::from_secs(10),
+    );
+    codex_activity_record(
+        &engine,
+        binding,
+        &mut parser,
+        "task_complete",
+        "old",
+        at + Duration::from_secs(11),
+    );
+    engine.evaluate_idle(at + Duration::from_secs(60));
+    assert_eq!(engine.snapshot(binding.session).unwrap().state, "running");
+    codex_activity_record(
+        &engine,
+        binding,
+        &mut parser,
+        "task_complete",
+        "new",
+        at + Duration::from_secs(61),
+    );
+    assert_eq!(engine.snapshot(binding.session).unwrap().state, "standby");
+    // A new native-terminal turn needs no Hub input counter or Git changes.
+    codex_activity_record(
+        &engine,
+        binding,
+        &mut parser,
+        "task_started",
+        "native",
+        at + Duration::from_secs(70),
+    );
+    engine.evaluate_idle(at + Duration::from_secs(100));
+    assert_eq!(engine.snapshot(binding.session).unwrap().state, "running");
+    codex_activity_record(
+        &engine,
+        binding,
+        &mut parser,
+        "turn_aborted",
+        "",
+        at + Duration::from_secs(101),
+    );
+    assert_eq!(engine.snapshot(binding.session).unwrap().state, "standby");
+}
+
+#[tokio::test]
+async fn codex_turn_activity_does_not_override_other_providers_or_replay_redraw_as_work() {
+    let (_root, engine, binding, at) = fixture("claude").await;
+    engine
+        .observe_codex_turn_activity(binding, true, at)
+        .unwrap();
+    output(&engine, binding, "redraw", at);
+    engine.evaluate_idle(at + Duration::from_secs(4));
+    assert_eq!(engine.snapshot(binding.session).unwrap().state, "standby");
+    let (_root, engine, binding, at) = fixture("codex").await;
+    let mut parser = crate::approval::transcript::parser::ParseState::default();
+    codex_activity_record(
+        &engine,
+        binding,
+        &mut parser,
+        "task_started",
+        "finished",
+        at,
+    );
+    codex_activity_record(
+        &engine,
+        binding,
+        &mut parser,
+        "task_complete",
+        "finished",
+        at + Duration::from_secs(10),
+    );
+    // Neither a repeated old start nor a terminal redraw reopens a finished turn.
+    codex_activity_record(
+        &engine,
+        binding,
+        &mut parser,
+        "task_started",
+        "finished",
+        at,
+    );
+    output(&engine, binding, "redraw", at + Duration::from_secs(11));
+    engine.evaluate_idle(at + Duration::from_secs(15));
+    assert_eq!(engine.snapshot(binding.session).unwrap().state, "standby");
+}
+
+#[tokio::test]
+async fn codex_turn_activity_resumes_after_question_without_a_silent_standby_gap() {
+    use crate::approval::transcript::parser::{AgentChatMessage, AgentChatTool, ParseState};
+    let (_root, engine, binding, at) = fixture("codex").await;
+    let mut parser = ParseState::default();
+    codex_activity_record(&engine, binding, &mut parser, "task_started", "one", at);
+    engine
+        .observe_transcript_batch(
+            binding,
+            PathBuf::from("owned.jsonl"),
+            &[AgentChatMessage {
+                role: "assistant".into(),
+                text: "Proceed with this change? (Y:1/N:0)".into(),
+                ..Default::default()
+            }],
+            false,
+            at,
+        )
+        .unwrap();
+    engine.evaluate_idle(at + Duration::from_secs(4));
+    assert_eq!(engine.snapshot(binding.session).unwrap().state, "waiting");
+    engine
+        .observe_transcript_batch(
+            binding,
+            PathBuf::from("owned.jsonl"),
+            &[AgentChatMessage {
+                role: "assistant".into(),
+                tools: vec![AgentChatTool {
+                    name: "synthetic".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            false,
+            at + Duration::from_secs(5),
+        )
+        .unwrap();
+    assert_eq!(engine.snapshot(binding.session).unwrap().state, "running");
+}
 #[tokio::test]
 async fn git_work_predicate_and_marker_arriving_during_capture_prevent_false_fallback() {
     let (_root, engine, binding, at) = fixture("claude").await;

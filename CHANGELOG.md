@@ -259,6 +259,7 @@ Release artifacts are published at
   the approval-rule location and `doctor`) is now planned in one place that
   sets `GIT_OPTIONAL_LOCKS=0` and refuses a porcelain `git diff` against the
   work tree, and a test fails when new code starts `git` without it.
+- Rust Hub keeps Codex sessions running through silent processing until the provider reports completion or interruption, and restores active turns outside the chat-history window after reconnection, preventing premature yellow unread-stop marks.
 - The Windows Hub no longer builds a machine-wide thread snapshot every time it
   starts a child process (for example each `git` call that refreshes the branch
   display), which took more than half of the Hub's CPU. It now looks only at the

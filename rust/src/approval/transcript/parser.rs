@@ -95,6 +95,17 @@ pub struct CodexCompletion {
     pub at: String,
     pub last_agent_message: String,
 }
+#[derive(Clone)]
+struct CodexTurnActivity {
+    turn_id: String,
+    at: Timestamp,
+    active: bool,
+}
+#[derive(Clone, Default)]
+struct CodexActivityReplay {
+    read_state: ReadState,
+    activity: Option<CodexTurnActivity>,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProviderFormat {
     Claude,
@@ -131,6 +142,8 @@ pub struct ParseState {
     max_bytes: usize,
     pub parsed_messages: u64,
     completions: Vec<CodexCompletion>,
+    codex_turn_activity: Option<CodexTurnActivity>,
+    codex_prime_replay: Option<CodexActivityReplay>,
 }
 impl Default for ParseState {
     fn default() -> Self {
@@ -156,6 +169,8 @@ impl ParseState {
             max_bytes: if max_bytes == 0 { BATCH_MAX } else { max_bytes },
             parsed_messages: 0,
             completions: Vec::new(),
+            codex_turn_activity: None,
+            codex_prime_replay: None,
         }
     }
     pub fn begin_batch(&mut self) {
@@ -313,6 +328,71 @@ impl ParseState {
     pub fn take_completions(&mut self) -> Vec<CodexCompletion> {
         std::mem::take(&mut self.completions)
     }
+    /// Provider activity survives batch boundaries and prime-cursor adoption.
+    /// Priming restores current activity without replaying old completion cards.
+    pub fn codex_turn_active(&self) -> Option<bool> {
+        self.codex_turn_activity.as_ref().map(|turn| turn.active)
+    }
+    fn observe_codex_turn_activity(&mut self, turn_id: &str, at: &str, active: bool) {
+        Self::update_codex_turn_activity(&mut self.codex_turn_activity, turn_id, at, active);
+    }
+    fn update_codex_turn_activity(
+        activity: &mut Option<CodexTurnActivity>,
+        turn_id: &str,
+        at: &str,
+        active: bool,
+    ) {
+        let Ok(at) = proto::time::parse_rfc3339(at) else {
+            return;
+        };
+        if active && turn_id.is_empty() {
+            return;
+        }
+        if let Some(current) = activity.as_ref()
+            && (at < current.at
+                || (!active && !turn_id.is_empty() && turn_id != current.turn_id)
+                || (active && turn_id == current.turn_id && !current.active))
+        {
+            return;
+        }
+        let turn_id = if turn_id.is_empty() {
+            activity
+                .as_ref()
+                .map(|turn| turn.turn_id.clone())
+                .unwrap_or_default()
+        } else {
+            turn_id.to_owned()
+        };
+        *activity = Some(CodexTurnActivity {
+            turn_id,
+            at,
+            active,
+        });
+    }
+    fn replay_codex_activity(activity: &mut Option<CodexTurnActivity>, line: &[u8]) {
+        let Ok(record) = decode_codex_record(line) else {
+            return;
+        };
+        if record.kind != "event_msg" {
+            return;
+        }
+        let Some(raw) = record.payload.0 else {
+            return;
+        };
+        let Ok(payload) = decode_codex_payload(&raw) else {
+            return;
+        };
+        let (active, at) = match payload.kind.as_str() {
+            "task_started" => (true, record.timestamp.trim().to_owned()),
+            "turn_aborted" => (false, record.timestamp.trim().to_owned()),
+            "task_complete" => (
+                false,
+                codex_completion_at(&record.timestamp, payload.completed_at),
+            ),
+            _ => return,
+        };
+        Self::update_codex_turn_activity(activity, payload.turn_id.trim(), &at, active);
+    }
     pub fn pending_count(&self) -> usize {
         self.tools.len()
     }
@@ -365,6 +445,89 @@ impl ParseState {
         self.read_state = continuation;
         self.last_read = result?;
         Ok(self.output_messages())
+    }
+    /// Worker priming restores Codex lifecycle independently of the chat page.
+    /// Replay advances once through the authorized file in bounded polls, without
+    /// constructing messages or completion cards. Ordinary history pages keep
+    /// using read_tail_file and never wait for this lifecycle-only scan.
+    pub fn read_prime_tail_file(
+        &mut self,
+        file: std::fs::File,
+        format: ProviderFormat,
+        budget: &ReadBudget,
+    ) -> io::Result<Vec<AgentChatMessage>> {
+        if format != ProviderFormat::Codex {
+            return self.read_tail_file(file, format, None, budget);
+        }
+        let snapshot_end = file.metadata()?.len();
+        let lifecycle_file = file.try_clone()?;
+        let mut replay = self.codex_prime_replay.take().unwrap_or_default();
+        if replay.read_state.next_offset > snapshot_end {
+            replay = CodexActivityReplay::default();
+        }
+        let mut lifecycle_budget = budget.clone();
+        lifecycle_budget.max_bytes = if budget.max_bytes == 0 {
+            READ_BYTES
+        } else {
+            budget.max_bytes.min(READ_BYTES)
+        };
+        lifecycle_budget.max_records = if budget.max_records == 0 {
+            READ_RECORDS
+        } else {
+            budget.max_records.min(READ_RECORDS)
+        };
+        let CodexActivityReplay {
+            read_state,
+            activity,
+        } = &mut replay;
+        let read = read_range_file(
+            lifecycle_file,
+            read_state.next_offset,
+            read_state,
+            &lifecycle_budget,
+            |line, _, _| {
+                Self::replay_codex_activity(activity, line);
+                Ok(())
+            },
+        );
+        let stats = match read {
+            Ok(stats) => stats,
+            Err(error) => {
+                self.codex_prime_replay = Some(replay);
+                return Err(error);
+            }
+        };
+        if replay.read_state.next_offset < snapshot_end {
+            self.begin_batch();
+            self.last_read = ReadStats {
+                offset: replay.read_state.next_offset,
+                safe_offset: replay.read_state.safe_offset,
+                snapshot_end,
+                hit_budget: true,
+                ..stats
+            };
+            self.codex_prime_replay = Some(replay);
+            return Ok(Vec::new());
+        }
+        let messages = match self.read_tail_file(file, format, None, budget) {
+            Ok(messages) => messages,
+            Err(error) => {
+                self.codex_prime_replay = Some(replay);
+                return Err(error);
+            }
+        };
+        if self.last_read.decode_committed
+            && replay.read_state.safe_offset >= self.last_read.safe_offset
+        {
+            self.codex_turn_activity = replay.activity;
+        } else {
+            // The file can grow between lifecycle replay and the chat snapshot.
+            // Do not adopt its newer cursor until lifecycle has caught up too.
+            self.last_read.decode_committed = false;
+            self.completions.clear();
+            self.codex_prime_replay = Some(replay);
+        }
+        Ok(messages)
     }
     /// Prime/tail decode is atomic for the selected bounded page: once decoding
     /// starts, finish every selected record even if the deadline arrives meanwhile.
@@ -446,6 +609,25 @@ fn limit(text: &str) -> String {
         cut -= 1;
     }
     format!("{}…", &text[..cut])
+}
+fn codex_completion_at(ts: &str, completed_at: f64) -> String {
+    let mut at = ts.trim().to_owned();
+    if at.is_empty() && completed_at > 0.0 {
+        let seconds = if completed_at >= 1e12 {
+            completed_at / 1000.0
+        } else {
+            completed_at
+        };
+        if seconds.is_finite() && seconds <= u64::MAX as f64 {
+            let time = Duration::try_from_secs_f64(seconds)
+                .ok()
+                .and_then(|duration| Timestamp::UNIX_EPOCH.checked_add(duration));
+            if let Some(time) = time {
+                at = proto::time::format_with_offset(time, 0, false).unwrap_or_default();
+            }
+        }
+    }
+    at
 }
 fn masked(text: &str) -> String {
     limit(&mask_secrets(text.trim()))
@@ -922,28 +1104,19 @@ impl ParseState {
                         true,
                     );
                 }
+                "task_started" => {
+                    self.observe_codex_turn_activity(payload.turn_id.trim(), ts.trim(), true);
+                }
+                "turn_aborted" => {
+                    self.observe_codex_turn_activity(payload.turn_id.trim(), ts.trim(), false);
+                }
                 "task_complete" => {
-                    let mut at = ts.trim().to_owned();
-                    if at.is_empty() && payload.completed_at > 0.0 {
-                        let seconds = if payload.completed_at >= 1e12 {
-                            payload.completed_at / 1000.0
-                        } else {
-                            payload.completed_at
-                        };
-                        if seconds.is_finite() && seconds <= u64::MAX as f64 {
-                            let time = Duration::try_from_secs_f64(seconds)
-                                .ok()
-                                .and_then(|duration| Timestamp::UNIX_EPOCH.checked_add(duration));
-                            if let Some(time) = time {
-                                at = proto::time::format_with_offset(time, 0, false)
-                                    .unwrap_or_default();
-                            }
-                        }
-                    }
+                    let at = codex_completion_at(ts, payload.completed_at);
                     let turn_id = payload.turn_id.trim().to_owned();
                     if at.is_empty() && turn_id.is_empty() {
                         return;
                     }
+                    self.observe_codex_turn_activity(&turn_id, &at, false);
                     let last = payload
                         .last_agent_message
                         .0

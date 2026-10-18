@@ -13,6 +13,9 @@ mod tests;
 #[derive(Default)]
 pub(super) struct CompletionState {
     pub(super) confirmed_turn: u64,
+    // Codex task_started without a matching task_complete / turn_aborted.
+    // Terminal silence is separate from the provider's turn lifecycle.
+    pub(super) codex_turn_active: bool,
     marker_seen: bool,
     last_notify: Option<Timestamp>,
     buffer: String,
@@ -54,6 +57,39 @@ impl CompletionState {
     }
 }
 impl SessionEngine {
+    pub fn observe_codex_turn_activity(
+        &self,
+        binding: SessionBinding,
+        active: bool,
+        now: Timestamp,
+    ) -> Result<CoreEffects, SessionError> {
+        let mut state = lock(&self.state);
+        let s = state.session(binding)?;
+        if s.snapshot.provider != "codex" || terminal(&s.snapshot.state) {
+            return Ok(CoreEffects::default());
+        }
+        let before = s.snapshot.activity.clone();
+        let old = s.snapshot.state.clone();
+        s.completion.codex_turn_active = active;
+        s.refresh_awaiting();
+        s.snapshot.activity.output_idle = s
+            .last_output
+            .is_none_or(|at| now.duration_since(at).unwrap_or_default() >= self.options.idle_after);
+        s.snapshot.activity.workflow_active =
+            (active || !s.snapshot.activity.output_idle) && !s.snapshot.activity.awaiting_user;
+        s.snapshot.state = s.snapshot.activity.display_state().into();
+        s.restart_stall_clock(&old, now);
+        let mut effects = CoreEffects::default();
+        if before != s.snapshot.activity || old != s.snapshot.state {
+            effects.0.push(CoreEffect::Broadcast(s.activity_update()));
+            effects.0.push(CoreEffect::Notify(CoreEvent::SessionState {
+                binding,
+                activity: s.snapshot.activity.clone(),
+                display_state: s.snapshot.state.clone(),
+            }));
+        }
+        Ok(state.route(effects))
+    }
     pub fn begin_handoff_note(
         &self,
         binding: SessionBinding,

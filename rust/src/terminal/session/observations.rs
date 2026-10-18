@@ -582,8 +582,9 @@ impl SessionEngine {
                 now.duration_since(at).unwrap_or_default() >= self.options.idle_after
             });
             s.refresh_awaiting();
-            s.snapshot.activity.workflow_active =
-                !s.snapshot.activity.output_idle && !s.snapshot.activity.awaiting_user;
+            s.snapshot.activity.workflow_active = (s.completion.codex_turn_active
+                || !s.snapshot.activity.output_idle)
+                && !s.snapshot.activity.awaiting_user;
             s.snapshot.activity.normalize();
             s.snapshot.state = s.snapshot.activity.display_state().into();
             s.restart_stall_clock(&old, now);
@@ -801,6 +802,11 @@ impl Session {
         let before = self.snapshot.activity.clone();
         let before_state = self.snapshot.state.clone();
         self.refresh_awaiting();
+        if self.completion.codex_turn_active {
+            // Resolving an approval resumes the same provider turn immediately,
+            // even if no terminal output has arrived since the approval closed.
+            self.snapshot.activity.workflow_active = !self.snapshot.activity.awaiting_user;
+        }
         self.snapshot.activity.normalize();
         if terminal(&self.snapshot.state) {
             return None;

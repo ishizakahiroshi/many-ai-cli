@@ -330,6 +330,296 @@ fn prime_restores_tail_and_never_promotes_partial_line_or_old_completion() {
         fs::metadata(&path).unwrap().len()
     );
 }
+
+#[test]
+fn codex_turn_activity_survives_prime_without_replaying_completions() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("synthetic.jsonl");
+    fs::write(&path, concat!(
+        "{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:00:00Z\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"one\"}}\n",
+        "{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:00:10Z\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"one\"}}\n",
+        "{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:00:20Z\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"two\"}}\n"
+    )).unwrap();
+    let mut parser = ParseState::default();
+    parser
+        .read_tail(
+            &path,
+            ProviderFormat::Codex,
+            None,
+            &budget(PAGE_BYTES, PAGE_RECORDS),
+        )
+        .unwrap();
+    assert!(parser.adopt_prime_cursor());
+    assert!(parser.take_completions().is_empty());
+    assert_eq!(parser.codex_turn_active(), Some(true));
+    fs::OpenOptions::new().append(true).open(&path).unwrap().write_all(
+        b"{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:00:30Z\",\"payload\":{\"type\":\"turn_aborted\"}}\n"
+    ).unwrap();
+    parser
+        .read_forward(
+            &path,
+            ProviderFormat::Codex,
+            &budget(READ_BYTES, READ_RECORDS),
+        )
+        .unwrap();
+    assert_eq!(parser.codex_turn_active(), Some(false));
+    assert!(parser.take_completions().is_empty());
+}
+
+fn long_codex_log(prefix: &str) -> String {
+    let mut log = prefix.to_owned();
+    for n in 0..1024 {
+        log.push_str(&format!(
+            "{{\"type\":\"event_msg\",\"payload\":{{\"type\":\"token_count\",\"count\":{n}}}}}\n"
+        ));
+    }
+    log.push_str("{\"type\":\"event_msg\",\"payload\":{\"type\":\"agent_message\",\"message\":\"visible tail\"}}\n");
+    log
+}
+fn finish_codex_worker_prime(
+    state: &mut ParseState,
+    path: &std::path::Path,
+) -> Vec<many_ai_cli::approval::transcript::parser::AgentChatMessage> {
+    let mut previous = 0;
+    for _ in 0..16 {
+        let messages = state
+            .read_prime_tail_file(
+                fs::File::open(path).unwrap(),
+                ProviderFormat::Codex,
+                &budget(PAGE_BYTES, PAGE_RECORDS),
+            )
+            .unwrap();
+        if state.adopt_prime_cursor() {
+            return messages;
+        }
+        assert!(messages.is_empty());
+        assert!(
+            state.last_read.offset > previous,
+            "lifecycle replay must continue instead of restarting at byte zero"
+        );
+        assert!(state.last_read.records <= READ_RECORDS);
+        assert!(state.last_read.bytes_read <= READ_BYTES);
+        assert_eq!(
+            state.parsed_messages, 0,
+            "state-only replay must not build chat messages"
+        );
+        previous = state.last_read.offset;
+    }
+    panic!("bounded lifecycle replay did not finish");
+}
+#[test]
+fn worker_prime_recovers_start_outside_chat_tail_without_replaying_cards() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("synthetic-long.jsonl");
+    fs::write(&path, long_codex_log(concat!(
+        "{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:00:00Z\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"old\"}}\n",
+        "{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:00:10Z\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"old\"}}\n",
+        "{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:01:00Z\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"current\"}}\n"
+    ))).unwrap();
+    // The history API must continue returning a bounded page in one call.
+    let mut history = ParseState::default();
+    assert_eq!(
+        history
+            .read_tail(
+                &path,
+                ProviderFormat::Codex,
+                None,
+                &budget(PAGE_BYTES, PAGE_RECORDS)
+            )
+            .unwrap()[0]
+            .text,
+        "visible tail"
+    );
+    assert_eq!(history.codex_turn_active(), None);
+    let mut worker = ParseState::default();
+    let messages = finish_codex_worker_prime(&mut worker, &path);
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].text, "visible tail");
+    assert_eq!(worker.parsed_messages, 1);
+    assert_eq!(worker.codex_turn_active(), Some(true));
+    assert!(worker.take_completions().is_empty());
+    assert!(
+        worker
+            .read_forward(
+                &path,
+                ProviderFormat::Codex,
+                &budget(READ_BYTES, READ_RECORDS)
+            )
+            .unwrap()
+            .is_empty()
+    );
+    assert!(worker.take_completions().is_empty());
+}
+#[test]
+fn worker_prime_uses_the_same_turn_identity_and_completion_time_rules_as_live_reads() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("synthetic-lifecycle.jsonl");
+    for (ending, expected) in [
+        (
+            "{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:02:00Z\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"old\"}}\n",
+            true,
+        ),
+        (
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"current\",\"completed_at\":1767225720}}\n",
+            false,
+        ),
+        (
+            "{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:02:00Z\",\"payload\":{\"type\":\"turn_aborted\",\"turn_id\":\"current\"}}\n",
+            false,
+        ),
+    ] {
+        let prefix = format!(
+            "{{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:01:00Z\",\"payload\":{{\"type\":\"task_started\",\"turn_id\":\"current\"}}}}\n{ending}"
+        );
+        fs::write(&path, long_codex_log(&prefix)).unwrap();
+        let mut state = ParseState::default();
+        finish_codex_worker_prime(&mut state, &path);
+        assert_eq!(state.codex_turn_active(), Some(expected));
+        assert!(state.take_completions().is_empty());
+    }
+}
+#[test]
+fn worker_prime_preserves_partial_line_for_the_live_cursor() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("synthetic-partial.jsonl");
+    let mut log = long_codex_log(
+        "{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:01:00Z\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"current\"}}\n",
+    );
+    log.push_str("{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:02:00Z\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"curr");
+    fs::write(&path, log).unwrap();
+    let mut state = ParseState::default();
+    finish_codex_worker_prime(&mut state, &path);
+    assert_eq!(state.codex_turn_active(), Some(true));
+    assert!(state.read_state.safe_offset < fs::metadata(&path).unwrap().len());
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&path)
+        .unwrap()
+        .write_all(b"ent\"}}\n")
+        .unwrap();
+    state
+        .read_forward(
+            &path,
+            ProviderFormat::Codex,
+            &budget(READ_BYTES, READ_RECORDS),
+        )
+        .unwrap();
+    assert_eq!(state.codex_turn_active(), Some(false));
+    assert_eq!(state.take_completions().len(), 1);
+}
+#[test]
+fn worker_prime_does_not_scan_or_delay_other_provider_history() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("synthetic-anthropic.jsonl");
+    for format in [ProviderFormat::Claude, ProviderFormat::CommandCode] {
+        let mut log = String::new();
+        let kind = if format == ProviderFormat::Claude {
+            "assistant"
+        } else {
+            "message"
+        };
+        for n in 0..1024 {
+            log.push_str(&format!("{{\"type\":\"{kind}\",\"message\":{{\"role\":\"assistant\",\"content\":\"message {n}\"}}}}\n"));
+        }
+        fs::write(&path, log).unwrap();
+        let mut state = ParseState::new(2, PAGE_BYTES);
+        let messages = state
+            .read_prime_tail_file(
+                fs::File::open(&path).unwrap(),
+                format,
+                &budget(PAGE_BYTES, PAGE_RECORDS),
+            )
+            .unwrap();
+        assert!(state.adopt_prime_cursor());
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages.last().unwrap().text, "message 1023");
+        assert_eq!(state.codex_turn_active(), None);
+    }
+}
+#[test]
+fn worker_prime_waits_for_lifecycle_when_the_chat_snapshot_grows_after_eof() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("synthetic-growing.jsonl");
+    fs::write(&path,"{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:01:00Z\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"current\"}}\n").unwrap();
+    let before = fs::metadata(&path).unwrap().len();
+    let append_path = path.clone();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let clock_calls = calls.clone();
+    let fixed = Instant::now();
+    let racing = ReadBudget {
+        max_bytes: PAGE_BYTES,
+        max_records: PAGE_RECORDS,
+        deadline: fixed + Duration::from_secs(60),
+        clock: Arc::new(move || {
+            // The fifth budget check follows the lifecycle reader's EOF read,
+            // before the separately authorized chat snapshot reads metadata.
+            if clock_calls.fetch_add(1, Ordering::SeqCst) == 4 {
+                fs::OpenOptions::new().append(true).open(&append_path).unwrap().write_all(b"{\"type\":\"event_msg\",\"timestamp\":\"2026-01-01T00:02:00Z\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"current\"}}\n").unwrap();
+            }
+            fixed
+        }),
+    };
+    let mut state = ParseState::default();
+    state
+        .read_prime_tail_file(
+            fs::File::open(&path).unwrap(),
+            ProviderFormat::Codex,
+            &racing,
+        )
+        .unwrap();
+    assert!(calls.load(Ordering::SeqCst) >= 5);
+    assert!(
+        state.last_read.safe_offset > before,
+        "the chat snapshot must include the raced append"
+    );
+    assert!(
+        !state.adopt_prime_cursor(),
+        "a newer chat cursor cannot skip unreplayed lifecycle events"
+    );
+    assert!(state.take_completions().is_empty());
+    state
+        .read_prime_tail_file(
+            fs::File::open(&path).unwrap(),
+            ProviderFormat::Codex,
+            &budget(PAGE_BYTES, PAGE_RECORDS),
+        )
+        .unwrap();
+    assert!(state.adopt_prime_cursor());
+    assert_eq!(state.codex_turn_active(), Some(false));
+    assert!(state.take_completions().is_empty());
+}
+
+#[test]
+fn codex_turn_activity_ignores_invalid_time_and_late_abort_of_another_turn() {
+    let mut parser = ParseState::default();
+    for (kind, id, at) in [
+        ("task_started", "one", "invalid"),
+        ("task_complete", "one", "invalid"),
+    ] {
+        parser.parse_record(
+            ProviderFormat::Codex,
+            serde_json::json!({"type":"event_msg", "timestamp":at,
+            "payload":{"type":kind, "turn_id":id}})
+            .to_string()
+            .as_bytes(),
+        );
+        assert_eq!(parser.codex_turn_active(), None);
+    }
+    for (kind, id, at) in [
+        ("task_started", "new", "2026-01-01T00:00:10Z"),
+        ("task_started", "old", "2026-01-01T00:00:00Z"),
+        ("turn_aborted", "old", "2026-01-01T00:00:20Z"),
+    ] {
+        parser.parse_record(
+            ProviderFormat::Codex,
+            serde_json::json!({"type":"event_msg", "timestamp":at,
+            "payload":{"type":kind, "turn_id":id}})
+            .to_string()
+            .as_bytes(),
+        );
+        assert_eq!(parser.codex_turn_active(), Some(true));
+    }
+}
 #[test]
 fn incomplete_prime_retries_same_snapshot_without_forward_adoption() {
     let root = tempfile::tempdir().unwrap();

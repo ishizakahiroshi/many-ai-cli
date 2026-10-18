@@ -505,7 +505,7 @@ impl SessionWorkers {
             let messages = if prime {
                 cursor
                     .parse
-                    .read_tail_file(file, format, None, &ReadBudget::page())
+                    .read_prime_tail_file(file, format, &ReadBudget::page())
             } else {
                 cursor
                     .parse
@@ -531,6 +531,13 @@ impl SessionWorkers {
                 continue;
             }
             let now = Timestamp::now();
+            // Restore provider activity on prime as well as live reads. Existing
+            // snapshots and session_update frames then carry the same state, so
+            // reconnects need no separate client-side turn tracker.
+            if let Some(active) = cursor.parse.codex_turn_active() {
+                self.apply(core.observe_codex_turn_activity(details.binding, active, now)?)
+                    .await?;
+            }
             let safe = cursor.parse.read_state.safe_offset;
             if cursor.published_path.as_ref() != Some(&path) || safe != cursor.published_offset {
                 let effects = core.apply_observation(
