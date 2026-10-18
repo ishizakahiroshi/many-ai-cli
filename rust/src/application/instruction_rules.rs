@@ -167,9 +167,25 @@ impl InstructionRules {
             self.cwd.join(path)
         })
     }
+    async fn resolve_root(
+        &self,
+        cwd: &str,
+        cancel: &Cancellation,
+        roots: &mut BTreeMap<String, PathBuf>,
+    ) -> PathBuf {
+        let trimmed = cwd.trim();
+        let k = key(Path::new(trimmed));
+        if let Some(root) = roots.get(&k) {
+            return root.clone();
+        }
+        let root = self.resolver.root(Path::new(trimmed), cancel).await;
+        roots.insert(k, root.clone());
+        root
+    }
     async fn targets(&self, cancel: &Cancellation) -> (Vec<Target>, Vec<Target>) {
         let mut active = Vec::new();
         let mut legacy = Vec::new();
+        let mut roots = BTreeMap::new();
         for id in self.core.registered_session_ids() {
             let Some(details) = self.core.details(id) else {
                 continue;
@@ -222,8 +238,7 @@ impl InstructionRules {
                     } else {
                         Some(Target {
                             path: self
-                                .resolver
-                                .root(Path::new(s.cwd.trim()), cancel)
+                                .resolve_root(&s.cwd, cancel, &mut roots)
                                 .await
                                 .join("AGENTS.md"),
                             providers: vec![provider.into()],
@@ -239,8 +254,7 @@ impl InstructionRules {
             if provider == "codex" && !s.cwd.trim().is_empty() {
                 legacy.push(Target {
                     path: self
-                        .resolver
-                        .root(Path::new(s.cwd.trim()), cancel)
+                        .resolve_root(&s.cwd, cancel, &mut roots)
                         .await
                         .join("AGENTS.md"),
                     providers: vec!["codex".into()],

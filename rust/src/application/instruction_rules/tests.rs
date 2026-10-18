@@ -33,9 +33,10 @@ impl WrappedSessionSpawner for Unused {
         Box::pin(async { panic!("instruction owner must not spawn provider") })
     }
 }
-struct Root(PathBuf);
+struct Root(PathBuf, Arc<std::sync::atomic::AtomicUsize>);
 impl InstructionRootResolver for Root {
     fn root<'a>(&'a self, _: &'a Path, _: &'a Cancellation) -> CoreFuture<'a, PathBuf> {
+        self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Box::pin(async { self.0.clone() })
     }
 }
@@ -48,6 +49,7 @@ struct Fixture {
     core: Arc<SessionEngine>,
     config: Arc<ConfigStore>,
     warnings: Arc<std::sync::Mutex<Vec<&'static str>>>,
+    root_calls: Arc<std::sync::atomic::AtomicUsize>,
 }
 fn fixture() -> Fixture {
     let root = tempfile::tempdir().unwrap();
@@ -71,6 +73,7 @@ fn fixture() -> Fixture {
     ));
     let config = Arc::new(ConfigStore::new(paths.clone(), Config::default()).unwrap());
     let warnings = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let root_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let w = warnings.clone();
     let owner = InstructionRules::new(
         paths.clone(),
@@ -79,7 +82,7 @@ fn fixture() -> Fixture {
         root.path().to_path_buf(),
         config.clone(),
         core.clone(),
-        Arc::new(Root(cwd)),
+        Arc::new(Root(cwd, root_calls.clone())),
         Arc::new(move |v| w.lock().unwrap().push(v)),
     )
     .unwrap();
@@ -92,6 +95,7 @@ fn fixture() -> Fixture {
         core,
         config,
         warnings,
+        root_calls,
     }
 }
 fn at() -> Timestamp {
@@ -131,6 +135,7 @@ async fn source_shared_provider_lifetime_keeps_block_until_last_actual_session_e
     std::fs::write(&path, b"original").unwrap();
     let cancel = Cancellation::default();
     f.owner.change("enable", &cancel).await.unwrap();
+    assert_eq!(f.root_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
     let body = std::fs::read(&path).unwrap();
     assert!(
         body.windows(b"<!-- many-ai-cli:approval-rules -->".len())
