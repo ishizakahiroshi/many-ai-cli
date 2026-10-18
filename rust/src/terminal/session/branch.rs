@@ -3,6 +3,7 @@
 use super::*;
 
 pub(crate) const REFRESH_AFTER: Duration = Duration::from_secs(2);
+const IDLE_REFRESH_AFTER: Duration = Duration::from_secs(30);
 
 #[derive(Default)]
 pub(super) struct RefreshState {
@@ -10,6 +11,30 @@ pub(super) struct RefreshState {
     checked: bool,
     changes: (i64, i64, i64),
     project_checked: bool,
+    final_checked: bool,
+}
+
+impl Session {
+    fn branch_refresh_due(&mut self, now: Timestamp) -> bool {
+        let ended = terminal(&self.snapshot.state);
+        let Some(at) = self.branch_refresh.checked_at else {
+            self.branch_refresh.final_checked = ended;
+            return true;
+        };
+        let age = now.duration_since(at).unwrap_or_default();
+        if ended {
+            let due = age >= REFRESH_AFTER && !self.branch_refresh.final_checked;
+            self.branch_refresh.final_checked |= due;
+            return due;
+        }
+        self.branch_refresh.final_checked = false;
+        if age >= IDLE_REFRESH_AFTER {
+            return true;
+        }
+        let git_not_answered = self.snapshot.branch.is_empty()
+            && !(self.branch_refresh.project_checked && self.snapshot.project_id.is_empty());
+        age >= REFRESH_AFTER && (self.last_output.is_some_and(|out| out > at) || git_not_answered)
+    }
 }
 
 impl SessionEngine {
@@ -19,14 +44,12 @@ impl SessionEngine {
             .sessions
             .values_mut()
             .filter_map(|session| {
-                let due = session
-                    .branch_refresh
-                    .checked_at
-                    .is_none_or(|at| now.duration_since(at).is_ok_and(|age| age >= REFRESH_AFTER));
-                if !due {
+                if !session.branch_refresh_due(now) {
                     return None;
                 }
-                // Enqueue time, not completion time. Terminal sessions remain eligible.
+                // Enqueue time, not completion time. Live sessions poll every 2s only
+                // after new output or while the branch is unknown, else every 30s; an
+                // ended session gets one last check, then stops.
                 session.branch_refresh.checked_at = Some(now);
                 Some((session.binding.session, session.snapshot.cwd.clone()))
             })

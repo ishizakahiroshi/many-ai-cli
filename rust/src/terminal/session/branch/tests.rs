@@ -205,8 +205,138 @@ async fn reattach(
     binding
 }
 
+fn mark_output(f: &Fixture, id: LiveSessionId, milliseconds: u64) {
+    lock(&f.core.state)
+        .sessions
+        .get_mut(&id)
+        .unwrap()
+        .last_output = Some(at(milliseconds));
+}
+fn set_state(f: &Fixture, id: LiveSessionId, state: &str) {
+    lock(&f.core.state)
+        .sessions
+        .get_mut(&id)
+        .unwrap()
+        .snapshot
+        .state = state.into();
+}
+fn due(f: &Fixture, id: LiveSessionId, milliseconds: u64) -> bool {
+    f.core
+        .branch_refresh_requests(at(milliseconds))
+        .iter()
+        .any(|(due, _)| *due == id)
+}
+/// A live session whose branch is known, already admitted once at `at(0)`.
+async fn admitted_with_branch(f: &Fixture) -> SessionBinding {
+    lock(&f.lookup).1 = "main".into();
+    let binding = register(f, 1, "cwd", false).await;
+    assert!(due(f, binding.session, 0));
+    binding
+}
+
 #[tokio::test]
-async fn first_tick_is_due_and_enqueue_time_advances_even_for_terminal_sessions() {
+async fn idle_live_session_with_a_branch_waits_for_output_or_the_slow_interval() {
+    let f = fixture();
+    let binding = admitted_with_branch(&f).await;
+    let id = binding.session;
+    // Output at the admission time is not newer than the admission.
+    mark_output(&f, id, 0);
+    assert!(!due(&f, id, 3_000));
+    // The rejected tick must not move the admission time.
+    assert!(!due(&f, id, 29_999));
+    assert!(due(&f, id, 30_000));
+    assert!(!due(&f, id, 31_000));
+}
+
+#[tokio::test]
+async fn live_session_with_output_after_the_last_admission_is_due_after_two_seconds() {
+    let f = fixture();
+    let binding = admitted_with_branch(&f).await;
+    let id = binding.session;
+    mark_output(&f, id, 1_000);
+    assert!(!due(&f, id, 1_999));
+    assert!(due(&f, id, 3_000));
+    // Admitted at 3s; the old output no longer counts.
+    assert!(!due(&f, id, 6_000));
+    mark_output(&f, id, 7_000);
+    assert!(due(&f, id, 9_000));
+}
+
+#[tokio::test]
+async fn live_session_is_due_after_thirty_one_seconds_without_output() {
+    let f = fixture();
+    let binding = admitted_with_branch(&f).await;
+    assert!(due(&f, binding.session, 31_000));
+}
+
+#[tokio::test]
+async fn live_session_without_a_branch_retries_every_two_seconds_unless_git_is_ruled_out() {
+    let f = fixture();
+    let unknown = register(&f, 1, "unknown-cwd", false).await;
+    let not_git = register(&f, 2, "not-git-cwd", false).await;
+    {
+        let mut state = lock(&f.core.state);
+        let session = state.sessions.get_mut(&not_git.session).unwrap();
+        session.branch_refresh.project_checked = true;
+        session.snapshot.project_id.clear();
+    }
+    // One tick admits both, since neither has been checked yet.
+    assert_eq!(f.core.branch_refresh_requests(at(0)).len(), 2);
+    // No output since admission, branch still empty.
+    assert!(!due(&f, unknown.session, 1_999));
+    assert!(due(&f, unknown.session, 3_000));
+    assert!(!due(&f, not_git.session, 3_000));
+    assert!(due(&f, not_git.session, 30_000));
+}
+
+#[tokio::test]
+async fn ended_session_gets_one_last_check_then_is_never_admitted_again() {
+    let f = fixture();
+    let binding = admitted_with_branch(&f).await;
+    let id = binding.session;
+    drop(
+        f.core
+            .observe_end(
+                binding,
+                SessionEnd {
+                    declared_state: "completed".into(),
+                    exit_code: 0,
+                    reason: String::new(),
+                },
+                at(1_000),
+            )
+            .unwrap(),
+    );
+    assert!(!due(&f, id, 1_999));
+    assert!(due(&f, id, 3_000));
+    assert!(!due(&f, id, 6_000));
+    assert!(!due(&f, id, 37_000));
+    // Output after the end does not reopen polling for an ended session.
+    mark_output(&f, id, 40_000);
+    assert!(!due(&f, id, 80_000));
+}
+
+#[tokio::test]
+async fn session_that_returns_to_live_follows_the_live_rules_again() {
+    let f = fixture();
+    let binding = admitted_with_branch(&f).await;
+    let id = binding.session;
+    set_state(&f, id, "completed");
+    assert!(due(&f, id, 3_000));
+    assert!(!due(&f, id, 6_000));
+    set_state(&f, id, "standby");
+    // Live again: no new output, branch known, so only the slow interval applies.
+    assert!(!due(&f, id, 6_000));
+    mark_output(&f, id, 4_000);
+    assert!(due(&f, id, 6_000));
+    // Ending again earns a new last check.
+    set_state(&f, id, "completed");
+    assert!(due(&f, id, 9_000));
+    assert!(!due(&f, id, 12_000));
+}
+
+#[tokio::test]
+async fn first_tick_is_due_and_ended_sessions_stop_after_the_first_check() {
     let f = fixture();
     let first = register(&f, 1, "first-cwd", false).await;
     let terminal = register(&f, 2, "terminal-cwd", false).await;
@@ -227,13 +357,16 @@ async fn first_tick_is_due_and_enqueue_time_advances_even_for_terminal_sessions(
         (first.session, "first-cwd".into()),
         (terminal.session, "terminal-cwd".into()),
     ];
+    let live_only = vec![(first.session, "first-cwd".into())];
     assert_eq!(f.core.branch_refresh_requests(at(0)), expected);
     // No result has completed. Repeated ticks still use last admission time.
+    // The branch is still unknown, so the live session keeps its two-second
+    // cadence; the session that ended before its first check never returns.
     assert!(f.core.branch_refresh_requests(at(0)).is_empty());
     assert!(f.core.branch_refresh_requests(at(1_999)).is_empty());
-    assert_eq!(f.core.branch_refresh_requests(at(2_000)), expected);
+    assert_eq!(f.core.branch_refresh_requests(at(2_000)), live_only);
     assert!(f.core.branch_refresh_requests(at(3_999)).is_empty());
-    assert_eq!(f.core.branch_refresh_requests(at(4_000)), expected);
+    assert_eq!(f.core.branch_refresh_requests(at(4_000)), live_only);
     assert_eq!(
         f.core.snapshot(terminal.session).unwrap().state,
         "completed"
@@ -280,6 +413,9 @@ async fn registration_and_cold_reattach_lookup_raw_cwd_but_only_reattach_delays_
             .checked
     );
     assert!(f.core.branch_refresh_requests(at(500)).is_empty());
+    // Both branches are known, so only new output makes the two-second tick due.
+    mark_output(&f, first.session, 1_000);
+    mark_output(&f, cold_id, 600);
     assert_eq!(
         f.core.branch_refresh_requests(at(2_499)),
         vec![(first.session, "  raw-cwd  ".into())]
@@ -499,6 +635,8 @@ async fn warm_reattach_keeps_cached_stats_and_accepts_an_old_same_cwd_result_on_
         assert_eq!(cached.changes, (2, 3, 4));
         assert_eq!(cached.checked_at, Some(at(1_000)));
     }
+    // The branch is known, so only new output makes the two-second tick due.
+    mark_output(&f, old.session, 1_500);
     assert!(f.core.branch_refresh_requests(at(2_999)).is_empty());
     assert_eq!(
         f.core.branch_refresh_requests(at(3_000)),
