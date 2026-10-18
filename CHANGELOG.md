@@ -232,6 +232,13 @@ Release artifacts are published at
   `git diff-index`, which never rewrites the index, so a read stopped at its
   5-second limit can no longer leave a 0-byte `index.lock` that blocks your own
   `git add` / `git commit`. Commit, push, pull and fetch are unchanged.
+- Session cards read the branch name from the repository's `.git/HEAD` file
+  instead of starting `git` for it on every refresh. Starting `git` sometimes
+  took longer than the 250 ms limit when many sessions were open, and the card
+  then showed "(no git)" for a repository. Git is still asked when HEAD is
+  detached, when the repository uses reftable, or when HEAD cannot be read. A
+  repository with no commit yet now shows its branch name instead of
+  "(no git)".
 - Relay's change count and the clean check before an automatic worktree is
   removed no longer take `.git/index.lock` either: they ran `git status` without
   `GIT_OPTIONAL_LOCKS=0` and are stopped after 3 and 5 seconds. Every `git` the

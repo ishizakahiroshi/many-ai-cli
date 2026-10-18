@@ -47,11 +47,64 @@ impl FilesService {
     }
 }
 
+/// The branch the repository's HEAD file names, read without starting Git.
+/// Every card refresh asks for the branch, and starting Git for it took
+/// longer than the 250 ms budget often enough to show "(no git)" for a
+/// repository (2026-10-16). `None` leaves the answer to Git: no repository
+/// above `cwd`, a directory that does not exist, a detached HEAD (Git's
+/// abbreviation length decides how it is shown), the reftable placeholder
+/// `refs/heads/.invalid`, or anything else unexpected.
+///
+/// Unlike Git, this names the branch of a repository with no commit yet.
+async fn head_file_branch(cwd: &str) -> Option<String> {
+    let cwd = PathBuf::from(cwd);
+    tokio::task::spawn_blocking(move || {
+        if !cwd.is_dir() {
+            return None;
+        }
+        let (_, git_dir) = super::git_lock::locate(&cwd)?;
+        let head = git_dir.join("HEAD");
+        let meta = std::fs::metadata(&head).ok()?;
+        if !meta.is_file() || meta.len() > 4096 {
+            return None;
+        }
+        head_branch(&std::fs::read_to_string(&head).ok()?)
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+/// `ref: refs/heads/<name>` gives `<name>` when it is a plain branch name.
+fn head_branch(content: &str) -> Option<String> {
+    let line = content.strip_suffix('\n').unwrap_or(content);
+    let line = line.strip_suffix('\r').unwrap_or(line);
+    let name = line
+        .strip_prefix("ref:")?
+        .trim_start_matches([' ', '\t'])
+        .strip_prefix("refs/heads/")?;
+    let plain = !name.is_empty()
+        && name != ".invalid"
+        && !name.starts_with(['/', '-', '.'])
+        && !name.ends_with(['/', '.'])
+        && !name.ends_with(".lock")
+        && !name.contains("..")
+        && !name.contains("//")
+        && !name.contains("@{")
+        && !name
+            .chars()
+            .any(|c| c.is_control() || c.is_whitespace() || "~^:?*[\\".contains(c));
+    plain.then(|| name.to_owned())
+}
+
 impl GitBranchSource for FilesService {
     fn branch<'a>(&'a self, cwd: &'a str) -> CoreFuture<'a, String> {
         Box::pin(async move {
             if cwd.trim().is_empty() {
                 return String::new();
+            }
+            if let Some(name) = head_file_branch(cwd).await {
+                return name;
             }
             let git = Lookup::new(self);
             let Ok(output) = git.run(cwd, &["rev-parse", "--abbrev-ref", "HEAD"]).await else {
@@ -629,7 +682,9 @@ mod tests {
         let fixture = Fixture::new();
         fixture.init().await;
         fs::write(fixture.root.join("text.txt"), "one\ntwo\n").unwrap();
-        assert_eq!(fixture.service.branch(fixture.cwd()).await, "");
+        // HEAD already names the branch before the first commit; Git's
+        // `rev-parse` failed there and the card showed "(no git)".
+        assert_eq!(fixture.service.branch(fixture.cwd()).await, "synthetic");
         assert_eq!(
             fixture.observed_changes(fixture.cwd(), (1, 0, 0)).await,
             (1, 0, 0)
@@ -667,6 +722,100 @@ mod tests {
         assert_eq!(
             fixture.observed_changes(fixture.cwd(), (3, 2, 1)).await,
             (3, 2, 1)
+        );
+    }
+
+    #[tokio::test]
+    async fn head_file_names_the_branch_without_starting_git() {
+        let mut fixture = Fixture::new();
+        fixture.init().await;
+        fs::write(fixture.root.join("readme.txt"), "base\n").unwrap();
+        fixture.commit().await;
+        let worktree = fixture.owned.path().join("synthetic worktree");
+        fixture
+            .git(
+                &fixture.root,
+                &[
+                    "worktree",
+                    "add",
+                    "-b",
+                    "side/feature",
+                    worktree.to_str().unwrap(),
+                ],
+            )
+            .await;
+        let subdir = fixture.root.join("inside");
+        fs::create_dir(&subdir).unwrap();
+        let outside = fixture.owned.path().join("nonrepo");
+        fs::create_dir(&outside).unwrap();
+        // From here Git cannot start, so every name below came from HEAD.
+        fixture.service.git_executable = fixture.owned.path().join("absent-git");
+        assert_eq!(fixture.service.branch(fixture.cwd()).await, "synthetic");
+        assert_eq!(
+            fixture.service.branch(subdir.to_str().unwrap()).await,
+            "synthetic"
+        );
+        // A linked worktree's `.git` file points at its own HEAD.
+        assert_eq!(
+            fixture.service.branch(worktree.to_str().unwrap()).await,
+            "side/feature"
+        );
+        // Left to Git (which cannot start here): outside a repository, a
+        // directory that does not exist inside one, and a detached HEAD.
+        assert_eq!(fixture.service.branch(outside.to_str().unwrap()).await, "");
+        let missing = fixture.root.join("missing");
+        assert_eq!(fixture.service.branch(missing.to_str().unwrap()).await, "");
+        let head = fixture.root.join(".git").join("HEAD");
+        fs::write(&head, format!("{}\n", "a".repeat(40))).unwrap();
+        assert_eq!(fixture.service.branch(fixture.cwd()).await, "");
+    }
+
+    #[test]
+    fn head_branch_accepts_only_plain_branch_names() {
+        for (content, expected) in [
+            ("ref: refs/heads/develop\n", Some("develop")),
+            ("ref: refs/heads/feature/日本語\r\n", Some("feature/日本語")),
+            ("ref:\trefs/heads/x", Some("x")),
+            // reftable keeps this placeholder in HEAD and the real ref elsewhere.
+            ("ref: refs/heads/.invalid\n", None),
+            ("ref: refs/remotes/origin/main\n", None),
+            ("ref: refs/heads/\n", None),
+            ("ref: refs/heads/a..b\n", None),
+            ("ref: refs/heads/a b\n", None),
+            ("ref: refs/heads/x.lock\n", None),
+            ("ref: refs/heads/x\nextra\n", None),
+            ("0123456789abcdef0123456789abcdef01234567\n", None),
+            ("", None),
+        ] {
+            assert_eq!(head_branch(content).as_deref(), expected, "{content:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn reftable_repository_is_left_to_git() {
+        let fixture = Fixture::new();
+        let mut init = std::process::Command::new(&fixture.service.git_executable);
+        init.args(["init", "--ref-format=reftable", "-b", "synthetic"])
+            .arg(&fixture.root);
+        for (key, value) in &fixture.service.git_environment {
+            match value {
+                Some(value) => init.env(key, value),
+                None => init.env_remove(key),
+            };
+        }
+        if !init.output().is_ok_and(|out| out.status.success()) {
+            // Git older than 2.45 has no reftable; nothing to check.
+            return;
+        }
+        fs::write(fixture.root.join("readme.txt"), "base\n").unwrap();
+        fixture.commit().await;
+        assert_eq!(
+            head_branch(&fs::read_to_string(fixture.root.join(".git").join("HEAD")).unwrap()),
+            None
+        );
+        assert_eq!(
+            fixture.observed_branch(fixture.cwd(), "synthetic").await,
+            "synthetic"
         );
     }
 
