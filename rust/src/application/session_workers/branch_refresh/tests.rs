@@ -491,6 +491,52 @@ async fn shutdown_cancels_running_and_waiting_cwds_and_releases_pending_ownershi
 }
 
 #[tokio::test]
+async fn timer_starts_no_lookup_without_a_browser_and_recounts_when_one_attaches() {
+    let mut f = fixture().await;
+    let id = register(&f, 1, "project").await;
+    let first = UiBinding {
+        connection: UiConnectionId(1),
+        auth_epoch: f.core.auth_epoch(),
+    };
+    drop(f.core.detach_ui(first));
+    let cancel = HubShutdownCancellation::default();
+    let timer = tokio::spawn(f.owner.clone().run_timer(cancel.clone()));
+    // The session has never been counted, so it is due; still nothing starts.
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    assert!(
+        f.calls.try_recv().is_err(),
+        "a lookup started with no browser"
+    );
+    // Counted a moment ago: without the restart it would wait for its interval.
+    assert_eq!(
+        f.core.branch_refresh_requests(Timestamp::now()),
+        vec![(id, "project".to_owned())]
+    );
+    let second = UiBinding {
+        connection: UiConnectionId(2),
+        auth_epoch: f.core.auth_epoch(),
+    };
+    f.core.attach_ui(second, None, None).unwrap();
+    f.sink
+        .apply(f.core.finish_ui_priming(second).unwrap())
+        .await
+        .unwrap();
+    let attached = std::time::Instant::now();
+    let call = f.next_call().await;
+    // The shortest normal interval is REFRESH_AFTER (2 s, terminal/session/branch.rs).
+    assert!(
+        attached.elapsed() < Duration::from_secs(2),
+        "the attaching browser waited for the normal interval"
+    );
+    assert_eq!(call.cwd, "project");
+    call.release.send("main".into()).unwrap();
+    cancel.cancel();
+    timer.await.unwrap();
+    f.drain().await;
+    assert_eq!(f.core.snapshot(id).unwrap().branch, "main");
+}
+
+#[tokio::test]
 async fn aborting_an_unpolled_refresh_releases_its_precreated_cwd_guard() {
     let mut f = fixture().await;
     let id = register(&f, 1, "project").await;

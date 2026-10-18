@@ -194,6 +194,9 @@ Release artifacts are published at
   there yet.
 
 ### Changed
+- While no browser is connected to the Hub, session cards are not refreshed, so
+  the Hub starts no `git` for their branch name and change counts. When a
+  browser connects again, every session is counted once right away.
 - Work memo rows are now a single compact line with an explicit edit (✎) button; clicking a text memo also starts editing.
 - **Daily local Rust builds use the repair worktree, including uncommitted Web
   and Rust changes.** The local build helper no longer fetches an older trial copy
