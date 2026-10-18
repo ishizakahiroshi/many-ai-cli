@@ -182,7 +182,36 @@ if ($SkipWeb) {
 }
 
 # --- Rust ---
+# 稼働中の wrap / usage-relay / serve プロセスが exe を掴んでいると、Windows は削除（上書き）を拒否して
+# cargo build が最後の配置で失敗する（os error 5）。実行中の exe でも同一フォルダ内のリネームは通るため、
+# 書き込みロックされている exe を .old.<日時>.exe へ退避し、終了済みの古い退避ファイルもここで掃除する。
+function Clear-LockedRustBinaries([string]$targetDir) {
+    if (-not (Test-Path -LiteralPath $targetDir -PathType Container)) { return }
+    Get-ChildItem -LiteralPath $targetDir -Filter '*.old.*.exe' -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+    }
+    foreach ($name in 'many-ai-cli.exe', 'many-ai-cli-launcher.exe') {
+        $bin = Join-Path $targetDir $name
+        if (-not (Test-Path -LiteralPath $bin -PathType Leaf)) { continue }
+        $locked = $false
+        try {
+            $fs = [System.IO.File]::Open($bin, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+            $fs.Close()
+        } catch {
+            $locked = $true
+        }
+        if ($locked) {
+            $base = [System.IO.Path]::GetFileNameWithoutExtension($name)
+            $stamp = Get-Date -Format 'yyyyMMdd_HHmmss_fff'
+            $oldName = "$base.old.$stamp.exe"
+            Rename-Item -LiteralPath $bin -NewName $oldName
+            Write-Host "実行中の $name を $oldName へ退避しました（稼働中のセッションはそのまま継続します）" -ForegroundColor Yellow
+        }
+    }
+}
+
 Step "Rust をビルド（cargo +$Toolchain / $buildKind）"
+Clear-LockedRustBinaries (Split-Path -Parent $exe)
 $cargoArgs = @("+$Toolchain", 'build', '--locked', '--manifest-path', (Join-Path $Worktree 'rust\Cargo.toml'))
 if ($Release) { $cargoArgs += '--release' }
 Native 'cargo build' { & cargo @cargoArgs }
