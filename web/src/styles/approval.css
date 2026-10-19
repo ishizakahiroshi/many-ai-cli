@@ -394,7 +394,7 @@
   position: absolute;
   inset: 0;
   width: 0;
-  background: rgba(239, 68, 68, 0.28);
+  background: color-mix(in srgb, var(--red) 28%, transparent);
   pointer-events: none;
 }
 .hold-to-approve.holding::after {

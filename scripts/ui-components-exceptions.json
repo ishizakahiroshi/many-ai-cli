@@ -521,6 +521,17 @@
     },
     {
       "file": "web/src/styles.css",
+      "selector": ".git-lock-banner",
+      "context": "",
+      "property": "box-shadow",
+      "value": "0 10px 28px rgba(0,0,0,0.4)",
+      "rule": "literal-color",
+      "fingerprint": "4aafd661904c26cb1e826e3b92b3d2cdbda8480ca03340b5745d93cca18130b9",
+      "count": 1,
+      "reason": "Existing popup, tooltip, drawer or content shadow retains its placement/depth cue outside the shared modal body; same size and tone as the handoff notification banner it mirrors. Reviewed declaration: .git-lock-banner { box-shadow: 0 10px 28px rgba(0,0,0,0.4) }."
+    },
+    {
+      "file": "web/src/styles.css",
       "selector": ".main-tab-add-menu",
       "context": "",
       "property": "box-shadow",
@@ -1687,17 +1698,6 @@
     },
     {
       "file": "web/src/styles/approval.css",
-      "selector": ".action-btn.hold-to-approve::after",
-      "context": "",
-      "property": "background",
-      "value": "rgba(239, 68, 68, 0.28)",
-      "rule": "local-control-appearance",
-      "fingerprint": "6092c59b1e2ec43bf546bfaa330f433931b95368ab570064ff7da57e682ffc34",
-      "count": 1,
-      "reason": "semantic-state: Existing selected/current/armed/live/copy/danger feedback is behavioral state. Matching ui-button variables preserve it under common hover. Reviewed background=rgba(239, 68, 68, 0.28) at .action-btn.hold-to-approve::after."
-    },
-    {
-      "file": "web/src/styles/approval.css",
       "selector": ".risk-high .approval-risk-badge",
       "context": "",
       "property": "color",
@@ -2036,17 +2036,6 @@
       "fingerprint": "e29bc59ffe97b84d4ebe9f46c587ab2209bcf26a3e7a910c09e2c937e7d397cc",
       "count": 1,
       "reason": "semantic-state: Existing selected/current/armed/live/copy/danger feedback is behavioral state. Matching ui-button variables preserve it under common hover. Reviewed background=rgba(255,255,255,0.08) at .action-btn.current:hover, .action-btn.permanent:hover, .action-btn.session-allow:hover."
-    },
-    {
-      "file": "web/src/styles/approval.css",
-      "selector": ".action-btn.hold-to-approve::after",
-      "context": "",
-      "property": "background",
-      "value": "rgba(239, 68, 68, 0.28)",
-      "rule": "literal-color",
-      "fingerprint": "e69ad64debbf7575c8cd1f8550deb6a97558873c2b63000c123c0be563ead5a9",
-      "count": 1,
-      "reason": "semantic-state: Existing selected/current/armed/live/copy/danger feedback is behavioral state. Matching ui-button variables preserve it under common hover. Reviewed background=rgba(239, 68, 68, 0.28) at .action-btn.hold-to-approve::after."
     },
     {
       "file": "web/src/styles/approval.css",
