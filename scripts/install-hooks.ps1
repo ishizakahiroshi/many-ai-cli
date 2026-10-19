@@ -23,4 +23,4 @@ if (-not (Test-Path .githooks)) {
 
 Write-Host "OK: hooks active (core.hooksPath = .githooks)"
 Write-Host "    pre-commit: .githooks/pre-commit  (secrets-scan / approval-rules residue)"
-Write-Host "    pre-push:   .githooks/pre-push    (instrumentation ledger)"
+Write-Host "    pre-push:   .githooks/pre-push    (instrumentation ledger / staticcheck when .go changed)"
