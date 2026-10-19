@@ -16,6 +16,7 @@ Updated: 2026-10-09. This folder is public and may be read by the delegated impl
 Work repo: `ishizakahiroshi/many-ai-cli`.
 Work branch: `dots/P-20261008-007-session-list-tabs`.
 PR base: `dots/rust-recovery-resume-3`.
+Update 2026-10-19: the Rust main line moved to `develop` (the integration branch was merged there and the frozen Go sources moved to `go/`). New work targets `develop`; the lines below are kept as the record of their date.
 Behavior oracle: `4a3c141a1e6573459d3ff2a8cc6c9962bce6def3`.
 Management Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/12
 First instruction commit: `c29b58fa1c5bff2298197d9700c61b503b581b18`.

@@ -56,7 +56,8 @@ const EXCLUDE = [
   /^scripts\/check-instrumentation\.mjs$/,
   // 恒久の足場。観測コードではなく、記録点フックそのもの。
   /^web\/src\/debug\/(?:probe|index)\.ts$/,
-  /^internal\/[^/]+\/probe_(?:debug|nodebug)\.go$/,
+  // 2026-10-19 から Go 版は go/ に凍結（同じ足場が go/internal/ の下にある）。
+  /^(?:go\/)?internal\/[^/]+\/probe_(?:debug|nodebug)\.go$/,
 ];
 
 // sink 登録の唯一の入口。第 4 パスがここの import と台帳を突き合わせる。

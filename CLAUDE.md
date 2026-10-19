@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-10-19(月) 23:34:48 — 本線を Rust 版（develop）へ移したことに合わせて概要・構成・作業ルールを書き換えた
+> 最終更新: 2026-10-19(月) 23:28:55 — 本線を Rust 版へ移し（develop）、Go 版を go/ に凍結したことに合わせて概要・構成・作業ルールを書き換えた
 > 2026-10-16(金) 11:56:03 — 利用者指定で見送り台帳 D-01〜D-13 と custom_providers の制限を全件撤廃し、判断基準を利用者の使いやすさに改めた
 > 2026-10-11(日) 20:36:31 — 共通UI部品・確認文言と機械検査の索引を追加
 > 2026-10-09(金) 19:36:22 — 全修正の普段のビルド元への反映を明文化
@@ -20,7 +20,7 @@
 
 ## プロジェクト概要
 
-**開発方針（2026-10-09 利用者指定、2026-10-19 に本線を移行）:** 本線は Rust 版で、`develop` で開発し v1.0.0 でリリースする予定。全ての修正は普段のビルド元への反映まで行う（`CLAUDE/development.md`）。Go 版のソース（`cmd/` `internal/` `go.mod`）は凍結してあり、ビルド・改修・追加調査・回帰確認は行わない（Rust のテストが固定基準として読むだけ。`go/` へ移す予定）。
+**開発方針（2026-10-09 利用者指定、2026-10-19 に本線を移行）:** 本線は Rust 版で、`develop` で開発し v1.0.0 でリリースする予定。全ての修正は普段のビルド元への反映まで行う（`CLAUDE/development.md`）。Go 版のソースは `go/` に凍結してあり、ビルド・改修・追加調査・回帰確認は行わない（Rust のテストが固定基準として読むだけ）。
 
 **many-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI など。対応一覧は下の用語表の Provider 行）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。Rust の実行ファイル 2 本（Hub 常駐 + ラッパー機能の `many-ai-cli`、ランチャーの `many-ai-cli-launcher`）+ ブラウザ UI（xterm.js / TypeScript）。
 
@@ -49,8 +49,9 @@ rust/src/bin/      実行ファイル 2 本（many-ai-cli / many-ai-cli-launcher
 rust/src/hub/      HTTP+WS / セッション管理 / attach / spawn
 rust/src/wrapper/  PTY ラッパー / 承認ルールの注入
 rust/src/          ほか機能別モジュール（一覧と役割は .omitnix/index.json）
+rust/assets/       Rust ビルドが同梱する資材（ランチャー画面・provider 定義・Windows ランタイム）
 web/src/           フロントソース（web/dist/ は生成物・gitignore）
-cmd/ internal/     凍結した Go 版（ビルド・改修しない。go/ へ移す予定）
+go/                凍結した Go 版（ビルド・改修しない）
 docs/local/        設計書・plan 等（非公開）
 ```
 
@@ -70,27 +71,27 @@ docs/local/        設計書・plan 等（非公開）
 
 ## 設計原則の索引（本文は正本にある）
 
-事故から生まれた設計ルール。**本文はここに書かず、破る人が必ず開く場所に置いてある。** 機械検査があるものは、それが最終的な歯止め。`internal/` のパスと `Test...` は凍結した Go 版の正本で、Rust 版の対応箇所への付け替えは [pending](docs/local/pending_rust-design-index-remap.md) にある（ルール自体は Rust 版にもそのまま効く）。
+事故から生まれた設計ルール。**本文はここに書かず、破る人が必ず開く場所に置いてある。** 機械検査があるものは、それが最終的な歯止め。`go/internal/` のパスと `Test...` は凍結した Go 版の正本で、Rust 版の対応箇所への付け替えは [pending](docs/local/pending_rust-design-index-remap.md) にある（ルール自体は Rust 版にもそのまま効く）。
 
 | ルール | 正本（本文はここ） | 機械検査 |
 |---|---|---|
-| 承認の同一性は 1 本（`candidateKey` + `sourceEpoch`）だけ。誤表示を踏んでも抑止を足さない | `internal/hub/approval_identity.go` / `web/src/app/approval-answered.ts` | `TestApprovalSuppressionStateIsSingleSource` |
-| 承認の表示は Hub が持つ保留中の記録を描くだけ。画面は端末の文字から承認を作らず、「保留中」も記録からだけ出す。承認マーカーの供給元はセッションに 1 つ（claude / codex は CLI のトランスクリプト、他は VT ミラー） | `internal/hub/approval_record.go` の冒頭 / `internal/hub/approval_marker_transcript.go` | `scripts/check-approval-display-source.mjs`（Validate CI） / `internal/hub/approval_display_guard_test.go` / `TestReplayApprovalSkipsVTMarkerWhenTranscriptIsSource` |
-| 複数サブスクリプションは設定ディレクトリを env で切るだけ。token を持たない | `internal/subscription/adapter.go` のパッケージ doc | `TestLiveSessionAuthIsNeverSwapped` ほか 2 件 |
-| auto 選択は spawn 時の round-robin だけ。残量を見て自動で別契約へ乗り換えない | `internal/hub/subscription.go` の `pickAutoSubscription` 冒頭 | `TestAutoSubscriptionNeverConsultsUsage` |
-| 利用者のファイルへ書く機能は「次回起動時の回収」まで設計する | `internal/doctor/residue.go` の冒頭 | `many-ai-cli doctor` の置き去り検査 / `scripts/check-approval-rules-residue.mjs`（commit 混入） |
+| 承認の同一性は 1 本（`candidateKey` + `sourceEpoch`）だけ。誤表示を踏んでも抑止を足さない | `go/internal/hub/approval_identity.go` / `web/src/app/approval-answered.ts` | `TestApprovalSuppressionStateIsSingleSource` |
+| 承認の表示は Hub が持つ保留中の記録を描くだけ。画面は端末の文字から承認を作らず、「保留中」も記録からだけ出す。承認マーカーの供給元はセッションに 1 つ（claude / codex は CLI のトランスクリプト、他は VT ミラー） | `go/internal/hub/approval_record.go` の冒頭 / `go/internal/hub/approval_marker_transcript.go` | `scripts/check-approval-display-source.mjs`（Validate CI） / `go/internal/hub/approval_display_guard_test.go` / `TestReplayApprovalSkipsVTMarkerWhenTranscriptIsSource` |
+| 複数サブスクリプションは設定ディレクトリを env で切るだけ。token を持たない | `go/internal/subscription/adapter.go` のパッケージ doc | `TestLiveSessionAuthIsNeverSwapped` ほか 2 件 |
+| auto 選択は spawn 時の round-robin だけ。残量を見て自動で別契約へ乗り換えない | `go/internal/hub/subscription.go` の `pickAutoSubscription` 冒頭 | `TestAutoSubscriptionNeverConsultsUsage` |
+| 利用者のファイルへ書く機能は「次回起動時の回収」まで設計する | `go/internal/doctor/residue.go` の冒頭 | `many-ai-cli doctor` の置き去り検査 / `scripts/check-approval-rules-residue.mjs`（commit 混入） |
 | 調査用の観測コードは同じコミットで `instrumentation.json` へ登録し、リリース成果物には入れない（build tag オプトイン＋成果物検査） | `scripts/check-instrumentation.mjs` の冒頭 / `web/src/debug/probe.ts` / `docs/local/archive/v0.8.x/plan_instrumentation-probe-lifecycle.md` | `scripts/check-instrumentation.mjs`（Validate CI） / `scripts/check-artifact-clean.mjs` |
 | 版数を手で直す場所は無い（タグが単一ソース。古いままが正常） | `scripts/check-version-sources.mjs` の冒頭 | 同スクリプト（Validate CI） |
 | `resources/` は `main` へ push した時点で全ユーザーへ live 配信される | [`resources/README.md`](resources/README.md) | `scripts/check-slash-commands.mjs` |
-| profile へ持ち込む設定は additive のみ。credential は運ばず、書くのは自分のツリーの中だけ | `internal/subscription/seed.go` のパッケージ doc | `TestSeedIsAdditiveOnly` / `TestSeedNeverCarriesCredentials` |
+| profile へ持ち込む設定は additive のみ。credential は運ばず、書くのは自分のツリーの中だけ | `go/internal/subscription/seed.go` のパッケージ doc | `TestSeedIsAdditiveOnly` / `TestSeedNeverCarriesCredentials` |
 | 本ファイルを索引のまま保つ（本文を書き戻さない） | `scripts/check-claude-md.mjs` の冒頭 | 同スクリプト（Validate CI） |
 | 代替画面を CLI が全面管理している端末へこちらのテキストを差し込まない（消せない残骸になる）／マーカーは端末の折り返しで分断される前提で照合する（連続バイト完全一致にしない）／端末出力を溜めて捨てる状態機械を置かない（再描画フレームに CLOSE が描かれないことがある） | `web/src/app/hub-marker-filter.ts` の案 H・案 I・案 J | `hub-marker-filter-fixtures.ts` の案 H 5 件・案 I 8 件・案 J 6 件 |
 | 全画面オーバーレイには wheel 除外クラス `.aac-wheel-overlay` を付ける（端末に重なるだけのポップオーバーは `data-wheel-native`） | `web/src/app/terminal.ts` の `isModalOverlayOpen()` | `scripts/check-wheel-overlays.mjs`（Validate CI） |
 | 画面の JS を読み込んだ瞬間に、循環 import の相手の変数を同期で読まない（TDZ で評価が止まり「読み込み中...」のまま固まる。遅らせるなら `queueMicrotask`）。止まったときは黙らず失敗の帯を出す | `web/src/app/boot-guard.ts` の冒頭 / `scripts/check-web-module-init.mjs` の冒頭 | `scripts/check-web-module-init.mjs`（Validate CI） / `web/tests/boot-guard.test.ts` |
-| relay は Hub の状態機械で回し、AI conductor に判断させない。利用者ブランチへは触らない | `internal/hub/relay.go` / `internal/hub/relay_worktree.go` | `TestRelay_*`（`internal/hub/`） |
+| relay は Hub の状態機械で回し、AI conductor に判断させない。利用者ブランチへは触らない | `go/internal/hub/relay.go` / `go/internal/hub/relay_worktree.go` | `TestRelay_*`（`go/internal/hub/`） |
 | サイドバーの配置は 1 本の木から導く（兄弟順と折りたたみ以外でノードが器を越えない） | `web/src/app/sidebar-tree.ts` | `sidebar-tree-fixtures.ts` |
-| 引き継ぎ看板とサブエージェントの木は、入れてよいものだけを型で受け、それ以外は入れる口を作らない。メモ本文は Record に入れず、記録済みパスを利用者が明示して開いた場合だけ Hub の読み取り専用 Markdown ビューアが表示できる。会話ログは引き続き後継のツールだけが開く。利用者の作業メモ（`internal/hub/memo_store.go`）に書かれたパスも、論理リモートからは `isPathMentionedInMemos`（`files_content.go`）経由で同様に読み取り専用で開ける（秘密 denylist は変わらず先に適用） | `internal/handoff/handoff.go` の冒頭コメント / `internal/proto/messages.go` の `SubagentNode` / `internal/hub/files_content.go` の `isPathMentionedInMemos` | `internal/handoff/handoff_test.go` の allowlist フィールド固定テスト / `TestSubagentNodeFieldsAreTheAllowlist` / `TestHandleFilesContent_MemoMentionedOutsidePathReadOnly` ほか `files_content_test.go` の Memo 系 |
-| 残量ソースは provider 直書きの switch/slice ではなく 1 本の表で持つ。問い合わせて取る経路は作らない（`ReadUsage` を Adapter に足さない） | `internal/subscription/usage_source.go` | `internal/subscription/usage_source_test.go` |
+| 引き継ぎ看板とサブエージェントの木は、入れてよいものだけを型で受け、それ以外は入れる口を作らない。メモ本文は Record に入れず、記録済みパスを利用者が明示して開いた場合だけ Hub の読み取り専用 Markdown ビューアが表示できる。会話ログは引き続き後継のツールだけが開く。利用者の作業メモ（`go/internal/hub/memo_store.go`）に書かれたパスも、論理リモートからは `isPathMentionedInMemos`（`files_content.go`）経由で同様に読み取り専用で開ける（秘密 denylist は変わらず先に適用） | `go/internal/handoff/handoff.go` の冒頭コメント / `go/internal/proto/messages.go` の `SubagentNode` / `go/internal/hub/files_content.go` の `isPathMentionedInMemos` | `go/internal/handoff/handoff_test.go` の allowlist フィールド固定テスト / `TestSubagentNodeFieldsAreTheAllowlist` / `TestHandleFilesContent_MemoMentionedOutsidePathReadOnly` ほか `files_content_test.go` の Memo 系 |
+| 残量ソースは provider 直書きの switch/slice ではなく 1 本の表で持つ。問い合わせて取る経路は作らない（`ReadUsage` を Adapter に足さない） | `go/internal/subscription/usage_source.go` | `go/internal/subscription/usage_source_test.go` |
 
 **新しいルールを足したくなったら、まずこの表に 1 行足せる形にできないかを考える。** できないもの（機械検査も、決まったファイルも無いもの）だけが本文を持ってよい。
 

@@ -1,7 +1,14 @@
 # Rust migration candidate
 
-This directory is an incremental implementation of the fixed Go contracts, not a
-replacement for the running Go application. Follow
+Since 2026-10-19 this Rust version is the main line on `develop`. The frozen Go
+sources moved to [`../go/`](../go/) and are neither built nor checked. Source
+comments such as `Source: internal/hub/...` cite the fixed Go commit named next
+to them, where those paths are at the repository root. Assets that the Rust
+build embeds (launcher UI, provider manifests, Windows runtime payload) live in
+[`assets/`](assets/); nothing in the product reads `go/`.
+
+This directory began as an incremental implementation of the fixed Go contracts,
+not a replacement for the running Go application. Follow
 [`docs/bot/rust-migration/README.md`](../docs/bot/rust-migration/README.md) and the
 [progress ledger](../docs/bot/rust-migration/PROGRESS.md).
 

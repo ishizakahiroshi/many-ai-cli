@@ -215,7 +215,7 @@ impl DeliveryManifest {
                 return Err("artifact path/hash/size is missing, unsafe or duplicated".into());
             }
         }
-        for needed in ["web/dist/index.html", "internal/launcher/ui/index.html"] {
+        for needed in ["web/dist/index.html", "rust/assets/launcher/ui/index.html"] {
             if !self.embedded_assets.iter().any(|a| a.path == needed) {
                 return Err(format!("missing embedded asset identity: {needed}"));
             }

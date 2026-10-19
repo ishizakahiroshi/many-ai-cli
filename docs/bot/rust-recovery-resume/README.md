@@ -10,7 +10,9 @@ last_reviewed: 2026-10-08
 
 # #3 many-ai-cli Rust: recovery continuation
 
-## Single source for ongoing fixes (2026-10-08)
+## Single source for ongoing fixes (updated 2026-10-19)
+
+Since 2026-10-19 the Rust version is the main line on `develop`: the integration branch was merged into `develop`, and the frozen Go sources moved to `go/` (neither built nor checked). Make Rust and Web fixes on `develop`; the owner's `rust-local.ps1` now selects the checkout of `develop` by default. The paragraphs below describe the 2026-10-08 arrangement and remain as history.
 
 The integration branch `dots/rust-recovery-resume-3` in PR #11 is the source of truth for Rust fixes. Make related Rust and Web changes together in the checkout of that branch, and validate and commit them as one coherent change. Do not edit a separate trial checkout first and leave its fixes outside the integration branch.
 

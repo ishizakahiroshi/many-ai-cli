@@ -4,20 +4,20 @@
 //
 // なぜ要るか:
 //   codex / copilot / cursor-agent / opencode を wrap すると、wrapper が
-//   AGENTS.md の末尾へ承認ルールのブロックを追記する（internal/wrapper/approval_rules.go の
-//   appendSharedBlock）。Claude 系には CLAUDE.md へ import 行を 1 本足す。
+//   AGENTS.md の末尾へ承認ルールのブロックを追記する（rust/src/wrapper/approval_injection.rs。
+//   凍結した Go 版では go/internal/wrapper/approval_rules.go の appendSharedBlock）。Claude 系には CLAUDE.md へ import 行を 1 本足す。
 //   many-ai-cli の開発中に子セッションを起こすと、それが **このリポジトリの追跡ファイル**に
 //   書かれる。2026-09-01 に実際に AGENTS.md へ 132 行が入った。
 //
-//   `many-ai-cli doctor` は既に置き去りを検出する（internal/doctor/residue.go）。
+//   `many-ai-cli doctor` は既に置き去りを検出する（rust/src/application/diagnostics/supplemental.rs）。
 //   ただしあれは「次回起動時に気づく」経路で、**commit への混入は別の穴**。
 //   git status に紛れるうえ `git add -A` で黙って入り、公開リポの履歴に
 //   作者環境の運用ルールが残る。文章で「混ぜるな」と書いても破られたときに誰も気づかないので、
 //   コミットの瞬間に落とす。
 //
 // 正本:
-//   マーカーと注入対象   internal/wrapper/approval_rules.go
-//   置き去りの検出       internal/doctor/residue.go
+//   マーカーと注入対象   rust/src/wrapper/approval_injection.rs
+//   置き去りの検出       rust/src/application/diagnostics/supplemental.rs
 //
 // モード:
 //   （既定）--staged      ステージ済みの内容だけを見る。pre-commit フック用
@@ -27,7 +27,7 @@
 //   旧名 any-ai-cli は新名 many-ai-cli の部分文字列（many = "m" + any）なので、
 //   コメント開始記号を落とした旧名パターンで探すと新旧どちらのマーカーにも当たる。
 //   逆に新名パターンで探すと旧名の残骸が 0 件に見える。
-//   internal/wrapper/approval_rules.go の ApprovalRulesResidueNeedle と同じ考え方。
+//   rust/src/wrapper/approval_injection.rs の OLD_START（旧名のマーカー）と同じ考え方。
 
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
@@ -46,7 +46,8 @@ const TARGET_BASENAMES = new Set([
 ]);
 
 // 配線の検査。マーカーを改名したのにこの検査が古い文字列を探し続ける状態を防ぐ。
-const WIRING_FILE = 'internal/wrapper/approval_rules.go';
+// 2026-10-19 に本線を Rust 版へ移したので、Rust の注入処理を読む（Go 版は go/ に凍結）。
+const WIRING_FILE = 'rust/src/wrapper/approval_injection.rs';
 
 function git(args) {
   return execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });

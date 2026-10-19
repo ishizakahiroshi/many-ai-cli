@@ -23,7 +23,7 @@ class WindowsRuntimeReceiptTests(unittest.TestCase):
         self.patcher.start()
         self.addCleanup(self.patcher.stop)
         self.source = 'a' * 40
-        script = self.root / 'internal/whisperruntime/fetch_windows_runtime.ps1'
+        script = self.root / 'rust/assets/whisperruntime/fetch_windows_runtime.ps1'
         script.parent.mkdir(parents=True)
         script.write_bytes(b'synthetic acquisition script')
         self.payload = script.parent / 'files/windows-amd64'

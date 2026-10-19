@@ -182,9 +182,13 @@ fn closed_writer_copy_restore_go_continuation_and_rust_reread() {
         b"Go/Rust storage compatibility only\n",
     )
     .unwrap();
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    // The frozen Go sources live under go/ since 2026-10-19.
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("go");
     let oracle_source = root.path().join("oracle-source");
-    copy_verified_go_sources(repo, &oracle_source).unwrap();
+    copy_verified_go_sources(&repo, &oracle_source).unwrap();
     std::fs::write(
         oracle_source.join("rollback-oracle.go"),
         include_bytes!("rollback-oracle.go"),

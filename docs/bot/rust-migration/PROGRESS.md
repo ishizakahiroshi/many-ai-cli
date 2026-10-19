@@ -7,6 +7,8 @@ Task label: #3 many-ai-cli rust. This is a coordination label, not GitHub issue/
 Baseline Go SHA: 21d0bc7935a2c4696fb89ccff2e324157a528c2d.
 Instruction/implementation branch: feat/rust-migration.
 PR base: develop.
+Update 2026-10-19: the Rust main line moved to `develop` (the integration branch was merged there and the frozen Go sources moved to `go/`). New work targets `develop`; the lines below are kept as the record of their date.
+
 Current state: the recovered continuation is published in [Draft PR #11](https://github.com/ishizakahiroshi/many-ai-cli/pull/11) on `dots/rust-recovery-resume-3`; delivery and acknowledgment are complete. Tested/reviewed code is `4dc961ce600d12aa0911e5a9620e50411ab13d9f`. The [current progress](../rust-recovery-resume/PROGRESS.md), [behavior matrix](../rust-recovery-resume/BEHAVIOR-MATRIX.md), [validation receipt](../rust-recovery-resume/VALIDATION-4dc961ce.json) and [artifact record](../rust-recovery-resume/ARTIFACTS-4dc961ce.md) supersede the current-state claims in this older ledger.
 
 All 155 HTTP registrations and 32 CLI entries have current source bindings. Four-target CI passed: Windows 987 library / 1266 all-targets; Linux 1047 / 1354; both macOS architectures 1047 / 1353, all with zero failed/ignored tests and three separate doctests. Source composition and synthetic/native CI remain distinct from complete behavior, device, installed-data, signed packaging and cutover acceptance. The known empty Windows Whisper runtime payload remains a packaging implementation gap pending the continuation's verified VS-only build/embedding receipt. No production release or Go replacement is authorized.

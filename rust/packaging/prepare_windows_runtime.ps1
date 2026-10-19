@@ -4,8 +4,8 @@ param([Parameter(Mandatory = $true)][string]$ReceiptPath)
 
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$fetch = Join-Path $repo 'internal/whisperruntime/fetch_windows_runtime.ps1'
-$payload = Join-Path $repo 'internal/whisperruntime/files/windows-amd64'
+$fetch = Join-Path $repo 'rust/assets/whisperruntime/fetch_windows_runtime.ps1'
+$payload = Join-Path $repo 'rust/assets/whisperruntime/files/windows-amd64'
 # Inherit the existing Go VS-Redist acquisition and licence decision. This
 # wrapper deliberately exposes no AllowSystem32 option or alternate source.
 & $fetch
@@ -51,7 +51,7 @@ $receipt = [ordered]@{
     target = 'x86_64-pc-windows-msvc'
     acquisition = 'visual-studio-redist'
     selection = 'Latest installed VC/Redist/MSVC x64 CRT/OpenMP; existing Go script; no System32'
-    source_script = 'internal/whisperruntime/fetch_windows_runtime.ps1'
+    source_script = 'rust/assets/whisperruntime/fetch_windows_runtime.ps1'
     source_script_sha256 = (Get-FileHash -LiteralPath $fetch -Algorithm SHA256).Hash.ToLowerInvariant()
     version_policy = 'Observed per build; not a fixed version or hash'
     licence_basis = 'Existing Go Visual Studio VC/redist redistribution decision; Microsoft components, not MIT-licensed project code'

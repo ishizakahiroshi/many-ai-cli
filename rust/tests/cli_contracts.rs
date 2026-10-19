@@ -420,10 +420,11 @@ fn source_function_fixtures_pin_env_validation_order_and_stdio() {
 
 #[test]
 fn evidence_paths_anchors_and_referenced_go_tests_are_real() {
+    // The frozen Go sources live under go/ since 2026-10-19.
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
-        .to_path_buf();
+        .join("go");
     let inventory = inventory();
     for group in [
         "behavior_contracts",

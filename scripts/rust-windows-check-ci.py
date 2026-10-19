@@ -239,7 +239,8 @@ def validate(args: argparse.Namespace, source: str, output: Path, receipt: dict)
     env["GOCACHE"] = candidate.capture(["go", "env", "GOCACHE"], ROOT)
     receipt["preparation"] = "running"
     write_receipt(output, receipt)
-    candidate.run(["go", "mod", "download"], env, ROOT)
+    # The frozen Go oracle module lives under go/ since 2026-10-19.
+    candidate.run(["go", "mod", "download"], env, ROOT / "go")
     runtime = output / "WINDOWS-RUNTIME.json"
     candidate.run(["pwsh", "-NoProfile", "-File", "rust/packaging/prepare_windows_runtime.ps1",
                    "-ReceiptPath", runtime.relative_to(ROOT).as_posix()], env, ROOT)
@@ -252,7 +253,7 @@ def validate(args: argparse.Namespace, source: str, output: Path, receipt: dict)
     receipt["generated_web_asset_inputs"] = [
         {"path": path.relative_to(ROOT / "web/dist").as_posix(), "sha256": candidate.digest(path)}
         for path in sorted((ROOT / "web/dist").rglob("*")) if path.is_file()]
-    receipt["launcher_ui_input_sha256"] = candidate.digest(ROOT / "internal/launcher/ui/index.html")
+    receipt["launcher_ui_input_sha256"] = candidate.digest(ROOT / "rust/assets/launcher/ui/index.html")
     receipt["preparation"] = "passed"
     failed = False
     for command in (["cargo", "fmt", "--manifest-path", "rust/Cargo.toml", "--", "--check"],

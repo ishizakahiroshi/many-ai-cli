@@ -53,14 +53,14 @@ fn main() {
         ));
     }
     output.push_str("];\n");
-    let launcher = root.join("internal/launcher/ui/index.html");
+    let launcher = manifest.join("assets/launcher/ui/index.html");
     println!("cargo:rerun-if-changed={}", launcher.display());
     output.push_str(&format!(
         "pub static LAUNCHER_UI: &[u8] = include_bytes!({:?});\n",
         launcher.to_str().unwrap()
     ));
     println!("cargo:rerun-if-env-changed=MANY_AI_REQUIRE_WINDOWS_RUNTIME");
-    let runtime_root = root.join("internal/whisperruntime/files/windows-amd64");
+    let runtime_root = manifest.join("assets/whisperruntime/files/windows-amd64");
     println!("cargo:rerun-if-changed={}", runtime_root.display());
     output.push_str("pub static WINDOWS_RUNTIME: &[(&str, &[u8])] = &[\n");
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")

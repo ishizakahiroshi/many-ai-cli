@@ -21,6 +21,10 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+// 2026-10-19 に本線を Rust 版へ移し、Go 版（.goreleaser.yaml を含む）は go/ に凍結した。
+// release.yml はまだ Go の配布経路のままで、Rust の配布へ作り直すまでは動かない
+// （docs/local/plan_rust-release-preparation.md）。作り直すときは、下の go/.goreleaser.yaml の
+// 2 件を「タグから MANY_AI_BUILD_VERSION を渡して rust/build.rs が焼く」配線の検査へ置き換える。
 /** @type {{file: string, needle: RegExp, what: string}[]} */
 const WIRING = [
   {
@@ -29,12 +33,12 @@ const WIRING = [
     what: 'npm/*/package.json の version をタグから焼く配線',
   },
   {
-    file: '.goreleaser.yaml',
+    file: 'go/.goreleaser.yaml',
     needle: /go-winres[\s\S]{0,200}?--file-version=\{\{\s*\.Version\s*\}\}/,
     what: 'winres/*.json の file_version をタグから焼く before hook',
   },
   {
-    file: '.goreleaser.yaml',
+    file: 'go/.goreleaser.yaml',
     needle: /-X\s+main\.version=\{\{\s*\.Version\s*\}\}/,
     what: 'バイナリの version 文字列を焼く ldflags',
   },

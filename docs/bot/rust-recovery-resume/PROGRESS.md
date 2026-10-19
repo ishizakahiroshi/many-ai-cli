@@ -12,6 +12,8 @@ last_reviewed: 2026-10-06
 
 > 最終更新: 2026-10-07(水) 10:00:00 UTC
 
+Update 2026-10-19: the Rust main line moved to `develop` (the integration branch was merged there and the frozen Go sources moved to `go/`). New work targets `develop`; the lines below are kept as the record of their date.
+
 Repository: ishizakahiroshi/many-ai-cli. Existing task #3 continues on `dots/rust-recovery-resume-3` toward develop in [Draft PR #11](https://github.com/ishizakahiroshi/many-ai-cli/pull/11). Old Draft PR #9 remains preserved. Recovery delivery and acknowledgment are complete: the supplied `7c2d7d3` source/instructions and authoritative R/V supplement were read in this continuation. Earlier delivery-pending entries below are historical.
 
 Current continuation: **the owner has changed the Rust migration to “use it and fix specific reported bugs,” and requested publication of the existing work followed by a stop.** V01 continuation, the intermediate acceptance procedure (including three consecutive Windows checks), independent-review checkpoints, and the earlier Windows-local-PC division of work are stopped. No CI wait/rerun, further review, or next migration stage will be started after this publication. Subsequent work requires a specific bug request and relevant verification. This is a process decision, not a claim that all tests, product/device acceptance, or migration work passed. Earlier gate and next-stage wording below is historical and superseded by this decision.

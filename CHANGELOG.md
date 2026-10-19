@@ -201,8 +201,8 @@ Release artifacts are published at
 
 ### Changed
 - **Development moved to the Rust version.** The `develop` branch now carries the
-  Rust implementation as the main line, and `make build` builds the Rust
-  binaries. The Go sources are frozen and no longer built or tested. The
+  Rust implementation as the main line. The Go sources moved to `go/` unchanged
+  and are no longer built or tested; `make build` builds the Rust binaries. The
   released packages remain the Go v0.9.x line until the Rust release.
 - On Windows, session cards count changed files and lines again only after a
   file in the repository changes (2 seconds after the first change), and at

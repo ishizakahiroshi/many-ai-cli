@@ -9,13 +9,13 @@ use std::collections::{BTreeMap, BTreeSet};
 pub fn embedded_definitions() -> Result<Vec<Definition>, serde_json::Error> {
     let mut definitions = vec![];
     for bytes in [
-        include_bytes!("../../../internal/provider/manifests/claude.json").as_slice(),
-        include_bytes!("../../../internal/provider/manifests/codex.json").as_slice(),
-        include_bytes!("../../../internal/provider/manifests/copilot.json").as_slice(),
-        include_bytes!("../../../internal/provider/manifests/cursor-agent.json").as_slice(),
-        include_bytes!("../../../internal/provider/manifests/opencode.json").as_slice(),
-        include_bytes!("../../../internal/provider/manifests/grok.json").as_slice(),
-        include_bytes!("../../../internal/provider/manifests/command-code.json").as_slice(),
+        include_bytes!("../../assets/provider/manifests/claude.json").as_slice(),
+        include_bytes!("../../assets/provider/manifests/codex.json").as_slice(),
+        include_bytes!("../../assets/provider/manifests/copilot.json").as_slice(),
+        include_bytes!("../../assets/provider/manifests/cursor-agent.json").as_slice(),
+        include_bytes!("../../assets/provider/manifests/opencode.json").as_slice(),
+        include_bytes!("../../assets/provider/manifests/grok.json").as_slice(),
+        include_bytes!("../../assets/provider/manifests/command-code.json").as_slice(),
     ] {
         let mut def = crate::proto::decode_wire::<Definition>(bytes)?;
         def.source.origin = ORIGIN_EMBEDDED.into();

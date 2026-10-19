@@ -6,7 +6,7 @@ This separate native Windows lane provides earlier feedback. Its green result is
 
 ## Entry and scope
 
-`rust-windows-check.yml` runs automatically for relevant pushes to `dots/rust-recovery-resume-3`. It also declares `workflow_dispatch` with fixed choices: `all-tests`, `appserver`, `relay`, `git-turn`, or `conpty`, repeated one, two or three times. Both entry types are restricted to that branch. The input is never interpolated into a shell command; the Python driver validates the allowlist again. Checkout and receipts bind to the event's immutable SHA.
+`rust-windows-check.yml` runs automatically for relevant pushes to `develop` (until 2026-10-19 it was `dots/rust-recovery-resume-3`; the rest of this page records that period). It also declares `workflow_dispatch` with fixed choices: `all-tests`, `appserver`, `relay`, `git-turn`, or `conpty`, repeated one, two or three times. Both entry types are restricted to that branch. The input is never interpolated into a shell command; the Python driver validates the allowlist again. Checkout and receipts bind to the event's immutable SHA.
 
 Every choice prepares the four VS runtime DLLs, downloads the locked Go dependencies, builds the real Web assets, runs Python packaging checks, fmt, strict all-target Clippy, and all doctests. The default additionally executes all Rust test targets. Focused choices select the recorded Cargo targets and test-name filters; `conpty` includes the real Hub→wrapper→provider Windows integration test, and `git-turn` includes the real Git and observer budget regressions. Harness inventories and executed counts must agree. Zero matches, ignored-only selections, malformed inventories and any failed repeat fail the check.
 

@@ -82,7 +82,7 @@ def windows_runtime_receipt(path: Path, source: str, *, binary: Path | None = No
     if path.is_symlink() or not path.is_file():
         raise ValueError('runtime receipt must be a regular file')
     receipt = json.loads(path.read_text(encoding='utf-8'))
-    script = 'internal/whisperruntime/fetch_windows_runtime.ps1'
+    script = 'rust/assets/whisperruntime/fetch_windows_runtime.ps1'
     if (receipt.get('schema_version') != 1 or receipt.get('source_sha') != source
             or receipt.get('target') != 'x86_64-pc-windows-msvc'
             or receipt.get('acquisition') != 'visual-studio-redist'
@@ -94,7 +94,7 @@ def windows_runtime_receipt(path: Path, source: str, *, binary: Path | None = No
             or not all(isinstance(entry, dict) for entry in entries)
             or sorted(entry.get('name', '') for entry in entries) != sorted(WINDOWS_RUNTIME_NAMES)):
         raise ValueError('runtime receipt requires exactly four distinct DLLs')
-    payload = ROOT / 'internal/whisperruntime/files/windows-amd64'
+    payload = ROOT / 'rust/assets/whisperruntime/files/windows-amd64'
     if payload.is_symlink():
         raise ValueError('runtime payload directory must not be a symlink')
     binary_bytes = binary.read_bytes() if binary is not None else None
@@ -161,7 +161,8 @@ def main() -> None:
     env["GOMODCACHE"] = capture(["go", "env", "GOMODCACHE"])
     env["GOCACHE"] = capture(["go", "env", "GOCACHE"])
     env["GOTELEMETRY"] = "off"
-    run(["go", "mod", "download"], env)
+    # The frozen Go oracle module lives under go/ since 2026-10-19.
+    run(["go", "mod", "download"], env, ROOT / "go")
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     runtime_receipt = None
     runtime_path = output / 'WINDOWS-RUNTIME.json'
@@ -233,7 +234,7 @@ def main() -> None:
         "third_party_notices": notice_entries,
         "windows_runtime": runtime_receipt,
         "validation_steps": STEPS, "packaging_input_exit_code": packaging_exit,
-        "launcher_ui_input_sha256": digest(ROOT / "internal" / "launcher" / "ui" / "index.html"),
+        "launcher_ui_input_sha256": digest(ROOT / "rust" / "assets" / "launcher" / "ui" / "index.html"),
         "receipt_scope": "native validation/build plus input hashes; linked runtime asset retention is not yet verified",
         "pending": ["binary-entrypoint-and-asset-retention", "full-application-behavior", "native-device-remote-acceptance", "signed-channel-packaging", "rollback-rehearsal", "user-cutover-approval"],
     }

@@ -2,7 +2,7 @@ RUST_TOOLCHAIN    := 1.90.0
 RUST_MANIFEST     := rust/Cargo.toml
 BINARY            := rust/target/debug/many-ai-cli.exe
 
-# 本線は Rust 版（2026-10-19 から）。Go 版のソースは凍結して置いてあり（go/ へ移す予定）、
+# 本線は Rust 版（2026-10-19 から）。Go 版のソースは go/ に凍結して置いてあり、
 # この Makefile からはビルドしない。毎日の試用ビルドと起動は scripts/rust-local.ps1
 # が受け持ち、ここは同じ手順（画面資材 → cargo）を make の 1 語で呼べるようにするだけ。
 #

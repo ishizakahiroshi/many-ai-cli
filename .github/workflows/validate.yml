@@ -13,7 +13,7 @@ on:
 permissions:
   contents: read
 
-# 本線は Rust 版（2026-10-19 から）。Go 版のソースは凍結して置いてあり（go/ へ移す予定）、
+# 本線は Rust 版（2026-10-19 から）。Go 版のソースは go/ に凍結して置いてあり、
 # ビルドも検査もしない（Go 用の build / test / vet / mod tidy / govulncheck / gosec /
 # staticcheck / third-party の job はこのとき外した）。Rust の検査は
 # rust-windows-check.yml（develop への push で Windows）と、

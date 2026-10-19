@@ -285,7 +285,11 @@ fn source_manifest_matches_actual_pinned_go_declarations() {
         manifest["baseline"],
         "21d0bc7935a2c4696fb89ccff2e324157a528c2d"
     );
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    // The frozen Go sources live under go/ since 2026-10-19.
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("go");
     for (path, digest) in manifest["source_sha256"].as_object().unwrap() {
         let bytes = std::fs::read_to_string(root.join(path))
             .unwrap()

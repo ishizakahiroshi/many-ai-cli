@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "7da5a514f910bf250d6d05d9e40cf71d1a6c2a70",
+    "commit": "95aa4ec81723fec032f44e81c70fd87e3cea983a",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1987,
-    "analyzed": 1546,
-    "unresolved": 9,
+    "discovered": 1999,
+    "analyzed": 1547,
+    "unresolved": 10,
     "unknown": 0,
-    "unclaimed": 432,
+    "unclaimed": 442,
     "skipped_by_config": 0
   },
   "files": [
@@ -289,14 +289,6 @@
       "fields": {},
       "unresolved": [],
       "reason": "no adapter claims '(no extension)'"
-    },
-    {
-      "path": ".goreleaser.yaml",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.yaml'"
     },
     {
       "path": ".mcp.json",
@@ -481,209 +473,6 @@
       "fields": {},
       "unresolved": [],
       "reason": "no adapter claims '.png'"
-    },
-    {
-      "path": "cmd/many-ai-cli-launcher/main.go",
-      "adapter": "go",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "many-ai-cli-launcher is the unified launcher for many-ai-cli remote"
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "cmd/many-ai-cli/issue.go",
-      "adapter": "go",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "cmd/many-ai-cli/issue_test.go",
-      "adapter": "go",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "cmd/many-ai-cli/main.go",
-      "adapter": "go",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "cmd/many-ai-cli/main_test.go",
-      "adapter": "go",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "cmd/many-ai-cli/provider_command.go",
-      "adapter": "go",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "cmd/many-ai-cli/provider_command_test.go",
-      "adapter": "go",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
     },
     {
       "path": "deploy/docker/Dockerfile",
@@ -1669,7 +1458,218 @@
       "reason": "no adapter claims '.md'"
     },
     {
-      "path": "go.mod",
+      "path": "go/.goreleaser.yaml",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.yaml'"
+    },
+    {
+      "path": "go/cmd/many-ai-cli-launcher/main.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "many-ai-cli-launcher is the unified launcher for many-ai-cli remote"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "go/cmd/many-ai-cli/issue.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "go/cmd/many-ai-cli/issue_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "go/cmd/many-ai-cli/main.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "go/cmd/many-ai-cli/main_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "go/cmd/many-ai-cli/provider_command.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "go/cmd/many-ai-cli/provider_command_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "go/go.mod",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -1677,7 +1677,7 @@
       "reason": "no adapter claims '.mod'"
     },
     {
-      "path": "go.sum",
+      "path": "go/go.sum",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -1685,15 +1685,7 @@
       "reason": "no adapter claims '.sum'"
     },
     {
-      "path": "instrumentation.json",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.json'"
-    },
-    {
-      "path": "internal/approval/summary.go",
+      "path": "go/internal/approval/summary.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -1722,7 +1714,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/approval/summary_test.go",
+      "path": "go/internal/approval/summary_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -1751,7 +1743,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/attach/audit_cleanold_test.go",
+      "path": "go/internal/attach/audit_cleanold_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -1780,7 +1772,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/attach/store.go",
+      "path": "go/internal/attach/store.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -1809,7 +1801,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/attach/store_test.go",
+      "path": "go/internal/attach/store_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -1838,7 +1830,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/autoapproval/policy.go",
+      "path": "go/internal/autoapproval/policy.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -1867,7 +1859,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/autoapproval/policy_test.go",
+      "path": "go/internal/autoapproval/policy_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -1896,7 +1888,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/clitrust/canonical_other.go",
+      "path": "go/internal/clitrust/canonical_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -1925,7 +1917,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/clitrust/canonical_windows.go",
+      "path": "go/internal/clitrust/canonical_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -1954,7 +1946,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/clitrust/canonical_windows_test.go",
+      "path": "go/internal/clitrust/canonical_windows_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -1983,7 +1975,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/clitrust/claude.go",
+      "path": "go/internal/clitrust/claude.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2012,7 +2004,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/clitrust/claude_project.go",
+      "path": "go/internal/clitrust/claude_project.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2041,7 +2033,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/clitrust/claude_test.go",
+      "path": "go/internal/clitrust/claude_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2070,7 +2062,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/clitrust/clitrust.go",
+      "path": "go/internal/clitrust/clitrust.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2099,7 +2091,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/clitrust/codex.go",
+      "path": "go/internal/clitrust/codex.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2128,7 +2120,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/clitrust/codex_project.go",
+      "path": "go/internal/clitrust/codex_project.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2157,7 +2149,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/clitrust/codex_test.go",
+      "path": "go/internal/clitrust/codex_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2186,7 +2178,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/clitrust/grant_test.go",
+      "path": "go/internal/clitrust/grant_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2215,7 +2207,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/clitrust/key_test.go",
+      "path": "go/internal/clitrust/key_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2244,7 +2236,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/clitrust/reclaim_test.go",
+      "path": "go/internal/clitrust/reclaim_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2273,7 +2265,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/audit_atomic_write_test.go",
+      "path": "go/internal/config/audit_atomic_write_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2302,7 +2294,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/child_permission.go",
+      "path": "go/internal/config/child_permission.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2331,7 +2323,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/child_permission_test.go",
+      "path": "go/internal/config/child_permission_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2360,7 +2352,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/config.go",
+      "path": "go/internal/config/config.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2389,7 +2381,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/config_test.go",
+      "path": "go/internal/config/config_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2418,7 +2410,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/custom_provider.go",
+      "path": "go/internal/config/custom_provider.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2447,7 +2439,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/custom_provider_command.go",
+      "path": "go/internal/config/custom_provider_command.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2476,7 +2468,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/custom_provider_command_test.go",
+      "path": "go/internal/config/custom_provider_command_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2505,7 +2497,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/custom_provider_test.go",
+      "path": "go/internal/config/custom_provider_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2534,7 +2526,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/effort.go",
+      "path": "go/internal/config/effort.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2563,7 +2555,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/effort_test.go",
+      "path": "go/internal/config/effort_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2592,7 +2584,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/headless.go",
+      "path": "go/internal/config/headless.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2621,7 +2613,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/headless_test.go",
+      "path": "go/internal/config/headless_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2650,7 +2642,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/launch_prompt.go",
+      "path": "go/internal/config/launch_prompt.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2679,7 +2671,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/launch_prompt_test.go",
+      "path": "go/internal/config/launch_prompt_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2708,7 +2700,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/provider_legacy.go",
+      "path": "go/internal/config/provider_legacy.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2737,7 +2729,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/provider_legacy_test.go",
+      "path": "go/internal/config/provider_legacy_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2766,7 +2758,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/subscription.go",
+      "path": "go/internal/config/subscription.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2795,7 +2787,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/config/subscription_test.go",
+      "path": "go/internal/config/subscription_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2824,7 +2816,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/doctor/commandcode.go",
+      "path": "go/internal/doctor/commandcode.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2853,7 +2845,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/doctor/commandcode_test.go",
+      "path": "go/internal/doctor/commandcode_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2882,7 +2874,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/doctor/custom_provider.go",
+      "path": "go/internal/doctor/custom_provider.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2911,7 +2903,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/doctor/custom_provider_test.go",
+      "path": "go/internal/doctor/custom_provider_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2940,7 +2932,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/doctor/doctor.go",
+      "path": "go/internal/doctor/doctor.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2969,7 +2961,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/doctor/doctor_test.go",
+      "path": "go/internal/doctor/doctor_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -2998,7 +2990,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/doctor/handoff.go",
+      "path": "go/internal/doctor/handoff.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3027,7 +3019,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/doctor/nvidia_nim.go",
+      "path": "go/internal/doctor/nvidia_nim.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3056,7 +3048,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/doctor/nvidia_nim_test.go",
+      "path": "go/internal/doctor/nvidia_nim_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3085,7 +3077,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/doctor/residue.go",
+      "path": "go/internal/doctor/residue.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3114,7 +3106,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/doctor/residue_test.go",
+      "path": "go/internal/doctor/residue_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3143,7 +3135,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/doctor/subscription_seed_test.go",
+      "path": "go/internal/doctor/subscription_seed_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3172,7 +3164,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/doctor/subscriptions.go",
+      "path": "go/internal/doctor/subscriptions.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3201,7 +3193,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/doctor/subscriptions_test.go",
+      "path": "go/internal/doctor/subscriptions_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3230,7 +3222,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/execpath/execpath_other.go",
+      "path": "go/internal/execpath/execpath_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3259,7 +3251,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/execpath/execpath_windows.go",
+      "path": "go/internal/execpath/execpath_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3288,7 +3280,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/handoff/handoff.go",
+      "path": "go/internal/handoff/handoff.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3317,7 +3309,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/handoff/handoff_test.go",
+      "path": "go/internal/handoff/handoff_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3346,7 +3338,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/handoff/render.go",
+      "path": "go/internal/handoff/render.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3375,7 +3367,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/handoff/render_test.go",
+      "path": "go/internal/handoff/render_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3404,7 +3396,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/headless/adapter.go",
+      "path": "go/internal/headless/adapter.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3433,7 +3425,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/headless/event.go",
+      "path": "go/internal/headless/event.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3462,7 +3454,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/headless/format_claude_stream_json.go",
+      "path": "go/internal/headless/format_claude_stream_json.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3491,7 +3483,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/headless/format_test.go",
+      "path": "go/internal/headless/format_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3520,7 +3512,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/headless/format_text.go",
+      "path": "go/internal/headless/format_text.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3549,7 +3541,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/headless/proc_other.go",
+      "path": "go/internal/headless/proc_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3578,7 +3570,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/headless/proc_windows.go",
+      "path": "go/internal/headless/proc_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3607,7 +3599,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/headless/prompt.go",
+      "path": "go/internal/headless/prompt.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3636,7 +3628,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/headless/runner.go",
+      "path": "go/internal/headless/runner.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3665,7 +3657,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/headless/runner_test.go",
+      "path": "go/internal/headless/runner_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3694,7 +3686,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/agent_chat_handler.go",
+      "path": "go/internal/hub/agent_chat_handler.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3723,7 +3715,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/agent_chat_handler_test.go",
+      "path": "go/internal/hub/agent_chat_handler_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3752,7 +3744,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/agent_chat_parse.go",
+      "path": "go/internal/hub/agent_chat_parse.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3781,7 +3773,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/agent_chat_parse_test.go",
+      "path": "go/internal/hub/agent_chat_parse_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3810,7 +3802,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/agent_log_handler.go",
+      "path": "go/internal/hub/agent_log_handler.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3839,7 +3831,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/agent_log_handler_test.go",
+      "path": "go/internal/hub/agent_log_handler_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3868,7 +3860,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_action.go",
+      "path": "go/internal/hub/approval_action.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3897,7 +3889,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_action_test.go",
+      "path": "go/internal/hub/approval_action_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3926,7 +3918,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_batch.go",
+      "path": "go/internal/hub/approval_batch.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3955,7 +3947,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_batch_test.go",
+      "path": "go/internal/hub/approval_batch_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -3984,7 +3976,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_carry_test.go",
+      "path": "go/internal/hub/approval_carry_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4013,7 +4005,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_detector.go",
+      "path": "go/internal/hub/approval_detector.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4042,7 +4034,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_detector_test.go",
+      "path": "go/internal/hub/approval_detector_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4071,7 +4063,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_display_guard_test.go",
+      "path": "go/internal/hub/approval_display_guard_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4100,7 +4092,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_handler.go",
+      "path": "go/internal/hub/approval_handler.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4129,7 +4121,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_handler_test.go",
+      "path": "go/internal/hub/approval_handler_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4158,7 +4150,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_identity.go",
+      "path": "go/internal/hub/approval_identity.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4187,7 +4179,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_identity_guard_test.go",
+      "path": "go/internal/hub/approval_identity_guard_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4216,7 +4208,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_marker.go",
+      "path": "go/internal/hub/approval_marker.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4245,7 +4237,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_marker_test.go",
+      "path": "go/internal/hub/approval_marker_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4274,7 +4266,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_marker_transcript.go",
+      "path": "go/internal/hub/approval_marker_transcript.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4303,7 +4295,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_marker_transcript_test.go",
+      "path": "go/internal/hub/approval_marker_transcript_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4332,7 +4324,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_marker_verdict.go",
+      "path": "go/internal/hub/approval_marker_verdict.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4361,7 +4353,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_marker_verdict_test.go",
+      "path": "go/internal/hub/approval_marker_verdict_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4390,7 +4382,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_native.go",
+      "path": "go/internal/hub/approval_native.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4419,7 +4411,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_native_test.go",
+      "path": "go/internal/hub/approval_native_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4448,7 +4440,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_patterns.go",
+      "path": "go/internal/hub/approval_patterns.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4477,7 +4469,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_patterns_custom.go",
+      "path": "go/internal/hub/approval_patterns_custom.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4506,7 +4498,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_patterns_custom_test.go",
+      "path": "go/internal/hub/approval_patterns_custom_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4535,7 +4527,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_patterns_fetch.go",
+      "path": "go/internal/hub/approval_patterns_fetch.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4564,7 +4556,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_patterns_fetch_test.go",
+      "path": "go/internal/hub/approval_patterns_fetch_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4593,7 +4585,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_patterns_sync.go",
+      "path": "go/internal/hub/approval_patterns_sync.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4622,7 +4614,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_record.go",
+      "path": "go/internal/hub/approval_record.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4651,7 +4643,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_record_test.go",
+      "path": "go/internal/hub/approval_record_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4680,7 +4672,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_replay_fixture_test.go",
+      "path": "go/internal/hub/approval_replay_fixture_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4709,7 +4701,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_rules_state.go",
+      "path": "go/internal/hub/approval_rules_state.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4738,7 +4730,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_rules_state_test.go",
+      "path": "go/internal/hub/approval_rules_state_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4767,7 +4759,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_text_question.go",
+      "path": "go/internal/hub/approval_text_question.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4796,7 +4788,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_text_question_test.go",
+      "path": "go/internal/hub/approval_text_question_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4825,7 +4817,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/approval_trigger_phrases.go",
+      "path": "go/internal/hub/approval_trigger_phrases.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4854,7 +4846,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/atomic_rename.go",
+      "path": "go/internal/hub/atomic_rename.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4883,7 +4875,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/atomic_rename_linux.go",
+      "path": "go/internal/hub/atomic_rename_linux.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4912,7 +4904,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/atomic_rename_other.go",
+      "path": "go/internal/hub/atomic_rename_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4941,7 +4933,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/atomic_rename_windows.go",
+      "path": "go/internal/hub/atomic_rename_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4970,7 +4962,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/audit_dbless_2026_06_15_test.go",
+      "path": "go/internal/hub/audit_dbless_2026_06_15_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -4999,7 +4991,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/audit_dns_rebinding_test.go",
+      "path": "go/internal/hub/audit_dns_rebinding_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5028,7 +5020,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/audit_gitshow_test.go",
+      "path": "go/internal/hub/audit_gitshow_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5057,7 +5049,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/audit_host_guard_test.go",
+      "path": "go/internal/hub/audit_host_guard_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5086,7 +5078,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/audit_input_serialization_test.go",
+      "path": "go/internal/hub/audit_input_serialization_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5115,7 +5107,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/audit_models_force_gen_test.go",
+      "path": "go/internal/hub/audit_models_force_gen_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5144,7 +5136,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/audit_notify_backend_test.go",
+      "path": "go/internal/hub/audit_notify_backend_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5173,7 +5165,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/audit_push_dedup_test.go",
+      "path": "go/internal/hub/audit_push_dedup_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5202,7 +5194,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/audit_server_fixes_test.go",
+      "path": "go/internal/hub/audit_server_fixes_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5231,7 +5223,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/audit_spawn_validation_test.go",
+      "path": "go/internal/hub/audit_spawn_validation_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5260,7 +5252,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/audit_ttl_cache_test.go",
+      "path": "go/internal/hub/audit_ttl_cache_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5289,7 +5281,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/audit_usage_stat_pricing_test.go",
+      "path": "go/internal/hub/audit_usage_stat_pricing_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5318,7 +5310,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/audit_vt_buffer_string_seq_test.go",
+      "path": "go/internal/hub/audit_vt_buffer_string_seq_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5347,7 +5339,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/audit_whisper_download_test.go",
+      "path": "go/internal/hub/audit_whisper_download_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5376,7 +5368,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/auth_handlers.go",
+      "path": "go/internal/hub/auth_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5405,7 +5397,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/auth_handlers_test.go",
+      "path": "go/internal/hub/auth_handlers_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5434,7 +5426,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/auto_approval.go",
+      "path": "go/internal/hub/auto_approval.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5463,7 +5455,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/auto_approval_test.go",
+      "path": "go/internal/hub/auto_approval_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5492,7 +5484,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/banner.go",
+      "path": "go/internal/hub/banner.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5521,7 +5513,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/banner_test.go",
+      "path": "go/internal/hub/banner_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5550,7 +5542,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/branch_refresh.go",
+      "path": "go/internal/hub/branch_refresh.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5579,7 +5571,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/bug_report_handler.go",
+      "path": "go/internal/hub/bug_report_handler.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5608,7 +5600,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/bug_report_handler_test.go",
+      "path": "go/internal/hub/bug_report_handler_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5637,7 +5629,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/buildinfo.go",
+      "path": "go/internal/hub/buildinfo.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5666,7 +5658,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/c4_audit_test.go",
+      "path": "go/internal/hub/c4_audit_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5695,7 +5687,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/child_limits_test.go",
+      "path": "go/internal/hub/child_limits_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5724,7 +5716,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/child_permission.go",
+      "path": "go/internal/hub/child_permission.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5753,7 +5745,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/child_permission_test.go",
+      "path": "go/internal/hub/child_permission_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5782,7 +5774,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/cli_update.go",
+      "path": "go/internal/hub/cli_update.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5811,7 +5803,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/cli_update_test.go",
+      "path": "go/internal/hub/cli_update_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5840,7 +5832,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/cli_version.go",
+      "path": "go/internal/hub/cli_version.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5869,7 +5861,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/cli_version_proc_other.go",
+      "path": "go/internal/hub/cli_version_proc_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5898,7 +5890,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/cli_version_proc_windows.go",
+      "path": "go/internal/hub/cli_version_proc_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5927,7 +5919,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/cli_version_test.go",
+      "path": "go/internal/hub/cli_version_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5956,7 +5948,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/codex_thread_follow.go",
+      "path": "go/internal/hub/codex_thread_follow.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -5985,7 +5977,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/codex_thread_follow_test.go",
+      "path": "go/internal/hub/codex_thread_follow_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6014,7 +6006,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/cross_session_message.go",
+      "path": "go/internal/hub/cross_session_message.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6043,7 +6035,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/cross_session_message_test.go",
+      "path": "go/internal/hub/cross_session_message_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6072,7 +6064,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/custom_provider_approval_test.go",
+      "path": "go/internal/hub/custom_provider_approval_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6101,7 +6093,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/custom_provider_info_test.go",
+      "path": "go/internal/hub/custom_provider_info_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6130,7 +6122,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/debug_ui_freeze.go",
+      "path": "go/internal/hub/debug_ui_freeze.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6159,7 +6151,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/debug_ui_freeze_test.go",
+      "path": "go/internal/hub/debug_ui_freeze_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6188,7 +6180,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/delegation_providers_test.go",
+      "path": "go/internal/hub/delegation_providers_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6217,7 +6209,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/dismiss_race_test.go",
+      "path": "go/internal/hub/dismiss_race_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6246,7 +6238,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/doctor_handler.go",
+      "path": "go/internal/hub/doctor_handler.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6275,7 +6267,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/done_summary.go",
+      "path": "go/internal/hub/done_summary.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6304,7 +6296,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/done_summary_notify_test.go",
+      "path": "go/internal/hub/done_summary_notify_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6333,7 +6325,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/done_summary_test.go",
+      "path": "go/internal/hub/done_summary_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6362,7 +6354,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/encoding_check.go",
+      "path": "go/internal/hub/encoding_check.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6391,7 +6383,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/encoding_check_other.go",
+      "path": "go/internal/hub/encoding_check_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6420,7 +6412,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/encoding_check_windows.go",
+      "path": "go/internal/hub/encoding_check_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6449,7 +6441,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/env_preset.go",
+      "path": "go/internal/hub/env_preset.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6478,7 +6470,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/env_preset_test.go",
+      "path": "go/internal/hub/env_preset_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6507,7 +6499,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/fetch_test.go",
+      "path": "go/internal/hub/fetch_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6536,7 +6528,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_content.go",
+      "path": "go/internal/hub/files_content.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6565,7 +6557,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_content_test.go",
+      "path": "go/internal/hub/files_content_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6594,7 +6586,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_create.go",
+      "path": "go/internal/hub/files_create.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6623,7 +6615,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_create_test.go",
+      "path": "go/internal/hub/files_create_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6652,7 +6644,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_delete.go",
+      "path": "go/internal/hub/files_delete.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6681,7 +6673,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_delete_test.go",
+      "path": "go/internal/hub/files_delete_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6710,7 +6702,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_helpers_test.go",
+      "path": "go/internal/hub/files_helpers_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6739,7 +6731,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_list.go",
+      "path": "go/internal/hub/files_list.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6768,7 +6760,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_list_test.go",
+      "path": "go/internal/hub/files_list_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6797,7 +6789,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_mkdir.go",
+      "path": "go/internal/hub/files_mkdir.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6826,7 +6818,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_mkdir_test.go",
+      "path": "go/internal/hub/files_mkdir_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6855,7 +6847,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_move.go",
+      "path": "go/internal/hub/files_move.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6884,7 +6876,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_move_test.go",
+      "path": "go/internal/hub/files_move_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6913,7 +6905,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_rename.go",
+      "path": "go/internal/hub/files_rename.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6942,7 +6934,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_rename_test.go",
+      "path": "go/internal/hub/files_rename_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -6971,7 +6963,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_roots.go",
+      "path": "go/internal/hub/files_roots.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7000,7 +6992,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_save.go",
+      "path": "go/internal/hub/files_save.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7029,7 +7021,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_save_test.go",
+      "path": "go/internal/hub/files_save_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7058,7 +7050,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/files_scope.go",
+      "path": "go/internal/hub/files_scope.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7087,7 +7079,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/folder_trust_test.go",
+      "path": "go/internal/hub/folder_trust_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7116,7 +7108,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_commit.go",
+      "path": "go/internal/hub/git_commit.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7145,7 +7137,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_commit_ai.go",
+      "path": "go/internal/hub/git_commit_ai.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7174,7 +7166,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_commit_test.go",
+      "path": "go/internal/hub/git_commit_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7203,7 +7195,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_common.go",
+      "path": "go/internal/hub/git_common.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7232,7 +7224,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_diff.go",
+      "path": "go/internal/hub/git_diff.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7261,7 +7253,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_diff_test.go",
+      "path": "go/internal/hub/git_diff_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7290,7 +7282,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_fetch.go",
+      "path": "go/internal/hub/git_fetch.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7319,7 +7311,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_log.go",
+      "path": "go/internal/hub/git_log.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7348,7 +7340,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_pull.go",
+      "path": "go/internal/hub/git_pull.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7377,7 +7369,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_push.go",
+      "path": "go/internal/hub/git_push.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7406,7 +7398,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_push_test.go",
+      "path": "go/internal/hub/git_push_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7435,7 +7427,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_refs.go",
+      "path": "go/internal/hub/git_refs.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7464,7 +7456,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_show.go",
+      "path": "go/internal/hub/git_show.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7493,7 +7485,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_show_test.go",
+      "path": "go/internal/hub/git_show_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7522,7 +7514,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_status.go",
+      "path": "go/internal/hub/git_status.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7551,7 +7543,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_status_test.go",
+      "path": "go/internal/hub/git_status_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7580,7 +7572,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_turns.go",
+      "path": "go/internal/hub/git_turns.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7609,7 +7601,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/git_turns_test.go",
+      "path": "go/internal/hub/git_turns_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7638,7 +7630,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/grok_history_handler.go",
+      "path": "go/internal/hub/grok_history_handler.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7667,7 +7659,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/grok_history_handler_test.go",
+      "path": "go/internal/hub/grok_history_handler_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7696,7 +7688,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/handoff.go",
+      "path": "go/internal/hub/handoff.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7725,7 +7717,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/handoff_handler.go",
+      "path": "go/internal/hub/handoff_handler.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7754,7 +7746,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/handoff_handler_test.go",
+      "path": "go/internal/hub/handoff_handler_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7783,7 +7775,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/handoff_test.go",
+      "path": "go/internal/hub/handoff_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7812,7 +7804,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/handoff_turn_summary_test.go",
+      "path": "go/internal/hub/handoff_turn_summary_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7841,7 +7833,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/headless_spawn_test.go",
+      "path": "go/internal/hub/headless_spawn_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7870,7 +7862,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/http_helpers.go",
+      "path": "go/internal/hub/http_helpers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7899,7 +7891,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/idle_state.go",
+      "path": "go/internal/hub/idle_state.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7928,7 +7920,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/inject_gate_test.go",
+      "path": "go/internal/hub/inject_gate_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7957,7 +7949,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/input_ack_test.go",
+      "path": "go/internal/hub/input_ack_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -7986,7 +7978,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/input_gate.go",
+      "path": "go/internal/hub/input_gate.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8015,7 +8007,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/install_link_fetch.go",
+      "path": "go/internal/hub/install_link_fetch.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8044,7 +8036,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/install_links_resource_test.go",
+      "path": "go/internal/hub/install_links_resource_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8073,7 +8065,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/jev_evaluate.go",
+      "path": "go/internal/hub/jev_evaluate.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8102,7 +8094,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/jev_evaluate_test.go",
+      "path": "go/internal/hub/jev_evaluate_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8131,7 +8123,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/launch_arg_startup_screen_test.go",
+      "path": "go/internal/hub/launch_arg_startup_screen_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8160,7 +8152,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/launch_options_info_test.go",
+      "path": "go/internal/hub/launch_options_info_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8189,7 +8181,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/launch_prompt_delivery_test.go",
+      "path": "go/internal/hub/launch_prompt_delivery_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8218,7 +8210,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/leftover_reclaim_test.go",
+      "path": "go/internal/hub/leftover_reclaim_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8247,7 +8239,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/lifecycle.go",
+      "path": "go/internal/hub/lifecycle.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8276,7 +8268,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/lifecycle_test.go",
+      "path": "go/internal/hub/lifecycle_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8305,7 +8297,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/lookpath_like_spawn_windows_test.go",
+      "path": "go/internal/hub/lookpath_like_spawn_windows_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8334,7 +8326,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/maintenance.go",
+      "path": "go/internal/hub/maintenance.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8363,7 +8355,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/maintenance_orchestration_test.go",
+      "path": "go/internal/hub/maintenance_orchestration_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8392,7 +8384,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/memo_handlers.go",
+      "path": "go/internal/hub/memo_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8421,7 +8413,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/memo_images.go",
+      "path": "go/internal/hub/memo_images.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8450,7 +8442,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/memo_images_test.go",
+      "path": "go/internal/hub/memo_images_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8479,7 +8471,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/memo_store.go",
+      "path": "go/internal/hub/memo_store.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8508,7 +8500,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/memo_test.go",
+      "path": "go/internal/hub/memo_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8537,7 +8529,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/misc_handlers.go",
+      "path": "go/internal/hub/misc_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8566,7 +8558,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/mobile_connect.go",
+      "path": "go/internal/hub/mobile_connect.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8595,7 +8587,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/mobile_connect_test.go",
+      "path": "go/internal/hub/mobile_connect_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8624,7 +8616,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/model_detect.go",
+      "path": "go/internal/hub/model_detect.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8653,7 +8645,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/model_detect_test.go",
+      "path": "go/internal/hub/model_detect_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8682,7 +8674,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/models_fetch.go",
+      "path": "go/internal/hub/models_fetch.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8711,7 +8703,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/models_fetch_test.go",
+      "path": "go/internal/hub/models_fetch_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8740,7 +8732,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/models_handlers.go",
+      "path": "go/internal/hub/models_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8769,7 +8761,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/models_handlers_test.go",
+      "path": "go/internal/hub/models_handlers_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8798,7 +8790,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/models_remote_fetch.go",
+      "path": "go/internal/hub/models_remote_fetch.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8827,7 +8819,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/net_hint_test.go",
+      "path": "go/internal/hub/net_hint_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8856,7 +8848,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/normal_worktree.go",
+      "path": "go/internal/hub/normal_worktree.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8885,7 +8877,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/normal_worktree_test.go",
+      "path": "go/internal/hub/normal_worktree_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8914,7 +8906,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/nvidia_nim_error_classification_test.go",
+      "path": "go/internal/hub/nvidia_nim_error_classification_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8943,7 +8935,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/nvidia_nim_handlers.go",
+      "path": "go/internal/hub/nvidia_nim_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -8972,7 +8964,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/nvidia_nim_handlers_test.go",
+      "path": "go/internal/hub/nvidia_nim_handlers_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9001,7 +8993,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/open_browser_darwin.go",
+      "path": "go/internal/hub/open_browser_darwin.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9030,7 +9022,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/open_browser_test.go",
+      "path": "go/internal/hub/open_browser_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9059,7 +9051,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/open_browser_unix.go",
+      "path": "go/internal/hub/open_browser_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9088,7 +9080,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/open_browser_windows.go",
+      "path": "go/internal/hub/open_browser_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9117,7 +9109,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/open_dir_unix.go",
+      "path": "go/internal/hub/open_dir_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9146,7 +9138,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/open_dir_windows.go",
+      "path": "go/internal/hub/open_dir_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9175,7 +9167,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/open_handlers.go",
+      "path": "go/internal/hub/open_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9204,7 +9196,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/orchestration.go",
+      "path": "go/internal/hub/orchestration.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9233,7 +9225,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/orchestration_child_defaults_test.go",
+      "path": "go/internal/hub/orchestration_child_defaults_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9262,7 +9254,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/orchestration_composer_guard_test.go",
+      "path": "go/internal/hub/orchestration_composer_guard_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9291,7 +9283,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/orchestration_inject_submit_test.go",
+      "path": "go/internal/hub/orchestration_inject_submit_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9320,7 +9312,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/orchestration_notify.go",
+      "path": "go/internal/hub/orchestration_notify.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9349,7 +9341,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/orchestration_notify_test.go",
+      "path": "go/internal/hub/orchestration_notify_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9378,7 +9370,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/orchestration_test.go",
+      "path": "go/internal/hub/orchestration_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9407,7 +9399,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/path_expand_other.go",
+      "path": "go/internal/hub/path_expand_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9436,7 +9428,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/path_expand_windows.go",
+      "path": "go/internal/hub/path_expand_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9465,7 +9457,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/path_expand_windows_test.go",
+      "path": "go/internal/hub/path_expand_windows_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9494,7 +9486,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/pick_directory_unix.go",
+      "path": "go/internal/hub/pick_directory_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9523,7 +9515,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/pick_directory_windows.go",
+      "path": "go/internal/hub/pick_directory_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9552,7 +9544,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/pick_file_unix.go",
+      "path": "go/internal/hub/pick_file_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9581,7 +9573,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/pick_file_windows.go",
+      "path": "go/internal/hub/pick_file_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9610,7 +9602,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/pick_ps_common.go",
+      "path": "go/internal/hub/pick_ps_common.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9639,7 +9631,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/pid.go",
+      "path": "go/internal/hub/pid.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9668,7 +9660,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/pin_auth.go",
+      "path": "go/internal/hub/pin_auth.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9697,7 +9689,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/pin_auth_test.go",
+      "path": "go/internal/hub/pin_auth_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9726,7 +9718,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/probe_debug.go",
+      "path": "go/internal/hub/probe_debug.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9755,7 +9747,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/probe_nodebug.go",
+      "path": "go/internal/hub/probe_nodebug.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9784,7 +9776,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/profiles_fetch.go",
+      "path": "go/internal/hub/profiles_fetch.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9813,7 +9805,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/project_id.go",
+      "path": "go/internal/hub/project_id.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9842,7 +9834,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/project_id_latch_test.go",
+      "path": "go/internal/hub/project_id_latch_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9871,7 +9863,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/project_id_test.go",
+      "path": "go/internal/hub/project_id_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9900,7 +9892,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/provider_capability.go",
+      "path": "go/internal/hub/provider_capability.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9929,7 +9921,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/provider_distribution_handlers.go",
+      "path": "go/internal/hub/provider_distribution_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9958,7 +9950,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/provider_distribution_handlers_test.go",
+      "path": "go/internal/hub/provider_distribution_handlers_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9987,7 +9979,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/provider_failure_detail_test.go",
+      "path": "go/internal/hub/provider_failure_detail_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10016,7 +10008,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/provider_feature_source.go",
+      "path": "go/internal/hub/provider_feature_source.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10045,7 +10037,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/provider_feature_source_test.go",
+      "path": "go/internal/hub/provider_feature_source_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10074,7 +10066,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/provider_handlers.go",
+      "path": "go/internal/hub/provider_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10103,7 +10095,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/provider_handlers_test.go",
+      "path": "go/internal/hub/provider_handlers_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10132,7 +10124,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/provider_icon_handlers.go",
+      "path": "go/internal/hub/provider_icon_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10161,7 +10153,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/provider_icon_handlers_test.go",
+      "path": "go/internal/hub/provider_icon_handlers_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10190,7 +10182,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/provider_registry.go",
+      "path": "go/internal/hub/provider_registry.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10219,7 +10211,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/provider_registry_test.go",
+      "path": "go/internal/hub/provider_registry_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10248,7 +10240,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/provider_rollback_drill_test.go",
+      "path": "go/internal/hub/provider_rollback_drill_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10277,7 +10269,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/pty_size_test.go",
+      "path": "go/internal/hub/pty_size_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10306,7 +10298,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/purge_handlers.go",
+      "path": "go/internal/hub/purge_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10335,7 +10327,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/push.go",
+      "path": "go/internal/hub/push.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10364,7 +10356,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/push_test.go",
+      "path": "go/internal/hub/push_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10393,7 +10385,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/reattach_altscreen_test.go",
+      "path": "go/internal/hub/reattach_altscreen_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10422,7 +10414,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/reattach_identity_test.go",
+      "path": "go/internal/hub/reattach_identity_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10451,7 +10443,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/reattach_order_test.go",
+      "path": "go/internal/hub/reattach_order_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10480,7 +10472,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/reattach_recovery_test.go",
+      "path": "go/internal/hub/reattach_recovery_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10509,7 +10501,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/reattach_replay.go",
+      "path": "go/internal/hub/reattach_replay.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10538,7 +10530,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/reattach_replay_test.go",
+      "path": "go/internal/hub/reattach_replay_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10567,7 +10559,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/reattach_state.go",
+      "path": "go/internal/hub/reattach_state.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10596,7 +10588,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/reattach_state_test.go",
+      "path": "go/internal/hub/reattach_state_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10625,7 +10617,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/reauth_page_test.go",
+      "path": "go/internal/hub/reauth_page_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10654,7 +10646,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/register_ack_order_test.go",
+      "path": "go/internal/hub/register_ack_order_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10683,7 +10675,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/relay.go",
+      "path": "go/internal/hub/relay.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10712,7 +10704,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/relay_api.go",
+      "path": "go/internal/hub/relay_api.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10741,7 +10733,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/relay_api_test.go",
+      "path": "go/internal/hub/relay_api_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10770,7 +10762,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/relay_headless_test.go",
+      "path": "go/internal/hub/relay_headless_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10799,7 +10791,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/relay_store.go",
+      "path": "go/internal/hub/relay_store.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10828,7 +10820,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/relay_store_test.go",
+      "path": "go/internal/hub/relay_store_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10857,7 +10849,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/relay_test.go",
+      "path": "go/internal/hub/relay_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10886,7 +10878,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/relay_worktree.go",
+      "path": "go/internal/hub/relay_worktree.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10915,7 +10907,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/role_permission_memory_test.go",
+      "path": "go/internal/hub/role_permission_memory_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10944,7 +10936,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/routine_handlers.go",
+      "path": "go/internal/hub/routine_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -10973,7 +10965,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/routine_runner.go",
+      "path": "go/internal/hub/routine_runner.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11002,7 +10994,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/routine_store.go",
+      "path": "go/internal/hub/routine_store.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11031,7 +11023,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/routine_test.go",
+      "path": "go/internal/hub/routine_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11060,7 +11052,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/runfile.go",
+      "path": "go/internal/hub/runfile.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11089,7 +11081,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/runfile_test.go",
+      "path": "go/internal/hub/runfile_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11118,7 +11110,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/runtime.go",
+      "path": "go/internal/hub/runtime.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11147,7 +11139,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/runtime_test.go",
+      "path": "go/internal/hub/runtime_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11176,7 +11168,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/safe_go.go",
+      "path": "go/internal/hub/safe_go.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11205,7 +11197,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/safe_go_test.go",
+      "path": "go/internal/hub/safe_go_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11234,7 +11226,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/screen_launch_prompt_test.go",
+      "path": "go/internal/hub/screen_launch_prompt_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11263,7 +11255,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/security_test.go",
+      "path": "go/internal/hub/security_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11292,7 +11284,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/server.go",
+      "path": "go/internal/hub/server.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11321,7 +11313,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/server_test.go",
+      "path": "go/internal/hub/server_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11350,7 +11342,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/servers.go",
+      "path": "go/internal/hub/servers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11379,7 +11371,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/session_activity.go",
+      "path": "go/internal/hub/session_activity.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11408,7 +11400,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/session_activity_test.go",
+      "path": "go/internal/hub/session_activity_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11437,7 +11429,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/session_log_handler.go",
+      "path": "go/internal/hub/session_log_handler.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11466,7 +11458,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/session_log_handler_test.go",
+      "path": "go/internal/hub/session_log_handler_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11495,7 +11487,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/session_meta.go",
+      "path": "go/internal/hub/session_meta.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11524,7 +11516,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/session_meta_test.go",
+      "path": "go/internal/hub/session_meta_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11553,7 +11545,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/session_store_handlers.go",
+      "path": "go/internal/hub/session_store_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11582,7 +11574,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/set_title_unix.go",
+      "path": "go/internal/hub/set_title_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11611,7 +11603,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/set_title_windows.go",
+      "path": "go/internal/hub/set_title_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11640,7 +11632,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/settings_handlers.go",
+      "path": "go/internal/hub/settings_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11669,7 +11661,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/slash_cmd_fetch.go",
+      "path": "go/internal/hub/slash_cmd_fetch.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11698,7 +11690,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/slash_cmd_fetch_test.go",
+      "path": "go/internal/hub/slash_cmd_fetch_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11727,7 +11719,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/slash_handlers.go",
+      "path": "go/internal/hub/slash_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11756,7 +11748,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/spawn_command.go",
+      "path": "go/internal/hub/spawn_command.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11785,7 +11777,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/spawn_command_test.go",
+      "path": "go/internal/hub/spawn_command_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11814,7 +11806,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/spawn_handler.go",
+      "path": "go/internal/hub/spawn_handler.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11843,7 +11835,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/spawn_handler_test.go",
+      "path": "go/internal/hub/spawn_handler_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11872,7 +11864,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/spawn_risk.go",
+      "path": "go/internal/hub/spawn_risk.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11901,7 +11893,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/spawn_risk_test.go",
+      "path": "go/internal/hub/spawn_risk_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11930,7 +11922,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/spawn_unix.go",
+      "path": "go/internal/hub/spawn_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11959,7 +11951,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/spawn_usage_probe_test.go",
+      "path": "go/internal/hub/spawn_usage_probe_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -11988,7 +11980,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/spawn_windows.go",
+      "path": "go/internal/hub/spawn_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12017,7 +12009,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/sshd_probe.go",
+      "path": "go/internal/hub/sshd_probe.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12046,7 +12038,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/sshd_probe_unix.go",
+      "path": "go/internal/hub/sshd_probe_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12075,7 +12067,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/sshd_probe_windows.go",
+      "path": "go/internal/hub/sshd_probe_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12104,7 +12096,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/stale_watch.go",
+      "path": "go/internal/hub/stale_watch.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12133,7 +12125,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/stale_watch_test.go",
+      "path": "go/internal/hub/stale_watch_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12162,7 +12154,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/stop_test.go",
+      "path": "go/internal/hub/stop_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12191,7 +12183,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subagent_review_fixes_test.go",
+      "path": "go/internal/hub/subagent_review_fixes_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12220,7 +12212,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subagent_source_claude.go",
+      "path": "go/internal/hub/subagent_source_claude.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12249,7 +12241,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subagent_source_claude_test.go",
+      "path": "go/internal/hub/subagent_source_claude_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12278,7 +12270,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subagent_source_codex.go",
+      "path": "go/internal/hub/subagent_source_codex.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12307,7 +12299,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subagent_source_codex_test.go",
+      "path": "go/internal/hub/subagent_source_codex_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12336,7 +12328,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subagent_source_grok.go",
+      "path": "go/internal/hub/subagent_source_grok.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12365,7 +12357,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subagent_source_grok_test.go",
+      "path": "go/internal/hub/subagent_source_grok_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12394,7 +12386,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subagent_tree.go",
+      "path": "go/internal/hub/subagent_tree.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12423,7 +12415,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subagent_tree_test.go",
+      "path": "go/internal/hub/subagent_tree_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12452,7 +12444,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/submit_enter_test.go",
+      "path": "go/internal/hub/submit_enter_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12481,7 +12473,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subscription.go",
+      "path": "go/internal/hub/subscription.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12510,7 +12502,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subscription_auth_status.go",
+      "path": "go/internal/hub/subscription_auth_status.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12539,7 +12531,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subscription_auth_status_test.go",
+      "path": "go/internal/hub/subscription_auth_status_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12568,7 +12560,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subscription_auto_test.go",
+      "path": "go/internal/hub/subscription_auto_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12597,7 +12589,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subscription_integration_test.go",
+      "path": "go/internal/hub/subscription_integration_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12626,7 +12618,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subscription_login.go",
+      "path": "go/internal/hub/subscription_login.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12655,7 +12647,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subscription_login_test.go",
+      "path": "go/internal/hub/subscription_login_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12684,7 +12676,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subscription_test.go",
+      "path": "go/internal/hub/subscription_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12713,7 +12705,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subscription_usage.go",
+      "path": "go/internal/hub/subscription_usage.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12742,7 +12734,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subscription_usage_handlers.go",
+      "path": "go/internal/hub/subscription_usage_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12771,7 +12763,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subscription_usage_test.go",
+      "path": "go/internal/hub/subscription_usage_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12800,7 +12792,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/subscriptions_handlers.go",
+      "path": "go/internal/hub/subscriptions_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12829,7 +12821,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/tailscale_handlers.go",
+      "path": "go/internal/hub/tailscale_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12858,7 +12850,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/tailscale_probe.go",
+      "path": "go/internal/hub/tailscale_probe.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12887,7 +12879,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/tailscale_probe_unix.go",
+      "path": "go/internal/hub/tailscale_probe_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12916,7 +12908,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/tailscale_probe_windows.go",
+      "path": "go/internal/hub/tailscale_probe_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -12945,7 +12937,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/testdata/approval_codex_shortcut_ansi.ansi",
+      "path": "go/internal/hub/testdata/approval_codex_shortcut_ansi.ansi",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -12953,7 +12945,7 @@
       "reason": "no adapter claims '.ansi'"
     },
     {
-      "path": "internal/hub/testdata/approval_summary_cases.json",
+      "path": "go/internal/hub/testdata/approval_summary_cases.json",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -12961,7 +12953,7 @@
       "reason": "no adapter claims '.json'"
     },
     {
-      "path": "internal/hub/testdata/workflow_vt/boxed_workflow.txt",
+      "path": "go/internal/hub/testdata/workflow_vt/boxed_workflow.txt",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -12969,7 +12961,7 @@
       "reason": "no adapter claims '.txt'"
     },
     {
-      "path": "internal/hub/testdata/workflow_vt/broken_resize.txt",
+      "path": "go/internal/hub/testdata/workflow_vt/broken_resize.txt",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -12977,7 +12969,7 @@
       "reason": "no adapter claims '.txt'"
     },
     {
-      "path": "internal/hub/testdata/workflow_vt/summary_done.txt",
+      "path": "go/internal/hub/testdata/workflow_vt/summary_done.txt",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -12985,7 +12977,7 @@
       "reason": "no adapter claims '.txt'"
     },
     {
-      "path": "internal/hub/testdata/workflow_vt/summary_running.txt",
+      "path": "go/internal/hub/testdata/workflow_vt/summary_running.txt",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -12993,7 +12985,7 @@
       "reason": "no adapter claims '.txt'"
     },
     {
-      "path": "internal/hub/testdata/workflow_vt/tip_and_agent_footer.txt",
+      "path": "go/internal/hub/testdata/workflow_vt/tip_and_agent_footer.txt",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -13001,7 +12993,7 @@
       "reason": "no adapter claims '.txt'"
     },
     {
-      "path": "internal/hub/testdata/workflow_vt/tip_no_boundary.txt",
+      "path": "go/internal/hub/testdata/workflow_vt/tip_no_boundary.txt",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -13009,7 +13001,7 @@
       "reason": "no adapter claims '.txt'"
     },
     {
-      "path": "internal/hub/testdata/workflow_vt/tree_running.txt",
+      "path": "go/internal/hub/testdata/workflow_vt/tree_running.txt",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -13017,7 +13009,7 @@
       "reason": "no adapter claims '.txt'"
     },
     {
-      "path": "internal/hub/testdata/workflow_vt/workflows_view.txt",
+      "path": "go/internal/hub/testdata/workflow_vt/workflows_view.txt",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -13025,7 +13017,7 @@
       "reason": "no adapter claims '.txt'"
     },
     {
-      "path": "internal/hub/transcript_stall.go",
+      "path": "go/internal/hub/transcript_stall.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13054,7 +13046,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/transcript_stall_test.go",
+      "path": "go/internal/hub/transcript_stall_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13083,7 +13075,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/ttl_cache.go",
+      "path": "go/internal/hub/ttl_cache.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13112,7 +13104,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/ui_broadcast.go",
+      "path": "go/internal/hub/ui_broadcast.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13141,7 +13133,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/ui_broadcast_test.go",
+      "path": "go/internal/hub/ui_broadcast_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13170,7 +13162,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/ui_origin_cookie.go",
+      "path": "go/internal/hub/ui_origin_cookie.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13199,7 +13191,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/usage_hook_handler.go",
+      "path": "go/internal/hub/usage_hook_handler.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13228,7 +13220,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/usage_link_fetch.go",
+      "path": "go/internal/hub/usage_link_fetch.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13257,7 +13249,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/usage_probe.go",
+      "path": "go/internal/hub/usage_probe.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13286,7 +13278,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/usage_probe_test.go",
+      "path": "go/internal/hub/usage_probe_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13315,7 +13307,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/usage_stat.go",
+      "path": "go/internal/hub/usage_stat.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13344,7 +13336,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/user_prefs_handlers.go",
+      "path": "go/internal/hub/user_prefs_handlers.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13373,7 +13365,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/user_prefs_handlers_test.go",
+      "path": "go/internal/hub/user_prefs_handlers_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13402,7 +13394,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/voice_transcribe.go",
+      "path": "go/internal/hub/voice_transcribe.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13431,7 +13423,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/voice_transcribe_test.go",
+      "path": "go/internal/hub/voice_transcribe_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13460,7 +13452,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/vt_buffer.go",
+      "path": "go/internal/hub/vt_buffer.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13489,7 +13481,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/vt_buffer_ech_test.go",
+      "path": "go/internal/hub/vt_buffer_ech_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13518,7 +13510,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/vt_buffer_test.go",
+      "path": "go/internal/hub/vt_buffer_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13547,7 +13539,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/whisper_disk_other.go",
+      "path": "go/internal/hub/whisper_disk_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13576,7 +13568,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/whisper_disk_windows.go",
+      "path": "go/internal/hub/whisper_disk_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13605,7 +13597,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/whisper_job_other.go",
+      "path": "go/internal/hub/whisper_job_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13634,7 +13626,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/whisper_job_windows.go",
+      "path": "go/internal/hub/whisper_job_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13663,7 +13655,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/whisper_manage.go",
+      "path": "go/internal/hub/whisper_manage.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13692,7 +13684,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/whisper_manage_test.go",
+      "path": "go/internal/hub/whisper_manage_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13721,7 +13713,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/whisper_manifest_test.go",
+      "path": "go/internal/hub/whisper_manifest_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13750,7 +13742,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/workflow_journal.go",
+      "path": "go/internal/hub/workflow_journal.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13779,7 +13771,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/workflow_journal_test.go",
+      "path": "go/internal/hub/workflow_journal_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13808,7 +13800,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/workflow_scan.go",
+      "path": "go/internal/hub/workflow_scan.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13837,7 +13829,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/workflow_scan_test.go",
+      "path": "go/internal/hub/workflow_scan_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13866,7 +13858,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/workflow_task_detail.go",
+      "path": "go/internal/hub/workflow_task_detail.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13895,7 +13887,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/workflow_task_detail_test.go",
+      "path": "go/internal/hub/workflow_task_detail_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13924,7 +13916,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/worktree_identity.go",
+      "path": "go/internal/hub/worktree_identity.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13953,7 +13945,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hub/wrapper_loop.go",
+      "path": "go/internal/hub/wrapper_loop.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -13982,7 +13974,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hubruntime/pid.go",
+      "path": "go/internal/hubruntime/pid.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14011,7 +14003,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hubruntime/pid_unix.go",
+      "path": "go/internal/hubruntime/pid_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14040,7 +14032,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hubruntime/pid_windows.go",
+      "path": "go/internal/hubruntime/pid_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14069,7 +14061,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/hubruntime/runtime.go",
+      "path": "go/internal/hubruntime/runtime.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14098,7 +14090,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/active.go",
+      "path": "go/internal/launcher/active.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14127,7 +14119,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/active_filelock_unix.go",
+      "path": "go/internal/launcher/active_filelock_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14156,7 +14148,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/active_filelock_windows.go",
+      "path": "go/internal/launcher/active_filelock_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14185,7 +14177,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/active_test.go",
+      "path": "go/internal/launcher/active_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14214,7 +14206,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/audit_active_lostupdate_test.go",
+      "path": "go/internal/launcher/audit_active_lostupdate_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14243,7 +14235,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/audit_connecttimer_test.go",
+      "path": "go/internal/launcher/audit_connecttimer_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14272,7 +14264,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/audit_ssh_arginjection_test.go",
+      "path": "go/internal/launcher/audit_ssh_arginjection_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14301,7 +14293,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/audit_wsl_urlch_test.go",
+      "path": "go/internal/launcher/audit_wsl_urlch_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14330,7 +14322,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/banner.go",
+      "path": "go/internal/launcher/banner.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14359,7 +14351,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/banner_test.go",
+      "path": "go/internal/launcher/banner_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14388,7 +14380,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/browser_unix.go",
+      "path": "go/internal/launcher/browser_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14417,7 +14409,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/browser_windows.go",
+      "path": "go/internal/launcher/browser_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14446,7 +14438,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/connect.go",
+      "path": "go/internal/launcher/connect.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14475,7 +14467,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/connector.go",
+      "path": "go/internal/launcher/connector.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14504,7 +14496,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/connector_for.go",
+      "path": "go/internal/launcher/connector_for.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14533,7 +14525,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/connector_ssh.go",
+      "path": "go/internal/launcher/connector_ssh.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14562,7 +14554,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/connector_ssh_test.go",
+      "path": "go/internal/launcher/connector_ssh_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14591,7 +14583,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/connector_ssh_unix.go",
+      "path": "go/internal/launcher/connector_ssh_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14620,7 +14612,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/connector_ssh_windows.go",
+      "path": "go/internal/launcher/connector_ssh_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14649,7 +14641,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/connector_wsl_unix.go",
+      "path": "go/internal/launcher/connector_wsl_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14678,7 +14670,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/connector_wsl_windows.go",
+      "path": "go/internal/launcher/connector_wsl_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14707,7 +14699,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/console_unix.go",
+      "path": "go/internal/launcher/console_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14736,7 +14728,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/console_windows.go",
+      "path": "go/internal/launcher/console_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14765,7 +14757,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/export.go",
+      "path": "go/internal/launcher/export.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14794,7 +14786,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/import.go",
+      "path": "go/internal/launcher/import.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14823,7 +14815,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/import_test.go",
+      "path": "go/internal/launcher/import_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14852,7 +14844,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/pid.go",
+      "path": "go/internal/launcher/pid.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14881,7 +14873,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/port.go",
+      "path": "go/internal/launcher/port.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14910,7 +14902,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/proc_attr_other.go",
+      "path": "go/internal/launcher/proc_attr_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14939,7 +14931,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/proc_attr_windows.go",
+      "path": "go/internal/launcher/proc_attr_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14968,7 +14960,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/profile.go",
+      "path": "go/internal/launcher/profile.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -14997,7 +14989,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/profile_test.go",
+      "path": "go/internal/launcher/profile_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15026,7 +15018,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/scan.go",
+      "path": "go/internal/launcher/scan.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15055,7 +15047,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/shell.go",
+      "path": "go/internal/launcher/shell.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15084,7 +15076,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/ui/index.html",
+      "path": "go/internal/launcher/ui/index.html",
       "adapter": "html",
       "status": "unresolved",
       "fields": {
@@ -15117,7 +15109,7 @@
       ]
     },
     {
-      "path": "internal/launcher/ui_server.go",
+      "path": "go/internal/launcher/ui_server.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15146,7 +15138,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/launcher/ui_server_test.go",
+      "path": "go/internal/launcher/ui_server_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15175,7 +15167,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/log/log.go",
+      "path": "go/internal/log/log.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15204,7 +15196,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/notify/approval_actions_test.go",
+      "path": "go/internal/notify/approval_actions_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15233,7 +15225,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/notify/audit_sanitize_test.go",
+      "path": "go/internal/notify/audit_sanitize_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15262,7 +15254,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/notify/notify.go",
+      "path": "go/internal/notify/notify.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15291,7 +15283,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/notify/notify_done_test.go",
+      "path": "go/internal/notify/notify_done_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15320,7 +15312,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/nvidianim/client.go",
+      "path": "go/internal/nvidianim/client.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15349,7 +15341,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/nvidianim/client_test.go",
+      "path": "go/internal/nvidianim/client_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15378,7 +15370,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/nvidianim/secret.go",
+      "path": "go/internal/nvidianim/secret.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15407,7 +15399,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/nvidianim/secret_test.go",
+      "path": "go/internal/nvidianim/secret_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15436,7 +15428,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/orchestrate/orchestrate.go",
+      "path": "go/internal/orchestrate/orchestrate.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15465,7 +15457,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/orchestrate/orchestrate_test.go",
+      "path": "go/internal/orchestrate/orchestrate_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15494,7 +15486,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/proto/messages.go",
+      "path": "go/internal/proto/messages.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15523,7 +15515,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/proto/messages_test.go",
+      "path": "go/internal/proto/messages_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15552,7 +15544,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/adapters.go",
+      "path": "go/internal/provider/adapters.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15581,7 +15573,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/adapters_test.go",
+      "path": "go/internal/provider/adapters_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15610,7 +15602,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/approval.go",
+      "path": "go/internal/provider/approval.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15639,7 +15631,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/approval_test.go",
+      "path": "go/internal/provider/approval_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15668,7 +15660,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/backup.go",
+      "path": "go/internal/provider/backup.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15697,7 +15689,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/backup_test.go",
+      "path": "go/internal/provider/backup_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15726,7 +15718,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/capability_test.go",
+      "path": "go/internal/provider/capability_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15755,7 +15747,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/compatibility_fixture_test.go",
+      "path": "go/internal/provider/compatibility_fixture_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15784,7 +15776,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/distribution.go",
+      "path": "go/internal/provider/distribution.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15813,7 +15805,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/distribution_diff.go",
+      "path": "go/internal/provider/distribution_diff.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15842,7 +15834,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/distribution_test.go",
+      "path": "go/internal/provider/distribution_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15871,7 +15863,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/embed.go",
+      "path": "go/internal/provider/embed.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15900,7 +15892,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/embed_test.go",
+      "path": "go/internal/provider/embed_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15929,7 +15921,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/history.go",
+      "path": "go/internal/provider/history.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15958,7 +15950,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/history_adapter.go",
+      "path": "go/internal/provider/history_adapter.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -15987,7 +15979,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/history_adapter_test.go",
+      "path": "go/internal/provider/history_adapter_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16016,7 +16008,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/history_sweep_test.go",
+      "path": "go/internal/provider/history_sweep_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16045,7 +16037,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/history_test.go",
+      "path": "go/internal/provider/history_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16074,7 +16066,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/launch.go",
+      "path": "go/internal/provider/launch.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16103,7 +16095,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/launch_test.go",
+      "path": "go/internal/provider/launch_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16132,7 +16124,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/manifests/claude.json",
+      "path": "go/internal/provider/manifests/claude.json",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -16140,7 +16132,7 @@
       "reason": "no adapter claims '.json'"
     },
     {
-      "path": "internal/provider/manifests/codex.json",
+      "path": "go/internal/provider/manifests/codex.json",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -16148,7 +16140,7 @@
       "reason": "no adapter claims '.json'"
     },
     {
-      "path": "internal/provider/manifests/command-code.json",
+      "path": "go/internal/provider/manifests/command-code.json",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -16156,7 +16148,7 @@
       "reason": "no adapter claims '.json'"
     },
     {
-      "path": "internal/provider/manifests/copilot.json",
+      "path": "go/internal/provider/manifests/copilot.json",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -16164,7 +16156,7 @@
       "reason": "no adapter claims '.json'"
     },
     {
-      "path": "internal/provider/manifests/cursor-agent.json",
+      "path": "go/internal/provider/manifests/cursor-agent.json",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -16172,7 +16164,7 @@
       "reason": "no adapter claims '.json'"
     },
     {
-      "path": "internal/provider/manifests/grok.json",
+      "path": "go/internal/provider/manifests/grok.json",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -16180,7 +16172,7 @@
       "reason": "no adapter claims '.json'"
     },
     {
-      "path": "internal/provider/manifests/opencode.json",
+      "path": "go/internal/provider/manifests/opencode.json",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -16188,7 +16180,7 @@
       "reason": "no adapter claims '.json'"
     },
     {
-      "path": "internal/provider/merge.go",
+      "path": "go/internal/provider/merge.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16217,7 +16209,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/presentation_test.go",
+      "path": "go/internal/provider/presentation_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16246,7 +16238,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/provider_test.go",
+      "path": "go/internal/provider/provider_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16275,7 +16267,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/recovery.go",
+      "path": "go/internal/provider/recovery.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16304,7 +16296,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/registry.go",
+      "path": "go/internal/provider/registry.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16333,7 +16325,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/schema.go",
+      "path": "go/internal/provider/schema.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16362,7 +16354,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/schema.json",
+      "path": "go/internal/provider/schema.json",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -16370,7 +16362,7 @@
       "reason": "no adapter claims '.json'"
     },
     {
-      "path": "internal/provider/store.go",
+      "path": "go/internal/provider/store.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16399,7 +16391,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/store_test.go",
+      "path": "go/internal/provider/store_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16428,7 +16420,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/subagent_adapter.go",
+      "path": "go/internal/provider/subagent_adapter.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16457,7 +16449,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/subagent_adapter_test.go",
+      "path": "go/internal/provider/subagent_adapter_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16486,7 +16478,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/update.go",
+      "path": "go/internal/provider/update.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16515,7 +16507,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/update_test.go",
+      "path": "go/internal/provider/update_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16544,7 +16536,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/usage_adapter.go",
+      "path": "go/internal/provider/usage_adapter.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16573,7 +16565,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/usage_adapter_test.go",
+      "path": "go/internal/provider/usage_adapter_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16602,7 +16594,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/provider/validation.go",
+      "path": "go/internal/provider/validation.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16631,7 +16623,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/report/collect.go",
+      "path": "go/internal/report/collect.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16660,7 +16652,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/report/redact.go",
+      "path": "go/internal/report/redact.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16689,7 +16681,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/report/redact_test.go",
+      "path": "go/internal/report/redact_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16718,7 +16710,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/report/report_test.go",
+      "path": "go/internal/report/report_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16747,7 +16739,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/report/template.go",
+      "path": "go/internal/report/template.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16776,7 +16768,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/report/url.go",
+      "path": "go/internal/report/url.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16805,7 +16797,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/securefile/atomic.go",
+      "path": "go/internal/securefile/atomic.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16834,7 +16826,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/securefile/atomic_test.go",
+      "path": "go/internal/securefile/atomic_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16863,7 +16855,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/securefile/securefile.go",
+      "path": "go/internal/securefile/securefile.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16892,7 +16884,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/securefile/securefile_other.go",
+      "path": "go/internal/securefile/securefile_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16921,7 +16913,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/securefile/securefile_windows.go",
+      "path": "go/internal/securefile/securefile_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16950,7 +16942,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/sessionlog/audit_masksecrets_test.go",
+      "path": "go/internal/sessionlog/audit_masksecrets_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -16979,7 +16971,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/sessionlog/sessionlog.go",
+      "path": "go/internal/sessionlog/sessionlog.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17008,7 +17000,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/sessionlog/sessionlog_test.go",
+      "path": "go/internal/sessionlog/sessionlog_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17037,7 +17029,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/sessionlog/transcript.go",
+      "path": "go/internal/sessionlog/transcript.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17066,7 +17058,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/sessionlog/transcript_test.go",
+      "path": "go/internal/sessionlog/transcript_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17095,7 +17087,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/sessionstore/approval_ledger_test.go",
+      "path": "go/internal/sessionstore/approval_ledger_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17126,7 +17118,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/sessionstore/audit_store_test.go",
+      "path": "go/internal/sessionstore/audit_store_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17160,7 +17152,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/sessionstore/noise_output_test.go",
+      "path": "go/internal/sessionstore/noise_output_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17189,7 +17181,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/sessionstore/store.go",
+      "path": "go/internal/sessionstore/store.go",
       "adapter": "go",
       "status": "unresolved",
       "fields": {
@@ -17283,7 +17275,7 @@
       ]
     },
     {
-      "path": "internal/sessionstore/store_test.go",
+      "path": "go/internal/sessionstore/store_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17312,7 +17304,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/setupcmd/setup.go",
+      "path": "go/internal/setupcmd/setup.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17341,7 +17333,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/setupcmd/setup_darwin.go",
+      "path": "go/internal/setupcmd/setup_darwin.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17370,7 +17362,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/setupcmd/setup_darwin_test.go",
+      "path": "go/internal/setupcmd/setup_darwin_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17399,7 +17391,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/setupcmd/setup_linux.go",
+      "path": "go/internal/setupcmd/setup_linux.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17428,7 +17420,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/setupcmd/setup_linux_test.go",
+      "path": "go/internal/setupcmd/setup_linux_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17457,7 +17449,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/setupcmd/setup_windows.go",
+      "path": "go/internal/setupcmd/setup_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17486,7 +17478,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/setupcmd/setup_windows_test.go",
+      "path": "go/internal/setupcmd/setup_windows_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17515,7 +17507,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/shell/init.go",
+      "path": "go/internal/shell/init.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17544,7 +17536,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/adapter.go",
+      "path": "go/internal/subscription/adapter.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17573,7 +17565,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/claude.go",
+      "path": "go/internal/subscription/claude.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17602,7 +17594,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/claude_test.go",
+      "path": "go/internal/subscription/claude_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17631,7 +17623,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/cliexec.go",
+      "path": "go/internal/subscription/cliexec.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17660,7 +17652,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/codex.go",
+      "path": "go/internal/subscription/codex.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17689,7 +17681,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/codex_test.go",
+      "path": "go/internal/subscription/codex_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17718,7 +17710,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/codex_usage_appserver.go",
+      "path": "go/internal/subscription/codex_usage_appserver.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17747,7 +17739,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/codex_usage_appserver_test.go",
+      "path": "go/internal/subscription/codex_usage_appserver_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17776,7 +17768,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/grok.go",
+      "path": "go/internal/subscription/grok.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17805,7 +17797,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/linkdir_other.go",
+      "path": "go/internal/subscription/linkdir_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17834,7 +17826,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/linkdir_windows.go",
+      "path": "go/internal/subscription/linkdir_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17863,7 +17855,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/linkdir_windows_test.go",
+      "path": "go/internal/subscription/linkdir_windows_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17892,7 +17884,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/login_complete.go",
+      "path": "go/internal/subscription/login_complete.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17921,7 +17913,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/login_complete_test.go",
+      "path": "go/internal/subscription/login_complete_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17950,7 +17942,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/opencode.go",
+      "path": "go/internal/subscription/opencode.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17979,7 +17971,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/resolve.go",
+      "path": "go/internal/subscription/resolve.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18008,7 +18000,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/seed.go",
+      "path": "go/internal/subscription/seed.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18037,7 +18029,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/seed_test.go",
+      "path": "go/internal/subscription/seed_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18066,7 +18058,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/subscription_test.go",
+      "path": "go/internal/subscription/subscription_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18095,7 +18087,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/usage_source.go",
+      "path": "go/internal/subscription/usage_source.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18124,7 +18116,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/subscription/usage_source_test.go",
+      "path": "go/internal/subscription/usage_source_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18153,7 +18145,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/tray/tray.go",
+      "path": "go/internal/tray/tray.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18182,7 +18174,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/tray/tray_other.go",
+      "path": "go/internal/tray/tray_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18211,7 +18203,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/tray/tray_test.go",
+      "path": "go/internal/tray/tray_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18240,7 +18232,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/tray/tray_windows.go",
+      "path": "go/internal/tray/tray_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18269,7 +18261,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/tray/tray_windows_test.go",
+      "path": "go/internal/tray/tray_windows_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18298,7 +18290,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/uninstall/uninstall.go",
+      "path": "go/internal/uninstall/uninstall.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18327,7 +18319,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/uninstall/uninstall_test.go",
+      "path": "go/internal/uninstall/uninstall_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18356,7 +18348,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/uninstall/uninstall_unix.go",
+      "path": "go/internal/uninstall/uninstall_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18385,7 +18377,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/uninstall/uninstall_windows.go",
+      "path": "go/internal/uninstall/uninstall_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18414,7 +18406,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/usagelocal/codex.go",
+      "path": "go/internal/usagelocal/codex.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18443,7 +18435,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/usagelocal/grok.go",
+      "path": "go/internal/usagelocal/grok.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18472,7 +18464,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/usagelocal/usagelocal.go",
+      "path": "go/internal/usagelocal/usagelocal.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18501,7 +18493,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/usagelocal/usagelocal_test.go",
+      "path": "go/internal/usagelocal/usagelocal_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18530,7 +18522,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/usagerelay/usagerelay.go",
+      "path": "go/internal/usagerelay/usagerelay.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18559,7 +18551,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/usagerelay/usagerelay_test.go",
+      "path": "go/internal/usagerelay/usagerelay_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18588,7 +18580,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/whisperruntime/embed.go",
+      "path": "go/internal/whisperruntime/embed.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18617,7 +18609,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/whisperruntime/embed_test.go",
+      "path": "go/internal/whisperruntime/embed_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18646,7 +18638,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/whisperruntime/fetch_windows_runtime.ps1",
+      "path": "go/internal/whisperruntime/fetch_windows_runtime.ps1",
       "adapter": "powershell",
       "status": "analyzed",
       "fields": {
@@ -18673,7 +18665,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/whisperruntime/files/windows-amd64/.gitignore",
+      "path": "go/internal/whisperruntime/files/windows-amd64/.gitignore",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -18681,7 +18673,7 @@
       "reason": "no adapter claims '(no extension)'"
     },
     {
-      "path": "internal/whisperruntime/files/windows-amd64/.gitkeep",
+      "path": "go/internal/whisperruntime/files/windows-amd64/.gitkeep",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -18689,7 +18681,7 @@
       "reason": "no adapter claims '(no extension)'"
     },
     {
-      "path": "internal/whisperruntime/files/windows-amd64/README.md",
+      "path": "go/internal/whisperruntime/files/windows-amd64/README.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -18697,7 +18689,7 @@
       "reason": "no adapter claims '.md'"
     },
     {
-      "path": "internal/wrapper/approval_rules.go",
+      "path": "go/internal/wrapper/approval_rules.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18726,7 +18718,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/approval_rules_test.go",
+      "path": "go/internal/wrapper/approval_rules_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18755,7 +18747,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/attach.go",
+      "path": "go/internal/wrapper/attach.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18784,7 +18776,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/audit_usage_hooks_test.go",
+      "path": "go/internal/wrapper/audit_usage_hooks_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18813,7 +18805,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/claude_session.go",
+      "path": "go/internal/wrapper/claude_session.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18842,7 +18834,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/claude_session_test.go",
+      "path": "go/internal/wrapper/claude_session_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18871,7 +18863,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/copilot_command.go",
+      "path": "go/internal/wrapper/copilot_command.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18900,7 +18892,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/copilot_command_test.go",
+      "path": "go/internal/wrapper/copilot_command_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18929,7 +18921,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/custom_provider_test.go",
+      "path": "go/internal/wrapper/custom_provider_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18958,7 +18950,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/custom_provider_unix_test.go",
+      "path": "go/internal/wrapper/custom_provider_unix_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18987,7 +18979,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/custom_provider_windows_test.go",
+      "path": "go/internal/wrapper/custom_provider_windows_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19016,7 +19008,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/delegation.go",
+      "path": "go/internal/wrapper/delegation.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19045,7 +19037,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/delegation_inject.go",
+      "path": "go/internal/wrapper/delegation_inject.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19074,7 +19066,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/delegation_inject_test.go",
+      "path": "go/internal/wrapper/delegation_inject_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19103,7 +19095,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/delegation_test.go",
+      "path": "go/internal/wrapper/delegation_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19132,7 +19124,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/detect_shell_unix.go",
+      "path": "go/internal/wrapper/detect_shell_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19161,7 +19153,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/detect_shell_windows.go",
+      "path": "go/internal/wrapper/detect_shell_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19190,7 +19182,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/detect_shell_windows_test.go",
+      "path": "go/internal/wrapper/detect_shell_windows_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19219,7 +19211,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/diagnose.go",
+      "path": "go/internal/wrapper/diagnose.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19248,7 +19240,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/diagnose_test.go",
+      "path": "go/internal/wrapper/diagnose_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19277,7 +19269,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/effort_args_test.go",
+      "path": "go/internal/wrapper/effort_args_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19306,7 +19298,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/env_color.go",
+      "path": "go/internal/wrapper/env_color.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19335,7 +19327,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/env_color_test.go",
+      "path": "go/internal/wrapper/env_color_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19364,7 +19356,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/headless_session.go",
+      "path": "go/internal/wrapper/headless_session.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19393,7 +19385,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/headless_session_test.go",
+      "path": "go/internal/wrapper/headless_session_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19422,7 +19414,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/injected_blocks_roundtrip_test.go",
+      "path": "go/internal/wrapper/injected_blocks_roundtrip_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19451,7 +19443,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/input_seq_test.go",
+      "path": "go/internal/wrapper/input_seq_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19480,7 +19472,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/input_split_test.go",
+      "path": "go/internal/wrapper/input_split_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19509,7 +19501,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/launch_prompt.go",
+      "path": "go/internal/wrapper/launch_prompt.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19538,7 +19530,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/launch_prompt_test.go",
+      "path": "go/internal/wrapper/launch_prompt_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19567,7 +19559,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/network_helpers_test.go",
+      "path": "go/internal/wrapper/network_helpers_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19596,7 +19588,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/opencode_command_test.go",
+      "path": "go/internal/wrapper/opencode_command_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19625,7 +19617,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/opencode_config.go",
+      "path": "go/internal/wrapper/opencode_config.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19654,7 +19646,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/opencode_config_test.go",
+      "path": "go/internal/wrapper/opencode_config_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19683,7 +19675,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/output_encoding.go",
+      "path": "go/internal/wrapper/output_encoding.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19712,7 +19704,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/output_encoding_other.go",
+      "path": "go/internal/wrapper/output_encoding_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19741,7 +19733,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/output_encoding_other_test.go",
+      "path": "go/internal/wrapper/output_encoding_other_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19770,7 +19762,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/output_encoding_test.go",
+      "path": "go/internal/wrapper/output_encoding_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19799,7 +19791,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/output_encoding_windows.go",
+      "path": "go/internal/wrapper/output_encoding_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19828,7 +19820,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/permission_args_test.go",
+      "path": "go/internal/wrapper/permission_args_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19857,7 +19849,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/probe_debug.go",
+      "path": "go/internal/wrapper/probe_debug.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19886,7 +19878,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/probe_nodebug.go",
+      "path": "go/internal/wrapper/probe_nodebug.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19915,7 +19907,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/process_alive.go",
+      "path": "go/internal/wrapper/process_alive.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19944,7 +19936,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/pty_output_test.go",
+      "path": "go/internal/wrapper/pty_output_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -19973,7 +19965,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/pty_replay.go",
+      "path": "go/internal/wrapper/pty_replay.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20002,7 +19994,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/pty_replay_test.go",
+      "path": "go/internal/wrapper/pty_replay_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20031,7 +20023,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/pty_unix.go",
+      "path": "go/internal/wrapper/pty_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20060,7 +20052,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/pty_windows.go",
+      "path": "go/internal/wrapper/pty_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20089,7 +20081,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/reattach_handshake_test.go",
+      "path": "go/internal/wrapper/reattach_handshake_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20118,7 +20110,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/reconnect_supervisor_test.go",
+      "path": "go/internal/wrapper/reconnect_supervisor_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20147,7 +20139,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/resolve_shell_unix_test.go",
+      "path": "go/internal/wrapper/resolve_shell_unix_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20176,7 +20168,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/set_title_unix.go",
+      "path": "go/internal/wrapper/set_title_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20205,7 +20197,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/set_title_windows.go",
+      "path": "go/internal/wrapper/set_title_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20234,7 +20226,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/spawn_unix.go",
+      "path": "go/internal/wrapper/spawn_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20263,7 +20255,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/spawn_windows.go",
+      "path": "go/internal/wrapper/spawn_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20292,7 +20284,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/staleguard.go",
+      "path": "go/internal/wrapper/staleguard.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20321,7 +20313,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/subscription_test.go",
+      "path": "go/internal/wrapper/subscription_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20350,7 +20342,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/usage_hooks.go",
+      "path": "go/internal/wrapper/usage_hooks.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20379,7 +20371,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/usage_hooks_test.go",
+      "path": "go/internal/wrapper/usage_hooks_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20408,7 +20400,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/utf8_session_other.go",
+      "path": "go/internal/wrapper/utf8_session_other.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20437,7 +20429,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/utf8_session_windows.go",
+      "path": "go/internal/wrapper/utf8_session_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20466,7 +20458,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wrapper/wrapper.go",
+      "path": "go/internal/wrapper/wrapper.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20495,7 +20487,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wslutil/wslutil_unix.go",
+      "path": "go/internal/wslutil/wslutil_unix.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20524,7 +20516,7 @@
       "unresolved": []
     },
     {
-      "path": "internal/wslutil/wslutil_windows.go",
+      "path": "go/internal/wslutil/wslutil_windows.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20551,6 +20543,75 @@
         }
       },
       "unresolved": []
+    },
+    {
+      "path": "go/web/web.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Package web は Hub UI の静的アセットを embed.FS で同梱する。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "go/winres/icon.png",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.png'"
+    },
+    {
+      "path": "go/winres/icon16.png",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.png'"
+    },
+    {
+      "path": "go/winres/winres-launcher.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "go/winres/winres.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "instrumentation.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
     },
     {
       "path": "npm/.gitignore",
@@ -21312,6 +21373,146 @@
     },
     {
       "path": "rust/THIRD-PARTY-NOTICES.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "rust/assets/launcher/ui/index.html",
+      "adapter": "html",
+      "status": "unresolved",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "MANY-AI-CLI Launcher"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": [
+        {
+          "code": "dynamic_endpoint",
+          "detail": "the address of this request is a run-time value: url"
+        }
+      ]
+    },
+    {
+      "path": "rust/assets/provider/manifests/claude.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "rust/assets/provider/manifests/codex.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "rust/assets/provider/manifests/command-code.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "rust/assets/provider/manifests/copilot.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "rust/assets/provider/manifests/cursor-agent.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "rust/assets/provider/manifests/grok.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "rust/assets/provider/manifests/opencode.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "rust/assets/whisperruntime/fetch_windows_runtime.ps1",
+      "adapter": "powershell",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "requires -Version 5.1"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/assets/whisperruntime/files/windows-amd64/.gitignore",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '(no extension)'"
+    },
+    {
+      "path": "rust/assets/whisperruntime/files/windows-amd64/.gitkeep",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '(no extension)'"
+    },
+    {
+      "path": "rust/assets/whisperruntime/files/windows-amd64/README.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -48959,79 +49160,18 @@
       "fields": {},
       "unresolved": [],
       "reason": "no adapter claims '.json'"
-    },
-    {
-      "path": "web/web.go",
-      "adapter": "go",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "Package web は Hub UI の静的アセットを embed.FS で同梱する。"
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "winres/icon.png",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.png'"
-    },
-    {
-      "path": "winres/icon16.png",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.png'"
-    },
-    {
-      "path": "winres/winres-launcher.json",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.json'"
-    },
-    {
-      "path": "winres/winres.json",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.json'"
     }
   ],
   "tables": [
     {
       "name": "approvals",
       "read_by": [
-        "internal/sessionstore/approval_ledger_test.go",
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/approval_ledger_test.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/repository.rs"
       ],
       "written_by": [
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/repository.rs",
         "rust/src/storage/schema.sql",
         "rust/tests/fixtures/core/storage/old-schema.sql",
@@ -49039,7 +49179,7 @@
       ],
       "in_schema_snapshot": false,
       "unresolved_in": [
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/repository.rs",
         "rust/tests/storage_contracts.rs"
       ]
@@ -49047,18 +49187,18 @@
     {
       "name": "attachments",
       "read_by": [
-        "internal/sessionstore/audit_store_test.go",
+        "go/internal/sessionstore/audit_store_test.go",
         "rust/tests/storage_contracts.rs"
       ],
       "written_by": [
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/repository.rs",
         "rust/src/storage/schema.sql",
         "rust/tests/fixtures/core/storage/old-schema.sql"
       ],
       "in_schema_snapshot": false,
       "unresolved_in": [
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/repository.rs",
         "rust/tests/storage_contracts.rs"
       ]
@@ -49066,13 +49206,13 @@
     {
       "name": "events",
       "read_by": [
-        "internal/sessionstore/audit_store_test.go",
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/audit_store_test.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/repository.rs",
         "rust/tests/storage_contracts.rs"
       ],
       "written_by": [
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/repository.rs",
         "rust/src/storage/schema.sql",
         "rust/tests/fixtures/core/storage/old-schema.sql",
@@ -49080,7 +49220,7 @@
       ],
       "in_schema_snapshot": false,
       "unresolved_in": [
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/repository.rs",
         "rust/tests/storage_contracts.rs"
       ]
@@ -49088,8 +49228,8 @@
     {
       "name": "messages",
       "read_by": [
-        "internal/sessionstore/audit_store_test.go",
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/audit_store_test.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/history.rs",
         "rust/src/storage/mod.rs",
         "rust/src/storage/repository.rs",
@@ -49097,7 +49237,7 @@
         "rust/tests/storage_contracts.rs"
       ],
       "written_by": [
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/history.rs",
         "rust/src/storage/repository.rs",
         "rust/src/storage/schema.sql",
@@ -49106,7 +49246,7 @@
       ],
       "in_schema_snapshot": false,
       "unresolved_in": [
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/history.rs",
         "rust/src/storage/repository.rs",
         "rust/tests/storage_contracts.rs"
@@ -49116,14 +49256,14 @@
       "name": "messages_fts",
       "read_by": [],
       "written_by": [
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/history.rs",
         "rust/src/storage/repository.rs",
         "rust/tests/storage_contracts.rs"
       ],
       "in_schema_snapshot": false,
       "unresolved_in": [
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/history.rs",
         "rust/src/storage/repository.rs",
         "rust/tests/storage_contracts.rs"
@@ -49132,15 +49272,15 @@
     {
       "name": "sessions",
       "read_by": [
-        "internal/sessionstore/audit_store_test.go",
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/audit_store_test.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/history.rs",
         "rust/src/storage/mod.rs",
         "rust/src/storage/repository.rs",
         "rust/src/storage/schema.rs"
       ],
       "written_by": [
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/history.rs",
         "rust/src/storage/repository.rs",
         "rust/src/storage/schema.rs",
@@ -49149,7 +49289,7 @@
       ],
       "in_schema_snapshot": false,
       "unresolved_in": [
-        "internal/sessionstore/store.go",
+        "go/internal/sessionstore/store.go",
         "rust/src/storage/history.rs",
         "rust/src/storage/repository.rs"
       ]
@@ -49157,7 +49297,7 @@
   ],
   "table_gaps": {
     "files": [
-      "internal/sessionstore/store.go",
+      "go/internal/sessionstore/store.go",
       "rust/src/storage/history.rs",
       "rust/src/storage/repository.rs",
       "rust/tests/dependency_contracts.rs",

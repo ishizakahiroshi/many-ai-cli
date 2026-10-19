@@ -742,14 +742,16 @@ fn fixed_go_cross_read_and_rollback_continuation() {
         "Go/Rust storage compatibility only\n",
     )
     .unwrap();
+    // The frozen Go sources live under go/ since 2026-10-19.
     let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .unwrap();
+        .unwrap()
+        .join("go");
     // Build only a verified snapshot of the baseline package files. This works
     // from immutable archives and shallow checkouts without any Git executable
     // or historical object, and excludes unlisted local Go files/go.work.
     let oracle_source = root.path().join("oracle-source");
-    copy_verified_go_sources(repo, &oracle_source).unwrap();
+    copy_verified_go_sources(&repo, &oracle_source).unwrap();
     let helper = oracle_source.join("rollback-oracle.go");
     std::fs::write(
         &helper,
@@ -1034,11 +1036,13 @@ fn copy_verified_go_sources(
 
 #[test]
 fn oracle_manifest_works_without_git_and_rejects_source_changes() {
+    // The frozen Go sources live under go/ since 2026-10-19.
     let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .unwrap();
+        .unwrap()
+        .join("go");
     let archive = tempfile::tempdir().unwrap();
-    copy_verified_go_sources(repo, archive.path()).unwrap();
+    copy_verified_go_sources(&repo, archive.path()).unwrap();
     assert!(!archive.path().join(".git").exists());
     // A local extra Go file cannot change what gets compiled by the oracle.
     std::fs::write(

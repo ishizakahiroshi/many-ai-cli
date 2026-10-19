@@ -860,7 +860,7 @@ fn launcher_delivery_target_channel_contract_and_hash_readback() {
             target == Target::WindowsX64
         );
     }
-    for asset in ["web/dist/index.html", "internal/launcher/ui/index.html"] {
+    for asset in ["web/dist/index.html", "rust/assets/launcher/ui/index.html"] {
         manifest.embedded_assets.push(make(asset.into()));
     }
     assert!(

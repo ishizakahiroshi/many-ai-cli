@@ -854,6 +854,9 @@ fn materialize_committed_sources(
     let commit = commit.trim().to_owned();
     assert_eq!(commit.len(), 40);
     assert!(commit.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    // The frozen Go sources live under go/ since 2026-10-19. Oracle names stay
+    // relative to the Go module root.
+    const GO_ROOT: &str = "go/";
     let mut args = vec![
         "ls-tree".into(),
         "-r".into(),
@@ -861,10 +864,15 @@ fn materialize_committed_sources(
         "--full-tree".into(),
         commit.clone().into(),
         "--".into(),
-        "go.mod".into(),
-        "go.sum".into(),
+        format!("{GO_ROOT}go.mod").into(),
+        format!("{GO_ROOT}go.sum").into(),
     ];
-    args.extend(manifest.packages.iter().map(Into::into));
+    args.extend(
+        manifest
+            .packages
+            .iter()
+            .map(|package| format!("{GO_ROOT}{package}").into()),
+    );
     let tree = git("git ls-tree", args, vec![]);
     let mut blobs = BTreeMap::new();
     for entry in tree
@@ -873,6 +881,9 @@ fn materialize_committed_sources(
     {
         let text = std::str::from_utf8(entry).unwrap();
         let (meta, name) = text.split_once('\t').expect("Git ls-tree record");
+        let name = name
+            .strip_prefix(GO_ROOT)
+            .expect("oracle source outside the frozen Go root");
         let path = Path::new(name);
         let package = path.parent().unwrap().to_str().unwrap().replace('\\', "/");
         let filename = path.file_name().unwrap().to_str().unwrap();

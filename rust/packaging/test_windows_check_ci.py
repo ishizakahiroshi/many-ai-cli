@@ -166,7 +166,7 @@ class WindowsCheckTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
         for relative in ("rust/Cargo.lock", "scripts/rust-windows-check-ci.py", "scripts/rust-candidate-ci.py",
-                         "web/dist/index.html", "internal/launcher/ui/index.html"):
+                         "web/dist/index.html", "rust/assets/launcher/ui/index.html"):
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("synthetic\n", encoding="utf-8")
