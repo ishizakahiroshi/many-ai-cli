@@ -1,4 +1,16 @@
 #!/usr/bin/env sh
+# doxguard prerelease opt-in begin
+if [ "$(git config --local --get doxguard.prerelease.enabled)" = true ]; then
+  dg_dir=$(git rev-parse --path-format=absolute --git-common-dir) || exit $?
+  dg_bin="$dg_dir/doxguard/prerelease/doxguard.exe"
+  dg_config="$dg_dir/doxguard/prerelease/config.json"
+  if [ ! -f "$dg_bin" ] || [ ! -f "$dg_config" ]; then
+    echo "doxguard: prerelease candidate or config missing" >&2
+    exit 2
+  fi
+  "$dg_bin" scan --staged --block --strict --config "$dg_config" || exit $?
+fi
+# doxguard prerelease opt-in end
 # secrets-scan layer 2 (per-commit) — non-pnpm path via core.hooksPath = .githooks
 # 設計詳細: docs/local/secrets-scan-design/ (gitignored)
 # Activate with: bash scripts/install-hooks.sh  or  pwsh scripts/install-hooks.ps1
