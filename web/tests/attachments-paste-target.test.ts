@@ -19,6 +19,9 @@ function fixture() {
   const stagedTexts: string[] = [];
   const composer = new FakeTextArea();
   const body = new FakeHTMLElement('BODY');
+  // 下の入力欄の添付（app.ts の appendComposerAttachment が積む先）の代役。
+  const appended: unknown[] = [];
+  const sessions = new Map<number, { started_at: string }>([[7, { started_at: '2026-10-20T00:00:00Z' }]]);
   const ctx: any = {
     Element: FakeElement, HTMLElement: FakeHTMLElement,
     HTMLTextAreaElement: FakeTextArea, HTMLInputElement: FakeInput,
@@ -26,7 +29,25 @@ function fixture() {
     document: { getElementById: () => null, addEventListener: () => {}, createElement: () => ({}) },
     window: { addEventListener: (type: string, fn: Function) => windowListeners.set(type, [...(windowListeners.get(type) || []), fn]) },
     t: (key: string) => key, apiFetch: async () => ({ ok: true }), showToast: () => {}, token: '',
-    activeSessionId: 7, sessions: new Map(), terminals: new Map(),
+    activeSessionId: 7, sessions, terminals: new Map(),
+    // app.ts の同名関数と同じ振る舞い（アクティブなセッションを持ち主にし、まだ生きている間だけ積む）。
+    captureComposerOwner: () => {
+      const session = sessions.get(7);
+      return session ? { sessionId: 7, startedAt: String(session.started_at || '') } : null;
+    },
+    isComposerOwnerLive: (owner: { sessionId: number; startedAt: string } | null) => {
+      const session = owner ? sessions.get(owner.sessionId) : null;
+      return !!session && String(session.started_at || '') === owner!.startedAt;
+    },
+    appendComposerAttachment: (owner: { sessionId: number; startedAt: string }, attachment: unknown) => {
+      if (!owner || !sessions.has(owner.sessionId)) return false;
+      appended.push(attachment);
+      return true;
+    },
+    removeComposerAttachment: (_owner: unknown, entry: unknown) => {
+      const index = appended.findIndex((item: any) => item.entry === entry);
+      if (index >= 0) appended.splice(index, 1);
+    },
     copyPathText: async () => {}, pushMessage: () => {}, openLightbox: () => {},
     inputEl: composer, isInteractiveFocusTarget: () => false, updateInputAffordance: () => {},
     // 本物は 5 行以上か 300 字超でチップにして true を返す（app.ts の stagePastedText）。
@@ -34,7 +55,7 @@ function fixture() {
   };
   const source = readFileSync(new URL('../src/app/attachments.ts', import.meta.url), 'utf8')
     .replace(/^import .*;\r?$/gm, '').replace(/^export /gm, '');
-  runInNewContext(new Bun.Transpiler({ loader: 'ts' }).transformSync(source) + '\nglobalThis.probe={pendingAttachFiles};', ctx);
+  runInNewContext(new Bun.Transpiler({ loader: 'ts' }).transformSync(source), ctx);
 
   async function paste(target: FakeElement, data: { text?: string; image?: boolean }) {
     const items = data.image
@@ -50,7 +71,7 @@ function fixture() {
     for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0));
     return event;
   }
-  return { composer, body, stagedTexts, pending: ctx.probe.pendingAttachFiles as unknown[], paste };
+  return { composer, body, stagedTexts, pending: appended, paste };
 }
 
 describe('window の paste 処理は、下の入力欄以外の文字入力欄への貼り付けを横取りしない', () => {
