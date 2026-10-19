@@ -1,6 +1,6 @@
 module many-ai-cli
 
-go 1.26.9
+go 1.26.8
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
@@ -8,7 +8,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/pelletier/go-toml/v2 v2.4.3
 	golang.org/x/crypto v0.57.0
-	golang.org/x/net v0.60.0
+	golang.org/x/net v0.58.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.46.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1

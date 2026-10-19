@@ -1,6 +1,7 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-10-16(金) 11:56:03 — 利用者指定で見送り台帳 D-01〜D-13 と custom_providers の制限を全件撤廃し、判断基準を利用者の使いやすさに改めた
+> 最終更新: 2026-10-19(月) 23:34:48 — 本線を Rust 版（develop）へ移したことに合わせて概要・構成・作業ルールを書き換えた
+> 2026-10-16(金) 11:56:03 — 利用者指定で見送り台帳 D-01〜D-13 と custom_providers の制限を全件撤廃し、判断基準を利用者の使いやすさに改めた
 > 2026-10-11(日) 20:36:31 — 共通UI部品・確認文言と機械検査の索引を追加
 > 2026-10-09(金) 19:36:22 — 全修正の普段のビルド元への反映を明文化
 > 2026-09-29(火) 21:14:45 — prompt-audit の指摘で、古くなった版数の段落を削り、サブコマンド表を現行の分岐に合わせ、`internal/` の列挙を索引への参照に替えた
@@ -19,9 +20,9 @@
 
 ## プロジェクト概要
 
-**今後の開発方針（2026-10-09 利用者指定）:** ソース改修・不具合修正はRust版を対象とし、Rust版をv1.0.0でリリースする予定。全ての修正は普段のビルド元への反映まで行う（`CLAUDE/development.md`）。Go版は現状のまま使う退役予定の版で、ソース改修・追加調査・回帰確認は行わない。以下のGo構成の記述は既存版の説明であり、Go版の改修・確認を指示するものではない。
+**開発方針（2026-10-09 利用者指定、2026-10-19 に本線を移行）:** 本線は Rust 版で、`develop` で開発し v1.0.0 でリリースする予定。全ての修正は普段のビルド元への反映まで行う（`CLAUDE/development.md`）。Go 版のソース（`cmd/` `internal/` `go.mod`）は凍結してあり、ビルド・改修・追加調査・回帰確認は行わない（Rust のテストが固定基準として読むだけ。`go/` へ移す予定）。
 
-**many-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI など。対応一覧は下の用語表の Provider 行）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / TypeScript）。
+**many-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI など。対応一覧は下の用語表の Provider 行）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。Rust の実行ファイル 2 本（Hub 常駐 + ラッパー機能の `many-ai-cli`、ランチャーの `many-ai-cli-launcher`）+ ブラウザ UI（xterm.js / TypeScript）。
 
 **仕様の正本**は README（公開仕様）とソースコード（実装仕様）。v0.3.x の設計書は [docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md) へ退避した（非公開・履歴）。リリースごとの変更は [CHANGELOG.md](CHANGELOG.md)。**実装状況をここに書き写さない**（すぐ古くなり、二重管理になる）。
 
@@ -30,7 +31,7 @@
 | 項目 | 値 |
 |------|------|
 | プロダクト名 / バイナリ名 | `many-ai-cli`（Windows: `many-ai-cli.exe`） |
-| サブコマンド | `serve` / `connect` / `setup` / `doctor` / `issue` / `wrap <provider>`（`<provider>` 単体でも同じ）/ `shell-init` / `stop` / `status` / `tray` / `profile-export` / `log-clean` / `uninstall` / `version`。ほかに `provider` と隠しサブコマンド `usage-relay` / `orchestrate`（正本は `cmd/many-ai-cli/main.go` のサブコマンド分岐） |
+| サブコマンド | `serve` / `connect` / `setup` / `doctor` / `issue` / `wrap <provider>`（`<provider>` 単体でも同じ）/ `shell-init` / `stop` / `status` / `tray` / `profile-export` / `log-clean` / `uninstall` / `version`。ほかに `provider` と隠しサブコマンド `usage-relay` / `orchestrate`（正本は `rust/src/cli.rs` のサブコマンド分岐） |
 | Hub URL | `http://127.0.0.1:47777/?token=<random>` |
 | 設定ファイル | `~/.many-ai-cli/config.yaml`（Win: `%USERPROFILE%\.many-ai-cli\config.yaml`） |
 | ログ | `~/.many-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl/.txt` |
@@ -41,22 +42,23 @@
 
 ## 技術スタック・ディレクトリ構成
 
-Go（クロスコンパイルで Win/Mac/Linux 単一バイナリ）/ PTY は `creack/pty`（Unix）+ `aymanbagabas/go-pty`（Windows ConPTY）/ HTTP は `net/http` / WS は `golang.org/x/net/websocket` / 設定は `gopkg.in/yaml.v3` / ログは `log/slog`。フロントは静的 HTML/CSS + TypeScript(ESM) + esbuild + vendored xterm.js を `web/dist/` へ出し `go:embed` で同梱。
+Rust 1.90.0（`rust/rust-toolchain.toml`。Cargo は `rust/Cargo.toml` の単一 package で、依存の版はそこに固定）/ 非同期は `tokio` / HTTP+WS は `axum`・`hyper` / PTY は `portable-pty` / 保存は `rusqlite`。フロントは静的 HTML/CSS + TypeScript(ESM) + esbuild + vendored xterm.js を `web/dist/` へ出し、`rust/build.rs` が検査して同梱する（`web/dist` が無いと cargo が止まるので、画面資材を先にビルドする）。
 
 ```
-cmd/many-ai-cli/main.go   単一バイナリのエントリポイント
-internal/hub/             HTTP+WS / セッション管理 / attach / spawn
-internal/wrapper/         PTY ラッパー（OS 別実装）/ attach inject
-internal/                 ほか機能別パッケージ（一覧と役割は .omitnix/index.json）
-web/src/                  フロントソース（web/dist/ は生成物・gitignore）
-docs/local/               設計書・plan 等（非公開）
+rust/src/bin/      実行ファイル 2 本（many-ai-cli / many-ai-cli-launcher）のエントリ
+rust/src/hub/      HTTP+WS / セッション管理 / attach / spawn
+rust/src/wrapper/  PTY ラッパー / 承認ルールの注入
+rust/src/          ほか機能別モジュール（一覧と役割は .omitnix/index.json）
+web/src/           フロントソース（web/dist/ は生成物・gitignore）
+cmd/ internal/     凍結した Go 版（ビルド・改修しない。go/ へ移す予定）
+docs/local/        設計書・plan 等（非公開）
 ```
 
 ## クロスプラットフォーム原則
 
-- **OS固有コードは build tag で分離**（例: `pty_unix.go` / `pty_windows.go`）
-- **パス操作は `filepath.Join` / `os.UserHomeDir`**（`/` ハードコード禁止）
-- **改行・PTY 動作の差異**は `internal/wrapper/` で吸収し、上位層は OS 非依存に保つ
+- **OS固有コードは `#[cfg(windows)]` / `#[cfg(unix)]` で分離**する
+- **パス操作は `Path` / `PathBuf::join`**（`/` ハードコード禁止）
+- **改行・PTY 動作の差異**は `rust/src/wrapper/` と `rust/src/terminal/` で吸収し、上位層は OS 非依存に保つ
 - **設定・ログのデフォルトディレクトリ**は全 OS 共通の `~/.many-ai-cli/`
 
 ## ローカルサーバの設計上の制約
@@ -68,7 +70,7 @@ docs/local/               設計書・plan 等（非公開）
 
 ## 設計原則の索引（本文は正本にある）
 
-事故から生まれた設計ルール。**本文はここに書かず、破る人が必ず開く場所に置いてある。** 機械検査があるものは、それが最終的な歯止め。
+事故から生まれた設計ルール。**本文はここに書かず、破る人が必ず開く場所に置いてある。** 機械検査があるものは、それが最終的な歯止め。`internal/` のパスと `Test...` は凍結した Go 版の正本で、Rust 版の対応箇所への付け替えは [pending](docs/local/pending_rust-design-index-remap.md) にある（ルール自体は Rust 版にもそのまま効く）。
 
 | ルール | 正本（本文はここ） | 機械検査 |
 |---|---|---|
@@ -107,9 +109,9 @@ docs/local/               設計書・plan 等（非公開）
 
 ビルド・コミット禁止、secrets-scan 責務、plan/bugfix/pending md の作成ルール等は、各利用者のグローバル AI 設定に従う（作者環境の例: `~/.claude/CLAUDE.md` と `~/.claude/guides/`）。本ファイルはプロジェクト固有ルールだけを扱う。
 
-- ビルドだけでなく **実行・Hub 起動・ブラウザリロードも全てユーザーが行う**（`go run` / `serve` / `stop` / 再起動 / ブラウザリロード等）
-- **ビルドコマンドは `make build` が基本**。`bun run build` 単体は使わない。ユーザーの「ビルドして」は `make build` の実行指示を意味する
-- **AI がコードを編集したら、ビルドせず構文だけ確認してよい**（Go は `gofmt -e`、TS は **`web` ディレクトリで** `bun run check`。リポジトリ直下に `package.json` は無く、直下で叩くと `Script not found` になる）。ただし**構文が通ることは動作の証明ではない**。AI 側で保証できるのは「parse が通る」までと明示する
+- ビルドだけでなく **実行・Hub 起動・ブラウザリロードも全てユーザーが行う**（`cargo run` / `serve` / `stop` / 再起動 / ブラウザリロード等）
+- **ビルドコマンドは `make build` が基本**（画面資材 → `cargo build` の debug。毎日の試用は `scripts/rust-local.ps1`）。`bun run build` 単体は使わない。ユーザーの「ビルドして」は `make build` の実行指示を意味する
+- **AI がコードを編集したら、ビルドせず構文だけ確認してよい**（Rust は `cargo +1.90.0 fmt --manifest-path rust/Cargo.toml -- --check`、TS は **`web` ディレクトリで** `bun run check`。リポジトリ直下に `package.json` は無く、直下で叩くと `Script not found` になる）。ただし**構文が通ることは動作の証明ではない**。AI 側で保証できるのは「parse が通る」までと明示する
 - `many-ai-cli` 自身のセッションログは情報密度が低い。承認検出のバグ調査では、実際に動いている AI CLI 本体が書き出す生ログを見ること
 
 ## 監査・リリース証拠の境界
@@ -127,7 +129,7 @@ docs/local/               設計書・plan 等（非公開）
 |---|---|
 | 調査・読み取り・質問応答 | （本ファイルのみ。`CLAUDE/*` は読まない） |
 | Rust移行の看板・現在地・次の1個・再開 | [マスター計画](docs/local/plan_rust-migration-execution.md#看板の現在地) → [台帳・看板運用](docs/local/reference/manual_rust-migration-board.md)（ローカル資料） |
-| 実装・コーディング（Go / TypeScript）、共通UI部品・確認文言 | `CLAUDE/coding.md` / [docs/ui-components.md](docs/ui-components.md) / `scripts/check-ui-components.mjs`（Validate CI） |
+| 実装・コーディング（Rust / TypeScript）、共通UI部品・確認文言 | `CLAUDE/coding.md` / [docs/ui-components.md](docs/ui-components.md) / `scripts/check-ui-components.mjs`（Validate CI） |
 | Rust版のローカルビルド・起動・停止（手元の手順） | [reference_rust-local-build.md](docs/local/reference/reference_rust-local-build.md)（ローカルに存在する場合） |
 | ビルド・配布・クロスコンパイル | `CLAUDE/deployment.md` |
 | 全修正のビルド元への反映・context分割・docs命名・AI作業モデル・plan自走/停止条件 | `CLAUDE/development.md` |

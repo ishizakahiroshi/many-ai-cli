@@ -4,7 +4,7 @@ function Resolve-RustLocalSource {
     param(
         [Parameter(Mandatory)][string]$Repo,
         [string]$Source,
-        [string]$Branch = 'dots/rust-recovery-resume-3',
+        [string]$Branch = 'develop',
         [switch]$RemoteCandidate
     )
 

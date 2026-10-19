@@ -21,7 +21,7 @@ try {
         New-Item -ItemType Directory -Path (Join-Path $dir 'rust') -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $dir 'rust/Cargo.toml') -Value '# synthetic fixture'
     }
-    $script:listing = @("worktree $old", 'HEAD fixture', 'detached', '', "worktree $canonical", 'HEAD fixture', 'branch refs/heads/dots/rust-recovery-resume-3', '')
+    $script:listing = @("worktree $old", 'HEAD fixture', 'detached', '', "worktree $canonical", 'HEAD fixture', 'branch refs/heads/develop', '')
     if ((Resolve-RustLocalSource -Repo $testRoot) -ne $canonical) { throw 'Daily build selected old copy.' }
     $script:listing = @("worktree $old", 'HEAD fixture', 'detached', '')
     Assert-Throws { Resolve-RustLocalSource -Repo $testRoot }
@@ -30,7 +30,7 @@ try {
     $calls = $script:gitCalls
     if ($null -ne (Resolve-RustLocalSource -Repo $testRoot -RemoteCandidate)) { throw 'Explicit remote selection used daily source.' }
     if ($calls -ne $script:gitCalls) { throw 'Explicit source/candidate made an unnecessary Git call.' }
-    $script:listing = @("worktree $testRoot", 'branch refs/heads/dots/rust-recovery-resume-3', '')
+    $script:listing = @("worktree $testRoot", 'branch refs/heads/develop', '')
     Assert-Throws { Resolve-RustLocalSource -Repo $testRoot }
     'Source selection: 6 regression cases passed.'
 } finally {

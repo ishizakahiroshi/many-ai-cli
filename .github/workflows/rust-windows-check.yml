@@ -2,7 +2,8 @@ name: Rust Windows check
 
 on:
   push:
-    branches: ['dots/rust-recovery-resume-3']
+    # 本線は develop（2026-10-19 に Rust 版の本線を develop へ移した）
+    branches: ['develop']
     paths:
       - 'rust/**'
       - 'web/**'
@@ -34,7 +35,7 @@ concurrency:
 
 jobs:
   windows-check:
-    if: github.ref == 'refs/heads/dots/rust-recovery-resume-3'
+    if: github.ref == 'refs/heads/develop'
     runs-on: windows-2022
     timeout-minutes: 45
     env:

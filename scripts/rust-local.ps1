@@ -3,7 +3,7 @@
   many-ai-cli の Rust 候補を、手元でワンコマンドでビルドし、隔離（trial）で起動する。
 
 .DESCRIPTION
-  - 通常は修正元のworktreeをそのまま使い、未commit変更を含む画面資材（Bun）と Rust（cargo +1.90.0）をビルドする。
+  - 通常は修正元（develop を開いている作業フォルダ。ふだん使うリポジトリのフォルダ）をそのまま使い、未commit変更を含む画面資材（Bun）と Rust（cargo +1.90.0）をビルドする。
   - -Branch を明示した候補検査だけ、リモートから別フォルダへ取得する。
   - 起動は必ず trial モード（実際の ~/.many-ai-cli と、ポート 47777 の Go 版 Hub には触れない）。
   - 既存の Go 版や実 home は変更しない。作るのは $Worktree と $TrialRoot の中だけ。
@@ -26,7 +26,7 @@ param(
     [switch]$CopySettings,   # 実際の config.yaml を trial root へコピー（読むだけ・実物は変更しない。秘密を含む）
     [switch]$Real,           # trial でなく通常モード。ただし home を F:\build\rust-home に向け、実際の ~/.many-ai-cli・DB・Go 版の Hub には触れない
     [switch]$CopyDb,         # -Real のとき、DB（any-ai-cli.db と -wal/-shm）のスナップショットも、コピーして持ち込む（予定の実行が二重に走る可能性があるので既定では持ち込まない）
-    [string]$Branch = 'dots/rust-recovery-resume-3',
+    [string]$Branch = 'develop',
     [string]$CodexHome,      # -Real の Hub に CODEX_HOME を渡す（例: %USERPROFILE%\.codex を展開した値）。「全部更新」で、本物の Codex のインストールを更新する。省略時は実 home の .codex（あれば）を渡す
     [switch]$IsolateCodex,   # -CodexHome の既定（実 home の .codex）を使わず、Codex も仮 home の中だけで動かす。仮 home の Codex は実 home の bin と食い違うので、「全部更新」は通らない
     [string]$Source,         # 手元の worktree（rust\Cargo.toml があるフォルダ）を、取得せずそのままビルドする。push 不要。-Stop も同じ -Source を付ける

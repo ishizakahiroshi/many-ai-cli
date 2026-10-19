@@ -1,73 +1,45 @@
-BINARY            := dist/many-ai-cli.exe
-LAUNCHER_BINARY   := dist/many-ai-cli-launcher.exe
-LINUX_BINARY      := dist/linux/many-ai-cli
-MAIN              := ./cmd/many-ai-cli
-LAUNCHER_MAIN     := ./cmd/many-ai-cli-launcher
+RUST_TOOLCHAIN    := 1.90.0
+RUST_MANIFEST     := rust/Cargo.toml
+BINARY            := rust/target/debug/many-ai-cli.exe
 
-# ローカル（make）ビルドでも稼働中 Hub の素性を判別できるよう、git commit と
-# その日時を ldflags で注入する。引用符を含むコマンド（powershell 等）は GnuWin32
-# make の $(shell) で CreateProcess に失敗するため、引用符不要の git のみで構成する。
-# buildTime には HEAD のコミット日時（ISO 8601）を入れる（=どの版から建てたか判別用。
-# リリースは .goreleaser.yaml が実ビルド日時 {{ .Date }} を入れる）。未注入でも main
-# 側は空文字で正常動作する（致命的依存はない）。
+# 本線は Rust 版（2026-10-19 から）。Go 版のソースは凍結して置いてあり（go/ へ移す予定）、
+# この Makefile からはビルドしない。毎日の試用ビルドと起動は scripts/rust-local.ps1
+# が受け持ち、ここは同じ手順（画面資材 → cargo）を make の 1 語で呼べるようにするだけ。
 #
-# version はローカル `make build` でも `git describe` の "祖先タグ + 距離 + sha" 形式
-# (例: v0.3.3-21-g3664cac) を埋め込む。これがないと displayVersion() は version="dev"
-# fallback に入り `git describe --tags --abbrev=0` を呼ぶため、develop が main の最新
-# タグを取り込み損ねていると静かに古いタグ（例 v0.3.3）だけを表示してしまう
-# (bugfix_develop-version-stale-v0.3.4_2026-06-22 の根本対策)。--always --dirty を
-# 付けることで「タグから距離が離れている = backport を取り込み損ねている」「dirty 付き
-# = uncommitted のままビルドした」が Hub UI に visual に出る。Release ビルド
-# (goreleaser) は .goreleaser.yaml の {{ .Version }} 注入で `0.3.4` のクリーンな版数を
-# 入れるので、本注入はローカル make build のときだけ意味を持つ。
-GIT_COMMIT        := $(shell git rev-parse --short HEAD)
-BUILD_TIME        := $(shell git show -s --format=%cI HEAD)
-GIT_VERSION       := $(shell git describe --tags --always --dirty)
-GO_LDFLAGS        := -X main.version=$(GIT_VERSION) -X main.gitCommit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME)
+# 版数・commit・日時は rust/build.rs が MANY_AI_BUILD_VERSION / _COMMIT / _TIME から
+# 埋め込む。git describe の "祖先タグ + 距離 + sha" 形式（例: v0.9.0-160-g7da5a51-dirty）を
+# 渡すので、タグから離れていることと uncommitted のままビルドしたことが画面で分かる。
+# 引用符を含むコマンド（powershell 等）は GnuWin32 make の $(shell) で CreateProcess に
+# 失敗するため、引用符不要の git のみで構成する。
+export MANY_AI_BUILD_COMMIT  := $(shell git rev-parse --short HEAD)
+export MANY_AI_BUILD_TIME    := $(shell git show -s --format=%cI HEAD)
+export MANY_AI_BUILD_VERSION := $(shell git describe --tags --always --dirty)
 
-# 調査用の観測コード（instrumentation.json の台帳に載るもの）は build tag での
-# オプトイン。ローカルの make ビルドだけが maidebug を渡し、リリース
-# (.goreleaser.yaml) は何も渡さないので成果物には入らない。付け忘れたらクリーンな
-# 側へ倒れる。リリース相当を手元で試すときは `make build-windows GO_TAGS=`。
-# web 側の対応する切り替えは MAI_DEBUG（web/scripts/build.mjs）。
-GO_TAGS           ?= maidebug
+.PHONY: build build-web build-rust build-release clean run fmt fmt-check debug-purge debug-restore
 
-# gofmt の検査は scripts/check-gofmt.mjs が持つ（走査範囲の限定と、CRLF を無視した
-# 比較の 2 つが要るため make の 1 行では書けない。理由は同スクリプト冒頭）。
-
-.PHONY: build build-web build-windows build-launcher build-linux deploy-wsl clean run fmt fmt-check debug-purge debug-restore
-
-build: build-windows build-launcher build-linux
+build: build-rust
 
 build-web:
-	cd web && bun install && bun run build -- --debug
+	cd web && bun install --frozen-lockfile && bun run build
 
-build-windows: build-web
-	go-winres make --out cmd/many-ai-cli/rsrc
-	go build -tags "$(GO_TAGS)" -ldflags "$(GO_LDFLAGS)" -o $(BINARY) $(MAIN)
+# rust/build.rs は web/dist を検査して同梱するので、画面資材を先に作る。
+build-rust: build-web
+	cargo +$(RUST_TOOLCHAIN) build --locked --manifest-path $(RUST_MANIFEST) --bins
 
-build-launcher:
-	go-winres make --in winres/winres-launcher.json --out cmd/many-ai-cli-launcher/rsrc
-	go build -o $(LAUNCHER_BINARY) $(LAUNCHER_MAIN)
+build-release: build-web
+	cargo +$(RUST_TOOLCHAIN) build --locked --manifest-path $(RUST_MANIFEST) --release --bins
 
-build-linux: build-web
-	cmd /C "if not exist dist\linux mkdir dist\linux"
-	cmd /C "set CGO_ENABLED=0&& set GOOS=linux&& set GOARCH=amd64&& go build -tags $(GO_TAGS) -o $(LINUX_BINARY) $(MAIN)"
-
-deploy-wsl:
-	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy-wsl.ps1
-
-run: build-windows
+run: build-rust
 	$(BINARY) serve
 
 clean:
-	rm -f $(BINARY) $(LAUNCHER_BINARY) $(LINUX_BINARY) cmd/many-ai-cli/rsrc_windows_*.syso cmd/many-ai-cli-launcher/rsrc_windows_*.syso
+	cargo +$(RUST_TOOLCHAIN) clean --manifest-path $(RUST_MANIFEST)
 
 fmt-check:
-	node scripts/check-gofmt.mjs
+	cargo +$(RUST_TOOLCHAIN) fmt --manifest-path $(RUST_MANIFEST) -- --check
 
 fmt:
-	node scripts/check-gofmt.mjs --fix
+	cargo +$(RUST_TOOLCHAIN) fmt --manifest-path $(RUST_MANIFEST)
 
 debug-purge:
 	node scripts/check-instrumentation.mjs --purge --id=$(id)
