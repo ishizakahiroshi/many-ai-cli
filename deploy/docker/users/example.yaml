@@ -36,7 +36,7 @@ services:
       - "127.0.0.1:47801:48000"
     volumes:
       - aac-home-example:/home/ubuntu
-      - /srv/any-ai-cli/work/example:/home/ubuntu/work
+      - /srv/any-ai-cli/work/example:/home/ubuntu/work # doxguard: allow /home/ubuntu/
     # Keep each user's container on a dedicated network so other user
     # containers cannot reach the Hub TCP port directly.
     networks:

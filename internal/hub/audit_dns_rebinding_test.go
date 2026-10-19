@@ -51,7 +51,7 @@ func TestPrivateNetworkBlockingDialContext_DialsResolvedIPLiteral(t *testing.T) 
 // 弾かれることを assert する（既存 SSRF ガードの基本動作）。
 func TestPrivateNetworkBlockingDialContext_BlocksPrivateIP(t *testing.T) {
 	withStubLookup(t, func(_ context.Context, _ string) ([]net.IPAddr, error) {
-		return []net.IPAddr{{IP: net.ParseIP("192.168.1.5")}}, nil
+		return []net.IPAddr{{IP: net.ParseIP("192.168.1.5")}}, nil // doxguard: allow 192.168.1.5
 	})
 
 	nextCalled := false

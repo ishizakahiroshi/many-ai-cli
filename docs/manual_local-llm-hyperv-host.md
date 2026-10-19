@@ -13,8 +13,8 @@ LM Studio をホスト側で使う場合も基本は同じ（ホスト側で動�
 - Ollama: `0.30.6`
 - GPU: NVIDIA GeForce RTX 4060 / VRAM 8188 MiB
 - Ollama API ポート: `11434`
-- 外部スイッチ側ホスト IP: `192.168.11.50`
-- Default Switch 側ホスト IP: `172.20.224.1`
+- 外部スイッチ側ホスト IP: `192.0.2.50`
+- Default Switch 側ホスト IP: `198.51.100.1`
 
 API をインターネットへ公開しない。ルーターのポート転送は設定しない。
 
@@ -82,7 +82,7 @@ New-NetFirewallRule `
     -Action Allow `
     -Protocol TCP `
     -LocalPort 11434 `
-    -RemoteAddress 192.168.11.0/24 `
+    -RemoteAddress 192.0.2.0/24 `
     -Profile Private
 ```
 
@@ -95,7 +95,7 @@ New-NetFirewallRule `
     -Action Allow `
     -Protocol TCP `
     -LocalPort 11434 `
-    -RemoteAddress 172.20.224.0/20 `
+    -RemoteAddress 198.51.100.0/24 `
     -Profile Private
 ```
 
@@ -143,15 +143,15 @@ ollama ps
 外部スイッチを使用している場合:
 
 ```powershell
-Test-NetConnection 192.168.11.50 -Port 11434
-Invoke-RestMethod http://192.168.11.50:11434/api/tags
+Test-NetConnection 192.0.2.50 -Port 11434
+Invoke-RestMethod http://192.0.2.50:11434/api/tags
 ```
 
 Default Switch を使用している場合:
 
 ```powershell
-Test-NetConnection 172.20.224.1 -Port 11434
-Invoke-RestMethod http://172.20.224.1:11434/api/tags
+Test-NetConnection 198.51.100.1 -Port 11434
+Invoke-RestMethod http://198.51.100.1:11434/api/tags
 ```
 
 成功条件:
@@ -169,7 +169,7 @@ TcpTestSucceeded : True
 
 ```yaml
 ollama:
-  base_url: "http://192.168.11.50:11434"
+  base_url: "http://192.0.2.50:11434"
   allow_private_hosts: true
 ```
 
@@ -177,7 +177,7 @@ Default Switch の場合:
 
 ```yaml
 ollama:
-  base_url: "http://172.20.224.1:11434"
+  base_url: "http://198.51.100.1:11434"
   allow_private_hosts: true
 ```
 
@@ -211,11 +211,11 @@ New-NetFirewallRule `
     -Action Allow `
     -Protocol TCP `
     -LocalPort 1234 `
-    -RemoteAddress 192.168.11.0/24 `
+    -RemoteAddress 192.0.2.0/24 `
     -Profile Private
 ```
 
-Default Switch 側なら `-RemoteAddress 172.20.224.0/20` のようにゲストのサブネットに合わせる。
+Default Switch 側なら `-RemoteAddress 198.51.100.0/24` のようにゲストのサブネットに合わせる。
 
 ### ゲスト側: 疎通確認
 

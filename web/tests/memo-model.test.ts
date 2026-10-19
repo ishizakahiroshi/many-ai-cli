@@ -93,7 +93,7 @@ test('resolveMemoPathTarget leaves absolute paths untouched', () => {
 });
 
 test('resolveMemoPathTarget resolves a relative path against the memo project', () => {
-  expect(resolveMemoPathTarget('docs\\local\\plan_x.md', 'D:\\dev\\repo')).toBe('D:\\dev\\repo\\docs\\local\\plan_x.md');
+  expect(resolveMemoPathTarget('docs\\local\\plan_x.md', 'D:\\dev\\repo')).toBe('D:\\dev\\repo\\docs\\local\\plan_x.md'); // doxguard: allow D:\\dev\\
 });
 
 test('resolveMemoPathTarget returns the candidate as-is when the memo has no project (unclassified)', () => {
@@ -103,13 +103,13 @@ test('resolveMemoPathTarget returns the candidate as-is when the memo has no pro
 // C4: セッションの cwd と memo.project の突き合わせ。project_id（Hub が非同期に解決する
 // git root）ではなく cwd で判定する理由は memo-model.ts のコメント参照。
 test('cwdMatchesMemoProject matches when cwd equals the project (case/backslash insensitive)', () => {
-  expect(cwdMatchesMemoProject('D:\\dev\\repo', 'D:\\dev\\repo')).toBe(true);
-  expect(cwdMatchesMemoProject('D:\\Dev\\Repo', 'd:\\dev\\repo')).toBe(true);
+  expect(cwdMatchesMemoProject('D:\\dev\\repo', 'D:\\dev\\repo')).toBe(true); // doxguard: allow D:\\dev\\
+  expect(cwdMatchesMemoProject('D:\\Dev\\Repo', 'd:\\dev\\repo')).toBe(true); // doxguard: allow D:\\Dev\\ doxguard: allow d:\\dev\\
   expect(cwdMatchesMemoProject('/repo/a', '/repo/a')).toBe(true);
 });
 
 test('cwdMatchesMemoProject matches a cwd nested under the project (mixed separators)', () => {
-  expect(cwdMatchesMemoProject('D:\\dev\\repo\\sub\\dir', 'D:\\dev\\repo')).toBe(true);
+  expect(cwdMatchesMemoProject('D:\\dev\\repo\\sub\\dir', 'D:\\dev\\repo')).toBe(true); // doxguard: allow D:\\dev\\
   expect(cwdMatchesMemoProject('/repo/a/sub', '/repo/a')).toBe(true);
 });
 

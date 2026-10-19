@@ -44,7 +44,7 @@ test('live status: Cursor Agent combines follow-up state with usage percent', ()
     '  → Add a follow-up        ctrl+c to stop',
     '',
     '  Auto · 12.1%',
-    '  C:\\dev\\github\\public\\many-ai-cli · develop',
+    '  C:\\dev\\github\\public\\many-ai-cli · develop', // doxguard: allow C:\\dev\\
   ];
   assert.equal(extractCursorAgentLiveStatusFromLines(lines), 'Add a follow-up · Auto · 12.1%');
 });

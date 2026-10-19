@@ -208,7 +208,7 @@ function row(partial: Partial<HandoffListItem> & Pick<HandoffListItem, 'sessionI
   return {
     live: false,
     providerLabel: 'Claude Code',
-    cwd: 'D:\\dev\\github\\public\\many-ai-cli',
+    cwd: 'D:\\dev\\github\\public\\many-ai-cli', // doxguard: allow D:\\dev\\
     ...partial,
   };
 }
@@ -228,7 +228,7 @@ describe('orderHandoffList', () => {
 });
 
 describe('handoffListMatches', () => {
-  const item = row({ sessionID: 64, providerLabel: 'Codex CLI', cwd: 'D:\\dev\\github\\public\\many-ai-cli' });
+  const item = row({ sessionID: 64, providerLabel: 'Codex CLI', cwd: 'D:\\dev\\github\\public\\many-ai-cli' }); // doxguard: allow D:\\dev\\
 
   test('blank query keeps every row', () => {
     expect(handoffListMatches(item, '   ')).toBe(true);

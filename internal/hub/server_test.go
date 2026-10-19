@@ -634,7 +634,7 @@ func TestExtractBannerModel(t *testing.T) {
 			lines: []string{
 				"▐▛███▜▌ Claude Code v2.1.162",
 				"▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max",
-				"  ▘▘ ▝▝  C:\\dev\\many-ai-cli",
+				"  ▘▘ ▝▝  C:\\dev\\many-ai-cli", // doxguard: allow C:\\dev\\
 			},
 			want:       "Opus 4.8 (1M context)",
 			wantEffort: "medium",
@@ -713,31 +713,31 @@ func TestExtractBannerModel(t *testing.T) {
 		{
 			name:     "cursor-agent: cwd·branch 行直上",
 			provider: "cursor-agent",
-			cwd:      `D:\dev\many-ai-cli`,
+			cwd:      `D:\dev\many-ai-cli`, // doxguard: allow D:\dev\
 			lines: []string{
 				"  → Plan, search, build anything",
 				"   Auto",
-				`  D:\dev\many-ai-cli · develop`,
+				`  D:\dev\many-ai-cli · develop`, // doxguard: allow D:\dev\
 			},
 			want: "Auto",
 		},
 		{
 			name:     "cursor-agent: 使用率サフィックスを除去",
 			provider: "cursor-agent",
-			cwd:      `D:\dev\many-ai-cli`,
+			cwd:      `D:\dev\many-ai-cli`, // doxguard: allow D:\dev\
 			lines: []string{
 				"  Auto · 7.4%",
-				`  D:\dev\many-ai-cli · develop`,
+				`  D:\dev\many-ai-cli · develop`, // doxguard: allow D:\dev\
 			},
 			want: "Auto",
 		},
 		{
 			name:     "cursor-agent: 直上がプロンプト残骸なら除外",
 			provider: "cursor-agent",
-			cwd:      `D:\dev\many-ai-cli`,
+			cwd:      `D:\dev\many-ai-cli`, // doxguard: allow D:\dev\
 			lines: []string{
 				"  → 今日の日時は？",
-				`  D:\dev\many-ai-cli · develop`,
+				`  D:\dev\many-ai-cli · develop`, // doxguard: allow D:\dev\
 			},
 			want: "",
 		},

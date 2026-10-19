@@ -18,7 +18,7 @@ import {
 import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
 
 // 合成データ。実在のパスは書かない（公開ファイルの層 1 防御）。
-const PARENT = 'C:\\dev\\public';
+const PARENT = 'C:\\dev\\public'; // doxguard: allow C:\\dev\\
 const SUBDIRS = [
   'PlainSheet',
   'ai-audit-prompts',
@@ -94,17 +94,17 @@ test('sortCwdSubdirItems: お気に入りが先頭グループ、非お気に入
 test('sortCwdSubdirItems: 各グループ内の並びは compareCwdByBasename と一致する', () => {
   // 3 つのお気に入りを設定してもう少し複雑なケース
   const paths = [
-    'C:\\dev\\public\\Zebra',
-    'C:\\dev\\public\\apple',
-    'C:\\dev\\public\\Banana',
-    'C:\\dev\\public\\cherry',
-    'C:\\dev\\public\\Date',
-    'C:\\dev\\public\\elderberry',
+    'C:\\dev\\public\\Zebra', // doxguard: allow C:\\dev\\
+    'C:\\dev\\public\\apple', // doxguard: allow C:\\dev\\
+    'C:\\dev\\public\\Banana', // doxguard: allow C:\\dev\\
+    'C:\\dev\\public\\cherry', // doxguard: allow C:\\dev\\
+    'C:\\dev\\public\\Date', // doxguard: allow C:\\dev\\
+    'C:\\dev\\public\\elderberry', // doxguard: allow C:\\dev\\
   ];
   const favSet = new Set([
-    'C:\\dev\\public\\Banana',
-    'C:\\dev\\public\\Zebra',
-    'C:\\dev\\public\\elderberry',
+    'C:\\dev\\public\\Banana', // doxguard: allow C:\\dev\\
+    'C:\\dev\\public\\Zebra', // doxguard: allow C:\\dev\\
+    'C:\\dev\\public\\elderberry', // doxguard: allow C:\\dev\\
   ]);
   const sorted = sortCwdSubdirItems(paths, favSet);
 
@@ -135,13 +135,13 @@ test('sortCwdSubdirItems: 空配列を安全に処理する', () => {
 
 test('splitCwdTypeahead: 入力値を親・区切り・打ちかけセグメントに分割する', () => {
   // 末尾が区切りでない: 最後の区切りの位置で parent と partial に分ける
-  assert.deepEqual(splitCwdTypeahead('C:\\dev\\public\\o'), { parent: 'C:\\dev\\public', sep: '\\', partial: 'o' });
+  assert.deepEqual(splitCwdTypeahead('C:\\dev\\public\\o'), { parent: 'C:\\dev\\public', sep: '\\', partial: 'o' }); // doxguard: allow C:\\dev\\
   assert.deepEqual(splitCwdTypeahead('/srv/work/y'), { parent: '/srv/work', sep: '/', partial: 'y' });
 
   // 末尾が区切り: partial は空文字、parent は末尾の区切りを落とした値
-  assert.deepEqual(splitCwdTypeahead('C:\\dev\\public\\'), { parent: 'C:\\dev\\public', sep: '\\', partial: '' });
+  assert.deepEqual(splitCwdTypeahead('C:\\dev\\public\\'), { parent: 'C:\\dev\\public', sep: '\\', partial: '' }); // doxguard: allow C:\\dev\\
   // 区切りが 2 つ連続して終わる場合も全部落とす
-  assert.deepEqual(splitCwdTypeahead('C:\\dev\\public\\\\'), { parent: 'C:\\dev\\public', sep: '\\', partial: '' });
+  assert.deepEqual(splitCwdTypeahead('C:\\dev\\public\\\\'), { parent: 'C:\\dev\\public', sep: '\\', partial: '' }); // doxguard: allow C:\\dev\\
 
   // ドライブ直下の特別扱い: 落とした結果が "D:" 形式になったら区切りを 1 つ残す
   assert.deepEqual(splitCwdTypeahead('C:\\o'), { parent: 'C:\\', sep: '\\', partial: 'o' });
@@ -158,7 +158,7 @@ test('splitCwdTypeahead: 入力値を親・区切り・打ちかけセグメン�
 // ---- filterCwdSubdirItems ----
 // 由来: docs/local/plan_spawn-cwd-subdir-typeahead.md
 
-const TYPEAHEAD_PARENT = 'C:\\dev\\public';
+const TYPEAHEAD_PARENT = 'C:\\dev\\public'; // doxguard: allow C:\\dev\\
 const TYPEAHEAD_SUBDIRS = ['orbit', 'omega', 'motor', 'zephyr'].map(n => TYPEAHEAD_PARENT + '\\' + n);
 
 test('filterCwdSubdirItems: partial が空文字なら sortCwdSubdirItems と一致する（不変条件）', () => {
@@ -214,7 +214,7 @@ test('filterCwdSubdirItems: 一致 0 件で空配列を返す', () => {
 // 由来: docs/local/plan_spawn-cwd-subdir-typeahead.md
 
 test('joinCwdChild: 親が区切りで終わっていなければ区切りを 1 つ挟む', () => {
-  assert.equal(joinCwdChild('C:\\dev\\public', '\\', 'orbit'), 'C:\\dev\\public\\orbit');
+  assert.equal(joinCwdChild('C:\\dev\\public', '\\', 'orbit'), 'C:\\dev\\public\\orbit'); // doxguard: allow C:\\dev\\
   assert.equal(joinCwdChild('/srv/work', '/', 'orbit'), '/srv/work/orbit');
 });
 

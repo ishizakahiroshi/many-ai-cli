@@ -88,7 +88,7 @@ profiles:
     host: remote.example.com
     user: your-user
     hub_port: 47777       # 0 = tự chọn cổng
-    cwd: /home/your-user/projects
+    cwd: /home/your-user/projects # doxguard: allow /home/your-user/
 ```
 
 `host` có thể là alias trong `~/.ssh/config`, hoặc dạng `user@host`.

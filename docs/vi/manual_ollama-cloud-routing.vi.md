@@ -169,14 +169,14 @@ Ví dụ Hub trong guest Hyper-V, Ollama + GPU trên host Windows — set đích
 
 ```yaml
 ollama:
-  base_url: "http://192.168.11.50:11434"
+  base_url: "http://192.0.2.50:11434"
 ```
 
 Ví dụ phía Default Switch:
 
 ```yaml
 ollama:
-  base_url: "http://172.20.224.1:11434"
+  base_url: "http://198.51.100.1:11434"
 ```
 
 Giá trị này dùng cho cả lấy `/api/tags` của `/api/models` và inject `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` lúc spawn. **Không** gắn `/v1` hay `/api/tags` vào `base_url`.

@@ -34,7 +34,7 @@
 | 変数 | 説明 | 例 |
 |---|---|---|
 | `SSH_TARGET` | SSH 接続先（`user@host` またはエイリアス）。docker を叩ける権限が要る | `your-user@remote.example.com` |
-| `SSH_KEY` | 秘密鍵パス（config で指定済みなら空でよい） | `D:\dev\.ssh\id_ed25519` |
+| `SSH_KEY` | 秘密鍵パス（config で指定済みなら空でよい） | `<DEV_ROOT>\.ssh\id_ed25519` |
 | `USER_TAG` | サービス/コンテナ/volume を区別する名前 | `user1` |
 | `HUB_PORT` | host 側 publish ポート（手元と同番号にする） | `47801` |
 | `AAC_TAG` | 追従するイメージタグ（`latest`=main / `develop`=検証） | `latest` |
@@ -125,7 +125,7 @@ verify: `127.0.0.1:HUB_PORT` のみ。`0.0.0.0:HUB_PORT` や public IP が出た
 token はコンテナ初回起動時に自動生成され volume に永続化される。
 
 ```bash
-ssh SSH_TARGET 'bash -lc "docker exec aac-USER_TAG sh -c \"grep ^token: /home/ubuntu/.many-ai-cli/config.yaml\""'
+ssh SSH_TARGET 'bash -lc "docker exec aac-USER_TAG sh -c \"grep ^token: /home/ubuntu/.many-ai-cli/config.yaml\""' # doxguard: allow /home/ubuntu/
 ```
 
 verify: `token: ...` が取れる。**token はログ・チャットに残さない**（launcher は接続のたびに `token_command` で取り直すので、ここで控えた値はファイルに保存しない）。

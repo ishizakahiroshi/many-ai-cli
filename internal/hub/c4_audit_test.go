@@ -62,8 +62,8 @@ func TestSanitizeNotifySoundPrefUsesOnlyManagedAudio(t *testing.T) {
 }
 
 func TestLocalModelHTTPClientBlocksPrivateHostWithoutOptIn(t *testing.T) {
-	client := newLocalModelHTTPClient("http://10.0.0.1:11434/api/tags", 100*time.Millisecond, false)
-	_, err := client.Get("http://10.0.0.1:11434/api/tags")
+	client := newLocalModelHTTPClient("http://10.0.0.1:11434/api/tags", 100*time.Millisecond, false) // doxguard: allow 10.0.0.1
+	_, err := client.Get("http://10.0.0.1:11434/api/tags")                                           // doxguard: allow 10.0.0.1
 	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "private") {
 		t.Fatalf("private host request error = %v", err)
 	}

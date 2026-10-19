@@ -89,7 +89,7 @@
 
   // 最初の 1 以降だけを見て重複を判定する。前置き（経緯）の地の文に行頭数字が混じると
   // parseHubBlock がそれを擬似 option として拾うため（実例: 前置きの IP アドレス
-  // 192.168.68.100 が num=192 になる）、先頭から見ると正常なブロックを弾いてしまう。
+  // 192.168.68.100 が num=192 になる）、先頭から見ると正常なブロックを弾いてしまう。 // doxguard: allow 192.168.68.100
   function hasDuplicateNumFromFirstOne(nums) {
     const i1 = nums.indexOf(1);
     if (i1 < 0) return false;

@@ -20,7 +20,7 @@ func TestValidateNotifyBackend(t *testing.T) {
 		{"webhook https", config.NotifyBackendConfig{Type: "webhook", URL: "https://example.com/hook"}, false},
 		{"webhook http", config.NotifyBackendConfig{Type: "webhook", URL: "http://example.com/hook"}, false},
 		{"ntfy https with topic", config.NotifyBackendConfig{Type: "ntfy", URL: "https://ntfy.sh", Topic: "my-topic"}, false},
-		{"ntfy self-hosted lan", config.NotifyBackendConfig{Type: "ntfy", URL: "http://192.168.1.10:8080", Topic: "alerts"}, false},
+		{"ntfy self-hosted lan", config.NotifyBackendConfig{Type: "ntfy", URL: "http://192.168.1.10:8080", Topic: "alerts"}, false}, // doxguard: allow 192.168.1.10
 		{"webhook url with surrounding spaces", config.NotifyBackendConfig{Type: "webhook", URL: "  https://example.com/hook  "}, false},
 
 		// 異常系（拒否される）

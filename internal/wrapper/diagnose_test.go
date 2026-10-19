@@ -16,7 +16,7 @@ func TestClassifyStartFailure_ExecNotFound(t *testing.T) {
 }
 
 func TestClassifyStartFailure_TextualNotFound(t *testing.T) {
-	err := errors.New(`exec: "C:\\dev\\many-ai-cli\\codex": executable file not found in %PATH%`)
+	err := errors.New(`exec: "C:\\dev\\many-ai-cli\\codex": executable file not found in %PATH%`) // doxguard: allow C:\\dev\\
 	if got := classifyStartFailure(err); got != "exec_not_found" {
 		t.Fatalf("classifyStartFailure(textual) = %q, want %q", got, "exec_not_found")
 	}
