@@ -84,7 +84,7 @@ func (c *WSLConnector) run(ctx context.Context, p Profile, urlCh chan<- string, 
 	// MANY_AI_CLI_WSL_LAUNCHER marks "the user is reaching the WSL Hub from
 	// Windows via this launcher", so the Linux-side serve can default log_dir
 	// to the Windows %USERPROFILE% (so the Hub UI's open-folder buttons land
-	// in plain C:\Users\... instead of \\wsl$\... UNC). A bare `many-ai-cli
+	// in plain C:\Users\... instead of \\wsl$\... UNC). A bare `many-ai-cli // doxguard: allow C:\Users\
 	// serve` inside WSL (without this launcher) stays purely Linux-side.
 	shellCmd := fmt.Sprintf("export MANY_AI_CLI_WSL_LAUNCHER=1; exec %s serve --port %d", ShellQuote(binary), port)
 	wslArgs = append(wslArgs, "--", "bash", "-ilc", shellCmd)

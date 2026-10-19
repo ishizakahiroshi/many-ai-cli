@@ -123,17 +123,17 @@ func parseForEachRef(raw string) []gitRef {
 
 // toGithubHTTPSURL は origin の URL を GitHub HTTPS 形式に正規化する。
 // 対応形式:
-//   - git@github.com:owner/repo.git    → https://github.com/owner/repo
+//   - git@github.com:owner/repo.git    → https://github.com/owner/repo // doxguard: allow git@github.com
 //   - https://github.com/owner/repo.git → https://github.com/owner/repo
 //   - https://github.com/owner/repo    → https://github.com/owner/repo
-//   - ssh://git@github.com/owner/repo.git → https://github.com/owner/repo
+//   - ssh://git@github.com/owner/repo.git → https://github.com/owner/repo // doxguard: allow git@github.com
 //
 // github.com 以外（GitLab 等）は空文字を返す。
 func toGithubHTTPSURL(remote string) string {
 	if remote == "" {
 		return ""
 	}
-	// SCP-like: git@github.com:owner/repo.git
+	// SCP-like: git@github.com:owner/repo.git // doxguard: allow git@github.com
 	if strings.HasPrefix(remote, "git@") {
 		// 想定: git@<host>:<path>
 		colon := strings.Index(remote, ":")
@@ -159,7 +159,7 @@ func toGithubHTTPSURL(remote string) string {
 		return ""
 	}
 	host := u.Host
-	// ssh://git@github.com:22/... のようなポート付きを許容
+	// ssh://git@github.com:22/... のようなポート付きを許容 // doxguard: allow git@github.com
 	if idx := strings.Index(host, ":"); idx >= 0 {
 		host = host[:idx]
 	}

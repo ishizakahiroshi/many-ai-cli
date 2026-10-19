@@ -164,9 +164,9 @@ Rust本体・共用Web・不具合修正・機能追加は、利用者の普段�
 ### 作業完了時のファイル移動
 
 `plan_*.md` の作業が完了したら：
-1. `python D:\dev\tools\dev-scripts\check_archivable_plans.py` で対象を確認
+1. `python <DEV_ROOT>\tools\dev-scripts\check_archivable_plans.py` で対象を確認
 2. ユーザーに `docs/local/archive/` への移動を確認（`Y:1/N:0`）
-3. 承認を得たら `python D:\dev\tools\dev-scripts\check_archivable_plans.py --move` を実行
+3. 承認を得たら `python <DEV_ROOT>\tools\dev-scripts\check_archivable_plans.py --move` を実行
 4. **ファイル名は変えない**
 5. 移動後は、他ファイルからの相対リンクを grep で機械的に張り直す
 

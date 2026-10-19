@@ -152,7 +152,7 @@ Thông tin auth lưu trong volume `aac-home-<user>`, giữ sau restart container
 ### 5. Xác nhận token và giao cho chính chủ
 
 ```bash
-docker exec aac-<user> grep '^token:' /home/ubuntu/.many-ai-cli/config.yaml
+docker exec aac-<user> grep '^token:' /home/ubuntu/.many-ai-cli/config.yaml # doxguard: allow /home/ubuntu/
 # hoặc từ banner start:
 docker logs aac-<user> 2>&1 | grep -m1 'Open:'
 ```
@@ -259,9 +259,9 @@ docker run --rm hello-world
 # 2. User admin (tái dùng public key của private key admin hiện có <admin-key>.pem)
 adduser --disabled-password --gecos "" admin
 usermod -aG docker admin
-install -d -m 700 -o admin -g admin /home/admin/.ssh
+install -d -m 700 -o admin -g admin ~admin/.ssh
 # đưa output ssh-keygen -y -f <admin-key>.pem vào authorized_keys
-chmod 600 /home/admin/.ssh/authorized_keys && chown admin:admin /home/admin/.ssh/authorized_keys
+chmod 600 ~admin/.ssh/authorized_keys && chown admin:admin ~admin/.ssh/authorized_keys
 
 # 3. Ước lệ thư mục
 mkdir -p /opt/any-ai-cli/users /opt/any-ai-cli/templates /srv/any-ai-cli/work/admin

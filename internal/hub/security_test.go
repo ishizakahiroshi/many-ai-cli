@@ -175,9 +175,9 @@ func TestRequireTokenLoopbackBypassEnabled(t *testing.T) {
 func TestRequireTokenTrustedNetworkBypassEnabled(t *testing.T) {
 	s := newSecTestServer(t, t.TempDir())
 	s.cfg.Hub.AllowLoopbackWithoutToken = true
-	s.cfg.Hub.TrustedNetworks = []string{"172.19.0.1/32"}
+	s.cfg.Hub.TrustedNetworks = []string{"172.19.0.1/32"} // doxguard: allow 172.19.0.1
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.RemoteAddr = "172.19.0.1:34567"
+	req.RemoteAddr = "172.19.0.1:34567" // doxguard: allow 172.19.0.1
 	w := httptest.NewRecorder()
 	if !s.requireToken(w, req) {
 		t.Fatalf("expected trusted network request to pass, status=%d body=%s", w.Code, w.Body.String())
@@ -187,7 +187,7 @@ func TestRequireTokenTrustedNetworkBypassEnabled(t *testing.T) {
 func TestRequireTokenBypassRejectsUntrustedRemote(t *testing.T) {
 	s := newSecTestServer(t, t.TempDir())
 	s.cfg.Hub.AllowLoopbackWithoutToken = true
-	s.cfg.Hub.TrustedNetworks = []string{"172.19.0.1/32"}
+	s.cfg.Hub.TrustedNetworks = []string{"172.19.0.1/32"} // doxguard: allow 172.19.0.1
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.RemoteAddr = "203.0.113.10:34567"
 	w := httptest.NewRecorder()
@@ -219,10 +219,10 @@ func TestAllowedHubHost(t *testing.T) {
 }
 
 func TestAllowedHubHostConfig(t *testing.T) {
-	if got := isAllowedHubHost("10.8.0.1:47777", 47777); got {
+	if got := isAllowedHubHost("10.8.0.1:47777", 47777); got { // doxguard: allow 10.8.0.1
 		t.Fatal("isAllowedHubHost without configured allowed host = true, want false")
 	}
-	if got := isAllowedHubHost("10.8.0.1:47777", 47777, "10.8.0.1"); !got {
+	if got := isAllowedHubHost("10.8.0.1:47777", 47777, "10.8.0.1"); !got { // doxguard: allow 10.8.0.1
 		t.Fatal("isAllowedHubHost with configured allowed host = false, want true")
 	}
 }
@@ -248,10 +248,10 @@ func TestAllowedHubOrigin(t *testing.T) {
 }
 
 func TestAllowedHubOriginConfig(t *testing.T) {
-	if got := isAllowedHubOrigin("http://10.8.0.1:47777", 47777); got {
+	if got := isAllowedHubOrigin("http://10.8.0.1:47777", 47777); got { // doxguard: allow 10.8.0.1
 		t.Fatal("isAllowedHubOrigin without configured allowed host = true, want false")
 	}
-	if got := isAllowedHubOrigin("http://10.8.0.1:47777", 47777, "10.8.0.1"); !got {
+	if got := isAllowedHubOrigin("http://10.8.0.1:47777", 47777, "10.8.0.1"); !got { // doxguard: allow 10.8.0.1
 		t.Fatal("isAllowedHubOrigin with configured allowed host = false, want true")
 	}
 	// Tailscale serve 経由は HTTPS かつ外部ポート 443（hub ポートと不一致）。
@@ -332,10 +332,10 @@ func TestWSHandshakeAllowsLoopbackHostAndOrigin(t *testing.T) {
 
 func TestWSHandshakeAllowsConfiguredHostAndOrigin(t *testing.T) {
 	s := newSecTestServer(t, t.TempDir())
-	s.cfg.Hub.AllowedHosts = []string{"10.8.0.1"}
+	s.cfg.Hub.AllowedHosts = []string{"10.8.0.1"} // doxguard: allow 10.8.0.1
 	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
-	req.Host = "10.8.0.1:47777"
-	req.Header.Set("Origin", "http://10.8.0.1:47777")
+	req.Host = "10.8.0.1:47777"                       // doxguard: allow 10.8.0.1
+	req.Header.Set("Origin", "http://10.8.0.1:47777") // doxguard: allow 10.8.0.1
 	if err := s.wsHandshake(&websocket.Config{}, req); err != nil {
 		t.Fatalf("expected configured Host/Origin to pass: %v", err)
 	}
@@ -698,8 +698,8 @@ func TestIsUnder_CaseSensitivity(t *testing.T) {
 		t.Skip("Windows-only test")
 	}
 	// Windows: 大文字小文字違いでも配下と認識されるべき
-	base := `C:\Users\test`
-	target := `C:\users\TEST\sub`
+	base := `C:\Users\test`       // doxguard: allow C:\Users\
+	target := `C:\users\TEST\sub` // doxguard: allow C:\users\
 	if !isUnder(target, base) {
 		t.Fatalf("expected case-insensitive match on Windows: target=%s, base=%s", target, base)
 	}
@@ -821,7 +821,7 @@ func strconvQuote(s string) string {
 // --- C7: sanitizeGitErrMsg ---
 
 func TestSanitizeGitErrMsg_PathInStderr(t *testing.T) {
-	err := &sanitizeGitTestErr{msg: `git show abc: fatal: /home/user/.many-ai-cli/repo: not a git repo`}
+	err := &sanitizeGitTestErr{msg: `git show abc: fatal: /home/user/.many-ai-cli/repo: not a git repo`} // doxguard: allow /home/user/
 	got := sanitizeGitErrMsg(err)
 	if got == "" {
 		t.Fatal("expected non-empty sanitized message")

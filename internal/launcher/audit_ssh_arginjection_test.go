@@ -153,7 +153,7 @@ func TestValidateSSH_AllowsLegitimateValues(t *testing.T) {
 		{Name: "ip", Type: ProfileTypeSSH, Mode: SSHModeServe, Host: "198.51.100.10", User: "ubuntu"},
 		{Name: "host", Type: ProfileTypeSSH, Mode: SSHModeServe, Host: "ubuntu@example.com"},
 		{Name: "bin", Type: ProfileTypeSSH, Mode: SSHModeServe, Host: "h", Binary: "many-ai-cli"},
-		{Name: "key", Type: ProfileTypeSSH, Mode: SSHModeServe, Host: "h", IdentityFile: `C:\Users\My Name\.ssh\key.pem`},
+		{Name: "key", Type: ProfileTypeSSH, Mode: SSHModeServe, Host: "h", IdentityFile: `C:\Users\My Name\.ssh\key.pem`}, // doxguard: allow C:\Users\
 	} {
 		pf := &ProfilesFile{Version: 1, Profiles: []Profile{p}}
 		if err := Validate(pf); err != nil {

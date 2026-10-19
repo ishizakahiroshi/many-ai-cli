@@ -56,10 +56,10 @@ func TestSpawnCwdTooBroad(t *testing.T) {
 	var broad, okPaths []string
 	if runtime.GOOS == "windows" {
 		broad = []string{`C:\`, `D:\`, `C:\Windows`, `C:\Program Files`, `C:\Users`}
-		okPaths = []string{`D:\dev\myproject`, `C:\Users\someone\proj`, `C:\Windows\Temp\sub`}
+		okPaths = []string{`D:\dev\myproject`, `C:\Users\someone\proj`, `C:\Windows\Temp\sub`} // doxguard: allow D:\dev\ doxguard: allow C:\Users\
 	} else {
 		broad = []string{"/", "/etc", "/usr", "/var", "/home", "/root"}
-		okPaths = []string{"/home/someone/proj", "/etc/myapp/conf", "/var/www/site", "/opt/app"}
+		okPaths = []string{"/home/someone/proj", "/etc/myapp/conf", "/var/www/site", "/opt/app"} // doxguard: allow /home/someone/
 	}
 	// ホーム自身と全ユーザー親は両 OS 共通で拒否対象。
 	if home, err := os.UserHomeDir(); err == nil && home != "" {

@@ -42,7 +42,7 @@ func TestRedactKnownSecretPatterns(t *testing.T) {
 		{"generic API key field", "API_KEY=syntheticGenericAPIKey123", "syntheticGenericAPIKey123"},
 		{"password field", "db_password: syntheticDatabasePassword123", "syntheticDatabasePassword123"},
 		{"client secret field", "client_secret=syntheticClientSecret123", "syntheticClientSecret123"},
-		{"credential URL", "https://example-user:syntheticPassword123@example.test/db", "syntheticPassword123"},
+		{"credential URL", "https://example-user:syntheticPassword123@example.test/db", "syntheticPassword123"}, // doxguard: allow syntheticPassword123@example.test
 		{"private key", "-----BEGIN PRIVATE KEY-----\nsynthetic-private-material\n-----END PRIVATE KEY-----", "synthetic-private-material"},
 		// 2026-08-17 の監査 F-61。完成形を並べていた頃はこの 3 つが素通りしていた。
 		// いずれも many-ai-cli 自身の config.yaml に現れうるキー名（値は合成）。
@@ -119,10 +119,10 @@ func TestNormalizeHomeDir(t *testing.T) {
 		input string
 		want  string
 	}{
-		{`C:\Users\example-user\project\file.txt`, `~/project\file.txt`},
-		{`C:/Users/example-user/project/file.txt`, `~/project/file.txt`},
-		{`/home/example-user/project/file.txt`, `~/project/file.txt`},
-		{`/Users/example-user/project/file.txt`, `~/project/file.txt`},
+		{`C:\Users\example-user\project\file.txt`, `~/project\file.txt`}, // doxguard: allow C:\Users\
+		{`C:/Users/example-user/project/file.txt`, `~/project/file.txt`}, // doxguard: allow C:/Users/ doxguard: allow /Users/example-user/
+		{`/home/example-user/project/file.txt`, `~/project/file.txt`},    // doxguard: allow /home/example-user/
+		{`/Users/example-user/project/file.txt`, `~/project/file.txt`},   // doxguard: allow /Users/example-user/
 	}
 	for _, tt := range tests {
 		if got := normalizeHomeDir(tt.input); got != tt.want {
@@ -133,9 +133,9 @@ func TestNormalizeHomeDir(t *testing.T) {
 
 func TestRedactPrivatePaths(t *testing.T) {
 	tests := []string{
-		`D:\dev\kb\companies\synthetic.csv`,
-		`D:\dev\.ssh\synthetic-key.pem`,
-		`D:\dev\github\private\synthetic\config.yaml`,
+		`D:\dev\kb\companies\synthetic.csv`,           // doxguard: allow D:\dev\
+		`D:\dev\.ssh\synthetic-key.pem`,               // doxguard: allow D:\dev\
+		`D:\dev\github\private\synthetic\config.yaml`, // doxguard: allow D:\dev\
 		`/dev/github/private/synthetic/config.yaml`,
 	}
 	for _, input := range tests {
@@ -143,20 +143,20 @@ func TestRedactPrivatePaths(t *testing.T) {
 			t.Errorf("Redact(%q) = %q, want %q", input, got, redactedPrivatePath)
 		}
 	}
-	if got := Redact(`D:\dev\github\public\many-ai-cli`); got != `D:\dev\github\public\many-ai-cli` {
+	if got := Redact(`D:\dev\github\public\many-ai-cli`); got != `D:\dev\github\public\many-ai-cli` { // doxguard: allow D:\dev\
 		t.Errorf("public dev path changed: %q", got)
 	}
 }
 
 func TestRedactNetworkAndIdentity(t *testing.T) {
-	input := "loopback=127.0.0.1 v6loop=::1 private=192.0.2.10 v6=2001:db8::1234 public=ishizakahiroshi.dev@gmail.com personal=person@example.test host=ishiz.synthetic.lan"
+	input := "loopback=127.0.0.1 v6loop=::1 private=192.0.2.10 v6=2001:db8::1234 public=ishizakahiroshi.dev@gmail.com personal=person@example.test host=ishiz.synthetic.lan" // doxguard: allow person@example.test doxguard: allow ishizakahiroshi.dev@gmail.com
 	got := Redact(input)
 	for _, keep := range []string{"127.0.0.1", "::1", "ishizakahiroshi.dev@gmail.com"} {
 		if !strings.Contains(got, keep) {
 			t.Errorf("Redact() did not preserve %q: %q", keep, got)
 		}
 	}
-	for _, remove := range []string{"192.0.2.10", "2001:db8::1234", "person@example.test", "ishiz.synthetic.lan"} {
+	for _, remove := range []string{"192.0.2.10", "2001:db8::1234", "person@example.test", "ishiz.synthetic.lan"} { // doxguard: allow person@example.test
 		if strings.Contains(got, remove) {
 			t.Errorf("Redact() retained %q: %q", remove, got)
 		}
@@ -166,7 +166,7 @@ func TestRedactNetworkAndIdentity(t *testing.T) {
 func TestExtractAllowedConfig(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Hub.Port = 47777
-	cfg.Hub.LogDir = `C:\Users\example-user\.many-ai-cli\logs`
+	cfg.Hub.LogDir = `C:\Users\example-user\.many-ai-cli\logs` // doxguard: allow C:\Users\
 	cfg.Token = "syntheticHubToken123"
 	cfg.AuthCookieSecret = "syntheticCookieSecret123"
 	cfg.Ollama.BaseURL = "http://192.0.2.20:11434"

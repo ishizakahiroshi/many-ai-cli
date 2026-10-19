@@ -26,7 +26,7 @@ func testUsageHookParams() UsageHookParams {
 		HubURL:    "http://127.0.0.1:47777",
 		Token:     "deadbeef",
 		SessionID: 7,
-		ExePath:   "D:/dev/foo/many-ai-cli.exe",
+		ExePath:   "D:/dev/foo/many-ai-cli.exe", // doxguard: allow D:/dev/
 	}
 }
 

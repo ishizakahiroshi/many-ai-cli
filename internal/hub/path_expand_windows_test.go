@@ -49,13 +49,13 @@ func TestExpandPathEntries_PnpmHomeFromRegistry(t *testing.T) {
 	t.Setenv("PNPM_HOME", "")
 	withRegistryStub(t, func(name string) string {
 		if strings.EqualFold(name, "PNPM_HOME") {
-			return `C:\Users\test\AppData\Local\pnpm`
+			return `C:\Users\test\AppData\Local\pnpm` // doxguard: allow C:\Users\
 		}
 		return ""
 	})
 	in := []string{`%PNPM_HOME%\bin`, `C:\Windows\System32`}
 	out := expandPathEntries(in)
-	want := []string{`C:\Users\test\AppData\Local\pnpm\bin`, `C:\Windows\System32`}
+	want := []string{`C:\Users\test\AppData\Local\pnpm\bin`, `C:\Windows\System32`} // doxguard: allow C:\Users\
 	if !equalSlice(out, want) {
 		t.Fatalf("expandPathEntries() = %v, want %v", out, want)
 	}
@@ -101,7 +101,7 @@ func TestExpandPathEntries_AlreadyExpandedEntryPreserved(t *testing.T) {
 		t.Fatalf("registry lookup should not be called for %s", name)
 		return ""
 	})
-	in := []string{`C:\Users\test\AppData\Local\pnpm\bin`, `C:\Windows`}
+	in := []string{`C:\Users\test\AppData\Local\pnpm\bin`, `C:\Windows`} // doxguard: allow C:\Users\
 	out := expandPathEntries(in)
 	if !equalSlice(out, in) {
 		t.Fatalf("expandPathEntries() = %v, want %v", out, in)
@@ -149,7 +149,7 @@ func TestExpandPathEntries_RecoverDroppedRegistryEntry(t *testing.T) {
 		case "PATH":
 			return `%PNPM_HOME%\bin;C:\WINDOWS\system32`
 		case "PNPM_HOME":
-			return `C:\Users\test\AppData\Local\pnpm`
+			return `C:\Users\test\AppData\Local\pnpm` // doxguard: allow C:\Users\
 		}
 		return ""
 	})
@@ -159,7 +159,7 @@ func TestExpandPathEntries_RecoverDroppedRegistryEntry(t *testing.T) {
 	want := []string{
 		`C:\WINDOWS\system32`,
 		`C:\Program Files\nodejs\`,
-		`C:\Users\test\AppData\Local\pnpm\bin`,
+		`C:\Users\test\AppData\Local\pnpm\bin`, // doxguard: allow C:\Users\
 	}
 	if !equalSlice(out, want) {
 		t.Fatalf("expandPathEntries() = %v, want %v", out, want)
@@ -176,11 +176,11 @@ func TestExpandPathEntries_RecoveredEntryNotDuplicated(t *testing.T) {
 		case "PATH":
 			return `%PNPM_HOME%\bin`
 		case "PNPM_HOME":
-			return `C:\Users\test\AppData\Local\pnpm`
+			return `C:\Users\test\AppData\Local\pnpm` // doxguard: allow C:\Users\
 		}
 		return ""
 	})
-	in := []string{`C:\users\test\appdata\local\pnpm\bin`} // 既に展開済みエントリが PATH にある
+	in := []string{`C:\users\test\appdata\local\pnpm\bin`} // 既に展開済みエントリが PATH にある // doxguard: allow C:\users\
 	out := expandPathEntries(in)
 	if !equalSlice(out, in) {
 		t.Fatalf("expandPathEntries() = %v, want %v (no duplicate append)", out, in)
@@ -194,7 +194,7 @@ func TestExpandPathEntries_RecoveredEntryNotDuplicated(t *testing.T) {
 func TestExpandPathEntries_RecoverPlainRegistryEntry(t *testing.T) {
 	withRegistryStub(t, func(name string) string {
 		if strings.EqualFold(name, "Path") {
-			return `C:\Users\test\AppData\Roaming\npm;C:\WINDOWS\system32`
+			return `C:\Users\test\AppData\Roaming\npm;C:\WINDOWS\system32` // doxguard: allow C:\Users\
 		}
 		return ""
 	})
@@ -203,7 +203,7 @@ func TestExpandPathEntries_RecoverPlainRegistryEntry(t *testing.T) {
 	out := expandPathEntries(in)
 	want := []string{
 		`C:\WINDOWS\system32`,
-		`C:\Users\test\AppData\Roaming\npm`,
+		`C:\Users\test\AppData\Roaming\npm`, // doxguard: allow C:\Users\
 	}
 	if !equalSlice(out, want) {
 		t.Fatalf("expandPathEntries() = %v, want %v", out, want)
@@ -237,14 +237,14 @@ func TestExpandPathEntries_RecoverMachinePath(t *testing.T) {
 func TestExpandPathEntries_MachinePathDeduplicated(t *testing.T) {
 	withRegistryStub(t, func(name string) string {
 		if strings.EqualFold(name, "Path") {
-			return `C:\Users\test\AppData\Roaming\npm`
+			return `C:\Users\test\AppData\Roaming\npm` // doxguard: allow C:\Users\
 		}
 		return ""
 	})
 	withMachineRegistryStub(t, func(name string) string {
 		if strings.EqualFold(name, "Path") {
 			// 大文字小文字違い + 末尾バックスラッシュ違いを混ぜる
-			return `c:\users\test\appdata\roaming\npm\;C:\Program Files\nodejs\`
+			return `c:\users\test\appdata\roaming\npm\;C:\Program Files\nodejs\` // doxguard: allow c:\users\
 		}
 		return ""
 	})
@@ -252,7 +252,7 @@ func TestExpandPathEntries_MachinePathDeduplicated(t *testing.T) {
 	out := expandPathEntries(in)
 	want := []string{
 		`C:\WINDOWS\system32`,
-		`C:\Users\test\AppData\Roaming\npm`,
+		`C:\Users\test\AppData\Roaming\npm`, // doxguard: allow C:\Users\
 		`C:\Program Files\nodejs\`,
 	}
 	if !equalSlice(out, want) {
@@ -266,16 +266,16 @@ func TestExpandPathEntries_ProviderFallbackAppended(t *testing.T) {
 	withRegistryStub(t, func(name string) string { return "" })
 	withProviderFallbackStub(t, func(cache map[string]string) []string {
 		return []string{
-			`C:\Users\test\AppData\Local\pnpm`,
-			`C:\Users\test\AppData\Roaming\npm`,
+			`C:\Users\test\AppData\Local\pnpm`,  // doxguard: allow C:\Users\
+			`C:\Users\test\AppData\Roaming\npm`, // doxguard: allow C:\Users\
 		}
 	})
 	in := []string{`C:\WINDOWS\system32`}
 	out := expandPathEntries(in)
 	want := []string{
 		`C:\WINDOWS\system32`,
-		`C:\Users\test\AppData\Local\pnpm`,
-		`C:\Users\test\AppData\Roaming\npm`,
+		`C:\Users\test\AppData\Local\pnpm`,  // doxguard: allow C:\Users\
+		`C:\Users\test\AppData\Roaming\npm`, // doxguard: allow C:\Users\
 	}
 	if !equalSlice(out, want) {
 		t.Fatalf("expandPathEntries() = %v, want %v", out, want)
@@ -289,10 +289,10 @@ func TestExpandPathEntries_ProviderFallbackSkippedWhenAlreadyPresent(t *testing.
 	withRegistryStub(t, func(name string) string { return "" })
 	withProviderFallbackStub(t, func(cache map[string]string) []string {
 		return []string{
-			`C:\Users\test\AppData\Local\pnpm`,
+			`C:\Users\test\AppData\Local\pnpm`, // doxguard: allow C:\Users\
 		}
 	})
-	in := []string{`c:\users\test\appdata\local\pnpm\`} // 末尾区切り＋大小違いでも seen に一致
+	in := []string{`c:\users\test\appdata\local\pnpm\`} // 末尾区切り＋大小違いでも seen に一致 // doxguard: allow c:\users\
 	out := expandPathEntries(in)
 	if !equalSlice(out, in) {
 		t.Fatalf("expandPathEntries() = %v, want preserved %v (fallback should not duplicate)", out, in)

@@ -79,7 +79,7 @@ profiles:
     host: remote.example.com
     user: your-user
     hub_port: 47777       # 0 にするとポート自動選択
-    cwd: /home/your-user/projects
+    cwd: /home/your-user/projects # doxguard: allow /home/your-user/
 ```
 
 `host` は `~/.ssh/config` のホストエイリアスでも、`user@host` 形式でも可。

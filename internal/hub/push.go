@@ -249,7 +249,7 @@ func (pm *pushManager) sendApproval(ctx context.Context, payload pushApprovalPay
 			Keys:     sub.Keys,
 		}, &webpush.Options{
 			HTTPClient:      pm.httpClient,
-			Subscriber:      "mailto:many-ai-cli@localhost.invalid",
+			Subscriber:      "mailto:many-ai-cli@localhost.invalid", // doxguard: allow many-ai-cli@localhost.invalid
 			VAPIDPublicKey:  store.VAPIDPublicKey,
 			VAPIDPrivateKey: store.VAPIDPrivateKey,
 			TTL:             300,
@@ -333,7 +333,7 @@ func (pm *pushManager) sendSecurity(ctx context.Context, title, body string) {
 			Keys:     sub.Keys,
 		}, &webpush.Options{
 			HTTPClient:      pm.httpClient,
-			Subscriber:      "mailto:many-ai-cli@localhost.invalid",
+			Subscriber:      "mailto:many-ai-cli@localhost.invalid", // doxguard: allow many-ai-cli@localhost.invalid
 			VAPIDPublicKey:  store.VAPIDPublicKey,
 			VAPIDPrivateKey: store.VAPIDPrivateKey,
 			TTL:             300,

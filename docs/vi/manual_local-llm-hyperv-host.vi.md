@@ -22,8 +22,8 @@ Ví dụ đã xác nhận:
 - Ollama: `0.30.6`
 - GPU: NVIDIA GeForce RTX 4060 / VRAM 8188 MiB
 - Cổng API Ollama: `11434`
-- IP host phía external switch: `192.168.11.50`
-- IP host phía Default Switch: `172.20.224.1`
+- IP host phía external switch: `192.0.2.50`
+- IP host phía Default Switch: `198.51.100.1`
 
 **Không** public API ra internet. **Không** port forward trên router.
 
@@ -91,7 +91,7 @@ New-NetFirewallRule `
     -Action Allow `
     -Protocol TCP `
     -LocalPort 11434 `
-    -RemoteAddress 192.168.11.0/24 `
+    -RemoteAddress 192.0.2.0/24 `
     -Profile Private
 ```
 
@@ -104,7 +104,7 @@ New-NetFirewallRule `
     -Action Allow `
     -Protocol TCP `
     -LocalPort 11434 `
-    -RemoteAddress 172.20.224.0/20 `
+    -RemoteAddress 198.51.100.0/24 `
     -Profile Private
 ```
 
@@ -152,15 +152,15 @@ ollama ps
 External switch:
 
 ```powershell
-Test-NetConnection 192.168.11.50 -Port 11434
-Invoke-RestMethod http://192.168.11.50:11434/api/tags
+Test-NetConnection 192.0.2.50 -Port 11434
+Invoke-RestMethod http://192.0.2.50:11434/api/tags
 ```
 
 Default Switch:
 
 ```powershell
-Test-NetConnection 172.20.224.1 -Port 11434
-Invoke-RestMethod http://172.20.224.1:11434/api/tags
+Test-NetConnection 198.51.100.1 -Port 11434
+Invoke-RestMethod http://198.51.100.1:11434/api/tags
 ```
 
 Điều kiện thành công:
@@ -177,14 +177,14 @@ External switch:
 
 ```yaml
 ollama:
-  base_url: "http://192.168.11.50:11434"
+  base_url: "http://192.0.2.50:11434"
 ```
 
 Default Switch:
 
 ```yaml
 ollama:
-  base_url: "http://172.20.224.1:11434"
+  base_url: "http://198.51.100.1:11434"
 ```
 
 Với cấu hình này, `/api/models` của Hub lấy `<base_url>/api/tags`; session spawn route Ollama được inject env:
@@ -217,11 +217,11 @@ New-NetFirewallRule `
     -Action Allow `
     -Protocol TCP `
     -LocalPort 1234 `
-    -RemoteAddress 192.168.11.0/24 `
+    -RemoteAddress 192.0.2.0/24 `
     -Profile Private
 ```
 
-Phía Default Switch: `-RemoteAddress 172.20.224.0/20` (hoặc dải subnet guest tương ứng).
+Phía Default Switch: `-RemoteAddress 198.51.100.0/24` (hoặc dải subnet guest tương ứng).
 
 ### Guest: kiểm tra thông
 

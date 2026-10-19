@@ -143,7 +143,7 @@ docker exec -it aac-<user> bash   # 以降このシェルで（管理者が実�
 ### 5. token の確認と本人への引き渡し
 
 ```bash
-docker exec aac-<user> grep '^token:' /home/ubuntu/.many-ai-cli/config.yaml
+docker exec aac-<user> grep '^token:' /home/ubuntu/.many-ai-cli/config.yaml # doxguard: allow /home/ubuntu/
 # または起動 banner から:
 docker logs aac-<user> 2>&1 | grep -m1 'Open:'
 ```
@@ -250,9 +250,9 @@ docker run --rm hello-world
 # 2. 管理者ユーザー admin（既存の管理者秘密鍵 <admin-key>.pem の公開鍵を使い回し）
 adduser --disabled-password --gecos "" admin
 usermod -aG docker admin
-install -d -m 700 -o admin -g admin /home/admin/.ssh
+install -d -m 700 -o admin -g admin ~admin/.ssh
 # ssh-keygen -y -f <admin-key>.pem の出力を authorized_keys へ
-chmod 600 /home/admin/.ssh/authorized_keys && chown admin:admin /home/admin/.ssh/authorized_keys
+chmod 600 ~admin/.ssh/authorized_keys && chown admin:admin ~admin/.ssh/authorized_keys
 
 # 3. ディレクトリ規約
 mkdir -p /opt/any-ai-cli/users /opt/any-ai-cli/templates /srv/any-ai-cli/work/admin
