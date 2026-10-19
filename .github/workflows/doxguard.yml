@@ -1,0 +1,40 @@
+name: doxguard
+
+# Strict personal-identity scan (doxguard 0.2.0, structural patterns only).
+# CI has no private watchlist; only path / IP / email patterns run here.
+# Independent of the existing gitleaks job (secret-scan.yml), which is left unchanged.
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'hotfix/**'
+      - 'release/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doxguard:
+    name: doxguard strict scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Install exact doxguard 0.2.0
+        run: npm install --prefix "$RUNNER_TEMP/doxguard-ci" --ignore-scripts --include=optional --package-lock=false --no-save doxguard@0.2.0
+
+      - name: Strict scan of all tracked files
+        env:
+          DOXGUARD_CONFIG: ${{ github.workspace }}/doxguard.ci.json
+        run: node "$RUNNER_TEMP/doxguard-ci/node_modules/doxguard/bin/doxguard.js" scan --all-tracked --block --strict --config doxguard.ci.json
