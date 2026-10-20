@@ -233,9 +233,10 @@ async fn cancellation_propagates_without_launching_new_work() {
 #[test]
 fn privacy_scrubs_named_secrets_private_paths_ips_but_keeps_loopback_and_public_contact() {
     let private_ip = std::net::Ipv4Addr::new(10, 2, 3, 4).to_string();
+    let private_path = ["D:", "dev", "github", "private", "repo"].join("\\");
     let public_email = ["ishizakahiroshi.dev", "gmail.com"].join("@");
     let input = format!(
-        "auth_cookie_secret=hidden remote_pin_hash=hashval vapid_private_key=keyval Bearer bearerval https://user:pass@example.com ?token=queryval D:\\work\\example\\repo {private_ip} 127.0.0.1 ishiz.private.example private@example.com {public_email}"
+        "auth_cookie_secret=hidden remote_pin_hash=hashval vapid_private_key=keyval Bearer bearerval https://user:pass@example.com ?token=queryval {private_path} {private_ip} 127.0.0.1 ishiz.private.example private@example.com {public_email}"
     );
     let output = report::redact(&input);
     for secret in [
@@ -245,7 +246,7 @@ fn privacy_scrubs_named_secrets_private_paths_ips_but_keeps_loopback_and_public_
         "bearerval",
         "pass@",
         "queryval",
-        "D:\\work",
+        "D:\\dev",
         private_ip.as_str(),
         "ishiz.private.example",
         "private@example.com",
