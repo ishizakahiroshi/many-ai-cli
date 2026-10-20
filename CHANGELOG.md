@@ -21,6 +21,10 @@ Release artifacts are published at
   blames a terminal redraw.
 
 ### Added
+- **Project headings can be dragged onto a session-list tab.** Dropping a
+  heading moves every root session of that project that currently belongs to the
+  selected tab, children included; the same project's roots in other tabs stay
+  put, and dropping on the already selected tab does nothing.
 - **Attachments reach the machine a shell session ssh'd into.** In a shell
   session, the new "📤 Send to" button next to the attachment area takes an ssh
   destination (a `~/.ssh/config` alias, `user@host` or `ssh://user@host:port`).
