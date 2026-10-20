@@ -12,7 +12,10 @@ import { findPathCandidates } from './path-detect.js';
 import {
   countOpenMemosForProject,
   findOpenMemoByText,
+  formatMemoTimestamp,
   groupMemosByProject,
+  memoWasEdited,
+  pruneMemoSelection,
   MEMO_IMAGE_MAX_BYTES,
   MEMO_IMAGES_PER_MEMO,
   memoPathType,
@@ -44,6 +47,10 @@ let feedbackEl: HTMLElement;
 let inputEl: HTMLTextAreaElement;
 let subtitleEl: HTMLElement;
 let loadGeneration = 0;
+// 一括操作。選択モード中だけ、行の ☑ が「完了」ではなく「選択」を表す。
+let selectMode = false;
+let selected = new Set<string>();
+let toolbarEl: HTMLElement;
 // 入力欄に貼り付け・ドロップした画像（Hub へ保存済みの画像名）。メモを追加すると空になる。
 // × で外した画像や、追加せずに終わった画像は Hub が次回起動時に回収する（memo_images.go）。
 let pendingImages: string[] = [];
@@ -254,6 +261,7 @@ async function refresh(): Promise<void> {
     const { memos } = await request<{ memos: Memo[] }>('/api/memos');
     if (epoch !== loadGeneration) return;
     cache = memos;
+    selected = pruneMemoSelection(selected, cache);
     feedbackEl.textContent = '';
     notifyMemosChanged();
     renderList();
@@ -296,6 +304,104 @@ async function removeMemo(memo: Memo): Promise<void> {
   } catch (error) { showFeedback(error); }
 }
 
+function setSelected(ids: readonly string[], on: boolean): void {
+  for (const id of ids) { if (on) selected.add(id); else selected.delete(id); }
+  renderList();
+}
+
+function setSelectMode(on: boolean): void {
+  selectMode = on;
+  selected = new Set();
+  renderList();
+}
+
+// 選択したメモをまとめて消す。1 件ずつ DELETE を送り、成功した分だけ画面から外す
+// （途中で失敗しても、消えたものと残ったものが画面と Hub で食い違わない）。
+async function bulkDelete(): Promise<void> {
+  const ids = Array.from(selected);
+  const results = await Promise.allSettled(
+    ids.map((id) => request(`/api/memos/${encodeURIComponent(id)}`, { method: 'DELETE' })));
+  const gone = new Set(ids.filter((_, i) => results[i].status === 'fulfilled'));
+  cache = cache.filter((m) => !gone.has(m.id));
+  for (const id of gone) selected.delete(id);
+  const failed = ids.length - gone.size;
+  if (failed > 0) feedbackEl.textContent = t('memo_bulk_failed', { count: failed });
+  notifyMemosChanged();
+  announceMemosChangedToOtherWindows();
+  renderList();
+}
+
+async function bulkMarkDone(): Promise<void> {
+  const targets = cache.filter((m) => selected.has(m.id) && !m.done);
+  const results = await Promise.allSettled(targets.map((m) =>
+    request<{ memo: Memo }>(`/api/memos/${encodeURIComponent(m.id)}`, body('PATCH', { done: true }))));
+  let failed = 0;
+  results.forEach((r) => {
+    if (r.status === 'fulfilled') {
+      const idx = cache.findIndex((m) => m.id === r.value.memo.id);
+      if (idx >= 0) cache[idx] = r.value.memo;
+    } else failed++;
+  });
+  selected = new Set();
+  if (failed > 0) feedbackEl.textContent = t('memo_bulk_failed', { count: failed });
+  notifyMemosChanged();
+  announceMemosChangedToOtherWindows();
+  renderList();
+}
+
+function toolbarBtn(label: string, variant: 'quiet' | 'danger' = 'quiet'): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = label;
+  b.className = `${uiButtonClass(variant, 'compact')} memo-toolbar-btn`;
+  return b;
+}
+
+function renderToolbar(): void {
+  if (!toolbarEl) return;
+  toolbarEl.replaceChildren();
+  toolbarEl.hidden = cache.length === 0;
+  if (cache.length === 0) return;
+  if (!selectMode) {
+    const enter = toolbarBtn(t('memo_select_mode'));
+    enter.type = 'button';
+    enter.addEventListener('click', () => setSelectMode(true));
+    toolbarEl.append(enter);
+    return;
+  }
+  const allIds = cache.map((m) => m.id);
+  const allOn = allIds.length > 0 && allIds.every((id) => selected.has(id));
+  const selectAll = toolbarBtn(allOn ? t('memo_select_none') : t('memo_select_all'));
+  selectAll.type = 'button';
+  selectAll.addEventListener('click', () => setSelected(allIds, !allOn));
+  const count = node('span', t('memo_selected_count', { count: selected.size }), 'memo-toolbar-count');
+  const done = toolbarBtn(t('memo_bulk_done'));
+  done.type = 'button';
+  done.disabled = !cache.some((m) => selected.has(m.id) && !m.done);
+  done.addEventListener('click', () => void bulkMarkDone());
+  // 行の 🗑 と同じ 2 段階。1 回目で「N 件を本当に削除」に変わり、もう一度押すと消す。
+  const del = toolbarBtn(t('memo_bulk_delete'), 'danger');
+  del.type = 'button';
+  del.disabled = selected.size === 0;
+  let armTimer: number | undefined;
+  const disarm = (): void => {
+    window.clearTimeout(armTimer);
+    del.classList.remove('memo-row-delete-armed');
+    del.textContent = t('memo_bulk_delete');
+  };
+  del.addEventListener('click', () => {
+    if (del.classList.contains('memo-row-delete-armed')) { disarm(); void bulkDelete(); return; }
+    del.classList.add('memo-row-delete-armed');
+    del.textContent = t('memo_bulk_delete_confirm', { count: selected.size });
+    armTimer = window.setTimeout(disarm, 3000);
+  });
+  del.addEventListener('blur', disarm);
+  const exit = toolbarBtn(t('memo_select_exit'));
+  exit.type = 'button';
+  exit.addEventListener('click', () => setSelectMode(false));
+  toolbarEl.append(selectAll, count, done, del, exit);
+}
+
 function beginEdit(memo: Memo, rowBody: HTMLElement, textEl: HTMLElement): void {
   if (rowBody.querySelector('textarea')) return;
   const textarea = document.createElement('textarea');
@@ -331,9 +437,16 @@ function buildMemoRow(memo: Memo, project: string): HTMLElement {
   const checkbox = document.createElement('input');
   checkbox.type = 'checkbox';
   checkbox.className = 'memo-row-check';
-  checkbox.checked = memo.done;
-  checkbox.setAttribute('aria-label', t('memo_mark_done'));
-  checkbox.addEventListener('change', () => void toggleDone(memo, checkbox.checked));
+  if (selectMode) {
+    checkbox.checked = selected.has(memo.id);
+    checkbox.setAttribute('aria-label', t('memo_select_row'));
+    checkbox.addEventListener('change', () => setSelected([memo.id], checkbox.checked));
+    if (checkbox.checked) row.classList.add('memo-row-selected');
+  } else {
+    checkbox.checked = memo.done;
+    checkbox.setAttribute('aria-label', t('memo_mark_done'));
+    checkbox.addEventListener('change', () => void toggleDone(memo, checkbox.checked));
+  }
 
   const rowBody = node('div', '', 'memo-row-body');
   const textEl = node('div', '', 'memo-row-text');
@@ -345,9 +458,20 @@ function buildMemoRow(memo: Memo, project: string): HTMLElement {
   textEl.addEventListener('click', (e) => {
     if ((e.target as Element | null)?.closest?.('.tool-output-path-link')) return;
     if (window.getSelection()?.toString()) return;
+    // 選択モード中は本文のクリックで選択を切り替える（編集には入らない）。
+    if (selectMode) { setSelected([memo.id], !selected.has(memo.id)); return; }
     beginEdit(memo, rowBody, textEl);
   });
   rowBody.append(textEl);
+  // 作成日時と更新日時（本文を直したときだけ更新を足す）。完了済みは完了日時も出す。
+  const stamps = [`${t('memo_created')} ${formatMemoTimestamp(memo.created_at)}`];
+  if (memoWasEdited(memo)) stamps.push(`${t('memo_updated')} ${formatMemoTimestamp(memo.updated_at)}`);
+  if (memo.done && memo.done_at) stamps.push(`${t('memo_completed')} ${formatMemoTimestamp(memo.done_at)}`);
+  if (formatMemoTimestamp(memo.created_at)) {
+    const meta = node('div', stamps.join(' ・ '), 'memo-row-meta');
+    meta.title = [memo.created_at, memo.updated_at].filter(Boolean).join(' / ');
+    rowBody.append(meta);
+  }
   if (memo.images && memo.images.length > 0) {
     renderMemoImages(rowBody, memo.images);
     // 画像だけのメモは本文が空。クリックで後から一言足せるよう、薄い案内を出す。
@@ -424,13 +548,16 @@ function buildMemoRow(memo: Memo, project: string): HTMLElement {
   }
   actions.append(launch, del);
 
-  row.append(checkbox, rowBody, actions);
+  // 選択モード中は行の操作ボタンを隠す（誤って 1 件だけ消す・起動するのを防ぐ）。
+  row.append(checkbox, rowBody);
+  if (!selectMode) row.append(actions);
   return row;
 }
 
 function renderList(): void {
   if (!listEl) return;
   listEl.replaceChildren();
+  renderToolbar();
   const project = activeProject();
   const groups = groupMemosByProject(cache, project);
   if (groups.length === 0) {
@@ -442,6 +569,17 @@ function renderList(): void {
     const heading = node('div', '', 'memo-group-heading');
     const label = node('strong', group.project ? basenameForPath(group.project) : t('memo_group_unclassified'));
     if (group.project) label.title = group.project;
+    if (selectMode) {
+      // グループ見出しの ☑ で、そのプロジェクトのメモ（完了済みも）をまとめて選ぶ。
+      const ids = [...group.open, ...group.done].map((m) => m.id);
+      const groupCheck = document.createElement('input');
+      groupCheck.type = 'checkbox';
+      groupCheck.className = 'memo-group-check';
+      groupCheck.checked = ids.length > 0 && ids.every((id) => selected.has(id));
+      groupCheck.setAttribute('aria-label', t('memo_select_group'));
+      groupCheck.addEventListener('change', () => setSelected(ids, groupCheck.checked));
+      heading.append(groupCheck);
+    }
     heading.append(label, node('span', String(group.open.length), 'memo-group-count'));
     section.append(heading);
 
@@ -605,9 +743,11 @@ function ensureDrawer(): HTMLElement {
 
   feedbackEl = node('p', '', 'memo-feedback');
   feedbackEl.setAttribute('role', 'status');
+  toolbarEl = node('div', '', 'memo-toolbar');
+  toolbarEl.hidden = true;
   listEl = node('div', '', 'memo-list');
 
-  drawer.append(header, description, inputWrap, feedbackEl, listEl);
+  drawer.append(header, description, inputWrap, feedbackEl, toolbarEl, listEl);
   document.body.append(drawer);
   return drawer;
 }

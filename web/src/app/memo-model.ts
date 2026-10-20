@@ -97,6 +97,30 @@ export function sortDoneMemos(memos: readonly Memo[]): Memo[] {
   return [...memos].sort((a, b) => (b.done_at || '').localeCompare(a.done_at || ''));
 }
 
+/** 日時の表示用（ローカル時刻）。今年なら年を省く。読めない値は空文字。 */
+export function formatMemoTimestamp(iso: string | undefined, now: Date = new Date()): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  const md = `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return d.getFullYear() === now.getFullYear() ? md : `${d.getFullYear()}/${md}`;
+}
+
+/** 更新日時を別に出すか。作成直後（1 分以内）の更新は作成と同じ扱いにして、行を静かに保つ。 */
+export function memoWasEdited(memo: Pick<Memo, 'created_at' | 'updated_at'>): boolean {
+  const c = new Date(memo.created_at).getTime();
+  const u = new Date(memo.updated_at).getTime();
+  if (Number.isNaN(c) || Number.isNaN(u)) return false;
+  return u - c > 60_000;
+}
+
+/** 選択中の id のうち、いまも存在するものだけを返す（取り直しで消えた id を数えない）。 */
+export function pruneMemoSelection(selected: ReadonlySet<string>, memos: readonly Memo[]): Set<string> {
+  const alive = new Set(memos.map((m) => m.id));
+  return new Set(Array.from(selected).filter((id) => alive.has(id)));
+}
+
 /**
  * project 単位の未完了件数。project は memo.project / SessionSnapshot.project_id と
  * 同じ表記（git root、または未分類なら空文字）で渡す。C4 のバッジがこれを使う。

@@ -204,3 +204,13 @@
   line-height: 13px;
   flex-shrink: 0;
 }
+
+/* 作成・更新日時 */
+.memo-row-meta { margin-top: 2px; font-size: var(--fs-2xs); color: var(--muted); }
+/* 一括操作（選択モード） */
+.memo-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+.memo-toolbar[hidden] { display: none; }
+.memo-toolbar-count { font-size: var(--fs-sm); color: var(--muted); margin-right: auto; }
+.memo-toolbar-btn:disabled { opacity: 0.45; cursor: default; }
+.memo-group-check { flex-shrink: 0; align-self: center; }
+.memo-row-selected { border-color: var(--ui-primary-bg, var(--muted)); }

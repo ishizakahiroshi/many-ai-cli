@@ -4,6 +4,9 @@ import {
   countOpenMemosForProject,
   cwdMatchesMemoProject,
   findOpenMemoByText,
+  formatMemoTimestamp,
+  memoWasEdited,
+  pruneMemoSelection,
   groupMemosByProject,
   memoPathType,
   openMemoCountForCwd,
@@ -191,4 +194,22 @@ test('memoPathType treats a path without an extension as a directory, except kno
 test('memoPathType treats a trailing separator as a directory', () => {
   expect(memoPathType('D:\\x\\sub\\')).toBe('dir');
   expect(memoPathType('/repo/sub/')).toBe('dir');
+});
+
+test('formatMemoTimestamp omits the year only for the current year', () => {
+  const now = new Date(2026, 9, 20, 12, 0);
+  expect(formatMemoTimestamp(new Date(2026, 9, 19, 22, 5).toISOString(), now)).toBe('10/19 22:05');
+  expect(formatMemoTimestamp(new Date(2025, 0, 3, 9, 7).toISOString(), now)).toBe('2025/1/3 09:07');
+  expect(formatMemoTimestamp('', now)).toBe('');
+  expect(formatMemoTimestamp('garbage', now)).toBe('');
+});
+
+test('memoWasEdited ignores updates within a minute of creation', () => {
+  expect(memoWasEdited({ created_at: '2026-10-19T10:00:00Z', updated_at: '2026-10-19T10:00:30Z' })).toBe(false);
+  expect(memoWasEdited({ created_at: '2026-10-19T10:00:00Z', updated_at: '2026-10-19T10:05:00Z' })).toBe(true);
+});
+
+test('pruneMemoSelection drops ids that no longer exist', () => {
+  const memos = [{ id: 'a' }, { id: 'b' }] as never[];
+  expect(Array.from(pruneMemoSelection(new Set(['a', 'x']), memos))).toEqual(['a']);
 });
