@@ -17,8 +17,8 @@ last_reviewed: 2026-10-20
 - 作業 branch: `dots/P-20261020-004-sidebar-compact-cards`（この指示書もこの branch にある）
 - Draft PR の base: `develop`（Rust 版の本線。Go 版は `go/` に凍結してあり触らない）
 - 挙動の基準 SHA: `754f5f5782b1bb7762c3b730e73ce93f97113a8d`
-- 管理 Issue: <ISSUE_URL>
-- 実装 diff の起点は初回指示公開 commit <FIRST_INSTRUCTION_COMMIT>（基準 SHA とは別）
+- 管理 Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/27
+- 実装 diff の起点は初回指示公開 commit `7390fd9f70da8b2b096e175d08ebe2d9a18e2d3b`（基準 SHA とは別）
 
 1 つのタブに入るセッションが 8〜10 件で限界になる。今のカードは 2 段（1 段目: 状態・#番号・プロバイダ・モデル+題、2 段目: 状態情報・完了サマリー・補足チップ・残量・子トグル・ブランチ）でおよそ 55px あり、グループ見出しも 1 行ずつ取る。同じ縦幅に入る件数を増やして、承認待ち・完了・⚠ を探すスクロールを減らすのが目的。
 
