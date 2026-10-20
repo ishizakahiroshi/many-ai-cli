@@ -73,6 +73,8 @@
   --accent-glow:         rgba(99,102,241,0.25);
   --warn:                #f59e0b;
   --yellow:              #eab308;
+  --state-appr:          #f97316;
+  --state-stop:          #facc15;
   --warn-bg:             #92400e;
   --warn-text:           #fde68a;
   --danger:              #fda4af;
@@ -192,6 +194,8 @@
   --accent-glow:         rgba(79,70,229,0.15);
   --warn:                #d97706;
   --yellow:              #ca8a04;
+  --state-appr:          #ea580c;
+  --state-stop:          #c48500;
   --warn-bg:             #fef3c7;
   --warn-text:           #92400e;
   --danger:              #be123c;
@@ -1318,7 +1322,6 @@ header {
 .card { --card-actions-reserve: calc(2 * var(--ui-control-compact) + var(--space-1) + 10px); position: relative; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 5px var(--card-actions-reserve) 5px 14px; margin-bottom: 4px; cursor: pointer; transition: border-color 0.15s, background 0.15s; overflow: hidden; }
 .card:hover { border-color: var(--line-soft); background: var(--bg-deep); }
 .card.waiting { border-color: rgba(245,158,11,0.35); }
-.card.awaiting-approval { background: color-mix(in srgb, var(--warn-bg) 12%, var(--bg-elev)); }
 /* 子起動の確認待ち（pending-spawn-confirm）。既存の awaiting-approval（AI 本体の承認）
    と並んだときに見分けられるよう、--warn ではなく --perm（元々未使用だった紫系トークン）
    を流用する（plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C3）。 */
@@ -1355,7 +1358,6 @@ header {
 }
 .card.running::before { background: var(--green); opacity: 1; }
 .card.waiting::before { background: var(--warn); opacity: 1; }
-.card.awaiting-approval::before { background: var(--warn); opacity: 1; width: 5px; }
 .card.pending-spawn-confirm::before { background: var(--perm); opacity: 1; width: 5px; }
 .card.active::before  { background: var(--accent); opacity: 1; width: 5px; top: 3px; bottom: 3px; }
 /* 1 行に並ぶ文字は baseline で揃える。align-items:center だと各項目の baseline が
@@ -1424,7 +1426,7 @@ header {
 .card-state-pill.error,
 .card-state-pill.disconnected { color: var(--danger); }
 /* 付帯状態は通常 state の色より優先する（standby 中の入力待ち等）。 */
-.card-state-pill.awaiting-approval { color: var(--ui-warning-ink); background: var(--warn); border-radius: var(--radius-sm); }
+.card-state-pill.awaiting-approval { color: var(--ui-warning-ink); background: var(--state-appr); border-radius: var(--radius-sm); }
 .card-state-pill.pending-spawn-confirm { color: var(--ui-warning-ink); background: var(--perm); border-radius: var(--radius-sm); }
 .card-state-pill.awaiting-input { color: var(--accent); }
 .card-state-pill.workflow-active { color: var(--muted-2); }
@@ -2456,6 +2458,37 @@ color: var(--warn);
   pointer-events: none;
 }
 .card[draggable=true]:hover::before { opacity: 0.5; }
+
+/* 状態の枠: 承認待ち（橙・光る）と未確認で停止（黄・静か）。枠は 1px の border と 1px の内側の輪で 2px に見せ、カードの大きさを変えない */
+.card.awaiting-approval { border-color: var(--state-appr); box-shadow: inset 0 0 0 1px var(--state-appr); background: color-mix(in srgb, var(--state-appr) 12%, var(--bg-elev)); }
+.card.stopped-unseen { border-color: var(--state-stop); box-shadow: inset 0 0 0 1px var(--state-stop); background: color-mix(in srgb, var(--state-stop) 7%, var(--bg-elev)); }
+/* 状態の左バーはドラッグハンドルより優先し、ホバー中も元の位置・不透明度を保つ。 */
+.card.awaiting-approval::before,
+.card.stopped-unseen::before,
+.card[draggable=true].awaiting-approval::before,
+.card[draggable=true].stopped-unseen::before { content: ''; left: 0; top: 5px; bottom: 5px; transform: none; opacity: 1; }
+.card.awaiting-approval::before { background: var(--state-appr); width: 5px; }
+.card.stopped-unseen::before { background: var(--state-stop); }
+/* 色ラベルは左バーに残す */
+.card[class*="card-color-"].awaiting-approval::before,
+.card[class*="card-color-"].stopped-unseen::before { background: var(--card-ident-color); }
+/* 選択中の状態枠: 橙・黄の枠の外側に青い細い輪。左バーは選択中の青のまま */
+.card.active.awaiting-approval { border-color: var(--state-appr); background: color-mix(in srgb, var(--state-appr) 12%, var(--bg-elev)); box-shadow: inset 0 0 0 1px var(--state-appr), 0 0 0 2px var(--accent); }
+.card.active.stopped-unseen { border-color: var(--state-stop); background: color-mix(in srgb, var(--state-stop) 7%, var(--bg-elev)); box-shadow: inset 0 0 0 1px var(--state-stop), 0 0 0 2px var(--accent); }
+.card.active.awaiting-approval::before,
+.card.active.stopped-unseen::before { background: var(--accent); opacity: 1; width: 5px; top: 3px; bottom: 3px; }
+@media (prefers-reduced-motion: no-preference) {
+  .card.awaiting-approval { animation: card-attention-glow 1.8s ease-in-out infinite; }
+  .card.active.awaiting-approval { animation-name: card-attention-glow-active; }
+  @keyframes card-attention-glow {
+    0%, 100% { box-shadow: inset 0 0 0 1px var(--state-appr), 0 0 0 0 transparent; }
+    50% { box-shadow: inset 0 0 0 1px var(--state-appr), 0 0 10px 1px color-mix(in srgb, var(--state-appr) 55%, transparent); }
+  }
+  @keyframes card-attention-glow-active {
+    0%, 100% { box-shadow: inset 0 0 0 1px var(--state-appr), 0 0 0 2px var(--accent); }
+    50% { box-shadow: inset 0 0 0 1px var(--state-appr), 0 0 0 2px var(--accent), 0 0 10px 3px color-mix(in srgb, var(--state-appr) 55%, transparent); }
+  }
+}
 
 /* Orchestration relay dashboard */
 #orchestration-dashboard-pane {

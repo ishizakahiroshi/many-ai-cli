@@ -1278,10 +1278,11 @@ export function renderSessionList() {
       const activity = stateActivityDecoration(s);
       const stateClass = (state === 'running' || state === 'waiting') ? ` ${state}` : '';
       const approvalClass = activity.className === 'awaiting-approval' ? ' awaiting-approval' : '';
+      const stoppedUnseenClass = activity.className === 'stopped-unseen' ? ' stopped-unseen' : '';
       const pendingSpawnConfirmClass = activity.className === 'pending-spawn-confirm' ? ' pending-spawn-confirm' : '';
       const orchClass = entry.depth > 0 ? ' orchestration-child' : (entry.childCount > 0 || s.orchestration_id ? ' orchestration-parent' : '');
       const colorClass = s.color ? ` card-color-${safeClassToken(s.color)}` : '';
-      c.className = 'card' + stateClass + approvalClass + pendingSpawnConfirmClass + orchClass + colorClass + (s.id === activeSessionId ? ' active' : '');
+      c.className = 'card' + stateClass + approvalClass + stoppedUnseenClass + pendingSpawnConfirmClass + orchClass + colorClass + (s.id === activeSessionId ? ' active' : '');
       c.tabIndex = isCollapsed ? -1 : 0;
       c.setAttribute('role', 'button');
       const label = stateLabel(state);
@@ -1828,6 +1829,7 @@ export function updateSessionCardStateInPlace(id) {
   card.classList.toggle('running', state === 'running');
   card.classList.toggle('waiting', state === 'waiting');
   card.classList.toggle('awaiting-approval', activity.className === 'awaiting-approval');
+  card.classList.toggle('stopped-unseen', activity.className === 'stopped-unseen');
   card.classList.toggle('pending-spawn-confirm', activity.className === 'pending-spawn-confirm');
   card.classList.toggle('active', id === activeSessionId);
   const pill = card.querySelector('.card-state-pill');
