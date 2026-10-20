@@ -10,11 +10,12 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
+GO_ROOT = ROOT / 'go'  # frozen Go sources; manifest keys stay relative to this root
 manifest = json.loads((HERE / 'source-sha256.json').read_text())
 with tempfile.TemporaryDirectory(prefix='many-launcher-oracle-') as temporary:
     destination = Path(temporary)
     for relative, entry in manifest['files'].items():
-        source = ROOT / relative
+        source = GO_ROOT / relative
         data = source.read_bytes()
         if hashlib.sha256(data).hexdigest() != entry['sha256']:
             raise SystemExit(f'Go oracle source changed: {relative}')
