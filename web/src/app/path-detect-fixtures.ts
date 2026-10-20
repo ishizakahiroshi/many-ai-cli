@@ -194,7 +194,7 @@ test('expandLogicalPathLine: xterm isWrapped はハイフン無しでも結合�
 test('expandLogicalPathLine: 右端に届いていない行の次は isWrapped でも結合しない', () => {
   // 2026-10-09: 途中で終わった行の次の行に折り返しの印が付き、リンクが次の行の文まで伸びた
   const rows = [
-    row('  資料: D:\\dev\\kobo\\docs\\local\\design_2026-10-09.html', { width: 53 }),
+    row('  資料: D:\\work\\example\\docs\\design_2026-10-09.html', { width: 53 }),
     row('  S2 [AI][依頼] (次回) まとめる', { wrapped: true, width: 33 }),
   ];
   assert.deepEqual(expandLogicalPathLine(getter(rows), 0, 80), { start: 0, end: 0 });

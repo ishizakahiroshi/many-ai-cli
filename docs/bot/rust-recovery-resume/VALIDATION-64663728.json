@@ -494,21 +494,21 @@
         {
           "command": [
             "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
-            "/Users/runner/work/many-ai-cli/many-ai-cli/rust/packaging/collect_inputs.py",
+            "/runner-home/work/many-ai-cli/many-ai-cli/rust/packaging/collect_inputs.py",
             "--lockfile",
             "rust/Cargo.lock",
             "--metadata",
-            "/Users/runner/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-apple-silicon/cargo-metadata.json",
+            "/runner-home/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-apple-silicon/cargo-metadata.json",
             "--build-messages",
-            "/Users/runner/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-apple-silicon/cargo-build.jsonl",
+            "/runner-home/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-apple-silicon/cargo-build.jsonl",
             "--cargo-home",
-            "/Users/runner/.cargo",
+            "/runner-home/.cargo",
             "--target",
             "aarch64-apple-darwin",
             "--source-revision",
             "646637281c1b9f90c43434f364da2c03d4ba2203",
             "--output",
-            "/Users/runner/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-apple-silicon/packaging-inputs"
+            "/runner-home/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-apple-silicon/packaging-inputs"
           ],
           "exit_code": 0
         }
@@ -696,21 +696,21 @@
         {
           "command": [
             "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
-            "/Users/runner/work/many-ai-cli/many-ai-cli/rust/packaging/collect_inputs.py",
+            "/runner-home/work/many-ai-cli/many-ai-cli/rust/packaging/collect_inputs.py",
             "--lockfile",
             "rust/Cargo.lock",
             "--metadata",
-            "/Users/runner/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-intel/cargo-metadata.json",
+            "/runner-home/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-intel/cargo-metadata.json",
             "--build-messages",
-            "/Users/runner/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-intel/cargo-build.jsonl",
+            "/runner-home/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-intel/cargo-build.jsonl",
             "--cargo-home",
-            "/Users/runner/.cargo",
+            "/runner-home/.cargo",
             "--target",
             "x86_64-apple-darwin",
             "--source-revision",
             "646637281c1b9f90c43434f364da2c03d4ba2203",
             "--output",
-            "/Users/runner/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-intel/packaging-inputs"
+            "/runner-home/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-intel/packaging-inputs"
           ],
           "exit_code": 0
         }

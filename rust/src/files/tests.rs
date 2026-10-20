@@ -809,7 +809,7 @@ fn remote_copy_is_injected_while_the_local_copy_stays_in_history() {
     let service = service.with_history(journal.clone());
     let remote = attachments::RemoteCopy {
         target: "myserver".into(),
-        path: "/home/u/.many-ai-cli/remote-attachments/20261015_000000001_shot.png".into(),
+        path: "/srv/u/.many-ai-cli/remote-attachments/20261015_000000001_shot.png".into(),
     };
     let saved = service
         .save_attachment_with(

@@ -893,7 +893,7 @@
   "remote_fetch_tooltip": "送り先（ssh 先）にあるファイルを、このブラウザのダウンロードとして保存する",
   "remote_fetch_title": "送り先から取ってくる",
   "remote_fetch_hint": "{target} にあるファイルのパスを入れてください。/ か ~/ から始まるパスだけ使えます。ブラウザのダウンロードとして保存します（1 ファイル 50 MB まで。大きいものは scp で取ってください）。",
-  "remote_fetch_placeholder": "例: /home/user/project/out.png",
+  "remote_fetch_placeholder": "例: /srv/project/out.png",
   "remote_fetch_submit": "取ってくる",
   "remote_fetch_busy": "取ってきています…",
   "remote_fetch_invalid": "/ か ~/ から始まるファイルのパスを入れてください",

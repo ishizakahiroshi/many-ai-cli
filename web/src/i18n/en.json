@@ -893,7 +893,7 @@
   "remote_fetch_tooltip": "Save a file from the send-to destination (ssh) as a download in this browser",
   "remote_fetch_title": "Fetch from the destination",
   "remote_fetch_hint": "Enter the path of a file on {target}. Only paths starting with / or ~/ work. The file is saved as a browser download (up to 50 MB per file; use scp for larger ones).",
-  "remote_fetch_placeholder": "e.g. /home/user/project/out.png",
+  "remote_fetch_placeholder": "e.g. /srv/project/out.png",
   "remote_fetch_submit": "Fetch",
   "remote_fetch_busy": "Fetching…",
   "remote_fetch_invalid": "Enter a file path that starts with / or ~/",
