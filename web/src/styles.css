@@ -32,6 +32,7 @@
 @import url("/styles/close-button.css");
 @import url("/styles/shortcut-help.css");
 @import url("/styles/pane-placement.css");
+@import url("/styles/session-card-compact.css");
 
 #deferred-send-status { order:2; flex:1 1 100%; display:flex; align-items:center; gap:7px; font-size:var(--fs-xs); color:var(--muted); }
 #deferred-send-status[hidden] { display:none; }

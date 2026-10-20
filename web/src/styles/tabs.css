@@ -238,6 +238,19 @@ body.pane-resizing .xterm { pointer-events: none; }
 .session-info-chip .effort-badge { font-size: var(--header-font-size); }
 /* 🧠 とエージェント名は文字サイズだけヘッダーに合わせる。色・最大幅は token-statusbar.css の .tsb-agent-name をそのまま使う。 */
 .session-info-chip .tsb-thinking, .session-info-chip .tsb-agent-name { font-size: var(--header-font-size); }
+/* Launch metadata belongs to the header even when compact cards hide it. */
+.session-info-chip .card-permission-chip,
+.session-info-chip .session-info-branch {
+  font-size: var(--header-font-size);
+  flex-shrink: 0;
+}
+.session-info-chip .session-info-branch {
+  display: block;
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* 表示モード系タブ。ボタン部品は quiet（面と枠なし）を使い、タブの形はここで決める:
    選択は下線で示すので下の角は丸めない。文字はセッション情報チップと同じヘッダーの大きさ。 */
 .view-tab {

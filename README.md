@@ -1076,6 +1076,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 - **Review tab**: per-file diff of the working tree or a single AI turn, with the same Commit all / push actions as the Git tab. Also reachable from the Files tab's + menu and from a chat turn's "Review" link — all three open the same tab. Shows a plain message instead of a diff when the session's folder is not a git repository.
 - **Sync with terminal input**: if you resolve the prompt by typing `y` / `n` directly in the terminal, the action bar disappears automatically.
 - **File and image attach**: paste or drag-and-drop into the attach area; the file is materialized locally and a path reference is injected into the PTY on send.
+- **Settings → Display density**: Standard keeps the two-line sidebar cards; Compact uses one-line cards and thinner project headings, with details after a short hover. This choice is saved only in the current browser.
 - **Status bar (bottom)**: a single line at the bottom of the right pane showing the active session's tokens, cost, context usage, and more. On phones it stays hidden, except for a one-line warning above the input when context, compaction or the rate limit is near its limit. See [Status bar (bottom)](#status-bar-bottom) below (toggle visibility from the settings panel).
 
 ### Usage notes

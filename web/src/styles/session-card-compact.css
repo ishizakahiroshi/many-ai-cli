@@ -1,0 +1,97 @@
+/* Every card/group override is density-scoped. Standard sidebar CSS stays intact. */
+#sessions.density-compact .card {
+  padding: 0 7px 0 10px;
+  margin-bottom: 2px;
+}
+#sessions.density-compact .card-compact-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--ui-control-compact);
+  min-width: 0;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+}
+#sessions.density-compact .card-compact-row > b,
+#sessions.density-compact .card-children-toggle,
+#sessions.density-compact .card-notes-slot,
+#sessions.density-compact .card-ctx-slot,
+#sessions.density-compact .card-memo-badge { flex-shrink: 0; }
+#sessions.density-compact .card-compact-name {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#sessions.density-compact .card-done-slot { flex: 1 1 0; }
+#sessions.density-compact .card-done {
+  border: 0;
+  padding: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-2xs);
+}
+#sessions.density-compact .card-status-slot {
+  flex: 0 1 auto;
+  max-width: 25%;
+  min-width: 1em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#sessions.density-compact .card-status-slot:empty,
+#sessions.density-compact .card-notes-slot:empty { display: none; }
+#sessions.density-compact .card-longproc { padding: 0; }
+#sessions.density-compact .card-ctx-slot { margin-left: auto; font-size: var(--fs-2xs); }
+#sessions.density-compact .card-ctx-gauge { width: 24px; height: 5px; }
+#sessions.density-compact .card-children-toggle { padding: 0 3px; }
+#sessions.density-compact .card-note-dot { color: var(--muted-2); font-size: var(--fs-2xs); }
+#sessions.density-compact .card-actions {
+  top: 50%;
+  right: 3px;
+  transform: translateY(-50%);
+  background: var(--bg-elev);
+  opacity: 0;
+  pointer-events: none;
+}
+#sessions.density-compact .card:hover .card-actions,
+#sessions.density-compact .card:focus-within .card-actions { opacity: 1; pointer-events: auto; }
+#sessions.density-compact .project-group { margin-bottom: 4px; }
+#sessions.density-compact .project-group-header {
+  padding-top: 0;
+  padding-bottom: 0;
+  min-height: var(--ui-control-compact);
+  font-size: var(--fs-xs);
+}
+#sessions.density-compact .project-group-actions > * { opacity: 0; pointer-events: none; }
+#sessions.density-compact .project-group-actions .starred,
+#sessions.density-compact .project-group-header:hover .project-group-actions > *,
+#sessions.density-compact .project-group-header:focus-within .project-group-actions > * { opacity: 1; pointer-events: auto; }
+#sessions.density-compact .project-group-actions { gap: 1px; }
+#sessions.density-compact .status-chip { padding: 0 3px; min-width: 16px; font-size: var(--fs-2xs); }
+.session-card-popover {
+  position: fixed;
+  z-index: 10020;
+  pointer-events: none;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 12px));
+  max-height: calc(100vh - 12px);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--text) 25%, transparent);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.session-card-popover[hidden] { display: none; }
+.session-card-popover ul { margin: 4px 0 0; padding-left: 18px; }
+
+/* The detail view must not inherit the row's ellipsis on completion summaries. */
+.session-card-popover .card-done {
+  white-space: pre-wrap;
+  overflow: visible;
+  text-overflow: clip;
+}
