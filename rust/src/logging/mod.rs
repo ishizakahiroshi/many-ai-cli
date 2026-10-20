@@ -66,6 +66,21 @@ pub(crate) mod branch_probe {
     }
 }
 
+// 一時観測 rust-spawn-probe（instrumentation.json）。他の probe と同じく debug ビルドだけ本体を
+// 組み込み、それ以外は何もしない空実装にする。撤去するときはこの 2 つの塊と、`spawn_probe::` の
+// 呼び出し点（main_program/context.rs・application/wrapped_spawn.rs・wrapper/entry.rs・
+// wrapper/runtime.rs）を消す。
+#[cfg(debug_assertions)]
+pub(crate) mod spawn_probe;
+#[cfg(not(debug_assertions))]
+pub(crate) mod spawn_probe {
+    use std::path::Path;
+    #[inline(always)]
+    pub(crate) fn init(_: &Path) {}
+    #[inline(always)]
+    pub(crate) fn mark(_: &'static str, _: Option<u32>, _: Option<i64>) {}
+}
+
 use crate::{
     config::LogConfig,
     files::safe_fs::{self, Dir},

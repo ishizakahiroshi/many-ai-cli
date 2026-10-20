@@ -238,6 +238,7 @@ pub async fn run_cli(
         output_cap: 16 * 1024 * 1024,
         pipe_drain_timeout: Duration::from_secs(2),
     };
+    crate::logging::spawn_probe::mark("wrapper_prepared", Some(std::process::id()), None);
     let registration = registration(&context, &launch)?;
     super::startup::strip_provider_environment(&mut process);
     let proof = env(context.environment, SPAWN_PROOF_ENV).map(str::to_owned);

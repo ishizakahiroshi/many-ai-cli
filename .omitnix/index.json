@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "0b2c46fb255028b3a769494921ea9c3aa5fbe910",
+    "commit": "ea2d408ea74f1490ff9150e2ff4d202547644f9a",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2001,
-    "analyzed": 1547,
+    "discovered": 2002,
+    "analyzed": 1548,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 444,
@@ -32247,6 +32247,35 @@
         "summary": {
           "state": "value",
           "value": "Private rolling log owner. Application audit and Hub diagnostics share this"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/logging/spawn_probe.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "一時観測 `rust-spawn-probe`（instrumentation.json に登録）。原因が確定したら撤去する。"
         },
         "authentication": {
           "state": "not_configured"
