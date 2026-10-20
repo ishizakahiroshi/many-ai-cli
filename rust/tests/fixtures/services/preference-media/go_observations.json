@@ -17,7 +17,7 @@
     "internal/config/provider_legacy.go": "d3a3bf643c8806e0b5c17b6c4aaa81477aa107e52a1e48bc2006bd934a5d2099",
     "internal/config/subscription.go": "5251e3e45fd4e957ab5ddb196f6726c3be502d0181d8d3b84b44929f8d23a52c",
     "internal/hub/http_helpers.go": "6175da5759f10b3d17fb6c664ce38102a15ee9029658af6f05d6c1bc146be450",
-    "internal/hub/misc_handlers.go": "a7323dccce83b4ac21584e4d3f25866695c7304edce4586a1d3c4c5fe6c5d0f2",
+    "internal/hub/misc_handlers.go": "33fbd54b4512fc39749fe1e64dcb58a4b6447b59fb380b11714d77c08c93c305",
     "internal/hub/server.go": "1e38b7353fc41f2b4d91607bcd7f72ec3f1b96f35b057f91348ac3ddd400dadd",
     "internal/hub/user_prefs_handlers.go": "6dd1c6d9ee4d1b1a3076e51f5ba13b2e15aa53d596b165f8811feadde520118d",
     "internal/securefile/atomic.go": "3d3ff3c1e43e5156c51461bffc7b21a78c5a66d27a36dd52368e730a06bb42d7",

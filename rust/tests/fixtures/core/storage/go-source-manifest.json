@@ -36,7 +36,7 @@
     },
     {
       "path": "internal/sessionlog/transcript_test.go",
-      "sha256": "e0cf8b8d856dfde77eae04baf51d14c8aa7d347715fd1f0554ef7ee4ec878d2b"
+      "sha256": "f685e9ed7931e757e20ce9b238e60e84c74bfe8eb005b7b1efdb3faa96db83be"
     },
     {
       "path": "internal/sessionstore/approval_ledger_test.go",
@@ -56,7 +56,7 @@
     },
     {
       "path": "internal/sessionstore/store_test.go",
-      "sha256": "621733b4c594d9d3308fcae17cf6371f3b78569964cb12fcddb7b185d29317cf"
+      "sha256": "9ed0e5855940b88e3ca4b91b69872aabed46e1a6ec4521ab9a6210cddbe204f3"
     }
   ]
 }
