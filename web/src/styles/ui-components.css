@@ -1,5 +1,8 @@
 /* Shared appearance. Behavior belongs to the existing screen/controller. */
 :root {
+  /* 端末面の既定色（暗いテーマの値）。JS が起動時に applyXtermTheme で上書きする */
+  --terminal-bg: #0d1117;
+  --terminal-header-bg: rgba(22, 30, 43, 0.92);
   --ui-modal-sm: 420px;
   --ui-modal-md: 620px;
   --ui-modal-lg: 840px;
