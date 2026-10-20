@@ -11,7 +11,7 @@ import { SESSION_LIST_TABS_KEY, normalizeSessionListTabs as normalize, loadSessi
   saveSessionListStopped as saveStopped, noteSessionListStopped as noteStopped,
   clearSessionListStopped as clearStopped, isSessionListStoppedShown as shown,
   settleSessionListStopped as settle, rememberSessionListActive as remember,
-  sessionListTabSession as pick } from './session-list-tab-state.js';
+  sessionListTabSession as pick, sessionListNeighborAfterRemoval as neighbor } from './session-list-tab-state.js';
 const session = (id: number, extra: Partial<SessionSnapshot> = {}): SessionSnapshot =>
   ({ id, started_at: `2026-10-08T01:00:${String(id).padStart(2, '0')}Z`, cwd: '/repos/example', ...extra } as SessionSnapshot);
 const state = () => { const value = normalize(null); add(value, 'Work', 'work'); return value; };
@@ -223,4 +223,36 @@ test('C2-R1: missing ancestor defers a child move and reconnect preserves the or
   assert.equal(JSON.stringify(s), before);
   assert.equal(owners(s, [child]).get(2), 'work');
   assert.equal(owners(s, [root, child]).get(2), 'work');
+});
+
+// Neighbour after a delete: chosen inside the viewed tab, so deleting never switches the tab.
+const neighborLive = () => [session(1, { cwd: '/repos/a' }), session(2, { cwd: '/repos/a' }), session(3, { cwd: '/repos/b' }),
+  session(4, { cwd: '/repos/c' }), session(5, { cwd: '/repos/c' })];
+test('neighbour after delete: the one above in the viewed tab, even when other tabs interleave', () => {
+  const s = state(); const live = neighborLive();
+  for (const id of [3, 4, 5]) move(s, live, id, 'work');
+  assert.equal(s.selectedId, 'work');
+  assert.deepEqual(neighbor(s, live, [1, 2, 3, 4, 5], 4), { id: 3, sameTab: true });
+});
+test('neighbour after delete: the first of the viewed tab takes the one below it, not the previous tab', () => {
+  const s = state(); const live = neighborLive();
+  for (const id of [3, 4, 5]) move(s, live, id, 'work');
+  assert.deepEqual(neighbor(s, live, [1, 2, 3, 4, 5], 3), { id: 4, sameTab: true });
+  // The old rule looked at the whole order and picked #2, which belongs to another tab.
+  assert.equal(owners(s, live).get(2), 'tab-1');
+});
+test('neighbour after delete: a viewed tab left empty falls back to the whole order without claiming the tab', () => {
+  const s = state(); const live = neighborLive().slice(0, 3);
+  move(s, live, 3, 'work');
+  assert.deepEqual(neighbor(s, live, [1, 2, 3], 3), { id: 2, sameTab: false });
+});
+test('neighbour after delete: the only session has no neighbour', () => {
+  const s = state(); const live = [session(1, { cwd: '/repos/a' })];
+  assert.equal(neighbor(s, live, [1], 1), null);
+});
+test('neighbour after delete: removing a session of another tab than the viewed one does not claim the viewed tab', () => {
+  const s = state(); const live = neighborLive();
+  for (const id of [3, 4, 5]) move(s, live, id, 'work');
+  s.selectedId = 'tab-1';
+  assert.deepEqual(neighbor(s, live, [1, 2, 3, 4, 5], 4), { id: 3, sameTab: false });
 });

@@ -9,7 +9,8 @@ import { SESSION_LIST_TAB_DRAG, SESSION_LIST_CARD_DRAG, SESSION_LIST_GROUP_DRAG,
   moveSessionListProject,
   filterSessionListTree, sessionListWaitingCounts, loadSessionListStopped, saveSessionListStopped,
   noteSessionListStopped, clearSessionListStopped, isSessionListStoppedShown, settleSessionListStopped,
-  rememberSessionListActive, sessionListTabSession, type SessionListTabState } from './session-list-tab-state.js';
+  rememberSessionListActive, sessionListTabSession, sessionListNeighborAfterRemoval,
+  type SessionListTabState } from './session-list-tab-state.js';
 
 interface Callbacks {
   sessions: () => SessionSnapshot[];
@@ -183,6 +184,10 @@ export function visibleSessionListTree(tree: SidebarProjectNode[], sessions: Ses
 export function preserveSessionListSelection(action: () => void): void {
   preserveSelectionDepth++;
   try { action(); } finally { preserveSelectionDepth--; }
+}
+/** Neighbour to open after removedId is deleted; call before the session leaves the snapshot list. */
+export function neighborAfterSessionRemoval(removedId: number, ordered: number[]): { id: number; sameTab: boolean } | null {
+  return sessionListNeighborAfterRemoval(state(), all(), ordered, removedId);
 }
 export function revealSessionListOwner(id: number): void {
   if (preserveSelectionDepth) return;

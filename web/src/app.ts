@@ -1,5 +1,5 @@
 import { noteSpawnSessions } from './app/session-spawn-tracker.js';
-import { restoreSessionListDrawerScroll } from './app/session-list-tabs.js';
+import { restoreSessionListDrawerScroll, preserveSessionListSelection, neighborAfterSessionRemoval, isSessionInSelectedListTab } from './app/session-list-tabs.js';
 import { probeSpan } from './debug/probe.js';
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
@@ -1817,13 +1817,13 @@ export function removeLocalSession(id) {
   // 削除直前にセッション一覧上の「上の隣」を覚えておく。
   // active セッションを削除した際、勝手に先頭へジャンプしないよう、
   // 削除カードの直上（先頭の場合は直下）を後でアクティブ化する。
+  // 見ているタブの中から隣を選ぶ（sameTab: true）。無いときだけ全体から選び、タブを動かさずに開く。
   let neighborId: number | null = null;
+  let neighborSameTab = false;
   if (activeSessionId === id) {
     try {
-      const ordered = orderSessions();
-      const idx = ordered.findIndex(s => s.id === id);
-      if (idx > 0) neighborId = ordered[idx - 1].id;
-      else if (idx === 0 && ordered.length > 1) neighborId = ordered[1].id;
+      const neighbor = neighborAfterSessionRemoval(id, orderSessions().map(s => s.id));
+      if (neighbor) { neighborId = neighbor.id; neighborSameTab = neighbor.sameTab; }
     } catch (_) {}
   }
   cleanupRemovedSessionState(id);
@@ -1862,10 +1862,12 @@ export function removeLocalSession(id) {
     hideActionBar(undefined);
     setMultiQuestionBannerVisible(false);
     if (sessions.size > 0) {
-      const next = (neighborId !== null && sessions.has(neighborId))
-        ? neighborId
-        : sessions.keys().next().value;
-      activateSession(next);
+      const hasNeighbor = neighborId !== null && sessions.has(neighborId);
+      const next = hasNeighbor ? neighborId : sessions.keys().next().value;
+      // 同じタブの隣は包まずに開く。別タブの隣・先頭へのフォールバックは見ているタブを動かさない。
+      // 親を消すと子は根を失って所属を引き直すので、削除前の sameTab だけでなく削除後の所属も確かめる。
+      if (hasNeighbor && neighborSameTab && isSessionInSelectedListTab(next)) activateSession(next);
+      else preserveSessionListSelection(() => activateSession(next));
       return;
     }
   }

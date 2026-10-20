@@ -219,6 +219,26 @@ export function sessionListTabSession(state: SessionListTabState, sessions: Sess
   if (remembered && owners.get(remembered.id) === tabId) return remembered.id;
   return order.find(id => owners.get(id) === tabId) ?? null;
 }
+/**
+ * The session to open after removedId is deleted. When the removed session belongs to the tab being
+ * viewed, the neighbour comes from that tab alone (sameTab: true) so the view never jumps to another tab.
+ * Only when the viewed tab has no other session does it fall back to the whole order (sameTab: false);
+ * the caller then opens it without moving the tab. Call before the session leaves the snapshot list.
+ */
+export function sessionListNeighborAfterRemoval(state: SessionListTabState, sessions: SessionSnapshot[],
+    ordered: number[], removedId: number): { id: number; sameTab: boolean } | null {
+  const owners = sessionListOwners(state, sessions);
+  if (owners.get(removedId) === state.selectedId) {
+    const inTab = ordered.filter(id => owners.get(id) === state.selectedId);
+    const index = inTab.indexOf(removedId);
+    if (index > 0) return { id: inTab[index - 1], sameTab: true };
+    if (index === 0 && inTab.length > 1) return { id: inTab[1], sameTab: true };
+  }
+  const index = ordered.indexOf(removedId);
+  if (index > 0) return { id: ordered[index - 1], sameTab: false };
+  if (index === 0 && ordered.length > 1) return { id: ordered[1], sameTab: false };
+  return null;
+}
 export function filterSessionListTree(tree: SidebarProjectNode[], owners: Map<number, string>, tabId: string): SidebarProjectNode[] {
   return tree.map(project => ({ ...project, children: project.children
     .filter(root => owners.get(root.id) === tabId)
