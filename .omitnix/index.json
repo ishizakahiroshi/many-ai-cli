@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "ea2d408ea74f1490ff9150e2ff4d202547644f9a",
+    "commit": "754f5f5782b1bb7762c3b730e73ce93f97113a8d",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2002,
+    "discovered": 2006,
     "analyzed": 1548,
     "unresolved": 10,
     "unknown": 0,
-    "unclaimed": 444,
+    "unclaimed": 448,
     "skipped_by_config": 0
   },
   "files": [
@@ -1196,6 +1196,38 @@
         }
       },
       "unresolved": []
+    },
+    {
+      "path": "docs/bot/session-delete-keeps-tab/FACTS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/session-delete-keeps-tab/PROGRESS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/session-delete-keeps-tab/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/session-delete-keeps-tab/REVIEW.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
     },
     {
       "path": "docs/bot/session-list-tabs/FACTS.md",
