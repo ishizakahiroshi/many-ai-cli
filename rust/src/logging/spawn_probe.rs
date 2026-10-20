@@ -98,7 +98,11 @@ fn open(directory: &Path, now: SystemTime) -> Option<Sink> {
     let day = crate::proto::time::Timestamp::from_system_time(now)
         .and_then(crate::proto::time::format_rfc3339)
         .unwrap_or_default();
-    let day: String = day.chars().take(10).filter(|c| c.is_ascii_digit()).collect();
+    let day: String = day
+        .chars()
+        .take(10)
+        .filter(|c| c.is_ascii_digit())
+        .collect();
     let name = format!(
         "{}_{}.jsonl",
         if day.is_empty() { "unknown" } else { &day },
