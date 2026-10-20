@@ -1,9 +1,9 @@
 # #P-20261020-005 看板（PROGRESS）
 
-> 最終更新: 2026-10-20(火) 12:24:46
+> 最終更新: 2026-10-20(火) 12:30:09
 
 - 案件: #P-20261020-005 many-ai-cli セッションカード状態枠
-- GitHub Issue: [Issue 作成後に追記]
+- GitHub Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/29
 - 指示書の保存先: `ishizakahiroshi/many-ai-cli` の `docs/bot/session-card-state-border/`
 - 作業対象 repo / PR base: `ishizakahiroshi/many-ai-cli` / `develop`
 - 作業 branch: `dots/P-20261020-005-session-card-state-border`
