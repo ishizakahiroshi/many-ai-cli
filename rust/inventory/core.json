@@ -14967,7 +14967,7 @@
     },
     {
       "path": "internal/wrapper/approval_rules.go",
-      "sha256": "b925dd6ada0d7b5884c00cb797adee162eb6c93c6c954e55af789c3afc99d43b",
+      "sha256": "15c0ca260e71d183e3a25f0d040e3d547fde51f57474609ce4e6eb8ceae8358f",
       "line_count": 464,
       "functions": [
         {
