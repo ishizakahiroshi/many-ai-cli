@@ -11,10 +11,9 @@ if [ "$(git config --local --get doxguard.prerelease.enabled)" = true ]; then
   "$dg_bin" scan --staged --block --strict --config "$dg_config" || exit $?
 fi
 # doxguard prerelease opt-in end
-# secrets-scan layer 2 (per-commit) — non-pnpm path via core.hooksPath = .githooks
+# layer 2 (per-commit; secrets scanning is doxguard + gitleaks) — non-pnpm path via core.hooksPath = .githooks
 # 設計詳細: docs/local/secrets-scan-design/ (gitignored)
 # Activate with: bash scripts/install-hooks.sh  or  pwsh scripts/install-hooks.ps1
-node scripts/secrets-scan.mjs --staged --block || exit 1
 
 # 子セッションを起こすと wrapper が AGENTS.md へ承認ルールを追記する。
 # doctor は「次回起動時」に気づくが、commit への混入は別の穴なのでここで止める。
