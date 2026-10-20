@@ -11,12 +11,12 @@ last_reviewed: 2026-10-20
 
 更新: 2026-10-20。この看板は手元が更新する（dots は書かない）。状態の正本は管理 Issue のコメント。
 
-- 管理 Issue: （作成後に追記）
+- 管理 Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/28
 - 指示書の保存先: `ishizakahiroshi/many-ai-cli` の `docs/bot/session-delete-keeps-tab/`
 - 作業 branch: `dots/P-20261020-006-session-delete-keeps-tab`
 - Draft PR の base: `develop`
 - 挙動の基準 SHA: `754f5f5782b1bb7762c3b730e73ce93f97113a8d`
-- 初回指示公開 commit: （push 後に追記）
+- 初回指示公開 commit: `0c23b0eae3f5a430e5d4ea76d97876e59096a6f8`
 
 | 工程 | 担当 | Issue 上の状態 | 証跡・残件・次の一手 |
 |---|---|---|---|

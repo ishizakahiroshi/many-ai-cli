@@ -17,8 +17,8 @@ last_reviewed: 2026-10-20
 - 作業 branch: `dots/P-20261020-006-session-delete-keeps-tab`（この指示書もこの branch にある）
 - Draft PR の base: `develop`（Rust 版の本線。Go 版は `go/` に凍結してあり触らない）
 - 挙動の基準 SHA: `754f5f5782b1bb7762c3b730e73ce93f97113a8d`
-- 管理 Issue: （作成後に追記）
-- 実装 diff の起点は初回指示公開 commit（PROGRESS.md に記す。基準 SHA とは別）
+- 管理 Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/28
+- 実装 diff の起点は初回指示公開 commit `0c23b0eae3f5a430e5d4ea76d97876e59096a6f8`（基準 SHA とは別）
 
 サイドバー上部にはタブ（Tab 1 / Tab 2 …）があり、セッションはどれか 1 つのタブに属する。利用者があるタブを見ながら、そのタブのセッション（画面に開いているもの）を削除すると、見ていたタブが別のタブへ切り替わってしまう。目的は、**削除してもタブが切り替わらないこと**。
 
