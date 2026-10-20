@@ -45,7 +45,7 @@ func TestClassifyGitPushError(t *testing.T) {
 		},
 		{
 			name:       "publickey",
-			out:        "git@github.com: Permission denied (publickey).",
+			out:        "git@github.com: Permission denied (publickey).", // doxguard: allow git@github.com
 			wantCode:   "auth_failed",
 			wantStatus: http.StatusBadGateway,
 		},

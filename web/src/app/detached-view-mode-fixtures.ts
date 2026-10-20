@@ -20,15 +20,15 @@ function roundTrip(path: string, sessionId?: number | null, cwd?: string) {
 
 test('file window URL: Windows paths with spaces, #, &, %, + and Japanese survive the round trip', () => {
   const paths = [
-    'D:\\dev\\my project\\docs\\local\\plan_a b.md',
+    'D:\\dev\\my project\\docs\\local\\plan_a b.md', // doxguard: allow D:\\dev\\
     'C:\\work\\#1 & 2\\100% done+more.md',
     'D:\\資料\\議事録 2026-09-30（水）.md',
     '\\\\fileserver\\share\\team docs\\readme.md',
     '/srv/project/notes/a?b=c.md',
   ];
   for (const path of paths) {
-    const got = roundTrip(path, 12, 'D:\\dev\\my project');
-    assert.deepEqual(got, { tab: 'file', sessionId: 12, path, cwd: 'D:\\dev\\my project' }, path);
+    const got = roundTrip(path, 12, 'D:\\dev\\my project'); // doxguard: allow D:\\dev\\
+    assert.deepEqual(got, { tab: 'file', sessionId: 12, path, cwd: 'D:\\dev\\my project' }, path); // doxguard: allow D:\\dev\\
   }
 });
 

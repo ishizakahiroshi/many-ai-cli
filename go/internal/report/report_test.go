@@ -17,7 +17,7 @@ func TestCollectUsesAllowlist(t *testing.T) {
 		Version:   "v0.synthetic",
 		Provider:  "codex",
 		Model:     "gpt-synthetic",
-		UserAgent: "Synthetic Browser C:\\Users\\example-user\\profile",
+		UserAgent: "Synthetic Browser C:\\Users\\example-user\\profile", // doxguard: allow C:\\Users\\
 		Config:    cfg,
 	})
 	if env.Provider != "codex" || env.Model != "gpt-synthetic" || env.AllowedConfig["hub_port"] != "47777" {

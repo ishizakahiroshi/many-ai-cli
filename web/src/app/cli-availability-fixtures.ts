@@ -112,25 +112,25 @@ test('spawnLaunchBlockReason: cwd 欠けが先、次に CLI 未検出', () => {
     commandMissing: true,
   }), 'cwd-empty');
   assert.equal(spawnLaunchBlockReason({
-    cwd: 'C:\\dev\\app',
+    cwd: 'C:\\dev\\app', // doxguard: allow C:\\dev\\
     cwdMissing: true,
     providerId: 'claude',
     commandMissing: true,
   }), 'cwd-missing');
   assert.equal(spawnLaunchBlockReason({
-    cwd: 'C:\\dev\\app',
+    cwd: 'C:\\dev\\app', // doxguard: allow C:\\dev\\
     cwdMissing: false,
     providerId: 'claude',
     commandMissing: true,
   }), 'cli-missing');
   assert.equal(spawnLaunchBlockReason({
-    cwd: 'C:\\dev\\app',
+    cwd: 'C:\\dev\\app', // doxguard: allow C:\\dev\\
     cwdMissing: false,
     providerId: 'shell',
     commandMissing: true,
   }), null);
   assert.equal(spawnLaunchBlockReason({
-    cwd: 'C:\\dev\\app',
+    cwd: 'C:\\dev\\app', // doxguard: allow C:\\dev\\
     cwdMissing: false,
     providerId: 'claude',
     commandMissing: false,

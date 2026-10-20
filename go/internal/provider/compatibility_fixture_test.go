@@ -148,7 +148,7 @@ func TestCompatibilityFixturesCoverCurrentProviderEntrypoints(t *testing.T) {
 func TestCompatibilityFixturesDoNotContainSecretsOrMachinePaths(t *testing.T) {
 	for _, fixture := range compatibilityFixtures {
 		for _, value := range append(append(append(append([]string{}, fixture.ExecutableCandidates...), fixture.BaseArgs...), fixture.ModelArgs...), fixture.EffortArgs...) {
-			for _, forbidden := range []string{"token", "password", "secret", "C:\\Users\\", "/Users/"} {
+			for _, forbidden := range []string{"token", "password", "secret", "C:\\Users\\", "/Users/"} { // doxguard: allow C:\\Users\\
 				if containsFold(value, forbidden) {
 					t.Fatalf("compatibility fixture %q contains forbidden marker %q", fixture.ID, forbidden)
 				}

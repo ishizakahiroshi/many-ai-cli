@@ -46,7 +46,7 @@ func workflowLaunchText(taskID, wfDir string) string {
 	return "Workflow launched in background. Task ID: " + taskID + "\n" +
 		"Summary: many-ai-cli 全体監査（DBあり版・強度ハイ・調査まで）\n" +
 		"Transcript dir: " + wfDir + "\n" +
-		"Script file: C:\\Users\\ishiz\\.claude\\workflows\\audit.js"
+		"Script file: C:\\Users\\example\\.claude\\workflows\\audit.js" // doxguard: allow C:\\Users\\
 }
 
 func TestResolveWorkflowTaskIDExtractsFromToolResult(t *testing.T) {

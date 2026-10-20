@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "95aa4ec81723fec032f44e81c70fd87e3cea983a",
+    "commit": "0b2c46fb255028b3a769494921ea9c3aa5fbe910",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1999,
+    "discovered": 2001,
     "analyzed": 1547,
     "unresolved": 10,
     "unknown": 0,
-    "unclaimed": 442,
+    "unclaimed": 444,
     "skipped_by_config": 0
   },
   "files": [
@@ -204,6 +204,14 @@
     },
     {
       "path": ".github/workflows/docker-image.yml",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.yml'"
+    },
+    {
+      "path": ".github/workflows/doxguard.yml",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -1456,6 +1464,14 @@
       "fields": {},
       "unresolved": [],
       "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "doxguard.ci.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
     },
     {
       "path": "go/.goreleaser.yaml",

@@ -43,7 +43,7 @@ Bạn là AI agent chạy trên PC local. Theo các bước dưới, dựng **m�
 | Biến | Mô tả | Ví dụ |
 |---|---|---|
 | `SSH_TARGET` | Đích SSH (`user@host` hoặc alias). Cần quyền chạy docker | `your-user@remote.example.com` |
-| `SSH_KEY` | Đường dẫn private key (để trống nếu đã khai trong config) | `D:\dev\.ssh\id_ed25519` |
+| `SSH_KEY` | Đường dẫn private key (để trống nếu đã khai trong config) | `<DEV_ROOT>\.ssh\id_ed25519` |
 | `USER_TAG` | Tên phân biệt service/container/volume | `user1` |
 | `HUB_PORT` | Cổng publish phía host (cùng số với local) | `47801` |
 | `AAC_TAG` | Tag image theo dõi (`latest`=main / `develop`=thử) | `latest` |
@@ -134,7 +134,7 @@ verify: chỉ `127.0.0.1:HUB_PORT`. Nếu `0.0.0.0:HUB_PORT` hoặc public IP �
 Token tự sinh lần đầu container start, lưu bền trong volume.
 
 ```bash
-ssh SSH_TARGET 'bash -lc "docker exec aac-USER_TAG sh -c \"grep ^token: /home/ubuntu/.many-ai-cli/config.yaml\""'
+ssh SSH_TARGET 'bash -lc "docker exec aac-USER_TAG sh -c \"grep ^token: /home/ubuntu/.many-ai-cli/config.yaml\""' # doxguard: allow /home/ubuntu/
 ```
 
 verify: lấy được `token: ...`. **Không để token trong log · chat** (mỗi lần kết nối launcher lấy lại bằng `token_command`; giá trị ghi tạm ở đây **không** lưu file).

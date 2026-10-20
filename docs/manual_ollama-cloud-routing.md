@@ -160,7 +160,7 @@ Hub を Hyper-V ゲスト内で動かし、Ollama と GPU をホスト Windows �
 
 ```yaml
 ollama:
-  base_url: "http://192.168.11.50:11434"
+  base_url: "http://192.0.2.50:11434"
   allow_private_hosts: true
 ```
 
@@ -168,7 +168,7 @@ Default Switch 側を使う場合の例:
 
 ```yaml
 ollama:
-  base_url: "http://172.20.224.1:11434"
+  base_url: "http://198.51.100.1:11434"
   allow_private_hosts: true
 ```
 

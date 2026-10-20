@@ -388,7 +388,7 @@ func (s *Server) handlePickFile(w http.ResponseWriter, r *http.Request) {
 
 // handlePathExists は UI の cwd 入力欄/履歴ドロップダウン向けに、複数パスが
 // 「実在するディレクトリ」かをまとめて判定して返す。
-// POST {"paths": ["C:\\dev\\foo", ...]} → {"results": {"C:\\dev\\foo": true, ...}}
+// POST {"paths": ["C:\\dev\\foo", ...]} → {"results": {"C:\\dev\\foo": true, ...}} // doxguard: allow C:\\dev\\
 //
 // Spawn 時の Cmd.Dir に渡すと Windows では存在しないディレクトリで
 // CreateProcess が ERROR_DIRECTORY を返して分かりにくいので、事前に弾く用途。
@@ -419,7 +419,7 @@ func (s *Server) handlePathExists(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleListSubdirs は cwd 入力欄の補完用に、指定パス直下のサブディレクトリ名一覧を返す。
-// POST {"path": "C:\\dev\\github\\public\\"} → {"ok": true, "path": "...", "subdirs": ["a", "b", ...]}
+// POST {"path": "C:\\dev\\github\\public\\"} → {"ok": true, "path": "...", "subdirs": ["a", "b", ...]} // doxguard: allow C:\\dev\\
 //
 // 直 loopback（直接ブラウザでローカル Hub に接続）は任意パスを許可する（cwd 入力 UX）。
 // 論理リモート（tailscale serve / SSH tunnel 経由）は、ファイルシステム enumeration の

@@ -22,7 +22,7 @@
   - `feat: Hub の WebSocket エンドポイントを追加`
   - `fix: PTY 終了時に子プロセスが孤児化する問題を修正`
   - `docs: 設計書 v2 を追加し v1 を archive へ移動`
-- **AI作成の場合：** 末尾に `Co-Authored-By: Claude <model> <noreply@anthropic.com>` を付与
+- **AI作成の場合：** 末尾に `Co-Authored-By: Claude <model> <noreply@anthropic.com>` を付与 <!-- doxguard: allow noreply@anthropic.com -->
 
 ## push 前の検査（2026-09-07 制定）
 
@@ -45,7 +45,7 @@ GitHub Issue・フォーラム・外部サービスへ投稿する際は、以�
 ### 含めてはいけない情報
 
 - 個人ユーザー名・メールアドレス（個人の実アドレス。具体例も本ファイルに書かない）
-- ローカル PC のフルパス（`C:\Users\<user>\...` 等。`~/` や `<HOME>/` に置換）
+- ローカル PC のフルパス（`C:\Users\<user>\...` 等。`~/` や `<HOME>/` に置換） <!-- doxguard: allow C:\Users\ -->
 - 開発中の機密パターン（実環境固有のコマンド・社内プロジェクト名など）
 - スクリーンショットに映り込んだ個人名・社内固有の名称（タスクバー・ウィンドウタイトル含む）
 

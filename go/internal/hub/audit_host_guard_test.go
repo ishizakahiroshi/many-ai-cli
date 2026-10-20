@@ -91,9 +91,9 @@ func TestGuardGetWithValidTokenBlocksDisallowedHost(t *testing.T) {
 // GET が通過することを検証する（非GET と同条件になるだけで現行機能を壊さない）。
 func TestGuardGetAllowsConfiguredAllowedHost(t *testing.T) {
 	s := newSecTestServer(t, t.TempDir())
-	s.cfg.Hub.AllowedHosts = []string{"10.8.0.1"}
+	s.cfg.Hub.AllowedHosts = []string{"10.8.0.1"} // doxguard: allow 10.8.0.1
 
-	req := httptest.NewRequest(http.MethodGet, "http://10.8.0.1:47777/api/files-content?token=tok", nil)
+	req := httptest.NewRequest(http.MethodGet, "http://10.8.0.1:47777/api/files-content?token=tok", nil) // doxguard: allow 10.8.0.1
 	w := httptest.NewRecorder()
 
 	if !s.guard(w, req, http.MethodGet) {

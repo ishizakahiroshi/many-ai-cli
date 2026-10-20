@@ -101,7 +101,7 @@ func TestHandleBugReportPreviewCollectsAllowlistedSession(t *testing.T) {
 	id := 7
 	w := httptest.NewRecorder()
 	s.handleBugReportPreview(w, bugReportRequest("/api/bug-report/preview", bugReportPreviewRequest{
-		SessionID: &id, Locale: "en", UserAgent: `Synthetic C:\Users\example-user\Browser`,
+		SessionID: &id, Locale: "en", UserAgent: `Synthetic C:\Users\example-user\Browser`, // doxguard: allow C:\Users\
 	}))
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
@@ -222,7 +222,7 @@ func TestHandleBugReportPreviewShowsRedactedLast200LinesAndSavesSameContent(t *t
 		lines[i] = `{"type":"synthetic","line":` + strconv.Itoa(i) + `}`
 	}
 	secret := "sk-syntheticSecret123456789"
-	lines[204] = `{"type":"synthetic","secret":"` + secret + `","path":"C:\\dev\\github\\private\\example"}`
+	lines[204] = `{"type":"synthetic","secret":"` + secret + `","path":"C:\\dev\\github\\private\\example"}` // doxguard: allow C:\\dev\\
 	logPath := filepath.Join(sessionsDir, "codex_s7.jsonl")
 	if err := os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -250,7 +250,7 @@ func TestHandleBugReportPreviewShowsRedactedLast200LinesAndSavesSameContent(t *t
 		!strings.Contains(got.LogMarkdown, "\n    {\"type\":\"synthetic\",\"line\":5}\n") {
 		t.Fatalf("response did not contain exactly the last 200 lines: %s", got.LogMarkdown[:min(len(got.LogMarkdown), 500)])
 	}
-	for _, forbidden := range []string{secret, `C:\\dev\\github\\private`} {
+	for _, forbidden := range []string{secret, `C:\\dev\\github\\private`} { // doxguard: allow C:\\dev\\
 		if strings.Contains(got.LogMarkdown, forbidden) {
 			t.Fatalf("response leaked %q", forbidden)
 		}

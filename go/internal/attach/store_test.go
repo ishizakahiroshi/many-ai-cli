@@ -182,14 +182,14 @@ func TestSavePrefixPreventsWindowsReservedBasename(t *testing.T) {
 }
 
 func TestAttachmentInject(t *testing.T) {
-	windowsLikePath := `C:\Users\John Smith\開発 (試験)\file.png`
+	windowsLikePath := `C:\Users\John Smith\開発 (試験)\file.png` // doxguard: allow C:\Users\
 	tests := []struct {
 		provider string
 		path     string
 		want     string
 	}{
 		{provider: "claude", path: windowsLikePath, want: "@" + windowsLikePath + " "},
-		{provider: "codex", path: windowsLikePath, want: "@C:/Users/John Smith/開発 (試験)/file.png "},
+		{provider: "codex", path: windowsLikePath, want: "@C:/Users/John Smith/開発 (試験)/file.png "}, // doxguard: allow C:/Users/
 		{provider: "other", path: windowsLikePath, want: windowsLikePath + " "},
 	}
 

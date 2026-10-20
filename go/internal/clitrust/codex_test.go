@@ -160,7 +160,7 @@ func TestCodexGrantLeavesBrokenTOMLUntouched(t *testing.T) {
 // ファイルには [projects.'…'] を足せない）では、追記した分だけを切り詰めて
 // 元に戻し、エラーを返す。ファイルは 1 バイトも変わらない。
 func TestCodexGrantRollsBackAnAppendThatBreaksTheFile(t *testing.T) {
-	original := "model = \"gpt-5-codex\"\nprojects = { 'd:\\dev\\a' = { trust_level = \"trusted\" } }\n"
+	original := "model = \"gpt-5-codex\"\nprojects = { 'd:\\dev\\a' = { trust_level = \"trusted\" } }\n" // doxguard: allow d:\\dev\\
 	configPath := writeCodexFixture(t, original)
 
 	if _, err := codexGrant(configPath, codexKeyPlan(`d:\work\b`)); err == nil {

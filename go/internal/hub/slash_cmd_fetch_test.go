@@ -209,13 +209,13 @@ func TestSkillSearchContextForRequestUsesSessionOwner(t *testing.T) {
 		ID:        42,
 		Provider:  "codex",
 		HomeDir:   "/home/alice",
-		CodexHome: "/home/alice/.codex-custom",
+		CodexHome: "/home/alice/.codex-custom", // doxguard: allow /home/alice/
 	}
 	req := httptest.NewRequest(http.MethodGet, "/api/slash-commands?provider=codex&session_id=42&token=tok", nil)
 	req.Host = "127.0.0.1:47777"
 
 	ctx := s.skillSearchContextForRequest("codex", req)
-	if ctx.HomeDir != "/home/alice" || ctx.CodexHome != "/home/alice/.codex-custom" {
+	if ctx.HomeDir != "/home/alice" || ctx.CodexHome != "/home/alice/.codex-custom" { // doxguard: allow /home/alice/
 		t.Fatalf("unexpected session owner context: %#v", ctx)
 	}
 
@@ -237,7 +237,7 @@ func TestValidateSlashCmdSourceRejectsHTTPAndPrivateHosts(t *testing.T) {
 		"http://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/codex.md",
 		"https://127.0.0.1/slash.md",
 		"https://169.254.169.254/latest/meta-data",
-		"https://192.168.1.10/slash.md",
+		"https://192.168.1.10/slash.md", // doxguard: allow 192.168.1.10
 		"https://example.com/slash.md",
 	}
 	for _, src := range cases {

@@ -686,11 +686,11 @@ test('corrupt hub marker blocks are rejected', () => {
 
   // 前置き（経緯）の地の文に行頭数字が来ても弾かないこと。
   // parseHubBlock の optionRe は `^(\d+)\.` なので、前置きの IP アドレスや版数を
-  // 擬似 option として拾う。実データで 192.168.68.100 を num=192 と拾った承認があり、
+  // 擬似 option として拾う。実データで 192.168.68.100 を num=192 と拾った承認があり、 // doxguard: allow 192.168.68.100
   // 「先頭が 1」で判定すると正常な承認が無音で消える（2026-07-31 の敵対レビューで検出）。
   const preambleNumber = parser.extractHubMarkerApproval([
     OPEN,
-    '192.168.68.100 だとトークンが必要になり、設定の追加が要ります。',
+    '192.168.68.100 だとトークンが必要になり、設定の追加が要ります。', // doxguard: allow 192.168.68.100
     'どうしますか？',
     '1. 適用してビルド (Recommended)',
     '2. 修正内容だけ先に見せる',

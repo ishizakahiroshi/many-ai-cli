@@ -68,7 +68,7 @@ $d = Get-Date; "{0}({1}) {2}" -f $d.ToString("yyyy-MM-dd"), "日月火水木金�
 
 - Go コードでは `filepath.Join` を必ず使う（`/` ハードコード禁止）
 - ドキュメント・README では `/` で書いて構わない（人間が読むため）
-- `os.UserHomeDir()` は Windows で `C:\Users\<name>` を返す。`~/.many-ai-cli/` 表記は Windows でも `C:\Users\<name>\.many-ai-cli\` の意味で扱う
+- `os.UserHomeDir()` は Windows で `C:\Users\<name>` を返す。`~/.many-ai-cli/` 表記は Windows でも `C:\Users\<name>\.many-ai-cli\` の意味で扱う <!-- doxguard: allow C:\Users\ -->
 
 ### 改行コード
 
@@ -104,6 +104,6 @@ $d = Get-Date; "{0}({1}) {2}" -f $d.ToString("yyyy-MM-dd"), "日月火水木金�
 Hub UI の動作確認用：
 
 1. Windows Terminal で 4 ペイン分割
-2. 各ペインで `cd D:\dev\project-X` してから `many-ai-cli.exe wrap <provider>` を起動（または `MANY_AI_CLI_AUTO=1` + `eval "$(many-ai-cli.exe shell-init)"` 経由）
+2. 各ペインで `cd D:\dev\project-X` してから `many-ai-cli.exe wrap <provider>` を起動（または `MANY_AI_CLI_AUTO=1` + `eval "$(many-ai-cli.exe shell-init)"` 経由） <!-- doxguard: allow D:\dev\ -->
 3. 別ウィンドウでブラウザを開き `http://127.0.0.1:47777/?token=<起動時に表示>` を表示
 4. ブラウザを画面下部または右側に常時固定し、4 ペインが上に並ぶレイアウトで動作確認
