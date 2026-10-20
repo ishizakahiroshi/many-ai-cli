@@ -11,12 +11,13 @@ import pathlib
 import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+GO_ROOT = ROOT / "go"  # frozen Go sources; paths recorded in outputs stay relative to this root
 FIXTURES = ROOT / "rust/tests/fixtures/foundation/cli"
 BASELINE = "21d0bc7935a2c4696fb89ccff2e324157a528c2d"
 
 
 def read(path):
-    return (ROOT / path).read_text()
+    return (GO_ROOT / path).read_text()
 
 
 def evidence(path, anchor, test=None):
@@ -42,7 +43,7 @@ def generate():
     pure = json.loads((FIXTURES / "pure-oracle.json").read_text())
     for oracle in (lexical, pure):
         for source in oracle["sources"]:
-            actual = hashlib.sha256((ROOT / source["path"]).read_bytes()).hexdigest()
+            actual = hashlib.sha256((GO_ROOT / source["path"]).read_bytes()).hexdigest()
             if source["sha256"] != actual:
                 raise ValueError(f"stale CLI oracle: {source['path']}; regenerate the Go oracle first")
     main = "cmd/many-ai-cli/main.go"
@@ -217,15 +218,15 @@ def generate():
     source_files = set(s["path"] for s in lexical["sources"] + pure["sources"])
     source_files.update(r["source"] for r in lexical["environment_reads"])
     source_files.update(r["evidence"]["source"] for r in contracts + precedence + dynamic)
-    sources = [{"source": path, "sha256": hashlib.sha256((ROOT / path).read_bytes()).hexdigest()} for path in sorted(source_files)]
+    sources = [{"source": path, "sha256": hashlib.sha256((GO_ROOT / path).read_bytes()).hexdigest()} for path in sorted(source_files)]
     env_constants = []
-    for path in sorted((ROOT / "internal").rglob("*.go")):
+    for path in sorted((GO_ROOT / "internal").rglob("*.go")):
         if path.name.endswith("_test.go"):
             continue
         for number, line in enumerate(path.read_text().splitlines(), 1):
             match = re.match(r'\s*(?:const\s+)?([A-Za-z_]\w*)\s*=\s*"([A-Z_][A-Z0-9_]*(?:=[^"\n]*)?)"\s*(?://.*)?$', line)
             if match:
-                env_constants.append({"identifier": match[1], "value": match[2], "source": str(path.relative_to(ROOT)), "line": number,
+                env_constants.append({"identifier": match[1], "value": match[2], "source": path.relative_to(GO_ROOT).as_posix(), "line": number,
                                       "classification": "candidate environment constant; may be emitted rather than directly read"})
     return {
         "schema_version": 2, "baseline": BASELINE,
