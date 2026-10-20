@@ -11,6 +11,7 @@ import { basenameForPath, openFileModal, showPathPopup } from './path-links.js';
 import { findPathCandidates } from './path-detect.js';
 import {
   countOpenMemosForProject,
+  cwdMatchesMemoProject,
   findOpenMemoByText,
   formatMemoTimestamp,
   groupMemosByProject,
@@ -29,6 +30,16 @@ import {
   totalOpenMemoCount,
 } from './memo-model.js';
 import type { Memo } from './memo-model.js';
+// 書き出し／取り込みの純粋ロジック（memo-model.js しか import しない葉モジュール）。
+import {
+  MEMO_EXPORT_FORMATS,
+  buildMemoExport,
+  memoExportFileName,
+  parseMemoImport,
+  planMemoImport,
+  selectMemosForExport,
+} from './memo-export.js';
+import type { ImportItem, ImportTarget, MemoExportFormat, MemoExportLabels, MemoExportResult } from './memo-export.js';
 // 別窓（plan_detached-tab-windows.md C4）。どちらも何も import しない葉モジュール。
 import { isDetachedTabView, openDetachedTabWindow } from './detached-view-mode.js';
 import { onWindowMessage, postWindowMessage, requestMainWindow } from './window-channel.js';
@@ -51,6 +62,25 @@ let loadGeneration = 0;
 let selectMode = false;
 let selected = new Set<string>();
 let toolbarEl: HTMLElement;
+// 書き出し（コピー）メニューと取り込みパネル。どちらもドロワーを組み立てるときに 1 度だけ作る
+// 永続の要素で、renderList() が走ってもツールバーに付け直すだけ（開閉・入力の状態が消えない）。
+// 「最後に選んだ形式」は端末ごとの好みなので localStorage の 1 キーだけで持つ（サーバ同期しない）。
+const MEMO_EXPORT_FORMAT_KEY = 'ai_cli_hub_memo_export_format';
+const MEMO_IMPORT_FILE_MAX_BYTES = 1024 * 1024;
+let exportFormat: MemoExportFormat = loadExportFormat();
+let exportIncludeDone = false;
+let exportWrapEl: HTMLElement | null = null;
+let exportButtonEl: HTMLButtonElement | null = null;
+let exportMenuEl: HTMLElement | null = null;
+let exportSummaryEl: HTMLElement | null = null;
+let exportDoneCheckEl: HTMLInputElement | null = null;
+let exportCopyBtn: HTMLButtonElement | null = null;
+let exportSaveBtn: HTMLButtonElement | null = null;
+let importPanelEl: HTMLElement | null = null;
+let importTextEl: HTMLTextAreaElement | null = null;
+let importResultEl: HTMLElement | null = null;
+let importRunBtn: HTMLButtonElement | null = null;
+let importing = false;
 // 入力欄に貼り付け・ドロップした画像（Hub へ保存済みの画像名）。メモを追加すると空になる。
 // × で外した画像や、追加せずに終わった画像は Hub が次回起動時に回収する（memo_images.go）。
 let pendingImages: string[] = [];
@@ -357,16 +387,327 @@ function toolbarBtn(label: string, variant: 'quiet' | 'danger' = 'quiet'): HTMLB
   return b;
 }
 
+// ── 書き出し（コピー・ファイル保存）と JSON 取り込み ─────────────────────────
+
+function loadExportFormat(): MemoExportFormat {
+  try {
+    const raw = localStorage.getItem(MEMO_EXPORT_FORMAT_KEY);
+    const found = MEMO_EXPORT_FORMATS.find((f) => f === raw);
+    if (found) return found;
+  } catch (_) { /* localStorage が使えなくても既定で動く */ }
+  return 'markdown';
+}
+
+function saveExportFormat(format: MemoExportFormat): void {
+  try { localStorage.setItem(MEMO_EXPORT_FORMAT_KEY, format); } catch (_) { /* 覚えられないだけ */ }
+}
+
+const EXPORT_FORMAT_LABEL_KEYS: Record<MemoExportFormat, string> = {
+  markdown: 'memo_export_format_markdown',
+  text: 'memo_export_format_text',
+  json: 'memo_export_format_json',
+};
+
+/** 書き出す対象。選択モードで 1 件以上選んでいればその分だけ、それ以外は未完了（＋チェック時は完了済み）。 */
+function exportTargets(): Memo[] {
+  return selectMemosForExport(cache, selectMode ? selected : new Set<string>(), exportIncludeDone);
+}
+
+function updateExportSummary(): void {
+  if (!exportSummaryEl) return;
+  const targets = exportTargets();
+  const useSelection = selectMode && selected.size > 0;
+  if (targets.length === 0) exportSummaryEl.textContent = t('memo_export_empty');
+  else exportSummaryEl.textContent = t(useSelection ? 'memo_export_summary_selected' : 'memo_export_summary', { count: targets.length });
+  if (exportCopyBtn) exportCopyBtn.disabled = targets.length === 0;
+  if (exportSaveBtn) exportSaveBtn.disabled = targets.length === 0;
+  // 選んだメモを書き出すときは、完了済みを含めるかどうかは効かない。
+  if (exportDoneCheckEl) exportDoneCheckEl.disabled = useSelection;
+}
+
+function setExportMenuOpen(open: boolean): void {
+  if (!exportMenuEl || !exportButtonEl) return;
+  exportMenuEl.hidden = !open;
+  exportButtonEl.setAttribute('aria-expanded', String(open));
+  if (open) updateExportSummary();
+}
+
+function buildCurrentExport(): MemoExportResult | null {
+  const targets = exportTargets();
+  if (targets.length === 0) return null;
+  const labels: MemoExportLabels = {
+    title: (count, date) => t('memo_export_doc_title', { count, date }),
+    unclassified: t('memo_group_unclassified'),
+    images: (count) => t('memo_export_images', { count }),
+    doneMark: t('memo_export_done_mark'),
+  };
+  return buildMemoExport(targets, exportFormat, labels, { activeProject: activeProject(), now: new Date() });
+}
+
+async function copyExport(): Promise<void> {
+  const result = buildCurrentExport();
+  if (!result) { updateExportSummary(); return; }
+  try {
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') throw new Error('clipboard unavailable');
+    await navigator.clipboard.writeText(result.content);
+  } catch (_) {
+    // 失敗を成功と見せない。メニューは開いたままにして、ファイル保存へ切り替えられるようにする。
+    showToast(t('memo_export_copy_failed'), undefined, 5000);
+    return;
+  }
+  setExportMenuOpen(false);
+  showToast(t('memo_export_copied', { count: result.count }), undefined, 2500);
+}
+
+function saveExport(): void {
+  const result = buildCurrentExport();
+  if (!result) { updateExportSummary(); return; }
+  const url = URL.createObjectURL(new Blob([result.content], { type: result.mime }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = memoExportFileName(exportFormat);
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  // ダウンロードの開始に間に合うよう、少し待ってから解放する。
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  setExportMenuOpen(false);
+  showToast(t('memo_export_saved', { count: result.count }), undefined, 2500);
+}
+
+/** ボタンとメニューを作る（1 度だけ）。ツールバーが作り直されても、この要素を付け直して使う。 */
+function buildExportControls(): HTMLElement {
+  if (exportWrapEl) return exportWrapEl;
+  const wrap = node('div', '', 'memo-export-wrap');
+  const button = toolbarBtn(`${COPY_ICON} ${t('memo_export_button')} ▾`);
+  button.title = t('memo_export_button_title');
+  button.setAttribute('aria-haspopup', 'true');
+  button.setAttribute('aria-expanded', 'false');
+  button.addEventListener('click', () => setExportMenuOpen(Boolean(exportMenuEl?.hidden)));
+
+  const menu = node('div', '', 'memo-export-menu');
+  menu.hidden = true;
+  menu.setAttribute('role', 'group');
+  menu.setAttribute('aria-label', t('memo_export_button_title'));
+
+  const formatRow = node('div', '', 'memo-export-row');
+  formatRow.append(node('span', t('memo_export_format')));
+  const formats = node('div', '', 'memo-export-formats');
+  for (const format of MEMO_EXPORT_FORMATS) {
+    const label = document.createElement('label');
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'memo-export-format';
+    radio.value = format;
+    radio.checked = format === exportFormat;
+    radio.addEventListener('change', () => {
+      if (!radio.checked) return;
+      exportFormat = format;
+      saveExportFormat(format);
+      updateExportSummary();
+    });
+    label.append(radio, document.createTextNode(` ${t(EXPORT_FORMAT_LABEL_KEYS[format])}`));
+    formats.append(label);
+  }
+  formatRow.append(formats);
+
+  const doneRow = node('div', '', 'memo-export-row');
+  const doneLabel = document.createElement('label');
+  const doneCheck = document.createElement('input');
+  doneCheck.type = 'checkbox';
+  doneCheck.checked = exportIncludeDone;
+  doneCheck.addEventListener('change', () => { exportIncludeDone = doneCheck.checked; updateExportSummary(); });
+  doneLabel.append(doneCheck, document.createTextNode(` ${t('memo_export_include_done')}`));
+  doneRow.append(doneLabel);
+
+  const summary = node('p', '', 'memo-export-summary');
+  summary.setAttribute('role', 'status');
+
+  const actions = node('div', '', 'memo-export-actions');
+  const copyBtn = toolbarBtn(t('memo_export_copy'));
+  copyBtn.addEventListener('click', () => void copyExport());
+  const saveBtn = toolbarBtn(t('memo_export_save'));
+  saveBtn.addEventListener('click', () => saveExport());
+  actions.append(copyBtn, saveBtn);
+
+  const sep = node('div', '', 'memo-export-sep');
+  const openImport = document.createElement('button');
+  openImport.type = 'button';
+  openImport.textContent = t('memo_import_open');
+  openImport.className = `${uiButtonClass('quiet', 'compact', { menuItem: true })} memo-import-open`;
+  openImport.addEventListener('click', () => openImportPanel());
+
+  menu.append(formatRow, doneRow, summary, actions, sep, openImport);
+  wrap.append(button, menu);
+
+  exportWrapEl = wrap;
+  exportButtonEl = button;
+  exportMenuEl = menu;
+  exportSummaryEl = summary;
+  exportDoneCheckEl = doneCheck;
+  exportCopyBtn = copyBtn;
+  exportSaveBtn = saveBtn;
+
+  // 外側クリックと Esc で閉じる。ドロワーは別窓（detached view）でも同じ document の中にある。
+  document.addEventListener('click', (event) => {
+    if (menu.hidden) return;
+    if (event.target instanceof Node && wrap.contains(event.target)) return;
+    setExportMenuOpen(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || menu.hidden) return;
+    const hadFocus = wrap.contains(document.activeElement);
+    setExportMenuOpen(false);
+    if (hadFocus) button.focus();
+  });
+  return wrap;
+}
+
+function setImportResult(text: string, kind: '' | 'ok' | 'error' = ''): void {
+  if (!importResultEl) return;
+  importResultEl.textContent = text;
+  importResultEl.classList.toggle('is-ok', kind === 'ok');
+  importResultEl.classList.toggle('is-error', kind === 'error');
+}
+
+function openImportPanel(): void {
+  if (!importPanelEl) return;
+  setExportMenuOpen(false);
+  importPanelEl.hidden = false;
+  importTextEl?.focus();
+}
+
+/** 取り込み先を決める。同じフォルダで開いているセッション（id の小さいもの）があればその project、無ければ未分類。 */
+function resolveImportTarget(item: ImportItem): ImportTarget {
+  if (item.project !== '') {
+    const ids = Array.from(sessions.keys()).sort((a, b) => a - b);
+    for (const id of ids) {
+      const cwd = sessions.get(id)?.cwd ?? '';
+      if (cwdMatchesMemoProject(cwd, item.project)) {
+        return { sessionId: id, belongs: (p) => cwdMatchesMemoProject(cwd, p) };
+      }
+    }
+  }
+  return { sessionId: null, belongs: (p) => p === '' };
+}
+
+async function runImport(): Promise<void> {
+  if (importing || !importTextEl) return;
+  setImportResult('');
+  const parsed = parseMemoImport(importTextEl.value);
+  if (!parsed.ok) { setImportResult(t('memo_import_invalid'), 'error'); return; }
+  if (parsed.items.length === 0) { setImportResult(t('memo_import_none'), 'error'); return; }
+  const plan = planMemoImport(parsed.items, cache, resolveImportTarget);
+  importing = true;
+  if (importRunBtn) importRunBtn.disabled = true;
+  let created = 0;
+  let failed = 0;
+  try {
+    // 作成順を保つため、1 件ずつ順に送る。1 件でも失敗したら（件数上限など）残りは打ち切って失敗に数える。
+    for (let i = 0; i < plan.create.length; i++) {
+      const { item, sessionId } = plan.create[i];
+      try {
+        const payload: NewMemoPayload = { text: item.text };
+        if (sessionId !== null) payload.session_id = sessionId;
+        const { memo } = await request<{ memo: Memo }>('/api/memos', body('POST', payload));
+        cache.push(memo);
+        created++;
+        if (item.done) {
+          try {
+            const { memo: updated } = await request<{ memo: Memo }>(
+              `/api/memos/${encodeURIComponent(memo.id)}`, body('PATCH', { done: true }));
+            const idx = cache.findIndex((m) => m.id === updated.id);
+            if (idx >= 0) cache[idx] = updated;
+          } catch (_) { /* 作成はできている。完了にできなかっただけなので未完了のまま残す */ }
+        }
+      } catch (_) {
+        failed += plan.create.length - i;
+        break;
+      }
+    }
+  } finally {
+    importing = false;
+    if (importRunBtn) importRunBtn.disabled = false;
+    // 途中で失敗しても、作れた分は必ず画面・バッジ・ほかの窓へ反映する。
+    if (created > 0) {
+      notifyMemosChanged();
+      announceMemosChangedToOtherWindows();
+    }
+    renderList();
+  }
+  setImportResult(t('memo_import_result', { created, duplicates: plan.duplicates, failed }), failed > 0 ? 'error' : 'ok');
+  if (failed === 0) importTextEl.value = '';
+}
+
+function buildImportPanel(): HTMLElement {
+  if (importPanelEl) return importPanelEl;
+  const panel = node('div', '', 'memo-import-panel');
+  panel.hidden = true;
+
+  const title = document.createElement('strong');
+  title.textContent = t('memo_import_title');
+  const hint = node('p', t('memo_import_hint'), 'memo-plaintext-note');
+
+  const textarea = document.createElement('textarea');
+  textarea.className = 'ui-input memo-import-textarea';
+  textarea.rows = 6;
+  textarea.placeholder = t('memo_import_placeholder');
+  textarea.spellcheck = false;
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.json,application/json';
+  fileInput.hidden = true;
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    fileInput.value = ''; // 同じファイルをもう一度選べるようにする
+    if (!file) return;
+    if (file.size > MEMO_IMPORT_FILE_MAX_BYTES) { setImportResult(t('memo_import_invalid'), 'error'); return; }
+    file.text().then(
+      (text) => { textarea.value = text; setImportResult(''); },
+      () => setImportResult(t('memo_import_invalid'), 'error'),
+    );
+  });
+
+  const actions = node('div', '', 'memo-import-actions');
+  const pick = toolbarBtn(t('memo_import_file'));
+  pick.addEventListener('click', () => fileInput.click());
+  const run = document.createElement('button');
+  run.type = 'button';
+  run.textContent = t('memo_import_run');
+  run.className = `${uiButtonClass('primary', 'compact')} memo-toolbar-btn`;
+  run.addEventListener('click', () => void runImport());
+  const close = toolbarBtn(t('memo_import_close'));
+  close.addEventListener('click', () => { panel.hidden = true; });
+  actions.append(pick, run, close, fileInput);
+
+  const result = node('p', '', 'memo-import-result');
+  result.setAttribute('role', 'status');
+
+  panel.append(title, hint, textarea, actions, result);
+  importPanelEl = panel;
+  importTextEl = textarea;
+  importResultEl = result;
+  importRunBtn = run;
+  return panel;
+}
+
 function renderToolbar(): void {
   if (!toolbarEl) return;
   toolbarEl.replaceChildren();
-  toolbarEl.hidden = cache.length === 0;
-  if (cache.length === 0) return;
-  if (!selectMode) {
-    const enter = toolbarBtn(t('memo_select_mode'));
-    enter.type = 'button';
-    enter.addEventListener('click', () => setSelectMode(true));
-    toolbarEl.append(enter);
+  // 0 件でも取り込みは使えるので、ツールバーは常に出す（0 件のときは「コピー ▾」だけ）。
+  toolbarEl.hidden = false;
+  const exportControls = exportWrapEl;
+  if (!selectMode || cache.length === 0) {
+    if (cache.length > 0) {
+      const enter = toolbarBtn(t('memo_select_mode'));
+      enter.type = 'button';
+      enter.addEventListener('click', () => setSelectMode(true));
+      toolbarEl.append(enter);
+    }
+    if (exportControls) toolbarEl.append(exportControls);
+    updateExportSummary();
     return;
   }
   const allIds = cache.map((m) => m.id);
@@ -399,7 +740,10 @@ function renderToolbar(): void {
   const exit = toolbarBtn(t('memo_select_exit'));
   exit.type = 'button';
   exit.addEventListener('click', () => setSelectMode(false));
-  toolbarEl.append(selectAll, count, done, del, exit);
+  toolbarEl.append(selectAll, count);
+  if (exportControls) toolbarEl.append(exportControls);
+  toolbarEl.append(done, del, exit);
+  updateExportSummary();
 }
 
 function beginEdit(memo: Memo, rowBody: HTMLElement, textEl: HTMLElement): void {
@@ -744,10 +1088,12 @@ function ensureDrawer(): HTMLElement {
   feedbackEl = node('p', '', 'memo-feedback');
   feedbackEl.setAttribute('role', 'status');
   toolbarEl = node('div', '', 'memo-toolbar');
-  toolbarEl.hidden = true;
+  buildExportControls();
+  const importPanel = buildImportPanel();
   listEl = node('div', '', 'memo-list');
 
-  drawer.append(header, description, inputWrap, feedbackEl, toolbarEl, listEl);
+  drawer.append(header, description, inputWrap, feedbackEl, toolbarEl, importPanel, listEl);
+  renderToolbar(); // 0 件でも「コピー ▾」と取り込みを使えるよう、一覧を取る前から出す
   document.body.append(drawer);
   return drawer;
 }

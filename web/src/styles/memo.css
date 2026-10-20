@@ -214,3 +214,64 @@
 .memo-toolbar-btn:disabled { opacity: 0.45; cursor: default; }
 .memo-group-check { flex-shrink: 0; align-self: center; }
 .memo-row-selected { border-color: var(--ui-primary-bg, var(--muted)); }
+
+/* 書き出し（コピー）メニューと JSON 取り込みパネル。
+   メニューは #memo-drawer（z-index 1150 の独立した積み重ね文脈）の中に開くので、
+   z-index はドロワー内の兄弟より前に出れば足りる。見た目は共通部品（ui-button / ui-input）と
+   theme トークンに任せ、ここは配置と余白だけを持つ。 */
+/* メニューは「コピー ▾」ボタンではなくツールバーを基準に、ツールバーの全幅で開く。
+   ボタンの位置は通常モード・選択モード・0 件で違い、ボタン基準だとドロワーの外へはみ出して切れる。 */
+.memo-toolbar { position: relative; }
+.memo-export-wrap { display: inline-flex; flex-shrink: 0; }
+.memo-export-menu {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  right: 0;
+  z-index: 30;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: var(--ui-shadow-modal);
+  font-size: var(--fs-sm);
+}
+.memo-export-menu[hidden] { display: none; }
+.memo-export-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.memo-export-row label { display: inline-flex; align-items: center; gap: var(--space-1); cursor: pointer; }
+.memo-export-formats { flex-wrap: wrap; row-gap: var(--space-1); column-gap: var(--space-3); }
+.memo-export-summary { font-size: var(--fs-xs); color: var(--muted); }
+.memo-export-actions { flex-wrap: wrap; }
+.memo-export-sep { margin: var(--space-1) 0 0; padding: 0; border: 0; border-top: 1px solid var(--line); height: 0; flex-shrink: 0; }
+/* 見た目は共通ボタン（ui-button ui-button--quiet ui-button--compact ui-button--menu-item）に任せる。
+   memo-panel.ts はこれらのクラスを併記すること。ここは幅と寄せだけ。 */
+.memo-import-open {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  cursor: pointer;
+}
+
+.memo-import-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.memo-import-panel[hidden] { display: none; }
+/* 見た目（枠・背景・文字）は ui-input が持つ。ここは寸法と伸縮だけ。 */
+.memo-import-textarea { width: 100%; box-sizing: border-box; min-height: 9em; resize: vertical; }
+.memo-import-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.memo-import-result { margin: 0; font-size: var(--fs-sm); color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.memo-import-result:empty { display: none; }
+.memo-import-result.is-ok { color: var(--green-text); }
+.memo-import-result.is-error { color: var(--danger); }
