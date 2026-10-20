@@ -2802,7 +2802,7 @@
     },
     {
       "source": "internal/hub/misc_handlers.go",
-      "sha256": "a7323dccce83b4ac21584e4d3f25866695c7304edce4586a1d3c4c5fe6c5d0f2"
+      "sha256": "33fbd54b4512fc39749fe1e64dcb58a4b6447b59fb380b11714d77c08c93c305"
     },
     {
       "source": "internal/hub/mobile_connect.go",

@@ -32,7 +32,7 @@
       "sha256": "7c00b94c60a447398568b72d740fa714e3e49e11d9040c3255baf3d8d27855ab"
     },
     "internal/launcher/connector_wsl_windows.go": {
-      "sha256": "077be87de56608d4c3971c75a259b427328eb77b1fb43fbc85a281d25215ffb3"
+      "sha256": "c2ba36e7061092f27b654686852fcbbe0399b80b376764b2d36974cc219a6ae8"
     },
     "internal/launcher/connector.go": {
       "sha256": "139c3f8cb678410f22f471558291d4b32349ceef0ceda4f82fda8c36d99e401a"
