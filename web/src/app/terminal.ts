@@ -3,7 +3,7 @@ import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
 import { detachedTabName, isDetachedTabView } from './detached-view-mode.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
-import { currentXtermTheme } from './theme-tokens.js';
+import { currentXtermMinimumContrastRatio, currentXtermTheme } from './theme-tokens.js';
 import { activeSessionId, sessions, terminals } from './state.js';
 import { restoreTerminalView, terminalViewFollows } from './session-view-position.js';
 import { isApprovalPending } from './approval-store.js';
@@ -28,7 +28,7 @@ import { isShellProvider } from './approval.js';
 import { probe, probeSpan } from '../debug/probe.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
 import { addPromptTemplate } from './prompt-templates.js';
-import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
+import { refreshHistoryViewerTheme, resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
 import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSessionChange } from './grok-chat-viewer.js';
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith, isPossiblePrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
@@ -173,9 +173,13 @@ export const TERMINAL_LINE_HEIGHT = 1.35;
 
 export function refreshTerminalThemes(): void {
   const theme = currentXtermTheme();
+  const minimumContrastRatio = currentXtermMinimumContrastRatio();
   terminals.forEach((entry) => {
     entry.term.options.theme = theme;
+    entry.term.options.minimumContrastRatio = minimumContrastRatio;
   });
+  // 開いたままの履歴ビューアも同じ配色へ追従させる。
+  refreshHistoryViewerTheme();
 }
 
 export function ensureTerminal(id) {
@@ -201,6 +205,9 @@ export function ensureTerminal(id) {
     // 5.x 世代まで terminal.css が .xterm-viewport::-webkit-scrollbar で描いていた紫を theme 側で再現する。
     // 常時表示（Auto のフェードアウト抑止）は terminal.css の .scrollbar.invisible 上書きが担当。
     theme: currentXtermTheme(),
+    // ライト配色で CLI が薄く出した文字（dim・プレースホルダ）が読めなくなるのを補正する。
+    // 暗い配色では xterm 既定（1・補正なし）のまま。
+    minimumContrastRatio: currentXtermMinimumContrastRatio(),
     disableStdin: true,
     allowProposedApi: true,
     // CLI が OSC 8 のハイパーリンクで出した URL も、画面上の URL と同じメニューで開く

@@ -25,15 +25,37 @@ export type CustomTheme = {
   contrast: number;
 };
 
+// ANSI 16 色。xterm は未指定のキーだけ既定パレットへ落とすため、暗い配色では
+// 既定パレットと同値を明示し、ライト配色では白背景で読める濃さのパレットを渡す。
+export type XtermAnsiColors = {
+  black: string;
+  red: string;
+  green: string;
+  yellow: string;
+  blue: string;
+  magenta: string;
+  cyan: string;
+  white: string;
+  brightBlack: string;
+  brightRed: string;
+  brightGreen: string;
+  brightYellow: string;
+  brightBlue: string;
+  brightMagenta: string;
+  brightCyan: string;
+  brightWhite: string;
+};
+
 export type XtermChromeTheme = {
   background: string;
   cursor: string;
   cursorAccent: string;
   foreground: string;
+  selectionBackground: string;
   scrollbarSliderBackground: string;
   scrollbarSliderHoverBackground: string;
   scrollbarSliderActiveBackground: string;
-};
+} & XtermAnsiColors;
 
 export const MAX_CUSTOM_THEMES = 20;
 export const MAX_CUSTOM_THEME_NAME = 16;
@@ -41,14 +63,85 @@ export const DEFAULT_HUE_DARK = 220;
 export const DEFAULT_HUE_LIGHT = 210;
 export const DEFAULT_CONTRAST = 50;
 
+// xterm.js の組み込み既定パレット（vendor/xterm.min.js の DEFAULT_ANSI_COLORS）と同値。
+// 暗い配色で ANSI を明示しても、パレットが変わらないことを保証する。
+export const DARK_XTERM_ANSI: XtermAnsiColors = {
+  black: '#2e3436',
+  red: '#cc0000',
+  green: '#4e9a06',
+  yellow: '#c4a000',
+  blue: '#3465a4',
+  magenta: '#75507b',
+  cyan: '#06989a',
+  white: '#d3d7cf',
+  brightBlack: '#555753',
+  brightRed: '#ef2929',
+  brightGreen: '#8ae234',
+  brightYellow: '#fce94f',
+  brightBlue: '#729fcf',
+  brightMagenta: '#ad7fa8',
+  brightCyan: '#34e2e2',
+  brightWhite: '#eeeeec',
+};
+
+// 白背景で読める濃さに寄せたライト用パレット（VS Code Light+ の端末色を下敷き）。
+// 明るい白・黄・シアンは濃色へ落とし、bright 側も同系で読める濃さに揃える。
+export const LIGHT_XTERM_ANSI: XtermAnsiColors = {
+  black: '#000000',
+  red: '#cd3131',
+  green: '#00bc00',
+  yellow: '#949800',
+  blue: '#0451a5',
+  magenta: '#bc05bc',
+  cyan: '#0598bc',
+  white: '#555555',
+  brightBlack: '#666666',
+  brightRed: '#cd3131',
+  brightGreen: '#14ce14',
+  brightYellow: '#b5ba00',
+  brightBlue: '#0451a5',
+  brightMagenta: '#bc05bc',
+  brightCyan: '#0598bc',
+  brightWhite: '#a5a5a5',
+};
+
+// 選択色。暗い配色は xterm 既定（白 30%）と同値、ライトは白背景で見える淡青。
+const DARK_XTERM_SELECTION = 'rgba(255, 255, 255, 0.30)';
+const LIGHT_XTERM_SELECTION = '#add6ff';
+
+// 端末の minimumContrastRatio。暗い配色は xterm 既定（=1・補正なし）を維持し、
+// ライトだけ読めない組み合わせを補正する（C3 で調整）。
+export const DARK_MINIMUM_CONTRAST_RATIO = 1;
+export const LIGHT_MINIMUM_CONTRAST_RATIO = 4.5;
+
+export function minimumContrastRatioForMode(mode: ThemeMode): number {
+  return mode === 'light' ? LIGHT_MINIMUM_CONTRAST_RATIO : DARK_MINIMUM_CONTRAST_RATIO;
+}
+
 export const BUILTIN_XTERM_THEME: XtermChromeTheme = {
   background: '#0d1117',
   cursor: '#0d1117',
   cursorAccent: '#e6edf3',
   foreground: '#e6edf3',
+  selectionBackground: DARK_XTERM_SELECTION,
   scrollbarSliderBackground: '#4f5bd5',
   scrollbarSliderHoverBackground: '#6b74ff',
   scrollbarSliderActiveBackground: '#8b92ff',
+  ...DARK_XTERM_ANSI,
+};
+
+// 組み込みライト。UI 側の [data-theme="light"] トークンとは独立に、端末は
+// 白地・黒字を基本とする（周囲の余白は --terminal-bg で同じ白に揃える）。
+export const BUILTIN_LIGHT_XTERM_THEME: XtermChromeTheme = {
+  background: '#ffffff',
+  cursor: '#1f2328',
+  cursorAccent: '#ffffff',
+  foreground: '#1f2328',
+  selectionBackground: LIGHT_XTERM_SELECTION,
+  scrollbarSliderBackground: '#818cf8',
+  scrollbarSliderHoverBackground: '#6366f1',
+  scrollbarSliderActiveBackground: '#4f46e5',
+  ...LIGHT_XTERM_ANSI,
 };
 
 const SURFACE_VARS: Array<[string, keyof SurfaceTokens | 'rgba-text-soft' | 'rgba-text-hover' | 'copy-bg' | 'copy-elev' | 'copy-line' | 'copy-text' | 'copy-muted']> = [
@@ -74,13 +167,35 @@ const SURFACE_VARS: Array<[string, keyof SurfaceTokens | 'rgba-text-soft' | 'rgb
 ];
 
 let activeXtermTheme: XtermChromeTheme = BUILTIN_XTERM_THEME;
+let activeXtermMinimumContrastRatio: number = DARK_MINIMUM_CONTRAST_RATIO;
 
 export function currentXtermTheme(): XtermChromeTheme {
   return activeXtermTheme;
 }
 
-export function setActiveXtermTheme(theme: XtermChromeTheme): void {
+export function currentXtermMinimumContrastRatio(): number {
+  return activeXtermMinimumContrastRatio;
+}
+
+// 端末配色と minimumContrastRatio を同時に切り替え、端末の余白（CSS 変数）も揃える。
+// 端末側の xterm options へ反映するのは terminal.ts の refreshTerminalThemes。
+export function applyXtermTheme(theme: XtermChromeTheme, mode: ThemeMode): void {
   activeXtermTheme = theme;
+  activeXtermMinimumContrastRatio = minimumContrastRatioForMode(mode);
+  applyTerminalSurfaceVars(theme, mode);
+}
+
+// 端末エリア・履歴ビューアの固定の暗い背景をテーマへ追従させる CSS 変数。
+// 暗いテーマのヘッダ色は従来値（rgba(22,30,43,0.92)）をそのまま保つ。
+const TERMINAL_SURFACE_VARS: Record<ThemeMode, { header: string }> = {
+  dark: { header: 'rgba(22, 30, 43, 0.92)' },
+  light: { header: 'rgba(226, 232, 240, 0.92)' },
+};
+
+export function applyTerminalSurfaceVars(theme: XtermChromeTheme, mode: ThemeMode): void {
+  const root = document.documentElement;
+  root.style.setProperty('--terminal-bg', theme.background);
+  root.style.setProperty('--terminal-header-bg', TERMINAL_SURFACE_VARS[mode].header);
 }
 
 function clampInt(n: number, min: number, max: number): number {
@@ -209,15 +324,18 @@ export function deriveCustomTheme(mode: ThemeMode, hue: number, contrast: number
   };
 }
 
-export function xtermThemeFromTokens(tokens: SurfaceTokens): XtermChromeTheme {
+export function xtermThemeFromTokens(tokens: SurfaceTokens, mode: ThemeMode): XtermChromeTheme {
+  const light = mode === 'light';
   return {
     background: tokens.bgDeep,
     cursor: tokens.bgDeep,
     cursorAccent: tokens.text,
     foreground: tokens.text,
-    scrollbarSliderBackground: BUILTIN_XTERM_THEME.scrollbarSliderBackground,
-    scrollbarSliderHoverBackground: BUILTIN_XTERM_THEME.scrollbarSliderHoverBackground,
-    scrollbarSliderActiveBackground: BUILTIN_XTERM_THEME.scrollbarSliderActiveBackground,
+    selectionBackground: light ? LIGHT_XTERM_SELECTION : DARK_XTERM_SELECTION,
+    scrollbarSliderBackground: light ? BUILTIN_LIGHT_XTERM_THEME.scrollbarSliderBackground : BUILTIN_XTERM_THEME.scrollbarSliderBackground,
+    scrollbarSliderHoverBackground: light ? BUILTIN_LIGHT_XTERM_THEME.scrollbarSliderHoverBackground : BUILTIN_XTERM_THEME.scrollbarSliderHoverBackground,
+    scrollbarSliderActiveBackground: light ? BUILTIN_LIGHT_XTERM_THEME.scrollbarSliderActiveBackground : BUILTIN_XTERM_THEME.scrollbarSliderActiveBackground,
+    ...(light ? LIGHT_XTERM_ANSI : DARK_XTERM_ANSI),
   };
 }
 

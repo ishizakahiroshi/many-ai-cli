@@ -13,9 +13,11 @@ import { activateSession, cardSessionActions, openDetachedGridForSessions, patch
 import { pathPopupEl } from './path-links.js';
 import { TERMINAL_SCROLLBACK_LINES, attachTerminal, dismissTerminalReadOverlays, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, refreshTerminalThemes, sendResize } from './terminal.js';
 import {
+  BUILTIN_LIGHT_XTERM_THEME,
   BUILTIN_XTERM_THEME,
   MAX_CUSTOM_THEMES,
   applySurfaceTokens,
+  applyXtermTheme,
   clearSurfaceTokens,
   contrastNameJa,
   deriveCustomTheme,
@@ -24,7 +26,6 @@ import {
   hueNameJa,
   newCustomThemeId,
   resolveThemeId,
-  setActiveXtermTheme,
   xtermThemeFromTokens,
   type CustomTheme,
   type ThemeMode,
@@ -1026,7 +1027,7 @@ function previewNewTheme(): void {
   const knobs = readNewThemeKnobs();
   const tokens = deriveCustomTheme(knobs.mode, knobs.hue, knobs.contrast);
   applySurfaceTokens(tokens);
-  setActiveXtermTheme(xtermThemeFromTokens(tokens));
+  applyXtermTheme(xtermThemeFromTokens(tokens, knobs.mode), knobs.mode);
   document.documentElement.setAttribute('data-theme', knobs.mode);
   setKnobLabels('new', knobs.mode, knobs.hue, knobs.contrast);
   try { refreshTerminalThemes(); } catch (_) {}
@@ -1076,12 +1077,13 @@ export function applyTheme(theme, opts?: { rebuild?: boolean }) {
   if (custom) {
     const tokens = deriveCustomTheme(custom.mode, custom.hue, custom.contrast);
     applySurfaceTokens(tokens);
-    setActiveXtermTheme(xtermThemeFromTokens(tokens));
+    applyXtermTheme(xtermThemeFromTokens(tokens, custom.mode), custom.mode);
     document.documentElement.setAttribute('data-theme', custom.mode);
   } else {
     clearSurfaceTokens();
-    setActiveXtermTheme(BUILTIN_XTERM_THEME);
-    document.documentElement.setAttribute('data-theme', id === 'dark' ? 'dark' : 'light');
+    const mode: ThemeMode = id === 'dark' ? 'dark' : 'light';
+    applyXtermTheme(mode === 'light' ? BUILTIN_LIGHT_XTERM_THEME : BUILTIN_XTERM_THEME, mode);
+    document.documentElement.setAttribute('data-theme', mode);
   }
   if (opts?.rebuild !== false) rebuildThemeSelect(id);
   const sel = document.getElementById('theme-select') as HTMLSelectElement | null;

@@ -5,6 +5,7 @@
 import { apiFetch, showToast, ti18n } from './util.js';
 import { activeSessionId, sessions, terminals } from './state.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
+import { currentXtermMinimumContrastRatio, currentXtermTheme } from './theme-tokens.js';
 
 // 1 ページに読む生ログのバイト数（サーバ側上限 512KB 以内）
 const HV_CHUNK_BYTES = 128 * 1024;
@@ -140,7 +141,10 @@ function ensureViewerTerm() {
     fontFamily: '"MS Gothic", "BIZ UDGothic", "BIZ UDゴシック", "Segoe UI Symbol", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace',
     fontSize: FONTSIZE_MAP[localStorage.getItem(STORAGE_FONTSIZE_KEY)] || 13,
     lineHeight: 1.25,
-    theme: { background: '#0d1117', cursor: '#0d1117', cursorAccent: '#e6edf3' },
+    // ライブターミナルと同じ配色・コントラスト補正を共有する（テーマ切替は
+    // refreshHistoryViewerTheme で追従）。
+    theme: currentXtermTheme(),
+    minimumContrastRatio: currentXtermMinimumContrastRatio(),
     disableStdin: true,
     allowProposedApi: true,
   });
@@ -158,6 +162,13 @@ function disposeViewerTerm() {
   hvFit = null;
   try { previous?.dispose(); } catch (_) {}
   hvRoot?.querySelector('.hv-body')?.replaceChildren();
+}
+
+// テーマを切り替えたとき、開いたままの履歴ビューア端末を新しい配色へ追従させる。
+export function refreshHistoryViewerTheme(): void {
+  if (!hvTerm) return;
+  hvTerm.options.theme = currentXtermTheme();
+  hvTerm.options.minimumContrastRatio = currentXtermMinimumContrastRatio();
 }
 
 function hvDecodeChunk(b64: string): string {
