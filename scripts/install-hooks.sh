@@ -30,5 +30,5 @@ done
 git config core.hooksPath .githooks
 
 printf '%s\n' "OK: hooks active (core.hooksPath = .githooks)"
-printf '%s\n' "    pre-commit: .githooks/pre-commit  (secrets-scan / approval-rules residue)"
+printf '%s\n' "    pre-commit: .githooks/pre-commit  (approval-rules residue / omitnix freshness)"
 printf '%s\n' "    pre-push:   .githooks/pre-push    (instrumentation ledger / staticcheck when .go changed)"
