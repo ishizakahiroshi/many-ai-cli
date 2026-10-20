@@ -105,10 +105,10 @@ test('provider does not extend a path onto a wrap-marked row after a row that en
   // 2026-10-09: "資料: <path>.html" ended mid-row, yet the next "S2 [AI][依頼] (次回)" row
   // carried xterm's wrap mark and the link grew to ".html  S2 [AI][依頼". Padding the row
   // with written blanks before the next text produces the same mark.
-  const head = '  資料: D:\\dev\\kobo\\docs\\local\\design_2026-10-09.html';
+  const head = '  資料: D:\\work\\example\\docs\\design_2026-10-09.html';
   const cells = [...head].reduce((n, ch) => n + (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 2 : 1), 0);
   const input = head + ' '.repeat(80 - cells) + '  S2 [AI][依頼] (次回) まとめる';
-  const path = 'D:\\dev\\kobo\\docs\\local\\design_2026-10-09.html';
+  const path = 'D:\\work\\example\\docs\\design_2026-10-09.html';
   const first = await detect(input, 80, 1);
   expect(first.links).toEqual([{ text: path, range: { start: { x: cells - path.length + 1, y: 1 }, end: { x: cells, y: 1 } } }]);
   const second = await detect(input, 80, 2);

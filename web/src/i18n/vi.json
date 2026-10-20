@@ -893,7 +893,7 @@
   "remote_fetch_tooltip": "Lưu tệp trên nơi nhận (máy SSH) thành tệp tải xuống của trình duyệt này",
   "remote_fetch_title": "Lấy tệp từ nơi nhận",
   "remote_fetch_hint": "Nhập đường dẫn tệp trên {target}. Chỉ dùng được đường dẫn bắt đầu bằng / hoặc ~/. Tệp được lưu thành tệp tải xuống của trình duyệt (tối đa 50 MB mỗi tệp; tệp lớn hơn hãy dùng scp).",
-  "remote_fetch_placeholder": "Ví dụ: /home/user/project/out.png",
+  "remote_fetch_placeholder": "Ví dụ: /srv/project/out.png",
   "remote_fetch_submit": "Lấy về",
   "remote_fetch_busy": "Đang lấy về…",
   "remote_fetch_invalid": "Hãy nhập đường dẫn tệp bắt đầu bằng / hoặc ~/",

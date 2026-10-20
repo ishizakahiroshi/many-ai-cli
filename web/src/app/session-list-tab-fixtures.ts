@@ -6,6 +6,7 @@ import { SESSION_LIST_TABS_KEY, normalizeSessionListTabs as normalize, loadSessi
   addSessionListTab as add, nextSessionListTabName as nextName, renameSessionListTab as rename, deleteSessionListTab as remove,
   reorderSessionListTab as reorder, sessionListIdentity as identity, reconcileSessionListTabs as reconcile,
   sessionListOwners as owners, moveSessionListFamily as move, filterSessionListTree as filter,
+  sessionListProjectRoots as projectRoots, moveSessionListProject as moveProject,
   sessionListWaitingCounts as waiting, SESSION_LIST_STOPPED_KEY, loadSessionListStopped as loadStopped,
   saveSessionListStopped as saveStopped, noteSessionListStopped as noteStopped,
   clearSessionListStopped as clearStopped, isSessionListStoppedShown as shown,
@@ -197,6 +198,23 @@ test('each tab remembers its last opened session; moves, ID reuse and empty tabs
   assert.deepEqual(normalize(JSON.parse(JSON.stringify(s))).active, s.active);
   assert.deepEqual({ ...normalize({ tabs: [{ id: 'a', name: 'A' }], active: { a: 7, b: identity(session(1)) } }).active }, {});
   assert.equal(remove(s, 'work', s.defaultId), true); assert.ok(!('work' in s.active));
+});
+test('project header move takes only the selected tab roots of that project, families included', () => {
+  const s = state(); add(s, 'Other', 'other'); add(s, 'Dest', 'dest'); s.selectedId = 'work';
+  const live = [session(1), session(2, { parent_session_id: 1, cwd: '/repos/child' }), session(3),
+    session(4, { cwd: '/repos/other' })];
+  move(s, live, 1, 'work'); move(s, live, 3, 'other'); move(s, live, 4, 'work');
+  assert.deepEqual(projectRoots(s, live, 'example', 'work'), [1]);
+  assert.deepEqual(projectRoots(s, live, 'example', 'other'), [3]);
+  assert.deepEqual(projectRoots(s, live, 'missing', 'work'), []);
+  assert.equal(moveProject(s, live, 'example', 'work', 'dest'), true);
+  assert.deepEqual([...owners(s, live).values()], ['dest', 'dest', 'other', 'work']);
+  assert.deepEqual(projectRoots(s, live, 'example', 'work'), []);
+  assert.deepEqual(projectRoots(s, live, 'example', 'dest'), [1]);
+  assert.equal(moveProject(s, live, 'example', 'work', 'dest'), false);
+  const before = JSON.stringify(s);
+  assert.equal(moveProject(s, live, 'example', 'dest', 'missing'), false);
+  assert.equal(JSON.stringify(s), before);
 });
 test('C2-R1: missing ancestor defers a child move and reconnect preserves the original family', () => {
   const s = state(); const root = session(1), child = session(2, { parent_session_id: 1 });

@@ -1,5 +1,8 @@
 /* Shared appearance. Behavior belongs to the existing screen/controller. */
 :root {
+  /* 端末面の既定色（暗いテーマの値）。JS が起動時に applyXtermTheme で上書きする */
+  --terminal-bg: #0d1117;
+  --terminal-header-bg: rgba(22, 30, 43, 0.92);
   --ui-modal-sm: 420px;
   --ui-modal-md: 620px;
   --ui-modal-lg: 840px;
@@ -45,7 +48,10 @@
 .ui-button.ui-button--danger { --ui-button-bg: var(--danger-bg); --ui-button-fg: var(--danger); --ui-button-border: var(--danger); --ui-button-hover: var(--danger-bg-hover); font-weight: 600; }
 .ui-button.ui-button--quiet { --ui-button-bg: transparent; --ui-button-border: transparent; --ui-button-fg: var(--muted); }
 .ui-button.ui-button--warn { --ui-button-bg: var(--warn-bg); --ui-button-fg: var(--warn-text); --ui-button-border: var(--warn); --ui-button-hover: color-mix(in srgb, var(--warn-bg), var(--warn) 20%); font-weight: 600; }
-.ui-button:hover:not(:disabled) { background: var(--ui-button-hover); }
+/* --bg-hover は半透明（文字色の 6%）。単独で background にすると通常時の不透明な背景が消え、
+   下地が暗いとき（ライトテーマで暗い帯の上に載るボタン等）に hover で真っ黒になる。
+   通常時の背景色の上に重ねて塗る。 */
+.ui-button:hover:not(:disabled) { background: linear-gradient(var(--ui-button-hover), var(--ui-button-hover)), var(--ui-button-bg); }
 .ui-button:active:not(:disabled) { filter: brightness(0.94); }
 .ui-button:focus-visible, .ui-input:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
 .ui-button:disabled { opacity: 0.5; cursor: not-allowed; }

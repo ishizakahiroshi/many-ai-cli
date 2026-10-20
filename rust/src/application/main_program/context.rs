@@ -27,6 +27,8 @@ impl MainContext {
         let paths = runtime_context::runtime_paths(trial, &application_home)?;
         crate::logging::input_probe::init(&paths.resource(crate::config::Resource::Logs));
         crate::logging::branch_probe::init(&paths.resource(crate::config::Resource::Logs));
+        crate::logging::spawn_probe::init(&paths.resource(crate::config::Resource::Logs));
+        crate::logging::spawn_probe::mark("context_loaded", Some(std::process::id()), None);
         let cwd = std::env::current_dir()?;
         if paths.is_trial() {
             crate::profile::subscriptions::check_path(&paths, &cwd)?;

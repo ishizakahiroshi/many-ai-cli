@@ -329,8 +329,8 @@ mod tests {
     fn targets_that_ssh_could_read_as_options_are_rejected() {
         for ok in [
             "myserver",
-            "user@host.example",
-            "ssh://user@host.example:2222",
+            "user@example.com",
+            "ssh://user@example.com:2222",
             "user@[2001:db8::1]",
         ] {
             assert!(validate_target(ok).is_ok(), "{ok}");
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn saved_path_is_read_after_the_marker_only() {
         let name = "20261015_000000001_shot.png";
-        let path = format!("/home/u/{REMOTE_DIR}/{name}");
+        let path = format!("/srv/u/{REMOTE_DIR}/{name}");
         assert_eq!(
             parse_remote_path(format!("{PATH_MARKER}{path}").as_bytes(), name),
             Some(path.clone())
@@ -389,7 +389,7 @@ mod tests {
             None
         );
         assert_eq!(
-            parse_remote_path(format!("{PATH_MARKER}/home/u/other.png").as_bytes(), name),
+            parse_remote_path(format!("{PATH_MARKER}/srv/u/other.png").as_bytes(), name),
             None
         );
     }
@@ -418,8 +418,8 @@ mod tests {
     #[test]
     fn only_absolute_and_home_paths_naming_a_file_can_be_fetched() {
         assert_eq!(
-            validate_remote_path("/home/u/kobo/out.png").unwrap(),
-            RemotePath::Absolute("/home/u/kobo/out.png")
+            validate_remote_path("/srv/u/kobo/out.png").unwrap(),
+            RemotePath::Absolute("/srv/u/kobo/out.png")
         );
         assert_eq!(
             validate_remote_path("~/kobo/out file.png").unwrap(),
@@ -434,8 +434,8 @@ mod tests {
             "~/",
             "~user/out.png",
             "/",
-            "/home/u/kobo/",
-            "/home/u/a\nb.png",
+            "/srv/u/kobo/",
+            "/srv/u/a\nb.png",
         ] {
             assert!(validate_remote_path(bad).is_err(), "{bad:?}");
         }

@@ -340,6 +340,11 @@ impl ProcessWrappedSpawner {
                         let receipt = receipt.take().expect("one registration transfer");
                         let binding = receipt.binding();
                         let reap = bundle.owner.receipt();
+                        crate::logging::spawn_probe::mark(
+                            "hub_registration_accepted",
+                            Some(reap.pid()),
+                            None,
+                        );
                         match bundle.owner.begin_registration(receipt) {
                             Ok(owner) => Some(Ok(PendingRegistrationAck {
                                 owner: Some(owner),
@@ -556,12 +561,14 @@ async fn lifecycle(
                 "wrapper startup closed",
             ));
         }
+        crate::logging::spawn_probe::mark("hub_native_spawn_begin", None, None);
         let owner = WrapperStartup::spawn(
             entry.attempt,
             &prepared.process,
             prepared.stdout,
             prepared.stderr,
         )?;
+        crate::logging::spawn_probe::mark("hub_native_spawned", Some(owner.pid()), None);
         let receipt = owner.receipt();
         state.native_start = Some(owner.pid());
         // Ordinary Start owns this advisory write, never the eventual ACK.

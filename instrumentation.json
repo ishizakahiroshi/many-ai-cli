@@ -514,6 +514,33 @@
       ],
       "removalCondition": "再発時の記録を読んで原因を確定し、修正と回帰テストを入れた後に、利用者が調査をやめると決めたときも同じく、files を消し sharedFiles の空実装・branch_probe:: の呼び出し点・files/branch.rs の BranchLookupDetail と branch_detailed（branch() の本体へ戻す）を単独の撤去 commit で除去する。共有ファイルのフックは手で外す。リリース前に必ず撤去する",
       "reason": "「(no git)」の原因が確定していない。起動時の取得は 250ms の制限で git rev-parse を 1 回打つだけで、時間切れ・起動失敗・0 以外の終了のどれでも同じ空の文字列になり、Hub は理由を残していない。同じ端末で同じコマンドが 250ms を超える回があることは測れたが、起動時に空になった本当の理由と、その後 40 秒以上直らなかった理由は確かめられていない。利用者が普段使う中で再発を待つため、debug ビルドで既定記録とし、保存は 7 日・合計 20MB・1 ファイル 4MB で自動的に消す"
+    },
+    {
+      "id": "rust-spawn-probe",
+      "status": "active",
+      "purpose": "セッションを起動してから端末に最初の文字が出るまでが遅い件（2026-10-20）を、段階別の所要時間で切り分ける。Hub が wrapper を起こす前後・登録受付、wrapper の準備・登録・PTY 起動・最初の出力で、1 段階 1 行の時刻を残す",
+      "addedIn": "pending",
+      "gate": "Rust cfg(debug_assertions) のビルドだけに本体を組み込み、--release の成果物は空実装になる。debug ビルドでは既定で記録し、MANY_AI_CLI_SPAWN_PROBE=0 で止まる。テスト（cfg(test)）では書かない。パス・引数・環境変数・端末出力は保存せず、段階名・epoch ミリ秒・pid・wrapper の pid・セッション番号だけを残す",
+      "due": "2026-10-30",
+      "files": [
+        "rust/src/logging/spawn_probe.rs"
+      ],
+      "sharedFiles": [
+        "rust/src/logging/mod.rs",
+        "rust/src/application/main_program/context.rs",
+        "rust/src/application/wrapped_spawn.rs",
+        "rust/src/wrapper/entry.rs",
+        "rust/src/wrapper/runtime.rs"
+      ],
+      "channels": [
+        "logs/spawn-probe/<日付>_<pid>.jsonl"
+      ],
+      "artifactNeedles": [
+        "MANY_AI_CLI_SPAWN_PROBE",
+        "spawn-probe"
+      ],
+      "removalCondition": "遅い段階を特定し、修正して再計測で改善を確かめた後に、files を消し sharedFiles の空実装・spawn_probe:: の呼び出し点を単独の撤去 commit で除去する。リリース前に必ず撤去する",
+      "reason": "起動が遅い原因の段階が未特定で、推測で高速化すると効かない場所を直すことになる。利用者が普段使う中で数回起動して記録を集めるため debug ビルドで既定記録とし、保存は 7 日・合計 20MB・1 ファイル 4MB で自動的に消す"
     }
   ]
 }

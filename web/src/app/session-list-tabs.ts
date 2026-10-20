@@ -2,10 +2,11 @@
 import { t } from '../i18n.js';
 import type { SessionSnapshot } from '../types/proto.js';
 import type { SidebarProjectNode } from './sidebar-tree.js';
-import { SESSION_LIST_TAB_DRAG, SESSION_LIST_CARD_DRAG, SESSION_LIST_TABS_KEY,
+import { SESSION_LIST_TAB_DRAG, SESSION_LIST_CARD_DRAG, SESSION_LIST_GROUP_DRAG, SESSION_LIST_TABS_KEY,
   loadSessionListTabs, normalizeSessionListTabs, saveSessionListTabs, addSessionListTab, nextSessionListTabName,
   renameSessionListTab, deleteSessionListTab, reorderSessionListTab, reconcileSessionListTabs,
   sessionListIdentity, sessionListFamilies, sessionListOwners, canMoveSessionListFamily, moveSessionListFamily,
+  moveSessionListProject,
   filterSessionListTree, sessionListWaitingCounts, loadSessionListStopped, saveSessionListStopped,
   noteSessionListStopped, clearSessionListStopped, isSessionListStoppedShown, settleSessionListStopped,
   rememberSessionListActive, sessionListTabSession, type SessionListTabState } from './session-list-tab-state.js';
@@ -33,7 +34,8 @@ let heldPointerId: number | null = null;
 let menu: HTMLElement | null = null;
 let dialog: HTMLDialogElement | null = null;
 let menuOrigin: HTMLElement | null = null;
-let drag: { kind: 'tab'; id: string } | { kind: 'session'; id: number; identity: string } | null = null;
+let drag: { kind: 'tab'; id: string } | { kind: 'session'; id: number; identity: string }
+  | { kind: 'group'; key: string; from: string } | null = null;
 let edgeFrame = 0;
 let edgeDirection = 0;
 let touchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -473,6 +475,9 @@ export function sessionListCanMove(id: number): boolean {
 }
 
 function clearFeedback(): void { strip()?.querySelectorAll('.session-list-tab').forEach(tab => tab.classList.remove('drop-before', 'drop-after', 'drop-session')); }
+function dragMime(kind: 'tab' | 'session' | 'group'): string {
+  return kind === 'tab' ? SESSION_LIST_TAB_DRAG : kind === 'group' ? SESSION_LIST_GROUP_DRAG : SESSION_LIST_CARD_DRAG;
+}
 function stopEdge(): void { cancelAnimationFrame(edgeFrame); edgeFrame = 0; edgeDirection = 0; }
 function clearDrag(): void { drag = null; stopEdge(); clearFeedback(); renderSessionListTabs(); }
 function edgeScroll(): void {
@@ -483,7 +488,7 @@ function edgeScroll(): void {
 function bindDrag(parent: HTMLElement, sidebar: HTMLElement): void {
   sidebar.addEventListener('dragstart', event => {
     clearDrag(); cancelTouch(); closeMenu(false);
-    const origin = (event.target as Element).closest<HTMLElement>('[data-session-list-tab], .card[data-session-id]');
+    const origin = (event.target as Element).closest<HTMLElement>('[data-session-list-tab], .project-group-header[data-project], .card[data-session-id]');
     if (!origin || !event.dataTransfer) return;
     if (origin.dataset.sessionListTab) {
       callbacks?.resetDrag();
@@ -491,6 +496,11 @@ function bindDrag(parent: HTMLElement, sidebar: HTMLElement): void {
       event.dataTransfer.setData(SESSION_LIST_TAB_DRAG, JSON.stringify(drag));
       // Do not provide a pane payload for sidebar bucket reordering.
       event.dataTransfer.effectAllowed = 'move'; event.stopPropagation();
+    } else if (origin.dataset.project !== undefined) {
+      // No stopPropagation: the header's own dragstart still sets dragSrcGroupKey for group reordering.
+      drag = { kind: 'group', key: origin.dataset.project, from: state().selectedId };
+      event.dataTransfer.setData(SESSION_LIST_GROUP_DRAG, JSON.stringify(drag));
+      event.dataTransfer.effectAllowed = 'move';
     } else {
       const id = Number(origin.dataset.sessionId), identity = sessionListIdentity(all().find(session => session.id === id));
       if (!identity) return;
@@ -501,13 +511,15 @@ function bindDrag(parent: HTMLElement, sidebar: HTMLElement): void {
   }, true);
   parent.addEventListener('dragover', event => {
     if (!drag || !event.dataTransfer) return;
-    const mime = drag.kind === 'tab' ? SESSION_LIST_TAB_DRAG : SESSION_LIST_CARD_DRAG;
+    const mime = dragMime(drag.kind);
     if (!event.dataTransfer.types.includes(mime)) return;
     event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'move'; clearFeedback();
     const target = (event.target as Element).closest<HTMLElement>('[data-session-list-tab]');
     if (target) {
       const rect = target.getBoundingClientRect();
-      target.classList.add(drag.kind === 'session' ? 'drop-session' : event.clientX > rect.left + rect.width / 2 ? 'drop-after' : 'drop-before');
+      target.classList.add(drag.kind === 'tab'
+        ? event.clientX > rect.left + rect.width / 2 ? 'drop-after' : 'drop-before'
+        : 'drop-session');
     }
     const rect = parent.getBoundingClientRect();
     const direction = event.clientX < rect.left + 20 ? -1 : event.clientX > rect.right - 20 ? 1 : 0;
@@ -516,15 +528,18 @@ function bindDrag(parent: HTMLElement, sidebar: HTMLElement): void {
   parent.addEventListener('dragleave', event => { if (!parent.contains(event.relatedTarget as Node)) { stopEdge(); clearFeedback(); } });
   parent.addEventListener('drop', event => {
     if (!drag || !event.dataTransfer) return;
-    const payload = drag, mime = payload.kind === 'tab' ? SESSION_LIST_TAB_DRAG : SESSION_LIST_CARD_DRAG;
+    const payload = drag, mime = dragMime(payload.kind);
     if (!event.dataTransfer.types.includes(mime)) { clearDrag(); return; }
     event.preventDefault(); event.stopPropagation();
     const target = (event.target as Element).closest<HTMLElement>('[data-session-list-tab]');
     if (target) {
+      const to = target.dataset.sessionListTab!;
       if (payload.kind === 'tab') {
-        const rect = target.getBoundingClientRect(); reorderSessionListTab(state(), payload.id, target.dataset.sessionListTab!, event.clientX > rect.left + rect.width / 2);
+        const rect = target.getBoundingClientRect(); reorderSessionListTab(state(), payload.id, to, event.clientX > rect.left + rect.width / 2);
+      } else if (payload.kind === 'group') {
+        if (to !== payload.from) moveSessionListProject(state(), all(), payload.key, payload.from, to);
       } else if (sessionListIdentity(all().find(session => session.id === payload.id)) === payload.identity) {
-        moveSessionListFamily(state(), all(), payload.id, target.dataset.sessionListTab!);
+        moveSessionListFamily(state(), all(), payload.id, to);
       }
     }
     callbacks?.resetDrag();

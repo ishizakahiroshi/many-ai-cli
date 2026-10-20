@@ -6,6 +6,7 @@ import { buildSidebarTree, flattenSidebarTree, type SidebarProjectNode } from '.
 export const SESSION_LIST_TABS_KEY = 'many-ai-cli-session-list-tabs-v1';
 export const SESSION_LIST_TAB_DRAG = 'application/x-many-ai-cli-session-list-tab';
 export const SESSION_LIST_CARD_DRAG = 'application/x-many-ai-cli-session-list-card';
+export const SESSION_LIST_GROUP_DRAG = 'application/x-many-ai-cli-session-list-group';
 export interface SessionListTab { id: string; name: string; }
 export interface SessionListTabState {
   version: 1;
@@ -176,6 +177,28 @@ export function moveSessionListFamily(state: SessionListTabState, sessions: Sess
     if (key) state.memberships[key] = target;
   }
   return true;
+}
+/** Roots of one project that the given tab currently owns, as decided by the one sidebar tree. */
+export function sessionListProjectRoots(state: SessionListTabState, sessions: SessionSnapshot[],
+    projectKey: string, tabId: string): number[] {
+  const project = buildSidebarTree({ sessions, order: [] }).find(item => item.key === projectKey);
+  if (!project) return [];
+  const owners = sessionListOwners(state, sessions);
+  return project.children.map(root => root.id).filter(id => owners.get(id) === tabId);
+}
+/**
+ * Move every root family of one project that belongs to fromTabId into target, leaving the same
+ * project's roots in other tabs alone. Unresolvable families are skipped; false when nothing moved.
+ */
+export function moveSessionListProject(state: SessionListTabState, sessions: SessionSnapshot[],
+    projectKey: string, fromTabId: string, target: string): boolean {
+  if (!state.tabs.some(tab => tab.id === target)) return false;
+  let moved = false;
+  for (const root of sessionListProjectRoots(state, sessions, projectKey, fromTabId)) {
+    if (sessionListOwners(state, sessions).get(root) === target) continue;
+    if (moveSessionListFamily(state, sessions, root, target)) moved = true;
+  }
+  return moved;
 }
 /** Record an opened session under the tab that owns it. Without a lifecycle identity nothing is kept. */
 export function rememberSessionListActive(state: SessionListTabState, sessions: SessionSnapshot[], id: number): boolean {
