@@ -751,7 +751,8 @@ function cardNoteText(note: CardNote): string {
 function cardNotesHtml(s, baselines: CardBaselines): string {
   const notes = collectCardNotes(s, baselines, successorSessionIDOf(Number(s.id)));
   if (notes.length === 0) return '';
-  return `<span class="card-note-dot" role="img" aria-label="${escapeHtml(notes.map(cardNoteText).join('; '))}">●</span>`;
+  const board = notes.some(note => note.kind === 'board') ? ' board' : '';
+  return `<span class="card-note-dot${board}" role="img" aria-label="${escapeHtml(notes.map(cardNoteText).join('; '))}">●</span>`;
 }
 
 function compactCardDetailsHtml(id: number): string {

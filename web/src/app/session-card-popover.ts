@@ -16,11 +16,20 @@ export function hideSessionCardPopover(): void {
   if (pop) pop.hidden = true;
 }
 
+// Scroll events from unrelated elements (terminal output, other panes) must not cancel the details;
+// only scrolling the page or a container that holds the anchor moves the row away from the cursor.
+function hideOnAnchorScroll(e: Event): void {
+  const target = e.target as (Node & { contains?: (other: Node | null) => boolean }) | null;
+  if (target === (document as unknown) || (anchor && typeof target?.contains === 'function' && target.contains(anchor))) {
+    hideSessionCardPopover();
+  }
+}
+
 function listenForDismissal(): void {
   if (listening) return;
   listening = true;
   // Cancel pending timers too, not only an already visible popover.
-  document.addEventListener('scroll', hideSessionCardPopover, true);
+  document.addEventListener('scroll', hideOnAnchorScroll, true);
   document.addEventListener('pointerdown', hideSessionCardPopover, true);
   document.addEventListener('dragstart', hideSessionCardPopover, true);
   document.addEventListener('visibilitychange', hideSessionCardPopover);

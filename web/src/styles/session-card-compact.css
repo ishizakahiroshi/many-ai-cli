@@ -44,6 +44,8 @@
 #sessions.density-compact .card-ctx-gauge { width: 24px; height: 5px; }
 #sessions.density-compact .card-children-toggle { padding: 0 3px; }
 #sessions.density-compact .card-note-dot { color: var(--muted-2); font-size: var(--fs-2xs); }
+/* A pending board update must stand out from the other (informational) notes. */
+#sessions.density-compact .card-note-dot.board { color: var(--warn); font-size: var(--fs-xs); }
 #sessions.density-compact .card-actions {
   top: 50%;
   right: 3px;

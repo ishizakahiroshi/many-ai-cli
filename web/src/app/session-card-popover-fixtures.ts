@@ -85,6 +85,23 @@ test('compact details lifecycle with synthetic DOM and deterministic timers', as
       documentStub.emit('scroll');
       assert.equal(appended[0].hidden, true);
     });
+    await context.test('scroll of an unrelated element keeps details; scroll of a container holding the card cancels them', () => {
+      const unrelated = new ElementStub();
+      const container = new ElementStub();
+      container.contains = () => true;
+      card.emit('pointerenter', { pointerType: 'mouse' });
+      documentStub.emit('scroll', { target: unrelated });
+      advance(400);
+      assert.equal(appended[0].hidden, false);
+      documentStub.emit('scroll', { target: unrelated });
+      assert.equal(appended[0].hidden, false);
+      documentStub.emit('scroll', { target: container });
+      assert.equal(appended[0].hidden, true);
+      card.emit('pointerenter', { pointerType: 'mouse' });
+      documentStub.emit('scroll', { target: container });
+      advance(400);
+      assert.equal(appended[0].hidden, true);
+    });
     await context.test('render/tab cleanup, drag, click, blur and resize cancel pending details', () => {
       const dismissals = [hideSessionCardPopover, () => documentStub.emit('dragstart'), () => documentStub.emit('pointerdown'),
         () => windowStub.emit('blur'), () => windowStub.emit('resize'), () => documentStub.emit('visibilitychange')];

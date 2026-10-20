@@ -1377,7 +1377,7 @@ function syncSettingsPanelButton(): void {
   fontsizeEl.addEventListener('change', () => { applyFontSize(fontsizeEl.value); setUserPref('display.font_size', fontsizeEl.value); });
   document.getElementById('sidebar-density-select')?.addEventListener('change', (e) => {
     const density = (e.target as HTMLSelectElement).value === 'compact' ? 'compact' : 'standard';
-    localStorage.setItem(STORAGE_SIDEBAR_DENSITY_KEY, density);
+    try { localStorage.setItem(STORAGE_SIDEBAR_DENSITY_KEY, density); } catch (_) {}
     applySidebarDensity(density);
     renderSessionList();
   });
