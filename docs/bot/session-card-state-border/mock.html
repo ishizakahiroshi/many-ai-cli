@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<!--docsweep-meta
+type: mockup
+status: planned
+tags: [mockup, sidebar]
+owner: ishizakahiroshi
+related: []
+last_reviewed: 2026-10-20
+docsweep_policy: archive_with_release
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>セッションカードの状態枠 配色・パターン比較モック — 2026-10-20</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f7f3ea; --ink:#241f1a; --ink-soft:#837a6c; --line:rgba(36,31,26,0.12);
+    --accent:#ff7a3d; --card:#fffdf8; --ok:#2e7d4f; --warn:#b8860b; --bad:#b3261e;
+    --display:'Baloo 2','Zen Maru Gothic',system-ui,cursive;
+    --body:'Zen Maru Gothic',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:var(--body);color:var(--ink);background:var(--bg);line-height:1.75;text-wrap:pretty;font-size:16px}
+  .wrap{max-width:min(1240px,94vw);margin:0 auto;padding:40px 0 80px}
+  h1{font-family:var(--display);font-weight:800;font-size:1.9rem;margin:12px 0;line-height:1.4}
+  h2{font-family:var(--display);font-weight:700;font-size:1.4rem;margin:52px 0 16px;padding-bottom:8px;border-bottom:2px solid var(--ink)}
+  h3{font-family:var(--display);font-weight:700;font-size:1.1rem;margin:28px 0 10px}
+  a{color:var(--accent);text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px}
+  .card{background:var(--card);border:2px solid var(--ink);border-radius:18px;padding:22px 24px;box-shadow:4px 5px 0 var(--line);margin:16px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;background:#fff;border:2px solid var(--ink);border-radius:12px;overflow:hidden}
+  th,td{padding:9px 13px;text-align:left;border-bottom:1px solid var(--line);font-size:0.92rem;vertical-align:top}
+  th{background:#fffdf8;font-family:var(--display);font-weight:700}
+  tr:last-child td{border-bottom:0}
+  .table-wrap{overflow-x:auto}
+  .meta{color:var(--ink-soft);font-size:0.88rem}
+  .system-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:2px solid var(--ink);background:var(--card);font-family:var(--display);font-weight:700;font-size:0.86rem}
+  .system-badge .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+  .tag{display:inline-block;padding:2px 10px;border-radius:999px;font-family:var(--display);font-weight:700;font-size:0.78rem;border:2px solid var(--ink);background:#fff;color:var(--ink)}
+  .tag-ok{background:var(--ok);color:#fff} .tag-warn{background:var(--warn);color:#fff}
+
+  /* 設問カード（decision-options.html の型） */
+  .qcard{border:2px solid var(--ink);border-radius:16px;background:var(--card);padding:16px 18px;margin:22px 0;box-shadow:4px 5px 0 var(--line)}
+  .qhead{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 8px}
+  .qhead h3{margin:0}
+  .qid{font-family:var(--display);font-weight:800;background:var(--ink);color:#fff;border-radius:8px;padding:0 10px}
+  .row{margin:6px 0;font-size:0.95rem}
+  .opts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
+  .opts.n4{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .opt{border:2px solid var(--ink);border-radius:12px;background:#fff;padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+  .opt.rec{border:3px solid var(--accent)}
+  .opt h4{margin:0;font-size:1rem;font-family:var(--display)}
+  .opt p{margin:0;font-size:0.9rem}
+  .opt .pick{margin-top:auto;display:flex;gap:8px;align-items:center;font-weight:700;border-top:1px solid var(--line);padding-top:8px;cursor:pointer}
+  .opt .pick input{width:1.1em;height:1.1em}
+  .opt.chosen{background:#fff7f0;outline:3px solid var(--ink);outline-offset:-3px}
+  .rec-mark{display:inline-block;padding:0 8px;border-radius:999px;background:var(--accent);color:#fff;font-size:0.78rem;font-weight:700;margin-left:4px}
+  .backlink{font-size:0.88rem;margin:10px 0 0}
+  .tools{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+  .tools button,.mini{font-family:inherit;font-weight:700;border:2px solid var(--ink);border-radius:10px;padding:6px 14px;background:#fff;cursor:pointer;color:var(--ink)}
+  .tools button.pri{background:var(--accent);color:#fff}
+  #out,#live-memo{width:100%;min-height:9em;font-family:inherit;font-size:0.92rem;border:2px solid var(--ink);border-radius:10px;padding:10px}
+  #memo{width:100%;min-height:4em;font-family:inherit;font-size:0.92rem;border:2px solid var(--ink);border-radius:10px;padding:8px}
+
+  /* 並べて見る図 */
+  .ba.cmp{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:12px 0}
+  .ba.cmp.t3{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+  .fig-col{min-width:0;border:2px solid var(--ink);border-radius:12px;background:#fff;padding:10px 10px 12px}
+  .fig-cap{font-family:var(--display);font-weight:700;margin:0 0 6px;font-size:0.98rem}
+  .fig-cap b{display:inline-block;background:var(--ink);color:#fff;border-radius:7px;padding:0 8px;margin-right:4px}
+  .fig-note{font-size:0.82rem;color:var(--ink-soft);margin:6px 0 0;line-height:1.5}
+  .sw{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px;font-size:0.82rem}
+  .sw span{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:1px 10px 1px 3px;background:#fff}
+  .sw i{display:inline-block;width:18px;height:18px;border-radius:50%;border:1px solid rgba(0,0,0,.25)}
+
+  /* 追従バー */
+  .stickbar{position:sticky;top:0;z-index:20;background:#eef4ff;border:2px solid var(--ink);border-radius:12px;padding:8px 14px;margin:16px 0;font-size:0.9rem;display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center}
+  .stickbar b{color:#b3430a}
+  .seg{display:inline-flex;border:2px solid var(--ink);border-radius:999px;overflow:hidden;margin-left:auto}
+  .seg button{font-family:inherit;font-weight:700;border:0;background:#fff;padding:2px 14px;cursor:pointer;color:var(--ink)}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:#fff}
+
+  /* ===== アプリのサイドバーを写した部分 =====
+     色の出どころ: Dark = styles.css 47-93 行 / Light = 167-212 行 / カスタム = theme-tokens.ts deriveCustomTheme。
+     カードの形: styles.css 1318-1500 行を簡略化（フォントとアイコンの細部は実物と違う）。 */
+  .sb{--bw:2px;--tint-a:12%;--tint-s:7%;--glow:10px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;font-family:system-ui,'Segoe UI','Yu Gothic UI',sans-serif;font-size:13px;line-height:1.4;overflow:hidden}
+  .sb.dark{--bg:#0e0f12;--bg-elev:#15171c;--bg-deep:#08090b;--line:rgba(255,255,255,0.08);--line-soft:rgba(255,255,255,0.14);--text:#e2e8f0;--text-dim:#94a3b8;--muted:#8994a3;--muted-2:#475569;--accent:#6366f1;--accent-glow:rgba(99,102,241,0.25);--warn:#f59e0b;--warn-bg:#92400e;--green:#22c55e;--green-text:#86efac;--stand-bg:#334155;--stand-ink:#cbd5e1;--run-ink:#86efac}
+  .sb.light{--bg:#f1f5f9;--bg-elev:#ffffff;--bg-deep:#e2e8f0;--line:#cbd5e1;--line-soft:#94a3b8;--text:#0f172a;--text-dim:#64748b;--muted:#475569;--muted-2:#64748b;--accent:#4f46e5;--accent-glow:rgba(79,70,229,0.15);--warn:#d97706;--warn-bg:#fef3c7;--green:#16a34a;--green-text:#166534;--stand-bg:#e2e8f0;--stand-ink:#334155;--run-ink:#166534}
+  .scard{position:relative;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:5px 40px 5px 14px;margin-bottom:4px;overflow:hidden;cursor:default}
+  .scard:last-child{margin-bottom:0}
+  .scard::before{content:'';position:absolute;left:0;top:5px;bottom:5px;width:3px;border-radius:0 3px 3px 0;background:var(--stand-bg);opacity:.6}
+  .scard.running::before{background:var(--green);opacity:1}
+  .scard.idc.idc-green{--ident:#34d399} .scard.idc.idc-blue{--ident:#60a5fa}
+  .scard.idc{border-color:color-mix(in srgb,var(--ident) 65%,var(--line))}
+  .scard.idc::before{background:var(--ident);opacity:1}
+  .scard.child{margin-left:8px;border-left:2px solid color-mix(in srgb,var(--accent) 65%,transparent)}
+  /* 今のアプリの見た目（承認待ちは薄い背景と左バー。停止は丸の色だけ） */
+  .scard.appr{background:color-mix(in srgb,var(--warn-bg) 12%,var(--bg-elev))}
+  .scard.appr::before{background:var(--c-appr);opacity:1;width:5px}
+  .scard.active{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--bg-elev));box-shadow:0 0 0 1px var(--accent),0 0 14px var(--accent-glow)}
+  .scard.active::before{background:var(--accent);opacity:1;width:5px;top:3px;bottom:3px}
+  .r1{display:flex;align-items:center;gap:4px;overflow:hidden;white-space:nowrap}
+  .r1 b{font-size:16px;line-height:1.2}
+  .pill{display:inline-flex;align-items:center;justify-content:center;width:1.1rem;height:1.1rem;border-radius:4px;flex:none}
+  .pill svg{width:14px;height:14px;display:block;overflow:visible}
+  .pill.standby{color:var(--stand-ink)} .pill.running{color:var(--run-ink)}
+  .pill.running svg{animation:spin 1s linear infinite;transform-origin:50% 50%}
+  .pill.appr{color:#111;background:var(--c-appr)}
+  .pill.stop{color:var(--c-stop)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .pv{width:14px;height:14px;border-radius:50%;background:#fb923c;color:#111;font-size:9px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
+  .mdl{font-size:10.5px;color:var(--green-text);flex:none}
+  .ttl{font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .r2{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);margin-top:2px;white-space:nowrap;overflow:hidden}
+  .chip{border:1px dashed var(--line-soft);border-radius:4px;padding:0 5px;font-weight:700;font-size:10.5px;flex:none}
+  .gauge{width:38px;height:6px;border:1px solid var(--line);border-radius:3px;background:var(--bg-deep);overflow:hidden;display:inline-block;flex:none}
+  .gauge i{display:block;height:100%;background:var(--green)}
+  .br{margin-left:auto;font-family:Consolas,monospace;font-size:10.5px;font-weight:600;color:var(--green-text)}
+  .acts{position:absolute;right:8px;top:4px;color:var(--text-dim);letter-spacing:5px;font-size:13px}
+  .flag{display:none}
+  .sb[data-flag=on] .scard.appr .flag,.sb[data-flag=on] .scard.stop .flag{display:block;margin:-5px -40px 3px -14px;padding:1px 14px;font-size:10.5px;font-weight:700;color:#111;letter-spacing:.04em}
+  .sb[data-flag=on] .scard.appr .flag{background:var(--c-appr)}
+  .sb[data-flag=on] .scard.stop .flag{background:var(--c-stop)}
+  .sb[data-flag=on] .scard.appr .acts,.sb[data-flag=on] .scard.stop .acts{color:#111}
+
+  /* 重なり: 色ラベルを左バーに残す */
+  .sb[data-ov=keep] .scard.idc.appr::before,.sb[data-ov=keep] .scard.idc.stop::before{background:var(--ident);opacity:1}
+
+  /* 枠パターン A: 全周枠 / B: 面で塗る（B は 1px 枠＋濃い背景） */
+  .sb[data-pat=p1] .scard.appr,.sb[data-pat=p2] .scard.appr{border-color:var(--c-appr);box-shadow:inset 0 0 0 calc(var(--bw) - 1px) var(--c-appr);background:color-mix(in srgb,var(--c-appr) var(--tint-a),var(--bg-elev))}
+  .sb[data-pat=p1] .scard.stop,.sb[data-pat=p2] .scard.stop{border-color:var(--c-stop);box-shadow:inset 0 0 0 calc(var(--bw) - 1px) var(--c-stop);background:color-mix(in srgb,var(--c-stop) var(--tint-s),var(--bg-elev))}
+  .sb[data-pat=p1] .scard.stop::before{background:var(--c-stop);opacity:1}
+  .sb[data-pat=p1] .scard.appr{animation:glowA 1.8s ease-in-out infinite}
+  @keyframes glowA{
+    0%,100%{box-shadow:inset 0 0 0 calc(var(--bw) - 1px) var(--c-appr),0 0 0 0 transparent}
+    50%{box-shadow:inset 0 0 0 calc(var(--bw) - 1px) var(--c-appr),0 0 var(--glow) 1px color-mix(in srgb,var(--c-appr) 55%,transparent)}
+  }
+  .sb[data-pat=p1] .scard.active.appr{border-color:var(--c-appr);background:color-mix(in srgb,var(--c-appr) var(--tint-a),var(--bg-elev));animation:glowAA 1.8s ease-in-out infinite}
+  .sb[data-pat=p2] .scard.active.appr{border-color:var(--c-appr);background:color-mix(in srgb,var(--c-appr) var(--tint-a),var(--bg-elev));box-shadow:inset 0 0 0 calc(var(--bw) - 1px) var(--c-appr),0 0 0 2px var(--accent)}
+  @keyframes glowAA{
+    0%,100%{box-shadow:inset 0 0 0 calc(var(--bw) - 1px) var(--c-appr),0 0 0 2px var(--accent)}
+    50%{box-shadow:inset 0 0 0 calc(var(--bw) - 1px) var(--c-appr),0 0 0 2px var(--accent),0 0 var(--glow) 3px color-mix(in srgb,var(--c-appr) 55%,transparent)}
+  }
+  /* 枠パターン C: 外側だけ光る */
+  .sb[data-pat=p4] .scard.appr{background:var(--bg-elev);animation:glowB 1.8s ease-in-out infinite}
+  .sb[data-pat=p4] .scard.stop{box-shadow:0 0 0 1px color-mix(in srgb,var(--c-stop) 65%,transparent),0 0 calc(var(--glow) * .6) 0 color-mix(in srgb,var(--c-stop) 40%,transparent)}
+  .sb[data-pat=p4] .scard.stop::before{background:var(--c-stop);opacity:1}
+  @keyframes glowB{
+    0%,100%{box-shadow:0 0 0 1px color-mix(in srgb,var(--c-appr) 70%,transparent),0 0 0 0 transparent}
+    50%{box-shadow:0 0 0 1px color-mix(in srgb,var(--c-appr) 70%,transparent),0 0 var(--glow) 1px color-mix(in srgb,var(--c-appr) 60%,transparent)}
+  }
+  .sb[data-pat=p4] .scard.active.appr{animation:none;box-shadow:0 0 0 1px var(--accent),0 0 var(--glow) 2px color-mix(in srgb,var(--c-appr) 60%,transparent)}
+  @media (prefers-reduced-motion:reduce){.sb .scard{animation:none!important}}
+  body.noanim .sb .scard{animation:none!important}
+
+  /* 作り込みパネル */
+  .panel{display:grid;grid-template-columns:minmax(300px,420px) minmax(0,1fr);gap:18px;align-items:start}
+  .ctl{border:2px solid var(--ink);border-radius:14px;background:var(--card);padding:12px 14px;display:grid;gap:9px;font-size:0.9rem}
+  .ctl label{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+  .ctl .lab{min-width:7.5em;font-weight:700}
+  .ctl input[type=range]{flex:1 1 120px}
+  .ctl select{font-family:inherit;border:2px solid var(--ink);border-radius:8px;padding:2px 6px;background:#fff}
+  .ctl input[type=color]{width:42px;height:28px;border:2px solid var(--ink);border-radius:6px;padding:0;background:#fff}
+  .ctl .val{min-width:3.2em;color:var(--ink-soft)}
+  .ctl hr{border:0;border-top:1px solid var(--line);margin:2px 0;width:100%}
+  @media(max-width:900px){.opts.n4{grid-template-columns:repeat(2,minmax(0,1fr))}.panel{grid-template-columns:1fr}}
+  @media(max-width:720px){.opts,.opts.n4{grid-template-columns:1fr} h1{font-size:1.5rem}}
+  @media print{ body{background:#fff} .card,.qcard{box-shadow:none} .tools,.stickbar{display:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="system-badge"><span class="dot"></span> 対象: <b>many-ai-cli</b></div>
+<h1>セッションカードの「承認待ち」「未確認で停止」を枠で目立たせる — 配色・パターン比較モック</h1>
+<p class="meta">2026-10-20 ／ ステータス: <span class="tag tag-warn">草案</span> ／ 画面の見た目を決めるための認識合わせ（動くアプリではなく、色の見え方を描いた絵）</p>
+
+<div class="card">
+<p style="margin:0 0 6px"><b>この資料でやること。</b> サイドバーのセッションカードで、「承認待ち」と「未確認で停止」が流し見でも分かるように、カードの枠の色で目立たせる案を並べました。選べる 3 点（枠のパターン・色・重なり方）を、実際のテーマの色に写して見比べられます。</p>
+<p style="margin:0 0 6px"><b>見方。</b> Q1〜Q3 の案を選ぶと、S-04（6 種類のテーマ）と S-05（作り込みパネル）が選んだ内容に変わります。何も選ばないときは、おすすめの A で表示します。右上の「背景」で暗い画面と明るい画面を切り替えられます。</p>
+<p style="margin:0"><b>注意。</b> 色は実アプリの色の定義を写し、カードの形は実アプリの CSS を簡略化して写しました。<b>実アプリの画面では確認していません。</b>文字やアイコンの細部は実物と少し違います。動く部分（脈動）は、OS の「アニメーション効果」をオフにすると止まります。</p>
+</div>
+
+<div class="stickbar" id="stickbar">
+  <span>いまの選択 — Q1 パターン: <b id="sb-q1">未選択（A で表示）</b></span>
+  <span>Q2 色: <b id="sb-q2">未選択（A で表示）</b></span>
+  <span>Q3 重なり: <b id="sb-q3">未選択（A で表示）</b></span>
+  <span class="seg" role="group" aria-label="背景の明暗"><button type="button" id="mode-dark" aria-pressed="true">暗い画面</button><button type="button" id="mode-light" aria-pressed="false">明るい画面</button></span>
+</div>
+
+<h2 id="fix">決めていただきたいこと</h2>
+<p>決めていただきたいことは 3 つです。おすすめは、どの設問も先頭の A です。</p>
+<div class="table-wrap"><table id="qlist">
+<thead><tr><th>番号</th><th>決めること</th><th>おすすめ</th><th>いつ決めるか</th></tr></thead>
+<tbody>
+<tr><td><a href="#q1"><b>Q1</b></a></td><td>承認待ちと未確認で停止を、どんな見せ方で目立たせるか</td><td>A 全周に枠をつける</td><td>作り込みに入る前（急ぎではない）</td></tr>
+<tr><td><a href="#q2"><b>Q2</b></a></td><td>枠に使う色（承認待ち・未確認で停止）</td><td>A 橙＋黄</td><td>作り込みの途中でも変えられる</td></tr>
+<tr><td><a href="#q3"><b>Q3</b></a></td><td>色ラベル・選択中の枠と、状態の枠が重なるときの優先順</td><td>A 状態を優先し、色ラベルは左バーに残す</td><td>作り込みに入る前（急ぎではない）</td></tr>
+</tbody></table></div>
+
+<h2 id="screens">画面リスト</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>画面 ID</th><th>画面名</th><th>一言説明</th></tr></thead>
+<tbody>
+<tr><td><a href="#q1">S-01</a></td><td>枠のパターン比較（Q1）</td><td>同じ 5 枚のカードに 4 つの見せ方を当てて並べる</td></tr>
+<tr><td><a href="#q2">S-02</a></td><td>色の比較（Q2）</td><td>3 組の色を同じパターンで並べ、色相の差を数字で出す</td></tr>
+<tr><td><a href="#q3">S-03</a></td><td>重なり方の比較（Q3）</td><td>色ラベル・子セッション・選択中と状態が重なるカード</td></tr>
+<tr><td><a href="#s04">S-04</a></td><td>テーマ別の見え方</td><td>選んだ内容を、標準 2 種とカスタム 4 種のテーマに写す。枠と背景の明暗差も計算</td></tr>
+<tr><td><a href="#s05">S-05</a></td><td>作り込みパネル</td><td>色・太さ・背景の色づけ・光り方を自由に動かして、設定メモを出す</td></tr>
+<tr><td><a href="#states">—</a></td><td>状態一覧と状態の動き</td><td>各状態が今どう見え、提案でどう変わり、いつ消えるか</td></tr>
+</tbody></table></div>
+
+<!-- ===================== Q1 ===================== -->
+<h2 id="s01">S-01 枠のパターン比較</h2>
+<div class="qcard" id="q1">
+<div class="qhead"><span class="qid">Q1</span><h3>承認待ちと未確認で停止を、どんな見せ方で目立たせるか</h3></div>
+<p class="row"><b>何を決めるか：</b>カードをどんな見せ方で目立たせるかを選んでください。下の図は、どれも同じ 5 枚（実行中・承認待ち・未確認で停止・待機・選択中）です。</p>
+<div class="ba cmp" id="fig1" aria-label="4 つの見せ方の比較"></div>
+<div class="opts n4" id="opts1">
+<div class="opt rec">
+<h4>A　全周に枠をつける<span class="rec-mark">おすすめ</span></h4>
+<p>承認待ちは橙の枠がゆっくり光り、未確認で停止は黄の枠が静かに付きます。</p>
+<p>メリット：一覧を流し見したとき、カードの輪郭で気づけます。承認待ちは動き、停止は動かないので、急ぎの度合いも見分けられます。枠はカードの内側に描くので、カードの大きさは変わりません。</p>
+<p>デメリット：承認待ちが何枚も同時に出ると、光る枠が並んでにぎやかに見えます。</p>
+<p>改修の目安：変更 0.5 日・確認 0.5 日（概算）</p>
+<label class="pick"><input type="radio" name="q1" value="A　全周に枠をつける" data-key="A" data-rec="1"> この案にする</label>
+</div>
+<div class="opt">
+<h4>B　カード全体を色で塗る</h4>
+<p>カードの背景を橙・黄で濃く塗ります。動きはありません。</p>
+<p>メリット：枠より面積が広いので、遠くからでも色の違いが分かります。動かないので落ち着いて見えます。</p>
+<p>デメリット：背景が濃くなり、カード内の文字や小さなラベルとの差が縮みます。</p>
+<p>改修の目安：変更 0.5 日・確認 0.5 日（概算）</p>
+<label class="pick"><input type="radio" name="q1" value="B　カード全体を色で塗る" data-key="B"> この案にする</label>
+</div>
+<div class="opt">
+<h4>C　外側だけ光らせる（枠なし）</h4>
+<p>枠線は付けず、カードの外側に色の光だけを出します。承認待ちはゆっくり脈打ちます。</p>
+<p>メリット：カードの中身の見た目は今のままで、周りだけが変わります。</p>
+<p>デメリット：枠線がないので、光が弱く見えるテーマでは気づきにくくなる場合があります（S-04 で確認できます）。</p>
+<p>改修の目安：変更 0.5 日・確認 0.5 日（概算）</p>
+<label class="pick"><input type="radio" name="q1" value="C　外側だけ光らせる（枠なし）" data-key="C"> この案にする</label>
+</div>
+<div class="opt">
+<h4>D　今のまま</h4>
+<p>承認待ちは薄い背景と左の橙バー。未確認で停止は丸が黄色になるだけです。</p>
+<p>メリット：見慣れた表示のまま変わりません。</p>
+<p>デメリット：未確認で停止は丸 1 つの色だけなので、流し見では気づけません（今回の相談の原因です）。</p>
+<p>改修の目安：変更なし</p>
+<label class="pick"><input type="radio" name="q1" value="D　今のまま" data-key="D"> この案にする</label>
+</div>
+</div>
+<p class="row"><b>おすすめの理由：</b>承認待ち（今すぐ操作が要る）は動く枠、未確認で停止（見るだけ）は静かな枠と、急ぎの度合いで見せ方を変えられるのは A だけです。</p>
+<p class="row"><b>いつ決めるか：</b>作り込みに入る前（急ぎではありません）。</p>
+<p class="row"><b>直るまでの防ぎ方：</b>決まるまでは今の表示のままで、丸の色と旗のアイコン、タブの数字で見分けられます。</p>
+<p class="backlink"><a href="#qlist">↑ 決めることの一覧へ戻る</a></p>
+</div>
+
+<!-- ===================== Q2 ===================== -->
+<h2 id="s02">S-02 色の比較</h2>
+<div class="qcard" id="q2">
+<div class="qhead"><span class="qid">Q2</span><h3>枠に使う色（承認待ち・未確認で停止）</h3></div>
+<p class="row"><b>何を決めるか：</b>承認待ちと未確認で停止の枠に使う色の組を選んでください。パターンは Q1 の選択（今のままを選んでいるときは A）で描いています。</p>
+<div class="ba cmp t3" id="fig2" aria-label="3 組の色の比較"></div>
+<div class="opts" id="opts2">
+<div class="opt rec">
+<h4>A　橙＋黄<span class="rec-mark">おすすめ</span></h4>
+<p>承認待ちは濃い橙、未確認で停止は明るい黄にします。</p>
+<p>メリット：2 色が並んでも見分けやすく、「橙は今操作が要る、黄は見るだけ」と直感で分かれます。ご希望の橙・黄とも同じです。</p>
+<p>デメリット：橙は Claude のアイコンの色（#fb923c）に近く、Claude のセッションが並ぶと、アイコンと枠の色が似て見えます。</p>
+<p>改修の目安：色の指定だけなので、Q1 の変更に含まれます。</p>
+<label class="pick"><input type="radio" name="q2" value="A　橙＋黄" data-key="A" data-rec="1"> この案にする</label>
+</div>
+<div class="opt">
+<h4>B　橙＋水色</h4>
+<p>承認待ちは橙、未確認で停止は穏やかな水色にします。</p>
+<p>メリット：橙との差が最も大きく、「終わって静かに待っている」印象と合います。</p>
+<p>デメリット：水色は Codex のアイコンの青（#60a5fa）に近く、Codex のセッションでは枠とアイコンの色が似て見えます。</p>
+<p>改修の目安：色の指定だけなので、Q1 の変更に含まれます。</p>
+<label class="pick"><input type="radio" name="q2" value="B　橙＋水色" data-key="B"> この案にする</label>
+</div>
+<div class="opt">
+<h4>C　今の色（琥珀＋黄）</h4>
+<p>今の画面の警告色（承認待ち）と黄色（未確認で停止）をそのまま使います。</p>
+<p>メリット：ゲージの警告や親セッションの印など、ほかの警告表示と同じ色にそろいます。</p>
+<p>デメリット：2 色の色相がとても近く（上の図の数字）、並ぶと見分けにくくなります。</p>
+<p>改修の目安：変更なし</p>
+<label class="pick"><input type="radio" name="q2" value="C　今の色（琥珀＋黄）" data-key="C"> この案にする</label>
+</div>
+</div>
+<p class="row"><b>おすすめの理由：</b>2 色の意味（今すぐ・見るだけ）が色の違いで読み取れ、どちらも「注意」の暖色にそろうのは A です。</p>
+<p class="row"><b>いつ決めるか：</b>作り込みの途中でも変えられます（S-05 で好きな色にできます）。急ぎではありません。</p>
+<p class="row"><b>直るまでの防ぎ方：</b>決まるまでは今の色のままです。</p>
+<p class="backlink"><a href="#qlist">↑ 決めることの一覧へ戻る</a></p>
+</div>
+
+<!-- ===================== Q3 ===================== -->
+<h2 id="s03">S-03 重なり方の比較</h2>
+<div class="qcard" id="q3">
+<div class="qhead"><span class="qid">Q3</span><h3>色ラベル・選択中の枠と、状態の枠が重なるときの優先順</h3></div>
+<p class="row"><b>何を決めるか：</b>利用者が付けたカードの色ラベル、子セッションの印、選択中の青い枠が、状態の枠と重なるときの優先順を選んでください。図の 4 枚は「承認待ち＋緑のラベル」「未確認で停止＋青のラベル」「承認待ちの子セッション」「承認待ち＋選択中」です。未確認で停止は、開くと消えるので選択中とは重なりません。</p>
+<div class="ba cmp t3" id="fig3" aria-label="重なり方の比較"></div>
+<div class="opts" id="opts3">
+<div class="opt rec">
+<h4>A　状態を優先し、色ラベルは左バーに残す<span class="rec-mark">おすすめ</span></h4>
+<p>枠は状態の色にします。色ラベルは左端のバーに残り、選択中は外側に青い細い輪が残ります。</p>
+<p>メリット：承認待ちに気づけて、どのセッションかも左バーの色で分かります。選択中でも承認待ちが隠れません。</p>
+<p>デメリット：色ラベルを枠で見分けていた人は、状態が付いている間だけ枠の色が変わって見えます。</p>
+<p>改修の目安：変更 0.5 日・確認 0.5 日（概算）</p>
+<label class="pick"><input type="radio" name="q3" value="A　状態を優先し、色ラベルは左バーに残す" data-key="A" data-rec="1"> この案にする</label>
+</div>
+<div class="opt">
+<h4>B　状態の色で全部上書きする</h4>
+<p>状態が付いている間は、枠も左バーも状態の色にします。</p>
+<p>メリット：見た目が単純で、状態がいちばん強く出ます。</p>
+<p>デメリット：状態が付いている間は、色ラベルがカードのどこにも出ません。</p>
+<p>改修の目安：変更 0.5 日・確認 0.5 日（概算）</p>
+<label class="pick"><input type="radio" name="q3" value="B　状態の色で全部上書きする" data-key="B"> この案にする</label>
+</div>
+<div class="opt">
+<h4>C　今のまま</h4>
+<p>色ラベルが枠のままで、承認待ちは左バーだけが橙になります。選択中のカードは承認待ちでも青のままです（CSS の並びから読んだ挙動で、実画面では未確認）。</p>
+<p>メリット：色ラベルがいつも枠に出ます。</p>
+<p>デメリット：状態の枠を足せないので、今回の目的（流し見で気づく）が叶いません。</p>
+<p>改修の目安：変更なし</p>
+<label class="pick"><input type="radio" name="q3" value="C　今のまま" data-key="C"> この案にする</label>
+</div>
+</div>
+<p class="row"><b>おすすめの理由：</b>「状態に気づく」を最優先にしながら、色ラベルも残せるのは A だけです。</p>
+<p class="row"><b>いつ決めるか：</b>作り込みに入る前（急ぎではありません）。</p>
+<p class="row"><b>直るまでの防ぎ方：</b>決まるまでは今の表示のままです。</p>
+<p class="backlink"><a href="#qlist">↑ 決めることの一覧へ戻る</a></p>
+</div>
+
+<!-- ===================== S-04 ===================== -->
+<h2 id="s04">S-04 テーマ別の見え方</h2>
+<p>Q1〜Q3 の選択（<b id="s04-sel"></b>）を、アプリで選べるテーマに写しました。Dark と Light は標準、あとの 4 つは「カスタムテーマ」（色相とコントラストを動かす機能）の例です。カスタムテーマは背景の色味だけが変わり、警告色（橙・黄）は土台の Dark / Light のままです（<code>theme-tokens.ts</code> 冒頭の記述）。</p>
+<div class="ba cmp t3" id="themes"></div>
+<h3>枠の色と背景の明暗差（計算値）</h3>
+<p class="meta">各テーマのカード背景（色づけ前）に対する、枠の色のコントラスト比です。3 以上を○にしています（図形や枠線が背景と区別できる目安として広く使われる値）。同じ並びで暗い画面の色と明るい画面の色をそれぞれ使います。</p>
+<div class="table-wrap"><table id="ctab"></table></div>
+
+<!-- ===================== S-05 ===================== -->
+<h2 id="s05">S-05 作り込みパネル</h2>
+<p>色・太さ・背景の色づけ・光り方を自由に動かして、気に入った組み合わせを「設定メモ」として出せます。メモはそのまま次の作業の指示に貼れます。</p>
+<div class="tools"><button type="button" id="live-sync">上の選択（Q1〜Q3・背景の明暗）をパネルへ反映</button></div>
+<div class="panel">
+<div class="ctl" id="ctl">
+  <label><span class="lab">背景の明暗</span>
+    <span><input type="radio" name="live-mode" value="dark" checked> 暗</span>
+    <span><input type="radio" name="live-mode" value="light"> 明</span></label>
+  <label><span class="lab">標準テーマ</span><span><input type="checkbox" id="live-std" checked> 色相・コントラストを使わない</span></label>
+  <label><span class="lab">色相</span><input type="range" id="live-hue" min="0" max="359" value="220"><span class="val" id="v-hue"></span></label>
+  <label><span class="lab">コントラスト</span><input type="range" id="live-con" min="0" max="100" value="50"><span class="val" id="v-con"></span></label>
+  <hr>
+  <label><span class="lab">パターン</span><select id="live-pat"><option value="p1">A 全周に枠</option><option value="p2">B 面で塗る</option><option value="p4">C 外側だけ光る</option><option value="p0">D 今のまま</option></select></label>
+  <label><span class="lab">色の組</span><select id="live-pal"><option value="A">A 橙＋黄</option><option value="B">B 橙＋水色</option><option value="C">C 今の色</option><option value="X">自分で決めた色</option></select></label>
+  <label><span class="lab">承認待ちの色</span><input type="color" id="live-a" value="#f97316"><span class="val" id="v-a"></span></label>
+  <label><span class="lab">停止の色</span><input type="color" id="live-s" value="#facc15"><span class="val" id="v-s"></span></label>
+  <hr>
+  <label><span class="lab">枠の太さ</span><input type="range" id="live-bw" min="1" max="4" step="1" value="2"><span class="val" id="v-bw"></span></label>
+  <label><span class="lab">背景の色づけ（承認待ち）</span><input type="range" id="live-ta" min="0" max="40" value="12"><span class="val" id="v-ta"></span></label>
+  <label><span class="lab">背景の色づけ（停止）</span><input type="range" id="live-ts" min="0" max="30" value="7"><span class="val" id="v-ts"></span></label>
+  <label><span class="lab">光の広がり</span><input type="range" id="live-gl" min="0" max="24" value="10"><span class="val" id="v-gl"></span></label>
+  <hr>
+  <label><span class="lab">重なり方</span><select id="live-ov"><option value="keep">A 状態を優先・色ラベルは左バー</option><option value="over">B 状態で全部上書き</option><option value="now">C 今のまま</option></select></label>
+  <label><span class="lab">状態名の帯</span><span><input type="checkbox" id="live-flag"> カード上端に「承認待ち」「停止・未確認」の帯を付ける（カードが 1 行ぶん高くなる）</span></label>
+  <label><span class="lab">動き</span><span><input type="checkbox" id="live-noanim"> 脈動を止めて見る（OS の設定でアニメーションを切った状態）</span></label>
+</div>
+<div>
+  <div id="live-sb"></div>
+  <p class="fig-note">下から 3 枚は重なりの確認用（承認待ち＋選択中、承認待ち＋緑の色ラベル、承認待ちの子セッション）です。</p>
+  <h3>設定メモ</h3>
+  <textarea id="live-memo" readonly></textarea>
+  <div class="tools"><button type="button" id="live-copy">設定メモをコピー</button><span class="meta" id="live-status" aria-live="polite"></span></div>
+</div>
+</div>
+
+<!-- ===================== 状態 ===================== -->
+<h2 id="states">状態一覧と状態の動き</h2>
+<h3>状態一覧</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>状態</th><th>今の見え方</th><th>提案（Q1〜Q3 のおすすめ）</th><th>いつ消えるか</th></tr></thead>
+<tbody>
+<tr><td>実行中</td><td>緑の回る輪・左バー緑</td><td>変更なし</td><td>処理が終わったとき</td></tr>
+<tr><td>承認待ち</td><td>旗のアイコン（橙の箱）・左の橙バー・薄い背景</td><td>橙の枠 2px・ゆっくり光る・薄い橙の背景（旗のアイコンは今のまま）</td><td>承認または拒否したとき</td></tr>
+<tr><td>未確認で停止</td><td>黄色い丸だけ（タブの枠付き数字と同じ記録を見ている）</td><td>黄の枠 2px・動かない・薄い黄の背景</td><td>そのセッションを開いたとき</td></tr>
+<tr><td>待機（確認済み）</td><td>グレーの丸</td><td>変更なし</td><td>—</td></tr>
+<tr><td>選択中</td><td>青紫の枠と光</td><td>変更なし（承認待ちと重なったときだけ、橙の枠の外に青い細い輪）</td><td>別のセッションを選んだとき</td></tr>
+</tbody></table></div>
+<h3>状態の動き</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>きっかけ</th><th>カードに起きること</th><th>その後</th></tr></thead>
+<tbody>
+<tr><td>実行中に承認が必要になる</td><td>橙の枠が付き、ゆっくり光り始める</td><td>承認または拒否で枠が消え、実行中に戻る</td></tr>
+<tr><td>作業が終わって止まる（まだ開いていない）</td><td>黄の枠が静かに付く</td><td>カードを開くと枠が消え、待機に変わる</td></tr>
+<tr><td>承認待ちのまま、そのカードを選ぶ</td><td>橙の枠は残り、外側に青い輪が付く</td><td>承認または拒否で橙の枠が消え、青い輪だけ残る</td></tr>
+</tbody></table></div>
+
+<h2 id="open">未決定事項</h2>
+<ul>
+<li>☐ 子セッションの起動確認（紫）と入力待ち（青紫）にも、同じ枠の方式を広げるか</li>
+<li>☐ 上部のセッション帯（タブ）にも同じ枠を付けるか（今は状態の色を文字色に使っている）</li>
+<li>☐ 外側の光は、リストの左右の端で切れる可能性がある（実アプリのリストの余白を見て決める）</li>
+<li>☐ 承認待ちが同時に何枚も出たときの見え方（にぎやかさ）</li>
+<li>☐ OS のアニメーション効果をオフにしたときは、止まった枠と薄い背景だけで足りるか</li>
+<li>☐ 状態名の帯（S-05 のスイッチ）を付けるか。付けるとカードの高さが 1 行ぶん増える</li>
+<li>☐ 実アプリの画面での確認（このモックは実アプリで確認していない）</li>
+</ul>
+
+<div class="card" id="answer">
+<h3 style="margin-top:0">選んだ結果を返す</h3>
+<p>Q1〜Q3 の「この案にする」を選んで「結果を作る」を押すと、返信用の文ができます。S-05 のパネルの設定メモも一緒に入ります。コピーして、チャットに貼ってください。</p>
+<div class="tools">
+<button type="button" id="btn-rec">おすすめをすべて選ぶ</button>
+<button type="button" class="pri" id="btn-make">結果を作る</button>
+<button type="button" id="btn-copy">コピー</button>
+</div>
+<label for="memo"><b>ご意見・気になる点（任意）</b></label>
+<textarea id="memo"></textarea>
+<p id="copy-status" class="meta" aria-live="polite"></p>
+<textarea id="out" readonly placeholder="ここに返信用の文ができます"></textarea>
+</div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+  function $(s, r) { return (r || document).querySelector(s); }
+  function $$(s, r) { return [].slice.call((r || document).querySelectorAll(s)); }
+
+  /* ---------- 色の計算（theme-tokens.ts の deriveCustomTheme と hslHex を写した） ---------- */
+  function hexToRgb(h) {
+    h = String(h || '').replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    return { r: parseInt(h.slice(0, 2), 16) || 0, g: parseInt(h.slice(2, 4), 16) || 0, b: parseInt(h.slice(4, 6), 16) || 0 };
+  }
+  function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map(function (v) { v = Math.max(0, Math.min(255, Math.round(v))); return (v < 16 ? '0' : '') + v.toString(16); }).join('');
+  }
+  function hslHex(h, s, l) {
+    h = ((h % 360) + 360) % 360;
+    s = Math.max(0, Math.min(100, s)) / 100;
+    l = Math.max(0, Math.min(100, l)) / 100;
+    var a = s * Math.min(l, 1 - l);
+    function f(n) { var k = (n + h / 30) % 12; var c = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1); return Math.round(255 * c); }
+    return rgbToHex(f(0), f(8), f(4));
+  }
+  function clampInt(v, lo, hi) { v = Math.round(Number(v)); if (isNaN(v)) v = lo; return Math.max(lo, Math.min(hi, v)); }
+  function rgbaOf(hex, a) { var c = hexToRgb(hex); return 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',' + a + ')'; }
+  function derive(mode, hue, contrast) {
+    var t = clampInt(contrast, 0, 100) / 100, h = clampInt(hue, 0, 359);
+    if (mode === 'dark') {
+      var sat = 8 + t * 10, bgL = 13 - t * 10, textL = 74 + t * 20, mutedL = 52 + t * 6;
+      var elevL = bgL + (7 - t * 3), elev2L = elevL + 5, deepL = Math.max(1, bgL - 3);
+      var text = hslHex(h, 10, textL);
+      return { bg: hslHex(h, sat, bgL), bgElev: hslHex(h, sat, elevL), bgDeep: hslHex(h, sat, deepL), text: text,
+        textDim: hslHex(h, 8, textL - 16), muted: hslHex(h, 8, mutedL), muted2: hslHex(h, 8, mutedL - 8),
+        line: rgbaOf(text, 0.12), lineSoft: rgbaOf(text, 0.20) };
+    }
+    var satL = 10 + (1 - t) * 8, bgL2 = 90 + t * 6, textL2 = 24 - t * 16, mutedL2 = 42 - t * 8;
+    var text2 = hslHex(h, 18, textL2);
+    return { bg: hslHex(h, satL, bgL2), bgElev: hslHex(h, Math.max(0, satL - 4), Math.min(100, bgL2 + 6)), bgDeep: hslHex(h, satL, bgL2 - 4), text: text2,
+      textDim: hslHex(h, 12, textL2 + 18), muted: hslHex(h, 10, mutedL2), muted2: hslHex(h, 10, mutedL2 + 8),
+      line: rgbaOf(text2, 0.16), lineSoft: rgbaOf(text2, 0.24) };
+  }
+  function themeStyle(t) {
+    if (t.hue == null) return '';
+    var s = derive(t.mode, t.hue, t.con);
+    return '--bg:' + s.bg + ';--bg-elev:' + s.bgElev + ';--bg-deep:' + s.bgDeep + ';--text:' + s.text + ';--text-dim:' + s.textDim +
+      ';--muted:' + s.muted + ';--muted-2:' + s.muted2 + ';--line:' + s.line + ';--line-soft:' + s.lineSoft + ';';
+  }
+  function elevOf(t) { if (t.hue != null) return derive(t.mode, t.hue, t.con).bgElev; return t.mode === 'dark' ? '#15171c' : '#ffffff'; }
+  function chan(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+  function lum(hex) { var c = hexToRgb(hex); return 0.2126 * chan(c.r) + 0.7152 * chan(c.g) + 0.0722 * chan(c.b); }
+  function ratio(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  function hueOf(hex) {
+    var c = hexToRgb(hex), r = c.r / 255, g = c.g / 255, b = c.b / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    if (!d) return 0;
+    var h;
+    if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4;
+    h *= 60; if (h < 0) h += 360; return h;
+  }
+  function hueDiff(a, b) { var d = Math.abs(hueOf(a) - hueOf(b)); return Math.min(d, 360 - d); }
+
+  /* ---------- 定義 ---------- */
+  var THEMES = [
+    { id: 'dark', label: 'Dark（標準）', mode: 'dark' },
+    { id: 'light', label: 'Light（標準）', mode: 'light' },
+    { id: 'c1', label: 'カスタム 暗・橙黒（色相 35 / コントラスト 50）', mode: 'dark', hue: 35, con: 50 },
+    { id: 'c2', label: 'カスタム 暗・青黒（色相 220 / コントラスト 20）', mode: 'dark', hue: 220, con: 20 },
+    { id: 'c3', label: 'カスタム 明・黄紙（色相 65 / コントラスト 50）', mode: 'light', hue: 65, con: 50 },
+    { id: 'c4', label: 'カスタム 明・青紙（色相 210 / コントラスト 80）', mode: 'light', hue: 210, con: 80 }
+  ];
+  var PAL = {
+    A: { name: '橙＋黄', dark: { a: '#f97316', s: '#facc15' }, light: { a: '#ea580c', s: '#c48500' } },
+    B: { name: '橙＋水色', dark: { a: '#f97316', s: '#38bdf8' }, light: { a: '#ea580c', s: '#0284c7' } },
+    C: { name: '今の色（琥珀＋黄）', dark: { a: '#f59e0b', s: '#eab308' }, light: { a: '#d97706', s: '#ca8a04' } }
+  };
+  var PATMAP = { A: 'p1', B: 'p2', C: 'p4', D: 'p0' };
+  var PATNAME = { A: '全周に枠', B: '面で塗る', C: '外側だけ光る', D: '今のまま' };
+  var PATDEF = { p1: { bw: 2, ta: 12, ts: 7, gl: 10 }, p2: { bw: 1, ta: 26, ts: 16, gl: 0 }, p4: { bw: 1, ta: 0, ts: 0, gl: 14 }, p0: { bw: 1, ta: 0, ts: 0, gl: 0 } };
+  var OVNAME = { A: '状態を優先・色ラベルは左バー', B: '状態で全部上書き', C: '今のまま' };
+  var OVMAP = { A: 'keep', B: 'over', C: 'now' };
+
+  var BASE = [
+    { id: 21, st: 'running', model: 'Opus 5.5', title: '承認ルールの検証', pct: 29 },
+    { id: 18, st: 'appr', model: 'Sonnet 5.5', title: '画面の枠色を調整する', pct: 42 },
+    { id: 19, st: 'stop', model: 'Sonnet 5.5', title: '大体 1 つのタスクを進める', pct: 15 },
+    { id: 20, st: 'standby', model: 'Opus 5.5', title: '作業メモを整理する', pct: 15 },
+    { id: 22, st: 'standby', active: true, model: 'Opus 5.5', title: '/model', pct: 29 }
+  ];
+  var OVERLAP = [
+    { id: 23, st: 'appr', idc: 'green', model: 'Sonnet 5.5', title: '色ラベル（緑）つき', pct: 33 },
+    { id: 24, st: 'stop', idc: 'blue', model: 'Opus 5.5', title: '色ラベル（青）つき', pct: 18 },
+    { id: 25, st: 'appr', child: true, model: 'Sonnet 5.5', title: '子セッション', pct: 21 },
+    { id: 26, st: 'appr', active: true, model: 'Opus 5.5', title: '選択中で承認待ち', pct: 37 }
+  ];
+  var LIVE_ITEMS = BASE.concat([OVERLAP[3], OVERLAP[0], OVERLAP[2]]);
+
+  var ICON = {
+    flag: '<path d="M5 2.7v10.6" stroke-width="1.6" stroke-linecap="round"/><path d="M6.4 3.5 12.1 6.1 6.4 8.7Z" stroke="none"/>',
+    dot: '<circle cx="8" cy="8" r="3.6" stroke="none"/>',
+    ring: '<circle cx="8" cy="8" r="3.5" fill="none" stroke-width="1.5" stroke-dasharray="2.3 1.9"/>'
+  };
+  function svg(kind) { return '<svg viewBox="0 0 16 16" fill="currentColor" stroke="currentColor" aria-hidden="true">' + ICON[kind] + '</svg>'; }
+  var STLABEL = { running: '実行中', appr: '承認待ち', stop: '停止・未確認', standby: '待機' };
+
+  function cardHtml(it) {
+    var kind = it.st === 'appr' ? 'flag' : (it.st === 'running' ? 'ring' : 'dot');
+    var cls = 'scard ' + it.st + (it.active ? ' active' : '') + (it.idc ? ' idc idc-' + it.idc : '') + (it.child ? ' child' : '');
+    return '<div class="' + cls + '">' +
+      '<div class="flag">' + (it.st === 'appr' ? '承認待ち' : (it.st === 'stop' ? '停止・未確認' : '')) + '</div>' +
+      '<div class="r1"><span class="pill ' + it.st + '" title="' + STLABEL[it.st] + '">' + svg(kind) + '</span><b>#' + it.id + '</b><span class="pv">C</span><span class="mdl">' + it.model + '</span><span class="ttl">' + it.title + '</span></div>' +
+      '<div class="r2"><span class="chip">全許可</span><span class="gauge"><i style="width:' + it.pct + '%"></i></span><span>' + it.pct + '%</span><span class="br">develop</span></div>' +
+      '<span class="acts">⋯ ✕</span></div>';
+  }
+  function sbHtml(o) {
+    var colors = o.colors || PAL[o.pal][o.mode];
+    var tun = o.tun || PATDEF[o.pat];
+    var style = '--c-appr:' + colors.a + ';--c-stop:' + colors.s + ';--bw:' + tun.bw + 'px;--tint-a:' + tun.ta + '%;--tint-s:' + tun.ts + '%;--glow:' + tun.gl + 'px;';
+    if (o.theme) style += themeStyle(o.theme);
+    return '<div class="sb ' + o.mode + '" data-pat="' + o.pat + '" data-ov="' + (o.ov || 'keep') + '" data-flag="' + (o.flag ? 'on' : 'off') + '" style="' + style + '">' +
+      o.items.map(cardHtml).join('') + '</div>';
+  }
+
+  /* ---------- 状態 ---------- */
+  var view = { mode: 'dark' };
+  function sel(n) { var r = $('input[name="' + n + '"]:checked'); return r ? r.getAttribute('data-key') : null; }
+  function cur() { return { P: sel('q1') || 'A', L: sel('q2') || 'A', O: sel('q3') || 'A' }; }
+
+  function renderFig1(c) {
+    $('#fig1').innerHTML = ['A', 'B', 'C', 'D'].map(function (k) {
+      var pat = PATMAP[k], pal = pat === 'p0' ? 'C' : c.L;
+      return '<div class="fig-col"><div class="fig-cap"><b>' + k + '</b>' + PATNAME[k] + '</div>' +
+        sbHtml({ mode: view.mode, pat: pat, pal: pal, ov: OVMAP[c.O], items: BASE }) +
+        (k === 'D' ? '<p class="fig-note">今の画面の色（琥珀＋黄）で描いています。</p>' : '') + '</div>';
+    }).join('');
+  }
+  function renderFig2(c) {
+    var pat = PATMAP[c.P] === 'p0' ? 'p1' : PATMAP[c.P];
+    $('#fig2').innerHTML = ['A', 'B', 'C'].map(function (k) {
+      var p = PAL[k][view.mode];
+      var sw = '<div class="sw"><span><i style="background:' + p.a + '"></i>承認待ち ' + p.a + '（色相 ' + Math.round(hueOf(p.a)) + '°）</span>' +
+        '<span><i style="background:' + p.s + '"></i>停止 ' + p.s + '（色相 ' + Math.round(hueOf(p.s)) + '°）</span></div>';
+      return '<div class="fig-col"><div class="fig-cap"><b>' + k + '</b>' + PAL[k].name + '</div>' + sw +
+        sbHtml({ mode: view.mode, pat: pat, pal: k, ov: OVMAP[c.O], items: BASE }) +
+        '<p class="fig-note">2 色の色相の差: <b>' + Math.round(hueDiff(p.a, p.s)) + '°</b></p></div>';
+    }).join('');
+  }
+  function renderFig3(c) {
+    $('#fig3').innerHTML = ['A', 'B', 'C'].map(function (k) {
+      var pat = k === 'C' ? 'p0' : 'p1', pal = k === 'C' ? 'C' : c.L;
+      return '<div class="fig-col"><div class="fig-cap"><b>' + k + '</b>' + OVNAME[k] + '</div>' +
+        sbHtml({ mode: view.mode, pat: pat, pal: pal, ov: OVMAP[k], items: OVERLAP }) +
+        '<p class="fig-note">' + (k === 'C' ? '今の画面の見え方（今の色・今の CSS の並び）' : '枠は A 全周に枠の見せ方で描いています') + '</p></div>';
+    }).join('');
+  }
+  function renderThemes(c) {
+    var pat = PATMAP[c.P], pal = pat === 'p0' ? 'C' : c.L;
+    $('#s04-sel').textContent = 'Q1: ' + c.P + ' ' + PATNAME[c.P] + ' ／ Q2: ' + c.L + ' ' + PAL[c.L].name + ' ／ Q3: ' + c.O + ' ' + OVNAME[c.O];
+    $('#themes').innerHTML = THEMES.map(function (t) {
+      return '<div class="fig-col"><div class="fig-cap">' + t.label + '</div>' +
+        sbHtml({ mode: t.mode, theme: t, pat: pat, pal: pal, ov: OVMAP[c.O], items: BASE.concat([OVERLAP[3], OVERLAP[0]]) }) + '</div>';
+    }).join('');
+    var cols = [['A', 'a', '承認待ち（A 橙）'], ['A', 's', '停止（A 黄）'], ['B', 's', '停止（B 水色）'], ['C', 'a', '承認待ち（C 琥珀）'], ['C', 's', '停止（C 黄）']];
+    var html = '<thead><tr><th>テーマ</th>' + cols.map(function (x) { return '<th>' + x[2] + '</th>'; }).join('') + '</tr></thead><tbody>';
+    THEMES.forEach(function (t) {
+      var bg = elevOf(t);
+      html += '<tr><td>' + t.label + '</td>' + cols.map(function (x) {
+        var r = ratio(PAL[x[0]][t.mode][x[1]], bg);
+        return '<td>' + r.toFixed(1) + (r >= 3 ? ' ○' : ' ×') + '</td>';
+      }).join('') + '</tr>';
+    });
+    $('#ctab').innerHTML = html + '</tbody>';
+  }
+  function renderBar(c) {
+    var q1 = sel('q1'), q2 = sel('q2'), q3 = sel('q3');
+    $('#sb-q1').textContent = q1 ? q1 + ' ' + PATNAME[q1] : '未選択（A で表示）';
+    $('#sb-q2').textContent = q2 ? q2 + ' ' + PAL[q2].name : '未選択（A で表示）';
+    $('#sb-q3').textContent = q3 ? q3 + ' ' + OVNAME[q3] : '未選択（A で表示）';
+    $$('.opt').forEach(function (o) { var i = $('input', o); o.classList.toggle('chosen', !!(i && i.checked)); });
+    $('#mode-dark').setAttribute('aria-pressed', view.mode === 'dark');
+    $('#mode-light').setAttribute('aria-pressed', view.mode === 'light');
+  }
+  function renderAll() {
+    var c = cur();
+    renderBar(c); renderFig1(c); renderFig2(c); renderFig3(c); renderThemes(c);
+  }
+
+  /* ---------- 作り込みパネル ---------- */
+  var live = { mode: 'dark', std: true, hue: 220, con: 50, pat: 'p1', pal: 'A', a: '#f97316', s: '#facc15', bw: 2, ta: 12, ts: 7, gl: 10, flag: false, ov: 'keep', noanim: false };
+  function readLive() {
+    live.mode = ($('input[name="live-mode"]:checked') || {}).value || 'dark';
+    live.std = $('#live-std').checked;
+    live.hue = clampInt($('#live-hue').value, 0, 359); live.con = clampInt($('#live-con').value, 0, 100);
+    live.pat = $('#live-pat').value; live.pal = $('#live-pal').value;
+    live.a = $('#live-a').value; live.s = $('#live-s').value;
+    live.bw = clampInt($('#live-bw').value, 1, 4); live.ta = clampInt($('#live-ta').value, 0, 40);
+    live.ts = clampInt($('#live-ts').value, 0, 30); live.gl = clampInt($('#live-gl').value, 0, 24);
+    live.flag = $('#live-flag').checked; live.ov = $('#live-ov').value; live.noanim = $('#live-noanim').checked;
+  }
+  function writeLive() {
+    var m = $('input[name="live-mode"][value="' + live.mode + '"]'); if (m) m.checked = true;
+    $('#live-std').checked = live.std; $('#live-hue').value = live.hue; $('#live-con').value = live.con;
+    $('#live-pat').value = live.pat; $('#live-pal').value = live.pal;
+    $('#live-a').value = live.a; $('#live-s').value = live.s;
+    $('#live-bw').value = live.bw; $('#live-ta').value = live.ta; $('#live-ts').value = live.ts; $('#live-gl').value = live.gl;
+    $('#live-flag').checked = live.flag; $('#live-ov').value = live.ov; $('#live-noanim').checked = live.noanim;
+  }
+  function renderLive() {
+    document.body.classList.toggle('noanim', live.noanim);
+    var theme = live.std ? null : { mode: live.mode, hue: live.hue, con: live.con };
+    $('#live-sb').innerHTML = sbHtml({ mode: live.mode, theme: theme, pat: live.pat, ov: live.ov, flag: live.flag,
+      colors: { a: live.a, s: live.s }, tun: { bw: live.bw, ta: live.ta, ts: live.ts, gl: live.gl }, items: LIVE_ITEMS });
+    $('#live-hue').disabled = live.std; $('#live-con').disabled = live.std;
+    $('#v-hue').textContent = live.std ? '（標準では使わない）' : live.hue;
+    $('#v-con').textContent = live.std ? '（標準では使わない）' : live.con;
+    $('#v-a').textContent = live.a; $('#v-s').textContent = live.s;
+    $('#v-bw').textContent = live.bw + 'px'; $('#v-ta').textContent = live.ta + '%'; $('#v-ts').textContent = live.ts + '%'; $('#v-gl').textContent = live.gl + 'px';
+    $('#live-memo').value = liveMemo();
+  }
+  function liveMemo() {
+    var patName = { p1: 'A 全周に枠', p2: 'B 面で塗る', p4: 'C 外側だけ光る', p0: 'D 今のまま' }[live.pat];
+    var palName = live.pal === 'X' ? '自分で決めた色' : live.pal + ' ' + PAL[live.pal].name;
+    var bg = live.std ? (live.mode === 'dark' ? 'Dark 標準' : 'Light 標準') : ('カスタム ' + (live.mode === 'dark' ? '暗' : '明') + '（色相 ' + live.hue + ' / コントラスト ' + live.con + '）');
+    return ['[作り込みの設定メモ]',
+      'パターン: ' + patName,
+      '色: ' + palName + '（承認待ち ' + live.a + ' ／ 未確認で停止 ' + live.s + '）',
+      '枠の太さ: ' + live.bw + 'px',
+      '背景の色づけ: 承認待ち ' + live.ta + '% ／ 停止 ' + live.ts + '%',
+      '光の広がり: ' + live.gl + 'px',
+      '重なり方: ' + OVNAME[{ keep: 'A', over: 'B', now: 'C' }[live.ov]],
+      '状態名の帯: ' + (live.flag ? 'あり' : 'なし'),
+      '確認した背景: ' + bg].join('\n');
+  }
+  function status(id, s) { $(id).textContent = s; }
+  function selectBox(box, id) { box.focus(); box.select(); status(id, '自動でコピーできませんでした。欄が選ばれた状態なので、Ctrl+C でコピーしてください。'); }
+  function copyText(t, box, id) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function () { status(id, 'コピーしました。チャットに貼ってください。'); }, function () { selectBox(box, id); });
+    } else { selectBox(box, id); }
+  }
+  function onLiveChange(e) {
+    var id = e.target.id;
+    if (id === 'live-pat') { readLive(); var d = PATDEF[live.pat]; live.bw = d.bw; live.ta = d.ta; live.ts = d.ts; live.gl = d.gl; writeLive(); }
+    if (id === 'live-pal' || e.target.name === 'live-mode') {
+      readLive();
+      if (live.pal !== 'X') { var p = PAL[live.pal][live.mode]; live.a = p.a; live.s = p.s; writeLive(); }
+    }
+    if (id === 'live-a' || id === 'live-s') { readLive(); live.pal = 'X'; writeLive(); }
+    readLive(); renderLive();
+  }
+  function syncFromSelection() {
+    var c = cur();
+    live.mode = view.mode; live.pat = PATMAP[c.P]; live.pal = c.L; live.ov = OVMAP[c.O];
+    var p = PAL[c.L][live.mode]; live.a = p.a; live.s = p.s;
+    var d = PATDEF[live.pat]; live.bw = d.bw; live.ta = d.ta; live.ts = d.ts; live.gl = d.gl;
+    writeLive(); renderLive();
+  }
+
+  /* ---------- 結果の文 ---------- */
+  var out = $('#out');
+  function make() {
+    var q1 = sel('q1'), q2 = sel('q2'), q3 = sel('q3');
+    function v(n) { var r = $('input[name="' + n + '"]:checked'); return r ? r.value : '未選択'; }
+    var lines = ['セッションカードの状態枠 配色・パターン比較モック（2026-10-20）',
+      'Q1 見せ方：' + v('q1'), 'Q2 色：' + v('q2'), 'Q3 重なり：' + v('q3'), '', liveMemo()];
+    var m = $('#memo').value.trim(); if (m) lines.push('', 'ご意見：' + m);
+    out.value = lines.join('\n');
+    return out.value;
+  }
+
+  /* ---------- 配線 ---------- */
+  $('#mode-dark').addEventListener('click', function () { view.mode = 'dark'; renderAll(); });
+  $('#mode-light').addEventListener('click', function () { view.mode = 'light'; renderAll(); });
+  $$('input[name="q1"],input[name="q2"],input[name="q3"]').forEach(function (r) { r.addEventListener('change', function () { renderAll(); make(); }); });
+  $$('#ctl input,#ctl select').forEach(function (el) { el.addEventListener('input', onLiveChange); el.addEventListener('change', onLiveChange); });
+  $('#live-sync').addEventListener('click', syncFromSelection);
+  $('#live-copy').addEventListener('click', function () { copyText($('#live-memo').value, $('#live-memo'), '#live-status'); });
+  $('#btn-rec').addEventListener('click', function () {
+    $$('input[data-rec="1"]').forEach(function (r) { r.checked = true; });
+    renderAll(); make(); status('#copy-status', 'おすすめを選びました。「コピー」を押して、チャットに貼ってください。');
+  });
+  $('#btn-make').addEventListener('click', function () { make(); status('#copy-status', '結果を作りました。「コピー」を押して、チャットに貼ってください。'); });
+  $('#btn-copy').addEventListener('click', function () { copyText(make(), out, '#copy-status'); });
+  $('#memo').addEventListener('input', make);
+
+  renderAll();
+  writeLive(); syncFromSelection();
+  window.__mock = { cur: cur, ratio: ratio, hueDiff: hueDiff, PAL: PAL, THEMES: THEMES, elevOf: elevOf };
+})();
+</script>
+</body>
+</html>
