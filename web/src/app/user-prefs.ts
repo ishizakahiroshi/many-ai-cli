@@ -11,6 +11,8 @@ import { SharedTemplateSync } from './shared-template-sync.js';
 
 export const STORAGE_THEME_KEY      = 'ai_cli_hub_theme';
 export const STORAGE_FONTSIZE_KEY   = 'ai_cli_hub_fontsize';
+// Sidebar density is local to this browser. Never add it to _USER_PREFS_PATH_TO_LS.
+export const STORAGE_SIDEBAR_DENSITY_KEY = 'ai_cli_hub_sidebar_density';
 export const STORAGE_LANG_KEY       = 'ai_cli_hub_lang';
 export const STORAGE_ORDER_KEY             = 'ai_cli_hub_session_order';
 export const STORAGE_GROUP_ORDER_KEY       = 'ai_cli_hub_group_order';

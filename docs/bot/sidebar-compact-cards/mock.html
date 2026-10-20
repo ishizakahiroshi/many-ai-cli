@@ -1,0 +1,337 @@
+<!doctype html>
+<!--docsweep-meta
+type: mockup
+status: planned
+tags: [mockup, sidebar]
+owner: user
+related: []
+last_reviewed: 2026-10-20
+docsweep_policy: archive_with_release
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>サイドバー コンパクト表示 モック — 2026-10-20</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f7f3ea; --ink:#241f1a; --ink-soft:#837a6c; --line:rgba(36,31,26,0.12);
+    --accent:#ff7a3d; --card:#fffdf8; --ok:#2e7d4f; --warn:#b8860b; --bad:#b3261e;
+    --display:'Baloo 2','Zen Maru Gothic',system-ui,cursive;
+    --body:'Zen Maru Gothic',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;padding:0}
+  body{font-family:var(--body);color:var(--ink);background:var(--bg);line-height:1.7;font-size:16px;text-wrap:pretty}
+  .wrap{max-width:min(1180px,94vw);margin:0 auto;padding:48px 0 80px}
+  h1{font-family:var(--display);font-weight:800;font-size:2rem;margin:0 0 8px;letter-spacing:-0.01em}
+  h2{font-family:var(--display);font-weight:700;font-size:1.4rem;margin:48px 0 16px;padding-bottom:8px;border-bottom:2px solid var(--ink)}
+  h3{font-family:var(--display);font-weight:700;font-size:1.1rem;margin:28px 0 10px}
+  a{color:var(--accent);text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px}
+  .card{background:var(--card);border:2px solid var(--ink);border-radius:18px;padding:22px 24px;box-shadow:4px 5px 0 var(--line);margin:16px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;background:#fff;border:2px solid var(--ink);border-radius:12px;overflow:hidden}
+  th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line);font-size:0.94rem;vertical-align:top}
+  th{background:#fffdf8;font-family:var(--display);font-weight:700}
+  tr:last-child td{border-bottom:0}
+  .tag{display:inline-block;padding:2px 10px;border-radius:999px;font-family:var(--display);font-weight:700;font-size:0.78rem;border:2px solid var(--ink);background:#fff;color:var(--ink)}
+  .tag-ok{background:var(--ok);color:#fff} .tag-warn{background:var(--warn);color:#fff}
+  .tag-bad{background:var(--bad);color:#fff} .tag-accent{background:var(--accent);color:#fff}
+  .system-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:2px solid var(--ink);background:var(--card);font-family:var(--display);font-weight:700;font-size:0.86rem}
+  .system-badge .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+  .meta{color:var(--ink-soft);font-size:0.88rem}
+  .header-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:18px}
+  .screen-list a{font-family:var(--display);font-weight:700}
+  ul.checklist{list-style:none;padding-left:0}
+  ul.checklist li{padding:6px 0;border-bottom:1px dashed var(--line)}
+  ul.checklist li::before{content:"☐";margin-right:10px;font-family:var(--display)}
+
+  /* 並べて比べるための枠 */
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:28px;align-items:start}
+  .col h3{margin-top:0}
+  .wf{border:2px solid var(--ink);border-radius:14px;background:#fff;overflow:hidden}
+  .wf-caption{font-size:0.84rem;color:var(--ink-soft);padding:8px 16px;border-top:1px solid var(--line);background:#fffdf8}
+
+  /* サイドバーの模型（実物より簡略。幅は実物と同じ約 350px） */
+  .sbframe{height:560px;overflow:hidden;padding:10px 12px;background:#f3f2ee;position:relative;font-size:13px}
+  .sbfoot{position:absolute;left:0;right:0;bottom:0;padding:6px 12px;border-top:1px solid var(--line);background:#fffdf8;color:var(--ink-soft);font-size:12px}
+  .ic{color:var(--ink-soft);width:20px;text-align:center;flex:none}
+  .cn{display:inline-block;min-width:20px;height:20px;line-height:17px;text-align:center;border:1.5px solid var(--ink-soft);border-radius:5px;font-size:11px;font-weight:700;color:var(--ink)}
+  .pv{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1.5px solid var(--accent);color:var(--accent);font-size:9px;font-weight:700;flex:none}
+  .pv.o{border-color:var(--ink-soft);color:var(--ink-soft)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ink);flex:none}
+  .dot.run{background:none;border:1.5px dashed var(--ink-soft)}
+  .num{font-weight:700;flex:none}
+  .bar{display:inline-block;width:46px;height:6px;border-radius:3px;background:rgba(36,31,26,0.1);overflow:hidden;flex:none}
+  .bar i{display:block;height:100%;background:var(--ok)}
+  .chip{display:inline-block;padding:0 6px;border:1.5px dashed var(--ink-soft);border-radius:5px;font-size:11px;color:var(--ink);flex:none}
+  .sub{display:inline-block;padding:0 6px;border:1.5px solid var(--ink-soft);border-radius:999px;font-size:11px;flex:none}
+  .warnmark{color:var(--warn);font-weight:700;flex:none}
+  .sp{flex:1}
+  .ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+
+  /* 標準（今） */
+  .gh{display:flex;align-items:center;gap:6px;height:34px;padding:0 6px;margin:6px 0 8px;border-bottom:1px solid var(--line);font-weight:700;font-size:13px}
+  .std{border:1.5px solid var(--line);border-radius:10px;background:#fff;padding:7px 10px;margin:0 0 8px}
+  .std.nest{margin-left:16px}
+  .std .r1{display:flex;align-items:center;gap:6px;height:22px}
+  .std .r2{display:flex;align-items:center;gap:6px;height:20px;margin-top:2px;font-size:12px;color:var(--ink-soft)}
+  .std .r2 b{color:var(--ink)}
+
+  /* コンパクト（提案） */
+  .gh.s{height:24px;margin:5px 0 3px;font-size:12px}
+  .gh.s .cn{min-width:16px;height:16px;line-height:13px;font-size:10px}
+  .gh.s .tools{display:flex;gap:2px;opacity:0}
+  .gh.s:hover .tools{opacity:1}
+  .gh.s .tools.keep .star{opacity:1}
+  .cmp{position:relative;display:flex;align-items:center;gap:6px;height:28px;padding:0 8px;margin:0 0 2px;border:1.5px solid var(--line);border-radius:8px;background:#fff;font-size:12.5px}
+  .cmp.nest{margin-left:16px;height:26px;font-size:12px}
+  .cmp .nm{flex:0 1 auto;max-width:46%}
+  .cmp .dn{flex:1;min-width:0;color:var(--ink-soft);font-size:11.5px}
+  .cmp .pct{display:inline-flex;align-items:center;gap:4px;flex:none;font-size:11px;color:var(--ink-soft)}
+  .cmp .pct .bar{width:30px}
+  /* ⋯ と × は行の右端に重ねる（幅を取らないので、ホバーで名前の幅が変わらない） */
+  .cmp .tools{display:flex;gap:2px;position:absolute;right:8px;top:50%;transform:translateY(-50%);width:58px;justify-content:flex-end;background:inherit;opacity:0;pointer-events:none}
+  .cmp:hover .tools,.cmp.hov .tools{opacity:1;pointer-events:auto}
+  /* 詳細ポップ: カーソルを 0.4 秒止めたときだけ出る。外れたら即消える（出るときだけ遅延） */
+  .cmp .pop{display:block;visibility:hidden;opacity:0;position:absolute;top:100%;left:6px;right:6px;margin-top:2px;z-index:5;padding:7px 10px;background:var(--card);border:2px solid var(--ink);border-radius:10px;box-shadow:3px 4px 0 var(--line);font-size:12px;line-height:1.7;white-space:normal}
+  .cmp:hover .pop{animation:pop-in 1ms 400ms forwards}
+  @keyframes pop-in{to{visibility:visible;opacity:1}}
+  .cmp.hov .pop{visibility:visible;opacity:1}
+  .cmp.sel{border-color:var(--ink);border-width:2px}
+  .cmp.hov{background:#fff9f3;border-color:var(--accent)}
+
+  /* 動きの見本（S-03）: 9 秒ループで自動再生。JS は使わず CSS だけ */
+  .demo .cmp{height:28px}
+  .demo .cur{position:absolute;left:210px;top:18px;font-size:22px;line-height:1;opacity:0;z-index:9;pointer-events:none;color:var(--ink);text-shadow:0 0 3px #fff,0 0 3px #fff;animation:cur 9s infinite}
+  .demo .r1{animation:hv1 9s step-end infinite}
+  .demo .r2{animation:hv2 9s step-end infinite}
+  .demo .r3{animation:hv3 9s step-end infinite}
+  .demo .r1 .tools{animation:tl1 9s step-end infinite}
+  .demo .r2 .tools{animation:tl2 9s step-end infinite}
+  .demo .r3 .tools{animation:tl3 9s step-end infinite}
+  .demo .r2 .pop{animation:pop 9s step-end infinite}
+  @keyframes cur{0%{top:16px;opacity:0}3%{top:16px;opacity:1}9%{top:50px}17%{top:80px}25%{top:110px}34%{top:80px}78%{top:80px}85%{top:160px;opacity:1}91%{top:160px;opacity:0}100%{top:16px;opacity:0}}
+  @keyframes hv1{0%{background:#fff;border-color:var(--line)}7%{background:#fff9f3;border-color:var(--accent)}12%{background:#fff;border-color:var(--line)}}
+  @keyframes hv2{0%{background:#fff;border-color:var(--line)}14%{background:#fff9f3;border-color:var(--accent)}20%{background:#fff;border-color:var(--line)}32%{background:#fff9f3;border-color:var(--accent)}78%{background:#fff;border-color:var(--line)}}
+  @keyframes hv3{0%{background:#fff;border-color:var(--line)}22%{background:#fff9f3;border-color:var(--accent)}28%{background:#fff;border-color:var(--line)}}
+  @keyframes tl1{0%{opacity:0}7%{opacity:1}12%{opacity:0}}
+  @keyframes tl2{0%{opacity:0}14%{opacity:1}20%{opacity:0}32%{opacity:1}78%{opacity:0}}
+  @keyframes tl3{0%{opacity:0}22%{opacity:1}28%{opacity:0}}
+  @keyframes pop{0%{visibility:hidden;opacity:0}36.5%{visibility:visible;opacity:1}78%{visibility:hidden;opacity:0}}
+  .steps{display:flex;flex-direction:column;gap:8px}
+  .st{padding:10px 14px;border:2px solid var(--line);border-radius:12px;background:#fff;opacity:.45}
+  .st b{font-family:var(--display)}
+  .st1{animation:st1 9s step-end infinite}
+  .st2{animation:st2 9s step-end infinite}
+  .st3{animation:st3 9s step-end infinite}
+  @keyframes st1{0%{opacity:1;border-color:var(--accent)}32%{opacity:.45;border-color:var(--line)}}
+  @keyframes st2{0%{opacity:.45;border-color:var(--line)}32%{opacity:1;border-color:var(--accent)}78%{opacity:.45;border-color:var(--line)}}
+  @keyframes st3{0%{opacity:.45;border-color:var(--line)}78%{opacity:1;border-color:var(--accent)}}
+  @media (prefers-reduced-motion:reduce){.demo *{animation:none!important}}
+  pre.flow{font-family:ui-monospace,Menlo,Consolas,monospace;line-height:1.5;margin:0;overflow:auto}
+  @media print{ body{background:#fff} .card{box-shadow:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header-row">
+    <span class="system-badge"><span class="dot"></span>対象: <b>many-ai-cli</b></span>
+    <span class="tag tag-accent">草案</span>
+    <span class="meta">v0.1 · 2026-10-20</span>
+  </div>
+  <h1>サイドバー コンパクト表示 モック</h1>
+  <p>1 つのタブに入るセッションが 8〜10 件で限界になる問題への対策です。カードを 1 行にし、グループの見出しを細くして、同じ縦幅に入る件数を増やします。左が今の表示（標準）、右がコンパクト表示です。どちらも同じ 8 セッションを同じ縦幅 560px の枠に入れています。標準は 4 グループ目（project-c）の途中から枠の外に出ますが、コンパクトは 6 グループ全部入ってまだ余ります。</p>
+  <p class="meta">このモックは並び方と寸法の比較用です。色・アイコンは実物より簡略にしてあり、上部のアイコン列と下部の設定ボタンは変更しない前提で省いています。実物の見た目は実装後に Hub 上で確認します。</p>
+
+  <h2>画面リスト</h2>
+  <table class="screen-list">
+    <thead><tr><th style="width:5em">ID</th><th style="width:16em">画面名</th><th>概要</th></tr></thead>
+    <tbody>
+      <tr><td>S-01</td><td><a href="#s-01">標準（今の表示）と コンパクト</a></td><td>同じ 8 セッションを並べて、入る件数を比べる</td></tr>
+      <tr><td>S-02</td><td><a href="#s-02">コンパクトの行にカーソルを乗せたとき</a></td><td>行の下に詳細（モデル・許可・ブランチ・1M）を重ねて出す</td></tr>
+      <tr><td>S-03</td><td><a href="#s-03">動きの見本（自動再生）</a></td><td>カーソルが行をなぞる・止まる・外れる流れを、操作なしで再生する</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="s-01">S-01 標準（今）と コンパクト（提案）</h2>
+  <div class="cols">
+
+    <!-- ===== 標準 ===== -->
+    <div class="col">
+      <h3>標準（今の表示）</h3>
+      <div class="wf">
+        <div class="sbframe">
+          <div class="gh"><span class="ic">▾</span><span>many-ai-cli</span><span class="cn">1</span><span class="cn">0</span><span class="cn">2</span><span class="sp"></span><span class="ic">▦</span><span class="ic" style="color:var(--accent)">★</span><span class="ic">×</span></div>
+
+          <div class="std">
+            <div class="r1"><span class="dot"></span><span class="num">#1</span><span class="pv">C</span><span class="ell">Opus 5.5 /resume</span><span class="sp"></span><span class="ic">⋯</span><span class="ic">×</span></div>
+            <div class="r2"><span class="chip">起動時: 全許可</span><span class="bar"><i style="width:14%"></i></span>14%<b>1M</b><span class="sp"></span><b>develop</b></div>
+          </div>
+          <div class="std">
+            <div class="r1"><span class="dot run"></span><span class="num">#7</span><span class="pv">C</span><span class="ell">Sonnet 5.5 ライトモー…</span><span class="sp"></span><span class="ic">⋯</span><span class="ic">×</span></div>
+            <div class="r2"><span class="warnmark">⚠</span><span class="bar"><i style="width:21%"></i></span>21%<b>1M</b><span class="sub">▼ 1</span><span class="sp"></span><b>develop</b></div>
+          </div>
+          <div class="std nest">
+            <div class="r1"><span class="dot run"></span><span class="num">#8</span><span class="pv o">◎</span><span class="ell">orch-child-1…</span><span class="sp"></span><span class="ic">×</span></div>
+            <div class="r2"><span class="chip">terminal…</span><span class="chip">起動時: 全許可</span></div>
+          </div>
+
+          <div class="gh"><span class="ic">▾</span><span>project-a</span><span class="cn">0</span><span class="cn">0</span><span class="cn">1</span><span class="sp"></span><span class="ic">▦</span><span class="ic">☆</span><span class="ic">×</span></div>
+          <div class="std">
+            <div class="r1"><span class="dot"></span><span class="num">#2</span><span class="pv">C</span><span class="ell">Opus 5.5 /resume</span><span class="sp"></span><span class="ic">⋯</span><span class="ic">×</span></div>
+            <div class="r2"><span class="chip">起動時: 全許可</span><span class="bar"><i style="width:44%"></i></span>44%<b>1M</b><span class="sp"></span><b>develop</b></div>
+          </div>
+
+          <div class="gh"><span class="ic">▾</span><span>project-b</span><span class="cn">0</span><span class="cn">0</span><span class="cn">1</span><span class="sp"></span><span class="ic">▦</span><span class="ic">☆</span><span class="ic">×</span></div>
+          <div class="std">
+            <div class="r1"><span class="dot"></span><span class="num">#6</span><span class="pv">C</span><span class="ell">Sonnet 5.5 /resume</span><span class="sp"></span><span class="ic">⋯</span><span class="ic">×</span></div>
+            <div class="r2"><span class="chip">起…</span><span class="bar"><i style="width:61%"></i></span>61%<b>1M</b><span class="sp"></span><b>feature/export-excep…</b></div>
+          </div>
+
+          <div class="gh"><span class="ic">▾</span><span>project-c</span><span class="cn">1</span><span class="cn">0</span><span class="cn">0</span><span class="sp"></span><span class="ic">▦</span><span class="ic">☆</span><span class="ic">×</span></div>
+          <div class="sbfoot">↓ ここから下はスクロールしないと見えない（残り: project-c #17 / project-d #15 / project-e #13）</div>
+        </div>
+        <div class="wf-caption">枠に入るのは 4 グループ・5 件。残り 3 件はスクロール。</div>
+      </div>
+    </div>
+
+    <!-- ===== コンパクト ===== -->
+    <div class="col">
+      <h3>コンパクト（提案）</h3>
+      <div class="wf">
+        <div class="sbframe">
+          <div class="gh s"><span class="ic">▾</span><span>many-ai-cli</span><span class="cn">1</span><span class="cn">0</span><span class="cn">2</span><span class="sp"></span><span class="tools keep"><span class="ic">▦</span><span class="ic star" style="color:var(--accent)">★</span><span class="ic">×</span></span></div>
+          <div class="cmp sel"><span class="dot"></span><span class="num">#1</span><span class="pv">C</span><span class="ell nm">Opus 5.5 /resume</span><span class="ell dn">✓ テスト 12 件が通り、修正が終わりました</span><span class="pct"><span class="bar"><i style="width:14%"></i></span>14%</span><span class="tools"><span class="ic">⋯</span><span class="ic">×</span></span></div>
+          <div class="cmp"><span class="dot run"></span><span class="num">#7</span><span class="pv">C</span><span class="ell sp">Sonnet 5.5 ライトモー…</span><span class="warnmark">⚠</span><span class="sub">▼1</span><span class="pct"><span class="bar"><i style="width:21%"></i></span>21%</span><span class="tools"><span class="ic">⋯</span><span class="ic">×</span></span></div>
+          <div class="cmp nest"><span class="dot run"></span><span class="num">#8</span><span class="pv o">◎</span><span class="ell sp">orch-child-1…</span><span class="tools"><span class="ic">×</span></span></div>
+
+          <div class="gh s"><span class="ic">▾</span><span>project-a</span><span class="cn">0</span><span class="cn">0</span><span class="cn">1</span><span class="sp"></span><span class="tools"><span class="ic">▦</span><span class="ic star">☆</span><span class="ic">×</span></span></div>
+          <div class="cmp"><span class="dot"></span><span class="num">#2</span><span class="pv">C</span><span class="ell nm">Opus 5.5 /resume</span><span class="ell dn">✓ 記事の下書きが終わりました</span><span class="pct"><span class="bar"><i style="width:44%"></i></span>44%</span><span class="tools"><span class="ic">⋯</span><span class="ic">×</span></span></div>
+
+          <div class="gh s"><span class="ic">▾</span><span>project-b</span><span class="cn">0</span><span class="cn">0</span><span class="cn">1</span><span class="sp"></span><span class="tools"><span class="ic">▦</span><span class="ic star">☆</span><span class="ic">×</span></span></div>
+          <div class="cmp"><span class="dot"></span><span class="num">#6</span><span class="pv">C</span><span class="ell nm">Sonnet 5.5 /resume</span><span class="ell dn">✓ レビューの指摘を反映しました</span><span class="pct"><span class="bar"><i style="width:61%"></i></span>61%</span><span class="tools"><span class="ic">⋯</span><span class="ic">×</span></span></div>
+
+          <div class="gh s"><span class="ic">▾</span><span>project-c</span><span class="cn">1</span><span class="cn">0</span><span class="cn">0</span><span class="sp"></span><span class="tools"><span class="ic">▦</span><span class="ic star">☆</span><span class="ic">×</span></span></div>
+          <div class="cmp"><span class="dot run"></span><span class="num">#17</span><span class="pv">C</span><span class="ell sp">Sonnet 5.5 quick-fix…</span><span class="pct"><span class="bar"><i style="width:8%"></i></span>8%</span><span class="tools"><span class="ic">⋯</span><span class="ic">×</span></span></div>
+
+          <div class="gh s"><span class="ic">▾</span><span>project-d</span><span class="cn">1</span><span class="cn">0</span><span class="cn">0</span><span class="sp"></span><span class="tools"><span class="ic">▦</span><span class="ic star">☆</span><span class="ic">×</span></span></div>
+          <div class="cmp"><span class="dot run"></span><span class="num">#15</span><span class="pv">C</span><span class="ell sp">Sonnet 5.5 api-design…</span><span class="pct"><span class="bar"><i style="width:12%"></i></span>12%</span><span class="tools"><span class="ic">⋯</span><span class="ic">×</span></span></div>
+
+          <div class="gh s"><span class="ic">▾</span><span>project-e</span><span class="cn">0</span><span class="cn">0</span><span class="cn">1</span><span class="sp"></span><span class="tools"><span class="ic">▦</span><span class="ic star">☆</span><span class="ic">×</span></span></div>
+          <div class="cmp"><span class="dot"></span><span class="num">#13</span><span class="pv o">S</span><span class="ell sp">ssh -i key host…</span><span class="pct"><span class="bar"><i style="width:0%"></i></span>—</span><span class="tools"><span class="ic">⋯</span><span class="ic">×</span></span></div>
+
+          <div class="sbfoot">この下に、まだ約 3 行ぶんの空きがある</div>
+        </div>
+        <div class="wf-caption">6 グループ・8 件が全部入る。<b>この枠は動く。</b>行にカーソルを乗せると、⋯ と ×が右端に重なって出る（行の大きさは変わらない）。そのまま 0.4 秒止めると詳細ポップが出る。なぞって通り過ぎるだけなら出ない。</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>1 行に常に出すものと、隠すもの</h3>
+  <table>
+    <thead><tr><th style="width:13em">項目</th><th style="width:9em">標準</th><th style="width:9em">コンパクト</th><th>メモ</th></tr></thead>
+    <tbody>
+      <tr><td>状態ドット / #番号 / プロバイダ</td><td>常に表示</td><td>常に表示</td><td>どのセッションか分かる最低限</td></tr>
+      <tr><td>名前（モデル名 + 題）</td><td>常に表示</td><td>常に表示</td><td>1 行になって長く出せる（今は ⋯ ×で削れる）</td></tr>
+      <tr><td>コンテキスト残量バー + %</td><td>常に表示</td><td>常に表示（小さめ）</td><td>溢れそうかを一目で見る用途のため残す</td></tr>
+      <tr><td>完了サマリー（「〜が終わりました」）</td><td>2 行目の空き幅に表示</td><td>名前の右に薄い字で常時表示</td><td>待機中のセッションだけ。長いときは残り幅で「…」に省略し、全文はポップ。見ていないセッションの完了に気づける唯一の手がかりなので残す</td></tr>
+      <tr><td>⚠ / ▼ 子の数</td><td>常に表示</td><td>常に表示</td><td>要対応・子あり。隠すと見落とす</td></tr>
+      <tr><td>「起動時: 全許可」バッジ</td><td>常に表示</td><td>出さない</td><td>どのセッションも同じ値のため。いつもと違うときだけ小さなマークで知らせる案は未決定事項</td></tr>
+      <tr><td>1M / ブランチ</td><td>常に表示</td><td>出さない</td><td>実際に使っているリポジトリは全部 develop・1M のため。いつもと違うときだけマーク（未決定事項）</td></tr>
+      <tr><td>⋯ メニュー / ×</td><td>常に表示</td><td>ホバー時のみ</td><td>押すときだけ見えれば足りる</td></tr>
+      <tr><td>グループ見出しのボタン（▦ ★ ×）</td><td>常に表示</td><td>ホバー時のみ（★ が付いているときは ★ だけ常時）</td><td>件数の 3 つの数字は残す</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="s-02">S-02 コンパクトの行にカーソルを乗せたとき</h2>
+  <div class="cols">
+    <div class="col">
+      <div class="wf">
+        <div class="sbframe" style="height:230px">
+          <div class="gh s"><span class="ic">▾</span><span>many-ai-cli</span><span class="cn">1</span><span class="cn">0</span><span class="cn">2</span><span class="sp"></span><span class="tools keep"><span class="ic">▦</span><span class="ic star" style="color:var(--accent)">★</span><span class="ic">×</span></span></div>
+          <div class="cmp hov"><span class="dot run"></span><span class="num">#7</span><span class="pv">C</span><span class="ell sp">Sonnet 5.5 ライトモー…</span><span class="warnmark">⚠</span><span class="sub">▼1</span><span class="pct"><span class="bar"><i style="width:21%"></i></span>21%</span><span class="tools"><span class="ic">⋯</span><span class="ic">×</span></span>
+            <div class="pop"><b>Sonnet 5.5</b> · ライトモードの調整<br>作業中（完了サマリーは終わってから出る）<br>残量 <b>21%</b></div>
+          </div>
+        </div>
+        <div class="wf-caption">ポップが出た状態の静止図。行の下に重ねて出すので、下の行を押し下げない。出るのはカーソルを 0.4 秒止めたときだけで、外れたら即座に消える。右端の ⋯ × は残量の上に重ねて出し、行の幅は変えない。</div>
+      </div>
+    </div>
+    <div class="col">
+      <h3>画面遷移</h3>
+      <div class="card">
+<pre class="flow">
+設定「表示密度」─ 標準 ──▶ 今のカード（2 段）
+                 └ コンパクト ──▶ 1 行カード + 細い見出し
+                                    │
+              行にカーソル ◀────────┘
+                  │
+                  ▼
+        詳細ポップ（モデル・許可・1M・残量・ブランチ）
+        ※ カーソルを 0.4 秒止めたときだけ出る
+                  │ カーソルが外れる（即消える）
+                  ▼
+                 非表示
+</pre>
+      </div>
+    </div>
+  </div>
+
+  <h2 id="s-03">S-03 動きの見本（自動再生・9 秒ループ）</h2>
+  <p>カーソルの動きに合わせて、行がどう変わるかを自動で再生します。操作しなくても動きます。</p>
+  <div class="cols">
+    <div class="col">
+      <div class="wf demo">
+        <div class="sbframe" style="height:230px">
+          <span class="cur">↖</span>
+          <div class="gh s"><span class="ic">▾</span><span>many-ai-cli</span><span class="cn">1</span><span class="cn">0</span><span class="cn">2</span><span class="sp"></span></div>
+          <div class="cmp r1"><span class="dot"></span><span class="num">#1</span><span class="pv">C</span><span class="ell nm">Opus 5.5 /resume</span><span class="ell dn">✓ テスト 12 件が通り、修正が終わりました</span><span class="pct"><span class="bar"><i style="width:14%"></i></span>14%</span><span class="tools"><span class="ic">⋯</span><span class="ic">×</span></span>
+            <div class="pop"><b>Opus 5.5</b> · /resume<br>✓ テスト 12 件が通り、修正が終わりました<br>残量 <b>14%</b></div></div>
+          <div class="cmp r2"><span class="dot run"></span><span class="num">#7</span><span class="pv">C</span><span class="ell sp">Sonnet 5.5 ライトモー…</span><span class="warnmark">⚠</span><span class="sub">▼1</span><span class="pct"><span class="bar"><i style="width:21%"></i></span>21%</span><span class="tools"><span class="ic">⋯</span><span class="ic">×</span></span>
+            <div class="pop"><b>Sonnet 5.5</b> · ライトモードの調整<br>作業中（完了サマリーは終わってから出る）<br>残量 <b>21%</b></div></div>
+          <div class="cmp r3"><span class="dot"></span><span class="num">#2</span><span class="pv">C</span><span class="ell nm">Opus 5.5 /resume</span><span class="ell dn">✓ 記事の下書きが終わりました</span><span class="pct"><span class="bar"><i style="width:44%"></i></span>44%</span><span class="tools"><span class="ic">⋯</span><span class="ic">×</span></span>
+            <div class="pop"><b>Opus 5.5</b> · /resume<br>✓ 記事の下書きが終わりました<br>残量 <b>44%</b></div></div>
+        </div>
+        <div class="wf-caption">カーソル（↖）が行をなぞり、#7 で止まり、外へ出る流れ。どの行も高さは変わらない。</div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="steps">
+        <div class="st st1"><b>① なぞる</b><br>行が薄く色づき、右端に ⋯ と ×が出るだけ。ポップは出ない。行の大きさは変わらない。</div>
+        <div class="st st2"><b>② 止める（0.4 秒）</b><br>#7 の上で止めて 0.4 秒たつと、行の下に詳細ポップが重なる。下の #2 は押し下げられない。</div>
+        <div class="st st3"><b>③ 外れる</b><br>カーソルが行から出た瞬間に、ポップも ⋯ × も消える。</div>
+      </div>
+    </div>
+  </div>
+
+  <h2>状態一覧</h2>
+  <table>
+    <thead><tr><th style="width:12em">状態</th><th>コンパクト行の見え方</th></tr></thead>
+    <tbody>
+      <tr><td>通常</td><td>ドット・#番号・プロバイダ・名前・残量バー%。⋯ と ×は隠れている</td></tr>
+      <tr><td>カーソルが乗った</td><td>⋯ と ×が右端に重なって出る（行の幅・高さは変わらない）。止めて 0.4 秒後に、行の下に詳細ポップが重なる</td></tr>
+      <tr><td>選択中</td><td>枠線を太くする（今の紫の枠に相当）</td></tr>
+      <tr><td>待機（完了サマリーあり）</td><td>名前の右に「✓ 〜が終わりました」を薄い字で表示。実行中のセッションには出ない</td></tr>
+      <tr><td>実行中 / 待機</td><td>ドットの形で区別（実線＝待機、破線の輪＝実行中）。文字ラベルは詳細ポップに出す</td></tr>
+      <tr><td>要対応（⚠）</td><td>名前の右に ⚠ を常時表示</td></tr>
+      <tr><td>子セッションあり</td><td>▼ 件数を常時表示。子は 1 段下げた小さめの行</td></tr>
+      <tr><td>名前が長い</td><td>1 行ぶんの幅で末尾を … で省略。全文は詳細ポップ</td></tr>
+    </tbody>
+  </table>
+
+  <h2>未決定事項</h2>
+  <ul class="checklist">
+    <li>コンパクト時に常に出す項目は、このモックの内容（残量バーと %、⚠、▼ 件数まで）でよいか</li>
+    <li>「全許可でない」「develop 以外のブランチ」「1M でない」のセッションだけ、コンパクト行に小さなマークを出すか（普段は何も出ない）</li>
+    <li>完了サマリーと名前が 1 行に収まらないとき、どちらを先に残すか（今のモックは名前を先に出し、サマリーは残り幅）</li>
+    <li>標準とコンパクトを切り替える場所（設定の中か、サイドバー上部のアイコンか）</li>
+    <li>新規インストールの既定を標準にするか、コンパクトにするか</li>
+    <li>ポップが出るまでの待ち時間は 0.4 秒でよいか（長いと反応が鈍く、短いとなぞるだけで出る）</li>
+    <li>タッチ画面など、ホバーが使えない環境でのポップの出し方（クリックで開くか）</li>
+  </ul>
+
+</div>
+</body>
+</html>

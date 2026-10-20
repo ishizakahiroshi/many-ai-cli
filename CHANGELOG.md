@@ -21,6 +21,8 @@ Release artifacts are published at
   blames a terminal redraw.
 
 ### Added
+- **Sidebar display density** can be switched between Standard and Compact in Settings; the device-local Compact view uses one-line cards, thinner project headings, and delayed details on hover.
+- **The selected-session header** now shows the launch-time permission mode and an abbreviated branch that opens the same Git view as the sidebar badge.
 - **Project headings can be dragged onto a session-list tab.** Dropping a
   heading moves every root session of that project that currently belongs to the
   selected tab, children included; the same project's roots in other tabs stay

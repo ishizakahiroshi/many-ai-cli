@@ -115,9 +115,9 @@ function fixture(mobile = false) {
     requestAnimationFrame: (fn: Function) => frames.push(fn), getComputedStyle: (el: El) => ({ display: el.hidden ? 'none' : 'block' }),
     t: (key: string) => key, showToast: () => {}, pathPopupEl: null,
     appConfirm: async () => confirmed, renderSettingsSummary: () => {}, attachSummaryToggleListeners: () => {},
-    applyTheme: () => {}, applyFontSize: () => {}, applyLang: () => {}, applyUsageLinks: () => {}, initUsageSettings: () => {},
+    applyTheme: () => {}, applyFontSize: () => {}, applySidebarDensity: () => {}, applyLang: () => {}, applyUsageLinks: () => {}, initUsageSettings: () => {},
     maybeAutoSwitchToNextApproval: () => {}, bindCustomThemeControls: () => {}, setUserPref: () => {},
-    STORAGE_THEME_KEY: '', STORAGE_FONTSIZE_KEY: '', STORAGE_LANG_KEY: '', queueMicrotask,
+    STORAGE_THEME_KEY: '', STORAGE_FONTSIZE_KEY: '', STORAGE_SIDEBAR_DENSITY_KEY: '', STORAGE_LANG_KEY: '', queueMicrotask,
   };
   window.setTimeout = ctx.setTimeout;
   run(clean(read('../src/app/settings-visibility.ts')), ctx);
