@@ -16,6 +16,9 @@ import {
 // 既定値（terminal.css の #terminal-live-status と揃える）。カラーピッカーの初期表示に使う。
 const DEFAULT_BG = '#0d1117';
 const DEFAULT_FG = '#93c5fd';
+// ライトテーマの既定（terminal.css の [data-theme="light"] の --live-status-*-default と揃える）。
+const DEFAULT_BG_LIGHT = '#e2e8f0';
+const DEFAULT_FG_LIGHT = '#1d4ed8';
 
 function ti18n(key: string): string {
   const tfn = typeof window.t === 'function' ? window.t : (k: string) => k;
@@ -133,8 +136,9 @@ function buildUI(): void {
   popoverEl = pop;
 
   const syncInputs = () => {
-    bgInput.value = readStored(STORAGE_LIVE_STATUS_BG_KEY) || DEFAULT_BG;
-    fgInput.value = readStored(STORAGE_LIVE_STATUS_FG_KEY) || DEFAULT_FG;
+    const light = document.documentElement.getAttribute('data-theme') === 'light';
+    bgInput.value = readStored(STORAGE_LIVE_STATUS_BG_KEY) || (light ? DEFAULT_BG_LIGHT : DEFAULT_BG);
+    fgInput.value = readStored(STORAGE_LIVE_STATUS_FG_KEY) || (light ? DEFAULT_FG_LIGHT : DEFAULT_FG);
   };
 
   // ボタンの右上にポップオーバーを配置（帯の上側に出す）。
