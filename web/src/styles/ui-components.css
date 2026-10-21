@@ -23,6 +23,34 @@
   --ui-focus: var(--accent);
 }
 
+/* ライブ状態帯（#terminal-live-status）の既定色と、ライトテーマ用の状態色。terminal.css が参照する。
+   既定（:root）は暗い下地用で、terminal.css に直書きしてある暗い下地用の値と同じ。 */
+:root {
+  --live-status-bg-default: rgba(13, 17, 23, 0.82);
+  --live-status-fg-default: rgba(147, 197, 253, 0.92);
+}
+[data-theme="light"] {
+  --live-status-bg-default: rgba(226, 232, 240, 0.92);
+  --live-status-fg-default: #1d4ed8;
+  --live-idle: #475569;
+  --live-dim: #64748b;
+  --live-line: rgba(100, 116, 139, 0.5);
+  --live-wait: #b45309;
+  --live-wait-line: rgba(217, 119, 6, 0.55);
+  --live-ok: #166534;
+  --live-ok-line: rgba(34, 197, 94, 0.55);
+  --live-fail: #b91c1c;
+  --live-fail-line: rgba(239, 68, 68, 0.55);
+  --live-run: #15803d;
+  --live-input: #4f46e5;
+  --live-spawn: #7c3aed;
+  --live-compact-bg: rgba(37, 99, 235, 0.18);
+  --terminal-badge-bg: rgba(226, 232, 240, 0.9);
+}
+/* 状態記号の「入力待ち」。クラス名に input を含むため terminal.css に置くと制御部品の外観と
+   見なされる。ライブ状態帯の状態色の続きとして、ここに置く。 */
+[data-theme="light"] .live-status-state.awaiting-input { color: var(--live-input); }
+
 .ui-button {
   --ui-control-size: var(--ui-control-regular);
   box-sizing: border-box;

@@ -280,36 +280,29 @@
   background: color-mix(in srgb, var(--danger-bg) 55%, transparent);
   border-color: var(--danger);
 }
-/* ライトテーマのライブ状態帯。下地と文字色の既定をテーマ別に持つ（ユーザーが 🎨 で選んだ色は
-   インラインの --live-status-bg / -fg が優先する）。状態ごとの文字色は暗い下地用の明るい値を
-   上で直書きしているので、ライトでは同じ意味の濃い値へ置き換える。 */
-:root {
-  --live-status-bg-default: rgba(13, 17, 23, 0.82);
-  --live-status-fg-default: rgba(147, 197, 253, 0.92);
-}
-[data-theme="light"] {
-  --live-status-bg-default: rgba(226, 232, 240, 0.92);
-  --live-status-fg-default: #1d4ed8;
-}
-[data-theme="light"] #terminal-live-status.idle { color: #475569; border-color: rgba(100, 116, 139, 0.45); }
-[data-theme="light"] #terminal-live-status.idle .live-status-state { color: #64748b; }
-[data-theme="light"] #terminal-live-status.waiting { color: #b45309; border-color: rgba(217, 119, 6, 0.55); }
-[data-theme="light"] #terminal-live-status.done { color: #475569; border-color: rgba(100, 116, 139, 0.5); }
-[data-theme="light"] #terminal-live-status.done .live-status-state { color: #64748b; }
-[data-theme="light"] #terminal-live-status.done-success  { color: #166534; border-color: rgba(34, 197, 94, 0.55); }
-[data-theme="light"] #terminal-live-status.done-failure  { color: #b91c1c; border-color: rgba(239, 68, 68, 0.55); }
-[data-theme="light"] #terminal-live-status.done-aborted  { color: #475569; border-color: rgba(100, 116, 139, 0.55); }
-[data-theme="light"] #terminal-live-status.done-needs-action { color: #b45309; border-color: rgba(217, 119, 6, 0.55); }
-[data-theme="light"] #terminal-live-status.done-unknown  { color: #64748b; border-color: rgba(100, 116, 139, 0.4); }
-[data-theme="light"] .live-status-state { color: #475569; }
-[data-theme="light"] .live-status-state.running { color: #15803d; }
-[data-theme="light"] .live-status-state.awaiting-approval { color: #b45309; }
-[data-theme="light"] .live-status-state.awaiting-input { color: #4f46e5; }
-[data-theme="light"] .live-status-state.pending-spawn-confirm { color: #7c3aed; }
-[data-theme="light"] .live-status-state.workflow-active { color: #64748b; }
-[data-theme="light"] .live-compact-bar { background: rgba(37, 99, 235, 0.18); }
+/* ライトテーマのライブ状態帯。色の実値は ui-components.css の --live-* /--terminal-badge-bg
+   （[data-theme="light"] の明るい下地用）に集約してあり、ここは参照だけ。
+   ユーザーが 🎨 で選んだ色（インラインの --live-status-bg / -fg）は既定より優先する。
+   状態ごとの文字色は上で暗い下地用の明るい値を直書きしているので、ライトでは同じ意味の
+   濃い値へ置き換える。 */
+[data-theme="light"] #terminal-live-status.idle { color: var(--live-idle); border-color: var(--live-line); }
+[data-theme="light"] #terminal-live-status.idle .live-status-state { color: var(--live-dim); }
+[data-theme="light"] #terminal-live-status.waiting { color: var(--live-wait); border-color: var(--live-wait-line); }
+[data-theme="light"] #terminal-live-status.done { color: var(--live-idle); border-color: var(--live-line); }
+[data-theme="light"] #terminal-live-status.done .live-status-state { color: var(--live-dim); }
+[data-theme="light"] #terminal-live-status.done-success  { color: var(--live-ok); border-color: var(--live-ok-line); }
+[data-theme="light"] #terminal-live-status.done-failure  { color: var(--live-fail); border-color: var(--live-fail-line); }
+[data-theme="light"] #terminal-live-status.done-aborted  { color: var(--live-idle); border-color: var(--live-line); }
+[data-theme="light"] #terminal-live-status.done-needs-action { color: var(--live-wait); border-color: var(--live-wait-line); }
+[data-theme="light"] #terminal-live-status.done-unknown  { color: var(--live-dim); border-color: var(--live-line); }
+[data-theme="light"] .live-status-state { color: var(--live-idle); }
+[data-theme="light"] .live-status-state.running { color: var(--live-run); }
+[data-theme="light"] .live-status-state.awaiting-approval { color: var(--live-wait); }
+[data-theme="light"] .live-status-state.pending-spawn-confirm { color: var(--live-spawn); }
+[data-theme="light"] .live-status-state.workflow-active { color: var(--live-dim); }
+[data-theme="light"] .live-compact-bar { background: var(--live-compact-bg); }
 /* 読み取り専用バッジはターミナル上に重なる。ライトでは明るい下地へ。 */
-[data-theme="light"] #terminal-readonly-badge { background: rgba(226, 232, 240, 0.9); color: var(--text-soft); }
+[data-theme="light"] #terminal-readonly-badge { background: var(--terminal-badge-bg); color: var(--text-soft); }
 
 /* 配色パレット: 帯の右端に置く。帯は pointer-events:none なので操作要素だけ復活させる。 */
 .live-status-palette-btn {
@@ -583,13 +576,13 @@
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-needs-action { color: rgba(251, 191, 36, 0.95); }
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-unknown  { color: rgba(148, 163, 184, 0.85); }
   /* モバイル帯は下地が透明でテーマの背景に乗るので、ライトでは濃い色へ。 */
-  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.idle { color: #475569; }
-  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.waiting { color: #b45309; }
-  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done { color: #475569; }
-  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-success  { color: #166534; }
-  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-failure  { color: #b91c1c; }
-  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-needs-action { color: #b45309; }
-  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-unknown  { color: #64748b; }
+  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.idle { color: var(--live-idle); }
+  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.waiting { color: var(--live-wait); }
+  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done { color: var(--live-idle); }
+  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-success  { color: var(--live-ok); }
+  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-failure  { color: var(--live-fail); }
+  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-needs-action { color: var(--live-wait); }
+  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-unknown  { color: var(--live-dim); }
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .card-state-svg {
     width: 11px;
     height: 11px;
@@ -621,7 +614,7 @@
 .xterm { height: 100%; }
 /* 描画行の余り（端末の高さが行の高さの倍数でない分）に .xterm-viewport の既定 #000 が見える。
    ライトでは黒い帯になるので、端末エリアと同じ背景へ揃える（--terminal-bg は theme-tokens.ts が設定）。 */
-.xterm .xterm-viewport { background-color: var(--terminal-bg, #0d1117); }
+.xterm .xterm-viewport { background-color: var(--terminal-bg); }
 /* ターミナルのスクロールバー — xterm 6.0 世代のオーバーレイスクロールバーを常時表示にする。
    xterm 5.x までは .xterm-viewport がネイティブスクロールしていたので
    ::-webkit-scrollbar で色と幅を指定できたが、6.0 で VS Code 由来の

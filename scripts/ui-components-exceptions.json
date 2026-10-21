@@ -8441,17 +8441,6 @@
     },
     {
       "file": "web/src/styles/terminal.css",
-      "selector": "body.mobile-has-session:not(.mobile-home-view) #terminal-live-status",
-      "context": "@media (max-width: 720px)",
-      "property": "color",
-      "value": "var(--live-status-fg, rgba(147, 197, 253, 0.92))",
-      "rule": "literal-color",
-      "fingerprint": "22c3be6cbfed509f625ade292d1e215ce66474485ad8ec5ec31b528385463c92",
-      "count": 1,
-      "reason": "theme-fallback: The primary value already references an existing theme/status token; the exact fallback preserves old/custom theme compatibility. Reviewed color=var(--live-status-fg, rgba(147, 197, 253, 0.92)) at body.mobile-has-session:not(.mobile-home-view) #terminal-live-status."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
       "selector": "#mobile-key-row button[aria-pressed=\"true\"]",
       "context": "",
       "property": "color",
@@ -8518,17 +8507,6 @@
     },
     {
       "file": "web/src/styles/terminal.css",
-      "selector": ".live-compact-bar::before",
-      "context": "",
-      "property": "background",
-      "value": "var(--live-status-fg, rgba(147, 197, 253, 0.92))",
-      "rule": "literal-color",
-      "fingerprint": "30a2fc59a324cf117248d548ccb7706cdd8c04fe2ce2b80cf0920b80f53e280a",
-      "count": 1,
-      "reason": "glyph-or-indicator: Decorative glyph/indicator formatting does not define the action button or modal frame. Reviewed background=var(--live-status-fg, rgba(147, 197, 253, 0.92)) at .live-compact-bar::before."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
       "selector": ".live-status-palette-row input[type=\"color\"]",
       "context": "",
       "property": "background",
@@ -8559,17 +8537,6 @@
       "fingerprint": "3528badde46c267247639b4cf2330ff78827fece97390c56913e79055fc0124d",
       "count": 1,
       "reason": "glyph-or-indicator: Decorative glyph/indicator formatting does not define the action button or modal frame. Reviewed background=rgba(59, 130, 246, 0.12) at #terminal-wrapper.drag-active::after, #chat-pane.drag-active::after."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
-      "selector": "#terminal-live-status",
-      "context": "",
-      "property": "background",
-      "value": "var(--live-status-bg, rgba(13, 17, 23, 0.82))",
-      "rule": "literal-color",
-      "fingerprint": "35d7ef4cb76a50ff3ed6980fdd971659c1161755b957d36f26d3c1d5f62b0306",
-      "count": 1,
-      "reason": "theme-fallback: The primary value already references an existing theme/status token; the exact fallback preserves old/custom theme compatibility. Reviewed background=var(--live-status-bg, rgba(13, 17, 23, 0.82)) at #terminal-live-status."
     },
     {
       "file": "web/src/styles/terminal.css",
@@ -8691,17 +8658,6 @@
       "fingerprint": "4cb35a3134a09e7bbf55b1b2379d868c8efaab0be63817977446f1e61e2aa062",
       "count": 1,
       "reason": "semantic-state: Existing selected/current/armed/live/copy/danger feedback is behavioral state. Matching ui-button variables preserve it under common hover. Reviewed color=rgba(165, 180, 252, 0.95) at .live-status-state.awaiting-input."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
-      "selector": "#terminal-live-status",
-      "context": "",
-      "property": "color",
-      "value": "var(--live-status-fg, rgba(147, 197, 253, 0.92))",
-      "rule": "literal-color",
-      "fingerprint": "56d5b5f9c58b0ea5a17b5e9e296ca731d2b4fd979519efbc49f61f451a785ca8",
-      "count": 1,
-      "reason": "theme-fallback: The primary value already references an existing theme/status token; the exact fallback preserves old/custom theme compatibility. Reviewed color=var(--live-status-fg, rgba(147, 197, 253, 0.92)) at #terminal-live-status."
     },
     {
       "file": "web/src/styles/terminal.css",
@@ -9021,17 +8977,6 @@
       "fingerprint": "96b00fd18ff3e130506ad25df4a0f1d1c6504a239ef957fe1f39e7063ad1bc94",
       "count": 1,
       "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed border-color=rgba(100, 116, 139, 0.42) at #terminal-live-status.done."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
-      "selector": ".live-status-palette-popover",
-      "context": "",
-      "property": "background",
-      "value": "#0d1117",
-      "rule": "literal-color",
-      "fingerprint": "9a30f0cfc2963045980b524447edb077039dd9197044c0fab978649282d528ef",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed background=#0d1117 at .live-status-palette-popover."
     },
     {
       "file": "web/src/styles/terminal.css",
@@ -9483,17 +9428,6 @@
       "fingerprint": "df2e2bf3284764758075998f1627661b26c0c9c0f6a4bac9ea16fc58ff15d518",
       "count": 1,
       "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(252, 165, 165, 0.95) at #terminal-live-status.done-failure."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
-      "selector": ".live-status-palette-popover",
-      "context": "",
-      "property": "color",
-      "value": "#cbd5e1",
-      "rule": "literal-color",
-      "fingerprint": "e46e71029e00b6b28adaaba4611f8dd8a6abbf03649255f92b2992f9d55b38d7",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=#cbd5e1 at .live-status-palette-popover."
     },
     {
       "file": "web/src/styles/terminal.css",
