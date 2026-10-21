@@ -82,6 +82,15 @@ impl SessionUsage {
         {
             return Response::error(404, "not_found", "session not found");
         }
+        if details.snapshot.provider == "claude"
+            && !req.transcript_path.is_empty()
+            && self
+                .core
+                .follow_claude_transcript(details.binding, &req.transcript_path)
+                .is_err()
+        {
+            return Response::error(404, "not_found", "session not found");
+        }
         let (message, record_at) = match normalize::normalize(req, &details.snapshot.model, now) {
             Ok(value) => value,
             Err(detail) => return Response::error(400, "bad_request", detail),

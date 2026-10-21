@@ -39,6 +39,12 @@ pub fn claude(
     started: Timestamp,
 ) -> Result<(String, UsageRequest), serde_json::Error> {
     let mut fields = wire::decode_go_json_object(raw)?.unwrap_or_default();
+    // Go ignores this field for Claude. Hub follows /resume through it, so it is read
+    // leniently here: a non-string value must never fail the status line.
+    let transcript_path = fields
+        .get("transcript_path")
+        .and_then(|v| serde_json::from_slice::<String>(v).ok())
+        .unwrap_or_default();
     let limits_raw = fields.remove("rate_limits");
     let present = limits_raw.is_some();
     let input: Claude = wire::decode(&raw_object(&fields))?;
@@ -98,6 +104,7 @@ pub fn claude(
         repo_owner: input.workspace.repo.owner,
         repo_name: input.workspace.repo.name,
         remaining_pct: context.remaining_percentage,
+        transcript_path,
         ..Default::default()
     };
     if let Some(limits) = limits {

@@ -4,6 +4,7 @@ mod grok;
 #[cfg(test)]
 mod tests;
 pub use discovery::Location as AgentLogLocation;
+pub use discovery::claude_conversation_id;
 pub use grok::resolve_grok;
 /// Shared provider-owned transcript resolver for HTTP and observation workers.
 pub fn resolve_transcript(

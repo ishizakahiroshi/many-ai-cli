@@ -234,6 +234,7 @@ async fn fixture(
                     model: "gpt-4.1".into(),
                     cwd: runtime.to_string_lossy().into_owned(),
                     codex_home: runtime.join("profile").to_string_lossy().into_owned(),
+                    claude_dir: runtime.join("claude-config").to_string_lossy().into_owned(),
                     pid: 8,
                     cols: 80,
                     rows: 24,
@@ -310,6 +311,94 @@ async fn source_path_is_admitted_before_invalid_tokens_but_numeric_usage_stays_a
     );
     assert!(core.session_usage(b).unwrap().is_none());
     assert_eq!(io.calls.load(Ordering::SeqCst), 0);
+}
+const RESUMED: &str = "22222222-2222-4222-8222-222222222222";
+fn claude_project_dir(
+    root: &tempfile::TempDir,
+    core: &SessionEngine,
+    b: SessionBinding,
+) -> std::path::PathBuf {
+    let cwd = core.details(b.session).unwrap().transcript.cwd;
+    root.path().join("trial/claude-config/projects").join(
+        crate::files::scope::clean(std::path::Path::new(&cwd))
+            .to_string_lossy()
+            .replace(['\\', '/', ':'], "-"),
+    )
+}
+fn agent_id(core: &SessionEngine, b: SessionBinding) -> String {
+    core.details(b.session).unwrap().transcript.agent_session_id
+}
+#[tokio::test]
+async fn claude_transcript_path_is_admitted_only_inside_this_sessions_project_directory() {
+    let (root, _tasks, core, owner, _io, b) = fixture("claude").await;
+    let dir = claude_project_dir(&root, &core, b);
+    let other_project = dir.with_file_name("elsewhere");
+    for path in [
+        other_project.join(format!("{RESUMED}.jsonl")),
+        dir.join("not-a-uuid.jsonl"),
+        dir.join(format!("{RESUMED}.txt")),
+        dir.join(format!("sub/{RESUMED}.jsonl")),
+        std::path::PathBuf::from(format!("{RESUMED}.jsonl")),
+    ] {
+        let r = owner
+            .receive(
+                &request(
+                    b,
+                    serde_json::json!({"provider":"claude","tokens_in":-1,"transcript_path":path}),
+                ),
+                now(),
+            )
+            .await;
+        assert_eq!(r.status, 400, "{path:?}");
+        assert_eq!(agent_id(&core, b), "", "{path:?}");
+    }
+    // The status line value is not trusted for anything but the file stem it names.
+    let r = owner
+        .receive(
+            &request(
+                b,
+                serde_json::json!({"provider":"claude","tokens_in":-1,"transcript_path":dir.join(format!("{RESUMED}.jsonl"))}),
+            ),
+            now(),
+        )
+        .await;
+    assert_eq!(r.status, 400);
+    assert_eq!(agent_id(&core, b), RESUMED);
+}
+#[tokio::test]
+async fn claude_conversation_owned_by_another_live_session_is_not_adopted() {
+    let (root, _tasks, core, owner, _io, first) = fixture("claude").await;
+    let second = core
+        .register(
+            RegisterRequest {
+                message: proto::Message {
+                    provider: "claude".into(),
+                    cwd: core.details(first.session).unwrap().transcript.cwd,
+                    claude_dir: root
+                        .path()
+                        .join("trial/claude-config")
+                        .to_string_lossy()
+                        .into_owned(),
+                    pid: 9,
+                    cols: 80,
+                    rows: 24,
+                    ..Default::default()
+                },
+                spawn_proof: None,
+            },
+            WrapperConnectionId(2),
+            now(),
+        )
+        .await
+        .unwrap()
+        .binding;
+    let path = claude_project_dir(&root, &core, first).join(format!("{RESUMED}.jsonl"));
+    let body = serde_json::json!({"provider":"claude","tokens_in":-1,"transcript_path":path});
+    owner.receive(&request(first, body.clone()), now()).await;
+    assert_eq!(agent_id(&core, first), RESUMED);
+    owner.receive(&request(second, body), now()).await;
+    assert_eq!(agent_id(&core, second), "");
+    assert_eq!(agent_id(&core, first), RESUMED);
 }
 #[tokio::test]
 async fn http_abandonment_retains_profile_then_ui_order_and_usage_never_persists() {

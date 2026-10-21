@@ -22,6 +22,39 @@ impl SessionEngine {
         session.usage = Some(message.clone());
         Ok(state.route(CoreEffects(vec![CoreEffect::Broadcast(message)])))
     }
+    /// Follows a Claude `/resume` or `/clear`: the statusLine `transcript_path` names the
+    /// conversation file now being written, while the id Hub launched with stays stale.
+    /// Admission is lexical (no disk read). A conversation another live Claude session
+    /// already owns is never adopted, so a forged path cannot take over its transcript.
+    pub fn follow_claude_transcript(
+        &self,
+        binding: SessionBinding,
+        raw: &str,
+    ) -> Result<(), SessionError> {
+        let mut state = lock(&self.state);
+        let session = state.session(binding)?;
+        if session.snapshot.provider != "claude" {
+            return Ok(());
+        }
+        let Some(id) =
+            crate::application::agent_history::claude_conversation_id(&session.transcript, raw)
+        else {
+            return Ok(());
+        };
+        if session.transcript.agent_session_id == id {
+            return Ok(());
+        }
+        let claimed = state.sessions.values().any(|other| {
+            other.binding.session != binding.session
+                && other.snapshot.provider == "claude"
+                && !terminal(&other.snapshot.state)
+                && other.transcript.agent_session_id.eq_ignore_ascii_case(&id)
+        });
+        if !claimed {
+            state.session(binding)?.transcript.agent_session_id = id;
+        }
+        Ok(())
+    }
     /// Codex Stop hook path admission is lexical and does not read transcript bytes.
     pub fn set_usage_transcript(
         &self,

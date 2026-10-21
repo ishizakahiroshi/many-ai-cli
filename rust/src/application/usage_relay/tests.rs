@@ -147,6 +147,49 @@ async fn statusline_and_success_exit_survive_post_failure_without_body_leak() {
             .contains("PRIVATE_BODY_SENTINEL")
     );
 }
+// Go drops Claude's transcript_path; Hub forwards it to follow /resume. A bad type must
+// leave the status line and the rest of the payload exactly as they were.
+#[tokio::test]
+async fn claude_transcript_path_is_forwarded_and_a_bad_type_never_breaks_the_status_line() {
+    let mut outputs = vec![];
+    for raw in [r#""C:/claude/projects/p/x.jsonl""#, "7", "null", r#"["x"]"#] {
+        let io = FakeIo {
+            rollout: vec![],
+            posts: Mutex::new(vec![]),
+            fail_post: false,
+        };
+        let input = format!(
+            r#"{{"transcript_path":{raw},"cost":{{"total_cost_usd":2}},"model":{{"display_name":"Example"}}}}"#
+        );
+        let mut output = vec![];
+        run_with_io(
+            &args("claude"),
+            &["MANY_AI_CLI_HUB_TOKEN=synthetic".into()],
+            &mut Cursor::new(input),
+            &mut output,
+            &io,
+            &|_| {},
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            output, b"$2.0000  Example  \xe2\x86\x910 \xe2\x86\x930\n",
+            "{raw}"
+        );
+        let posts = io.posts.lock().unwrap();
+        assert_eq!(posts.len(), 1, "{raw}");
+        outputs.push(posts[0].get("transcript_path").cloned());
+    }
+    assert_eq!(
+        outputs,
+        vec![
+            Some(Value::String("C:/claude/projects/p/x.jsonl".into())),
+            None,
+            None,
+            None
+        ]
+    );
+}
 #[tokio::test]
 async fn missing_auth_keeps_claude_status_and_never_posts() {
     let io = FakeIo {

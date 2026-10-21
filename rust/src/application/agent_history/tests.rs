@@ -185,6 +185,75 @@ async fn actual_session_chat_keeps_source_validation_order_and_never_reads_unsup
     assert!(f.dispatch.calls.lock().unwrap().is_empty());
 }
 #[tokio::test]
+async fn claude_resume_moves_the_log_from_the_missing_launch_id_to_the_resumed_conversation() {
+    let f = fixture();
+    let claude = register(&f, "claude", 1303, UUID).await;
+    let identity = f.core.details(claude.session).unwrap().transcript;
+    let dir = discovery::claude_dir(
+        &Path::new(&identity.home_dir).join(".claude"),
+        &identity.cwd,
+    );
+    let resumed = dir.join("22222222-2222-4222-8222-222222222222.jsonl");
+    write(&resumed, "{}\n");
+    // /resume as the first action: the launch-time file never existed.
+    let before = f.owner.location(claude.session);
+    assert!(!before.available);
+    assert_eq!(before.reason, "Claude Code transcript file not found yet");
+    f.core
+        .follow_claude_transcript(claude, &resumed.to_string_lossy())
+        .unwrap();
+    let after = f.owner.location(claude.session);
+    assert!(after.available);
+    assert_eq!(PathBuf::from(after.path), resumed);
+    // The launch-time file appearing later (/clear back, or a late write) is not preferred.
+    write(&dir.join(format!("{UUID}.jsonl")), "{}\n");
+    assert_eq!(
+        PathBuf::from(f.owner.location(claude.session).path),
+        resumed
+    );
+}
+#[test]
+fn claude_conversation_id_requires_this_identitys_project_directory_and_a_uuid_stem() {
+    let (root, cwd) = if cfg!(windows) {
+        (r"C:\cfg", r"C:\work\app")
+    } else {
+        ("/cfg", "/work/app")
+    };
+    let identity = TranscriptSessionIdentity {
+        provider: "claude".into(),
+        cwd: cwd.into(),
+        claude_dir: root.into(),
+        ..Default::default()
+    };
+    let dir = discovery::claude_dir(Path::new(root), cwd);
+    let good = dir.join(format!("{UUID}.jsonl"));
+    let id = |raw: &str| discovery::claude_conversation_id(&identity, raw);
+    assert_eq!(id(&good.to_string_lossy()).as_deref(), Some(UUID));
+    assert_eq!(
+        id(&format!("  {}\n", good.display())).as_deref(),
+        Some(UUID)
+    );
+    for bad in [
+        dir.with_file_name("other").join(format!("{UUID}.jsonl")),
+        dir.join("sub").join(format!("{UUID}.jsonl")),
+        dir.join("..").join("other").join(format!("{UUID}.jsonl")),
+        dir.join("not-a-uuid.jsonl"),
+        dir.join(format!("{UUID}.json")),
+        PathBuf::from(format!("projects/x/{UUID}.jsonl")),
+        PathBuf::new(),
+    ] {
+        assert_eq!(id(&bad.to_string_lossy()), None, "{bad:?}");
+    }
+    let other_provider = TranscriptSessionIdentity {
+        provider: "codex".into(),
+        ..identity
+    };
+    assert_eq!(
+        discovery::claude_conversation_id(&other_provider, &good.to_string_lossy()),
+        None
+    );
+}
+#[tokio::test]
 async fn exact_codex_path_precedes_ambiguous_start_lookup_and_trial_open_never_dispatches() {
     let f = fixture();
     let binding = register(&f, "codex", 1303, "").await;

@@ -180,6 +180,31 @@ pub(super) fn claude_dir(root: &Path, cwd: &str) -> PathBuf {
             .replace(['\\', '/', ':'], "-"),
     )
 }
+/// Lexical admission of the `transcript_path` Claude hands to its statusLine.
+/// Yields the conversation id only for `<claude dir>/projects/<cwd name>/<UUID>.jsonl`
+/// of this very identity, so a forged path cannot point `exact` at another directory.
+/// The file itself is not opened or required to exist.
+pub fn claude_conversation_id(identity: &TranscriptSessionIdentity, raw: &str) -> Option<String> {
+    if identity.provider != "claude" || identity.cwd.is_empty() {
+        return None;
+    }
+    let root = home(&identity.claude_dir, &identity.home_dir, ".claude")?;
+    let dir = claude_dir(&root, &identity.cwd);
+    let path = crate::files::scope::clean(Path::new(raw.trim()));
+    if !path.is_absolute()
+        || !path
+            .extension()
+            .and_then(|v| v.to_str())
+            .is_some_and(|v| v.eq_ignore_ascii_case("jsonl"))
+    {
+        return None;
+    }
+    let id = path.file_stem()?.to_str()?;
+    if !uuid(id) || !same_path(&path.parent()?.to_string_lossy(), &dir.to_string_lossy()) {
+        return None;
+    }
+    Some(id.to_owned())
+}
 pub(super) fn command_dir(home: &str, cwd: &str) -> PathBuf {
     let mut slug = String::new();
     for c in simple_lower(super::trim_space(cwd)).chars() {
