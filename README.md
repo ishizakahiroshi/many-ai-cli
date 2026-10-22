@@ -316,7 +316,7 @@ npm install -g many-ai-cli
 
 Once installed → next: [Getting started (right after install)](#getting-started-right-after-install). If your shell has not picked up the global bin yet, `pnpm exec many-ai-cli setup` still creates the shortcuts.
 
-> Published to the npm registry since v0.3.0. The package ships the native Go binary for your platform as an optional dependency, so nothing is downloaded in a browser — the launcher is generated locally at install time and carries no Mark-of-the-Web, which avoids that SmartScreen trigger. This is **not** a substitute for Authenticode signing: Smart App Control / WDAC / AppLocker / EDR / antivirus policies are handled separately. If the global command is not found after install, run `pnpm setup` (or reopen your shell) so the global bin directory is on your `PATH`.
+> Published to the npm registry since v0.3.0. The package installs your platform's native executable as an optional dependency; the small Node launcher resolves and starts it. Package-manager installation avoids the browser download step, but it does **not** guarantee that Windows will allow the executable: SmartScreen reputation, Smart App Control, WDAC, AppLocker, EDR and antivirus policies are separate. If the global command is not found after install, run `pnpm setup` (or reopen your shell) so the global bin directory is on your `PATH`.
 
 **Windows (winget) — one-line paste:**
 
@@ -449,11 +449,15 @@ Whichever install path you used, the next steps are the same.
    many-ai-cli setup
    ```
 
-   On **Windows** it creates a single **"MANY-AI-CLI"** shortcut on your desktop, which starts a tray icon, and puts the same shortcut in your **Startup folder** so the tray is there after you sign in. If you would rather launch it yourself, delete "MANY-AI-CLI" from the Startup folder or switch it off in **Task Manager → Startup apps**. On macOS and Linux it creates **"Many AI Hub Start"** and **"Many AI Hub Stop"** (`.command` / `.desktop`).
-2. From now on, just **double-click the desktop shortcut**. On Windows a tray icon appears; click it and choose **"Hub を開く"** to start the Hub if needed and open it in your browser at `http://127.0.0.1:47777/?token=<token>`. On macOS and Linux, "Many AI Hub Start" opens a console window alongside the browser.
+   On **Windows** it creates a single **"MANY-AI-CLI"** shortcut on your desktop and a separate sign-in entry in your **Startup folder**. The desktop shortcut opens the Hub; the sign-in entry starts only the tray and does not open a browser. If you would rather launch it yourself, delete "MANY-AI-CLI" from the Startup folder or switch it off in **Task Manager → Startup apps**. On macOS and Linux it creates **"Many AI Hub Start"** and **"Many AI Hub Stop"** (`.command` / `.desktop`).
+2. From now on, just **double-click the desktop shortcut**. On Windows it starts the Hub if needed and opens the browser directly, including the first launch; an existing Hub is reused. The tray remains available for **"Hub を開く"** and **"Hub を停止"**. On macOS and Linux, "Many AI Hub Start" opens a console window alongside the browser.
 3. In the Hub UI, click **"+ New Session"** in the lower left to launch one of the wrapped AI CLIs (claude / codex / copilot / cursor-agent / opencode / grok / command-code). When an approval prompt appears, an action bar shows up under the input — click a button or use the keyboard.
 
 To stop, use the tray menu's **"Hub を停止"** (Windows), **"Many AI Hub Stop"** on your desktop (macOS / Linux), the `⏻` button in the Settings → Hub view of the Hub UI, or `many-ai-cli stop` from another terminal. If you prefer a terminal, `many-ai-cli serve --open` still works.
+
+Windows shortcuts retain the executable, home and selected Hub port from setup. If the intended port is not currently running and differs from the saved configuration, use `many-ai-cli setup --port <port>` explicitly. Setup does not copy or migrate existing settings, data or credentials. Exiting the tray leaves its Hub running; use **"Hub を停止"** when you intend to stop the Hub.
+
+For npm updates, install the selected version (for example, `pnpm add -g many-ai-cli@<version>`) and run `many-ai-cli setup` again from that version. Package managers may change the executable's directory between versions, so setup refreshes the shortcuts. Installation does not restart a running Hub; arrange any restart around ongoing AI work. Foreground `serve` and no-argument Hub startup show a logo, version and connection instructions when stdin and stdout are terminals. Background launches and redirected output do not print the authentication URL.
 
 > **Upgrading from an earlier version?** The tray does not appear just because you installed a newer binary — **run `setup` once** to get the "MANY-AI-CLI" shortcut and the sign-in entry. Doing so **leaves your existing "Start" and "Stop" icons in place** — they keep working. Delete them yourself once you have switched to the tray; `setup` will never remove them for you. An older desktop icon named "Many AI Hub" is the same launcher under the previous name; `setup` replaces it with "MANY-AI-CLI".
 

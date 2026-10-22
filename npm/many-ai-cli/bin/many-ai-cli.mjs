@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 // Thin launcher for the `many-ai-cli` npm package.
 //
-// The real program is a native Go binary shipped in a platform-specific
-// optional dependency (e.g. `many-ai-cli-win32-x64`). This shim resolves the
+// The real program is a native binary shipped in a platform-specific
+// optional dependency (e.g. `many-ai-cli-windows-x64`). This shim resolves the
 // matching package for the current OS/arch and execs its bundled binary,
-// forwarding argv, stdio, and the exit code / terminating signal.
+// forwarding argv and stdio and reporting its exit status.
 //
-// Distributing the binary through npm (rather than a browser-downloaded exe)
-// means the launcher is materialized locally at install time, so it carries no
-// Mark-of-the-Web and does not trigger the Windows SmartScreen prompt.
+// The shim is independent of the implementation language. Rust release
+// candidates use the same package names and binary paths; this file alone does
+// not establish which release is published to the registry. Package-manager
+// installation does not guarantee that Windows security policies allow an exe.
 
 import { spawnSync } from 'node:child_process';
 import { chmodSync } from 'node:fs';

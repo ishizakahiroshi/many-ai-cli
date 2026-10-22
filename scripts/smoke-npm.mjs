@@ -4,35 +4,32 @@
 //
 // 1. `npm pack --dry-run` for every package and assert the published file set
 //    is exactly what we expect (binary + shim + metadata, nothing else).
-// 2. If the current platform's binary is staged, exercise the real shim
-//    resolution path (temp local node_modules) by running `--version` and
+// 2. Require all four staged binaries, then exercise the current platform's
+//    real shim resolution path (owned temporary layout) by running `--version` and
 //    `version` through bin/many-ai-cli.mjs.
+// Missing/empty binaries or an unsupported execution host are failures, not
+// successful skips. Run only after staging the candidate's four artifacts.
 //
 // The global-install smoke (`pnpm add -g <tarball>` then `many-ai-cli --version`,
 // which exercises the generated .cmd shim on Windows) is a manual / CI step
 // because it mutates global state — see docs/manual_release.md.
 
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, rmSync, mkdirSync } from 'node:fs';
+import { accessSync, constants, copyFileSync, mkdtempSync, rmSync, mkdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const npmDir = join(repoRoot, 'npm');
 
-const PLATFORM_PKGS = [
-  'many-ai-cli-windows-x64',
-  'many-ai-cli-linux-x64',
-  'many-ai-cli-macos-intel',
-  'many-ai-cli-macos-apple-silicon',
-];
-
-const CURRENT = {
+const PLATFORM_TARGETS = {
   'win32 x64': { pkg: 'many-ai-cli-windows-x64', binName: 'many-ai-cli.exe' },
   'linux x64': { pkg: 'many-ai-cli-linux-x64', binName: 'many-ai-cli' },
   'darwin x64': { pkg: 'many-ai-cli-macos-intel', binName: 'many-ai-cli' },
   'darwin arm64': { pkg: 'many-ai-cli-macos-apple-silicon', binName: 'many-ai-cli' },
-}[`${process.platform} ${process.arch}`];
+};
+const CURRENT = PLATFORM_TARGETS[`${process.platform} ${process.arch}`];
 
 let failures = 0;
 function check(name, fn) {
@@ -65,45 +62,63 @@ function assertSameSet(actual, expected, label) {
   }
 }
 
+function requireBinary(pkg, binName) {
+  const binary = join(npmDir, pkg, 'bin', binName);
+  const stat = statSync(binary);
+  if (!stat.isFile() || stat.size === 0) throw new Error(`${pkg}: binary is not a nonempty regular file`);
+  accessSync(binary, constants.R_OK);
+  return binary;
+}
+
 console.log('pack content checks:');
 check('root package ships only shim + readme + package.json', () => {
   assertSameSet(packFileList('many-ai-cli'), ['README.md', 'bin/many-ai-cli.mjs', 'package.json'], 'root');
 });
 
-for (const pkg of PLATFORM_PKGS) {
+for (const { pkg, binName } of Object.values(PLATFORM_TARGETS)) {
   check(`${pkg} ships only its binary + package.json`, () => {
-    const binName = pkg.includes('win32') ? 'many-ai-cli.exe' : 'many-ai-cli';
-    const files = packFileList(pkg);
-    // package.json is always included; the binary is only present once staged.
-    const allowed = new Set(['package.json', `bin/${binName}`]);
-    const extra = files.filter((f) => !allowed.has(f));
-    if (extra.length) throw new Error(`${pkg}: unexpected files [${extra}]`);
+    requireBinary(pkg, binName);
+    assertSameSet(packFileList(pkg), ['package.json', `bin/${binName}`], pkg);
   });
 }
 
 console.log('\nshim execution check:');
 if (!CURRENT) {
-  console.log(`  SKIP  unsupported dev platform ${process.platform} ${process.arch}`);
-} else if (!existsSync(join(npmDir, CURRENT.pkg, 'bin', CURRENT.binName))) {
-  console.log(`  SKIP  ${CURRENT.pkg}/bin/${CURRENT.binName} not staged (run stage-npm-binaries.mjs first)`);
+  check('current host can execute the staged native binary', () => {
+    throw new Error(`Unsupported execution host ${process.platform} ${process.arch}; use a supported target to complete the smoke check.`);
+  });
+} else if (failures) {
+  // A broken/missing platform package must stop acceptance even if the current
+  // host could execute an old binary left over from a previous candidate.
+  console.log('  NOT RUN  correct the package content failures before executing the shim.');
 } else {
   // The shim resolves the platform package with createRequire(import.meta.url),
-  // which walks up from the shim's own location. Mirror the published layout by
-  // placing the platform package under the root package's node_modules.
-  const nm = join(npmDir, 'many-ai-cli', 'node_modules', CURRENT.pkg);
+  // which walks up from the shim's own location. Mirror only the packaged files
+  // in a fresh owned directory; never replace a developer's node_modules.
+  let ownedTemp;
   try {
-    rmSync(join(npmDir, 'many-ai-cli', 'node_modules'), { recursive: true, force: true });
-    mkdirSync(nm, { recursive: true });
-    cpSync(join(npmDir, CURRENT.pkg), nm, { recursive: true });
-    const shim = join(npmDir, 'many-ai-cli', 'bin', 'many-ai-cli.mjs');
+    ownedTemp = mkdtempSync(join(tmpdir(), 'many-ai-cli-npm-smoke-'));
+    const rootPkg = join(ownedTemp, 'node_modules', 'many-ai-cli');
+    const platformPkg = join(rootPkg, 'node_modules', CURRENT.pkg);
+    mkdirSync(join(rootPkg, 'bin'), { recursive: true });
+    mkdirSync(join(platformPkg, 'bin'), { recursive: true });
+    copyFileSync(join(npmDir, 'many-ai-cli', 'package.json'), join(rootPkg, 'package.json'));
+    const shim = join(rootPkg, 'bin', 'many-ai-cli.mjs');
+    copyFileSync(join(npmDir, 'many-ai-cli', 'bin', 'many-ai-cli.mjs'), shim);
+    copyFileSync(join(npmDir, CURRENT.pkg, 'package.json'), join(platformPkg, 'package.json'));
+    copyFileSync(requireBinary(CURRENT.pkg, CURRENT.binName), join(platformPkg, 'bin', CURRENT.binName));
     for (const verArg of ['--version', 'version']) {
       check(`shim "${verArg}" exits 0 with output`, () => {
-        const out = execFileSync('node', [shim, verArg], { encoding: 'utf8' });
+        const out = execFileSync(process.execPath, [shim, verArg], { encoding: 'utf8' });
         if (!out.trim()) throw new Error('no version output');
       });
     }
+  } catch (err) {
+    check('prepare isolated shim layout', () => { throw err; });
   } finally {
-    rmSync(join(npmDir, 'many-ai-cli', 'node_modules'), { recursive: true, force: true });
+    // ownedTemp is the absolute directory returned by mkdtempSync above. Remove
+    // only that exact owned path, never a repository or package-manager folder.
+    if (ownedTemp) rmSync(ownedTemp, { recursive: true, force: true });
   }
 }
 

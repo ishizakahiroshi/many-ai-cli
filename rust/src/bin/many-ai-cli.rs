@@ -10,12 +10,22 @@ fn main() {
     if many_ai_cli::wrapper::launch_payload::is_internal_invocation(&args) {
         std::process::exit(many_ai_cli::wrapper::launch_payload::run_internal_invocation(&args));
     }
+    let display_args: Vec<String> = args
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    let tray_invocation = cli::split_trial_options(&display_args)
+        .is_ok_and(|(_, args)| args.first().is_some_and(|command| command == "tray"));
     // Adopt an inherited startup Job before any provider or registration work.
     // Its lifetime remains outside Tokio so runtime cleanup happens first.
     let startup = match many_ai_cli::wrapper::startup::StartupLifetime::adopt_from_environment() {
         Ok(startup) => startup,
         Err(error) => {
-            eprintln!("wrapper startup: {error}");
+            if tray_invocation {
+                many_ai_cli::application::tray::report_error(&format!("wrapper startup: {error}"));
+            } else {
+                eprintln!("wrapper startup: {error}");
+            }
             std::process::exit(1);
         }
     };
@@ -27,7 +37,11 @@ fn main() {
     let code = match result {
         Ok(()) => 0,
         Err(error) => {
-            eprintln!("{error}");
+            if tray_invocation {
+                many_ai_cli::application::tray::report_error(&error);
+            } else {
+                eprintln!("{error}");
+            }
             1
         }
     };
@@ -146,7 +160,7 @@ async fn run() -> Result<(), String> {
             }
         }
         Command::Version => println!("{}", env!("MANY_AI_BUILD_VERSION")),
-        Command::Help => println!("{}", cli::USAGE),
+        Command::Help => println!("{}\n\n{}", cli::USAGE, cli::TRAY_USAGE),
         Command::Serve(args) => {
             let options = main_program::ServeOptions::parse(&args)?;
             let context = main_program::MainContext::load(invocation.trial.as_ref())
@@ -336,9 +350,16 @@ async fn run() -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
         }
         Command::Setup(args) => {
-            let flags = many_ai_cli::application::issue_cli::flags::parse(&args, &[])?;
+            use many_ai_cli::application::issue_cli::flags::{self, Kind};
+            let flags = flags::parse(&args, &[("port", Kind::Int)])?;
             if flags.help {
+                println!(
+                    "many-ai-cli setup [--port <port>]\nWindows: select the current Hub port or pass --port explicitly; shortcuts retain this home and port."
+                );
                 return Ok(());
+            }
+            if flags.values.contains_key("port") && !cfg!(windows) {
+                return Err("setup --port is only available on Windows".into());
             }
             {
                 let context = main_program::MainContext::load(invocation.trial.as_ref())
@@ -346,6 +367,35 @@ async fn run() -> Result<(), String> {
                 let cancel = Cancellation::default();
                 let _signals = runtime_context::ShutdownSignals::install(cancel.clone())
                     .map_err(|e| e.to_string())?;
+                let port = if !cfg!(windows) {
+                    // Unix setup keeps its existing templates and does not
+                    // discover/probe a Hub for this Windows-only option.
+                    context.paths.port()
+                } else if let Some(value) = flags.values.get("port") {
+                    value
+                        .parse::<u16>()
+                        .ok()
+                        .filter(|port| *port > 0)
+                        .ok_or("setup --port requires a port from 1 to 65535")?
+                } else if let Some(port) = main_program::running_port(&context)
+                    .await
+                    .map_err(|e| e.to_string())?
+                {
+                    port
+                } else {
+                    u16::try_from(
+                        context
+                            .config
+                            .snapshot()
+                            .map_err(|e| e.to_string())?
+                            .config
+                            .hub
+                            .port,
+                    )
+                    .ok()
+                    .filter(|port| *port > 0)
+                    .ok_or("configured Hub port is invalid; use setup --port")?
+                };
                 let native = std::sync::Arc::new(
                     many_ai_cli::application::platform_cli::native::NativePlatformIo {
                         actor: many_ai_cli::application::diagnostics::NativeDiagnosticIo {
@@ -365,7 +415,7 @@ async fn run() -> Result<(), String> {
                     io: native,
                 };
                 owner
-                    .setup(&mut std::io::stdout(), &cancel)
+                    .setup_with_port(port, &mut std::io::stdout(), &cancel)
                     .await
                     .map_err(|e| e.to_string())?;
             }
@@ -425,8 +475,16 @@ async fn run() -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
         }
         Command::Tray => {
-            let context = main_program::MainContext::load(invocation.trial.as_ref())
-                .map_err(|e| e.to_string())?;
+            let options = cli::parse_tray(&command_args[1..])?;
+            if options.help {
+                println!("{}", cli::TRAY_USAGE);
+                return Ok(());
+            }
+            let context = main_program::MainContext::load_with_home(
+                invocation.trial.as_ref(),
+                options.home.as_deref(),
+            )
+            .map_err(|e| e.to_string())?;
             let stop = std::sync::Arc::new(
                 many_ai_cli::application::maintenance_entry::stop_command(&context)
                     .map_err(|e| e.to_string())?,
@@ -440,9 +498,10 @@ async fn run() -> Result<(), String> {
                     cwd: context.cwd,
                     environment: context.environment,
                     stop,
+                    preferred_port: options.port,
                 });
             many_ai_cli::application::tray::TrayOwner::new(hooks)
-                .run(trial)
+                .run_with_open(trial, options.open)
                 .await
                 .map_err(|e| e.to_string())?;
         }

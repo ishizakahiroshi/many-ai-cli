@@ -217,6 +217,34 @@ impl PlatformIo for NativePlatformIo {
         exe: &'a Path,
         cancel: &'a Cancellation,
     ) -> CoreFuture<'a, io::Result<()>> {
+        let home = self
+            .actor
+            .paths
+            .root()
+            .parent()
+            .unwrap_or_else(|| self.actor.paths.root())
+            .to_path_buf();
+        Box::pin(async move {
+            self.shortcut_with_options(
+                path,
+                exe,
+                &ShortcutOptions {
+                    open: false,
+                    home,
+                    port: None,
+                },
+                cancel,
+            )
+            .await
+        })
+    }
+    fn shortcut_with_options<'a>(
+        &'a self,
+        path: &'a Path,
+        exe: &'a Path,
+        options: &'a ShortcutOptions,
+        cancel: &'a Cancellation,
+    ) -> CoreFuture<'a, io::Result<()>> {
         Box::pin(async move {
             self.checked(path)?;
             if self.actor.paths.is_trial() {
@@ -231,14 +259,33 @@ impl PlatformIo for NativePlatformIo {
                         .ok_or_else(|| io::Error::other("shortcut path is not UTF-8"))?,
                 )
             };
+            if !options.home.is_absolute() {
+                return Err(io::Error::other("shortcut home must be absolute"));
+            }
+            let mut arguments = if options.open {
+                "tray --open".to_owned()
+            } else {
+                "tray".to_owned()
+            };
+            arguments.push_str(" --home ");
+            arguments.push_str(&windows_argument(
+                options
+                    .home
+                    .to_str()
+                    .ok_or_else(|| io::Error::other("shortcut home is not UTF-8"))?,
+            )?);
+            if let Some(port) = options.port {
+                if port == 0 {
+                    return Err(io::Error::other("shortcut port must not be zero"));
+                }
+                arguments.push_str(&format!(" --port {port}"));
+            }
             let script = format!(
-                "$s=(New-Object -ComObject WScript.Shell).CreateShortcut({});$s.TargetPath={};$s.Arguments='tray';$s.WorkingDirectory={};$s.WindowStyle=7;$s.IconLocation={};$s.Save()",
+                "$ErrorActionPreference='Stop';$s=(New-Object -ComObject WScript.Shell).CreateShortcut({});$s.TargetPath={};$s.Arguments={};$s.WorkingDirectory={};$s.WindowStyle=7;$s.IconLocation={};$s.Save()",
                 convert(path)?,
                 convert(exe)?,
-                convert(
-                    exe.parent()
-                        .ok_or_else(|| io::Error::other("executable lacks parent"))?
-                )?,
+                quote(&arguments)?,
+                convert(&options.home)?,
                 quote(&format!("{},0", exe.display()))?
             );
             let executable = self.actor.look_path("powershell")?;
@@ -334,4 +381,28 @@ impl PlatformIo for NativePlatformIo {
             Ok(())
         })
     }
+}
+// The shortcut stores a Windows argv string, not shell source. Escape quotes
+// and trailing backslashes according to CommandLineToArgvW/CRT quoting rules.
+fn windows_argument(value: &str) -> io::Result<String> {
+    if value.contains(['\0', '\r', '\n']) {
+        return Err(io::Error::other("invalid shortcut argument"));
+    }
+    let mut result = String::from("\"");
+    let mut slashes = 0;
+    for ch in value.chars() {
+        if ch == '\\' {
+            slashes += 1;
+            continue;
+        }
+        result.extend(std::iter::repeat_n(
+            '\\',
+            if ch == '"' { slashes * 2 + 1 } else { slashes },
+        ));
+        result.push(ch);
+        slashes = 0;
+    }
+    result.extend(std::iter::repeat_n('\\', slashes * 2));
+    result.push('"');
+    Ok(result)
 }

@@ -11,6 +11,55 @@ pub const BUILTIN_PROVIDERS: &[&str] = &[
     "command-code",
 ];
 pub const USAGE: &str = "many-ai-cli <serve|connect|setup|doctor|issue|wrap|claude|codex|copilot|cursor-agent|opencode|grok|command-code|shell-init|stop|status|tray|profile-export|log-clean|uninstall|version>";
+pub const TRAY_USAGE: &str = "Windows: many-ai-cli tray [--open] [--home <absolute-home>] [--port <port>]\n  --open: start or reuse the Hub and open its browser; omitted: idle tray only\n  --home/--port: retain the home and port selected by setup\nWindows: many-ai-cli setup [--port <port>]";
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TrayInvocation {
+    pub open: bool,
+    pub home: Option<PathBuf>,
+    pub port: Option<u16>,
+    pub help: bool,
+}
+pub fn parse_tray(args: &[String]) -> Result<TrayInvocation, String> {
+    use crate::application::issue_cli::flags::{self, Kind};
+    let flags = flags::parse(
+        args,
+        &[
+            ("open", Kind::Bool),
+            ("home", Kind::String),
+            ("port", Kind::Int),
+        ],
+    )?;
+    if flags.help {
+        return Ok(TrayInvocation {
+            help: true,
+            ..Default::default()
+        });
+    }
+    // Preserve the existing dispatch contract's opaque positional tail. The
+    // shared Go-style parser stops at that tail; only leading flags set intent.
+    let home = flags.values.get("home").map(PathBuf::from);
+    if home.as_ref().is_some_and(|path| !path.is_absolute()) {
+        return Err("tray --home requires an absolute home".into());
+    }
+    let port = flags
+        .values
+        .get("port")
+        .map(|value| {
+            value
+                .parse::<u16>()
+                .ok()
+                .filter(|port| *port > 0)
+                .ok_or_else(|| "tray --port requires a port from 1 to 65535".to_string())
+        })
+        .transpose()?;
+    Ok(TrayInvocation {
+        open: flags.boolean("open"),
+        home,
+        port,
+        help: false,
+    })
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
@@ -109,7 +158,13 @@ pub fn parse(args: &[String], custom_providers: &[String]) -> Result<Invocation,
         "shell-init" => Command::ShellInit,
         "stop" => Command::Stop,
         "status" => Command::Status,
-        "tray" => Command::Tray,
+        "tray" => {
+            let options = parse_tray(&rest)?;
+            if trial.is_some() && (options.home.is_some() || options.port.is_some()) {
+                return Err("tray --home/--port cannot override trial isolation".into());
+            }
+            Command::Tray
+        }
         "profile-export" => Command::ProfileExport(rest),
         "log-clean" => Command::LogClean(rest),
         "uninstall" => Command::Uninstall(rest),

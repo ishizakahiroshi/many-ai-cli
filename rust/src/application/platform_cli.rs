@@ -36,6 +36,11 @@ pub struct Locations {
     pub startup: Option<PathBuf>,
     pub executable: PathBuf,
 }
+pub struct ShortcutOptions {
+    pub open: bool,
+    pub home: PathBuf,
+    pub port: Option<u16>,
+}
 pub trait PlatformIo: Send + Sync {
     fn prepare_directory(&self, path: &Path) -> io::Result<()>;
     fn write(&self, path: &Path, bytes: &[u8]) -> io::Result<()>;
@@ -49,6 +54,15 @@ pub trait PlatformIo: Send + Sync {
         exe: &'a Path,
         cancel: &'a Cancellation,
     ) -> CoreFuture<'a, io::Result<()>>;
+    fn shortcut_with_options<'a>(
+        &'a self,
+        path: &'a Path,
+        exe: &'a Path,
+        _options: &'a ShortcutOptions,
+        cancel: &'a Cancellation,
+    ) -> CoreFuture<'a, io::Result<()>> {
+        self.shortcut(path, exe, cancel)
+    }
     fn purge<'a>(
         &'a self,
         exe: &'a Path,
@@ -78,9 +92,30 @@ impl PlatformCli {
     pub async fn setup(&self, out: &mut impl Write, cancel: &Cancellation) -> io::Result<()> {
         self.setup_for(TargetPlatform::native(), out, cancel).await
     }
+    pub async fn setup_with_port(
+        &self,
+        port: u16,
+        out: &mut impl Write,
+        cancel: &Cancellation,
+    ) -> io::Result<()> {
+        if port == 0 {
+            return Err(io::Error::other("shortcut port must not be zero"));
+        }
+        self.setup_for_with_port(TargetPlatform::native(), Some(port), out, cancel)
+            .await
+    }
     pub async fn setup_for(
         &self,
         target: TargetPlatform,
+        out: &mut impl Write,
+        cancel: &Cancellation,
+    ) -> io::Result<()> {
+        self.setup_for_with_port(target, None, out, cancel).await
+    }
+    async fn setup_for_with_port(
+        &self,
+        target: TargetPlatform,
+        port: Option<u16>,
         out: &mut impl Write,
         cancel: &Cancellation,
     ) -> io::Result<()> {
@@ -99,10 +134,28 @@ impl PlatformCli {
             self.locations.config.display()
         )?;
         self.io.prepare_directory(&self.locations.data)?;
+        let home = self
+            .locations
+            .config
+            .parent()
+            .filter(|home| home.is_absolute())
+            .ok_or_else(|| io::Error::other("shortcut home must be absolute"))?;
+        if let Some(port) = port {
+            writeln!(
+                out,
+                "[OK] shortcut home: {}\n[OK] shortcut port: {port}",
+                home.display()
+            )?;
+        }
         let mut failed = false;
         for (name, args) in [("start.cmd", "serve --open"), ("stop.cmd", "stop")] {
             let path = self.locations.data.join(name);
-            let result = cmd_contents(&self.locations.executable, args)
+            let args = if name == "start.cmd" {
+                port.map_or_else(|| args.to_owned(), |port| format!("{args} --port {port}"))
+            } else {
+                args.into()
+            };
+            let result = cmd_contents_for_home(&self.locations.executable, &args, home)
                 .and_then(|body| self.io.write(&path, body.as_bytes()));
             failed |= print_result(out, &path, result)?;
         }
@@ -113,9 +166,14 @@ impl PlatformCli {
             std::iter::once(&self.locations.desktop).chain(self.locations.startup.iter())
         {
             let path = directory.join(SHORTCUT);
+            let options = ShortcutOptions {
+                open: directory == &self.locations.desktop,
+                home: home.to_path_buf(),
+                port,
+            };
             let result = self
                 .io
-                .shortcut(&path, &self.locations.executable, cancel)
+                .shortcut_with_options(&path, &self.locations.executable, &options, cancel)
                 .await;
             failed |= print_result(out, &path, result)?;
         }
@@ -143,7 +201,7 @@ impl PlatformCli {
         }
         writeln!(
             out,
-            "\nNext:\n  Double click \"MANY-AI-CLI\" on your desktop. It also starts on sign-in.\n  To stop that, delete \"MANY-AI-CLI\" from the Startup folder\n  (or turn it off in Task Manager > Startup apps)."
+            "\nNext:\n  Double click \"MANY-AI-CLI\" on your desktop to start/reuse the Hub and open the browser.\n  Sign-in starts only the tray; it does not open the browser.\n  Tray exit keeps the Hub running; choose \"Hub を停止\" to stop the Hub.\n  To stop sign-in startup, delete \"MANY-AI-CLI\" from the Startup folder\n  (or turn it off in Task Manager > Startup apps)."
         )?;
         if failed {
             Err(io::Error::other("some shortcuts failed to create"))
@@ -281,6 +339,19 @@ impl PlatformCli {
         }
         writeln!(out, "\nアンインストール完了。")
     }
+}
+fn cmd_contents_for_home(exe: &Path, args: &str, home: &Path) -> io::Result<String> {
+    let home = home
+        .to_str()
+        .ok_or_else(|| io::Error::other("shortcut home is not UTF-8"))?;
+    if home.contains(['%', '"', '\r', '\n', '\0']) {
+        return Err(io::Error::other(
+            "home cannot be represented safely in a command shortcut",
+        ));
+    }
+    let contents =
+        cmd_contents(exe, args)?.replace("cd /d %USERPROFILE%\r\n", "cd /d \"%USERPROFILE%\"\r\n");
+    Ok(contents.replacen("@echo off\r\n", &format!("@echo off\r\nsetlocal DisableDelayedExpansion\r\nset \"USERPROFILE={home}\"\r\nset \"HOME={home}\"\r\n"), 1))
 }
 pub fn unix_contents(
     target: TargetPlatform,

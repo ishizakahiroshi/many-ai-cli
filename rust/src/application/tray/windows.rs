@@ -11,12 +11,25 @@ use windows_sys::Win32::{
     },
 };
 const CALLBACK: u32 = WM_USER + 1;
+const OPEN_REQUEST: u32 = WM_APP + 1;
 fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(Some(0)).collect()
 }
 unsafe extern "system" fn procedure(window: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     unsafe {
         match message {
+            OPEN_REQUEST => {
+                let pointer = GetWindowLongPtrW(window, GWLP_USERDATA) as *const Arc<TrayOwner>;
+                if !pointer.is_null() {
+                    let mismatch = w != 0
+                        && (*pointer)
+                            .hooks
+                            .instance_port()
+                            .is_some_and(|port| usize::from(port) != w);
+                    (*pointer).command(if mismatch { 4 } else { 1 });
+                }
+                0
+            }
             CALLBACK if matches!(l as u32, WM_LBUTTONUP | WM_RBUTTONUP) => {
                 menu(window);
                 0
@@ -53,26 +66,19 @@ unsafe fn menu(window: HWND) {
         if pointer.is_null() {
             return;
         }
-        let owner = &*pointer;
         let menu = CreatePopupMenu();
         if menu.is_null() {
             return;
         }
-        let running = owner
-            .runtime
-            .block_on(owner.hooks.running_url())
-            .ok()
-            .flatten()
-            .is_some();
         AppendMenuW(menu, MF_STRING, 1, wide("Hub を開く").as_ptr());
+        AppendMenuW(menu, MF_STRING, 2, wide("Hub を停止").as_ptr());
+        AppendMenuW(menu, MF_SEPARATOR, 0, null());
         AppendMenuW(
             menu,
-            MF_STRING | if running { 0 } else { MF_GRAYED },
-            2,
-            wide("Hub を停止").as_ptr(),
+            MF_STRING,
+            3,
+            wide("トレイを終了（Hub は継続）").as_ptr(),
         );
-        AppendMenuW(menu, MF_SEPARATOR, 0, null());
-        AppendMenuW(menu, MF_STRING, 3, wide("終了").as_ptr());
         let mut point = std::mem::zeroed();
         GetCursorPos(&mut point);
         SetForegroundWindow(window);
@@ -89,26 +95,78 @@ unsafe fn menu(window: HWND) {
         DestroyMenu(menu);
     }
 }
-pub(super) fn run(owner: Arc<TrayOwner>) -> io::Result<()> {
+pub(super) fn run(owner: Arc<TrayOwner>, open: bool) -> io::Result<()> {
     // This complete function runs on one blocking OS thread: all window calls and
     // message dispatch share the same Win32 queue.
     unsafe {
         FreeConsole();
-        let mutex = CreateMutexW(null(), 1, wide("Local\\ManyAICLITray").as_ptr());
+        // An older tray has no per-home identity or forwarding protocol. Ask
+        // the user to close it instead of starting a conflicting second owner.
+        let class = wide("ManyAICLITrayWindow");
+        if !FindWindowW(class.as_ptr(), class.as_ptr()).is_null() {
+            return Err(io::Error::other(
+                "旧版のトレイが起動しています。旧版のメニューからトレイだけを終了し、アイコンを開き直してください。Hub を停止する必要はありません。",
+            ));
+        }
+        let key = owner.hooks.instance_key();
+        let mutex = CreateMutexW(null(), 0, wide(&format!("Local\\{key}")).as_ptr());
         if mutex.is_null() {
             return Err(io::Error::last_os_error());
         }
         let duplicate = GetLastError() == ERROR_ALREADY_EXISTS;
         if duplicate {
+            let result = if open {
+                notify_existing(&key, owner.hooks.requested_port())
+            } else {
+                Ok(())
+            };
             CloseHandle(mutex);
-            return owner.runtime.block_on(owner.open_hub());
+            return result;
         }
-        let result = window_loop(owner);
+        let result = window_loop(owner, &key, open);
         CloseHandle(mutex);
         result
     }
 }
-unsafe fn window_loop(owner: Arc<TrayOwner>) -> io::Result<()> {
+fn notify_existing(key: &str, port: Option<u16>) -> io::Result<()> {
+    let class = wide("ManyAICLITrayWindow");
+    let title = wide(key);
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        // A simultaneous first click may still be creating the first owner's
+        // window. Only that owner performs Hub startup/browser actions.
+        let window = unsafe { FindWindowW(class.as_ptr(), title.as_ptr()) };
+        if !window.is_null() {
+            if unsafe { PostMessageW(window, OPEN_REQUEST, port.map(usize::from).unwrap_or(0), 0) }
+                != 0
+            {
+                return Ok(());
+            }
+            return Err(io::Error::last_os_error());
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "起動済みのトレイへ接続できませんでした。トレイの状態を確認して開き直してください。",
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+pub(super) fn show_error(message: &str) {
+    let message = wide(&format!(
+        "操作を完了できませんでした。\n\n{message}\n\n同じ保存先でターミナルから many-ai-cli doctor または serve を実行すると詳細を確認できます。\nこの案内では Hub を停止していません。"
+    ));
+    unsafe {
+        MessageBoxW(
+            null_mut(),
+            message.as_ptr(),
+            wide("many-ai-cli").as_ptr(),
+            MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TASKMODAL,
+        );
+    }
+}
+unsafe fn window_loop(owner: Arc<TrayOwner>, key: &str, open: bool) -> io::Result<()> {
     unsafe {
         let instance = GetModuleHandleW(null());
         let name = wide("ManyAICLITrayWindow");
@@ -125,7 +183,7 @@ unsafe fn window_loop(owner: Arc<TrayOwner>) -> io::Result<()> {
             let window = CreateWindowExW(
                 0,
                 name.as_ptr(),
-                name.as_ptr(),
+                wide(key).as_ptr(),
                 0,
                 0,
                 0,
@@ -176,6 +234,9 @@ unsafe fn window_loop(owner: Arc<TrayOwner>) -> io::Result<()> {
                     DestroyIcon(icon);
                 }
                 return Err(error);
+            }
+            if open {
+                state.command(1);
             }
             let mut message: MSG = std::mem::zeroed();
             let result = loop {

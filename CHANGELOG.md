@@ -11,6 +11,12 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Fixed
+- Windows desktop shortcuts now open the Hub and browser on the first launch,
+  while sign-in starts only the tray. Setup retains the selected home and port;
+  tray startup/action failures are shown instead of disappearing with the console.
+- npm staging checks all four native inputs before replacing package payloads
+  and verifies copied hashes. Package smoke checks require the correct Windows
+  executable name and nonempty binaries instead of accepting missing payloads.
 - In light mode, the footer and its detail panels now follow the light theme,
   and the live status bar refreshes its saved colors after preference sync.
 - The inline Usage meter now gives its remaining-quota bar the width left after
@@ -23,6 +29,10 @@ Release artifacts are published at
   blames a terminal redraw.
 
 ### Added
+- Foreground Hub startup displays its logo, build version, actual runtime and
+  connection instructions in an interactive terminal. Background launches and
+  redirected output do not receive the authentication URL. npm update guidance
+  now includes rerunning setup to refresh shortcuts after package paths change.
 - The authenticated Hub AI launch shell preference now controls new interactive AI wrapper sessions: `auto` preserves the existing launch path, while Windows `pwsh` and `cmd` choices wrap the resolved launch and preserve provider arguments as data. Explicit unavailable or unsupported routes fail with an explanation instead of silently falling back; headless, login, usage-probe, subscription-login, and Shell provider launches remain unchanged.
 - **Project headings can be dragged onto a session-list tab.** Dropping a
   heading moves every root session of that project that currently belongs to the

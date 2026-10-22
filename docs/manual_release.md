@@ -1,6 +1,6 @@
 # many-ai-cli リリース手順
 
-> 最終更新: 2026-09-21(月) 11:26:00 — v0.3.0 での未解決課題（release notes 自動編集、npm publish backoff）の解決済み反映
+> 最終更新: 2026-10-22(木) 17:11:55 — npm検収を4環境の非空バイナリ必須・専有temp方式へ追従。正式Rust配布への切替は公開準備計画で管理
 
 この手順は GitHub Actions の `Release` workflow と GoReleaser で GitHub Releases を作成するための恒久運用メモ。
 **特定バージョンの実行チェックリスト**は別途用意する（v0.3.0 は `docs/local/manual_release-v0-3-0_2026-06-13.md`）。本書は版に依らない方式・設計・注意点を扱う。
@@ -263,7 +263,8 @@ GoReleaser の `release --clean` 成功後に、同一 job 内で以下を実行
 ### ローカル検証
 
 - `node scripts/sync-npm-version.mjs 0.3.0` でバージョンを揃える。
-- `node scripts/smoke-npm.mjs` で pack 内容（shim+binary+metadata のみ）を検証。`make build` 等で `dist/` にバイナリを用意済みなら、現在 OS の shim 経由 `--version`/`version` も検証する（`stage-npm-binaries.mjs` 実行後）。
+- 正式候補の4環境すべての非空バイナリと`artifacts.json`を用意し、`node scripts/stage-npm-binaries.mjs`で配置する。全入力を事前確認し、コピー前後のSHA256を照合する。失敗終了した配置物は公開しない。
+- `node scripts/smoke-npm.mjs`で全4パッケージの内容（shim+binary+metadataのみ）を検証し、対応する現在OSのshim経由で`--version`/`version`を確認する。バイナリ未配置・空ファイル・非対応ホストは合格にしない。検査用レイアウトは専有tempに作り、既存の`node_modules`は変更しない。
 - グローバル install smoke（`.cmd` shim 経路の確認）は global 状態を変えるためユーザー手動: `pnpm add -g ./npm/many-ai-cli/*.tgz` → `many-ai-cli --version`。
 
 ### ユーザー側の事前準備

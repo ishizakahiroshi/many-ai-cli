@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "600bd8e58436c7fdb2c07c4db5facc67f588be0c",
+    "commit": "ad682662ad94889300d855a81864c68742da0569",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2006,
-    "analyzed": 1552,
+    "discovered": 2007,
+    "analyzed": 1553,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 444,
@@ -23250,6 +23250,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/application/main_program/banner.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Foreground Hub display. Authentication URLs must never pass through HubLogger."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/application/main_program/bootstrap.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -41243,7 +41272,7 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "Copy the GoReleaser-built native binaries into each npm platform package's"
+          "value": "Copy canonical native binaries into each npm platform package's"
         },
         "authentication": {
           "state": "not_configured"

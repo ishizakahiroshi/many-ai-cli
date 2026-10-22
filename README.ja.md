@@ -277,7 +277,7 @@ npm install -g many-ai-cli
 
 インストールできたら → 次の「[はじめる（インストール直後にやること）](#はじめるインストール直後にやること)」へ。PATH が通っていなくても `pnpm exec many-ai-cli setup` でショートカットを作れます。
 
-> v0.3.0 以降、`many-ai-cli` は npm registry で公開されています。各プラットフォーム向けの Go ネイティブバイナリを optional dependency として同梱するため、ブラウザでのダウンロードは発生せず、起動 shim はインストール時にローカル生成されるので Mark-of-the-Web が付かず、その SmartScreen トリガーを回避できます。これは Authenticode 署名の代替ではありません（Smart App Control / WDAC / AppLocker / EDR / ウイルス対策のポリシーは別問題）。インストール後にグローバルコマンドが見つからない場合は `pnpm setup` を実行する（またはシェルを開き直す）と、グローバル bin ディレクトリが `PATH` に載ります。
+> v0.3.0 以降、`many-ai-cli` は npm registry で公開されています。OS別のネイティブ実行ファイルを optional dependency として導入し、小さなNode起動処理が解決して実行します。パッケージマネージャ経由ではブラウザからの直接ダウンロードを省けますが、Windowsの実行許可を保証するものではありません。SmartScreenの評価、Smart App Control / WDAC / AppLocker / EDR / ウイルス対策のポリシーは別に適用されます。インストール後にグローバルコマンドが見つからない場合は `pnpm setup` を実行する（またはシェルを開き直す）と、グローバル bin ディレクトリが `PATH` に載ります。
 
 **Windows (winget) — 1 行貼り付け:**
 
@@ -397,11 +397,15 @@ sha256sum -c SHA256SUMS.txt
    many-ai-cli setup
    ```
 
-   **Windows** ではデスクトップに **「MANY-AI-CLI」** のショートカットが 1 個作成されます（トレイ常駐を起動します）。macOS / Linux では従来どおり **「Many AI Hub Start」「Many AI Hub Stop」** の 2 個です（`.command` / `.desktop`）。
-2. 以後はデスクトップのショートカットを**ダブルクリック**するだけです。Windows はタスクトレイにアイコンが出るので、クリックして **「Hub を開く」** を選ぶと、止まっていれば起動してからブラウザで開きます（`http://127.0.0.1:47777/?token=<token>`）。macOS / Linux は「Many AI Hub Start」で黒いコンソールウィンドウと一緒にブラウザが開きます。
+   **Windows** ではデスクトップに **「MANY-AI-CLI」** のショートカットと、Startupフォルダにログイン時の常駐用ショートカットを作成します。デスクトップからはHubを開き、ログイン時はトレイだけを起動してブラウザは開きません。自動常駐を止めるにはStartupフォルダの「MANY-AI-CLI」を削除するか、タスクマネージャの「スタートアップ アプリ」で無効にします。macOS / Linux では従来どおり **「Many AI Hub Start」「Many AI Hub Stop」** の 2 個です（`.command` / `.desktop`）。
+2. 以後はデスクトップのショートカットを**ダブルクリック**するだけです。Windowsは初回からHubを起動してブラウザを直接開き、起動済みのHubがあれば再利用します。トレイからも **「Hub を開く」「Hub を停止」** を操作できます。macOS / Linux は「Many AI Hub Start」で黒いコンソールウィンドウと一緒にブラウザが開きます。
 3. ブラウザの Hub UI 左下の **「+ 新しいセッション」** をクリックし、使う AI CLI（claude / codex / copilot / cursor-agent / opencode / grok / command-code）のセッションを起動します。承認待ちが発生すると入力欄の下にアクションバーが出るので、クリックまたはキーボードで操作します。
 
 止めるときは、トレイメニューの **「Hub を停止」**（Windows）、デスクトップの **「Many AI Hub Stop」**（macOS / Linux）、Hub UI の設定 → Hub にある `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使います。ターミナルから直接起動したい場合は従来どおり `many-ai-cli serve --open` も使えます。
+
+Windowsのショートカットはsetup時の実行ファイル・ホーム・選択したHubポートを保持します。使いたいポートが起動しておらず設定とも異なる場合は、`many-ai-cli setup --port <port>`で明示します。設定・データ・認証情報のコピーや移行はしません。トレイの終了だけではHubは停止しないため、止める場合は **「Hub を停止」** を使います。
+
+npm版を更新するときは、`pnpm add -g many-ai-cli@<version>`などで対象版を導入し、その版から`many-ai-cli setup`を再実行してください。更新で実行ファイルの保存先が変わる場合があるため、ショートカットを作り直します。導入だけで実行中のHubは再起動しません。再起動は進行中のAI作業への影響を確認して行ってください。手動の`serve`と無引数のHub起動では、標準入力・出力がターミナルの場合にロゴ・版数・接続案内を表示します。背景起動や出力のリダイレクト先へ認証URLは表示しません。
 
 > **すでに旧バージョンを使っている場合**: `setup` をもう一度実行すると「MANY-AI-CLI」が追加されますが、**既存の「Start」「Stop」の 2 個はそのまま残ります**（引き続き動きます）。トレイに移行して不要になったら手動で削除してください。`setup` が勝手に消すことはありません。旧名「Many AI Hub」は同じトレイ起動なので、`setup` が「MANY-AI-CLI」に置き換えます。
 

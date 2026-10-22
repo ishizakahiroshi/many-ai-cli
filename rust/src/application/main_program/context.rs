@@ -5,7 +5,11 @@ use crate::{
     files::safe_fs::Dir,
     proto::core::TerminalSize,
 };
-use std::{io, path::PathBuf, sync::Arc};
+use std::{
+    io,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 #[derive(Clone)]
 pub struct MainContext {
@@ -23,7 +27,21 @@ pub struct MainContext {
 }
 impl MainContext {
     pub fn load(trial: Option<&TrialOptions>) -> io::Result<Self> {
-        let application_home = runtime_context::user_home()?;
+        Self::load_with_home(trial, None)
+    }
+    /// Desktop shortcuts carry their selected normal-mode home explicitly.
+    /// Never mutate this process's environment or reinterpret a trial root.
+    pub fn load_with_home(trial: Option<&TrialOptions>, home: Option<&Path>) -> io::Result<Self> {
+        if home.is_some_and(|home| !home.is_absolute()) || (trial.is_some() && home.is_some()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "explicit home must be absolute and cannot override trial isolation",
+            ));
+        }
+        let application_home = match home {
+            Some(home) => home.to_path_buf(),
+            None => runtime_context::user_home()?,
+        };
         let paths = runtime_context::runtime_paths(trial, &application_home)?;
         crate::wrapper::launch_payload::cleanup_stale_payloads(&paths);
         crate::logging::input_probe::init(&paths.resource(crate::config::Resource::Logs));
@@ -34,7 +52,7 @@ impl MainContext {
         if paths.is_trial() {
             crate::profile::subscriptions::check_path(&paths, &cwd)?;
         }
-        let environment: Vec<String> = std::env::vars_os()
+        let mut environment: Vec<String> = std::env::vars_os()
             .filter_map(|(key, value)| {
                 // Windows drive-current-directory pseudo entries cannot be passed
                 // through the ordinary key=value child environment contract.
@@ -45,6 +63,15 @@ impl MainContext {
                 Some(format!("{key}={}", value.to_string_lossy()))
             })
             .collect();
+        if let Some(home) = home {
+            environment.retain(|entry| {
+                !entry.split_once('=').is_some_and(|(key, _)| {
+                    key.eq_ignore_ascii_case("HOME") || key.eq_ignore_ascii_case("USERPROFILE")
+                })
+            });
+            environment.push(format!("HOME={}", home.display()));
+            environment.push(format!("USERPROFILE={}", home.display()));
+        }
         let (vendor_home, environment) =
             isolate_trial_environment(&paths, &application_home, environment)?;
         let config = Arc::new(
@@ -186,6 +213,8 @@ fn terminal_size() -> TerminalSize {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ServeOptions {
     pub port: Option<u16>,
+    /// Desktop shortcuts must never start a hidden Hub on another port.
+    pub strict_port: bool,
     pub open: bool,
     pub dev: bool,
     pub debug: bool,
@@ -209,7 +238,7 @@ impl ServeOptions {
                 .split_once('=')
                 .map_or((flag, None), |(a, b)| (a, Some(b)));
             match name {
-                "open" | "dev" | "debug" => {
+                "open" | "dev" | "debug" | "strict-port" => {
                     let value = match inline {
                         None => true,
                         Some("1" | "t" | "T" | "TRUE" | "true" | "True") => true,
@@ -219,6 +248,7 @@ impl ServeOptions {
                     match name {
                         "open" => result.open = value,
                         "dev" => result.dev = value,
+                        "strict-port" => result.strict_port = value,
                         _ => result.debug = value,
                     }
                 }
@@ -266,6 +296,7 @@ mod tests {
                 open: false,
                 dev: true,
                 debug: false,
+                strict_port: false,
                 port: None
             }
         );

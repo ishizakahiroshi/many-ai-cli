@@ -150,7 +150,8 @@ impl HubComposition {
                 .filter(|port| *port > 0)
                 .ok_or_else(|| io::Error::other("invalid configured Hub port"))?
         };
-        let listener = bind_listener(requested, context.paths.is_trial()).await?;
+        let listener =
+            bind_listener(requested, context.paths.is_trial() || options.strict_port).await?;
         let bound_port = listener.local_addr()?.port();
         let paths = context
             .paths
@@ -1505,6 +1506,9 @@ impl HubComposition {
             "MANY-AI-CLI started",
             &format!("pid={} port={}", std::process::id(), services.bound_port()),
         );
+        if let Ok(snapshot) = self.dependencies.config.snapshot() {
+            super::banner::write_startup(&snapshot.config, services.bound_port());
+        }
         let serve = crate::hub::transport::serve_with_websockets(
             self.listener,
             services,
@@ -1672,15 +1676,15 @@ impl OrdinarySpawnHooks for OrdinaryHooks {
 fn session_error(error: SessionError) -> io::Error {
     io::Error::other(format!("{error:?}"))
 }
-async fn bind_listener(port: u16, trial: bool) -> io::Result<tokio::net::TcpListener> {
-    let count = if trial { 1 } else { 100 };
+async fn bind_listener(port: u16, strict: bool) -> io::Result<tokio::net::TcpListener> {
+    let count = if strict { 1 } else { 100 };
     for step in 0..count {
         let Some(candidate) = port.checked_add(step) else {
             break;
         };
         match tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, candidate)).await {
             Ok(listener) => return Ok(listener),
-            Err(error) if error.kind() == io::ErrorKind::AddrInUse && !trial => continue,
+            Err(error) if error.kind() == io::ErrorKind::AddrInUse && !strict => continue,
             Err(error) => return Err(error),
         }
     }

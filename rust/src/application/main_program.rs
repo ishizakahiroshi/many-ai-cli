@@ -1,5 +1,6 @@
 //! Main serve/wrap composition. Newly implemented application input; recovered
 //! modules alone do not establish worker or runtime acceptance.
+mod banner;
 mod bootstrap;
 mod confirmations;
 mod context;
