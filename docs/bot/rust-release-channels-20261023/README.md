@@ -1,9 +1,13 @@
 # P-20261023-002 many-ai-cli: Rust release channel adapters
 
-> Last updated: 2026-10-23(金) 02:36:51 JST
+> Last updated: 2026-10-23(金) 02:38:35 JST
 
 The owner approved the remaining native Rust release wiring on 2026-10-23.
 Read FACTS.md, REVIEW.md and PROGRESS.md in this directory first.
+Management Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/33
+The initial instruction publication (review diff base) is
+79a69141446176a11ef46314cf309e222b56add2; use the final instruction revision
+supplied in the request for the implementation branch start and task contract.
 
 ## Objective and ownership
 
