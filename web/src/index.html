@@ -373,6 +373,17 @@
           </div>
           <div class="settings-note" data-i18n="settings_terminal_color_desc">Applies to newly started sessions. "Follow the launch environment" honors NO_COLOR from the shell that started the Hub; "No colors" turns colors off even if that shell asks for them.</div>
           <div class="settings-row">
+            <label class="settings-label" for="ai-launch-shell" data-i18n="settings_ai_launch_shell_label">AI launch shell</label>
+            <select id="ai-launch-shell" class="ui-input settings-select" disabled>
+              <option value="" data-i18n="settings_ai_launch_shell_loading" selected disabled>Loading the AI launch shell setting…</option>
+              <option value="auto" data-i18n="settings_ai_launch_shell_auto">Standard (automatic)</option>
+              <option value="pwsh" data-i18n="settings_ai_launch_shell_pwsh" disabled>PowerShell 7 (pwsh)</option>
+              <option value="cmd" data-i18n="settings_ai_launch_shell_cmd" disabled>Command Prompt (cmd)</option>
+            </select>
+          </div>
+          <div class="settings-note" data-i18n="settings_ai_launch_shell_desc">Standard uses the current launch behavior. The saved choice applies to new AI sessions; running sessions keep their recorded shell.</div>
+          <div id="ai-launch-shell-status" class="settings-note" role="status" aria-live="polite" hidden></div>
+          <div class="settings-row">
             <span class="settings-label" data-i18n="settings_handoff_intent_mode">Handoff recording</span>
             <select id="handoff-intent-mode" class="ui-input settings-select">
               <option value="done-only" data-i18n="settings_handoff_intent_mode_done_only">Completion summaries only (recommended)</option>

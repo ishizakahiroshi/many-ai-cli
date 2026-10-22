@@ -84,6 +84,34 @@ fn trial_provider_resolution_confines_path_custom_and_cwd_without_production_cha
     permission_denied(wrong_cwd.resolve_provider("synthetic", Some(&custom), &[]));
 }
 
+#[cfg(windows)]
+#[test]
+fn explicit_shell_lookup_uses_the_confined_shared_execpath_resolver() {
+    let fixture = Fixture::new(48892);
+    let pwsh = fixture.file(fixture.paths.root(), "pwsh.exe", b"synthetic executable");
+    let cmd = fixture.file(fixture.paths.root(), "cmd.exe", b"synthetic executable");
+    let environment = vec![
+        format!("PATH={}", fixture.paths.root().display()),
+        format!("COMSPEC={}", cmd.display()),
+    ];
+    let resolver = CommandResolver::new(&fixture.paths, &environment, fixture.paths.root());
+    assert_eq!(
+        Path::new(&resolver.resolve_ai_launch_shell("pwsh").unwrap()),
+        pwsh.canonicalize().unwrap()
+    );
+    assert_eq!(
+        Path::new(&resolver.resolve_ai_launch_shell("cmd").unwrap()),
+        cmd.canonicalize().unwrap()
+    );
+    assert_eq!(
+        resolver
+            .resolve_ai_launch_shell("invalid")
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::InvalidInput
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn trial_provider_resolution_rejects_file_directory_and_shell_alias_escapes() {
@@ -197,6 +225,7 @@ mod native {
             let frame = socket.next().await.unwrap().unwrap();
             let registration: Message = serde_json::from_slice(&frame.into_data()).unwrap();
             assert_eq!(registration.r#type, "register");
+            assert_eq!(registration.shell, "direct");
             if let Some((alias, outside)) = replace {
                 fs::remove_file(&alias).unwrap();
                 symlink(outside, alias).unwrap();

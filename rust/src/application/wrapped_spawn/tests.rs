@@ -271,6 +271,16 @@ fn argv_environment_prompt_and_trial_root_follow_go_launch_order() {
             .as_deref(),
         Some(std::ffi::OsStr::new("subscription"))
     );
+    let protected_names = prepared
+        .process
+        .env
+        .get(std::ffi::OsStr::new(
+            crate::wrapper::launch_payload::PROTECTED_ENV_NAMES_ENV,
+        ))
+        .and_then(|value| value.as_deref())
+        .map(|value| serde_json::from_str::<Vec<String>>(&value.to_string_lossy()).unwrap())
+        .unwrap();
+    assert_eq!(protected_names, ["SYNTHETIC_PRECEDENCE"]);
     assert_eq!(
         prepared
             .process

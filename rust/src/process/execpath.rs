@@ -424,6 +424,32 @@ impl<'a> Resolver<'a> {
     pub fn resolve_command(&self, command: &str, args: &[String]) -> io::Result<ResolvedCommand> {
         Ok(self.resolve(&self.look_path(command)?, args))
     }
+    /// Resolve an explicitly selected AI launch shell without starting it.
+    /// `auto` intentionally stays with the provider's existing resolution path.
+    pub fn resolve_ai_launch_shell(&self, shell: &str) -> io::Result<String> {
+        if self.platform != Platform::Windows {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "pwsh and cmd are only supported on Windows",
+            ));
+        }
+        match shell {
+            "pwsh" => self.look_path("pwsh.exe"),
+            "cmd" => {
+                if let Some(comspec) = self.env("COMSPEC").filter(|value| !value.trim().is_empty())
+                    && let Ok(path) = self.look_path(&sanitize_executable_path(comspec))
+                    && basename(&path, self.platform).eq_ignore_ascii_case("cmd.exe")
+                {
+                    return Ok(path);
+                }
+                self.look_path("cmd.exe")
+            }
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "ai_launch_shell must be auto, pwsh, or cmd",
+            )),
+        }
+    }
     /// Wrapper-specific compatibility route. Go intentionally retains the raw
     /// command on lookup failure so the process-start diagnostic owns the error.
     pub fn resolve_provider(
@@ -777,6 +803,35 @@ mod tests {
                 .resolve(r"C:\bin\claude.cmd", &strings(&["--version"]))
                 .executable,
             recovered
+        );
+    }
+    #[test]
+    fn ai_launch_shell_lookup_uses_the_injected_filesystem_without_execution() {
+        let mut fs = SyntheticFs::default();
+        fs.put(r"C:\PowerShell\pwsh.exe", "synthetic");
+        fs.put(r"C:\Windows\System32\cmd.exe", "synthetic");
+        let env = strings(&[
+            r"Path=C:\PowerShell;C:\Windows\System32",
+            r"ComSpec=C:\Windows\System32\cmd.exe",
+        ]);
+        let resolver = Resolver::new(Platform::Windows, &env, Path::new(r"C:\work"), &fs);
+        assert_eq!(
+            resolver.resolve_ai_launch_shell("pwsh").unwrap(),
+            r"C:\PowerShell\pwsh.exe"
+        );
+        assert_eq!(
+            resolver.resolve_ai_launch_shell("cmd").unwrap(),
+            r"C:\Windows\System32\cmd.exe"
+        );
+        assert_eq!(
+            resolver.resolve_ai_launch_shell("auto").unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+
+        let unix = Resolver::new(Platform::Unix, &[], Path::new("/synthetic"), &fs);
+        assert_eq!(
+            unix.resolve_ai_launch_shell("pwsh").unwrap_err().kind(),
+            io::ErrorKind::Unsupported
         );
     }
     #[test]

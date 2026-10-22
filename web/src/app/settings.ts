@@ -1451,6 +1451,256 @@ let _listSettingsSectionIds: (() => string[]) | null = null;
 // グループ名は settings_group_<id>（i18n）。辞書の読み込みは非同期なので、文字は _syncSettingsNav で入れる。
 const SETTINGS_NAV_GROUPS: readonly string[] = ['basic', 'conn', 'input', 'approval', 'maint'];
 
+// AI の起動シェルは Hub の設定 API を唯一の保存元にする。
+type AiLaunchShell = 'auto' | 'pwsh' | 'cmd';
+type AiLaunchShellAvailability = { available?: boolean; reason?: string };
+type AiLaunchShellController = { save: () => Promise<void>; reset: () => Promise<void> };
+
+export function initAiLaunchShellSettings(): AiLaunchShellController {
+  const select = document.getElementById('ai-launch-shell') as HTMLSelectElement | null;
+  const status = document.getElementById('ai-launch-shell-status') as HTMLElement | null;
+  if (!select) return { save: async () => {}, reset: async () => {} };
+
+  const validValues = new Set<string>(['auto', 'pwsh', 'cmd']);
+  const labelKeys: Record<AiLaunchShell, string> = {
+    auto: 'settings_ai_launch_shell_auto',
+    pwsh: 'settings_ai_launch_shell_pwsh',
+    cmd: 'settings_ai_launch_shell_cmd',
+  };
+  let availability: Record<string, AiLaunchShellAvailability> = { auto: { available: true } };
+  let confirmedValue: string | null = null;
+  let loaded = false;
+  let selectionRevision = 0;
+  let loadGeneration = 0;
+  let latestQueuedRevision = -1;
+  let writeEpoch = 0;
+  let pendingWrites = 0;
+  let writeQueue: Promise<void> = Promise.resolve();
+
+  async function waitForWrites(): Promise<void> {
+    while (pendingWrites > 0) {
+      const queue = writeQueue;
+      await queue;
+      if (queue === writeQueue && pendingWrites === 0) return;
+    }
+  }
+
+  const isValid = (value: string): value is AiLaunchShell => validValues.has(value);
+  const optionFor = (value: string): HTMLOptionElement | null =>
+    Array.from(select.options).find((option) => option.value === value) || null;
+  const removeInvalidOptions = (): void => {
+    Array.from(select.querySelectorAll('option[data-ai-launch-shell-invalid]')).forEach((option) => option.remove());
+  };
+  const displayValue = (value: string): string => value.length > 80 ? value.slice(0, 80) + '…' : value;
+  const setStatus = (message: string, warning = false): void => {
+    if (!status) return;
+    status.textContent = message;
+    status.hidden = !message;
+    status.classList.toggle('settings-note-warn', warning);
+  };
+  const announceCurrentValue = (): void => {
+    document.dispatchEvent(new CustomEvent('settings-current-updated', { detail: { sectionId: 'session' } }));
+  };
+  const reasonText = (entry?: AiLaunchShellAvailability): string => {
+    const reason = String(entry?.reason || '').trim();
+    const code = reason.toLowerCase().replace(/[\s-]+/g, '_');
+    if (code.includes('unsupported') || code.includes('non_windows') || code.includes('only_supported_on_windows') || code.includes('only_supported_on_win')) {
+      return t('settings_ai_launch_shell_unsupported');
+    }
+    if (code.includes('not_found') || code.includes('not_installed') || code === 'missing' || code.includes('was_not_found') || code.includes('not_found_by_executable_resolution')) {
+      return t('settings_ai_launch_shell_unavailable');
+    }
+    return reason || t('settings_ai_launch_shell_unavailable');
+  };
+  const isAvailable = (value: string): boolean => value === 'auto' || availability[value]?.available === true;
+
+  function setSavedValue(value: string): void {
+    removeInvalidOptions();
+    if (!isValid(value)) {
+      const option = document.createElement('option') as HTMLOptionElement;
+      option.value = value;
+      option.disabled = true;
+      option.setAttribute('data-ai-launch-shell-invalid', 'true');
+      option.textContent = t('settings_ai_launch_shell_invalid_saved') + ': ' + displayValue(value);
+      select.appendChild(option);
+    }
+    select.value = value;
+  }
+
+  function updateAvailability(raw: any, savedValue: string, selectedAvailability?: AiLaunchShellAvailability): void {
+    availability = {
+      auto: { available: true },
+      pwsh: raw && typeof raw.pwsh === 'object' ? raw.pwsh : { available: false },
+      cmd: raw && typeof raw.cmd === 'object' ? raw.cmd : { available: false },
+    };
+    if (isValid(savedValue) && savedValue !== 'auto' && selectedAvailability?.available === false) {
+      availability[savedValue] = selectedAvailability;
+    }
+    (['auto', 'pwsh', 'cmd'] as AiLaunchShell[]).forEach((value) => {
+      const option = optionFor(value);
+      if (!option) return;
+      const entry = availability[value];
+      const available = value === 'auto' || entry?.available === true;
+      const key = labelKeys[value];
+      const label = t(key);
+      const reason = available ? '' : reasonText(entry);
+      option.disabled = value !== 'auto' && !available;
+      option.textContent = reason ? label + ' — ' + reason : label;
+      option.title = reason;
+    });
+  }
+
+  function showValueStatus(value: string, saved = false, selectedAvailability?: AiLaunchShellAvailability): void {
+    if (!isValid(value)) {
+      setStatus(t('settings_ai_launch_shell_invalid_saved') + ': ' + displayValue(value) + ' — ' + t('settings_ai_launch_shell_choose_valid'), true);
+      return;
+    }
+    const entry = selectedAvailability?.available === false ? selectedAvailability : availability[value];
+    if (entry?.available === false) {
+      const prefix = saved ? t('settings_ai_launch_shell_saved_unavailable') : t('settings_ai_launch_shell_unavailable');
+      setStatus(prefix + ' ' + reasonText(entry), true);
+      return;
+    }
+    setStatus('');
+  }
+
+  async function postValue(value: AiLaunchShell): Promise<void> {
+    const res = await apiFetch('/api/ai-launch-shell', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ai_launch_shell: value }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.ok !== true || data?.ai_launch_shell !== value) {
+      throw new Error(String(data?.message || data?.error || 'save failed'));
+    }
+  }
+
+  function enqueueSave(revision: number, force = false): Promise<void> {
+    latestQueuedRevision = revision;
+    writeEpoch++;
+    pendingWrites++;
+    const task = writeQueue.then(async () => {
+      if (revision !== selectionRevision) return;
+      const value = select.value;
+      if (!force && value === confirmedValue) {
+        showValueStatus(value, true);
+        return;
+      }
+      if (!isValid(value)) {
+        showValueStatus(value, true);
+        throw new Error('invalid saved shell value');
+      }
+      if (loaded && !isAvailable(value)) {
+        showValueStatus(value, false);
+        throw new Error('selected shell is unavailable');
+      }
+      setStatus(t('settings_ai_launch_shell_saving'));
+      try {
+        await postValue(value);
+        confirmedValue = value;
+        if (revision === selectionRevision) {
+          removeInvalidOptions();
+          setStatus(t('settings_ai_launch_shell_saved'));
+          announceCurrentValue();
+        }
+      } catch (error) {
+        if (revision === selectionRevision) {
+          if (confirmedValue !== null) setSavedValue(confirmedValue);
+          setStatus(t('settings_ai_launch_shell_save_failed'), true);
+          announceCurrentValue();
+        }
+        throw error;
+      }
+    });
+    // Keep the queue alive after a failed write so the latest user choice can still be saved.
+    const settled = task.finally(() => { pendingWrites = Math.max(0, pendingWrites - 1); });
+    writeQueue = settled.catch(() => {});
+    return settled;
+  }
+
+  async function load(): Promise<void> {
+    const generation = ++loadGeneration;
+    const startingRevision = selectionRevision;
+    const pendingWriteAtStart = pendingWrites > 0;
+    const startingWriteEpoch = writeEpoch;
+    select.disabled = true;
+    setStatus(t('settings_ai_launch_shell_loading'));
+    try {
+      const res = await apiFetch('/api/ai-launch-shell');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || typeof data?.ai_launch_shell !== 'string') throw new Error('load failed');
+      if (generation !== loadGeneration) return;
+      // The GET may have captured an older value before a queued POST finished.
+      await waitForWrites();
+      if (generation !== loadGeneration) return;
+
+      const serverValue = data.ai_launch_shell as string;
+      const changedWhileLoading = startingRevision !== selectionRevision || pendingWriteAtStart || startingWriteEpoch !== writeEpoch;
+      updateAvailability(data.availability, serverValue, data.selected_availability);
+      if (confirmedValue === null || !changedWhileLoading) confirmedValue = serverValue;
+      loaded = true;
+      if (!changedWhileLoading) setSavedValue(serverValue);
+      select.disabled = false;
+      showValueStatus(select.value, !changedWhileLoading && select.value === serverValue,
+        !changedWhileLoading && select.value === serverValue ? data.selected_availability : undefined);
+
+      if (changedWhileLoading && isValid(select.value)) {
+        if (isAvailable(select.value) && select.value !== confirmedValue) {
+          if (latestQueuedRevision !== selectionRevision) {
+            setStatus(t('settings_ai_launch_shell_saving'));
+            void enqueueSave(selectionRevision).catch(() => {});
+          }
+        } else if (isAvailable(select.value)) {
+          showValueStatus(select.value, true);
+        }
+      }
+      announceCurrentValue();
+    } catch (_) {
+      if (generation !== loadGeneration) return;
+      select.disabled = !loaded;
+      setStatus(t('settings_ai_launch_shell_load_failed'), true);
+    }
+  }
+
+  select.addEventListener('change', () => {
+    selectionRevision++;
+    announceCurrentValue();
+    const value = select.value;
+    if (!loaded) return;
+    if (!isValid(value) || !isAvailable(value)) {
+      showValueStatus(value);
+      return;
+    }
+    setStatus(t('settings_ai_launch_shell_saving'));
+    void enqueueSave(selectionRevision).catch(() => {});
+  });
+
+  document.getElementById('settings-btn')?.addEventListener('click', () => {
+    if (!document.getElementById('settings-panel')?.hidden) void load();
+  });
+
+  return {
+    save: async () => {
+      // A Save action supersedes any GET already in flight and joins the same ordered write queue.
+      if (confirmedValue === null) {
+        setStatus(t('settings_ai_launch_shell_not_loaded'), true);
+        throw new Error('AI launch shell setting is not loaded');
+      }
+      selectionRevision++;
+      await enqueueSave(selectionRevision);
+      await waitForWrites();
+    },
+    reset: async () => {
+      selectionRevision++;
+      setSavedValue('auto');
+      announceCurrentValue();
+      await enqueueSave(selectionRevision, true);
+      await waitForWrites();
+    },
+  };
+}
+
 function initSettingsNav(): void {
   const list = document.getElementById('settings-nav-list');
   const body = document.querySelector<HTMLElement>('#settings-panel .settings-body');
@@ -1552,7 +1802,11 @@ function initSettingsNav(): void {
     window.setTimeout(() => renderSettingsSummary(id), 100);
   });
   // subscriptions.ts のように現在値を自分で書く節は、書いたあとこのイベントでナビへ知らせる。
-  document.addEventListener('settings-current-updated', () => _syncSettingsNav?.());
+  document.addEventListener('settings-current-updated', (event: Event) => {
+    const sectionId = (event as CustomEvent<{ sectionId?: string }>).detail?.sectionId;
+    if (sectionId) renderSettingsSummary(sectionId);
+    else _syncSettingsNav?.();
+  });
   // 辞書の読み込みが済んだら、グループ名と項目名を現在の言語で入れ直す。
   document.addEventListener('i18n-ready', () => _syncSettingsNav?.());
 }
@@ -4000,6 +4254,14 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
     const parts: string[] = [];
     if (idle !== '') parts.push(`idle:${idle}${_summaryLabel('分', 'm')}`);
     if (grace !== '') parts.push(`grace:${grace}${_summaryLabel('分', 'm')}`);
+    const launchShell = (document.getElementById('ai-launch-shell') as HTMLSelectElement | null)?.value;
+    if (launchShell) {
+      const shellKey = launchShell === 'auto' ? 'settings_ai_launch_shell_auto'
+        : launchShell === 'pwsh' ? 'settings_ai_launch_shell_pwsh'
+        : launchShell === 'cmd' ? 'settings_ai_launch_shell_cmd'
+        : 'settings_ai_launch_shell_invalid_saved';
+      parts.push(t(shellKey));
+    }
     return parts.join('・');
   },
 

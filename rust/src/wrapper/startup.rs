@@ -17,9 +17,17 @@ use std::{ffi::OsStr, io};
 /// Windows environment override. The inherited Job handle is separately made
 /// noninheritable at adoption, before any provider can execute.
 pub fn strip_provider_environment(plan: &mut ProcessPlan) {
-    plan.env
-        .retain(|key, _| !key.to_string_lossy().eq_ignore_ascii_case(STARTUP_JOB_ENV));
+    plan.env.retain(|key, _| {
+        !key.to_string_lossy().eq_ignore_ascii_case(STARTUP_JOB_ENV)
+            && !key
+                .to_string_lossy()
+                .eq_ignore_ascii_case(crate::wrapper::launch_payload::PROTECTED_ENV_NAMES_ENV)
+    });
     plan.env.insert(STARTUP_JOB_ENV.into(), None);
+    plan.env.insert(
+        crate::wrapper::launch_payload::PROTECTED_ENV_NAMES_ENV.into(),
+        None,
+    );
 }
 
 pub struct StartupLifetime {

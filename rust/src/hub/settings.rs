@@ -1,10 +1,12 @@
 use super::http::{Request, Response, decode_json};
 use crate::{
     config::{self, ConfigStore, LogConfig, Resource, RuntimePaths},
+    process::execpath::{ExecutableFs, NativeFs, Platform, Resolver},
     proto::wire::{Field, GoWire, Schema},
 };
 use serde::Deserialize;
 use serde_json::json;
+use std::path::{Path, PathBuf};
 
 macro_rules! request_type {
     ($name:ident {$($field:ident:$ty:ty => $kind:literal),*$(,)?})=>{
@@ -13,6 +15,7 @@ macro_rules! request_type {
     }
 }
 request_type!(TerminalColor { terminal_color:String=>"string" });
+request_type!(AiLaunchShell { ai_launch_shell:String=>"string" });
 request_type!(HandoffMode { intent_mode:String=>"string" });
 request_type!(Reconnect { wrapper_reconnect_grace_sec:i64=>"int" });
 request_type!(Input { deferred_enter_ms:i64=>"int" });
@@ -71,11 +74,81 @@ pub const PATHS: &[&str] = &[
     "/api/idle-timeout",
     "/api/log-config",
     "/api/terminal-color",
+    "/api/ai-launch-shell",
     "/api/handoff-intent-mode",
     "/api/reconnect-grace",
     "/api/input-config",
     "/api/orchestration-config",
 ];
+fn shell_availability(mode: &str, resolver: &Resolver<'_>) -> serde_json::Value {
+    if mode == "auto" {
+        return json!({"available":true});
+    }
+    match resolver.resolve_ai_launch_shell(mode) {
+        Ok(executable) => json!({"available":true,"executable":executable}),
+        Err(error) => {
+            let reason = match error.kind() {
+                std::io::ErrorKind::Unsupported => "pwsh and cmd are only supported on Windows",
+                std::io::ErrorKind::InvalidInput => "saved value must be auto, pwsh, or cmd",
+                std::io::ErrorKind::PermissionDenied => {
+                    "the executable could not be resolved from the current process environment"
+                }
+                _ => match mode {
+                    "pwsh" => "pwsh.exe was not found by executable resolution",
+                    "cmd" => "cmd.exe was not found by executable resolution",
+                    _ => "saved value must be auto, pwsh, or cmd",
+                },
+            };
+            json!({"available":false,"reason":reason})
+        }
+    }
+}
+pub(super) fn ai_launch_shell_availability(
+    saved_mode: &str,
+    platform: Platform,
+    environment: &[String],
+    cwd: &Path,
+    fs: &dyn ExecutableFs,
+) -> serde_json::Value {
+    let resolver = Resolver::new(platform, environment, cwd, fs);
+    let availability = json!({
+        "auto": shell_availability("auto", &resolver),
+        "pwsh": shell_availability("pwsh", &resolver),
+        "cmd": shell_availability("cmd", &resolver),
+    });
+    let selected = availability.get(saved_mode).cloned().unwrap_or_else(
+        || json!({"available":false,"reason":"saved value must be auto, pwsh, or cmd"}),
+    );
+    json!({
+        "ai_launch_shell": saved_mode,
+        "availability": availability,
+        "selected_availability": selected,
+    })
+}
+fn current_ai_launch_shell_availability(saved_mode: &str) -> serde_json::Value {
+    // Only the resolver's documented lookup inputs are read; no environment
+    // values are logged or returned in the unavailable case.
+    let environment = [
+        "PATH",
+        "PATHEXT",
+        "COMSPEC",
+        "GODEBUG",
+        "NoDefaultCurrentDirectoryInExePath",
+    ]
+    .into_iter()
+    .filter_map(|name| {
+        std::env::var_os(name).map(|value| format!("{name}={}", value.to_string_lossy()))
+    })
+    .collect::<Vec<_>>();
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    ai_launch_shell_availability(
+        saved_mode,
+        Platform::native(),
+        &environment,
+        &cwd,
+        &NativeFs,
+    )
+}
 /// Caller has applied the full guard. These six Go handlers publish their
 /// field mutations before Save, so a failed save remains visible in memory.
 /// The explicit shared legacy entry retains revision/trial-path protections.
@@ -137,6 +210,7 @@ pub fn handle_with_published(
             "/api/terminal-color" => {
                 json!({"terminal_color":config::normalize_terminal_color(&c.hub.terminal_color)})
             }
+            "/api/ai-launch-shell" => current_ai_launch_shell_availability(&c.hub.ai_launch_shell),
             "/api/handoff-intent-mode" => {
                 json!({"intent_mode":config::normalize_handoff_intent_mode(&c.handoff.intent_mode)})
             }
@@ -157,6 +231,23 @@ pub fn handle_with_published(
                 Ok(v) => v,
                 Err(e) => return e,
             }
+        };
+    }
+    if request.path == "/api/ai-launch-shell" {
+        let body = body!(AiLaunchShell);
+        if !config::valid_ai_launch_shell(&body.ai_launch_shell) {
+            return Response::error(
+                400,
+                "invalid_ai_launch_shell",
+                "ai_launch_shell must be auto, pwsh, or cmd",
+            );
+        }
+        let mode = body.ai_launch_shell;
+        snap.config.hub.ai_launch_shell = mode.clone();
+        let result = json!({"ok":true,"ai_launch_shell":mode});
+        return match store.persist(snap.revision, snap.config) {
+            Ok(_) => Response::json(200, &result),
+            Err(error) => Response::error(500, "save_failed", &format!("save failed: {error}")),
         };
     }
     let result = match request.path.as_str() {

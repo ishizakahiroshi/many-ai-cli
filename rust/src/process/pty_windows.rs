@@ -82,6 +82,90 @@ fn quote(arg: &OsStr) -> io::Result<Vec<u16>> {
     Ok(out)
 }
 
+/// Returns true only for the fixed, private cmd bootstrap emitted by
+/// `launch_payload`. The final `/c` source intentionally bypasses CRT quoting;
+/// every other ProcessPlan keeps the established Go-compatible quote path.
+fn is_valid_raw_cmd_bootstrap(plan: &ProcessPlan) -> io::Result<bool> {
+    let marker_values = plan
+        .env
+        .iter()
+        .filter(|(key, _)| {
+            key.to_string_lossy()
+                .eq_ignore_ascii_case(crate::wrapper::launch_payload::CMD_RAW_BOOTSTRAP_ENV)
+        })
+        .filter_map(|(_, value)| value.as_deref())
+        .collect::<Vec<_>>();
+    if marker_values.is_empty() {
+        return Ok(false);
+    }
+    if marker_values.len() != 1
+        || marker_values[0] != OsStr::new(crate::wrapper::launch_payload::CMD_RAW_BOOTSTRAP_VALUE)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid internal cmd bootstrap marker",
+        ));
+    }
+
+    if !plan
+        .executable
+        .file_name()
+        .is_some_and(|name| name.to_string_lossy().eq_ignore_ascii_case("cmd.exe"))
+        || plan.args.len() != 5
+        || plan.args[..4]
+            .iter()
+            .zip(["/d", "/v:off", "/s", "/c"])
+            .any(|(actual, expected)| actual != OsStr::new(expected))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "internal cmd bootstrap has an unsupported argument layout",
+        ));
+    }
+
+    let source = plan.args[4].to_str().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "internal cmd bootstrap source is not valid Unicode",
+        )
+    })?;
+    validate_raw_cmd_bootstrap_source(source)?;
+    Ok(true)
+}
+
+fn validate_raw_cmd_bootstrap_source(source: &str) -> io::Result<()> {
+    let invalid = || {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "internal cmd bootstrap source is invalid",
+        )
+    };
+    let body = source
+        .strip_prefix("\"\"")
+        .and_then(|source| source.strip_suffix("\"\""))
+        .ok_or_else(invalid)?;
+    let (runner, rest) = body.split_once("\" ").ok_or_else(invalid)?;
+    let payload = rest
+        .strip_prefix(crate::wrapper::launch_payload::INTERNAL_ARG)
+        .and_then(|rest| rest.strip_prefix(" \""))
+        .ok_or_else(invalid)?;
+    if !safe_cmd_bootstrap_path(runner) || !safe_cmd_bootstrap_path(payload) {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn safe_cmd_bootstrap_path(value: &str) -> bool {
+    !value.is_empty()
+        && std::path::Path::new(value).is_absolute()
+        && !value.chars().any(|ch| {
+            matches!(
+                ch,
+                '\0' | '\r' | '\n' | '"' | '%' | '!' | '^' | '&' | '|' | '<' | '>' | '(' | ')'
+            )
+        })
+}
+
 fn environment(plan: &ProcessPlan) -> io::Result<Vec<u16>> {
     let mut values: BTreeMap<String, (OsString, OsString)> = std::env::vars_os()
         .map(|(k, v)| (k.to_string_lossy().to_uppercase(), (k, v)))
@@ -95,6 +179,9 @@ fn environment(plan: &ProcessPlan) -> io::Result<Vec<u16>> {
         }
     }
     values.remove(SPAWN_PROOF_ENV);
+    // This is PTY-composer metadata only. The cmd process and its descendants
+    // must never receive it as ambient provider environment.
+    values.remove(crate::wrapper::launch_payload::CMD_RAW_BOOTSTRAP_ENV);
     let mut block = Vec::new();
     for (_, (key, value)) in values {
         let mut entry = key;
@@ -107,6 +194,28 @@ fn environment(plan: &ProcessPlan) -> io::Result<Vec<u16>> {
         block.push(0);
     }
     Ok(block)
+}
+
+fn command_line(plan: &ProcessPlan) -> io::Result<Vec<u16>> {
+    let raw_cmd_bootstrap = is_valid_raw_cmd_bootstrap(plan)?;
+    let mut command = quote(plan.executable.as_os_str())?;
+    for (index, arg) in plan.args.iter().enumerate() {
+        command.push(b' ' as u16);
+        if raw_cmd_bootstrap && index == plan.args.len() - 1 {
+            let raw = wide(arg)?;
+            command.extend_from_slice(&raw[..raw.len() - 1]);
+        } else {
+            command.extend(quote(arg)?);
+        }
+    }
+    command.push(0);
+    if command.len() > 32767 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "PTY command exceeds Windows command-line limit",
+        ));
+    }
+    Ok(command)
 }
 fn pipe() -> io::Result<(OwnedHandle, OwnedHandle)> {
     let (mut read, mut write) = (ptr::null_mut(), ptr::null_mut());
@@ -318,18 +427,7 @@ fn spawn_with_job(
 ) -> io::Result<Arc<dyn PtySession>> {
     let executable = wide(plan.executable.as_os_str())?;
     let cwd = wide(plan.cwd.as_os_str())?;
-    let mut command = quote(plan.executable.as_os_str())?;
-    for arg in &plan.args {
-        command.push(b' ' as u16);
-        command.extend(quote(arg)?);
-    }
-    command.push(0);
-    if command.len() > 32767 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "PTY command exceeds Windows command-line limit",
-        ));
-    }
+    let mut command = command_line(plan)?;
     let environment = environment(plan)?;
     let (input_read, input_write) = pipe()?;
     let (output_read, output_write) = pipe()?;
@@ -601,6 +699,28 @@ impl Drop for NativePty {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    fn plan(executable: PathBuf, args: Vec<OsString>, marker: Option<&str>) -> ProcessPlan {
+        let mut env = BTreeMap::new();
+        if let Some(marker) = marker {
+            env.insert(
+                crate::wrapper::launch_payload::CMD_RAW_BOOTSTRAP_ENV.into(),
+                Some(marker.into()),
+            );
+        }
+        ProcessPlan {
+            executable,
+            args,
+            cwd: std::env::current_dir().unwrap(),
+            env,
+            stdin: vec![],
+            timeout: Duration::ZERO,
+            output_cap: 1024,
+            pipe_drain_timeout: Duration::from_secs(1),
+        }
+    }
+
     #[test]
     fn command_line_quote_matches_go_escape_arg_shapes() {
         for (input, expected) in [
@@ -617,6 +737,123 @@ mod tests {
                 expected
             );
         }
+    }
+
+    #[test]
+    fn raw_cmd_bootstrap_requires_marker_and_exact_safe_shape() {
+        let executable = PathBuf::from(r"C:\Windows\System32\cmd.exe");
+        let source = format!(
+            "\"\"C:\\synthetic runner 日本語\\runner.exe\" {} \"C:\\synthetic payload 日本語\\payload.json\"\"",
+            crate::wrapper::launch_payload::INTERNAL_ARG
+        );
+        let args = vec![
+            "/d".into(),
+            "/v:off".into(),
+            "/s".into(),
+            "/c".into(),
+            source.clone().into(),
+        ];
+        let marked = plan(
+            executable.clone(),
+            args.clone(),
+            Some(crate::wrapper::launch_payload::CMD_RAW_BOOTSTRAP_VALUE),
+        );
+        let command = command_line(&marked).unwrap();
+        let command = String::from_utf16(&command[..command.len() - 1]).unwrap();
+        assert!(command.ends_with(&source));
+
+        let unmarked = plan(executable.clone(), args.clone(), None);
+        let mut old_quote_path = quote(executable.as_os_str()).unwrap();
+        for arg in &args {
+            old_quote_path.push(b' ' as u16);
+            old_quote_path.extend(quote(arg).unwrap());
+        }
+        old_quote_path.push(0);
+        assert_eq!(command_line(&unmarked).unwrap(), old_quote_path);
+
+        let invalid_marker = plan(executable.clone(), args.clone(), Some("v2"));
+        assert_eq!(
+            command_line(&invalid_marker).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+        for unsafe_source in [
+            format!("{source} & whoami"),
+            source.replace("runner.exe", "runner%PATH%.exe"),
+            source.replace("payload.json", "payload!VAR!.json"),
+            source.replace("payload.json", "payload|calc.json"),
+            source.replace("payload.json", "payload<calc.json"),
+        ] {
+            let mut invalid_args = args.clone();
+            invalid_args[4] = unsafe_source.into();
+            let invalid = plan(
+                executable.clone(),
+                invalid_args,
+                Some(crate::wrapper::launch_payload::CMD_RAW_BOOTSTRAP_VALUE),
+            );
+            assert_eq!(
+                command_line(&invalid).unwrap_err().kind(),
+                io::ErrorKind::InvalidInput
+            );
+        }
+        let mut invalid_args = args;
+        invalid_args[0] = "/c".into();
+        let invalid = plan(
+            executable,
+            invalid_args,
+            Some(crate::wrapper::launch_payload::CMD_RAW_BOOTSTRAP_VALUE),
+        );
+        assert_eq!(
+            command_line(&invalid).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+    }
+
+    #[tokio::test]
+    async fn synthetic_cmd_bootstrap_parses_unicode_paths_and_forwards_exit_code() {
+        let root = tempfile::tempdir().unwrap();
+        let runner = root.path().join("synthetic runner 日本語.cmd");
+        let payload = root.path().join("private payload 日本語.json");
+        let sentinel = root.path().join("sentinel.txt");
+        std::fs::write(&payload, b"synthetic payload only").unwrap();
+        std::fs::write(
+            &runner,
+            format!(
+                "@echo off\r\nif not \"%~1\"==\"{}\" exit /b 91\r\nif not exist \"%~2\" exit /b 92\r\n> sentinel.txt echo SYNTHETIC_ARGS_OK\r\nexit /b 23\r\n",
+                crate::wrapper::launch_payload::INTERNAL_ARG
+            ),
+        )
+        .unwrap();
+        let cmd = std::env::var_os("COMSPEC")
+            .map(PathBuf::from)
+            .filter(|path| path.exists())
+            .or_else(|| {
+                std::env::var_os("SystemRoot")
+                    .map(PathBuf::from)
+                    .map(|root| root.join("System32").join("cmd.exe"))
+                    .filter(|path| path.exists())
+            })
+            .expect("Windows cmd.exe is required for this native test");
+        let bootstrap =
+            crate::wrapper::launch_payload::build_bootstrap_command("cmd", &cmd, &runner, &payload)
+                .unwrap();
+        let mut process = plan(bootstrap.executable.into(), bootstrap.args, None);
+        process.cwd = root.path().to_owned();
+        for (name, value) in bootstrap.environment {
+            process.env.insert(name, Some(value));
+        }
+        let block = String::from_utf16(&environment(&process).unwrap()).unwrap();
+        assert!(!block.contains(crate::wrapper::launch_payload::CMD_RAW_BOOTSTRAP_ENV));
+
+        let session = spawn_with_job(&process, PtySize::default(), OwnedJob::attach_raw).unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(15), session.wait())
+            .await
+            .expect("synthetic cmd PTY exceeded its deadline")
+            .unwrap();
+        assert_eq!(result.code, 23);
+        assert_eq!(
+            std::fs::read_to_string(sentinel).unwrap().trim(),
+            "SYNTHETIC_ARGS_OK"
+        );
     }
     #[test]
     fn windows_exit_dword_does_not_turn_into_posix_signal() {

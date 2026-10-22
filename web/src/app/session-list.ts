@@ -346,7 +346,8 @@ export function updateShellBadge(id) {
   if (!el) return;
   const s = id !== null ? sessions.get(id) : null;
   const shell = s?.shell || '';
-  el.textContent = shell ? ' · ' + shell : '';
+  const label = shell === 'direct' ? ti18n('session_shell_direct', 'Direct launch') : shell;
+  el.textContent = label ? ' · ' + label : '';
 }
 
 // provider 別の quick コマンドボタン制御。

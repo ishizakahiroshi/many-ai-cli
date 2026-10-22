@@ -23,6 +23,7 @@ Release artifacts are published at
   blames a terminal redraw.
 
 ### Added
+- The authenticated Hub AI launch shell preference now controls new interactive AI wrapper sessions: `auto` preserves the existing launch path, while Windows `pwsh` and `cmd` choices wrap the resolved launch and preserve provider arguments as data. Explicit unavailable or unsupported routes fail with an explanation instead of silently falling back; headless, login, usage-probe, subscription-login, and Shell provider launches remain unchanged.
 - **Project headings can be dragged onto a session-list tab.** Dropping a
   heading moves every root session of that project that currently belongs to the
   selected tab, children included; the same project's roots in other tabs stay

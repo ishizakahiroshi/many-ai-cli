@@ -12,7 +12,7 @@ import { orderSessions } from './app/state.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
 import { disposeAltScrollRail } from './app/alt-scroll-rail-view.js';
 import { altDragSelectionText, disposeAltDragSelect } from './app/alt-drag-select-view.js';
-import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, attachTurnEndNotifyToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
+import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, attachTurnEndNotifyToggle, getActiveTriggerPhrase, getQuickCommand, initAiLaunchShellSettings, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { pendingSessionIds } from './app/approval-queue-tab.js';
@@ -1996,6 +1996,7 @@ inputEl.addEventListener('blur', (e) => {
 (function () {
   const idleTimeoutEl     = document.getElementById('idle-timeout-min');
   const terminalColorEl   = document.getElementById('terminal-color') as HTMLSelectElement | null;
+  const aiLaunchShellSettings = initAiLaunchShellSettings();
   const handoffIntentModeEl = document.getElementById('handoff-intent-mode') as HTMLSelectElement | null;
   const reconnectGraceEl  = document.getElementById('reconnect-grace-min');
 	const boardNotifyModeEl = document.getElementById('board-notify-mode') as HTMLSelectElement | null;
@@ -2386,9 +2387,11 @@ inputEl.addEventListener('blur', (e) => {
     await saveLogConfig();
     await saveSlashCmdSources();
     saveUsageLinkSettings();
+    await aiLaunchShellSettings.save();
   };
 
   window.__settingsResetAll = async () => {
+    await aiLaunchShellSettings.reset();
     setUserPref('display.custom_themes', []);
     applyTheme('light');
     applyFontSize('medium');
