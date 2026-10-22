@@ -206,6 +206,92 @@ class ReleaseChannels(unittest.TestCase):
         (self.archives / 'SHA256SUMS.txt').write_text('not a checksum\n')
         self.reject()
 
+    def test_unknown_or_unsafe_supplemental_checksums_are_rejected(self):
+        names = ('unrelated.txt', 'many-ai-cli-2.0.0-linux-x64.zip',
+                 'many-ai-cli-1.0.0-unknown.spdx.json', '../escape.spdx.json',
+                 '/absolute.spdx.json', 'C:\\escape.spdx.json',
+                 'bad name.spdx.json', 'NUL', 'notice;echo.spdx.json',
+                 'notice%{macro}.spdx.json', 'notice\x00.spdx.json')
+        path = self.archives / 'SHA256SUMS.txt'
+        original = path.read_bytes()
+        for name in names:
+            with self.subTest(name=name):
+                path.write_bytes(original + (('a' * 64) + '  ' + name + '\n').encode())
+                self.reject()
+        path.write_bytes(original)
+
+    def canonical_checksums(self):
+        self.sums()
+        names = [self.zip_path(s).name + '.spdx.json' for s in SUFFIXES]
+        if '-' not in self.version:
+            names += [f'many-ai-cli-{self.version}-linux-x64.deb',
+                      f'many-ai-cli-{self.version}-linux-x64.deb.spdx.json',
+                      f'many-ai-cli-{self.version}-1.x86_64.rpm',
+                      f'many-ai-cli-{self.version}-1.x86_64.rpm.spdx.json']
+        path = self.archives / 'SHA256SUMS.txt'
+        with path.open('a', encoding='utf-8') as stream:
+            for name in names:
+                stream.write(digest(('synthetic ' + name).encode()) + '  ' + name + '\n')
+        self.assertTrue(all(not (self.archives / name).exists() for name in names))
+        return names
+
+    def test_canonical_stable_twelve_checksum_records(self):
+        self.canonical_checksums()
+        self.assertEqual(len((self.archives / 'SHA256SUMS.txt').read_text().splitlines()), 12)
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = json.loads((self.output / 'channel-inputs.json').read_bytes())
+        self.assertEqual(len(manifest['archives']), 4)
+
+    def test_canonical_rc_eight_checksum_records(self):
+        for path in self.archives.glob('*.zip'):
+            path.unlink()
+        self.version = '1.0.0-rc.1'
+        self.write_archives()
+        self.canonical_checksums()
+        self.assertEqual(len((self.archives / 'SHA256SUMS.txt').read_text().splitlines()), 8)
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.output / 'homebrew').exists())
+        self.assertFalse((self.output / 'winget').exists())
+
+    def test_canonical_supplement_duplicate_and_invalid_hash(self):
+        self.canonical_checksums()
+        path = self.archives / 'SHA256SUMS.txt'
+        original = path.read_bytes()
+        last = original.splitlines(keepends=True)[-1]
+        for extra in (last, b'not-a-hash  ' + last.split(b'  ', 1)[1]):
+            with self.subTest(extra=extra):
+                path.write_bytes(original + extra)
+                self.reject()
+        path.write_bytes(original.replace(last[:64], b'g' * 64))
+        self.reject()
+
+    def test_canonical_selected_zip_missing_or_mismatch(self):
+        self.canonical_checksums()
+        path = self.archives / 'SHA256SUMS.txt'
+        original = path.read_bytes()
+        first = original.splitlines(keepends=True)[0]
+        for contents in (original.replace(first, b''), original.replace(first[:64], b'0' * 64)):
+            with self.subTest(contents=contents):
+                path.write_bytes(contents)
+                self.reject()
+
+    def test_rc_does_not_allow_stable_package_supplements(self):
+        for path in self.archives.glob('*.zip'):
+            path.unlink()
+        self.version = '1.0.0-rc.1'
+        self.write_archives()
+        self.canonical_checksums()
+        path = self.archives / 'SHA256SUMS.txt'
+        original = path.read_bytes()
+        for name in ('many-ai-cli-1.0.0-rc.1-linux-x64.deb',
+                     'many-ai-cli-1.0.0~rc.1-1.x86_64.rpm',
+                     'SHA256SUMS.txt', 'SHA256SUMS.txt.sig', 'SHA256SUMS.txt.pem'):
+            with self.subTest(name=name):
+                path.write_bytes(original + (('a' * 64) + '  ' + name + '\n').encode())
+                self.reject()
+
     def test_missing_checksum(self):
         p = self.archives / 'SHA256SUMS.txt'
         p.write_bytes(b'\n'.join(p.read_bytes().splitlines()[1:]) + b'\n')
@@ -242,7 +328,18 @@ class ReleaseChannels(unittest.TestCase):
         for name in ('../escape', '/absolute', 'C:/escape', 'dir\\escape', 'a/../b',
                      'dir//file', 'file.', 'NUL', 'aux.txt', 'bad name', 'a\nname', 'directory/'):
             with self.subTest(name=name):
-                self.write_zip('linux-x64', special=(name, b'synthetic'))
+                # zipfile normalizes separators on Windows: patch both raw names
+                # only after writing a safe, equal-length placeholder.
+                placeholder = 'Z' * len(name)
+                self.write_zip('linux-x64', special=(placeholder, b'synthetic'))
+                path = self.zip_path('linux-x64')
+                raw = path.read_bytes()
+                self.assertEqual(raw.count(placeholder.encode()), 2)
+                raw = raw.replace(placeholder.encode(), name.encode())
+                self.assertEqual(raw.count(name.encode()), 2)
+                path.write_bytes(raw)
+                with zipfile.ZipFile(path) as archive:
+                    self.assertEqual(archive.infolist()[-1].orig_filename, name)
                 self.sums()
                 self.reject()
 

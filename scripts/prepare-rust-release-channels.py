@@ -2,7 +2,8 @@
 """Prepare offline channel inputs from four verified release ZIPs, never publish.
 
 Caller authenticates SHA256SUMS.txt separately; this helper checks bytes, not a
-signature. Build-input evidence is not a distribution SBOM or license clearance.
+signature. Canonical supplemental checksum rows are validated, but their files
+are not fetched or byte-verified. Build-input evidence is not license clearance.
 Only stable SemVer and rc.N prereleases are representable here. rc.N maps to
 ~rc.N in Debian/RPM and skips Homebrew/winget (never updates stable channels).
 References: Debian Policy 5.6.12; rpm.org/docs/latest/manual/spec.html;
@@ -84,14 +85,23 @@ def preflight(archives, version):
     names = {s: f'many-ai-cli-{version}-{s}.zip' for s in SUFFIXES}
     if {p.name for p in archives.iterdir() if p.name.lower().endswith('.zip')} != set(names.values()):
         raise ValueError('expected exactly the four release ZIPs of the requested version')
+    # Canonical signed lists also cover distribution evidence and stable Linux
+    # packages. The retry caller downloads only ZIPs; do not require those other
+    # files locally or claim their byte hashes were verified.
+    allowed = set(names.values()) | {name + '.spdx.json' for name in names.values()}
+    if '-' not in version:
+        packages = (f'many-ai-cli-{version}-linux-x64.deb',
+                    f'many-ai-cli-{version}-1.x86_64.rpm')
+        allowed.update(packages)
+        allowed.update(name + '.spdx.json' for name in packages)
     checksums = {}
     for line in regular(archives / 'SHA256SUMS.txt').decode('utf-8').splitlines():
         m = re.fullmatch(r'([0-9a-fA-F]{64}) [ *]([^/\\\s]+)', line)
-        if not m or m[2] in checksums:
+        if not m or m[2] not in allowed or m[2] in checksums:
             raise ValueError('invalid or duplicate checksum record')
         checksums[m[2]] = m[1].lower()
-    if set(checksums) != set(names.values()):
-        raise ValueError('checksums must describe exactly the four release ZIPs')
+    if not set(names.values()).issubset(checksums):
+        raise ValueError('checksums must include all four release ZIPs')
     verified, payloads = [], {}
     for suffix, name in names.items():
         raw = regular(archives / name)
@@ -230,7 +240,7 @@ Installers:
                 'archives': verified, 'skipped_channels': skipped,
                 'linux_payloads': [{'name': n, 'sha256': sha(d), 'bytes': len(d)} for n, d in sorted(linux.items())],
                 'outputs': [{'path': n, 'sha256': sha(d), 'bytes': len(d)} for n, d in sorted(files.items())],
-                'scope': 'Checksums verified, not signatures; build-input evidence is not a distribution SBOM or license clearance.'}
+                'scope': 'Four ZIP byte checksums verified, not signatures; allowed supplemental checksum records are syntax-checked only, not fetched or byte-verified. Build-input evidence is not a distribution SBOM or license clearance.'}
     add('channel-inputs.json', json.dumps(manifest, sort_keys=True, indent=2) + '\n')
     return files, modes
 
