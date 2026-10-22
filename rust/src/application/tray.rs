@@ -117,11 +117,11 @@ impl TrayOwner {
                     _ => Ok(())
                 } } => result,
             };
-            if let Err(error) = result {
-                if !owner.cancel.is_cancelled() {
-                    let message = error.to_string();
-                    let _ = tokio::task::spawn_blocking(move || report_error(&message)).await;
-                }
+            if let Err(error) = result
+                && !owner.cancel.is_cancelled()
+            {
+                let message = error.to_string();
+                let _ = tokio::task::spawn_blocking(move || report_error(&message)).await;
             }
         }));
     }

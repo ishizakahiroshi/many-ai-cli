@@ -21,12 +21,13 @@ unsafe extern "system" fn procedure(window: HWND, message: u32, w: WPARAM, l: LP
             OPEN_REQUEST => {
                 let pointer = GetWindowLongPtrW(window, GWLP_USERDATA) as *const Arc<TrayOwner>;
                 if !pointer.is_null() {
+                    let owner = &*pointer;
                     let mismatch = w != 0
-                        && (*pointer)
+                        && owner
                             .hooks
                             .instance_port()
                             .is_some_and(|port| usize::from(port) != w);
-                    (*pointer).command(if mismatch { 4 } else { 1 });
+                    owner.command(if mismatch { 4 } else { 1 });
                 }
                 0
             }

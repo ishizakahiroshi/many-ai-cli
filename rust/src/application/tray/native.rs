@@ -58,15 +58,15 @@ impl TrayHooks for NativeTrayHooks {
                     &snapshot.config.token,
                 )
                 .await;
-            if let (Some(expected), Some(actual)) = (self.preferred_port, port) {
-                if expected != actual {
-                    return Err(io::Error::new(
-                        io::ErrorKind::AddrInUse,
-                        format!(
-                            "同じ保存先の Hub はポート {actual} で起動しています。アイコンの指定ポート {expected} を確認してください。自動で切り替えたり停止したりはしません。"
-                        ),
-                    ));
-                }
+            if let (Some(expected), Some(actual)) = (self.preferred_port, port)
+                && expected != actual
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::AddrInUse,
+                    format!(
+                        "同じ保存先の Hub はポート {actual} で起動しています。アイコンの指定ポート {expected} を確認してください。自動で切り替えたり停止したりはしません。"
+                    ),
+                ));
             }
             port.map(|port| {
                 let mut url = url::Url::parse(&format!("http://127.0.0.1:{port}/"))
