@@ -19,6 +19,9 @@
     "x64"
   ],
   "files": [
-    "bin/many-ai-cli"
+    "bin/many-ai-cli",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "build-inputs/"
   ]
 }

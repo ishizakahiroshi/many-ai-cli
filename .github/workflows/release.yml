@@ -1,349 +1,469 @@
-# The Windows VC++ runtime DLLs used by managed Whisper are intentionally
-# gitignored. A Windows preparation job obtains and verifies the Microsoft
-# signed copies, then the Linux GoReleaser job downloads that artifact before
-# embedding it with go:embed. A missing or invalid payload fails the release.
+# Same four native targets/helpers as rust-migration.yml, one build per target.
+# All downstream channels consume signed canonical ZIPs. No Docker publication.
 name: Release
-
 on:
   push:
-    tags:
-      - "v*.*.*"
-  # npm-only re-run: when goreleaser (GitHub Release / winget / Homebrew) already
-  # succeeded but npm publish failed (e.g. E429), re-publish npm ALONE against the
-  # existing tag. goreleaser is NOT re-run (it would collide with the existing
-  # Release), and npm is staged by extracting the binaries from the already
-  # published Release zips + verifying SHA256 — so npm ships the exact same bytes.
+    tags: ['v*.*.*']
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing release tag, e.g. v0.3.1"
+        description: 'Existing Rust release tag, e.g. v1.0.0'
         required: true
+        type: string
       npm_only:
-        description: "Re-publish npm only from the existing GitHub Release"
+        description: 'Legacy mode: npm only from the existing Rust release'
         type: boolean
         default: true
-
+      channel:
+        description: 'legacy honors npm_only; full must run at the tag ref'
+        type: choice
+        default: legacy
+        options: [legacy, full, npm, homebrew, winget]
 permissions:
-  contents: write
-  id-token: write
+  contents: read
+concurrency:
+  group: rust-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
-  prepare-whisper-runtime:
-    name: Prepare signed Windows Whisper runtime
-    runs-on: windows-latest
+  plan:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
     permissions:
       contents: read
+      actions: read
+    outputs:
+      tag: ${{ steps.target.outputs.tag }}
+      mode: ${{ steps.target.outputs.mode }}
+      source_sha: ${{ steps.target.outputs.source_sha }}
+      prerelease: ${{ steps.target.outputs.prerelease }}
     steps:
-      - name: Checkout release source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          # Full dispatch は入力 tag の source を使う。npm-only だけは、公開済み
-          # artifact と現行 branch の再配布 script を組み合わせる既存契約を維持する。
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.npm_only == false && inputs.tag || github.ref }}
-          fetch-depth: 1
-
-      - name: Fetch and verify Microsoft VC++ runtime
-        shell: pwsh
-        run: .\internal\whisperruntime\fetch_windows_runtime.ps1
-
-      - name: Verify runtime payload
-        shell: pwsh
-        run: |
-          $dir = Join-Path $env:GITHUB_WORKSPACE 'internal/whisperruntime/files/windows-amd64'
-          $expected = @('vcomp140.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
-          foreach ($name in $expected) {
-            $path = Join-Path $dir $name
-            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-              throw "Missing verified runtime DLL: $name"
-            }
-          }
-
-      - name: Upload verified runtime payload
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: whisper-windows-runtime
-          path: internal/whisperruntime/files/windows-amd64/*.dll
-          if-no-files-found: error
-          retention-days: 7
-
-  release:
-    needs: prepare-whisper-runtime
-    runs-on: ubuntu-latest
-    env:
-      # Keep only a boolean at job scope. The credential itself is exposed only
-      # to the final publish step below, never to every release step.
-      NPM_AVAILABLE: ${{ secrets.NPM_TOKEN != '' && 'true' || 'false' }}
-      # Single source for the tag/mode across push and workflow_dispatch.
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-      NPM_ONLY: ${{ (github.event_name == 'workflow_dispatch' && inputs.npm_only) && 'true' || 'false' }}
-    steps:
-      # Default checkout ref: a tag push checks out that tag; a workflow_dispatch
-      # checks out the branch it was launched from (e.g. main). For the npm-only
-      # re-run we WANT main's scripts + shim (which may post-date the old tag) —
-      # only the binaries come from the published Release, the version from the tag.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.npm_only == false && inputs.tag || github.ref }}
+          persist-credentials: false
           fetch-depth: 0
-
-      - name: Validate release target
-        shell: bash
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Validate exact tag source before any compile
+        id: target
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          LEGACY_NPM_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.npm_only && 'true' || 'false' }}
+          CHANNEL: ${{ inputs.channel || 'legacy' }}
+        run: >-
+          python3 scripts/rust-release-workflow.py plan --event "$GITHUB_EVENT_NAME"
+          --ref "$GITHUB_REF" --sha "$GITHUB_SHA" --tag "$RELEASE_TAG"
+          --npm-only "$LEGACY_NPM_ONLY" --channel "$CHANNEL" --github-output "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.target.outputs.mode == 'full'
+        with:
+          node-version: 22
+      - name: Refuse registered instrumentation before any native compile
+        if: steps.target.outputs.mode == 'full'
+        run: node scripts/check-instrumentation.mjs --release
+      - name: Refuse rebuilding a published release; select a channel rerun
+        if: steps.target.outputs.mode == 'full'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.target.outputs.tag }}
         run: |
           set -euo pipefail
-          if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::invalid release tag: ${RELEASE_TAG}"
-            exit 1
-          fi
-          tag_commit="$(git rev-parse "${RELEASE_TAG}^{commit}")"
-          if [ "${NPM_ONLY}" != "true" ]; then
-            source_commit="$(git rev-parse HEAD)"
-            if [ "${source_commit}" != "${tag_commit}" ]; then
-              echo "::error::checked out source ${source_commit} does not match ${RELEASE_TAG} (${tag_commit})"
-              exit 1
-            fi
-          fi
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
+          python3 -c 'import json,os; pages=json.load(open(os.environ["RUNNER_TEMP"]+"/releases.json")); assert not any(x["tag_name"]==os.environ["RELEASE_TAG"] for page in pages for x in page), "release exists; select npm/homebrew/winget instead of rebuilding"'
+      - name: Refuse empty or missing release notes before compiling
+        if: steps.target.outputs.mode == 'full'
+        env:
+          RELEASE_TAG: ${{ steps.target.outputs.tag }}
+        run: python3 scripts/rust-release-workflow.py notes --tag "$RELEASE_TAG" --output "$RUNNER_TEMP/release-notes.md"
+      - name: Require green source validation and identity/secret scans
+        if: steps.target.outputs.mode == 'full'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ steps.target.outputs.source_sha }}
+        run: python3 scripts/rust-release-workflow.py check-source-ci --repository "$GITHUB_REPOSITORY" --source "$SOURCE_SHA"
 
+  native:
+    name: Rust release (${{ matrix.target }})
+    needs: plan
+    if: needs.plan.outputs.mode == 'full'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-15
+            target: aarch64-apple-darwin
+    env:
+      RUSTUP_TOOLCHAIN: '1.90.0'
+      GOTOOLCHAIN: local
+      MANY_AI_REVIEW_HEAD_SHA: ${{ needs.plan.outputs.source_sha }}
+      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+    steps:
+      - name: Preserve source bytes on every native runner
+        shell: bash
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ needs.plan.outputs.source_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      # Pinned fixture-tool contract only; no Go product build or execution.
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: go.mod
-          cache: true
+          go-version: '1.26.8'
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.3.14'
+      - name: Install pinned Rust (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
+      - name: Install pinned Rust (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
+      - name: Validate and build one formal native target (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: python3 scripts/rust-candidate-ci.py --target '${{ matrix.target }}' --release-tag "$RELEASE_TAG"
+      - name: Validate and build one formal native target (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python scripts/rust-candidate-ci.py --target '${{ matrix.target }}' --release-tag $env:RELEASE_TAG
+      - name: Retain both native binaries and receipts for this attempt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rust-release-${{ matrix.target }}-${{ needs.plan.outputs.source_sha }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .rust-candidate-artifacts/
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7
 
+  package:
+    needs: [plan, native]
+    if: needs.plan.outputs.mode == 'full'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    env:
+      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ needs.plan.outputs.source_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-          registry-url: "https://registry.npmjs.org"
-
-      # .goreleaser.yaml の before hooks（bun install / bun run build）が使用
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - name: Require four current native artifacts (partial reruns fail)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
+        run: >-
+          python3 scripts/rust-release-workflow.py check-native-artifacts
+          --repository "$GITHUB_REPOSITORY" --source "$SOURCE_SHA"
+          --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          bun-version: "1.3.14"
-
-      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
-        with:
-          cosign-release: "v2.4.3"
-
-      # SBOM 生成用 syft（.goreleaser.yaml の sboms セクションが参照）
+          pattern: rust-release-{x86_64-pc-windows-msvc,x86_64-unknown-linux-gnu,x86_64-apple-darwin,aarch64-apple-darwin}-${{ needs.plan.outputs.source_sha }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .rust-release-inputs/
+          merge-multiple: true
+      - name: Assemble same-source formal ZIPs without rebuilding
+        run: |
+          set -euo pipefail
+          python3 scripts/package-rust-candidates.py --inputs .rust-release-inputs --output .rust-release-bundle --release-tag "$RELEASE_TAG"
+          mkdir .rust-release-linux
+      - name: Prepare Linux packages and stable pointers from canonical ZIPs
+        if: needs.plan.outputs.prerelease == 'false'
+        run: >-
+          python3 scripts/prepare-rust-release-channels.py --archives .rust-release-bundle
+          --tag "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --output .rust-release-channels
+      - name: Build Linux package containers without native compilation
+        if: needs.plan.outputs.prerelease == 'false'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y rpm cpio
+          dpkg-deb --build --root-owner-group .rust-release-channels/deb-root ".rust-release-linux/many-ai-cli-${RELEASE_TAG#v}-linux-x64.deb"
+          mkdir -p .rust-release-rpm-build/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+          rpmbuild --define "_topdir $GITHUB_WORKSPACE/.rust-release-rpm-build" --define "_sourcedir $GITHUB_WORKSPACE/.rust-release-channels/rpm/SOURCES" -bb .rust-release-channels/rpm/SPECS/many-ai-cli.spec
+          find .rust-release-rpm-build/RPMS -type f -name '*.rpm' -exec cp '{}' .rust-release-linux/ \;
+          mkdir .rust-release-deb-readback .rust-release-rpm-readback
+          dpkg-deb --extract .rust-release-linux/*.deb .rust-release-deb-readback
+          rpm2cpio .rust-release-linux/*.rpm | (cd .rust-release-rpm-readback && cpio -idm --no-absolute-filenames)
+          python3 scripts/rust-release-workflow.py verify-linux-payloads --expected .rust-release-channels/deb-root --deb .rust-release-deb-readback --rpm .rust-release-rpm-readback
+      - name: Report prerelease package and stable pointer policy
+        if: needs.plan.outputs.prerelease == 'true'
+        run: echo '::notice::prerelease publishes four ZIPs and npm next; deb/rpm and Homebrew/winget are explicitly skipped'
+      - name: Prepare exact distribution asset set
+        run: python3 scripts/rust-release-workflow.py prepare-assets --bundle .rust-release-bundle --packages .rust-release-linux --output .rust-release-assets --tag "$RELEASE_TAG"
       - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
-          syft-version: "v1.41.1"
-
-      # Validate の instrumentation job と同じ source invariant を release 自身でも
-      # credential を渡す前に再確認する。tag push と Validate は別 trigger のため、
-      # release 側の gate が無いと publish 後の artifact 検査まで止められない。
-      - name: Check instrumentation before publish
-        if: ${{ env.NPM_ONLY != 'true' }}
-        run: node scripts/check-instrumentation.mjs --release
-
-      # winget-pkgs fork を upstream (microsoft/winget-pkgs) と同期してから
-      # goreleaser の winget publisher に使わせる。winget-pkgs は1日数百コミット
-      # 動くため、stale な fork から PR を作ると差分汚染・conflict が起きる。
-      #
-      # 失敗してもリリースを止めない（2026-08-11 v0.6.0 で踏んだ）。これは winget
-      # という 1 チャネルの前準備でしかないのに、goreleaser より前にあり fail-fast
-      # だったため、GitHub Release という正本の発行ごと巻き添えで止まった。実際に
-      # 起きたのは PUBLISH_GITHUB_TOKEN に workflow スコープが無く、upstream の
-      # workflow 変更を取り込めないというもので、成果物の正しさとは無関係だった。
-      #
-      # 同期できなかった場合の劣化は「winget PR の base が古い」だけで、GitHub
-      # Release・Homebrew・npm には影響しない。winget PR が conflict したら手で
-      # 作り直せばよく、リリース全体をやり直す理由にはならない。
-      # 位置は goreleaser より前のまま（後ろへ動かすと毎回 1 リリース分 stale な
-      # fork から PR を作ることになり、このステップの目的そのものが失われる）。
-      - name: Sync winget-pkgs fork
-        if: ${{ env.NPM_ONLY != 'true' }}
-        env:
-          GH_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
+          syft-version: 'v1.41.1'
+      - name: Generate distribution SPDX and checksum inventory
         run: |
-          if ! gh repo sync ishizakahiroshi/winget-pkgs --source microsoft/winget-pkgs; then
-            echo "::warning title=winget fork sync failed::fork の同期に失敗した。winget PR の base が古いまま作られる可能性がある。PUBLISH_GITHUB_TOKEN に workflow スコープがあるか確認すること。リリース自体は続行する。"
-          fi
-
-      - name: Download verified Windows Whisper runtime
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+          set -euo pipefail
+          for asset in .rust-release-assets/*; do
+            syft scan "$asset" --output "spdx-json=$asset.spdx.json"
+            python3 scripts/rust-release-workflow.py complete-sbom --asset "$asset" --document "$asset.spdx.json" --tag "$RELEASE_TAG"
+          done
+          python3 scripts/rust-release-workflow.py checksums --directory .rust-release-assets --tag "$RELEASE_TAG"
+      - name: Block instrumentation before signing or publication
+        run: |
+          node scripts/check-instrumentation.mjs --release
+          node scripts/check-artifact-clean.mjs .rust-release-bundle .rust-release-assets
+          if [ -d .rust-release-channels ]; then node scripts/check-artifact-clean.mjs .rust-release-channels; fi
+      - name: Require human release notes
+        run: python3 scripts/rust-release-workflow.py notes --tag "$RELEASE_TAG" --output .rust-release-notes.md
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: whisper-windows-runtime
-          path: internal/whisperruntime/files/windows-amd64
+          name: rust-release-unsigned-${{ needs.plan.outputs.source_sha }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .rust-release-assets/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rust-release-notes-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .rust-release-notes.md
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Verify embedded runtime inputs
-        shell: bash
+  sign:
+    needs: [plan, package]
+    if: needs.plan.outputs.mode == 'full'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ needs.plan.outputs.source_sha }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: rust-release-unsigned-${{ needs.plan.outputs.source_sha }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .rust-release-assets/
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: 'v2.4.3'
+      - name: Sign and verify immutable distribution checksums
+        working-directory: .rust-release-assets
         run: |
           set -euo pipefail
-          dir=internal/whisperruntime/files/windows-amd64
-          expected=(vcomp140.dll msvcp140.dll vcruntime140.dll vcruntime140_1.dll)
-          for name in "${expected[@]}"; do
-            test -f "$dir/$name"
-          done
-          test "$(find "$dir" -maxdepth 1 -type f -name '*.dll' | wc -l)" -eq "${#expected[@]}"
+          sha256sum --check SHA256SUMS.txt
+          cosign sign-blob --yes --output-signature SHA256SUMS.txt.sig --output-certificate SHA256SUMS.txt.pem SHA256SUMS.txt
+          cosign verify-blob --certificate SHA256SUMS.txt.pem --signature SHA256SUMS.txt.sig --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/tags/$RELEASE_TAG" --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' SHA256SUMS.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rust-release-signed-${{ needs.plan.outputs.source_sha }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .rust-release-assets/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
 
-      # GitHub Release のノートは CHANGELOG.md の該当版節を使う。コミットメッセージ
-      # 由来の自動 changelog は Git タブ自動生成コミット（internal/hub/git_commit.go）の
-      # 羅列で読めないため、CHANGELOG.md の人間可読な節を抽出して --release-notes で渡す。
-      - name: Extract release notes from CHANGELOG.md
-        if: ${{ env.NPM_ONLY != 'true' }}
+  publish:
+    needs: [plan, sign]
+    if: needs.plan.outputs.mode == 'full'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ needs.plan.outputs.source_sha }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: rust-release-signed-${{ needs.plan.outputs.source_sha }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .rust-release-assets/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: rust-release-notes-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .release-notes/
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: 'v2.4.3'
+      - name: Verify signed handoff before publication credential
         run: |
           set -euo pipefail
-          VERSION="${RELEASE_TAG#v}"
-          awk -v ver="$VERSION" '
-            BEGIN { hdr = "## [" ver "]" }
-            index($0, hdr) == 1 { flag = 1; next }
-            flag && index($0, "## [") == 1 { exit }
-            flag { print }
-          ' CHANGELOG.md > "${RUNNER_TEMP}/release-notes.md"
-          echo "----- release notes (${VERSION}) -----"
-          cat "${RUNNER_TEMP}/release-notes.md"
-
-      # .goreleaser.yaml の before hooks をここで先に走らせる。
-      #
-      # 理由: goreleaser のステップは homebrew-tap / winget-pkgs fork へ push できる
-      # PAT を env に持つ。before hooks はその同じプロセスで動くので、`bun install` が
-      # 引く依存ツリーと `go install` が取るツールが、PAT の載った環境変数空間で
-      # 実行されることになる（2026-08-17 の監査 F-87）。版はすべて固定してあり bun は
-      # 既定で信頼外の lifecycle script を実行しないため悪用の見込みは低いが、
-      # 依存が 1 つ信頼リストへ入るだけで成立してしまう。credential を持つ工程と
-      # 第三者コードを走らせる工程を分けておけば、その前提に依存しなくて済む。
-      #
-      # .goreleaser.yaml 側の hooks は消さない。ローカルの `goreleaser --snapshot` が
-      # web/dist と .syso 無しで壊れる（CI だけが知っている手順を増やさない）。
-      # CI では下の --skip=before で二重実行を避ける。
-      - name: Run goreleaser before hooks (no publish credentials in this step)
-        if: ${{ env.NPM_ONLY != 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          RELEASE_VERSION="${RELEASE_TAG#v}"
-          (cd web && bun install --frozen-lockfile && bun run build)
-          go install github.com/tc-hib/go-winres@v0.3.3
-          go-winres make --in winres/winres.json --out cmd/many-ai-cli/rsrc \
-            --product-version="${RELEASE_VERSION}" --file-version="${RELEASE_VERSION}"
-          go-winres make --in winres/winres-launcher.json --out cmd/many-ai-cli-launcher/rsrc \
-            --product-version="${RELEASE_VERSION}" --file-version="${RELEASE_VERSION}"
-
-      # goreleaser-action v7 は通常 checksum と Sigstore bundle を検証するが、
-      # bundle download 失敗時は warning で継続する。publish credential を渡す
-      # binary は fail-closed で検証するため、固定版をここで直接取得する。
-      - name: Install verified GoReleaser v2.18.0
-        if: ${{ env.NPM_ONLY != 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          version=v2.18.0
-          archive=goreleaser_Linux_x86_64.tar.gz
-          base="https://github.com/goreleaser/goreleaser/releases/download/${version}"
-          verify_dir="${RUNNER_TEMP}/goreleaser-verify"
-          install_dir="${RUNNER_TEMP}/goreleaser-bin"
-          rm -rf "${verify_dir}" "${install_dir}"
-          mkdir -p "${verify_dir}" "${install_dir}"
-          cd "${verify_dir}"
-          for file in checksums.txt checksums.txt.sigstore.json "${archive}"; do
-            curl --fail --location --retry 3 --output "${file}" "${base}/${file}"
-          done
-          cosign verify-blob \
-            --bundle checksums.txt.sigstore.json \
-            --certificate-identity "https://github.com/goreleaser/goreleaser/.github/workflows/release.yml@refs/tags/${version}" \
-            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            checksums.txt
-          expected="$(awk -v name="${archive}" '$2 == name { print $1 }' checksums.txt)"
-          [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] || {
-            echo "::error::missing or ambiguous checksum for ${archive}"
-            exit 1
-          }
-          actual="$(sha256sum "${archive}" | cut -d' ' -f1)"
-          [ "${actual}" = "${expected}" ] || {
-            echo "::error::GoReleaser archive checksum mismatch"
-            exit 1
-          }
-          tar -xzf "${archive}" -C "${install_dir}" goreleaser
-          "${install_dir}/goreleaser" --version | grep -F '2.18.0'
-          echo "${install_dir}" >> "${GITHUB_PATH}"
-
-      - name: Publish release with verified GoReleaser
-        if: ${{ env.NPM_ONLY != 'true' }}
-        shell: bash
-        # --skip=before: 直前のステップで実行済み。ここで再実行すると PAT を
-        # 持つプロセスで第三者コードが動き、分離した意味が無くなる。
-        run: goreleaser release --clean --skip=before --release-notes="${RUNNER_TEMP}/release-notes.md"
+          cosign verify-blob --certificate .rust-release-assets/SHA256SUMS.txt.pem --signature .rust-release-assets/SHA256SUMS.txt.sig --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/tags/$RELEASE_TAG" --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' .rust-release-assets/SHA256SUMS.txt
+          python3 scripts/rust-release-workflow.py verify-assets --directory .rust-release-assets --tag "$RELEASE_TAG"
+          test -s .release-notes/.rust-release-notes.md
+      - name: Publish canonical signed assets and human release notes
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # homebrew-tap / winget-pkgs fork への push 用 PAT（GITHUB_TOKEN は自リポジトリ限定のため）
-          PUBLISH_GITHUB_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRERELEASE: ${{ needs.plan.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          options=()
+          if [ "$PRERELEASE" = true ]; then options+=(--prerelease); fi
+          gh release create "$RELEASE_TAG" .rust-release-assets/* --repo "$GITHUB_REPOSITORY" --verify-tag --title "$RELEASE_TAG" --notes-file .release-notes/.rust-release-notes.md "${options[@]}"
 
-      - name: Verify no instrumentation in release artifacts
-        if: ${{ env.NPM_ONLY != 'true' }}
-        run: node scripts/check-artifact-clean.mjs dist
-
-      # Belt-and-suspenders: re-apply the human-readable CHANGELOG section as the
-      # Release body unconditionally. Past releases needed a MANUAL `gh release
-      # edit` because goreleaser occasionally left the body empty / full of raw
-      # commit noise. Automating it here removes that manual step — a release must
-      # never depend on someone remembering to fix the notes by hand.
-      - name: Ensure release notes (automated, no manual gh release edit)
-        if: ${{ env.NPM_ONLY != 'true' }}
+  canonical:
+    needs: [plan, publish]
+    if: ${{ always() && needs.plan.result == 'success' && (needs.plan.outputs.mode != 'full' || needs.publish.result == 'success') }}
+    runs-on: ubuntu-22.04
+    env:
+      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+    steps:
+      # Retries use selected ref's scripts; binaries always come from the tag.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+        with:
+          cosign-release: 'v2.4.3'
+      - name: Download four canonical ZIPs and signed checksums
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          notes="${RUNNER_TEMP}/release-notes.md"
-          if [ -s "$notes" ]; then
-            gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --notes-file "$notes"
-            echo "release body set from CHANGELOG [${RELEASE_TAG#v}] section"
-          else
-            echo "WARN: extracted notes empty; left goreleaser-generated body in place"
-          fi
-
-      # --- npm registry 配布（pnpm add -g many-ai-cli の導線）---
-      # platform 別 optional dependency package に Go バイナリを同梱して publish する。
-      # standalone exe をブラウザ DL させないことで MotW/SmartScreen を回避。
-      # NPM_TOKEN secret が未設定なら丸ごとスキップ（既存の GitHub/Homebrew/winget リリースは壊さない）。
-      #
-      # 同一性の担保: npm が配るバイナリは GitHub Release の zip と同一でなければならない。
-      #  - 通常リリース（tag push）: 直前の goreleaser が作った dist/ から staging（同一ビルド）。
-      #  - npm-only 再実行（workflow_dispatch）: 公開済み Release zip を DL し、SHA256SUMS で
-      #    照合してから取り出す（cosign 署名済みチェックサムに鎖でつながる＝暗号的に同一バイト）。
-
-      - name: Download published release archives (npm-only re-run)
-        if: ${{ env.NPM_AVAILABLE == 'true' && env.NPM_ONLY == 'true' }}
+          mkdir .canonical
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir .canonical --pattern '*-windows-x64.zip' --pattern '*-linux-x64.zip' --pattern '*-macos-intel.zip' --pattern '*-macos-apple-silicon.zip' --pattern SHA256SUMS.txt --pattern SHA256SUMS.txt.sig --pattern SHA256SUMS.txt.pem
+      - name: Verify tag signature and every canonical archive hash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
         run: |
           set -euo pipefail
-          rm -rf "${RUNNER_TEMP}/relzips"; mkdir -p "${RUNNER_TEMP}/relzips"
-          gh release download "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
-            --dir "${RUNNER_TEMP}/relzips" \
-            --pattern '*-windows-x64.zip' \
-            --pattern '*-linux-x64.zip' \
-            --pattern '*-macos-intel.zip' \
-            --pattern '*-macos-apple-silicon.zip' \
-            --pattern 'SHA256SUMS.txt' \
-            --pattern 'SHA256SUMS.txt.sig' \
-            --pattern 'SHA256SUMS.txt.pem'
+          cosign verify-blob --certificate .canonical/SHA256SUMS.txt.pem --signature .canonical/SHA256SUMS.txt.sig --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/tags/$RELEASE_TAG" --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' .canonical/SHA256SUMS.txt
+          python3 scripts/rust-release-workflow.py verify-archives --directory .canonical --tag "$RELEASE_TAG" --source "$SOURCE_SHA"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rust-canonical-${{ needs.plan.outputs.tag }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .canonical/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Verify published checksum signature (npm-only re-run)
-        if: ${{ env.NPM_AVAILABLE == 'true' && env.NPM_ONLY == 'true' }}
-        working-directory: ${{ runner.temp }}/relzips
+  npm:
+    needs: [plan, canonical]
+    if: ${{ always() && needs.canonical.result == 'success' && (needs.plan.outputs.mode == 'full' || needs.plan.outputs.mode == 'npm') }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write # npm provenance, no dependency install/native build here
+    env:
+      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+      NPM_AVAILABLE: ${{ secrets.NPM_TOKEN != '' && 'true' || 'false' }}
+    steps:
+      - name: Report optional npm channel unavailable
+        if: env.NPM_AVAILABLE != 'true'
+        run: echo '::notice::npm skipped because NPM_TOKEN is unset; canonical release remains available'
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: env.NPM_AVAILABLE == 'true'
+        with:
+          persist-credentials: false
+      - name: Pin package metadata, shim and README to the release source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: env.NPM_AVAILABLE == 'true'
+        with:
+          persist-credentials: false
+          ref: ${{ needs.plan.outputs.source_sha }}
+          path: .release-tag
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        if: env.NPM_AVAILABLE == 'true'
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: env.NPM_AVAILABLE == 'true'
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: env.NPM_AVAILABLE == 'true'
+        with:
+          name: rust-canonical-${{ needs.plan.outputs.tag }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .canonical/
+      - name: Stage normal and npm-only runs from verified published archives
+        if: env.NPM_AVAILABLE == 'true'
+        env:
+          PACKAGE_SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
         run: |
           set -euo pipefail
-          cosign verify-blob \
-            --certificate SHA256SUMS.txt.pem \
-            --signature SHA256SUMS.txt.sig \
-            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${RELEASE_TAG}" \
-            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            SHA256SUMS.txt
-
-      - name: Stage npm binaries (verified, from published release zips)
-        if: ${{ env.NPM_AVAILABLE == 'true' && env.NPM_ONLY == 'true' }}
-        run: node scripts/stage-npm-from-release.mjs "${RUNNER_TEMP}/relzips"
-
-      - name: Stage npm binaries (from GoReleaser dist)
-        if: ${{ env.NPM_AVAILABLE == 'true' && env.NPM_ONLY != 'true' }}
-        run: node scripts/stage-npm-binaries.mjs
-
-      - name: Sync npm package versions to tag
-        if: ${{ env.NPM_AVAILABLE == 'true' }}
-        run: node scripts/sync-npm-version.mjs "${RELEASE_TAG}"
-
-      # ordered publish (platform pkgs -> root) with E429 backoff + idempotent skip.
-      - name: Publish npm packages
-        if: ${{ env.NPM_AVAILABLE == 'true' }}
+          python3 scripts/rust-release-workflow.py verify-archives --directory .canonical --tag "$RELEASE_TAG" --source "$PACKAGE_SOURCE_SHA"
+          echo "npm package inputs=$PACKAGE_SOURCE_SHA redistribution scripts=$GITHUB_SHA"
+          cp scripts/{stage-npm-from-release.mjs,stage-npm-binaries.mjs,publish-npm.mjs,publish-npm.sh,sync-npm-version.mjs} .release-tag/scripts/
+          cd .release-tag
+          node scripts/stage-npm-from-release.mjs ../.canonical
+          node scripts/sync-npm-version.mjs "$RELEASE_TAG"
+      - name: Publish platform packages before root (npm credential only here)
+        if: env.NPM_AVAILABLE == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: bash scripts/publish-npm.sh "${RELEASE_TAG}"
+        working-directory: .release-tag
+        run: bash scripts/publish-npm.sh "$RELEASE_TAG"
+
+  pointers:
+    needs: [plan, canonical]
+    if: ${{ always() && needs.canonical.result == 'success' && (needs.plan.outputs.mode == 'full' || needs.plan.outputs.mode == 'homebrew' || needs.plan.outputs.mode == 'winget') }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [homebrew, winget]
+    env:
+      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+      MODE: ${{ needs.plan.outputs.mode }}
+      CHANNEL: ${{ matrix.channel }}
+      POINTER_AVAILABLE: ${{ secrets.PUBLISH_GITHUB_TOKEN != '' && 'true' || 'false' }}
+      STABLE: ${{ needs.plan.outputs.prerelease == 'false' && 'true' || 'false' }}
+    steps:
+      - name: Report skipped optional or prerelease pointer
+        if: env.POINTER_AVAILABLE != 'true' || env.STABLE != 'true' || (env.MODE != 'full' && env.MODE != env.CHANNEL)
+        run: echo "::notice::$CHANNEL skipped (mode=$MODE, stable=$STABLE, credential configured=$POINTER_AVAILABLE)"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: env.POINTER_AVAILABLE == 'true' && env.STABLE == 'true' && (env.MODE == 'full' || env.MODE == env.CHANNEL)
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        if: env.POINTER_AVAILABLE == 'true' && env.STABLE == 'true' && (env.MODE == 'full' || env.MODE == env.CHANNEL)
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: env.POINTER_AVAILABLE == 'true' && env.STABLE == 'true' && (env.MODE == 'full' || env.MODE == env.CHANNEL)
+        with:
+          name: rust-canonical-${{ needs.plan.outputs.tag }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .canonical/
+      - name: Prepare stable pointer manifests from canonical archives
+        if: env.POINTER_AVAILABLE == 'true' && env.STABLE == 'true' && (env.MODE == 'full' || env.MODE == env.CHANNEL)
+        run: >-
+          python3 scripts/prepare-rust-release-channels.py --archives .canonical
+          --tag "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --output .pointer-inputs
+      - name: Publish pointer (cross-repository PAT only here)
+        if: env.POINTER_AVAILABLE == 'true' && env.STABLE == 'true' && (env.MODE == 'full' || env.MODE == env.CHANNEL)
+        env:
+          GH_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
+        run: python3 scripts/rust-release-workflow.py publish-pointer --channel "$CHANNEL" --directory .pointer-inputs --tag "$RELEASE_TAG"

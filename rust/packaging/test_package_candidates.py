@@ -62,6 +62,117 @@ class PackageCandidateTests(unittest.TestCase):
         with patch.object(package, "source_documents", return_value=docs):
             package.assemble(self.inputs, self.output, self.root)
 
+    def release_receipts(self):
+        for suffix, receipt in self.receipts.items():
+            receipt.update({'build_kind': 'release', 'release_tag': 'v1.0.0', 'build_commit': self.source,
+                            'version': '1.0.0', 'build_time': '2023-11-14T22:13:20+00:00',
+                            'status': 'native-release-build-not-accepted-for-publication'})
+            receipt['packaging_inputs'] = []
+            folder = self.inputs / suffix / 'packaging-inputs'
+            folder.mkdir()
+            for name in package.PACKAGING_INPUTS:
+                data = f'synthetic {suffix} {name}'.encode()
+                (folder / name).write_bytes(data)
+                receipt['packaging_inputs'].append({'name': name, 'bytes': len(data), 'sha256': package.sha(data)})
+            if suffix == 'windows-x64':
+                receipt['windows_resources'] = {'version': '1.0.0', 'icon_sha256': 'f' * 64,
+                    'binaries': [{**entry, 'file_version': '1.0.0', 'product_version': '1.0.0',
+                                  'icon_payloads_verified': True} for entry in receipt['binaries']]}
+            self.write_receipt(suffix)
+
+    def assemble_release(self, source=None, tag='v1.0.0'):
+        docs = {name: f'synthetic source doc {name}'.encode() for name in (*package.DOCS, 'unblock-windows.cmd')}
+        with patch.object(package, 'source_documents', return_value=docs):
+            with patch.object(package, 'release_source_identity', return_value=(source or self.source, '2023-11-14T22:13:20+00:00')):
+                package.assemble(self.inputs, self.output, self.root, release_tag=tag)
+
+    def test_explicit_release_mode_keeps_bytes_notices_and_input_evidence(self):
+        self.release_receipts()
+        self.assemble_release()
+        package_receipt = json.loads((self.output / 'PACKAGE-RECEIPT.json').read_text())
+        self.assertEqual(package_receipt['status'], 'release-packaged-not-accepted-for-publication')
+        self.assertFalse(package_receipt['release_ready'])
+        self.assertEqual(package_receipt['release_tag'], 'v1.0.0')
+        self.assertEqual(package_receipt['build_commit'], self.source)
+        self.assertFalse((self.output / 'NOT-FOR-CUTOVER.txt').exists())
+        for _, (suffix, _, _) in package.TARGETS.items():
+            path = self.output / f'many-ai-cli-1.0.0-{suffix}.zip'
+            with zipfile.ZipFile(path) as archive:
+                self.assertIn('RELEASE-EVIDENCE.txt', archive.namelist())
+                self.assertNotIn('NOT-FOR-PUBLICATION.txt', archive.namelist())
+                self.assertNotIn('NOT-FOR-CUTOVER.txt', archive.namelist())
+                self.assertEqual(archive.read('THIRD_PARTY_NOTICES.md'), archive.read('THIRD-PARTY-NOTICES.md'))
+                for entry in self.receipts[suffix]['binaries']:
+                    self.assertEqual(archive.read(entry['name']), (self.output / 'binaries' / suffix / entry['name']).read_bytes())
+                for name in package.PACKAGING_INPUTS:
+                    expected = (self.inputs / suffix / 'packaging-inputs' / name).read_bytes()
+                    self.assertEqual(archive.read('packaging-inputs/' + name), expected)
+                    self.assertEqual((self.output / 'evidence' / suffix / 'packaging-inputs' / name).read_bytes(), expected)
+
+    def test_release_mode_refuses_candidates_renames_and_mixed_stamps(self):
+        with self.assertRaises(ValueError):
+            self.assemble_release()
+        self.assertFalse(self.output.exists())
+        self.release_receipts()
+        with self.assertRaises(ValueError):
+            self.assemble()
+        original = copy.deepcopy(self.receipts['linux-x64'])
+        for field, value in (('build_kind', 'candidate'), ('release_tag', 'v1.0.1'),
+                             ('build_commit', 'b' * 40), ('build_time', '2023-11-15T22:13:20+00:00'),
+                             ('version', '0.0.0-rust-candidate+' + self.source[:12])):
+            with self.subTest(field=field):
+                self.receipts['linux-x64'] = {**original, field: value}
+                self.write_receipt('linux-x64')
+                with self.assertRaises(ValueError):
+                    self.assemble_release()
+                self.assertFalse(self.output.exists())
+
+    def test_release_tag_commit_mismatch_fails_before_output(self):
+        self.release_receipts()
+        with self.assertRaisesRegex(ValueError, 'tag commit/time'):
+            self.assemble_release(source='b' * 40)
+        self.assertFalse(self.output.exists())
+
+    def test_build_metadata_tag_is_refused_before_assembly_output(self):
+        self.release_receipts()
+        with self.assertRaisesRegex(ValueError, 'strict SemVer'):
+            self.assemble_release(tag='v1.0.0+build.1')
+        self.assertFalse(self.output.exists())
+
+    def test_release_source_identity_requires_tag_head_and_commit_time(self):
+        with patch.object(package.subprocess, 'check_output', side_effect=[self.source, self.source, '1700000000']) as git:
+            self.assertEqual(package.release_source_identity(self.root, 'v1.0.0'), (self.source, '2023-11-14T22:13:20+00:00'))
+        self.assertIn('refs/tags/v1.0.0^{commit}', git.call_args_list[0].args[0])
+        with patch.object(package.subprocess, 'check_output', side_effect=[self.source, 'b' * 40]):
+            with self.assertRaisesRegex(ValueError, 'checkout HEAD'):
+                package.release_source_identity(self.root, 'v1.0.0')
+        for tag in ('1.0.0', 'v01.0.0', 'v1.0.0-01', 'v1.0.0\n', 'v1.2.3+build.01'):
+            with self.assertRaises(ValueError):
+                package.release_version(tag)
+
+    def test_release_refuses_changed_packaging_inputs_and_missing_resource_evidence(self):
+        self.release_receipts()
+        evidence = self.inputs / 'linux-x64/packaging-inputs/CRATE-NOTICES.txt'
+        original = evidence.read_bytes()
+        evidence.write_bytes(b'changed source notices')
+        with self.assertRaisesRegex(ValueError, 'hash/size mismatch'):
+            self.assemble_release()
+        self.assertFalse(self.output.exists())
+        evidence.write_bytes(original)
+        self.receipts['windows-x64']['windows_resources'] = None
+        self.write_receipt('windows-x64')
+        with self.assertRaisesRegex(ValueError, 'product version/icon evidence'):
+            self.assemble_release()
+        self.assertFalse(self.output.exists())
+
+    @unittest.skipUnless(shutil.which('node'), 'Node needed for npm staging integration')
+    def test_release_manifest_still_stages_main_only_with_identical_zip_bytes(self):
+        self.release_receipts()
+        self.assemble_release()
+        stager = self.copy_stager()
+        self.run_stager(stager, self.output)
+        self.assert_npm_bytes(self.output)
+
     def test_archives_and_npm_inputs_share_verified_bytes(self):
         self.assemble()
         manifest = json.loads((self.output / "artifacts.json").read_text())

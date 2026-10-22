@@ -56,7 +56,18 @@ jobs:
       # 上書きする側の配線が消えても、リポジトリ内は何も変わらないので、
       # 古い版数を名乗る成果物を出荷するまで気づけない。配線自体を検査する。
       - name: Check version single-source wiring
-        run: node scripts/check-version-sources.mjs
+        run: |
+          node --test scripts/check-version-sources.test.mjs
+          node scripts/check-version-sources.mjs
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Test offline Rust release to npm handoff
+        run: |
+          node --test scripts/npm-release.test.mjs
+          python3 scripts/test-npm-packer-integration.py
 
       # 全画面オーバーレイに wheel 除外クラスを付け忘れると、そのモーダルは
       # 「自分はスクロールせず背後の端末が動く」という壊れ方をする。原因も直し方も

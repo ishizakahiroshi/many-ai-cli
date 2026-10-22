@@ -1,7 +1,9 @@
 # Candidate packaging input evidence
 
-This is preparation for K15/A12, not a publisher or a replacement packaging
-owner. `src/launcher/delivery.rs` remains the target/channel/manifest contract.
+The input collector is preparation for K15/A12, not license clearance or a
+replacement packaging owner. `src/launcher/delivery.rs` remains the
+target/channel/manifest contract. The separate formal release orchestration is
+described below.
 No package, release, installation, account, GUI or native-voice acceptance is
 established by these helpers. The fixed Go oracle remains
 `d8fbf8598c3effd4e2f837e43ad6f0488c461de3`.
@@ -48,13 +50,84 @@ Rerun all jobs for a new attempt: older native artifacts deliberately cannot
 complete a partial rerun. Original native evidence remains in the native artifacts.
 The aggregate workflow still needs a real four-target run for acceptance.
 
-This helper deliberately accepts only `0.0.0-rust-candidate+<source prefix>`,
-not v1.0.0. It does not build, install, publish, or change the running Hub.
-Official release version stamping, Windows resources, distribution SBOM and
-signing, deb/rpm, Homebrew/winget, Docker, installed-update/rollback acceptance,
-and changing the existing Go release workflow remain separate release work.
+Without `--release-tag`, these helpers accept only
+`0.0.0-rust-candidate+<source prefix>`. The assembler does not build, install,
+publish, or change the running Hub. The explicit formal mode and its publication
+boundary are described below. Native runtime, installation, update/rollback and
+device acceptance remain separate release work. Official Docker images,
+container builds and automatic updates are outside v1.0.0 support; see
+[`deploy/docker/README.md`](../../deploy/docker/README.md).
 Input-collection success is source evidence, not license clearance or native
 application/device acceptance. Candidate packaging remains unaccepted preparation.
+
+## Formal Rust release orchestration
+
+`.github/workflows/release.yml` replaces the frozen Go release path. A tag push
+selects a full release. The tag must be canonical `vMAJOR.MINOR.PATCH` with an
+optional SemVer prerelease suffix; build metadata and numeric leading zeroes
+are rejected. Before compilation, the workflow checks the tag ref, event SHA,
+checkout HEAD and tag commit agree, rejects registered investigation
+instrumentation, requires successful Validate/doxguard/secret-scan runs for that
+exact source, and rejects missing or empty release notes in the corresponding
+CHANGELOG section. An already published tag cannot
+be rebuilt by the full-release path. Pending or not-yet-visible latest CI runs
+are polled for up to ten minutes inside a fifteen-minute planning job (each
+request has a sixty-second bound). A completed failed run is rejected
+immediately; an older green run cannot replace the latest result.
+
+The four native jobs reuse the existing candidate runner and target/toolchain
+contract with `--release-tag`. Each target compiles its two binaries once. The
+native runner derives the version, commit and timestamp from the tag commit;
+the assembler rejects mixed identities. Aggregation requires all four artifact
+names from the same source, workflow run and attempt. Rerun every native job
+after a failed attempt: successful jobs from older attempts cannot complete a
+partial matrix rerun.
+
+No npm token, cross-repository PAT or signing permission is supplied to native
+build or package jobs. Stable releases prepare deb/rpm payloads from the Linux
+canonical ZIP, build only the package containers, extract them, and compare both
+binaries, notices and evidence with their canonical inputs. Syft is pinned to
+the existing version and generates a separate SPDX document for each shipped
+ZIP/deb/rpm. A hash-bound distribution root describes the opaque payload even
+when binary metadata does not reveal dependencies. Syft observations and
+embedded Cargo build-input SPDX are distinct evidence; neither asserts complete
+runtime classification or license clearance. Artifact instrumentation checks
+run before signing or publication.
+
+One signing job signs the complete checksums with the existing pinned cosign
+version and tag-bound GitHub OIDC identity. A separate publisher verifies the
+signature and every asset before creating the GitHub Release with human release
+notes. Canonical publication precedes npm and pointer updates. Build receipts
+retain their unaccepted status: a compiled or packaged input is not by itself
+publication, installation, native voice, device or update/rollback acceptance.
+
+`workflow_dispatch` retains the `tag` and `npm_only` API: `npm_only: true`
+(the default) selects only npm; `false` selects the full release. The additional
+`channel` choice defaults to `legacy` and can explicitly select `full`, `npm`,
+`homebrew` or `winget`. Full dispatch must run **at the requested tag ref**, not
+an unrelated branch, so the signing identity is the same as a tag push. A
+channel retry may use newer redistribution scripts, but it downloads the
+published four canonical ZIPs, verifies the tag-bound checksum signature and
+every archive hash, and never invokes a native build. Current Rust npm staging
+requires the formal Rust notices/build-input layout; it does not republish old
+Go releases as Rust packages. npm package metadata, shims and README inputs are
+checked out from the release tag commit, even on a retry. Only the explicitly
+listed redistribution helpers are copied from the selected workflow source
+into that checkout; both source SHAs are recorded in the staging log. This keeps
+retry package bytes independent of later edits to npm package inputs.
+
+Normal and npm-only publication both use `stage-npm-from-release.mjs`. Only the
+last npm publication step receives `NPM_TOKEN`; the existing optional-token gate
+and npm provenance behavior are retained. No Trusted Publishing account setting
+is changed. Homebrew and winget are stable-only optional pointers and receive
+`PUBLISH_GITHUB_TOKEN` only in their final publication step. A missing optional
+credential is explicitly reported as skipped and does not undo the canonical
+release. Prereleases publish ZIPs and npm `next`; deb/rpm and stable pointer
+updates are explicitly skipped.
+
+Offline source/helper tests do not establish that the hosted matrix, signing,
+package tools, registry, tap, winget PR, or installed binaries have succeeded.
+Those require their own retained CI/publication/native acceptance evidence.
 
 ## Offline collection from an actual successful build
 
@@ -169,8 +242,8 @@ not proof these packages build on any of the four supported targets. The collect
 selects observed IDs to avoid treating unrelated Android/UEFI/GNU rows as compiled
 MSVC/Linux/macOS inputs. Missing evidence for an observed package stays a failure.
 
-Remaining shared changes belong to the integration owner: build/log/metadata CI
-wiring, runtime embedding and resources, channel staging/smoke and notice
-allowlists, receipt composition and immutable artifact handoff. No Go/Web,
-release/package scripts, shared Cargo/build/protocol paths or Git state are
-changed by this lane.
+The matrix records the 2026-10-05 source review. The formal orchestration above
+addresses source wiring and immutable handoff; its existence does not establish
+hosted build, signed distribution, channel publication, installation or native
+acceptance. Retain those receipts separately rather than treating this historical
+gap inventory or collector success as release approval.

@@ -20,9 +20,9 @@
 // Verify copied bytes with SHA256 and exit non-zero on any incomplete staging.
 
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync, copyFileSync, chmodSync, mkdirSync, rmSync, renameSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, chmodSync, mkdirSync, rmSync, renameSync, statSync, existsSync, lstatSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, isAbsolute } from 'node:path';
+import { dirname, join, isAbsolute, resolve, relative, sep } from 'node:path';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distArg = process.argv[2];
@@ -31,7 +31,7 @@ const npmDir = join(repoRoot, 'npm');
 
 // Artifact manifest OS/arch tokens -> { pkg, binName }.
 // Package names match the GitHub release archive suffixes.
-const TARGETS = {
+export const TARGETS = {
   'windows/amd64': { pkg: 'many-ai-cli-windows-x64', binName: 'many-ai-cli.exe' },
   'linux/amd64': { pkg: 'many-ai-cli-linux-x64', binName: 'many-ai-cli' },
   'darwin/amd64': { pkg: 'many-ai-cli-macos-intel', binName: 'many-ai-cli' },
@@ -53,12 +53,100 @@ function loadArtifacts() {
   return artifacts;
 }
 
-function binaryHash(path) {
+function binaryBytes(path) {
   const stat = statSync(path);
   if (!stat.isFile() || stat.size === 0) throw new Error(`Binary is not a nonempty regular file: ${path}`);
   // Reading the bytes also proves readability, rather than accepting an entry
   // whose path exists but cannot be copied by this process.
-  return createHash('sha256').update(readFileSync(path)).digest('hex');
+  const data = readFileSync(path);
+  if (!data.length) throw new Error('binary became empty during preflight');
+  return data;
+}
+
+// All bytes and destinations are checked before replacing any package payload.
+// Backups also restore existing payloads if a filesystem error interrupts commit.
+export function stagePayloads(items, boundary = npmDir) {
+  const root = resolve(boundary);
+  const observe = path => {
+    try { return lstatSync(path); } catch (error) {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    }
+  };
+  const directory = path => {
+    const info = observe(path);
+    if (info && (info.isSymbolicLink() || !info.isDirectory())) {
+      throw new Error('npm output directory links/non-directories are forbidden');
+    }
+  };
+  // Begin at npm/, allowing the repository's legitimate worktree junction above
+  // this boundary. Check every destination before creating directories or temps.
+  directory(root);
+  const seen = new Set();
+  for (const item of items) {
+    const destination = resolve(item.dst);
+    const inside = relative(root, destination);
+    if (!inside || inside === '..' || inside.startsWith('..' + sep) || isAbsolute(inside)) {
+      throw new Error('npm output must stay inside the declared output root');
+    }
+    if (seen.has(destination)) throw new Error('duplicate npm output path');
+    seen.add(destination);
+    let ancestor = root;
+    for (const part of inside.split(sep).slice(0, -1)) {
+      ancestor = join(ancestor, part);
+      directory(ancestor);
+    }
+    if (item.data !== null && (!Buffer.isBuffer(item.data) || !item.data.length)) {
+      throw new Error('npm payload must contain nonempty bytes');
+    }
+    const info = observe(destination);
+    if (info && (!info.isFile() || info.isSymbolicLink())) {
+      throw new Error('npm output must be a regular file');
+    }
+  }
+  const id = randomUUID();
+  try {
+    for (const item of items) {
+      mkdirSync(dirname(item.dst), { recursive: true });
+      if (item.data !== null) {
+        item.temp = `${item.dst}.stage-${id}`;
+        writeFileSync(item.temp, item.data, { flag: 'wx' });
+        if (item.exec) chmodSync(item.temp, 0o755);
+        if (!readFileSync(item.temp).equals(item.data)) throw new Error('temporary npm payload differs');
+      }
+    }
+    for (const item of items) {
+      if (existsSync(item.dst)) {
+        item.backup = `${item.dst}.backup-${id}`;
+        renameSync(item.dst, item.backup);
+      }
+      if (item.data !== null) {
+        renameSync(item.temp, item.dst);
+        item.installed = true;
+      }
+    }
+    for (const item of items) {
+      if (item.data !== null && !readFileSync(item.dst).equals(item.data)) throw new Error('staged npm payload differs');
+    }
+  } catch (error) {
+    let rollbackError;
+    for (const item of [...items].reverse()) {
+      try {
+        if (item.installed) rmSync(item.dst, { force: true });
+        if (item.backup) renameSync(item.backup, item.dst);
+      } catch (failure) {
+        item.keepBackup = true;
+        rollbackError ??= failure;
+      }
+    }
+    if (rollbackError) throw new AggregateError([error, rollbackError], 'npm staging failed; an original payload backup was retained for recovery');
+    throw error;
+  } finally {
+    for (const item of items) {
+      if (item.temp) rmSync(item.temp, { force: true });
+      if (item.backup && !item.keepBackup) rmSync(item.backup, { force: true });
+    }
+  }
 }
 
 function main() {
@@ -86,9 +174,10 @@ function main() {
       }
       const base = art.pathBase === 'manifest' ? distDir : repoRoot;
       const src = isAbsolute(art.path) ? art.path : join(base, art.path);
-      const sha256 = binaryHash(src);
+      const data = binaryBytes(src);
+      const sha256 = createHash('sha256').update(data).digest('hex');
       const binDir = join(npmDir, pkg, 'bin');
-      pending.push({ target, pkg, binName, src, sha256, binDir, dst: join(binDir, binName), goos });
+      pending.push({ target, pkg, binName, data, sha256, binDir, dst: join(binDir, binName), goos });
     } catch (err) {
       errors.push(`${target}: ${err.message}`);
     }
@@ -98,42 +187,21 @@ function main() {
     throw new Error(`Preflight failed; npm outputs were not changed:\n${errors.join('\n')}`);
   }
 
-  const stagingID = randomUUID();
-  try {
-    // Keep existing binaries until every incoming file has been copied and
-    // verified. Temporary names cannot be included by package.json files[].
-    for (const item of pending) {
-      mkdirSync(item.binDir, { recursive: true });
-      item.temp = join(item.binDir, `${item.binName}.stage-${stagingID}`);
-      copyFileSync(item.src, item.temp);
-      if (item.goos !== 'windows') chmodSync(item.temp, 0o755);
-      if (binaryHash(item.temp) !== item.sha256) throw new Error(`${item.target}: copied bytes differ from source`);
-    }
-    for (const item of pending) {
-      // Both aliases are known package output filenames; remove no other files.
-      for (const stale of ['many-ai-cli', 'many-ai-cli.exe']) {
-        rmSync(join(item.binDir, stale), { force: true });
-      }
-      renameSync(item.temp, item.dst);
-    }
-    // Never report success while a destination contains stale or changed bytes.
-    for (const item of pending) {
-      if (binaryHash(item.dst) !== item.sha256) throw new Error(`${item.target}: staged bytes differ from source`);
-    }
-    for (const item of pending) {
-      console.log(`staged ${item.target} -> npm/${item.pkg}/bin/${item.binName} (SHA256 ${item.sha256})`);
-    }
-    console.log('\nall four platform binaries staged and byte-verified.');
-  } finally {
-    for (const item of pending) {
-      if (item.temp) rmSync(item.temp, { force: true });
-    }
+  stagePayloads(pending.flatMap(item => [
+    { dst: item.dst, data: item.data, exec: item.goos !== 'windows' },
+    { dst: join(item.binDir, item.binName.endsWith('.exe') ? 'many-ai-cli' : 'many-ai-cli.exe'), data: null },
+  ]));
+  for (const item of pending) {
+    console.log(`staged ${item.target} -> npm/${item.pkg}/bin/${item.binName} (SHA256 ${item.sha256})`);
   }
+  console.log('\nall four platform binaries staged and byte-verified.');
 }
 
-try {
-  main();
-} catch (err) {
-  console.error(`npm staging failed: ${err.message}\nDo not publish these packages; correct the inputs and rerun staging.`);
-  process.exitCode = 1;
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+  try {
+    main();
+  } catch (err) {
+    console.error(`npm staging failed: ${err.message}\nDo not publish these packages; correct the inputs and rerun staging.`);
+    process.exitCode = 1;
+  }
 }

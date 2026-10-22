@@ -19,6 +19,7 @@ import { accessSync, constants, copyFileSync, mkdtempSync, rmSync, mkdirSync, st
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { expectedFiles, npmCommand } from './publish-npm.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const npmDir = join(repoRoot, 'npm');
@@ -43,12 +44,9 @@ function check(name, fn) {
 }
 
 function packFileList(pkgDir) {
-  const out = execFileSync('npm', ['pack', '--dry-run', '--json'], {
-    cwd: join(npmDir, pkgDir),
-    encoding: 'utf8',
-    shell: process.platform === 'win32',
-  });
-  const meta = JSON.parse(out);
+  const result = npmCommand(['pack', '--dry-run', '--ignore-scripts', '--offline', '--json'], join(npmDir, pkgDir));
+  if (result.error || result.status !== 0) throw new Error('offline npm pack failed');
+  const meta = JSON.parse(result.stdout);
   return (meta[0]?.files ?? []).map((f) => f.path).sort();
 }
 
@@ -70,15 +68,23 @@ function requireBinary(pkg, binName) {
   return binary;
 }
 
-console.log('pack content checks:');
-check('root package ships only shim + readme + package.json', () => {
-  assertSameSet(packFileList('many-ai-cli'), ['README.md', 'bin/many-ai-cli.mjs', 'package.json'], 'root');
+function requirePayload(pkg) {
+  for (const file of expectedFiles(pkg)) {
+    const stat = statSync(join(npmDir, pkg, file));
+    if (!stat.isFile() || stat.size === 0) throw new Error(`${pkg}: missing or empty payload ${file}`);
+  }
+}
+console.log('pack content checks (Cargo input evidence is not a distribution SBOM):');
+check('root package ships shim, metadata, notices and all target input evidence', () => {
+  requirePayload('many-ai-cli');
+  assertSameSet(packFileList('many-ai-cli'), expectedFiles('many-ai-cli'), 'root');
 });
 
 for (const { pkg, binName } of Object.values(PLATFORM_TARGETS)) {
-  check(`${pkg} ships only its binary + package.json`, () => {
+  check(`${pkg} ships its main binary, metadata, notices and target input evidence`, () => {
     requireBinary(pkg, binName);
-    assertSameSet(packFileList(pkg), ['package.json', `bin/${binName}`], pkg);
+    requirePayload(pkg);
+    assertSameSet(packFileList(pkg), expectedFiles(pkg), pkg);
   });
 }
 

@@ -1,73 +1,52 @@
 #!/usr/bin/env node
-// 版数の単一ソース（git タグ）が配線されたままかを検査する。
-//
-// リポジトリ内には版数を持つファイルが 3 系統あるが、どれも CI がタグから
-// 上書きするので「古いままなのが正常」である。実際 v0.7.0 の出荷時点で
-// npm/many-ai-cli/package.json は 0.3.1、winres/winres.json は 0.3.1.0 の
-// ままだったが、配布物はすべて 0.7.0 だった。
-//
-// この設計は「上書きする側の配線」が消えた瞬間に静かに壊れる。壊れても
-// リポジトリ内のファイルは何も変わらないので、次のリリースで 0.3.1 と
-// 名乗る成果物が出るまで誰も気づかない。だから配線そのものを検査する。
-//
-// 逆に「ファイル内の版数がタグと一致するか」は検査しない。一致していない
-// ことが正常だからで、そこを揃えにいくと二重管理に戻る。
-//
-// exit 0 = 配線あり / exit 1 = ブロック。
-
-import { readFileSync, existsSync } from 'node:fs';
+// Tags are the version source. Stored Cargo/npm/winres versions may remain old.
+// Check the *writers*, rather than comparing stored versions with today's tag.
+// The frozen Go release wiring is no longer evidence for a Rust release.
+// This source guard complements actual runner/resource/package tests; it does
+// not prove a binary's stamped version or a hosted release has succeeded.
+import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-
-// 2026-10-19 に本線を Rust 版へ移し、Go 版（.goreleaser.yaml を含む）は go/ に凍結した。
-// release.yml はまだ Go の配布経路のままで、Rust の配布へ作り直すまでは動かない
-// （docs/local/plan_rust-release-preparation.md）。作り直すときは、下の go/.goreleaser.yaml の
-// 2 件を「タグから MANY_AI_BUILD_VERSION を渡して rust/build.rs が焼く」配線の検査へ置き換える。
-/** @type {{file: string, needle: RegExp, what: string}[]} */
-const WIRING = [
-  {
-    file: '.github/workflows/release.yml',
-    needle: /scripts\/sync-npm-version\.mjs/,
-    what: 'npm/*/package.json の version をタグから焼く配線',
-  },
-  {
-    file: 'go/.goreleaser.yaml',
-    needle: /go-winres[\s\S]{0,200}?--file-version=\{\{\s*\.Version\s*\}\}/,
-    what: 'winres/*.json の file_version をタグから焼く before hook',
-  },
-  {
-    file: 'go/.goreleaser.yaml',
-    needle: /-X\s+main\.version=\{\{\s*\.Version\s*\}\}/,
-    what: 'バイナリの version 文字列を焼く ldflags',
-  },
+export const WIRING = [
+  ['.github/workflows/release.yml', /scripts\/rust-candidate-ci\.py[^\r\n]+--release-tag\s+(?:"\$RELEASE_TAG"|\$env:RELEASE_TAG)/, 'formal native runner receives the release tag'],
+  ['.github/workflows/release.yml', /scripts\/sync-npm-version\.mjs\s+"\$RELEASE_TAG"/, 'npm package versions receive the same tag'],
+  ['scripts/rust-candidate-ci.py', /parser\.add_argument\(["']--release-tag["']/, 'native CLI accepts explicit formal mode'],
+  ['scripts/rust-candidate-ci.py', /version\s*=\s*release_version\(release_tag\)/, 'formal version derives from the validated tag'],
+  ['scripts/rust-candidate-ci.py', /return\s+tag\[1:\]/, 'version drops only the tag prefix'],
+  ['scripts/rust-candidate-ci.py', /["']MANY_AI_BUILD_VERSION["']:\s*stamp\[["']version["']\]/, 'Cargo version uses the formal stamp'],
+  ['scripts/rust-candidate-ci.py', /["']MANY_AI_BUILD_COMMIT["']:\s*stamp\[["']build_commit["']\]/, 'Cargo commit uses the formal stamp'],
+  ['scripts/rust-candidate-ci.py', /["']MANY_AI_BUILD_TIME["']:\s*stamp\[["']build_time["']\]/, 'Cargo timestamp uses the formal stamp'],
+  ['scripts/rust-candidate-ci.py', /prepare_windows_resources\(resource_dir,\s*stamp\[["']version["']\],\s*env\)/, 'Windows resources use that same version'],
+  ['scripts/rust-candidate-ci.py', /VALUE\s+"FileVersion",\s*"\{version\}/, 'Windows file version embeds the formal version'],
+  ['scripts/rust-candidate-ci.py', /VALUE\s+"ProductVersion",\s*"\{version\}/, 'Windows product version embeds the formal version'],
+  ['rust/build.rs', /link_windows_release_resources\(\);/, 'build script calls the Windows resource linker'],
+  ['rust/build.rs', /cargo:rustc-link-arg-bin=\{binary\}/, 'Windows resources are linked per binary'],
+  ...['MANY_AI_BUILD_VERSION', 'MANY_AI_BUILD_COMMIT', 'MANY_AI_BUILD_TIME'].map((name) => ['rust/build.rs', new RegExp(`"${name}"`), `build script forwards ${name}`]),
+  ['rust/build.rs', /cargo:rustc-env=\{name\}=\{\}/, 'build script forwards stamp values into Rust compilation'],
 ];
 
-const problems = [];
-
-for (const { file, needle, what } of WIRING) {
-  const path = join(repoRoot, file);
-  if (!existsSync(path)) {
-    problems.push(`${file} が見つからない（${what}）`);
-    continue;
+export function checkVersionWiring(read = (file) => readFileSync(join(repoRoot, file), 'utf8')) {
+  const problems = [];
+  const cache = new Map();
+  for (const [file, needle, what] of WIRING) {
+    if (!cache.has(file)) {
+      try { cache.set(file, read(file)); }
+      catch { cache.set(file, null); }
+    }
+    const source = cache.get(file);
+    if (source === null || !needle.test(source)) problems.push(`${file}: ${what}`);
   }
-  const text = readFileSync(path, 'utf8');
-  if (!needle.test(text)) {
-    problems.push(
-      `${file} に ${what} が見当たらない。\n` +
-        `    版数はタグが単一ソースで、この配線が唯一の反映経路。消すと次のリリースで\n` +
-        `    古い版数を名乗る成果物が出るが、リポジトリ内のファイルは何も変わらないので\n` +
-        `    出荷するまで気づけない。配線を意図的に変えたなら本スクリプトも同時に直すこと。`,
-    );
-  }
+  return problems;
 }
 
-if (problems.length > 0) {
-  console.error('NG: 版数の単一ソースの配線が壊れている\n');
-  for (const p of problems) console.error(`  - ${p}`);
-  console.error('\n正本: CLAUDE.md「設計原則の索引」の版数の行と本スクリプトの冒頭コメント。');
-  process.exit(1);
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const problems = checkVersionWiring();
+  if (problems.length) {
+    console.error('NG: tag-derived Rust version wiring is broken\n' + problems.map((p) => `  - ${p}`).join('\n'));
+    process.exitCode = 1;
+  } else {
+    console.log(`OK: tag remains the version source (${WIRING.length} Rust/npm/resource wiring checks)`);
+  }
 }
-
-console.log(`OK: 版数はタグが単一ソースのまま（配線 ${WIRING.length} 件を確認）`);

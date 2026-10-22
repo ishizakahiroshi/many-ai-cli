@@ -31,6 +31,7 @@ fn main() {
     let manifest = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     prepare_native_windows_test_fixture(&manifest);
     let root = manifest.parent().unwrap();
+    link_windows_release_resources();
     let web = root.join("web/dist");
     if !web.join("index.html").is_file() {
         panic!(
@@ -99,6 +100,30 @@ fn main() {
             "cargo:rustc-env={name}={}",
             env::var(name).unwrap_or_else(|_| default.into())
         );
+    }
+}
+
+fn link_windows_release_resources() {
+    println!("cargo:rerun-if-env-changed=MANY_AI_BUILD_KIND");
+    println!("cargo:rerun-if-env-changed=MANY_AI_WINDOWS_RESOURCE_DIR");
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows")
+        || env::var("MANY_AI_BUILD_KIND").as_deref() != Ok("release")
+    {
+        return;
+    }
+    let directory = PathBuf::from(
+        env::var_os("MANY_AI_WINDOWS_RESOURCE_DIR")
+            .expect("release Windows builds require prepared SDK version/icon resources"),
+    );
+    assert!(
+        directory.is_absolute(),
+        "resource directory must be absolute"
+    );
+    for binary in ["many-ai-cli", "many-ai-cli-launcher"] {
+        let resource = directory.join(format!("{binary}.res"));
+        assert!(resource.is_file(), "release Windows resource is missing");
+        println!("cargo:rerun-if-changed={}", resource.display());
+        println!("cargo:rustc-link-arg-bin={binary}={}", resource.display());
     }
 }
 

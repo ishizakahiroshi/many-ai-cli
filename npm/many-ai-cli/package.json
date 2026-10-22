@@ -30,7 +30,10 @@
   },
   "files": [
     "bin/many-ai-cli.mjs",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "build-inputs/"
   ],
   "optionalDependencies": {
     "many-ai-cli-windows-x64": "0.3.1",
