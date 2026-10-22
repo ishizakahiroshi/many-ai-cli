@@ -80,7 +80,8 @@ impl SessionEngine {
                 }));
         }
         let eligible = !s.usage_probe
-            && !s.custom_provider
+            && (crate::config::BUILTIN_PROVIDER_IDS.contains(&s.snapshot.provider.as_str())
+                || s.custom_provider)
             && s.snapshot.provider != "shell"
             && !terminal(&s.snapshot.state)
             && s.resize_debounce.is_none_or(|until| now > until);
@@ -854,3 +855,196 @@ mod output_model_tests;
 #[cfg(test)]
 #[path = "stall_tests.rs"]
 mod stall_tests;
+
+#[cfg(test)]
+mod custom_approval_tests {
+    use super::{
+        observer_tests::{Io, now},
+        *,
+    };
+    use crate::{
+        application::approval_patterns::ApprovalPatterns,
+        config::{Config, ConfigStore, CustomProvider, RuntimePaths},
+        terminal::journal::JournalOptions,
+    };
+
+    const NATIVE_PROMPT: &str =
+        "Run synthetic command\r\n❯ 1. Allow once\r\n2. Always allow in this workspace\r\n3. Reject\r\n";
+
+    async fn fixture(provider: &str) -> (tempfile::TempDir, Arc<SessionEngine>, SessionBinding) {
+        let root = tempfile::tempdir().unwrap();
+        let runtime = root.path().join("trial");
+        std::fs::create_dir(&runtime).unwrap();
+        let paths = RuntimePaths::trial(&runtime, 49689, &root.path().join("installed")).unwrap();
+        let core = Arc::new(SessionEngine::new(
+            EngineOptions {
+                custom_providers: ["muse".into()].into_iter().collect(),
+                branch_lookup: Arc::new(|_| Box::pin(async { String::new() })),
+                ..EngineOptions::default()
+            },
+            Arc::new(SessionJournal::new(
+                paths.clone(),
+                None,
+                JournalOptions::default(),
+            )),
+            Arc::new(Io),
+            Arc::new(Io),
+            Arc::new(Io),
+            CoreEventBus::new(64).unwrap(),
+        ));
+        let mut config = Config {
+            custom_providers: vec![CustomProvider {
+                id: "muse".into(),
+                command: "synthetic.exe".into(),
+                ..CustomProvider::default()
+            }],
+            ..Config::default()
+        };
+        config.approval_profiles.common = "custom".into();
+        let owner = ApprovalPatterns::new(
+            &paths,
+            Arc::new(ConfigStore::new(paths.clone(), config).unwrap()),
+            Arc::downgrade(&core),
+            Arc::new(|_| panic!("synthetic patterns must remain readable")),
+        )
+        .unwrap();
+        owner.sync().unwrap();
+        owner
+            .write_custom("common", &["Synthetic shared gate".into()])
+            .unwrap();
+        owner
+            .write_custom(
+                "muse",
+                &[
+                    "Allow once".into(),
+                    "Always allow in this workspace".into(),
+                    "Reject".into(),
+                ],
+            )
+            .unwrap();
+        let binding = core
+            .register(
+                RegisterRequest {
+                    message: proto::Message {
+                        provider: provider.into(),
+                        cwd: runtime.to_string_lossy().into_owned(),
+                        pid: 7,
+                        cols: 120,
+                        rows: 30,
+                        ..proto::Message::default()
+                    },
+                    spawn_proof: None,
+                },
+                WrapperConnectionId(1),
+                now(),
+            )
+            .await
+            .unwrap()
+            .binding;
+        (root, core, binding)
+    }
+
+    fn output(core: &SessionEngine, binding: SessionBinding, prompt: &str) -> CoreEffects {
+        core.observe_output(
+            binding,
+            OutputChunk {
+                bytes: prompt.as_bytes().to_vec(),
+                total_pty_bytes: 0,
+            },
+            now(),
+        )
+        .unwrap()
+    }
+
+    fn marker_prompt() -> String {
+        format!(
+            "{}\r\nSynthetic action (Y:1/N:0)\r\n{}\r\n",
+            marker::OPEN,
+            marker::CLOSE
+        )
+    }
+
+    #[tokio::test]
+    async fn registered_custom_provider_detects_its_saved_options_and_common_phrases() {
+        for prompt in [NATIVE_PROMPT, "Synthetic shared gate\r\n❯ 1. Yes\r\n2. No\r\n"] {
+            let (_root, core, binding) = fixture("muse").await;
+            let effects = output(&core, binding, prompt);
+            assert!(effects.0.iter().any(|effect| matches!(
+                effect,
+                CoreEffect::Notify(CoreEvent::ApprovalOpened { session, record })
+                    if *session == binding.session && record.data().origin == "native"
+            )));
+            let details = core.details(binding.session).unwrap();
+            assert!(details.snapshot.activity.awaiting_approval);
+            assert_eq!(details.approval.record.unwrap().data().source, "go_vt");
+        }
+    }
+
+    #[tokio::test]
+    async fn registered_custom_provider_extracts_approval_markers() {
+        let (_root, core, binding) = fixture("muse").await;
+        let effects = output(&core, binding, &marker_prompt());
+        assert!(effects.0.iter().any(|effect| matches!(
+            effect,
+            CoreEffect::Notify(CoreEvent::ApprovalOpened { session, record })
+                if *session == binding.session && record.data().origin == "marker"
+        )));
+    }
+
+    #[tokio::test]
+    async fn shell_and_unregistered_providers_do_not_detect_native_or_marker_approvals() {
+        for provider in ["shell", "unregistered"] {
+            for prompt in [NATIVE_PROMPT.to_owned(), marker_prompt()] {
+                let (_root, core, binding) = fixture(provider).await;
+                // Even a matching cache entry does not register a provider.
+                core.set_approval_phrases(BTreeMap::from([
+                    (provider.into(), vec!["allow once".into()]),
+                    ("common".into(), vec!["allow once".into()]),
+                ]));
+                let effects = output(&core, binding, &prompt);
+                assert!(!effects.0.iter().any(|effect| matches!(
+                    effect,
+                    CoreEffect::Notify(CoreEvent::ApprovalOpened { .. })
+                )));
+                assert!(
+                    core.details(binding.session)
+                        .unwrap()
+                        .approval
+                        .record
+                        .is_none()
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn custom_provider_detection_retains_usage_terminal_and_resize_guards() {
+        for guard in ["usage", "terminal", "resize"] {
+            for prompt in [NATIVE_PROMPT.to_owned(), marker_prompt()] {
+                let (_root, core, binding) = fixture("muse").await;
+                {
+                    let mut state = lock(&core.state);
+                    let session = state.session(binding).unwrap();
+                    match guard {
+                        "usage" => session.usage_probe = true,
+                        "terminal" => session.snapshot.state = "completed".into(),
+                        "resize" => session.resize_debounce = Some(now() + Duration::from_secs(1)),
+                        _ => unreachable!(),
+                    }
+                }
+                let effects = output(&core, binding, &prompt);
+                assert!(!effects.0.iter().any(|effect| matches!(
+                    effect,
+                    CoreEffect::Notify(CoreEvent::ApprovalOpened { .. })
+                )));
+                assert!(
+                    core.details(binding.session)
+                        .unwrap()
+                        .approval
+                        .record
+                        .is_none()
+                );
+            }
+        }
+    }
+}

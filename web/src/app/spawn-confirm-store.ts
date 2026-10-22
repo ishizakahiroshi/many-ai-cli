@@ -10,6 +10,8 @@
 //
 // plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C3。
 
+import { setOrchestrationCustomProviders } from './orchestration-roles.js';
+
 // 子が実際に起動する承認設定。Hub 側で権限の段の表を通して作ったものが
 // provider × 段ごとに入っている（internal/hub/child_permission.go と
 // internal/hub/orchestration.go の childApprovalPreviewTiers）。
@@ -143,6 +145,8 @@ export function setLaunchOptionChoices(info: any): void {
   childPermissionDefault = defaultTier === 'attended' || defaultTier === 'bounded' || defaultTier === 'full'
     ? defaultTier
     : 'full';
+  // Notify open provider selectors only after the other launch metadata is ready.
+  setOrchestrationCustomProviders(info?.custom_providers);
 }
 
 // その役割で覚えている段。覚えていなければ空文字（＝指定なし）。

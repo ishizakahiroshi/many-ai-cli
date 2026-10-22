@@ -448,42 +448,11 @@ impl OrdinarySpawnService {
             spec.registration_metadata.orchestration = owner
                 .reserve_conductor(&mut spec.label, roles.as_ref(), now)
                 .map_err(|error| match error {
-                    SessionError::InvalidRequest(detail)
-                        if detail == "invalid orchestration role provider" =>
-                    {
-                        // The role that was refused (the first, in the order the
-                        // reservation checks them, whose provider is not an
-                        // orchestration provider) says why when its provider is a
-                        // custom provider whose setting was left out. Another
-                        // role naming a left-out id is not what failed.
-                        let left_out = roles
-                            .iter()
-                            .flatten()
-                            .filter_map(|(_, settings)| settings.as_ref())
-                            .find(|settings| {
-                                !settings.provider.is_empty()
-                                    && !crate::orchestration::child_options::ORCHESTRATION_PROVIDERS
-                                        .contains(&settings.provider.as_str())
-                            })
-                            .and_then(|failed| {
-                                super::left_out_provider::role_refusal(
-                                    &self.config,
-                                    &failed.provider,
-                                    crate::orchestration::child_options::ORCHESTRATION_PROVIDERS,
-                                )
-                            });
-                        match left_out {
-                            Some(reason) => SpawnError {
-                                status: 400,
-                                code: "bad_request",
-                                detail: reason.into(),
-                            },
-                            None => SpawnError::bad("invalid orchestration role provider"),
-                        }
-                    }
-                    SessionError::InvalidRequest(_) => {
-                        SpawnError::bad("invalid orchestration role model")
-                    }
+                    SessionError::InvalidRequest(detail) => SpawnError {
+                        status: 400,
+                        code: "bad_request",
+                        detail: detail.into(),
+                    },
                     _ => unavailable("conductor reservation unavailable"),
                 })?;
             spec.registration_metadata.spawned_at = Some(now);

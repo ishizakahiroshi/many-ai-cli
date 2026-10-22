@@ -3,6 +3,7 @@
 //! direct verified UI launches use attended defaults when interactive.
 use crate::{
     config::{self, Config, ConfigError, OrchestrationConfig},
+    profile::registry::Registry,
     proto::{
         ChildApproval,
         core::{ChildSpawnRequest, ResolvedChildSpawn, VerifiedSpawnOrigin},
@@ -19,6 +20,36 @@ pub const ORCHESTRATION_PROVIDERS: &[&str] = &[
     "grok",
     "command-code",
 ];
+
+/// Match ordinary spawn against the current effective registry, including
+/// custom definitions. Configuration membership alone does not make an id usable.
+pub fn provider_is_usable(registry: &Registry, provider: &str) -> bool {
+    provider != "shell"
+        && registry.lookup(provider).is_some_and(|entry| {
+            entry.definition.enabled.unwrap_or(true) && entry.definition.launch.is_some()
+        })
+}
+
+/// Match wrapper launch: effective registry metadata takes precedence, with
+/// built-in/config definitions retained as the existing fallback.
+pub fn provider_supports_headless(registry: &Registry, provider: &str, cfg: &Config) -> bool {
+    registry.lookup(provider).is_some_and(|entry| {
+        entry
+            .definition
+            .launch
+            .as_ref()
+            .is_some_and(|launch| launch.headless.is_some())
+    }) || config::headless_def_for(provider, Some(cfg)).is_some()
+}
+
+pub fn usable_provider_ids(registry: &Registry) -> Vec<String> {
+    registry
+        .list()
+        .into_iter()
+        .filter(|entry| provider_is_usable(registry, &entry.id))
+        .map(|entry| entry.id)
+        .collect()
+}
 
 #[derive(Clone, Copy)]
 struct Fields {
@@ -107,11 +138,6 @@ const TABLE: &[Row] = &[
         full: EMPTY,
     },
 ];
-const FALLBACK: Row = Row {
-    provider: "",
-    bounded: None,
-    full: BYPASS,
-};
 
 fn launch_origin(origin: &VerifiedSpawnOrigin) -> &'static str {
     match origin {
@@ -158,10 +184,12 @@ pub fn permission_preset_approval(
     requested: &str,
     cfg: &OrchestrationConfig,
 ) -> ChildApproval {
-    let row = TABLE
-        .iter()
-        .find(|row| row.provider == provider.trim())
-        .unwrap_or(&FALLBACK);
+    let Some(row) = TABLE.iter().find(|row| row.provider == provider.trim()) else {
+        // The wrapper does not translate built-in permission flags for custom
+        // CLIs. Their configured command may already bypass approvals, so even
+        // an attended tier would make a promise about policy we do not control.
+        return ChildApproval::default();
+    };
     let (fields, tier, fallback_from) = match requested.trim() {
         config::PERMISSION_PRESET_ATTENDED => (EMPTY, config::PERMISSION_PRESET_ATTENDED, ""),
         config::PERMISSION_PRESET_BOUNDED => match row.bounded {
@@ -193,24 +221,26 @@ fn execution_mode(
     body: &ChildSpawnRequest,
     origin: &VerifiedSpawnOrigin,
     cfg: &Config,
+    registry: &Registry,
 ) -> Result<String, ConfigError> {
-    execution_mode_for_origin(body, launch_origin(origin), cfg)
+    execution_mode_for_origin(
+        body,
+        launch_origin(origin),
+        cfg,
+        provider_supports_headless(registry, &body.provider, cfg),
+    )
 }
 fn execution_mode_for_origin(
     body: &ChildSpawnRequest,
     origin: &str,
     cfg: &Config,
+    headless_capable: bool,
 ) -> Result<String, ConfigError> {
     let mut requested = config::normalize_execution_mode(&body.execution_mode);
     if requested.is_empty() {
         requested = cfg.orchestration.child_execution_mode_default();
     }
-    config::resolve_execution_mode(
-        &requested,
-        config::headless_def_for(&body.provider, Some(cfg)).is_some(),
-        origin,
-        false,
-    )
+    config::resolve_execution_mode(&requested, headless_capable, origin, false)
 }
 fn fill_request(body: &mut ChildSpawnRequest, permission: &ChildApproval) {
     if body.permission_mode.is_empty() {
@@ -232,8 +262,9 @@ fn fill_request(body: &mut ChildSpawnRequest, permission: &ChildApproval) {
 pub fn prepare(
     mut body: ResolvedChildSpawn,
     cfg: &Config,
+    registry: &Registry,
 ) -> Result<ResolvedChildSpawn, ConfigError> {
-    let mode = execution_mode(body.request(), body.origin(), cfg)?;
+    let mode = execution_mode(body.request(), body.origin(), cfg, registry)?;
     body.request_mut().execution_mode = mode;
     let permission = resolve_permission(
         &body.request().provider,
@@ -242,6 +273,13 @@ pub fn prepare(
         body.origin(),
         &cfg.orchestration,
     );
+    if !TABLE.iter().any(|row| row.provider == body.request().provider) {
+        let request = body.request_mut();
+        request.permission_mode.clear();
+        request.sandbox.clear();
+        request.ask_for_approval.clear();
+        request.risk_confirmed = false;
+    }
     fill_request(body.request_mut(), &permission);
     body.fill_allowed_tools_from_config(permission.allowed_tools);
     Ok(body)
@@ -277,7 +315,9 @@ fn preview_for(
     allowed_tools: &[String],
     cfg: &Config,
 ) -> BTreeMap<String, BTreeMap<String, ChildApproval>> {
+    let custom = config::effective_custom_providers(&cfg.custom_providers);
     let mut providers: Vec<&str> = ORCHESTRATION_PROVIDERS.to_vec();
+    providers.extend(custom.iter().map(|provider| provider.id.as_str()));
     let requested_provider = body.provider.trim();
     if !requested_provider.is_empty() && !providers.contains(&requested_provider) {
         providers.push(requested_provider);
@@ -292,8 +332,13 @@ fn preview_for(
             if !tier.is_empty() {
                 request.permission_preset.clone_from(&tier);
             }
-            request.execution_mode = execution_mode_for_origin(&request, origin, cfg)
-                .unwrap_or_else(|_| config::normalize_execution_mode(&body.execution_mode));
+            request.execution_mode = execution_mode_for_origin(
+                &request,
+                origin,
+                cfg,
+                config::headless_def_for(provider, Some(cfg)).is_some(),
+            )
+            .unwrap_or_else(|_| config::normalize_execution_mode(&body.execution_mode));
             let mut permission = resolve_permission_for_origin(
                 provider,
                 &request.permission_preset,
@@ -301,6 +346,12 @@ fn preview_for(
                 origin,
                 &cfg.orchestration,
             );
+            if !TABLE.iter().any(|row| row.provider == *provider) {
+                out.entry((*provider).into())
+                    .or_default()
+                    .insert(tier.clone(), permission);
+                continue;
+            }
             fill_request(&mut request, &permission);
             permission.permission_mode = request.permission_mode;
             permission.sandbox = request.sandbox;
@@ -395,9 +446,16 @@ mod tests {
                 },
                 ..Default::default()
             };
+            let expected_approval = if text(input, "provider") == "synthetic-custom" {
+                // C4: the old fallback claimed bypass flags that the custom
+                // wrapper never applies. Preserve the oracle for built-ins.
+                serde_json::json!({})
+            } else {
+                case["approval"].clone()
+            };
             let body = request(input);
             let preview = preview_tiers(&body, &cfg);
-            let prepared = prepare(body, &cfg);
+            let prepared = prepare(body, &cfg, &Registry::default());
             if let Some(expected) = case["error"].as_str() {
                 match prepared {
                     Err(error) => assert_eq!(error.to_string(), expected, "{name}"),
@@ -426,12 +484,12 @@ mod tests {
             actual.allowed_tools = prepared.grants().allowed_tools().to_vec();
             assert_eq!(
                 serde_json::to_value(&actual).unwrap(),
-                case["approval"],
+                expected_approval,
                 "prepared {name}"
             );
             assert_eq!(
                 serde_json::to_value(&preview[&body.provider][""]).unwrap(),
-                case["approval"],
+                expected_approval,
                 "disclosed {name}"
             );
         }
@@ -449,6 +507,7 @@ mod tests {
         let direct = prepare(
             request(&serde_json::json!({"provider":"claude","origin":"ui"})),
             &cfg,
+            &Registry::default(),
         )
         .unwrap();
         assert_eq!(direct.request().execution_mode, "interactive");
@@ -456,6 +515,7 @@ mod tests {
         let confirmed = prepare(
             request(&serde_json::json!({"provider":"claude","confirmed":true})),
             &cfg,
+            &Registry::default(),
         )
         .unwrap();
         assert_eq!(confirmed.request().execution_mode, "headless");
@@ -490,7 +550,7 @@ mod tests {
                     VerifiedConfirmationRequest::after_server_authentication(AuthEpoch(7)),
                 )
                 .unwrap();
-            let prepared = prepare(confirmed, &Config::default()).unwrap();
+            let prepared = prepare(confirmed, &Config::default(), &Registry::default()).unwrap();
             assert!(prepared.grants().grant_folder_trust());
             if tools.is_empty() {
                 assert!(
@@ -505,6 +565,120 @@ mod tests {
             let wire = serde_json::to_value(prepared.request()).unwrap();
             assert!(wire.get("allowed_tools").is_none());
             assert!(wire.get("grant_folder_trust").is_none());
+        }
+    }
+
+
+    fn custom(id: &str, command: &str) -> config::CustomProvider {
+        config::CustomProvider {
+            id: id.into(),
+            command: command.into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn live_registry_requires_enabled_launch_and_keeps_exact_custom_ids() {
+        let (mut definitions, _) = config::provider_definitions_for_app(&[
+            custom("synthetic-custom", "synthetic-cli"),
+            custom("dropped", "synthetic-cli \"unclosed"),
+            custom("disabled", "synthetic-cli"),
+            custom("no-launch", "synthetic-cli"),
+        ]);
+        definitions.iter_mut().for_each(|definition| match definition.id.as_str() {
+            "disabled" => definition.enabled = Some(false),
+            "no-launch" => definition.launch = None,
+            _ => {}
+        });
+        let registry = Registry::build(
+            crate::proto::provider::Layers {
+                embedded: Some(crate::profile::registry::embedded_definitions().unwrap()),
+                legacy: Some(definitions),
+                ..Default::default()
+            },
+            &crate::profile::registry::default_adapters(),
+        );
+        assert!(provider_is_usable(&registry, "claude"));
+        assert!(provider_is_usable(&registry, "synthetic-custom"));
+        for provider in ["dropped", "disabled", "no-launch", "unknown", "shell", "Synthetic-custom"] {
+            assert!(!provider_is_usable(&registry, provider), "{provider}");
+        }
+        let valid = usable_provider_ids(&registry);
+        assert!(valid.contains(&"synthetic-custom".to_owned()));
+        assert!(!valid.iter().any(|id| ["dropped", "disabled", "no-launch"].contains(&id.as_str())));
+    }
+
+    #[test]
+    fn custom_permission_previews_and_preparation_keep_the_cli_policy() {
+        let cfg = Config {
+            custom_providers: vec![
+                custom("synthetic-custom", "synthetic-cli"),
+                custom("synthetic-yolo", "synthetic-cli --yolo"),
+                custom("dropped", "synthetic-cli \"unclosed"),
+            ],
+            ..Default::default()
+        };
+        let body = request(&serde_json::json!({
+            "provider": "claude",
+            "permission_mode": "bypassPermissions",
+            "sandbox": "danger-full-access",
+            "ask_for_approval": "never",
+            "existing_tools": ["Read"]
+        }));
+        let expected = serde_json::json!({});
+        for preview in [preview_tiers(&body, &cfg), preview_ui_tiers(&cfg)] {
+            assert!(!preview.contains_key("dropped"));
+            for provider in ["synthetic-custom", "synthetic-yolo"] {
+                for permission in preview[provider].values() {
+                    assert_eq!(serde_json::to_value(permission).unwrap(), expected);
+                }
+            }
+        }
+        let prepared = prepare(
+            request(&serde_json::json!({
+                "provider": "synthetic-yolo",
+                "preset": "full",
+                "permission_mode": "bypassPermissions",
+                "sandbox": "danger-full-access",
+                "ask_for_approval": "never"
+            })),
+            &cfg,
+            &Registry::default(),
+        ).unwrap();
+        assert!(prepared.request().permission_mode.is_empty());
+        assert!(prepared.request().sandbox.is_empty());
+        assert!(prepared.request().ask_for_approval.is_empty());
+        assert!(!prepared.request().risk_confirmed);
+        assert!(prepared.grants().allowed_tools().is_empty());
+    }
+
+    #[test]
+    fn headless_capability_retains_config_fallback_when_registry_has_no_metadata() {
+        let cfg = Config {
+            custom_providers: vec![config::CustomProvider {
+                id: "config-headless".into(),
+                command: "synthetic-config-cli".into(),
+                headless: Some(config::HeadlessDef {
+                    args: vec!["exec".into()],
+                    format: "text".into(),
+                    prompt_via: "arg".into(),
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let registry = Registry::default();
+        assert!(provider_supports_headless(&registry, "config-headless", &cfg));
+        assert!(provider_supports_headless(&registry, "claude", &cfg));
+        assert!(!provider_supports_headless(&registry, "unknown", &cfg));
+        for mode in ["auto", "headless"] {
+            let prepared = prepare(
+                request(&serde_json::json!({"provider": "config-headless", "mode": mode})),
+                &cfg,
+                &registry,
+            )
+            .unwrap();
+            assert_eq!(prepared.request().execution_mode, "headless");
         }
     }
 }

@@ -486,3 +486,208 @@ fn oversized_legacy_migration_preserves_whole_file_and_rejects_profile_assets() 
         bytes
     );
 }
+
+fn custom_config(ids: &[&str]) -> Config {
+    Config {
+        custom_providers: ids
+            .iter()
+            .map(|id| crate::config::CustomProvider {
+                id: (*id).into(),
+                command: "synthetic.exe".into(),
+                ..Default::default()
+            })
+            .collect(),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn custom_options_load_without_sync_and_survive_owner_recreation() {
+    let root = tempfile::tempdir().unwrap();
+    let installed = tempfile::tempdir().unwrap();
+    let paths = RuntimePaths::trial(root.path(), 49687, installed.path()).unwrap();
+    let config = Arc::new(ConfigStore::new(paths.clone(), custom_config(&["muse"])).unwrap());
+    let owner =
+        ApprovalPatterns::new(&paths, config.clone(), Weak::new(), Arc::new(|_| {})).unwrap();
+    let options = vec![
+        "Allow once".into(),
+        "Always allow in this workspace".into(),
+        "Reject".into(),
+    ];
+    owner.write_custom("muse", &options).unwrap();
+    assert_eq!(owner.read("muse", "custom").unwrap(), options);
+    assert_eq!(owner.active().unwrap()["muse"], options);
+    assert_eq!(
+        serde_json::from_slice::<Vec<String>>(
+            &std::fs::read(custom_pattern_path(&paths, "muse")).unwrap()
+        )
+        .unwrap(),
+        options
+    );
+    assert_eq!(
+        serde_json::from_slice::<Vec<String>>(&owner.asset("muse.json").unwrap()).unwrap(),
+        options
+    );
+    assert!(owner.dir.metadata("muse.json").is_err());
+    assert!(
+        config.snapshot().unwrap().config.custom_providers[0]
+            .approval_pattern_source
+            .is_empty()
+    );
+    drop(owner);
+    let owner = ApprovalPatterns::new(&paths, config, Weak::new(), Arc::new(|_| {})).unwrap();
+    owner.sync().unwrap();
+    assert_eq!(owner.active().unwrap()["muse"], options);
+
+    // The detector matches lowercased literal substrings, not regular expressions.
+    let phrases = owner.active().unwrap()["muse"]
+        .iter()
+        .map(|p| crate::proto::unicode::simple_lower(p.trim()))
+        .collect::<Vec<_>>();
+    let lines = vec![
+        "Run synthetic command".into(),
+        "❯ 1. ALLOW ONCE".into(),
+        "2. Always allow in this workspace".into(),
+        "3. Reject".into(),
+    ];
+    assert!(crate::approval::detect::detect_native("muse", &lines, &[]).is_none());
+    assert!(crate::approval::detect::detect_native("muse", &lines, &phrases).is_some());
+    assert!(crate::approval::detect::detect_native("muse", &lines, &["allow.*once".into()]).is_none());
+}
+
+#[test]
+fn custom_pattern_namespace_preserves_builtin_profiles_and_other_custom_ids() {
+    let fixture = fixture_with_config(custom_config(&[
+        "muse",
+        "muse.custom",
+        "muse.official",
+        "claude.custom",
+        "common",
+    ]));
+    let owner = &fixture.owner;
+    owner
+        .write_custom("claude", &["builtin user phrase".into()])
+        .unwrap();
+    let builtin_profile = owner.asset("claude.custom.json").unwrap();
+    let common = owner.active().unwrap()["common"].clone();
+    for provider in ["muse", "muse.custom", "muse.official", "claude.custom"] {
+        let patterns = vec![format!("user phrase for {provider}")];
+        owner.write_custom(provider, &patterns).unwrap();
+        assert_eq!(owner.read(provider, "custom").unwrap(), patterns);
+        assert_eq!(owner.active().unwrap()[provider], patterns);
+    }
+    owner.refresh();
+    assert_eq!(owner.asset("claude.custom.json").unwrap(), builtin_profile);
+    assert_eq!(owner.active().unwrap()["common"], common);
+    assert_eq!(owner.active().unwrap()["muse"], ["user phrase for muse"]);
+    assert!(owner.dir.metadata("muse.json").is_err());
+    assert!(owner.dir.metadata("muse.custom.json").is_err());
+    assert!(owner.dir.metadata("muse.official.json").is_err());
+}
+
+#[test]
+fn custom_read_and_copy_official_keep_legacy_source_separate() {
+    let fixture = fixture_with_config(custom_config(&["muse"]));
+    let owner = &fixture.owner;
+    let legacy = vec!["synthetic remote phrase".into()];
+    owner.write("muse.json", &legacy).unwrap();
+    assert_eq!(owner.active().unwrap()["muse"], legacy);
+    assert_eq!(owner.read("muse", "official").unwrap(), legacy);
+    owner.copy_official("muse").unwrap();
+    assert_eq!(owner.read("muse", "custom").unwrap(), legacy);
+    owner
+        .write_custom("muse", &["synthetic user phrase".into()])
+        .unwrap();
+    assert_eq!(owner.read("muse", "official").unwrap(), legacy);
+    assert_eq!(owner.active().unwrap()["muse"], ["synthetic user phrase"]);
+    owner.copy_official("muse").unwrap();
+    assert_eq!(owner.active().unwrap()["muse"], legacy);
+}
+
+#[test]
+fn unknown_dropped_and_nonexact_custom_ids_cannot_write_patterns() {
+    let mut config = custom_config(&["muse", "dropped"]);
+    config.custom_providers[1].command = "\"unclosed".into();
+    let fixture = fixture_with_config(config);
+    let owner = &fixture.owner;
+    for provider in ["missing", "dropped", "MUSE", " muse ", "../muse", "muse/child"] {
+        assert!(owner.read(provider, "custom").is_err(), "{provider}");
+        assert!(
+            owner.write_custom(provider, &["phrase".into()]).is_err(),
+            "{provider}"
+        );
+        assert!(owner.copy_official(provider).is_err(), "{provider}");
+    }
+    assert!(owner.custom_dir.metadata("muse.json").is_err());
+    assert!(owner.custom_dir.metadata("dropped.json").is_err());
+}
+
+#[tokio::test]
+async fn remote_sync_preserves_custom_user_options_including_empty_overrides() {
+    let mut config = custom_config(&["muse"]);
+    config.custom_providers[0].approval_pattern_source = "synthetic://claude".into();
+    let fixture = fixture_with_config(config);
+    let owner = &fixture.owner;
+    let legacy = vec!["synthetic old source".into()];
+    owner.write("muse.json", &legacy).unwrap();
+    for options in [vec!["Allow once".into(), "Reject".into()], vec![]] {
+        owner.write_custom("muse", &options).unwrap();
+        owner
+            .remote_sync(
+                Arc::new(Source {
+                    body: Mutex::new(Some(b"- `synthetic new source`\n".to_vec())),
+                    pending: false,
+                }),
+                &Cancellation::default(),
+                fixture.effects.as_ref(),
+            )
+            .await;
+        assert_eq!(owner.read("muse", "custom").unwrap(), options);
+        assert_eq!(owner.active().unwrap()["muse"], options);
+        assert_eq!(owner.read("muse", "official").unwrap(), legacy);
+    }
+    assert!(
+        fixture
+            .recording
+            .messages()
+            .iter()
+            .all(|message| !message.providers.iter().any(|provider| provider == "muse"))
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn custom_options_saved_during_remote_fetch_win_when_fetch_finishes() {
+    let mut config = custom_config(&["muse"]);
+    config.custom_providers[0].approval_pattern_source = "synthetic://muse".into();
+    let fixture = fixture_with_config(config);
+    let owner = &fixture.owner;
+    let cancel = Cancellation::default();
+    let operation = owner.remote_sync(Arc::new(DelayedSource), &cancel, fixture.effects.as_ref());
+    tokio::pin!(operation);
+    tokio::select! {
+        _ = &mut operation => panic!("source completed without its delay"),
+        _ = tokio::task::yield_now() => {}
+    }
+    owner.write_custom("muse", &["Allow once".into()]).unwrap();
+    operation.await;
+    assert_eq!(owner.active().unwrap()["muse"], ["Allow once"]);
+    assert!(owner.dir.metadata("muse.json").is_err());
+}
+
+#[test]
+fn encoded_pattern_limit_counts_pretty_escaping_and_final_newline() {
+    let overhead = encode_pattern_file(&[String::new()]).unwrap().len();
+    let at_limit = vec!["a".repeat(PATTERN_FILE_CAP - overhead)];
+    let bytes = encode_pattern_file(&at_limit).unwrap();
+    assert_eq!(bytes.len(), PATTERN_FILE_CAP);
+    assert_eq!(json(&bytes).unwrap(), at_limit);
+    assert!(encode_pattern_file(&["a".repeat(PATTERN_FILE_CAP - overhead + 1)]).is_err());
+    for character in ['<', '>', '&', '\u{2028}', '\u{2029}'] {
+        let list = vec![character.to_string().repeat(PATTERN_FILE_CAP / 6 + 1)];
+        assert!(serde_json::to_vec(&list).unwrap().len() < PATTERN_FILE_CAP);
+        assert!(encode_pattern_file(&list).is_err());
+    }
+    let many_short = vec!["a".to_owned(); PATTERN_FILE_CAP / 7 + 1];
+    assert!(serde_json::to_vec(&many_short).unwrap().len() < PATTERN_FILE_CAP);
+    assert!(encode_pattern_file(&many_short).is_err());
+}

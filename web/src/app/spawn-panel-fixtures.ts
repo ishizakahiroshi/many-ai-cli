@@ -16,6 +16,8 @@ import {
   splitCwdTypeahead,
 } from './cwd-path.js';
 import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
+// Keep the C4 role/confirmation selectors in the existing fixture test pipeline.
+import './orchestration-roles-fixtures.js';
 
 // 合成データ。実在のパスは書かない（公開ファイルの層 1 防御）。
 const PARENT = 'C:\\dev\\public';

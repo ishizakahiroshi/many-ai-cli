@@ -1,4 +1,5 @@
 //! Source CLI maintenance operations with explicit runtime and filesystem owners.
+pub mod custom_provider;
 mod provider;
 pub mod stop;
 pub mod transcript;

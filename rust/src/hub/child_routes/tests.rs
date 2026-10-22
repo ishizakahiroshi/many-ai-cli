@@ -120,6 +120,13 @@ struct Fixture {
     parent: SessionBinding,
 }
 async fn fixture(confirm: &str, limit: i64) -> Fixture {
+    fixture_with(confirm, limit, Vec::new()).await
+}
+async fn fixture_with(
+    confirm: &str,
+    limit: i64,
+    custom: Vec<config::CustomProvider>,
+) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let runtime = root.path().join("trial");
     std::fs::create_dir(&runtime).unwrap();
@@ -127,6 +134,7 @@ async fn fixture(confirm: &str, limit: i64) -> Fixture {
     std::fs::create_dir(&project).unwrap();
     let paths = RuntimePaths::trial(&runtime, 49677, &root.path().join("installed")).unwrap();
     let mut cfg = Config::default();
+    cfg.custom_providers = custom;
     cfg.orchestration.spawn_confirm_mode = confirm.into();
     cfg.orchestration.max_children_per_parent = limit;
     let config = Arc::new(ConfigStore::new(paths.clone(), cfg).unwrap());
@@ -185,12 +193,23 @@ async fn fixture(confirm: &str, limit: i64) -> Fixture {
     workers
         .bind(Arc::downgrade(&core), Arc::downgrade(&effects))
         .unwrap();
+    let registry_config = config.clone();
     let program = OrchestrationProgram::new(OrchestrationDependencies {
         core: Arc::downgrade(&core),
         effects: Arc::downgrade(&effects),
         config: config.clone(),
         paths: paths.clone(),
-        registry: Arc::new(|| Err(std::io::Error::other("synthetic fixture forbids providers"))),
+        registry: Arc::new(move || {
+            let cfg = registry_config.snapshot().unwrap().config;
+            Ok(crate::profile::registry::Registry::build(
+                crate::proto::provider::Layers {
+                    embedded: Some(crate::profile::registry::embedded_definitions().unwrap()),
+                    legacy: Some(config::provider_definitions_for_app(&cfg.custom_providers).0),
+                    ..Default::default()
+                },
+                &crate::profile::registry::default_adapters(),
+            ))
+        }),
         environment: vec![],
         hub_cwd: project.clone(),
         workers,
@@ -531,4 +550,133 @@ async fn children_query_includes_terminal_children_and_unknown_parent_is_empty()
     )
     .unwrap();
     assert!(json["children"].as_array().unwrap().is_empty());
+}
+
+
+fn custom_entries() -> Vec<config::CustomProvider> {
+    vec![
+        config::CustomProvider {
+            id: "synthetic-custom".into(),
+            command: "synthetic-cli".into(),
+            ..Default::default()
+        },
+        config::CustomProvider {
+            id: "dropped".into(),
+            command: "synthetic-cli \"unclosed".into(),
+            ..Default::default()
+        },
+    ]
+}
+fn provider_request(parent: SessionBinding, provider: &str) -> Request {
+    let mut req = request(parent, "");
+    req.body = serde_json::to_vec(&serde_json::json!({
+        "role": "worker", "provider": provider, "same_tree": true
+    }))
+    .unwrap();
+    req
+}
+
+#[tokio::test]
+async fn custom_child_http_accepts_usable_and_lists_ids_for_dropped_and_unknown() {
+    let f = fixture_with("off", 4, custom_entries()).await;
+    for provider in ["dropped", "unknown", "Synthetic-custom"] {
+        let response = bounded(f.route.spawn_authenticated(
+            &provider_request(f.parent, provider),
+            None,
+            &HttpWaitCancellation::default(),
+            Timestamp::now(),
+        ))
+        .await;
+        assert_eq!(response.status, 400);
+        let json: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
+        let detail = json["detail"].as_str().unwrap();
+        assert!(detail.contains("valid providers are: claude, codex"));
+        assert!(detail.contains("command-code, synthetic-custom"));
+        if provider == "dropped" {
+            assert!(detail.contains("double quote"));
+            assert!(detail.contains("many-ai-cli config check"));
+        }
+    }
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+    f.io.release.add_permits(1);
+    let response = bounded(f.route.spawn_authenticated(
+        &provider_request(f.parent, "synthetic-custom"),
+        None,
+        &HttpWaitCancellation::default(),
+        Timestamp::now(),
+    ))
+    .await;
+    assert_eq!(response.status, 200);
+    assert!(f.core.snapshots().iter().any(|child| {
+        child.parent_session_id == f.parent.session && child.provider == "synthetic-custom"
+    }));
+}
+
+#[tokio::test]
+async fn confirmation_provider_changes_revalidate_custom_ids_and_remember_success() {
+    for (selected, removed) in [
+        ("synthetic-custom", false),
+        ("dropped", false),
+        ("unknown", false),
+        ("synthetic-custom", true),
+    ] {
+        let f = fixture_with("on", 4, custom_entries()).await;
+        let route = f.route.clone();
+        let req = provider_request(f.parent, "");
+        let http = tokio::spawn(async move {
+            route
+                .spawn_authenticated(
+                    &req,
+                    None,
+                    &HttpWaitCancellation::default(),
+                    Timestamp::now(),
+                )
+                .await
+        });
+        let pending = bounded(async {
+            loop {
+                if let Some(pending) = f.core.pending().into_iter().next() {
+                    break pending;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await;
+        if removed {
+            let mut snapshot = f.route.config.snapshot().unwrap();
+            snapshot.config.custom_providers.clear();
+            f.route.config
+                .publish_then_persist_legacy(snapshot.revision, snapshot.config)
+                .unwrap();
+        }
+        let decision = f.core.clone().accept_decision(
+            SpawnConfirmationResponse {
+                confirmation_id: pending.id,
+                approved: true,
+                provider: selected.into(),
+                permission_preset: Some("full".into()),
+                ..Default::default()
+            },
+            VerifiedConfirmationRequest::after_server_authentication(AuthEpoch(0)),
+            Timestamp::now(),
+        )
+        .unwrap();
+        f.io.release.add_permits(1);
+        let outcome = bounded(decision.run(TaskCancellation::default()).unwrap()).await;
+        let response = bounded(http).await.unwrap();
+        if selected == "synthetic-custom" && !removed {
+            assert!(matches!(outcome, ConfirmationOutcome::Approved(_)));
+            assert_eq!(response.status, 200);
+            assert_eq!(f.route.config.snapshot().unwrap().config.user_prefs.spawn.role_provider["worker"], selected);
+            assert!(f.core.snapshots().iter().any(|child| child.provider == selected));
+        } else {
+            assert!(matches!(outcome, ConfirmationOutcome::SpawnFailed(_)));
+            assert_eq!(response.status, 400);
+            let json: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
+            assert!(json["detail"].as_str().unwrap().contains("valid providers are:"));
+            assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+            assert!(!f.route.config.snapshot().unwrap().config.user_prefs.spawn.role_provider.contains_key("worker"));
+        }
+        assert!(f.core.pending().is_empty());
+    }
 }

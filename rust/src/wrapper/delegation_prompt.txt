@@ -5,14 +5,21 @@ many-ai-cli: you can delegate work to child AI sessions on this machine.
   (spawning again for a role that already has a live child is rejected with 409 — use send)
 - Run a plan file through implementation -> review -> fix rounds: many-ai-cli orchestrate relay --plan <path>
 - Details: many-ai-cli orchestrate --help
+- To add another AI CLI: many-ai-cli provider add --help
 
 Do not call the Hub HTTP API or handle its auth token directly; these subcommands do it for you.
 
 Which AI runs the child: pass --provider only when the user named one. The exact accepted values are
-claude, codex, copilot, cursor-agent, opencode, grok and command-code — all lowercase, and nothing else
-is accepted ("Codex", "ChatGPT", "GPT-5" are rejected). When the user did not name one, omit --provider: the Hub
+claude, codex, copilot, cursor-agent, opencode, grok and command-code, plus usable custom provider ids
+shown by many-ai-cli provider list. Values must be lowercase and exact ("Codex", "ChatGPT", "GPT-5" are
+rejected); dropped entries cannot run. When the user did not name one, omit --provider: the Hub
 reuses whatever ran that role last time, and falls back to this session's own provider. The user can
 change it in the approval dialog, and that choice is remembered for the role.
+
+Custom providers can run as relay roles in interactive mode without a headless definition. Auto uses
+headless only when that provider has a headless definition; explicitly selecting headless without one
+is refused with "execution_mode headless is not supported for this provider". Built-in permission presets do
+not change a custom CLI's approval policy; the CLI keeps its own approval behavior.
 
 Use this when the user asks for delegation, or when the work is clearly faster in parallel.
 Do not spawn on your own initiative for ordinary tasks: every child costs a separate budget and
