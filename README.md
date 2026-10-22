@@ -169,7 +169,7 @@ Relay roles can run headless too, and there the shape is one process per instruc
 
 A relay stops for a round limit, timeout, missing verdict or review file, blocked verdict, child exit, or the Stop button. Its `relay.json` state is restored after a Hub restart and can be resumed when the stop reason is resumable. Completion and stopping produce a relay notification. The working files live under `~/.many-ai-cli/orchestration/<orchestration_id>/` (`board.md`, `child-<id>.md`, `review-c<k>-r<r>.md`, and `relay.json`). This remains a lightweight sequential runner, not a general job DAG: one plan's C entries are processed in order.
 - **Unified launcher (Windows / Linux / macOS)** — `many-ai-cli-launcher` connects to a Hub via saved profiles and opens your default browser: SSH `serve` / `tunnel` profiles work on every OS, and WSL profiles start a Hub inside WSL on Windows
-- **Remote server / Docker deployment assets** — run one Hub container per user from GHCR with loopback-only port publishing and an opt-in auto-update script
+- **Remote server over SSH** — Linux binaries and SSH remote operation remain in the v1.0.0 release scope; official Docker images, container builds and automatic updates are unsupported for v1.0.0
 - **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
 - **Language switching** (English / Japanese / Vietnamese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `many-ai-cli` itself
@@ -497,7 +497,7 @@ The launcher reads your saved profiles and connects to the right Hub — startin
 | Mode | Use case |
 |---|---|
 | `serve` | SSH into a remote server and start `many-ai-cli serve` on the remote side |
-| `tunnel` | Port-forward to a Hub already running on the remote side (kept resident via systemd / tmux / Docker compose, etc.) |
+| `tunnel` | Port-forward to a Hub already running on the remote side (kept resident via systemd / tmux / screen) |
 
 In both modes, the Hub continues to bind to `127.0.0.1` only on the remote. The SSH local forward (`-L 127.0.0.1:<port>:127.0.0.1:<port>`) makes it reachable from the Windows browser without exposing the Hub to the network.
 
@@ -526,14 +526,14 @@ profiles:
     user: your-user
     hub_port: 47777
 
-  # Remote server profile (tunnel mode) — forward to a resident Hub (systemd / tmux / Docker)
-  - name: remote-docker
+  # Remote server profile (tunnel mode) — forward to a native Linux Hub (systemd / tmux / screen)
+  - name: remote-server
     type: ssh
     mode: tunnel
     host: remote.example.com
     user: your-user
-    hub_port: 47801
-    token_command: "docker exec many-ai-cli-user1 sh -c 'grep ^token ~/.many-ai-cli/config.yaml | cut -d\" \" -f2'"
+    hub_port: 47777
+    token_command: "awk '/^token:/{print $2}' ~/.many-ai-cli/config.yaml"
 ```
 
 #### WSL profile prerequisite: the Linux binary inside WSL
@@ -578,7 +578,7 @@ many-ai-cli --version
 **A. Remote side (one-time)**
 
 1. Place the Linux `many-ai-cli` binary on the remote machine and make it executable.
-2. Start the Hub with a **fixed port** (auto-select is not allowed in tunnel mode) and keep it resident — systemd, tmux/screen, or Docker all work:
+2. Start the Linux Hub with a **fixed port** (auto-select is not allowed in tunnel mode) and keep it resident with systemd, tmux or screen:
 
    ```bash
    many-ai-cli serve --port 47777
@@ -622,7 +622,6 @@ many-ai-cli --version
 - **Port mismatch** — the remote `serve --port` and the profile's `hub_port` must be the same number.
 - **Password prompt** — BatchMode fails immediately; key authentication is mandatory.
 - **Empty `token_command` output** — the Hub must have been started at least once on the remote, otherwise `config.yaml` has no token yet.
-- **Docker** — publish the container's Hub port to the host's `127.0.0.1` (the tunnel terminates at the remote machine's `127.0.0.1:<hub_port>`).
 
 #### Launch
 
@@ -650,7 +649,7 @@ If Windows SmartScreen or company policy prevents `many-ai-cli-launcher.exe` fro
 
 - the Windows built-in OpenSSH client (`ssh.exe`)
 - a normal browser
-- the Linux `many-ai-cli` binary or Docker container on the remote server
+- the Linux `many-ai-cli` binary on the remote server
 
 The tradeoff is that setup is more manual: the user keeps one SSH tunnel window open, then opens the Hub URL in the browser.
 
@@ -707,7 +706,7 @@ cd ~/work
 many-ai-cli serve --port 47777
 ```
 
-For daily use, keep it resident with `tmux`, `screen`, `systemd`, or Docker. The simplest manual option is `tmux`:
+For daily use, keep the Linux Hub resident with `tmux`, `screen` or `systemd`. The simplest manual option is `tmux`:
 
 ```bash
 tmux new -s many-ai-cli
@@ -799,7 +798,7 @@ timeout /t 2 >nul
 start "" "http://127.0.0.1:%PORT%/?token=%TOKEN%"
 ```
 
-Close the `many-ai-cli tunnel` window to disconnect. The remote Hub and any remote sessions continue if you started the Hub with `tmux`, `systemd`, or Docker.
+Close the `many-ai-cli tunnel` window to disconnect. The remote Hub and any remote sessions continue if you started the Hub with `tmux`, `screen` or `systemd`.
 
 **Common no-launcher pitfalls**
 
@@ -807,7 +806,7 @@ Close the `many-ai-cli tunnel` window to disconnect. The remote Hub and any remo
 - **Terminal area does not connect** - local and remote ports must match exactly: `47777:127.0.0.1:47777`.
 - **`ssh: bind: Address already in use`** - another local process is using the port; choose a different fixed port on both the remote server's Hub and the SSH tunnel.
 - **Files are "missing"** - the Hub runs on the remote server, so it sees the remote server's files only. Clone or mount the repository on the remote server.
-- **Free-tier server disconnected** - reconnect SSH and, if needed, reattach/restart the tmux/systemd/Docker Hub.
+- **Free-tier server disconnected** - reconnect SSH and, if needed, reattach/restart the tmux/screen/systemd Hub.
 
 ---
 
@@ -1609,7 +1608,9 @@ GOOS=linux   GOARCH=amd64 go build -o dist/many-ai-cli-linux-x64                
 
 ## Remote server / Docker deployment (auto-update)
 
-Docker is not required for remote-server use. For a small team, normal SSH plus `tmux`, `screen`, or `systemd` can work as long as each person signs in with their own AI CLI account and has a separate OS user, home directory, working directory, and Hub port. Try the layout that best fits your team before adopting the Docker setup.
+> **v1.0.0 support scope:** Official Docker images, container builds and automatic updates are unsupported. The current container build has a known failure. Automatic image publishing has stopped; existing images and recipes are retained as historical references, with no active publishing or update guarantee. Linux binaries and SSH remote operation remain in the v1.0.0 release scope. See the [Docker support policy](deploy/docker/README.md).
+
+Docker is not required for remote-server use. For a small team, normal SSH plus `tmux`, `screen`, or `systemd` can work as long as each person signs in with their own AI CLI account and has a separate OS user, home directory, working directory, and Hub port. For v1.0.0 remote setups, run the Linux binary directly.
 
 If you do not use Docker, pay attention to these points:
 
@@ -1618,14 +1619,19 @@ If you do not use Docker, pay attention to these points:
 - **Pin Python / Node / bun tooling per project.** Use `venv` / `uv`, `nvm` / `mise`, and project-local lockfiles to avoid version conflicts.
 - **Do not share one AI CLI account across users.** Each person must sign in with their own account; see "Do not share one account among multiple users" above.
 
-Container assets live under [`deploy/docker/`](deploy/docker/) (one user = one container; the Hub is published on `127.0.0.1` only and is meant to be reached through an SSH tunnel or similar). Start from [`deploy/docker/users/example.yaml`](deploy/docker/users/example.yaml), copy it to `users/<user>.yaml`, and replace the example user name and port before adding it to `compose.yaml`.
+<details>
+<summary>Legacy / pre-v1 Docker recipes (unsupported for v1.0.0)</summary>
 
-Every push to `main` / `develop` triggers GitHub Actions ([`docker-image.yml`](.github/workflows/docker-image.yml)) to build and publish a container image to GHCR — the server never builds anything itself:
+The following build, compose and cron examples describe the former Docker setup. They are retained for historical reference and are not supported v1.0.0 setup or update instructions.
+
+Container assets remain under [`deploy/docker/`](deploy/docker/) (one user = one container; the Hub is published on `127.0.0.1` only and is meant to be reached through an SSH tunnel or similar). The former setup started from [`deploy/docker/users/example.yaml`](deploy/docker/users/example.yaml), copied it to `users/<user>.yaml`, and replaced the example user name and port before adding it to `compose.yaml`.
+
+The former GitHub Actions publisher built images after successful validation of `main` / `develop` pushes. Automatic publishing has stopped, and [`docker-image.yml`](.github/workflows/docker-image.yml) is being replaced with a manual informational notice. These retained GHCR tag names do not promise current builds or updates:
 
 ```
-ghcr.io/ishizakahiroshi/many-ai-cli:latest      # follows main (normal operation)
-ghcr.io/ishizakahiroshi/many-ai-cli:develop     # follows develop (testing)
-ghcr.io/ishizakahiroshi/many-ai-cli:sha-<hash>  # per-commit tag (rollback)
+ghcr.io/ishizakahiroshi/many-ai-cli:latest      # historical main tag
+ghcr.io/ishizakahiroshi/many-ai-cli:develop     # historical develop tag
+ghcr.io/ishizakahiroshi/many-ai-cli:sha-<hash>  # historical per-commit tag
 ```
 
 ### Always run the latest image
@@ -1656,7 +1662,7 @@ Operational tips (especially for multi-user servers — the cron recreates **eve
 
 - **Pick the cron time wisely.** If users run long overnight AI tasks, 04:30 may cut them off — choose a window nobody works in, and announce it to all users.
 - **Freeze before important runs.** `touch /opt/many-ai-cli/HOLD` skips the update (for all users); `rm HOLD` resumes it.
-- **Tag choice controls frequency.** `AAC_TAG=develop` restarts on every develop push; `latest` only on releases to `main`.
+- **Former tag behavior.** Under the old publisher, `AAC_TAG=develop` followed develop pushes and `latest` followed `main`. Neither tag now guarantees automatic updates.
 
 ### Development bypass
 
@@ -1684,6 +1690,10 @@ docker compose up -d && rm HOLD
 ```
 
 For a local Docker build, start from a clean checkout rather than a working home directory. The per-Dockerfile ignore file excludes credentials, AI-agent state, worktree metadata, logs, transcripts, and other local artifacts before the build context is sent to Docker. The Dockerfile pins official base images by manifest digest, verifies the Whisper source commit and Cursor archive SHA-256 before extraction, and installs the provider CLIs from the tracked exact-version npm lockfile. These checks protect the build input boundary; they do not claim bit-for-bit reproducibility because Ubuntu apt updates remain live and the Cursor archive hash is a literal HTTPS TOFU pin.
+
+The retained input-pin checks are static protection; passing them does not establish a successful container build, runtime compatibility or v1.0.0 Docker support.
+
+</details>
 
 ---
 

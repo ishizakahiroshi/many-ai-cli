@@ -217,6 +217,11 @@ Release artifacts are published at
   there yet.
 
 ### Changed
+- Official Docker images, container builds and automatic updates are excluded
+  from v1.0.0 support and its release gate. Automatic image publishing is stopped
+  while the current container build has a known failure. Existing images and
+  recipes are retained as historical references without an update guarantee.
+  Linux binaries and SSH remote operation remain in the v1.0.0 release scope.
 - **Development moved to the Rust version.** The `develop` branch now carries the
   Rust implementation as the main line. The Go sources moved to `go/` unchanged
   and are no longer built or tested; `make build` builds the Rust binaries. The

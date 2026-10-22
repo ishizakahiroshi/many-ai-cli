@@ -1,6 +1,7 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-10-21(水) 09:03:00 — 「ビルドコマンドは make build が基本」の 1 行を削除（Go 版との言葉の整理が要らなくなり、Makefile の冒頭・手順書と食い違っていたため。手順は reference_rust-local-build.md）
+> 最終更新: 2026-10-23(金) 01:37:30 — v1.0.0で対象外にした公式Docker提供範囲の参照を追加
+> 2026-10-21(水) 09:03:00 — 「ビルドコマンドは make build が基本」の 1 行を削除（Go 版との言葉の整理が要らなくなり、Makefile の冒頭・手順書と食い違っていたため。手順は reference_rust-local-build.md）
 > 2026-10-19(月) 23:28:55 — 本線を Rust 版へ移し（develop）、Go 版を go/ に凍結したことに合わせて概要・構成・作業ルールを書き換えた
 > 2026-10-16(金) 11:56:03 — 利用者指定で見送り台帳 D-01〜D-13 と custom_providers の制限を全件撤廃し、判断基準を利用者の使いやすさに改めた
 > 2026-10-11(日) 20:36:31 — 共通UI部品・確認文言と機械検査の索引を追加
@@ -133,6 +134,7 @@ docs/local/        設計書・plan 等（非公開）
 | 実装・コーディング（Rust / TypeScript）、共通UI部品・確認文言 | `CLAUDE/coding.md` / [docs/ui-components.md](docs/ui-components.md) / `scripts/check-ui-components.mjs`（Validate CI） |
 | Rust版のローカルビルド・起動・停止（手元の手順） | [reference_rust-local-build.md](docs/local/reference/reference_rust-local-build.md)（ローカルに存在する場合） |
 | ビルド・配布・クロスコンパイル | `CLAUDE/deployment.md` |
+| v1.0.0の公式Docker提供範囲（対象外） | [deploy/docker/README.md](deploy/docker/README.md) |
 | 全修正のビルド元への反映・context分割・docs命名・AI作業モデル・plan自走/停止条件 | `CLAUDE/development.md` |
 | Git・コミット・出力ルール | `CLAUDE/operations.md` |
 | Windows 開発環境固有設定 | `CLAUDE/windows_setup.md` |

@@ -168,7 +168,7 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 
 停止理由は round 上限、timeout、verdict / review file の欠落、blocked verdict、子の終了、Stop ボタンです。Hub 再起動後は `relay.json` から状態を復元し、再開可能な停止理由なら resume できます。完了・停止は relay 通知になります。作業ファイルは `~/.many-ai-cli/orchestration/<orchestration_id>/` 配下の `board.md`、`child-<id>.md`、`review-c<k>-r<r>.md`、`relay.json` です。これは一般的な job DAG ではなく、1 つの plan の C を順番に処理する軽量な sequential runner です。
 - **統合ランチャー（Windows / Linux / macOS）**: `many-ai-cli-launcher` で接続プロファイルから Hub へ接続し既定ブラウザで操作。SSH `serve` / `tunnel` プロファイルは全 OS、WSL プロファイルは Windows で WSL 内に Hub を起動
-- **リモートサーバー / Docker 運用資材**: GHCR image、ユーザー別コンテナ、loopback 限定公開、自動更新スクリプトでサーバー運用
+- **SSH によるリモートサーバー運用**: Linux バイナリと SSH リモート接続は v1.0.0 の対象。公式 Docker image・コンテナビルド・自動更新は v1.0.0 ではサポート対象外
 - **クリーン transcript 生成**: 人間が読める `.txt` を自動生成し、`log-clean` で手動再生成も可能
 - **言語切替**（英語 / 日本語 / ベトナム語）
 - **ローカル限定**: Hub は `127.0.0.1` のみに bind。`many-ai-cli` 自身はテレメトリを送信しません
@@ -445,7 +445,7 @@ skills 棚もルールの正本も **1 本だけ持ち**、各 CLI にはそれ�
 | モード | 用途 |
 |---|---|
 | `serve` | リモートサーバーに SSH してリモート側で `many-ai-cli serve` を起動する |
-| `tunnel` | リモート側ですでに起動中の常駐 Hub（systemd / tmux / Docker compose 等で立てっぱなしにした Hub）へポートフォワードする |
+| `tunnel` | リモート側ですでに起動中の常駐 Hub（systemd / tmux / screen で起動している Hub）へポートフォワードする |
 
 どちらのモードでも、リモートの Hub は `127.0.0.1` にのみ bind したままです。SSH のローカルフォワード（`-L 127.0.0.1:<port>:127.0.0.1:<port>`）によって Hub をネットワークに公開することなく Windows ブラウザから到達可能にします。
 
@@ -474,14 +474,14 @@ profiles:
     user: your-user
     hub_port: 47777
 
-  # リモートサーバープロファイル（tunnel モード）— 常駐させた Hub（systemd / tmux / Docker いずれでも）へポートフォワード
-  - name: remote-docker
+  # リモートサーバープロファイル（tunnel モード）— Linux バイナリで常駐させた Hub（systemd / tmux / screen）へポートフォワード
+  - name: remote-server
     type: ssh
     mode: tunnel
     host: remote.example.com
     user: your-user
-    hub_port: 47801
-    token_command: "docker exec many-ai-cli-user1 sh -c 'grep ^token ~/.many-ai-cli/config.yaml | cut -d\" \" -f2'"
+    hub_port: 47777
+    token_command: "awk '/^token:/{print $2}' ~/.many-ai-cli/config.yaml"
 ```
 
 #### WSL プロファイルの前提: WSL 側に Linux バイナリを配置
@@ -527,7 +527,7 @@ many-ai-cli --version
 **A. リモート側の準備（最初に 1 回だけ）**
 
 1. Linux 版 `many-ai-cli` バイナリをリモートマシンに配置し、実行権限を付けます。
-2. **ポートを固定して** Hub を起動し、常駐させます（tunnel モードではポート自動選択は使えません）。常駐方法は systemd / tmux・screen / Docker のいずれでも構いません。
+2. **ポートを固定して** Linux の Hub を起動し、常駐させます（tunnel モードではポート自動選択は使えません）。systemd / tmux / screen を使います。
 
    ```bash
    many-ai-cli serve --port 47777
@@ -571,7 +571,6 @@ many-ai-cli --version
 - **ポート不一致** — リモートの `serve --port` とプロファイルの `hub_port` は同じ番号にする必要があります。
 - **パスワードを聞かれる状態** — BatchMode で即失敗します。鍵認証が必須です。
 - **`token_command` の出力が空** — リモートで Hub を一度も起動していないと `config.yaml` にトークンがありません。先に手順 2 を済ませてください。
-- **Docker で動かす場合** — コンテナの Hub ポートをホスト側の `127.0.0.1` に公開しておく必要があります（トンネルの終点はリモートマシンの `127.0.0.1:<hub_port>` です）。
 
 #### 起動
 
@@ -655,7 +654,7 @@ cd ~/work
 many-ai-cli serve --port 47777
 ```
 
-普段使いでは `tmux` / `screen` / `systemd` / Docker のいずれかで常駐させます。手作業で一番分かりやすいのは `tmux` です。
+普段使いでは Linux の Hub を `tmux` / `screen` / `systemd` で常駐させます。手作業で一番分かりやすいのは `tmux` です。
 
 ```bash
 tmux new -s many-ai-cli
@@ -747,7 +746,7 @@ timeout /t 2 >nul
 start "" "http://127.0.0.1:%PORT%/?token=%TOKEN%"
 ```
 
-切断するときは `many-ai-cli tunnel` のウィンドウを閉じます。Hub を `tmux` / `systemd` / Docker で常駐させていれば、切れるのは SSH トンネルだけで、リモートサーバー側の Hub とセッションは残ります。
+切断するときは `many-ai-cli tunnel` のウィンドウを閉じます。Hub を `tmux` / `screen` / `systemd` で常駐させていれば、切れるのは SSH トンネルだけで、リモートサーバー側の Hub とセッションは残ります。
 
 **launcher なし構成でつまずきやすい点**
 
@@ -755,7 +754,7 @@ start "" "http://127.0.0.1:%PORT%/?token=%TOKEN%"
 - **HTML は出るがターミナルがつながらない** — local port と remote port は必ず同じ番号にします。例: `47777:127.0.0.1:47777`。
 - **`ssh: bind: Address already in use`** — 手元 PC でその port が使用中です。リモートサーバー側 Hub と SSH トンネルの両方を同じ別 port に変えてください。
 - **ファイルが見つからない** — Hub はリモートサーバー上で動いています。作業リポジトリはリモートサーバー側に clone / 配置してください。
-- **無料枠サーバーが切断された** — SSH をつなぎ直し、必要に応じて tmux / systemd / Docker の Hub を復帰してください。
+- **無料枠サーバーが切断された** — SSH をつなぎ直し、必要に応じて tmux / screen / systemd の Hub を復帰してください。
 
 ---
 
@@ -1540,6 +1539,8 @@ GOOS=linux   GOARCH=amd64 go build -o dist/many-ai-cli-linux-x64                
 
 ## リモートサーバー / Docker 運用（自動更新）
 
+> **v1.0.0 のサポート範囲:** 公式 Docker image・コンテナビルド・自動更新はサポート対象外です。現在のコンテナビルドには既知の失敗があります。image の自動公開は停止し、既存 image と資材は履歴として保持しますが、継続公開・自動更新は保証しません。Linux バイナリと SSH によるリモート運用は v1.0.0 の対象に残ります。[Docker のサポート方針](deploy/docker/README.md)も参照してください。
+
 Docker はリモートサーバー運用の必須条件ではありません。複数人で使う場合でも、各利用者が自分の AI CLI アカウントでログインし、OS ユーザー / ホームディレクトリ / 作業フォルダ / Hub ポートを分ければ、通常の SSH + `tmux` / `screen` / `systemd` でも運用できます。まずは自分たちのチームに合う方法を試してください。
 
 Docker を使わない場合は、特に次の点に注意してください。
@@ -1549,14 +1550,19 @@ Docker を使わない場合は、特に次の点に注意してください。
 - **Python / Node / bun などの実行環境をプロジェクト単位で固定する。** `venv` / `uv`、`nvm` / `mise`、プロジェクトローカルの lockfile を使うと衝突を避けやすくなります
 - **1 つの AI CLI アカウントを複数人で共有しない。** 必ず各利用者が自分のアカウントでログインしてください（詳細は上の「アカウントの複数人共有は禁止」参照）
 
-コンテナ運用一式は [`deploy/docker/`](deploy/docker/) にあります（1 ユーザー = 1 コンテナ。Hub の公開は `127.0.0.1` 限定で、SSH トンネル等を介して到達する前提です。前節「ローカル実行限定」の通り、外部公開は行わないでください）。[`deploy/docker/users/example.yaml`](deploy/docker/users/example.yaml) を `users/<user>.yaml` にコピーし、ユーザー名とポートを置き換えてから `compose.yaml` に追加します。
+<details>
+<summary>旧版 / v1.0.0 より前の Docker 手順（サポート対象外）</summary>
 
-`main` / `develop` への push をトリガーに GitHub Actions（[`docker-image.yml`](.github/workflows/docker-image.yml)）がコンテナイメージをビルドして GHCR へ publish します。サーバー側では一切ビルドしません:
+以下のビルド・compose・cron の例は、従来の Docker 運用を履歴として残したものです。v1.0.0 でサポートするセットアップ・更新手順ではありません。
+
+コンテナ運用一式は [`deploy/docker/`](deploy/docker/) に保持しています（1 ユーザー = 1 コンテナ。Hub の公開は `127.0.0.1` 限定で、SSH トンネル等を介して到達する前提です。前節「ローカル実行限定」の通り、外部公開は行わないでください）。従来は [`deploy/docker/users/example.yaml`](deploy/docker/users/example.yaml) を `users/<user>.yaml` にコピーし、ユーザー名とポートを置き換えて `compose.yaml` に追加していました。
+
+従来は `main` / `develop` の push に対する検証成功後、GitHub Actions が GHCR へ image を公開していました。自動公開は停止し、[`docker-image.yml`](.github/workflows/docker-image.yml) は手動の案内 job へ置き換えます。以下の既存タグ名は、現在のビルドや更新を保証するものではありません:
 
 ```
-ghcr.io/ishizakahiroshi/many-ai-cli:latest      # main 追従（通常運用）
-ghcr.io/ishizakahiroshi/many-ai-cli:develop     # develop 追従（検証用）
-ghcr.io/ishizakahiroshi/many-ai-cli:sha-<hash>  # コミット単位タグ（ロールバック用）
+ghcr.io/ishizakahiroshi/many-ai-cli:latest      # 旧 main タグ
+ghcr.io/ishizakahiroshi/many-ai-cli:develop     # 旧 develop タグ
+ghcr.io/ishizakahiroshi/many-ai-cli:sha-<hash>  # 旧コミット単位タグ
 ```
 
 ### 常に最新イメージで動かす
@@ -1587,7 +1593,7 @@ ghcr.io/ishizakahiroshi/many-ai-cli:sha-<hash>  # コミット単位タグ（ロ
 
 - **cron の時刻は慎重に選ぶ。** 深夜に長時間 AI タスクを走らせるユーザーがいると 04:30 で切られる可能性があります。誰も作業しない時間帯を選び、全ユーザーに周知してください。
 - **大事な実行の前は凍結する。** `touch /opt/many-ai-cli/HOLD` で更新をスキップ（全ユーザー対象）。終わったら `rm HOLD` で再開。
-- **タグ選択が再起動頻度を決める。** `AAC_TAG=develop` は develop への push のたびに再起動、`latest` は `main` へのリリース時のみ。
+- **従来のタグ動作。** 旧 publisher では `AAC_TAG=develop` が develop の push、`latest` が `main` に追従していました。現在はいずれも自動更新を保証しません。
 
 ### 開発中のバイパス
 
@@ -1615,6 +1621,10 @@ docker compose up -d && rm HOLD
 ```
 
 Docker をローカルビルドするときは、作業中のホームディレクトリではなく clean checkout から開始してください。Dockerfile 専用の ignore 設定が、Docker daemon へ送る前に認証情報、AI エージェントの状態、worktree メタデータ、ログ、transcript などのローカル作業物を除外します。Dockerfile は公式 base image を manifest digest で固定し、Whisper の source commit と Cursor archive の SHA-256 を展開前に検証し、provider CLI は追跡した exact version の npm lockfile からインストールします。これは Docker build input の境界を守るための検査であり、Ubuntu apt は live 更新、Cursor の hash は公式 HTTPS byte に対する literal TOFU pin のため、bit-for-bit の完全再現を意味しません。
+
+保持している入力 pin の検査は静的な保護です。成功しても、コンテナビルド・実行時の互換性・v1.0.0 の Docker サポートが成立した証拠にはなりません。
+
+</details>
 
 ---
 

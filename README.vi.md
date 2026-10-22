@@ -108,7 +108,7 @@ Mặc định session con chạy worktree git riêng dưới `.many-ai-cli/workt
 Giới hạn đã biết: cơ chế cố ý nhẹ. Board poll 2 giây + inject Enter ngay có thể ngắt lượt conductor đang chạy. Hoàn tất phụ thuộc con ghi `## DONE ...`; không có job DAG, hàng đợi retry, hay merge tự động.
 
 - **Launcher thống nhất (Windows / Linux / macOS)** — `many-ai-cli-launcher` nối Hub theo profile đã lưu và mở trình duyệt: profile SSH `serve` / `tunnel` mọi OS; profile WSL khởi Hub trong WSL trên Windows
-- **Tài sản remote server / Docker** — một container Hub / user từ GHCR, publish port chỉ loopback, script auto-update opt-in
+- **Remote server qua SSH** — binary Linux và kết nối SSH vẫn thuộc phạm vi v1.0.0; image Docker chính thức, build container và tự động cập nhật không được hỗ trợ trong v1.0.0
 - **Transcript sạch** — sinh `.txt` tự động hoặc `log-clean`
 - **Đổi ngôn ngữ UI** (English / 日本語 / **Tiếng Việt**) — Settings → Language; file locale `web/src/i18n/{en,ja,vi}.json`
 - **UI local-first** — HTTP/WebSocket Hub chỉ bind `127.0.0.1`; bản thân `many-ai-cli` không telemetry
@@ -282,7 +282,7 @@ Binary launcher ship mọi platform. Profile `ssh` (`serve` / `tunnel`) chạy W
 | Mode SSH | Use case |
 |---|---|
 | `serve` | SSH vào remote và start `many-ai-cli serve` phía remote |
-| `tunnel` | Port-forward tới Hub đã chạy remote (systemd / tmux / Docker compose, …) |
+| `tunnel` | Port-forward tới Hub đã chạy remote (systemd / tmux / screen) |
 
 Cả hai mode: Hub remote vẫn chỉ bind `127.0.0.1`. SSH local forward (`-L 127.0.0.1:<port>:127.0.0.1:<port>`) cho browser local tới được mà **không** expose Hub ra mạng.
 
@@ -305,13 +305,13 @@ profiles:
     user: your-user
     hub_port: 47777
 
-  - name: remote-docker
+  - name: remote-server
     type: ssh
     mode: tunnel
     host: remote.example.com
     user: your-user
-    hub_port: 47801
-    token_command: "docker exec many-ai-cli-user1 sh -c 'grep ^token ~/.many-ai-cli/config.yaml | cut -d\" \" -f2'"
+    hub_port: 47777
+    token_command: "awk '/^token:/{print $2}' ~/.many-ai-cli/config.yaml"
 ```
 
 #### Tiên quyết profile WSL: binary Linux trong WSL
@@ -327,13 +327,13 @@ many-ai-cli --version
 
 #### Tunnel mode: setup end-to-end (tóm tắt)
 
-**A. Phía remote (một lần):** đặt binary Linux; `many-ai-cli serve --port 47777` (port **cố định** — tunnel không cho auto-select); giữ resident (systemd/tmux/Docker). Token lần đầu trong `~/.many-ai-cli/config.yaml`. Chuẩn bị `token_command` in ra token (ví dụ `awk '/^token:/{print $2}' ~/.many-ai-cli/config.yaml`).
+**A. Phía remote (một lần):** đặt binary Linux; `many-ai-cli serve --port 47777` (port **cố định** — tunnel không cho auto-select); giữ resident bằng systemd/tmux/screen. Token lần đầu trong `~/.many-ai-cli/config.yaml`. Chuẩn bị `token_command` in ra token (ví dụ `awk '/^token:/{print $2}' ~/.many-ai-cli/config.yaml`).
 
 **B. Phía client (một lần):** SSH **key-based** (`BatchMode=yes` — password không dùng được). Tạo profile type `ssh` mode `tunnel` với `hub_port` khớp và `token_command`.
 
 **C. Hàng ngày:** start launcher → chọn profile → tunnel + token + mở browser. Xong việc đóng launcher chỉ rớt tunnel; session remote vẫn chạy. Lần sau reconnect cùng profile.
 
-**Bẫy thường gặp:** lệch port serve vs `hub_port`; password prompt (BatchMode fail); `token_command` rỗng (Hub chưa start lần nào); Docker phải publish Hub ra `127.0.0.1` host.
+**Bẫy thường gặp:** lệch port serve vs `hub_port`; password prompt (BatchMode fail); `token_command` rỗng (Hub chưa start lần nào).
 
 #### Launch
 
@@ -359,7 +359,7 @@ SmartScreen / policy chặn `many-ai-cli-launcher.exe` vẫn nối Hub remote b�
 
 - OpenSSH client Windows (`ssh.exe`)
 - Trình duyệt thường
-- Binary Linux / Docker `many-ai-cli` trên server
+- Binary Linux `many-ai-cli` trên server
 
 Đổi lại: giữ một cửa sổ tunnel SSH mở, rồi mở URL Hub trên browser.
 
@@ -644,8 +644,10 @@ Dừng sạch: `⏻` UI hoặc `many-ai-cli stop`.
 
 ## Remote / Docker
 
+> **Phạm vi v1.0.0:** Không hỗ trợ image Docker chính thức, build container hoặc tự động cập nhật. Quá trình build container hiện có lỗi đã biết; việc tự động phát hành image đã dừng. Image và công thức cũ được giữ làm tài liệu lịch sử, không bảo đảm có bản cập nhật. Binary Linux và vận hành từ xa qua SSH vẫn thuộc phạm vi v1.0.0. Xem [chính sách Docker](deploy/docker/README.md).
+
 - Mục lục vai trò A/B/C và chọn quy trình: [docs/vi/manual_remote-server-overview.vi.md](docs/vi/manual_remote-server-overview.vi.md)  
-- Agent server đơn / Docker: file gốc `docs/manual_remote-server-agent-*.md`  
+- Agent server đơn / Docker (tài liệu cũ trước v1.0.0, không xác nhận hỗ trợ Docker): file gốc `docs/manual_remote-server-agent-*.md`
 - SSH tunnel chi tiết: `docs/manual_remote-server-ssh-tunnel.md`  
 
 ---
