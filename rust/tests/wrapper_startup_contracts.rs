@@ -3,7 +3,10 @@
 //! does not need a public test-only bypass of the registration boundary.
 use many_ai_cli::{
     process::{ProcessPlan, wrapper_startup::STARTUP_JOB_ENV},
-    wrapper::startup::{StartupLifetime, strip_provider_environment},
+    wrapper::{
+        launch_payload::PROTECTED_ENV_NAMES_ENV,
+        startup::{StartupLifetime, strip_provider_environment},
+    },
 };
 use std::{collections::BTreeMap, time::Duration};
 
@@ -31,7 +34,11 @@ fn startup_job_metadata_is_removed_from_every_provider_override_spelling() {
         plan.env.get(std::ffi::OsStr::new(STARTUP_JOB_ENV)),
         Some(&None)
     );
-    assert_eq!(plan.env.len(), 2);
+    assert_eq!(
+        plan.env.get(std::ffi::OsStr::new(PROTECTED_ENV_NAMES_ENV)),
+        Some(&None)
+    );
+    assert_eq!(plan.env.len(), 3);
     assert_eq!(
         plan.env.get(std::ffi::OsStr::new("SYNTHETIC_ORDINARY_ENV")),
         Some(&Some("retained".into()))
