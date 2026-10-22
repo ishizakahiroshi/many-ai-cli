@@ -6,6 +6,56 @@ No package, release, installation, account, GUI or native-voice acceptance is
 established by these helpers. The fixed Go oracle remains
 `d8fbf8598c3effd4e2f837e43ad6f0488c461de3`.
 
+## Assemble four native CI candidates without publishing
+
+`scripts/package-rust-candidates.py` accepts the target folders produced by
+`scripts/rust-candidate-ci.py`: `windows-x64`, `linux-x64`, `macos-intel`, and
+`macos-apple-silicon`. Download and retain the original CI evidence, then place
+these four folders immediately under one input directory. Use a canonical path
+without symlink ancestors. Keep input/output directories separate.
+
+```sh
+python3 scripts/package-rust-candidates.py --inputs /path/to/native-candidates --output /path/to/new-candidate-package
+```
+
+This checks all four receipts' source/version/Cargo-lock/Web/launcher-UI input
+consistency, both binary hashes, notice hashes, successful input collection, and
+Windows embedded-runtime evidence. Invalid, incomplete or mixed receipts fail
+before any output is created. Documents come from the receipt's Git commit.
+Four ZIPs preserve the existing target suffixes and include both binaries,
+notices, receipts and an unaccepted-candidate warning. Archive bytes are read
+back and checked. Output must not already exist.
+
+`artifacts.json` has the Binary/ID/goos/goarch fields consumed by the existing
+`scripts/stage-npm-binaries.mjs`, referencing the same staged binary bytes as
+the ZIPs. Each candidate binary uses `pathBase: "manifest"` and a relative
+`binaries/<target>/<name>` path, so the complete aggregate bundle can be downloaded
+or moved and then passed directly to the current stager without reassembly.
+The stager retains absolute paths and legacy paths relative to the repository
+root when `pathBase` is omitted; unknown path bases fail preflight.
+npm staging retains its main-binary-only contract and changes local
+npm package directories; the assembler does not invoke staging or publishing.
+Keep local candidate output outside the checkout to avoid untracked artifacts.
+`SHA256SUMS.txt` covers the four ZIPs. This assembler trusts the downloaded CI
+receipts; it is not a signature verifier or an independent native-runtime test.
+
+The existing `rust-migration.yml` stays `workflow_dispatch` only. Its uncredentialed
+assembly job waits for all four native jobs, checks out the same source SHA,
+and merges only the four native artifact names for that source, run and attempt.
+It uploads a separate candidate bundle, explicitly including its hidden output
+directory; it does not run a second native build.
+Rerun all jobs for a new attempt: older native artifacts deliberately cannot
+complete a partial rerun. Original native evidence remains in the native artifacts.
+The aggregate workflow still needs a real four-target run for acceptance.
+
+This helper deliberately accepts only `0.0.0-rust-candidate+<source prefix>`,
+not v1.0.0. It does not build, install, publish, or change the running Hub.
+Official release version stamping, Windows resources, distribution SBOM and
+signing, deb/rpm, Homebrew/winget, Docker, installed-update/rollback acceptance,
+and changing the existing Go release workflow remain separate release work.
+Input-collection success is source evidence, not license clearance or native
+application/device acceptance. Candidate packaging remains unaccepted preparation.
+
 ## Offline collection from an actual successful build
 
 Python 3.11 or later is required for the standard-library `tomllib`; candidate CI

@@ -6,7 +6,9 @@
 // schema: type="Binary", extra.ID="many-ai-cli" (or the main binary name),
 // goos/goarch and path. The field names are retained for compatibility; a Rust
 // release adapter can supply the same manifest without changing package names.
-// Relative artifact paths are resolved from the repository root, as before.
+// Relative artifact paths use the repository root by default. Entries with
+// pathBase="manifest" use the manifest directory, so downloaded candidate
+// bundles remain usable after moving. Absolute artifact paths remain supported.
 // This script neither builds artifacts nor verifies release signatures. The
 // release workflow owns canonical artifact/checksum/signature acceptance.
 //
@@ -79,7 +81,11 @@ function main() {
     try {
       const art = matches[0];
       if (typeof art.path !== 'string' || !art.path.trim()) throw new Error('artifact path is missing');
-      const src = isAbsolute(art.path) ? art.path : join(repoRoot, art.path);
+      if (art.pathBase !== undefined && art.pathBase !== 'manifest') {
+        throw new Error('unknown artifact pathBase; expected "manifest" or an omitted field');
+      }
+      const base = art.pathBase === 'manifest' ? distDir : repoRoot;
+      const src = isAbsolute(art.path) ? art.path : join(base, art.path);
       const sha256 = binaryHash(src);
       const binDir = join(npmDir, pkg, 'bin');
       pending.push({ target, pkg, binName, src, sha256, binDir, dst: join(binDir, binName), goos });
