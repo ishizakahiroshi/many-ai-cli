@@ -5,12 +5,13 @@ tags: [ui, components, reuse]
 owner:
 review_status: reviewed
 related: []
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-22
 ---
 
 # Web UI部品と確認文言の共通化
 
-> 最終更新: 2026-10-13(火) 12:56:37 — アイコンだけの操作の列に使う `ui-toolbar` を追記
+> 最終更新: 2026-10-22(木) 15:26:52 — footer の専用配色をライトテーマへ追従させる説明を追加
+> 2026-10-13(火) 12:56:37 — アイコンだけの操作の列に使う `ui-toolbar` を追記
 > 2026-10-13(火) 12:41:11 — popup・右クリックメニューの1行に使う `menuItem` を追記
 > 2026-10-11(日) 20:58:29
 
@@ -66,7 +67,9 @@ SVGは `uiIconHtml(name, size)` を使い、currentColorに追従させる。SVG
 意味が異なる供給元としてそのまま使う。hoverはmouse向け、keyboardはfocus-visibleを
 表示し、hoverだけに必要情報を置かない。
 
-footerは `--ui-footer-*` の専用paletteを使う。provider、session状態、Git diff/graph、
+footerとその詳細・履歴は `--ui-footer-*` の専用paletteを使う。darkは既存色を保ち、
+lightでは面・文字・罫線をtheme tokenへ追従させ、branchやtoken等の意味色を保つ。
+provider、session状態、Git diff/graph、
 terminal/codeの配色を一般の主操作色へ寄せない。
 
 ## 「しますか？」の確認と操作変数

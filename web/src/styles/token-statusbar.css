@@ -1,6 +1,6 @@
 /* token-statusbar.css — CLI 列の最下段のトークン/コスト ステータスバー */
 
-/* Dedicated footer palette: preserve the existing colors in every theme. */
+/* Dedicated footer palette: keep dark colors, adapt light surfaces to the theme. */
 :root {
   --ui-footer-copy-bg: rgba(125,207,255,.18);
   --ui-footer-popover-shadow: rgba(0,0,0,.5);
@@ -27,6 +27,34 @@
   --ui-footer-warning: #e0af68;
   --ui-footer-danger: #f7768e;
   --ui-footer-tokens: #ff9e64;
+}
+
+[data-theme="light"] {
+  --ui-footer-copy-bg: rgba(3,105,161,.12);
+  --ui-footer-popover-shadow: rgba(15,23,42,.18);
+  --ui-footer-overlay-bg: rgba(15,23,42,.3);
+  --ui-footer-modal-shadow: rgba(15,23,42,.24);
+  --ui-footer-row-hover: var(--bg-hover);
+  --ui-footer-code-bg: var(--bg-deep);
+  --ui-footer-panel-bg: var(--bg-elev);
+  --ui-footer-panel-hover: var(--bg);
+  --ui-footer-bg: var(--bg);
+  --ui-footer-row-line: var(--line);
+  --ui-footer-line: var(--line);
+  --ui-footer-hover: color-mix(in srgb, var(--bg) 94%, var(--text));
+  --ui-footer-line-strong: var(--line-soft);
+  --ui-footer-muted: var(--muted);
+  --ui-footer-teal: #0f766e;
+  --ui-footer-accent: #1d4ed8;
+  --ui-footer-cyan: #0369a1;
+  --ui-footer-text-soft: var(--text-soft);
+  --ui-footer-violet: #7e22ce;
+  --ui-footer-success: var(--green-text);
+  --ui-footer-branch: #6d28d9;
+  --ui-footer-text: var(--text);
+  --ui-footer-warning: var(--warn-text);
+  --ui-footer-danger: var(--danger);
+  --ui-footer-tokens: #9a3412;
 }
 
 #token-statusbar {

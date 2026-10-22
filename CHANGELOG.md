@@ -11,6 +11,8 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Fixed
+- In light mode, the footer and its detail panels now follow the light theme,
+  and the live status bar refreshes its saved colors after preference sync.
 - The inline Usage meter now gives its remaining-quota bar the width left after
   its value and reset text, so the fill is easier to read on narrow rows.
 - An approval question that the AI wrote without numbered options or

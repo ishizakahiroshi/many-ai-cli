@@ -192,6 +192,7 @@ function buildUI(): void {
 
 export function initLiveStatusColor(): void {
   applyLiveStatusColors();
+  document.addEventListener('user-prefs-mirrored', applyLiveStatusColors);
   buildUI();
 }
 
