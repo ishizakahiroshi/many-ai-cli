@@ -149,7 +149,7 @@ Version: {package_version}
 Section: utils
 Priority: optional
 Architecture: amd64
-Maintainer: many-ai-cli maintainers <noreply@github.com>
+Maintainer: many-ai-cli maintainers <ishizakahiroshi.dev@gmail.com>
 Homepage: https://github.com/{repo}
 License: MIT
 Description: Local workspace for AI command-line tools
