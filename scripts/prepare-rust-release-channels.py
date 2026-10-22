@@ -31,6 +31,8 @@ DOCS = ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'packaging-inputs/BUILD-INPUTS.json
 ALIAS = 'THIRD-PARTY-NOTICES.md'
 ID = 'ishizakahiroshi.many-ai-cli'
 SCHEMA = '1.12.0'
+# Intentionally public project contact, already listed in doxguard.ci.json.
+MAINTAINER_EMAIL = 'ishizakahiroshi.dev@gmail.com'  # doxguard: allow ishizakahiroshi.dev@gmail.com
 
 
 def sha(data):
@@ -149,7 +151,7 @@ Version: {package_version}
 Section: utils
 Priority: optional
 Architecture: amd64
-Maintainer: many-ai-cli maintainers <noreply@github.com>
+Maintainer: many-ai-cli maintainers <{MAINTAINER_EMAIL}>
 Homepage: https://github.com/{repo}
 License: MIT
 Description: Local workspace for AI command-line tools
