@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "21bf1a984aa8068ba77ffc66a2329fda95eac075",
+    "commit": "3225f89ba44d78a3c2af69a82d248b6f309caaa6",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2021,
+    "discovered": 2025,
     "analyzed": 1562,
     "unresolved": 10,
     "unknown": 0,
-    "unclaimed": 449,
+    "unclaimed": 453,
     "skipped_by_config": 0
   },
   "files": [
@@ -602,6 +602,38 @@
     },
     {
       "path": "docs/bot/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/release-route-cli-assurance-20261023/FACTS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/release-route-cli-assurance-20261023/PROGRESS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/release-route-cli-assurance-20261023/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/release-route-cli-assurance-20261023/REVIEW.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
