@@ -252,6 +252,71 @@ class CandidateReceiptTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'group/icon resource is missing'):
                     ci.verify_windows_resources(output, '1.0.0', receipt['windows_resources'])
 
+    def test_sdk_zero_ico_planes_normalization_accepts_only_exact_or_one(self):
+        output, _ = self.synthetic_native(windows=True)
+        receipt = json.loads((output / 'BUILD-RECEIPT.json').read_text())
+        root = output.parents[1]
+        icon = root / 'assets/many-ai-cli.ico'
+        source = bytearray(icon.read_bytes())
+        struct.pack_into('<H', source, 10, 0)
+        icon.write_bytes(source)
+        prepared = {**receipt['windows_resources'], 'icon_sha256': ci.digest(icon)}
+        payload = b'synthetic-ico-payload'
+        observed = lambda path: {'FileVersion': '1.0.0', 'ProductVersion': '1.0.0', 'OriginalFilename': path.name}
+        for actual_planes in (0, 1):
+            group = bytearray(self.group_icon(payload))
+            struct.pack_into('<H', group, 10, actual_planes)
+            api = self.icon_api({(14, 1): bytes(group), (3, 7): payload})
+            with self.subTest(actual_planes=actual_planes), patch.object(ci, 'ROOT', root):
+                with patch.object(ci, 'windows_file_version', side_effect=observed), patch.object(ctypes, 'WinDLL', return_value=api, create=True):
+                    result = ci.verify_windows_resources(output, '1.0.0', prepared)
+                self.assertEqual(len(result['binaries']), 2)
+                self.assertTrue(all(item['icon_payloads_verified'] for item in result['binaries']))
+                self.assertEqual(api.lookups, [(14, 1), (3, 7), (14, 1), (3, 7)])
+                self.assertEqual(api.freed, [71, 71])
+
+    def test_sdk_planes_exception_preserves_header_count_and_payload_rejections(self):
+        output, _ = self.synthetic_native(windows=True)
+        receipt = json.loads((output / 'BUILD-RECEIPT.json').read_text())
+        root = output.parents[1]
+        icon = root / 'assets/many-ai-cli.ico'
+        source = bytearray(icon.read_bytes())
+        struct.pack_into('<H', source, 10, 0)
+        icon.write_bytes(source)
+        prepared = {**receipt['windows_resources'], 'icon_sha256': ci.digest(icon)}
+        payload = b'synthetic-ico-payload'
+        observed = lambda path: {'FileVersion': '1.0.0', 'ProductVersion': '1.0.0', 'OriginalFilename': path.name}
+        cases = []
+        for label, offset, fmt, value in (('width', 6, '<B', 2), ('height', 7, '<B', 2),
+                                          ('colors', 8, '<B', 1), ('reserved', 9, '<B', 1),
+                                          ('planes', 10, '<H', 2), ('bit_depth', 12, '<H', 24),
+                                          ('size', 14, '<I', len(payload) + 1), ('missing_id', 18, '<H', 8)):
+            group = bytearray(self.group_icon(payload))
+            struct.pack_into(fmt, group, offset, value)
+            cases.append((label, bytes(group), payload))
+        group = self.group_icon(payload)
+        cases.extend([('payload', group, b'X' + payload[1:]),
+                      ('extra_image', group[:4] + struct.pack('<H', 2) + group[6:] * 2, payload),
+                      ('zero_count', group[:4] + b'\0\0', payload),
+                      ('truncated_group', group[:-1], payload)])
+        for label, group, actual_payload in cases:
+            api = self.icon_api({(14, 1): group, (3, 7): actual_payload})
+            with self.subTest(case=label), patch.object(ci, 'ROOT', root):
+                with patch.object(ci, 'windows_file_version', side_effect=observed), patch.object(ctypes, 'WinDLL', return_value=api, create=True):
+                    with self.assertRaises(ValueError):
+                        ci.verify_windows_resources(output, '1.0.0', prepared)
+            self.assertEqual(api.freed, [71])
+        # A nonzero source value has no normalization exception, even if SDK
+        # supplies one; actual arbitrary values are never normalized away.
+        struct.pack_into('<H', source, 10, 2)
+        icon.write_bytes(source)
+        prepared['icon_sha256'] = ci.digest(icon)
+        api = self.icon_api({(14, 1): self.group_icon(payload), (3, 7): payload})
+        with patch.object(ci, 'ROOT', root), patch.object(ci, 'windows_file_version', side_effect=observed):
+            with patch.object(ctypes, 'WinDLL', return_value=api, create=True):
+                with self.assertRaisesRegex(ValueError, 'product version/icon readback'):
+                    ci.verify_windows_resources(output, '1.0.0', prepared)
+
     def test_icon_reader_follows_group_ids_and_always_frees_resource_only_module(self):
         payload = b'synthetic referenced icon'
         api = self.icon_api({(14, 1): self.group_icon(payload), (3, 7): payload})

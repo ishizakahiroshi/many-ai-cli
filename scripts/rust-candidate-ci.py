@@ -187,6 +187,15 @@ def windows_icon_resources(binary: Path) -> list[tuple[tuple, bytes]]:
     finally:
         api.FreeLibrary(module)
 
+def windows_icon_images_match(actual: list, expected: list) -> bool:
+    # SDK rc.exe changes zero ICO planes to one in both PNG and DIB group entries.
+    # Preserve exact matches and allow only that change; all other fields and the
+    # actual referenced RT_ICON payloads must still match, including image count.
+    return len(actual) == len(expected) and all(
+        payload == wanted_payload and (entry == wanted_entry or (
+            wanted_entry[4] == 0 and entry == wanted_entry[:4] + (1,) + wanted_entry[5:]))
+        for (entry, payload), (wanted_entry, wanted_payload) in zip(actual, expected))
+
 def verify_windows_resources(output: Path, version: str, prepared: dict) -> dict:
     icon = (ROOT / 'assets' / 'many-ai-cli.ico').read_bytes()
     if len(icon) < 6 or icon[:4] != b'\0\0\1\0':
@@ -207,7 +216,7 @@ def verify_windows_resources(output: Path, version: str, prepared: dict) -> dict
         observed = windows_file_version(binary)
         if (observed['FileVersion'] != version or observed['ProductVersion'] != version
                 or observed['OriginalFilename'] != binary.name
-                or windows_icon_resources(binary) != images):
+                or not windows_icon_images_match(windows_icon_resources(binary), images)):
             raise ValueError('Windows binary product version/icon readback mismatch')
         binaries.append({'name': binary.name, 'sha256': digest(binary), 'file_version': version,
                          'product_version': version, 'icon_payloads_verified': True})

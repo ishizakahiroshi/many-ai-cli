@@ -11,6 +11,9 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Fixed
+- Windows release resource validation accepts the SDK's zero-to-one icon-plane
+  normalization while still requiring matching icon image bytes, directory
+  fields, image count, file version, and product version.
 - npm packages and Linux package documentation now retain the Web dependency
   license notices from the canonical release ZIPs. Packaging rejects missing,
   empty, or inconsistent Web notices before replacing any output.
