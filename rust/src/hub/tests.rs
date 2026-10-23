@@ -404,6 +404,115 @@ fn ai_launch_shell_api_auth_and_invalid_value_leave_state_and_file_unchanged() {
     assert_eq!(std::fs::read(destination).unwrap(), before_bytes);
 }
 #[test]
+fn protected_route_guard_failures_preserve_config_before_a_live_success() {
+    let (_dir, router) = router();
+    let initial = router.config.snapshot().unwrap();
+    router
+        .config
+        .persist(initial.revision, initial.config)
+        .unwrap();
+    let before = router.config.snapshot().unwrap();
+    let destination = router.paths.resource(crate::config::Resource::Config);
+    let before_bytes = std::fs::read(&destination).unwrap();
+
+    // Exercise the composed router and real temporary persistence destination,
+    // rather than interpreting guard return values as proof of no mutation.
+    for (label, token, method, host, origin, expected) in [
+        (
+            "query-over-bearer",
+            "wrong",
+            "POST",
+            "localhost:48888",
+            "http://localhost:48888",
+            401,
+        ),
+        (
+            "method-before-host",
+            "synthetic",
+            "DELETE",
+            "foreign.invalid",
+            "https://foreign.invalid",
+            405,
+        ),
+        (
+            "host-before-origin",
+            "synthetic",
+            "POST",
+            "foreign.invalid",
+            "https://foreign.invalid",
+            403,
+        ),
+        (
+            "origin-before-owner",
+            "synthetic",
+            "POST",
+            "localhost:48888",
+            "https://foreign.invalid",
+            403,
+        ),
+    ] {
+        let mut r = request();
+        r.path = "/api/ai-launch-shell".into();
+        r.query = format!("token={token}");
+        r.method = method.into();
+        r.host = host.into();
+        r.headers = vec![
+            ("Authorization".into(), "Bearer synthetic".into()),
+            ("Cookie".into(), format!("{TOKEN_COOKIE}=synthetic")),
+            ("Origin".into(), origin.into()),
+        ];
+        r.body = br#"{"ai_launch_shell":"pwsh"}"#.to_vec();
+        assert_eq!(router.handle(&r, 1000).response.status, expected, "{label}");
+        let after = router.config.snapshot().unwrap();
+        assert_eq!(after.revision, before.revision, "{label}");
+        assert_eq!(
+            after.config.hub.ai_launch_shell, before.config.hub.ai_launch_shell,
+            "{label}"
+        );
+        assert_eq!(
+            std::fs::read(&destination).unwrap(),
+            before_bytes,
+            "{label}"
+        );
+    }
+
+    let mut accepted = request();
+    accepted.path = "/api/ai-launch-shell".into();
+    accepted.body = br#"{"ai_launch_shell":"pwsh"}"#.to_vec();
+    assert_eq!(router.handle(&accepted, 1000).response.status, 200);
+    let after = router.config.snapshot().unwrap();
+    assert_eq!(after.config.hub.ai_launch_shell, "pwsh");
+    assert_ne!(after.revision, before.revision);
+    assert_ne!(std::fs::read(destination).unwrap(), before_bytes);
+}
+
+#[test]
+fn protected_safe_get_skips_origin_but_keeps_host_guard_without_mutation() {
+    let (_dir, router) = router();
+    let initial = router.config.snapshot().unwrap();
+    router
+        .config
+        .persist(initial.revision, initial.config)
+        .unwrap();
+    let before = router.config.snapshot().unwrap();
+    let destination = router.paths.resource(crate::config::Resource::Config);
+    let before_bytes = std::fs::read(&destination).unwrap();
+    let mut r = request();
+    r.path = "/api/input-config".into();
+    r.method = "GET".into();
+    r.headers = vec![
+        ("Origin".into(), "https://foreign.invalid".into()),
+        ("Sec-Fetch-Site".into(), "cross-site".into()),
+    ];
+    assert_eq!(router.handle(&r, 1000).response.status, 200);
+    r.host = "foreign.invalid:48888".into();
+    assert_eq!(router.handle(&r, 1000).response.status, 403);
+    let after = router.config.snapshot().unwrap();
+    assert_eq!(after.revision, before.revision);
+    assert_eq!(std::fs::read(destination).unwrap(), before_bytes);
+}
+
+#[test]
 fn ai_launch_shell_api_failed_save_does_not_publish_memory_or_change_existing_files() {
     let (_dir, router) = router();
     let destination = router.paths.resource(crate::config::Resource::Config);

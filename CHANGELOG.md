@@ -11,6 +11,9 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Fixed
+- Cancelling uninstall, closing its input, or failing to read confirmation now
+  leaves the running Hub untouched. Hub shutdown and data removal begin only
+  after explicit confirmation.
 - Windows release resource validation accepts the SDK's zero-to-one icon-plane
   normalization while still requiring matching icon image bytes, directory
   fields, image count, file version, and product version.

@@ -1,6 +1,7 @@
 //! Source desktop setup and uninstall. Effects run only when the CLI invokes them.
 use crate::{config::RuntimePaths, process::Cancellation, proto::core::CoreFuture};
 use std::{
+    future::Future,
     io::{self, BufRead, Write},
     path::{Path, PathBuf},
     sync::Arc,
@@ -279,6 +280,23 @@ impl PlatformCli {
         out: &mut impl Write,
         cancel: &Cancellation,
     ) -> io::Result<()> {
+        self.uninstall_with_prepare(purge, input, out, cancel, || async { Ok(()) })
+            .await
+    }
+
+    /// Run pre-removal work only after the user explicitly confirms once.
+    pub async fn uninstall_with_prepare<F, Fut>(
+        &self,
+        purge: bool,
+        input: &mut impl BufRead,
+        out: &mut impl Write,
+        cancel: &Cancellation,
+        prepare: F,
+    ) -> io::Result<()>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = io::Result<()>>,
+    {
         writeln!(
             out,
             "以下を削除します:\n  設定・ログ: {}",
@@ -295,6 +313,7 @@ impl PlatformCli {
             writeln!(out, "アンインストールをキャンセルしました。")?;
             return Ok(());
         }
+        prepare().await?;
         let removed = self.io.remove_data(&self.locations.config)?;
         writeln!(
             out,

@@ -431,14 +431,6 @@ async fn run() -> Result<(), String> {
             let cancel = Cancellation::default();
             let _signals = runtime_context::ShutdownSignals::install(cancel.clone())
                 .map_err(|e| e.to_string())?;
-            if main_program::running_port(&context)
-                .await
-                .map_err(|e| e.to_string())?
-                .is_some()
-            {
-                println!("Hub を停止中...");
-                let _ = many_ai_cli::application::maintenance_entry::stop(&context, &cancel).await;
-            }
             let native = std::sync::Arc::new(
                 many_ai_cli::application::platform_cli::native::NativePlatformIo {
                     actor: many_ai_cli::application::diagnostics::NativeDiagnosticIo {
@@ -461,15 +453,27 @@ async fn run() -> Result<(), String> {
                 locations,
                 io: native,
             };
-            // Release ConfigStore's held Windows root before removing the data
-            // directory. The immutable actor retains no directory capability.
-            drop(context);
+            let stop_cancel = cancel.clone();
             owner
-                .uninstall(
+                .uninstall_with_prepare(
                     flags.boolean("purge"),
                     &mut std::io::stdin().lock(),
                     &mut std::io::stdout(),
                     &cancel,
+                    || async move {
+                        if main_program::running_port(&context).await?.is_some() {
+                            println!("Hub を停止中...");
+                            let _ = many_ai_cli::application::maintenance_entry::stop(
+                                &context,
+                                &stop_cancel,
+                            )
+                            .await;
+                        }
+                        // Release ConfigStore's held Windows root before removing
+                        // data. The immutable actor retains no directory capability.
+                        drop(context);
+                        Ok(())
+                    },
                 )
                 .await
                 .map_err(|e| e.to_string())?;

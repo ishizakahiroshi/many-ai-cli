@@ -151,6 +151,160 @@ async fn uninstall_decline_has_no_effect_and_yes_orders_cleanup_before_purge() {
             .contains("localStorage.clear()")
     );
 }
+
+#[tokio::test]
+async fn uninstall_entry_decline_and_eof_never_prepare_or_delete() {
+    for answer in ["N\n", "no\n", "  No  \n", "\n", "", "yes please\n"] {
+        let (_temp, owner, io) = fixture();
+        let mut out = vec![];
+        owner
+            .uninstall_with_prepare(
+                true,
+                &mut answer.as_bytes(),
+                &mut out,
+                &Cancellation::default(),
+                || async {
+                    io.events.lock().unwrap().push("stop".into());
+                    Ok(())
+                },
+            )
+            .await
+            .unwrap();
+        assert!(io.events.lock().unwrap().is_empty(), "answer {answer:?}");
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out.matches("続行しますか? [y/N]: ").count(), 1);
+        assert!(out.contains("キャンセルしました"));
+    }
+}
+
+struct FailingConfirmation;
+impl io::Read for FailingConfirmation {
+    fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+        Err(io::ErrorKind::BrokenPipe.into())
+    }
+}
+impl BufRead for FailingConfirmation {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        Err(io::ErrorKind::BrokenPipe.into())
+    }
+    fn consume(&mut self, _: usize) {}
+    fn read_line(&mut self, line: &mut String) -> io::Result<usize> {
+        // A failed read must not accept even a partially received approval.
+        line.push_str("yes");
+        Err(io::ErrorKind::BrokenPipe.into())
+    }
+}
+
+#[tokio::test]
+async fn uninstall_entry_input_error_never_prepares_or_deletes() {
+    let (_temp, owner, io) = fixture();
+    let mut out = vec![];
+    let error = owner
+        .uninstall_with_prepare(
+            true,
+            &mut FailingConfirmation,
+            &mut out,
+            &Cancellation::default(),
+            || async {
+                io.events.lock().unwrap().push("stop".into());
+                Ok(())
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+    assert!(io.events.lock().unwrap().is_empty());
+    assert_eq!(
+        String::from_utf8(out)
+            .unwrap()
+            .matches("続行しますか? [y/N]: ")
+            .count(),
+        1
+    );
+}
+
+struct HeldContext(Arc<Fake>);
+impl Drop for HeldContext {
+    fn drop(&mut self) {
+        self.0.events.lock().unwrap().push("context-drop".into());
+    }
+}
+
+#[tokio::test]
+async fn uninstall_entry_approval_prepares_once_and_releases_context_before_cleanup() {
+    for (answer, purge) in [("y\n", true), ("yes\n", false), (" YES \n", true)] {
+        let (_temp, owner, io) = fixture();
+        let context = HeldContext(io.clone());
+        let mut out = vec![];
+        owner
+            .uninstall_with_prepare(
+                purge,
+                &mut answer.as_bytes(),
+                &mut out,
+                &Cancellation::default(),
+                || async {
+                    io.events.lock().unwrap().push("stop".into());
+                    drop(context);
+                    Ok(())
+                },
+            )
+            .await
+            .unwrap();
+        let mut expected = vec![
+            "stop".into(),
+            "context-drop".into(),
+            format!("tree:{}", owner.locations.config.display()),
+        ];
+        for name in [SHORTCUT, LEGACY_SHORTCUT] {
+            expected.push(format!(
+                "remove:{}",
+                owner
+                    .locations
+                    .startup
+                    .as_ref()
+                    .unwrap()
+                    .join(name)
+                    .display()
+            ));
+        }
+        if purge {
+            expected.push(format!("purge:{}", owner.locations.executable.display()));
+        }
+        assert_eq!(*io.events.lock().unwrap(), expected);
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out.matches("続行しますか? [y/N]: ").count(), 1);
+        assert!(out.contains("localStorage.clear()"));
+        assert_eq!(out.contains("バイナリを手動で削除してください"), !purge);
+    }
+}
+
+#[tokio::test]
+async fn uninstall_entry_prepare_error_preserves_error_and_prevents_deletion() {
+    let (_temp, owner, io) = fixture();
+    let mut out = vec![];
+    let error = owner
+        .uninstall_with_prepare(
+            true,
+            &mut &b"yes\n"[..],
+            &mut out,
+            &Cancellation::default(),
+            || async {
+                io.events.lock().unwrap().push("lookup".into());
+                Err(io::ErrorKind::PermissionDenied.into())
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+    assert_eq!(*io.events.lock().unwrap(), ["lookup"]);
+    assert_eq!(
+        String::from_utf8(out)
+            .unwrap()
+            .matches("続行しますか? [y/N]: ")
+            .count(),
+        1
+    );
+}
 #[test]
 fn batch_and_powershell_values_are_not_interpreted_as_code() {
     assert_eq!(native::quote("a'$()b").unwrap(), "'a''$()b'");
