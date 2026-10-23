@@ -11,6 +11,9 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Fixed
+- npm packages and Linux package documentation now retain the Web dependency
+  license notices from the canonical release ZIPs. Packaging rejects missing,
+  empty, or inconsistent Web notices before replacing any output.
 - Debug builds no longer collect temporary UI-freeze recorder events. Existing
   diagnostic files are preserved; the underlying investigation remains open.
 - Windows desktop shortcuts now open the Hub and browser on the first launch,

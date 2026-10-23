@@ -87,6 +87,9 @@ class PackerNpmIntegration(unittest.TestCase):
                     }
                 (folder / "BUILD-RECEIPT.json").write_text(json.dumps(receipt), encoding="utf-8")
             docs = {name: f"synthetic source document {name}".encode() for name in (*package.DOCS, "unblock-windows.cmd")}
+            web_notice_source = "web/src/vendor/THIRD_PARTY_LICENSES.txt"
+            web_notice_output = "WEB-THIRD-PARTY-LICENSES.txt"
+            docs[web_notice_source] = b"synthetic Web vendor license\r\nCopyright \xc2\xa9 fixture authors\n"
             with patch.object(package, "release_source_identity", return_value=(source, build_time)), \
                     patch.object(package, "source_documents", return_value=docs):
                 package.assemble(inputs, output, root, release_tag=tag)
@@ -95,6 +98,7 @@ class PackerNpmIntegration(unittest.TestCase):
                 with zipfile.ZipFile(output / f"many-ai-cli-{version}-{suffix}.zip") as archive:
                     self.assertIn("RELEASE-EVIDENCE.txt", archive.namelist())
                     self.assertNotIn("NOT-FOR-CUTOVER.txt", archive.namelist())
+                    self.assertEqual(archive.read(web_notice_source), docs[web_notice_source])
             environment = os.environ.copy()
             environment.update(PYTHONDONTWRITEBYTECODE="1", MANY_AI_PYTHON=sys.executable)
             result = subprocess.run(["node", str(scripts / "stage-npm-from-release.mjs"), str(output)],
@@ -107,10 +111,12 @@ class PackerNpmIntegration(unittest.TestCase):
                     self.assertEqual((platform / "bin" / binary).read_bytes(), archive.read(binary))
                     self.assertEqual([p.name for p in (platform / "bin").iterdir()], [binary])
                     self.assertEqual((platform / "THIRD_PARTY_NOTICES.md").read_bytes(), archive.read("THIRD_PARTY_NOTICES.md"))
+                    self.assertEqual((platform / web_notice_output).read_bytes(), archive.read(web_notice_source))
                     for name in package.PACKAGING_INPUTS:
                         expected = archive.read("packaging-inputs/" + name)
                         self.assertEqual((platform / "build-inputs" / name).read_bytes(), expected)
                         self.assertEqual((root / "npm/many-ai-cli/build-inputs" / suffix / name).read_bytes(), expected)
+            self.assertEqual((root / "npm/many-ai-cli" / web_notice_output).read_bytes(), docs[web_notice_source])
 
             def channels(archives, destination):
                 result = subprocess.run([sys.executable, str(ARGS.channels_helper.resolve()),
@@ -123,10 +129,11 @@ class PackerNpmIntegration(unittest.TestCase):
                         expected = archive.read(binary)
                         self.assertEqual((destination / "deb-root/usr/bin" / binary).read_bytes(), expected)
                         self.assertEqual((destination / "rpm/SOURCES" / binary).read_bytes(), expected)
-                    for member in ("LICENSE", "THIRD_PARTY_NOTICES.md", *["packaging-inputs/" + name for name in package.PACKAGING_INPUTS]):
+                    for member in ("LICENSE", "THIRD_PARTY_NOTICES.md", *["packaging-inputs/" + name for name in package.PACKAGING_INPUTS], web_notice_source):
                         expected = archive.read(member)
-                        self.assertEqual((destination / "deb-root/usr/share/doc/many-ai-cli" / member).read_bytes(), expected)
-                        self.assertEqual((destination / "rpm/SOURCES" / member).read_bytes(), expected)
+                        name = web_notice_output if member == web_notice_source else member
+                        self.assertEqual((destination / "deb-root/usr/share/doc/many-ai-cli" / name).read_bytes(), expected)
+                        self.assertEqual((destination / "rpm/SOURCES" / name).read_bytes(), expected)
 
             channels(output, root / "channels-before-publication")
             workflow_spec = importlib.util.spec_from_file_location("release_workflow_integration", REPO / "scripts/rust-release-workflow.py")

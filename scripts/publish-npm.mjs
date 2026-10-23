@@ -23,7 +23,7 @@ export function expectedFiles(pkg) {
   const root = pkg === 'many-ai-cli';
   const target = Object.values(TARGETS).find(t => t.pkg === pkg);
   if (!root && !target) throw new Error('unknown npm platform package');
-  return ['package.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'build-inputs/README.txt',
+  return ['package.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'WEB-THIRD-PARTY-LICENSES.txt', 'build-inputs/README.txt',
     ...(root ? ['README.md', 'bin/many-ai-cli.mjs', ...Object.values(TARGETS).flatMap(t =>
       [...EVIDENCE, 'THIRD_PARTY_NOTICES.md'].map(n => `build-inputs/${t.pkg.slice('many-ai-cli-'.length)}/${n}`))]
       : [`bin/${target.binName}`, ...EVIDENCE.map(n => `build-inputs/${n}`)])].sort();

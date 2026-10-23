@@ -1,5 +1,128 @@
 # many-ai-cli リリース手順
 
+## Rust 本線のリリース手順（現行）
+
+本線は Rust 版です。現在の配布経路は [Release workflow](../.github/workflows/release.yml)、
+[native 検証・ビルド](../scripts/rust-candidate-ci.py)、[四対象の梱包](../scripts/package-rust-candidates.py)、
+[配布制御 helper](../scripts/rust-release-workflow.py)を正本とします。
+GoReleaser と `GOOS` による旧アプリのビルドは現在の手順ではありません。
+凍結した `go/` は互換性の固定資料であり、旧アプリのビルド・テストを再開しません。
+以下は実装された配布契約の説明で、正式公開済み・実機受入済みの宣言ではありません。
+
+### 候補検証・正式配布・チャネル再実行の区別
+
+| 経路 | 入力と結果 | この結果だけでは証明しないこと |
+|---|---|---|
+| 手動の `rust-migration.yml` | 同じ source / run / attempt の Windows x64、Linux x64、macOS Intel、macOS Apple Silicon を検査し、両バイナリと receipt を候補梱包へ集約 | 正式 tag の stamp・Windows product resource、署名、公開、導入・更新・復帰、実機・音声・利用者受入 |
+| `release.yml` の `full` | strict tag の同一 commit から四 native target を検証・ビルドし、ZIP → 安定版 Linux package → SBOM / checksum → 署名 → canonical GitHub Release の順に渡す | receipt の作成や job の成功だけによる実機・実データ受入、全 optional channel の完了 |
+| `npm` / `homebrew` / `winget` の再実行 | 公開済みの四 canonical ZIP と署名済み checksum を検証し、指定チャネルだけを準備・公開する | native 再ビルドや canonical asset の差し替え、旧 Go リリースを Rust 配布として再公開すること |
+
+候補の receipt は `release_ready: false` を保持します。候補の bytes 検収と正式配布完了を
+同じ状態にしません。全手順と資材の境界は [Rust 梱包手順](../rust/packaging/README.md#formal-rust-release-orchestration)
+にも記載しています。公式 Docker image・container build・自動更新は v1.0.0 の対象外です。
+既知の container build 失敗は未修正で、Linux native / SSH 運用は対象に残ります。
+
+### 正式ビルド前の gate
+
+1. tag は `vMAJOR.MINOR.PATCH[-prerelease]`。`+build`、core と数値 prerelease の先頭ゼロ、空 segment は拒否します。full 実行では tag ref、event SHA、checkout HEAD、tag commit が一致する必要があります。
+2. `node scripts/check-instrumentation.mjs --release` が登録された一時観測の残存を拒否します。debug でしか記録しない観測でも、台帳の撤去条件は別途満たします。検査を通すために調査完了や原因修正を捏造しません。
+3. 公開済み tag の full 再ビルドは拒否します。チャネルの失敗は下の選択再実行で扱い、公開済み ZIP・checksum・tag を置き換える復旧はしません。
+4. `CHANGELOG.md` に tag の版と一致する `## [<version>]` 節がちょうど一つあり、見出し・コメント以外の本文が必要です。Unreleased や私的ドラフトだけでは通りません。版の節と実際の公開日はレビュー後に確定します。
+5. 同一 source SHA の最新 `Validate` / `doxguard` / `secret-scan` が成功している必要があります。未出現・実行中は最大 10 分待ち、completed failure と API 失敗は拒否します。古い green は代用しません。plan job は 15 分、各 API request は 60 秒で区切ります。
+
+これは tag 作成・push・workflow dispatch の実行許可を与えるチェックリストではありません。
+各操作はその版のレビューと公開承認の範囲で行います。
+
+### native から canonical 公開まで
+
+native runner の固定ツールは Rust 1.90.0、Go 1.26.8、Bun 1.3.14、Python 3.12 です。
+Go は互換データ・合成 fixture のためのツールで、Go 製品のビルドを行いません。
+Web 資材を先に生成し、packaging checks、Web check、Rust fmt / Clippy / all-target tests / doc tests
+を実行した後、各 target で本体とランチャーの 2 本を一度ずつ release build します。
+native helper の正式 mode は `--target <triple> --release-tag <tag>`、梱包 helper は
+`--inputs <directory> --output <directory> --release-tag <tag>` です。これら自体は公開を行いません。
+
+正式 mode は compile 前に tag commit を HEAD と照合し、tag 由来の版・commit・日時を
+注入します。Windows では既存 SDK の `rc.exe` で version / icon resource を用意し、
+生成した両 PE の version と group icon → icon resource の readback を検査します。
+Whisper runtime の準備・署名・x64・同梱 bytes 確認も別の検査です。
+通常 candidate mode の成功を、これら正式 Windows 資材の受入と読み替えません。
+
+梱包は同じ source / run / attempt の四 artifact だけを要求します。
+一つでも native が失敗した後は四 native job を同じ新 attempt で再実行します。
+前 attempt の成功三件と再試行一件を混ぜた集約は拒否されます。
+runner の checkout は source bytes を LF に統一し、lockfile、launcher UI、生成 Web 資材の
+identity 不一致も拒否します。ZIP に両バイナリ、license / notices、build receipt、
+Cargo build-input 証拠を同梱し、後続チャネルへ同じ bytes を渡します。
+
+安定版の deb / rpm は canonical Linux ZIP の内容からパッケージだけを作り、
+再展開して本体・ランチャー・notices・証拠の bytes を比較します。
+四 ZIP と deb / rpm ごとに pinned Syft の SPDX を作り、checksum inventory に結び付けます。
+Cargo build-input SPDX と配布資材の SPDX は別の証拠です。いずれも完全な runtime 分類や
+ライセンス確認完了を自動的に証明するものではありません。
+
+権限の境界は次のとおりです。
+
+- native / package は npm token、別リポジトリの PAT、署名用 OIDC 権限を持ちません。checkout credential は保存しません。package の GitHub token は artifact metadata の読み取り用です。
+- `sign` job だけが checksum 署名用の `id-token: write` を持ち、cosign keyless で `SHA256SUMS.txt` に署名し、tag ref に結び付く workflow identity を検証します。
+- `publish` job は署名と全 asset を再検証してから、公開 step だけに GitHub token を渡し、human notes と canonical asset を GitHub Release へ公開します。ここで native build は行いません。
+- canonical 公開の後で四 ZIP と署名済み checksum を再取得・検証して npm / pointer へ渡します。optional channel が skipped / failed なら、その状態を残し、canonical 公開の完了と区別します。
+
+Windows Authenticode と macOS Developer ID / notarization は未有効です。
+checksum の cosign 署名、package manager、`unblock-windows.cmd` は OS の code signing や
+組織の許可リストの代わりになりません。秘密値は手順書・リポジトリ・ログへ書きません。
+
+### npm と stable pointer
+
+通常公開と npm-only 再実行はともに `stage-npm-from-release.mjs` を使います。
+四 ZIP の checksum、正式 Rust receipt、source / tag / target、両 binary と build-input 証拠の
+hash を全件確認してから staging します。npm は main binary だけを platform package へ置き、
+別 launcher は含めません。root shim、package metadata、README は release tag commit に固定し、
+再実行時に選択した workflow source から移すのは明示された redistribution helper だけです。
+両 source SHA を記録し、後日の package metadata drift を混ぜません。
+
+`sync-npm-version.mjs <tag>` が root / 四 platform package と exact optionalDependencies を揃えます。
+`publish-npm.sh <tag>` は platform を先に、root を最後に、`--access public --provenance` 付きで
+公開します。既存の同一 npm version は payload の一致を確認し、不一致を上書きしません。
+prerelease は `next`、stable は `latest` です。`NPM_TOKEN` は最終 publish step だけで使い、
+未設定なら npm を明示的に skipped とします。registry の Trusted Publishing 設定変更は行いません。
+
+Homebrew / winget は canonical ZIP から manifest を作る stable 専用 pointer です。
+`PUBLISH_GITHUB_TOKEN` は最終 pointer 公開 step だけで使い、未設定なら skipped とします。
+prerelease は四 ZIP と npm `next` のみで、deb / rpm と stable pointer は明示的に skip します。
+Docker の build / push / auto-update はこの流れに含みません。
+
+既存の npm 注意点は現在も有効です。`npm publish` にディレクトリを渡す場合は `./npm/...`
+のように相対 path を明示し、GitHub shorthand と誤解釈させません。package manager を使っても
+OS の実行許可は別問題です。更新後は新しい版から `many-ai-cli setup` を再実行して shortcut を
+更新し、実行中 Hub の再起動は利用中の AI 作業に合わせます。
+`smoke-npm.mjs` は現在 OS で実バイナリを実行する検査なので、静的梱包検査の成功と混同しません。
+未配置・空バイナリ・非対応 host は合格にしません。
+
+### 部分失敗時の workflow_dispatch
+
+| input | 選択される経路 |
+|---|---|
+| `tag` | 既存の厳格な Rust release tag。必須 |
+| `channel: legacy`（既定）と `npm_only: true`（既定） | 公開済み canonical asset から npm だけ |
+| `channel: legacy` と `npm_only: false` | full。選択する workflow ref も要求 tag であることが必須 |
+| `channel: full` | 明示 full。選択 ref / event SHA / HEAD / tag commit の一致が必須 |
+| `channel: npm` / `homebrew` / `winget` | 指定チャネルだけ。`npm_only` よりこちらの明示選択を優先 |
+
+選択チャネルの再実行では native build をせず、公開済み tag-bound cosign 署名と四 canonical
+ZIP の hash / source を検証します。古い Go ZIP や候補 receipt は正式 Rust npm の入力にしません。
+署名・asset 検証の失敗を無視した手作業 publish や asset 差し替えで復旧しません。
+再実行の成功だけで実機、導入・更新・復帰、音声、実データの受入を完了にしません。
+
+## 旧 Go 配布の履歴（以下は現行手順ではない）
+
+<details>
+<summary>旧版の GoReleaser 手順・失敗記録を開く（参照専用）</summary>
+
+以下は既存 anchor と失敗時の背景を残す履歴です。「現在」「修正済み」という語も当時の状態を
+表します。Go build / test、WSL、タグ再利用、旧 GoReleaser publish のコマンドを Rust 本線の
+作業指示として実行しないでください。現行契約は上の「Rust 本線のリリース手順」です。
+
 > 最終更新: 2026-10-22(木) 17:11:55 — npm検収を4環境の非空バイナリ必須・専有temp方式へ追従。正式Rust配布への切替は公開準備計画で管理
 
 この手順は GitHub Actions の `Release` workflow と GoReleaser で GitHub Releases を作成するための恒久運用メモ。
@@ -118,6 +241,8 @@ git merge-base --is-ancestor (git describe --tags --abbrev=0 main) develop
 `Makefile` は `make build` のたびに `git describe --tags --always --dirty` を `-X main.version` に注入する。develop が main の最新タグを取り込み損ねていると、Hub UI の表示が `0.3.3-21-g3664cac` のように "タグから距離が離れた形" になり、目視で気付ける。クリーンに backport が済んでいれば `0.3.4-N-g<sha>` のように直近タグからの形になる。**Hub UI 設定モーダルの版数が "古いメジャー" を指していたら、まず `git merge-base --is-ancestor v<latest> develop` を確認する**。
 
 ## 現在のリリース方式
+
+> この節は旧 Go 配布時点の履歴です。現行は冒頭の [Rust 本線の手順](#rust-本線のリリース手順現行)を参照してください。
 
 - タグ `v*.*.*` を push すると `.github/workflows/release.yml` が起動する
 - workflow は Ubuntu 上で GoReleaser v2 系を実行する
@@ -621,3 +746,5 @@ GitHub の `windows-latest` / `ubuntu-latest` runner は、Node.js 20 ベース�
 統合ランチャー `many-ai-cli-launcher` は v0.3.0 から本体と同じマトリクスでビルドし、全 OS アーカイブ・deb/rpm・Homebrew cask に同梱する（`wsl` プロファイルのみ Windows 専用。他 OS では明示エラー）。`windows/arm64` と `linux/arm64` は本体・ランチャーとも `ignore` 済み。
 
 Linux / macOS を未検証のまま添付する場合は、README と release note に未検証であることを明記する。Linux arm64 や Windows arm64 を追加する場合は、GoReleaser の `ignore` 設定（本体・ランチャー両方）も見直す。
+
+</details>

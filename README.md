@@ -281,14 +281,20 @@ If `command`'s executable is not on PATH, the session ends the same way a missin
 
 ## Requirements
 
+Rust, Bun, and Go below are development tools; users of prebuilt packages do not need them.
+
 | Item | Requirement |
 |---|---|
-| Go | 1.25+ (build time) |
+| Rust | 1.90.0, including Cargo (source builds) |
+| Bun | 1.3.14 (generate and check the Web UI before Cargo) |
+| Go | 1.26.8 for compatibility generators and synthetic validation fixtures; the frozen Go application is not built |
 | OS | Windows 10/11, macOS, Linux |
 | Browser | Chrome / Edge / Firefox / Safari |
 | AI CLI | Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI, opencode, Command Code (install the providers you intend to use separately) |
 
 ### Platform verification
+
+The results below describe earlier versions and do not establish real-environment acceptance of Rust v1.0.0.
 
 - Verified in real environments: Windows local Hub and the Windows unified launcher (`wsl` / SSH tunnel profiles)
 - Not yet fully verified in real environments: native Linux, native macOS
@@ -1584,25 +1590,41 @@ The only supported configuration is localhost reachability, as described above. 
 
 ## Build from Source
 
-Requires Go 1.25+.
+The `develop` mainline builds the Rust application. Use Rust 1.90.0, Bun 1.3.14,
+and your platform's native compiler/linker for Cargo's native dependencies.
+Go 1.26.8 is used for compatibility generators and synthetic validation fixtures,
+not to build the frozen application under `go/`.
 
-```bash
-git clone https://github.com/ishizakahiroshi/many-ai-cli.git
+Run from the repository root (the same commands work in PowerShell 7):
+
+```sh
+git clone --branch develop https://github.com/ishizakahiroshi/many-ai-cli.git
 cd many-ai-cli
 
-# Build for the current OS
-go build -o many-ai-cli.exe ./cmd/many-ai-cli   # Windows
-go build -o many-ai-cli ./cmd/many-ai-cli        # macOS / Linux
+# Generate the real Web bundle first; rust/build.rs validates and embeds it.
+cd web
+bun install --frozen-lockfile
+bun run check
+bun run build
+cd ..
+cargo +1.90.0 build --locked --manifest-path rust/Cargo.toml --bins
 ```
+
+Both executables are written under `rust/target/debug/`, with `.exe` on Windows.
+The launcher UI comes from `rust/assets/launcher/ui/index.html`; product resources
+are no longer read from the frozen Go source tree. An ordinary source build is
+not a signed release or installation/update acceptance. The [Rust packaging
+guide](rust/packaging/README.md#formal-rust-release-orchestration) describes the
+separate formal Windows resource/runtime and distribution requirements.
 
 #### Cross-compilation
 
-```bash
-GOOS=windows GOARCH=amd64 go build -o dist/many-ai-cli-windows-x64.exe          ./cmd/many-ai-cli
-GOOS=darwin  GOARCH=amd64 go build -o dist/many-ai-cli-macos-intel              ./cmd/many-ai-cli
-GOOS=darwin  GOARCH=arm64 go build -o dist/many-ai-cli-macos-apple-silicon      ./cmd/many-ai-cli
-GOOS=linux   GOARCH=amd64 go build -o dist/many-ai-cli-linux-x64                ./cmd/many-ai-cli
-```
+Release validation uses native Windows x64, Linux x64, macOS Intel, and macOS
+Apple Silicon runners. The manually dispatched `rust-migration.yml` prepares
+unaccepted candidates; `release.yml` uses explicit tag mode for formal artifacts.
+A cross-target compilation check alone does not validate native PTY, process,
+voice, or device behavior. Do not use the historical `GOOS` commands for the
+Rust mainline; see the [release procedure](docs/manual_release.md).
 
 ---
 

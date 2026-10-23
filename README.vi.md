@@ -118,14 +118,31 @@ Giới hạn đã biết: cơ chế cố ý nhẹ. Board poll 2 giây + inject E
 
 ## Yêu cầu
 
+Rust, Bun và Go dưới đây chỉ dùng khi phát triển; người dùng gói dựng sẵn không cần cài các công cụ này.
+
 | Hạng mục | Yêu cầu |
 |---|---|
-| Go | 1.25+ (lúc build) |
+| Rust | 1.90.0, gồm Cargo (build từ mã nguồn) |
+| Bun | 1.3.14 (tạo và kiểm tra Web UI trước Cargo) |
+| Go | 1.26.8 cho bộ sinh dữ liệu tương thích và fixture kiểm thử tổng hợp; không build ứng dụng Go đã đóng băng |
 | OS | Windows 10/11, macOS, Linux |
 | Trình duyệt | Chrome / Edge / Firefox / Safari |
 | AI CLI | Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI (cài riêng provider cần dùng) |
 
+### Build từ mã nguồn (Rust)
+
+Nhánh `develop` dùng Rust. Tạo `web/dist` bằng Bun trước khi chạy
+`cargo +1.90.0 build --locked --manifest-path rust/Cargo.toml --bins` từ gốc repo;
+cần compiler/linker native phù hợp cho các dependency của Cargo. Xem [các bước tạo Web UI và build](README.md#build-from-source).
+Hai executable nằm trong `rust/target/debug/` (đuôi `.exe` trên Windows);
+launcher UI lấy từ `rust/assets/launcher/ui/index.html`, không dùng cây Go đã đóng băng làm nguồn tài nguyên sản phẩm.
+Ma trận native có Windows x64, Linux x64 và macOS Intel/Apple Silicon.
+Build thành công không chứng minh đã phát hành có chữ ký hoặc đã nghiệm thu cài đặt/cập nhật và thiết bị;
+xem [quy trình phát hành Rust](rust/packaging/README.md#formal-rust-release-orchestration).
+
 ### Mức xác minh nền tảng
+
+Các kết quả dưới đây là lịch sử xác minh của các phiên bản cũ, không chứng minh Rust v1.0.0 đã được nghiệm thu trong môi trường thực tế.
 
 - Đã xác minh thực tế: Hub local Windows và launcher thống nhất Windows (profile `wsl` / SSH tunnel)
 - Chưa xác minh đầy đủ thực tế: native Linux, native macOS

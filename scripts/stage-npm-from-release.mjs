@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { stagePayloads, TARGETS } from './stage-npm-binaries.mjs';
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const EVIDENCE = ['BUILD-INPUTS.json', 'CRATE-NOTICES.txt', 'build-inputs.spdx.json'];
+const WEB_NOTICE = 'WEB-THIRD-PARTY-LICENSES.txt';
 const SCOPE = Buffer.from('Cargo build-input evidence only. This is not a complete distribution SBOM or release/license acceptance.\n');
 const PREFLIGHT = String.raw`
 import hashlib,json,pathlib,re,stat,sys,zipfile
@@ -17,6 +18,7 @@ source,temp=map(pathlib.Path,sys.argv[1:])
 targets=['windows-x64','linux-x64','macos-intel','macos-apple-silicon']
 triples=['x86_64-pc-windows-msvc','x86_64-unknown-linux-gnu','x86_64-apple-darwin','aarch64-apple-darwin']
 evidence=['BUILD-INPUTS.json','CRATE-NOTICES.txt','build-inputs.spdx.json']
+web_notice='web/src/vendor/THIRD_PARTY_LICENSES.txt'
 def require(ok,message):
     if not ok: raise ValueError(message)
 def digest(data): return hashlib.sha256(data).hexdigest()
@@ -30,7 +32,7 @@ for line in (source/'SHA256SUMS.txt').read_text(encoding='utf-8').splitlines():
     sums[name]=match[1].lower()
 archives=list(source.glob('*.zip'))
 require(len(archives)==4,'exactly four supported target ZIPs required')
-selected=[];versions=set();sources=set()
+selected=[];versions=set();sources=set();web_notices=set()
 for suffix in targets:
     matches=[p for p in archives if p.name.endswith('-'+suffix+'.zip')]
     require(len(matches)==1,'missing or duplicate target ZIP: '+suffix)
@@ -45,7 +47,7 @@ for suffix in targets:
     require(path.name in sums and digest(path.read_bytes())==sums[path.name],'archive checksum mismatch: '+suffix)
     extension='.exe' if suffix=='windows-x64' else ''
     binary='many-ai-cli'+extension
-    required={binary,'many-ai-cli-launcher'+extension,'LICENSE','THIRD_PARTY_NOTICES.md','BUILD-RECEIPT.json',*['packaging-inputs/'+n for n in evidence]}
+    required={binary,'many-ai-cli-launcher'+extension,'LICENSE','THIRD_PARTY_NOTICES.md','BUILD-RECEIPT.json',web_notice,*['packaging-inputs/'+n for n in evidence]}
     allowed=required|{'README.md','README.ja.md','README.vi.md','CHANGELOG.md','GO-LICENSE','THIRD-PARTY-NOTICES.md','BUILD-RECEIPT.json','NOT-FOR-CUTOVER.txt','RELEASE-EVIDENCE.txt','PACKAGE-RECEIPT.json','web/src/vendor/THIRD_PARTY_LICENSES.txt'}
     if extension: allowed.add('unblock-windows.cmd')
     directories={p[:i+1] for p in allowed for i,c in enumerate(p) if c=='/'}
@@ -95,11 +97,14 @@ for suffix in targets:
     require(report.get('source_revision')==source_sha and report.get('declared_target')==triples[targets.index(suffix)],'build-input source/target mismatch')
     require(isinstance(spdx,dict) and spdx.get('spdxVersion')=='SPDX-2.3','build-input SPDX is invalid')
     payload={binary:members[binary],'LICENSE':members['LICENSE'],'THIRD_PARTY_NOTICES.md':members['THIRD_PARTY_NOTICES.md']}
+    payload['WEB-THIRD-PARTY-LICENSES.txt']=members[web_notice]
+    web_notices.add(members[web_notice])
     payload.update({'build-inputs/'+n:members['packaging-inputs/'+n] for n in evidence})
     selected.append((suffix,payload))
 require(len(versions)==1,'mixed release archive versions')
 require(len(sources)==1,'mixed release archive sources')
 require(len({payload['LICENSE'] for _,payload in selected})==1,'mixed release licenses')
+require(len(web_notices)==1,'mixed Web vendor notices')
 for suffix,payload in selected:
     for name,data in payload.items():
         dest=temp/suffix/name
@@ -120,6 +125,7 @@ try {
   const root = join(repoRoot, 'npm', 'many-ai-cli');
   const combinedNotices = [];
   let license;
+  let webNotice;
   for (const { pkg, binName } of Object.values(TARGETS)) {
     const suffix = pkg.slice('many-ai-cli-'.length);
     const base = join(ownedTemp, suffix);
@@ -131,6 +137,8 @@ try {
     add(join(platform, 'LICENSE'), license);
     const notice = readFileSync(join(base, 'THIRD_PARTY_NOTICES.md'));
     add(join(platform, 'THIRD_PARTY_NOTICES.md'), notice);
+    webNotice = readFileSync(join(base, WEB_NOTICE));
+    add(join(platform, WEB_NOTICE), webNotice);
     combinedNotices.push(Buffer.from('\n## '+suffix+'\n'), notice);
     for (const name of EVIDENCE) {
       const data = readFileSync(join(base, 'build-inputs', name));
@@ -141,6 +149,7 @@ try {
     add(join(platform, 'build-inputs', 'README.txt'), SCOPE);
   }
   items.push({ dst: join(root, 'LICENSE'), data: license },
+    { dst: join(root, WEB_NOTICE), data: webNotice },
     { dst: join(root, 'THIRD_PARTY_NOTICES.md'), data: Buffer.concat([SCOPE, ...combinedNotices]) },
     { dst: join(root, 'build-inputs', 'README.txt'), data: SCOPE });
   stagePayloads(items);

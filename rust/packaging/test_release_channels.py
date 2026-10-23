@@ -14,8 +14,10 @@ import zipfile
 HELPER = Path(__file__).resolve().parents[2] / 'scripts/prepare-rust-release-channels.py'
 SUFFIXES = ('windows-x64', 'linux-x64', 'macos-intel', 'macos-apple-silicon')
 BINS = ('many-ai-cli', 'many-ai-cli-launcher')
+WEB_NOTICE = 'web/src/vendor/THIRD_PARTY_LICENSES.txt'
+WEB_NOTICE_OUTPUT = 'WEB-THIRD-PARTY-LICENSES.txt'
 DOCS = ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'packaging-inputs/BUILD-INPUTS.json',
-        'packaging-inputs/CRATE-NOTICES.txt', 'packaging-inputs/build-inputs.spdx.json')
+        'packaging-inputs/CRATE-NOTICES.txt', 'packaging-inputs/build-inputs.spdx.json', WEB_NOTICE)
 ID = 'ishizakahiroshi.many-ai-cli'
 
 
@@ -80,9 +82,10 @@ class ReleaseChannels(unittest.TestCase):
             if name == 'README.md':
                 self.assertFalse((self.output / 'rpm/SOURCES' / name).exists())
                 continue
-            destination = 'usr/bin/' + name if name in BINS else 'usr/share/doc/many-ai-cli/' + name
+            output_name = WEB_NOTICE_OUTPUT if name == WEB_NOTICE else name
+            destination = 'usr/bin/' + output_name if name in BINS else 'usr/share/doc/many-ai-cli/' + output_name
             self.assertEqual((self.output / 'deb-root' / destination).read_bytes(), data)
-            self.assertEqual((self.output / 'rpm/SOURCES' / name).read_bytes(), data)
+            self.assertEqual((self.output / 'rpm/SOURCES' / output_name).read_bytes(), data)
             if name in BINS and os.name != 'nt':
                 self.assertEqual(stat.S_IMODE((self.output / 'deb-root' / destination).stat().st_mode), 0o755)
         control = (self.output / 'deb-root/DEBIAN/control').read_text()
@@ -93,6 +96,9 @@ class ReleaseChannels(unittest.TestCase):
         self.assertIn('%global __os_install_post %{nil}', spec)
         self.assertNotIn('%post\n', spec)
         self.assertNotIn('cargo', spec)
+        web_doc = '/usr/share/doc/many-ai-cli/' + WEB_NOTICE_OUTPUT
+        self.assertIn(f'install -Dpm 0644 "%{{_sourcedir}}/{WEB_NOTICE_OUTPUT}" "%{{buildroot}}{web_doc}"', spec)
+        self.assertIn('\n' + web_doc + '\n', spec)
         manifest = json.loads((self.output / 'channel-inputs.json').read_bytes())
         self.assertEqual(manifest['version'], self.version)
         self.assertEqual(manifest['skipped_channels'], {})
@@ -102,7 +108,25 @@ class ReleaseChannels(unittest.TestCase):
             self.assertEqual((len(data), digest(data)), (item['bytes'], item['sha256']))
             self.assertFalse(Path(item['path']).is_absolute())
         for item in manifest['linux_payloads']:
-            self.assertEqual(item['sha256'], digest(self.members('linux-x64')[item['name']]))
+            source_name = WEB_NOTICE if item['name'] == WEB_NOTICE_OUTPUT else item['name']
+            self.assertEqual(item['sha256'], digest(self.members('linux-x64')[source_name]))
+
+    def test_web_notice_in_every_target_is_verified_before_any_output(self):
+        for suffix in SUFFIXES:
+            for problem in ('missing', 'empty', 'changed'):
+                with self.subTest(suffix=suffix, problem=problem):
+                    self.output = self.root / f'new-parent-{suffix}-{problem}/output'
+                    members = self.members(suffix)
+                    if problem == 'missing':
+                        del members[WEB_NOTICE]
+                    else:
+                        members[WEB_NOTICE] = b'' if problem == 'empty' else b'changed synthetic Web license'
+                    self.write_zip(suffix, members)
+                    self.sums()
+                    self.reject()
+                    self.assertFalse(self.output.parent.exists())
+                    self.write_zip(suffix)
+                    self.sums()
 
     def test_homebrew_and_winget_contract(self):
         self.assertEqual(self.run_cli().returncode, 0)

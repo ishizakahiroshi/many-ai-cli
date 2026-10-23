@@ -26,8 +26,10 @@ import zlib
 
 SUFFIXES = ('windows-x64', 'linux-x64', 'macos-intel', 'macos-apple-silicon')
 BINS = ('many-ai-cli', 'many-ai-cli-launcher')
+WEB_NOTICE = 'web/src/vendor/THIRD_PARTY_LICENSES.txt'
+WEB_NOTICE_OUTPUT = 'WEB-THIRD-PARTY-LICENSES.txt'
 DOCS = ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'packaging-inputs/BUILD-INPUTS.json',
-        'packaging-inputs/CRATE-NOTICES.txt', 'packaging-inputs/build-inputs.spdx.json')
+        'packaging-inputs/CRATE-NOTICES.txt', 'packaging-inputs/build-inputs.spdx.json', WEB_NOTICE)
 ALIAS = 'THIRD-PARTY-NOTICES.md'
 ID = 'ishizakahiroshi.many-ai-cli'
 SCHEMA = '1.12.0'
@@ -124,7 +126,7 @@ def preflight(archives, version):
             if not set(required).issubset(archive.namelist()):
                 raise ValueError('missing binary or required license/build-input evidence')
             selected = (*required, *((ALIAS,) if ALIAS in archive.namelist() else ()))
-            payload = {n: archive.read(n) for n in selected}
+            payload = {WEB_NOTICE_OUTPUT if n == WEB_NOTICE else n: archive.read(n) for n in selected}
             if not all(payload.values()):
                 raise ValueError('empty selected ZIP member')
             # CRC-check all bytes, including safe but ignored documentation.
@@ -132,6 +134,8 @@ def preflight(archives, version):
                 raise ValueError('ZIP CRC mismatch')
         verified.append({'suffix': suffix, 'name': name, 'sha256': sha(raw), 'bytes': len(raw)})
         payloads[suffix] = payload
+    if len({payload[WEB_NOTICE_OUTPUT] for payload in payloads.values()}) != 1:
+        raise ValueError('mixed Web vendor notices')
     return verified, payloads
 
 

@@ -22,6 +22,7 @@
     "bin/many-ai-cli",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
+    "WEB-THIRD-PARTY-LICENSES.txt",
     "build-inputs/"
   ]
 }

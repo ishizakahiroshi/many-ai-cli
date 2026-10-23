@@ -12,6 +12,9 @@ import { TARGETS, stagePayloads } from './stage-npm-binaries.mjs';
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
 const python = process.env.MANY_AI_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
 const packages = [...Object.values(TARGETS).map(t => t.pkg), 'many-ai-cli'];
+const WEB_NOTICE_SOURCE = 'web/src/vendor/THIRD_PARTY_LICENSES.txt';
+const WEB_NOTICE_OUTPUT = 'WEB-THIRD-PARTY-LICENSES.txt';
+const WEB_NOTICE_BYTES = Buffer.from('synthetic Web vendor license\r\nCopyright \u00a9 fixture authors\n');
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'many-ai-cli-npm-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -47,6 +50,7 @@ function archives(root, mutate = () => {}) {
       declared_target: ['x86_64-pc-windows-msvc','x86_64-unknown-linux-gnu','x86_64-apple-darwin','aarch64-apple-darwin'][index] })],
     ['packaging-inputs/CRATE-NOTICES.txt', `synthetic crate notice ${pkg}`],
     ['packaging-inputs/build-inputs.spdx.json', JSON.stringify({ spdxVersion: 'SPDX-2.3' })],
+    [WEB_NOTICE_SOURCE, WEB_NOTICE_BYTES.toString('utf8')],
   ] }));
   mutate(definitions);
   const result = spawnSync(python, ['-c', String.raw`
@@ -97,11 +101,27 @@ test('four release ZIPs stage main-only binaries, exact target notices and root 
   for (const { pkg, binName } of Object.values(TARGETS)) {
     assert.equal(readFileSync(join(root, 'npm', pkg, 'bin', binName), 'utf8'), `new synthetic ${pkg}`);
     assert.deepEqual(readdirSync(join(root, 'npm', pkg, 'bin')), [binName]);
+    assert.deepEqual(readFileSync(join(root, 'npm', pkg, WEB_NOTICE_OUTPUT)), WEB_NOTICE_BYTES);
     assert.match(readFileSync(join(root, 'npm', pkg, 'build-inputs/README.txt'), 'utf8'), /not a complete distribution SBOM/);
     const suffix = pkg.slice('many-ai-cli-'.length);
     assert.equal(readFileSync(join(root, 'npm/many-ai-cli/build-inputs', suffix, 'CRATE-NOTICES.txt'), 'utf8'), `synthetic crate notice ${pkg}`);
   }
+  assert.deepEqual(readFileSync(join(root, 'npm/many-ai-cli', WEB_NOTICE_OUTPUT)), WEB_NOTICE_BYTES);
 });
+for (let target = 0; target < 4; target++) for (const problem of ['missing', 'empty', 'changed']) {
+  test(`Web vendor notice ${problem} in target ${target} refuses all npm writes`, t => {
+    const root = fixture(t), before = snapshot(join(root, 'npm'));
+    const dir = archives(root, definitions => {
+      const members = definitions[target].members;
+      if (problem === 'missing') definitions[target].members = members.filter(([name]) => name !== WEB_NOTICE_SOURCE);
+      else members.find(([name]) => name === WEB_NOTICE_SOURCE)[1] = problem === 'empty' ? '' : 'changed synthetic Web license';
+    });
+    const result = stage(root, dir);
+    assert.notEqual(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stderr, /npm outputs were not changed/);
+    assert.deepEqual(snapshot(join(root, 'npm')), before);
+  });
+}
 const invalid = {
   'last target missing': d => d.pop(),
   'unknown target ZIP': d => { d[3].suffix = 'unknown'; },
@@ -115,7 +135,7 @@ const invalid = {
   'backslash member': d => { d[3].members.push(['dir\\escape', 'synthetic']); },
   'symlink member': d => { d[3].members[0][2] = 0o120777; },
   'missing notices': d => { d[3].members.splice(3, 1); },
-  'missing SPDX': d => { d[3].members.pop(); },
+  'missing SPDX': d => { d[3].members = d[3].members.filter(([name]) => name !== 'packaging-inputs/build-inputs.spdx.json'); },
   'false distribution-ready report': d => { d[3].members[4][1] = '{"release_ready":true}'; },
   'missing Rust receipt': d => { d[3].omit_receipt = true; },
   'wrong Rust receipt target': d => { d[3].receipt_patch = { target_name: 'linux-x64' }; },
@@ -184,12 +204,20 @@ test('transaction refuses an npm output root link while allowing a repository ju
 
 test('real offline npm pack preserves the reviewed platform/root evidence allowlists without lifecycle execution', t => {
   const root = fixture(t), out = join(root, 'packed'); mkdirSync(out);
+  const staged = stage(root, archives(root));
+  assert.equal(staged.status, 0, staged.stderr);
   for (const pkg of packages) {
     const result = npmCommand(['pack', join(root, 'npm', pkg), '--offline', '--ignore-scripts', '--cache', join(root, 'npm-cache'), '--json', '--pack-destination', out], root);
     assert.equal(result.status, 0, result.stderr);
     const [pack] = JSON.parse(result.stdout);
     assert.deepEqual(pack.files.map(f => f.path).sort(), expectedFiles(pkg));
     assert.equal(pack.integrity, 'sha512-' + createHash('sha512').update(readFileSync(join(out, pack.filename))).digest('base64'));
+    const readback = spawnSync(python, ['-c', String.raw`
+import sys,tarfile
+with tarfile.open(sys.argv[1], 'r:gz') as archive:
+    assert archive.extractfile('package/WEB-THIRD-PARTY-LICENSES.txt').read() == sys.stdin.buffer.read()
+`, join(out, pack.filename)], { input: WEB_NOTICE_BYTES, encoding: 'utf8', timeout: 10000 });
+    assert.equal(readback.status, 0, readback.stderr);
   }
 });
 test('release tag parser accepts SemVer prereleases and rejects registry-ambiguous versions', () => {

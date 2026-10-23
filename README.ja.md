@@ -241,14 +241,20 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 
 ## 動作要件
 
+下の Rust・Bun・Go は開発用ツールです。配布済みパッケージを使うだけなら不要です。
+
 | 項目 | 要件 |
 |---|---|
-| Go | 1.25 以上（ビルド時） |
+| Rust | 1.90.0、Cargo を含む（ソースビルド時） |
+| Bun | 1.3.14（Cargo より先に Web UI を生成・検査する） |
+| Go | 1.26.8（互換データ生成・合成検証 fixture 用。凍結した Go アプリはビルドしない） |
 | OS | Windows 10/11、macOS、Linux |
 | ブラウザ | Chrome / Edge / Firefox / Safari |
 | AI CLI | Claude Code、Codex CLI、GitHub Copilot CLI、Cursor Agent CLI、Grok Build CLI、opencode、Command Code（使う provider は別途インストール済みであること） |
 
 ### プラットフォーム検証状況
+
+以下は旧版時点の検証履歴であり、現行 Rust v1.0.0 の実機受入を示すものではありません。
 
 - 実機で動作検証済み: Windows ローカル Hub、Windows 統合ランチャー（`wsl` / SSH tunnel profile）
 - 実機で十分に未検証: ネイティブ Linux / ネイティブ macOS
@@ -1515,25 +1521,38 @@ Hub UI には「ログフォルダを OS のファイルマネージャで開く
 
 ## ソースからビルド
 
-Go 1.25 以上が必要です。
+`develop` の本線は Rust 版です。Rust 1.90.0、Bun 1.3.14 と、Cargo の native
+依存に必要な各 OS のコンパイラ・リンカーを用意します。Go 1.26.8 は互換データ生成と
+合成検証 fixture 用で、`go/` に凍結したアプリをビルドするためのものではありません。
 
-```bash
-git clone https://github.com/ishizakahiroshi/many-ai-cli.git
+リポジトリのルートで次を実行します（PowerShell 7 でも同じコマンドです）。
+
+```sh
+git clone --branch develop https://github.com/ishizakahiroshi/many-ai-cli.git
 cd many-ai-cli
 
-# 現在の OS 向けにビルド
-go build -o many-ai-cli.exe ./cmd/many-ai-cli   # Windows
-go build -o many-ai-cli ./cmd/many-ai-cli        # macOS / Linux
+# 実際の Web 資材を先に生成する。rust/build.rs が検査して同梱する。
+cd web
+bun install --frozen-lockfile
+bun run check
+bun run build
+cd ..
+cargo +1.90.0 build --locked --manifest-path rust/Cargo.toml --bins
 ```
+
+2 本の実行ファイルは `rust/target/debug/` にできます（Windows は `.exe` 付き）。
+ランチャー画面は `rust/assets/launcher/ui/index.html` から同梱し、凍結した Go ツリーを
+製品資材の参照先にはしません。通常のソースビルドは署名済み配布や導入・更新の受入を
+意味しません。正式 Windows 資材・runtime と配布の条件は [Rust 梱包手順](rust/packaging/README.md#formal-rust-release-orchestration)
+を参照してください。
 
 #### クロスコンパイル
 
-```bash
-GOOS=windows GOARCH=amd64 go build -o dist/many-ai-cli-windows-x64.exe          ./cmd/many-ai-cli
-GOOS=darwin  GOARCH=amd64 go build -o dist/many-ai-cli-macos-intel              ./cmd/many-ai-cli
-GOOS=darwin  GOARCH=arm64 go build -o dist/many-ai-cli-macos-apple-silicon      ./cmd/many-ai-cli
-GOOS=linux   GOARCH=amd64 go build -o dist/many-ai-cli-linux-x64                ./cmd/many-ai-cli
-```
+配布前の検証は Windows x64・Linux x64・macOS Intel・macOS Apple Silicon の native
+runner で行います。手動実行の `rust-migration.yml` は未受入候補を作り、`release.yml` は
+明示した tag mode で正式配布資材を作ります。別 target のコンパイル確認だけでは PTY・
+プロセス・音声・実機動作を検証できません。Rust 本線に旧 `GOOS` 手順を使わず、
+[リリース手順](docs/manual_release.md)を参照してください。
 
 ---
 

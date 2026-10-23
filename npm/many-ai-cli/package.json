@@ -33,6 +33,7 @@
     "README.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
+    "WEB-THIRD-PARTY-LICENSES.txt",
     "build-inputs/"
   ],
   "optionalDependencies": {
