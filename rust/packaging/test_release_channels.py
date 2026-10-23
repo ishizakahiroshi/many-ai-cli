@@ -27,7 +27,7 @@ class ReleaseChannels(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
+        self.root = Path(self.tmp.name).resolve()
         self.archives = self.root / 'archives'
         self.archives.mkdir()
         self.output = self.root / 'output'
