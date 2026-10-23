@@ -1,6 +1,8 @@
 # P-20261023-003 many-ai-cli: permission evidence
 
-Updated: 2026-10-23. Owner: coordinator Codex (exact model unavailable).
+> 最終更新: 2026-10-23(金) 15:30:31
+
+Owner: coordinator Codex (exact model unavailable).
 
 Management Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/36
 
@@ -10,8 +12,10 @@ Instruction branch: `dots-instructions/release-assurance-20261023`. No code bran
 
 | Stage | Owner | Evidence |
 |---|---|---|
-| Delivery | Coordinator | [Issue 36](https://github.com/ishizakahiroshi/many-ai-cli/issues/36); message readback pending |
-| Acceptance | dots | No acknowledgement yet |
-| Submission | dots | No manifest received |
-| Independent review | Coordinator | Pending verified payloads |
-| Local acceptance | Coordinator | This source-only report cannot establish runtime acceptance |
+| Delivery | Coordinator | [Delivery receipt](https://github.com/ishizakahiroshi/many-ai-cli/issues/36#issuecomment-6358120554); destination and normalized body readback verified |
+| Acceptance | dots | [Attributed acknowledgement](https://github.com/ishizakahiroshi/many-ai-cli/issues/36#issuecomment-6358227849); source/parsing/Drive capabilities reported, final folder permission clarified |
+| Submission | dots | [Attributed submission and byte receipt](https://github.com/ishizakahiroshi/many-ai-cli/issues/36#issuecomment-6358829906); Drive v1, four payloads and manifest verified before content review |
+| Independent review | Coordinator | [Bounded review receipt](https://github.com/ishizakahiroshi/many-ai-cli/issues/36#issuecomment-6358953824); immutable source/ranges checked; static material accepted within the recorded review scope |
+| Local acceptance | Coordinator | No product or negative-case execution in this source-only task; wider C1/C4, runtime security, and formal release remain open |
+
+Final instruction revision: `fb97588b709b6beeda57c6dc95eca2716d9f978f`. The four submitted payloads remain in Drive; this branch stores instructions and receipt links only. Review limitations and remaining acceptance are recorded in the management Issue. No source fix or extra execution was requested for the newly observed behavior.
