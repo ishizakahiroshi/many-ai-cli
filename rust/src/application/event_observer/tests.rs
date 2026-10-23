@@ -18,6 +18,151 @@ use std::{
     },
 };
 
+// Failure-only CI evidence. Do not copy response text, Git stderr, arguments or
+// paths. A response cannot recover a process exit, runner timeout or duration.
+pub(super) fn test_snapshot_failure_diagnostic(response: &crate::hub::http::Response) -> String {
+    let parsed = (response.body.len() <= 4096)
+        .then(|| serde_json::from_slice::<serde_json::Value>(&response.body).ok())
+        .flatten();
+    let code = match parsed.as_ref().and_then(|value| value["error"].as_str()) {
+        Some("snapshot_failed") => "snapshot_failed",
+        Some("snapshot_cleanup_failed") => "snapshot_cleanup_failed",
+        Some("git_command_failed") => "git_command_failed",
+        Some("not_git_repo") => "not_git_repo",
+        Some("stale_binding") => "stale_binding",
+        _ => "unknown",
+    };
+    let detail = parsed
+        .as_ref()
+        .and_then(|value| value["detail"].as_str())
+        .unwrap_or_default();
+    let operation = if detail.starts_with("git read-tree HEAD:")
+        || detail.starts_with("git read-tree --empty:")
+    {
+        "read_tree"
+    } else if detail.starts_with("git add -A -- .:") {
+        "add"
+    } else if detail.starts_with("git write-tree:") {
+        "write_tree"
+    } else {
+        "unknown"
+    };
+    let class = match detail {
+        "git command timed out" => "budget_exhausted_before_command",
+        "git command output exceeded limit or pipes failed to close" => "output_or_pipe_guard",
+        "Git cannot represent the private index path" => "private_index_path",
+        "git write-tree returned an invalid object id" => "invalid_object_id",
+        _ => "unknown",
+    };
+    format!("; test-only response_code={code}, operation_prefix={operation}, detail_class={class}")
+}
+
+#[test]
+fn snapshot_failure_diagnostics_classify_only_fixed_codes_and_prefixes() {
+    for (code, detail, operation, class) in [
+        (
+            "snapshot_failed",
+            "synthetic private detail",
+            "unknown",
+            "unknown",
+        ),
+        (
+            "snapshot_cleanup_failed",
+            "synthetic private detail",
+            "unknown",
+            "unknown",
+        ),
+        (
+            "git_command_failed",
+            "git read-tree HEAD: synthetic private detail",
+            "read_tree",
+            "unknown",
+        ),
+        (
+            "git_command_failed",
+            "git read-tree --empty: synthetic private detail",
+            "read_tree",
+            "unknown",
+        ),
+        (
+            "git_command_failed",
+            "git add -A -- .: synthetic private detail",
+            "add",
+            "unknown",
+        ),
+        (
+            "git_command_failed",
+            "git write-tree: synthetic private detail",
+            "write_tree",
+            "unknown",
+        ),
+        (
+            "git_command_failed",
+            "git command timed out",
+            "unknown",
+            "budget_exhausted_before_command",
+        ),
+        (
+            "git_command_failed",
+            "git command output exceeded limit or pipes failed to close",
+            "unknown",
+            "output_or_pipe_guard",
+        ),
+        (
+            "git_command_failed",
+            "Git cannot represent the private index path",
+            "unknown",
+            "private_index_path",
+        ),
+        (
+            "git_command_failed",
+            "git write-tree returned an invalid object id",
+            "unknown",
+            "invalid_object_id",
+        ),
+        (
+            "not_git_repo",
+            "synthetic private detail",
+            "unknown",
+            "unknown",
+        ),
+        (
+            "stale_binding",
+            "synthetic private detail",
+            "unknown",
+            "unknown",
+        ),
+    ] {
+        let response = crate::hub::http::Response::error(500, code, detail);
+        assert_eq!(
+            test_snapshot_failure_diagnostic(&response),
+            format!(
+                "; test-only response_code={code}, operation_prefix={operation}, detail_class={class}"
+            )
+        );
+    }
+}
+
+#[test]
+fn snapshot_failure_diagnostics_never_echo_unknown_malformed_or_oversized_data() {
+    let unknown =
+        "; test-only response_code=unknown, operation_prefix=unknown, detail_class=unknown";
+    let bodies = [
+        serde_json::json!({"error":"synthetic-private-code","detail":"prefix git add -A -- .: synthetic-private-text"}).to_string(),
+        serde_json::json!({"error":["synthetic-private-code"],"detail":{"path":"synthetic-private-path"}}).to_string(),
+        serde_json::json!({"error":null,"detail":true}).to_string(),
+        "[\"synthetic-private-text\"]".into(),
+        "synthetic-private-invalid-json".into(),
+        format!("{}0{}", "[".repeat(256), "]".repeat(256)),
+        serde_json::json!({"error":"git_command_failed","detail":"git write-tree: ".to_owned() + &"x".repeat(4096)}).to_string(),
+    ];
+    for body in bodies {
+        let mut response = crate::hub::http::Response::error(500, "", "");
+        response.body = body.into_bytes();
+        assert_eq!(test_snapshot_failure_diagnostic(&response), unknown);
+    }
+}
+
 #[derive(Default)]
 struct Sink {
     messages: Mutex<Vec<GitTurnNotification>>,
@@ -414,6 +559,12 @@ async fn unbound_observer_fails_closed_and_snapshot_failure_is_best_effort() {
         ..f.binding
     };
     f.observer.observe(&event(missing, false)).await.unwrap();
+    assert!(
+        f.warnings.lock().unwrap().iter().any(|warning| warning.contains(
+            "; test-only response_code=stale_binding, operation_prefix=unknown, detail_class=unknown"
+        )),
+        "the actual failed capture must retain only the fixed test classification"
+    );
     assert!(f.callbacks.trace.lock().unwrap().is_empty());
     assert!(
         f.callbacks

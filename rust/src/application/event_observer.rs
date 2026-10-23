@@ -357,13 +357,18 @@ impl ApplicationEventObserver {
                             .await
                     }
                     Ok(None) => {}
-                    Err(response) => (observer.warning)(
-                        "git turn end snapshot skipped",
-                        &SessionError::InvalidRequest(format!(
-                            "snapshot unavailable: status={}",
-                            response.status
-                        )),
-                    ),
+                    Err(response) => {
+                        let detail = format!("snapshot unavailable: status={}", response.status);
+                        #[cfg(test)]
+                        let detail = format!(
+                            "{detail}{}",
+                            tests::test_snapshot_failure_diagnostic(&response)
+                        );
+                        (observer.warning)(
+                            "git turn end snapshot skipped",
+                            &SessionError::InvalidRequest(detail),
+                        );
+                    }
                 }
             }));
             return Ok(());
@@ -377,12 +382,15 @@ impl ApplicationEventObserver {
             Err(response) => {
                 // Go snapshot failures are diagnostic and never veto provider
                 // input. No response body, Git stderr or work text is logged.
+                let detail = format!("snapshot unavailable: status={}", response.status);
+                #[cfg(test)]
+                let detail = format!(
+                    "{detail}{}",
+                    tests::test_snapshot_failure_diagnostic(&response)
+                );
                 (self.warning)(
                     "git turn snapshot skipped",
-                    &SessionError::InvalidRequest(format!(
-                        "snapshot unavailable: status={}",
-                        response.status
-                    )),
+                    &SessionError::InvalidRequest(detail),
                 );
                 return Ok(());
             }
