@@ -156,25 +156,39 @@ async fn leftover_lock_is_listed_and_removed_only_on_request() {
         400
     );
     assert!(lock.exists());
-    let removed = service
-        .remove_leftover_lock(&post(&format!("{{\"id\":{}}}", found.id)))
-        .unwrap();
-    assert_eq!(removed.status, 200);
-    assert!(!lock.exists());
-    let again = service
-        .remove_leftover_lock(&post(&format!("{{\"id\":{}}}", found.id)))
-        .unwrap_err();
-    assert_eq!(
-        (again.status, value_of(&again)["error"].clone()),
-        (404, json!("lock_gone"))
-    );
+    let original = fs::read(&lock).unwrap();
+    let removal = service.remove_leftover_lock(&post(&format!("{{\"id\":{}}}", found.id)));
+    if cfg!(any(windows, target_os = "linux")) {
+        let removed = removal.unwrap();
+        assert_eq!(removed.status, 200);
+        assert!(!lock.exists());
+        let again = service
+            .remove_leftover_lock(&post(&format!("{{\"id\":{}}}", found.id)))
+            .unwrap_err();
+        assert_eq!(
+            (again.status, value_of(&again)["error"].clone()),
+            (404, json!("lock_gone"))
+        );
+    } else {
+        // Unsupported process lookup may list the lock, but cannot authorize removal.
+        assert_eq!(
+            crate::process::live_git::using(&root).unwrap_err().kind(),
+            std::io::ErrorKind::Unsupported
+        );
+        let refused = removal.unwrap_err();
+        assert_eq!(refused.status, 409);
+        assert_eq!(value_of(&refused)["error"], json!("git_unverifiable"));
+        assert_eq!(fs::read(&lock).unwrap(), original);
+        assert_eq!(service.locks.list(), vec![found]);
+    }
 }
 fn value_of(response: &Response) -> Value {
     serde_json::from_slice(&response.body).unwrap()
 }
 /// The whole path with a real Git: a commit held by its pre-commit hook is
-/// stopped at its limit, leaves index.lock, is not listed while it still runs,
-/// is listed after, and removing it lets the next `git add` work.
+/// stopped at its limit and leaves index.lock. Windows/Linux can verify its
+/// owner and remove it after the stop; unsupported systems list it but keep it.
+/// A verified removal lets the next `git add` work.
 #[tokio::test]
 async fn a_commit_stopped_at_its_limit_leaves_a_lock_that_is_listed_and_removed() {
     let (_dir, service, root) = repo().await;
@@ -220,24 +234,35 @@ async fn a_commit_stopped_at_its_limit_leaves_a_lock_that_is_listed_and_removed(
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
+    let lock_was_present = lock.exists();
+    let while_running = service.locks.inspect(
+        &root,
+        started,
+        std::time::SystemTime::now(),
+        "timeout",
+        0,
+        crate::process::live_git::using,
+    );
+    // Finish the owned process's timeout/cleanup before any observation can panic.
+    let out = running.await.unwrap().unwrap();
     assert!(
-        lock.exists(),
+        lock_was_present,
         "the hook holds the commit with index.lock taken"
     );
-    // The commit is still working, so its lock is not listed.
-    assert_eq!(
-        service.locks.inspect(
-            &root,
-            started,
-            std::time::SystemTime::now(),
-            "timeout",
-            0,
-            crate::process::live_git::using
-        ),
-        None
-    );
-    let out = running.await.unwrap().unwrap();
     assert_eq!(out.outcome, ExitOutcome::TimedOut);
+    if cfg!(any(windows, target_os = "linux")) {
+        assert_eq!(while_running, None);
+    } else {
+        assert_eq!(
+            crate::process::live_git::using(&root).unwrap_err().kind(),
+            std::io::ErrorKind::Unsupported
+        );
+        let visible = while_running.expect("an unverifiable owner does not hide the lock");
+        assert_eq!(visible.repository, root.to_string_lossy());
+        assert_eq!(visible.lock, lock.to_string_lossy());
+        assert_eq!(visible.cause, "timeout");
+        assert_eq!(visible.session, 0);
+    }
     let stopped = crate::process::git::stopped(&plan, &out.outcome, started).unwrap();
     assert!(
         lock.exists(),
@@ -256,17 +281,25 @@ async fn a_commit_stopped_at_its_limit_leaves_a_lock_that_is_listed_and_removed(
         .expect("the leftover is listed once no Git works in the repository");
     let blocked = git.run(&root, &["add", "a.txt"]).await.unwrap_err();
     assert!(blocked.contains("index.lock"), "{blocked}");
-    let removed = service
-        .remove_leftover_lock(&Request {
-            method: "POST".into(),
-            path: "/api/git-lock-remove".into(),
-            body: format!("{{\"id\":{}}}", found.id).into_bytes(),
-            ..Default::default()
-        })
-        .unwrap();
-    assert_eq!(removed.status, 200);
-    assert!(!lock.exists());
-    git.run(&root, &["add", "a.txt"]).await.unwrap();
+    let original = fs::read(&lock).unwrap();
+    let removal = service.remove_leftover_lock(&Request {
+        method: "POST".into(),
+        path: "/api/git-lock-remove".into(),
+        body: format!("{{\"id\":{}}}", found.id).into_bytes(),
+        ..Default::default()
+    });
+    if cfg!(any(windows, target_os = "linux")) {
+        let removed = removal.unwrap();
+        assert_eq!(removed.status, 200);
+        assert!(!lock.exists());
+        git.run(&root, &["add", "a.txt"]).await.unwrap();
+    } else {
+        let refused = removal.unwrap_err();
+        assert_eq!(refused.status, 409);
+        assert_eq!(value_of(&refused)["error"], json!("git_unverifiable"));
+        assert_eq!(fs::read(&lock).unwrap(), original);
+        assert_eq!(service.locks.list(), vec![found]);
+    }
 }
 #[tokio::test]
 async fn empty_repository_log_is_successful_empty_array() {
