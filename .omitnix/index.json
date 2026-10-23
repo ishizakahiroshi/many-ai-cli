@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "3225f89ba44d78a3c2af69a82d248b6f309caaa6",
+    "commit": "5bcd514fa508e55a2f10181c150861a659f1efbf",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2021,
+    "discovered": 2025,
     "analyzed": 1562,
     "unresolved": 10,
     "unknown": 0,
-    "unclaimed": 449,
+    "unclaimed": 453,
     "skipped_by_config": 0
   },
   "files": [
@@ -602,6 +602,38 @@
     },
     {
       "path": "docs/bot/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/http-final-effects-review-20261023/FACTS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/http-final-effects-review-20261023/PROGRESS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/http-final-effects-review-20261023/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/http-final-effects-review-20261023/REVIEW.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
