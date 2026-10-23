@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "36a8f6a314f1edb05d2cf180e4b7abfbaab34d3d",
+    "commit": "33050b3ccc5a310dc03a873392060b0091e2e926",
     "dirty": false,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2022,
-    "analyzed": 1563,
+    "discovered": 2019,
+    "analyzed": 1560,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 449,
@@ -6150,64 +6150,6 @@
     },
     {
       "path": "go/internal/hub/custom_provider_info_test.go",
-      "adapter": "go",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "go/internal/hub/debug_ui_freeze.go",
-      "adapter": "go",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "go/internal/hub/debug_ui_freeze_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -47356,38 +47298,6 @@
       "unresolved": []
     },
     {
-      "path": "web/src/debug/ui-freeze.ts",
-      "adapter": "tsjs",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "One module in two realms: the page registers the sink; its dedicated worker"
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/debug/ui-freeze"
-          ]
-        }
-      },
-      "unresolved": []
-    },
-    {
       "path": "web/src/i18n.ts",
       "adapter": "tsjs",
       "status": "unresolved",
@@ -48990,6 +48900,36 @@
       "unresolved": []
     },
     {
+      "path": "web/tests/probe.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/tests/provider-duplicate.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -49591,36 +49531,6 @@
     },
     {
       "path": "web/tests/ui-components.test.ts",
-      "adapter": "tsjs",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "none_observed",
-          "value": []
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "web/tests/ui-freeze.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

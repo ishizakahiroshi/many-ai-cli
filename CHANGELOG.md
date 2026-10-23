@@ -11,6 +11,8 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Fixed
+- Debug builds no longer collect temporary UI-freeze recorder events. Existing
+  diagnostic files are preserved; the underlying investigation remains open.
 - Windows desktop shortcuts now open the Hub and browser on the first launch,
   while sign-in starts only the tray. Setup retains the selected home and port;
   tray startup/action failures are shown instead of disappearing with the console.
