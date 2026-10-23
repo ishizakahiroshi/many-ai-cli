@@ -2,7 +2,7 @@
 
 Updated: 2026-10-23. Coordinator: Codex (exact model unavailable). Investigator: dots.
 
-GitHub Issue: pending creation by coordinator before delivery.
+GitHub Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/36
 
 Read FACTS.md and REVIEW.md alongside this file. This is a bounded, source-only inspection for the remaining pre-v1.0.0 assurance work. It produces evidence, not a release approval. Public source oracle: `ishizakahiroshi/many-ai-cli`, commit `3225f89ba44d78a3c2af69a82d248b6f309caaa6` on develop. Keep that commit fixed even if develop advances. Instructions live on `dots-instructions/release-assurance-20261023`; dots must not edit them or PROGRESS.md.
 

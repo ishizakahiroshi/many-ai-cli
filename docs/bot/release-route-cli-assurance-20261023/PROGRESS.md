@@ -2,7 +2,7 @@
 
 Updated: 2026-10-23. Owner: coordinator Codex (exact model unavailable).
 
-Management Issue: pending creation before delivery.
+Management Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/36
 
 Source oracle: `3225f89ba44d78a3c2af69a82d248b6f309caaa6`.
 
@@ -10,7 +10,7 @@ Instruction branch: `dots-instructions/release-assurance-20261023`. No code bran
 
 | Stage | Owner | Evidence |
 |---|---|---|
-| Delivery | Coordinator | Pending Issue creation and message readback |
+| Delivery | Coordinator | [Issue 36](https://github.com/ishizakahiroshi/many-ai-cli/issues/36); message readback pending |
 | Acceptance | dots | No acknowledgement yet |
 | Submission | dots | No manifest received |
 | Independent review | Coordinator | Pending verified payloads |
