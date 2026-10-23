@@ -12,8 +12,9 @@
 #
 # 何をするか:
 #   - 常に node scripts/check-instrumentation.mjs（数十 ms）
-#   - push 範囲に .go があるときだけ staticcheck（1 分弱。版は validate.yml と同じ固定タグ）
-#   - 削除 push（local sha が全 0）は素通し
+#   - push 範囲に .go があり、ルートに go.mod があるときだけ従来の固定版 staticcheck
+#     ルート module が無い Rust 本線では go/ は凍結資材なので実行しない。
+#   - 削除 push（local sha が全 0）は Go 範囲検査を飛ばす（台帳検査は実行）
 #   pre-commit ではなく pre-push なのは、staticcheck が 1 分弱かかり、docs だけの commit
 #   でも走ると commit の粒度が粗くなるため。
 #
@@ -71,12 +72,14 @@ node scripts/check-instrumentation.mjs || {
   exit 1
 }
 
-if [ "$go_changed" -eq 1 ]; then
+if [ "$go_changed" -eq 1 ] && [ -f go.mod ]; then
   echo "pre-push: push 範囲に .go があるので staticcheck@$staticcheck_version を実行します（1 分弱）"
   go run "honnef.co/go/tools/cmd/staticcheck@$staticcheck_version" ./... || {
     echo "pre-push: staticcheck で止めました。直してから push してください（CI でも同じ検査が走ります）"
     exit 1
   }
+elif [ "$go_changed" -eq 1 ]; then
+  echo "pre-push: ルートに go.mod が無いため、凍結 Go 資材の変更は staticcheck の対象外です"
 else
   echo "pre-push: push 範囲に .go が無いので staticcheck は飛ばします"
 fi

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "969e30e08e6cc8c554003ca691d42d85bf72a89d",
+    "commit": "21ea75673d59ec0b9889e43acf8e3d8f88889c1b",
     "dirty": false,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2019,
-    "analyzed": 1560,
+    "discovered": 2020,
+    "analyzed": 1561,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 449,
@@ -41182,6 +41182,36 @@
         },
         "screen_to_api": {
           "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "scripts/pre-push.test.mjs",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
         }
       },
       "unresolved": []
