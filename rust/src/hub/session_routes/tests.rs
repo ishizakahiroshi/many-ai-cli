@@ -302,12 +302,32 @@ async fn attachment_http_and_ws_use_real_bound_journal() {
                 b"synthetic ws image"
             );
         }
-        let messages = f
+        // JSONL writes are synchronous, but SQLite events are queued independently.
+        // Drain accepted writes before reopening this owned database for readback.
+        let cancellation = HubShutdownCancellation::default();
+        let report = f
             .store
             .as_ref()
             .unwrap()
-            .chat_messages_by_live_session(id, 100)
-            .unwrap();
+            .shutdown(
+                ShutdownPolicy::Drain {
+                    timeout: Duration::from_secs(5),
+                },
+                &cancellation,
+            )
+            .await;
+        assert!(!report.timed_out, "{report:?}");
+        assert!(!report.cancelled, "{report:?}");
+        assert!(report.error.is_none(), "{report:?}");
+        assert_eq!(report.remaining, 0, "{report:?}");
+        assert_eq!(report.dropped, 0, "{report:?}");
+        assert_eq!(report.discarded_old_generation, 0, "{report:?}");
+        let reopened = SqliteSessionStorage::open(
+            &f.paths,
+            StorageOptions::baseline(f.paths.resource(Resource::Logs)),
+        )
+        .unwrap();
+        let messages = reopened.chat_messages_by_live_session(id, 100).unwrap();
         assert_eq!(
             messages
                 .unwrap_or_default()
