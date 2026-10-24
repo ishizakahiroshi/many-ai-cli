@@ -11,6 +11,9 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Fixed
+- Subscription probe and login cleanup now rechecks the exact session connection
+  while dismissing it, so cleanup from an older connection cannot remove a
+  reconnected session or emit a duplicate dismissal after removal.
 - Cancelling uninstall, closing its input, or failing to read confirmation now
   leaves the running Hub untouched. Hub shutdown and data removal begin only
   after explicit confirmation.

@@ -19,6 +19,16 @@ pub(super) struct ProbeHooks {
     pub ordinary: Weak<OrdinarySpawnService>,
     pub trial: bool,
 }
+impl ProbeHooks {
+    fn dismiss_observed(
+        core: &SessionEngine,
+        details: &SessionDetails,
+    ) -> Result<CoreEffects, SessionError> {
+        // Observation and mutation take separate core locks. A wrapper may
+        // reconnect between them, so validate the full binding at mutation.
+        core.dismiss_bound(details.binding, Timestamp::now())
+    }
+}
 impl SubscriptionProbeHooks for ProbeHooks {
     fn dismiss<'a>(&'a self, binding: SessionBinding) -> CoreFuture<'a, Result<(), SessionError>> {
         Box::pin(async move {
@@ -29,7 +39,7 @@ impl SubscriptionProbeHooks for ProbeHooks {
             if details.binding != binding {
                 return Err(SessionError::StaleBinding);
             }
-            let actions = core.dismiss(binding.session, Timestamp::now())?;
+            let actions = Self::dismiss_observed(&core, &details)?;
             let effects = self.effects.upgrade().ok_or(SessionError::Shutdown)?;
             let delivered = effects.apply(actions).await;
             self.ordinary
@@ -59,6 +69,7 @@ impl SubscriptionProbeHooks for ProbeHooks {
         crate::process::wrapper_startup::recovery_identity::terminate(pid, identity)
     }
 }
+
 pub(super) struct LoginObserver {
     inner: Arc<ApplicationEventObserver>,
     hooks: OnceLock<Weak<ProbeHooks>>,
@@ -117,3 +128,7 @@ impl OrderedEventObserver for LoginObserver {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "subscriptions/tests.rs"]
+mod tests;

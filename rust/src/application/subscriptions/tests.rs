@@ -93,6 +93,9 @@ struct Fixture {
     _installed: tempfile::TempDir,
 }
 fn fixture() -> Fixture {
+    fixture_with_spawner(Arc::new(Boundary))
+}
+fn fixture_with_spawner(spawner: Arc<dyn WrappedSessionSpawner>) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let installed = tempfile::tempdir().unwrap();
     let paths = RuntimePaths::trial(root.path(), 49273, installed.path()).unwrap();
@@ -108,7 +111,7 @@ fn fixture() -> Fixture {
         )),
         Arc::new(Boundary),
         Arc::new(Boundary),
-        Arc::new(Boundary),
+        spawner,
         CoreEventBus::new(16).unwrap(),
     ));
     let tasks = HubTaskOwner::new(tokio::runtime::Handle::current());
@@ -132,6 +135,62 @@ fn fixture() -> Fixture {
         _root: root,
         _installed: installed,
     }
+}
+
+struct StalledSpawn;
+impl WrappedSessionSpawner for StalledSpawn {
+    fn spawn_and_wait<'a>(
+        &'a self,
+        spec: WrappedSpawnSpec,
+        wait: Duration,
+        _: &'a HttpWaitCancellation,
+    ) -> CoreFuture<'a, SpawnWaitOutcome> {
+        Box::pin(async move {
+            assert!(spec.usage_probe);
+            assert_eq!(wait, Duration::from_secs(20));
+            // Deliberately violate the spawner's own 20-second wait to exercise
+            // the actual probe service's independent work deadline.
+            tokio::time::sleep(Duration::from_secs(70)).await;
+            panic!("probe work deadline did not cancel the stalled synthetic spawn")
+        })
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn probe_work_deadline_releases_claim_when_spawn_never_registers() {
+    let f = fixture_with_spawner(Arc::new(StalledSpawn));
+    f.service
+        .add("claude", "p1", "synthetic")
+        .unwrap_or_else(|_| panic!("add profile"));
+    let started = tokio::time::Instant::now();
+    let error = f
+        .service
+        .probe(
+            "claude",
+            "p1",
+            false,
+            Timestamp::now(),
+            &TaskCancellation::default(),
+        )
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(error.status, 504);
+    assert_eq!(error.code, "probe_timeout");
+    assert_eq!(started.elapsed(), Duration::from_secs(60));
+    assert!(!f.service.probes.running("claude", "p1"));
+    assert!(
+        !f.service
+            .paths
+            .root()
+            .join("usage-probe/active/claude-p1.json")
+            .exists()
+    );
+    assert_eq!(f._tasks.snapshot().effects.running, 0);
+    eprintln!(
+        "synthetic stalled probe: work_elapsed_ms={}",
+        started.elapsed().as_millis()
+    );
 }
 #[tokio::test]
 async fn crud_uses_single_config_registry_and_never_reads_credentials() {

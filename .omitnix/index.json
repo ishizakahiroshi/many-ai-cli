@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "5bcd514fa508e55a2f10181c150861a659f1efbf",
-    "dirty": true,
+    "commit": "b2bc0590cec37a1aa6ac18ef681b12241947469e",
+    "dirty": false,
     "tool": "omitnix 0.1.3",
     "partial": false,
     "adapters": [
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2021,
-    "analyzed": 1562,
+    "discovered": 2022,
+    "analyzed": 1563,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 449,
@@ -23906,6 +23906,35 @@
         "summary": {
           "state": "value",
           "value": "Subscription lifecycle adapters over the existing core, effects and worktree owners."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/application/main_program/subscriptions/tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"

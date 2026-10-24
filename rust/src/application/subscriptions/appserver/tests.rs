@@ -31,8 +31,9 @@ fn native_rpc_fixture_child() {
         return;
     }
     let kind = std::env::var("MANY_AI_SYNTHETIC_APPSERVER").unwrap_or_default();
-    assert!(matches!(kind.as_str(), "chatgpt" | "apiKey"));
+    assert!(matches!(kind.as_str(), "chatgpt" | "apiKey" | "silent"));
     let root = executable.parent().unwrap();
+    std::fs::write(root.join("fixture.pid"), std::process::id().to_string()).unwrap();
     let result = (|| -> std::io::Result<()> {
         let input = std::io::stdin();
         let mut output = std::io::stdout().lock();
@@ -47,6 +48,9 @@ fn native_rpc_fixture_child() {
                 .append(true)
                 .open(root.join("requests.txt"))?;
             writeln!(log, "{line}")?;
+            if kind == "silent" {
+                continue;
+            }
             let request: serde_json::Value = serde_json::from_str(&line)
                 .map_err(|_| std::io::Error::other("invalid synthetic RPC request"))?;
             let response = match request.get("method").and_then(serde_json::Value::as_str) {
@@ -87,7 +91,7 @@ async fn synthetic_account(kind: &str) -> (std::io::Result<CodexUsage>, String, 
     // test helper instead of making RPC timing depend on PowerShell startup.
     let helper = root.path().join("rpc-fixture.exe");
     std::fs::copy(std::env::current_exe().unwrap(), &helper).unwrap();
-    assert!(matches!(kind, "chatgpt" | "apiKey"));
+    assert!(matches!(kind, "chatgpt" | "apiKey" | "silent"));
     let cmd = format!(
         r#"@echo off
 set "MANY_AI_SYNTHETIC_APPSERVER={kind}"
@@ -147,11 +151,16 @@ exit /b %ERRORLEVEL%
     )
     .unwrap();
     let cli = NativeSubscriptionCli::new(paths, root.path().into(), environment);
+    let started = std::time::Instant::now();
     let outcome = tokio::time::timeout(
         Duration::from_secs(20),
         cli.codex_usage(&profile, &TaskCancellation::default()),
     )
     .await;
+    eprintln!(
+        "synthetic app-server {kind}: elapsed_ms={}",
+        started.elapsed().as_millis()
+    );
     let outer_timeout = outcome.is_err();
     let result = outcome.unwrap_or_else(|_| {
         Err(std::io::Error::new(
@@ -169,7 +178,36 @@ exit /b %ERRORLEVEL%
             error.kind()
         )
     });
+    let pid = std::fs::read_to_string(root.path().join("fixture.pid"))
+        .unwrap()
+        .parse::<i64>()
+        .unwrap();
+    assert!(
+        !crate::process::pid_alive(pid),
+        "synthetic RPC child was not reaped"
+    );
     (result, requests, outer_timeout)
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn silent_appserver_hits_rpc_deadline_and_reaps_owned_process() {
+    let (result, requests, outer_timeout) = synthetic_account("silent").await;
+    assert!(
+        !outer_timeout,
+        "cleanup outlived the outer synthetic deadline"
+    );
+    assert_eq!(result.err().unwrap().kind(), std::io::ErrorKind::TimedOut);
+    let methods = requests
+        .lines()
+        .map(|line| {
+            serde_json::from_str::<serde_json::Value>(line).unwrap()["method"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(methods, ["initialize"]);
 }
 #[cfg(windows)]
 #[tokio::test]
