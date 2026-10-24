@@ -49,6 +49,24 @@ impl WrapperTransport for Transport {
         b: SessionBinding,
         m: proto::Message,
     ) -> CoreFuture<'a, Result<(), SessionError>> {
+        self.send_with_guard(b, m, None)
+    }
+    fn send_guarded<'a>(
+        &'a self,
+        b: SessionBinding,
+        m: proto::Message,
+        guard: InputSendGuard<'a>,
+    ) -> CoreFuture<'a, Result<(), SessionError>> {
+        self.send_with_guard(b, m, Some(guard))
+    }
+}
+impl Transport {
+    fn send_with_guard<'a>(
+        &'a self,
+        b: SessionBinding,
+        m: proto::Message,
+        guard: Option<InputSendGuard<'a>>,
+    ) -> CoreFuture<'a, Result<(), SessionError>> {
         Box::pin(async move {
             let n = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
             if self.pause_call.load(Ordering::SeqCst) == n {
@@ -58,7 +76,15 @@ impl WrapperTransport for Transport {
             if self.fail.load(Ordering::SeqCst) == n {
                 return Err(SessionError::Transport("synthetic write failure".into()));
             }
-            self.frames.lock().unwrap().push((b, m.clone()));
+            let mut dispatch = || {
+                self.frames.lock().unwrap().push((b, m.clone()));
+                Ok(())
+            };
+            if let Some(guard) = guard {
+                guard(&mut dispatch)?;
+            } else {
+                dispatch()?;
+            }
             let hook = self.on_send.lock().unwrap().clone();
             if let Some(hook) = hook {
                 hook(b, m).await;

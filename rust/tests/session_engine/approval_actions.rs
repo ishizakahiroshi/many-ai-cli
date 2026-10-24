@@ -93,6 +93,89 @@ fn sent(f: &Fixture) -> Vec<Vec<u8>> {
 }
 
 #[tokio::test]
+async fn ui_approval_key_and_epoch_mismatches_never_fall_back_to_plain_input() {
+    let f = fixture();
+    let session = native_session(&f, "git status", "Yes", true).await;
+    let ui = ui(&f, 71);
+    let bound = binding(&f, session);
+    let before = f.engine.snapshot(session.session).unwrap();
+    let history = || {
+        f.store
+            .approvals_by_live_session(session.session, 10, false)
+            .unwrap()
+            .unwrap()
+            .into_iter()
+            .map(|row| (row.state, row.selected_text))
+            .collect::<Vec<_>>()
+    };
+    let before_history = history();
+    let identity = CandidateIdentity {
+        key: bound.candidate_key.clone(),
+        source_epoch: bound.source_epoch,
+        shape: String::new(),
+    };
+    let cancel = TaskCancellation::default();
+    for wrong_epoch in [false, true] {
+        let mut stale = identity.clone();
+        if wrong_epoch {
+            stale.source_epoch.0 += 1;
+        } else {
+            stale.key.push_str("-different-candidate");
+        }
+        let receipt = f
+            .engine
+            .submit(
+                session,
+                InputRequest {
+                    bytes: b"1\r".to_vec(),
+                    authority: InputAuthority::UiApproval {
+                        ui,
+                        answer: "Yes".into(),
+                        identity: stale,
+                    },
+                },
+                now(),
+                &cancel,
+            )
+            .await;
+        assert_eq!(receipt.disposition, InputDisposition::StaleBinding);
+        assert!(sent(&f).is_empty());
+        assert_eq!(binding(&f, session), bound);
+        assert_eq!(history(), before_history);
+        assert_eq!(
+            f.engine.snapshot(session.session).unwrap().first_message,
+            before.first_message
+        );
+    }
+    let accepted = f
+        .engine
+        .submit(
+            session,
+            InputRequest {
+                bytes: b"1\r".to_vec(),
+                authority: InputAuthority::UiApproval {
+                    ui,
+                    answer: "Yes".into(),
+                    identity,
+                },
+            },
+            now(),
+            &cancel,
+        )
+        .await;
+    assert!(
+        matches!(
+            accepted.disposition,
+            InputDisposition::TransportWritten { .. }
+        ),
+        "positive control failed: {accepted:?}"
+    );
+    assert_eq!(sent(&f), vec![b"1\r".to_vec()]);
+    assert!(!pending(&f, session));
+    assert_ne!(history(), before_history);
+}
+
+#[tokio::test]
 async fn one_shot_intent_uses_focus_observed_after_fifo_acquisition() {
     for (selection, focus_before, focus_after, expected) in [
         (
