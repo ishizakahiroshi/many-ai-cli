@@ -786,6 +786,178 @@ fn service_pin_sessions_bound_to_nonce_device_and_expiry() {
     assert_eq!(router.handle(&r, 1000).response.status, 200);
     assert!(!router.auth.has_valid_pin(&r, &cfg, 1000));
 }
+
+fn pin_guard_router() -> (tempfile::TempDir, super::ServiceRouter) {
+    let (root, router) = router();
+    let mut snapshot = router.config.snapshot().unwrap();
+    snapshot.config.remote_pin_hash = bcrypt::hash("123456", 4).unwrap();
+    snapshot.config.auth_cookie_secret = "synthetic-secret".into();
+    router
+        .config
+        .persist(snapshot.revision, snapshot.config)
+        .unwrap();
+    (root, router)
+}
+
+fn pin_guard_login(router: &super::ServiceRouter, now: i64) -> String {
+    let mut login = pin_guard_write_request("");
+    login.path = "/api/auth/login".into();
+    login.body = br#"{"pin":"123456"}"#.to_vec();
+    let response = router.handle(&login, now).response;
+    assert_eq!(response.status, 200);
+    response.cookies[0].split(';').next().unwrap().to_owned()
+}
+
+fn pin_guard_write_request(cookie: &str) -> Request {
+    let mut r = request();
+    r.remote_addr = "203.0.113.1:1234".into();
+    r.path = "/api/ai-launch-shell".into();
+    r.headers = vec![
+        ("User-Agent".into(), "Chrome/100 Windows".into()),
+        ("Origin".into(), "http://127.0.0.1:48888".into()),
+    ];
+    if !cookie.is_empty() {
+        r.headers.push(("Cookie".into(), cookie.into()));
+    }
+    r.body = br#"{"ai_launch_shell":"pwsh"}"#.to_vec();
+    r
+}
+
+fn assert_guarded_setting_write(
+    router: &super::ServiceRouter,
+    r: &Request,
+    now: i64,
+    expected: u16,
+) {
+    let before = router.config.snapshot().unwrap();
+    let destination = router.paths.resource(crate::config::Resource::Config);
+    let before_bytes = std::fs::read(&destination).unwrap();
+    let admission = router.preflight(r, now);
+    if expected == 200 {
+        assert!(admission.is_ok());
+    } else {
+        assert_eq!(admission.unwrap_err().status, expected);
+    }
+    let dispatch = router.handle(r, now);
+    assert_eq!(dispatch.response.status, expected);
+    let after = router.config.snapshot().unwrap();
+    if expected == 200 {
+        let body: serde_json::Value = serde_json::from_slice(&r.body).unwrap();
+        assert_eq!(after.config.hub.ai_launch_shell, body["ai_launch_shell"]);
+        assert_ne!(after.revision, before.revision);
+        assert_ne!(std::fs::read(destination).unwrap(), before_bytes);
+    } else {
+        assert!(dispatch.effects.0.is_empty());
+        assert_eq!(after.revision, before.revision);
+        assert_eq!(
+            after.config.hub.ai_launch_shell,
+            before.config.hub.ai_launch_shell
+        );
+        assert_eq!(std::fs::read(destination).unwrap(), before_bytes);
+        if expected == 401 && json_response(&dispatch.response)["error"] == "pin_required" {
+            assert!(dispatch.response.headers["Cache-Control"].contains("no-store"));
+        }
+    }
+}
+
+#[test]
+fn remote_pin_expiry_guards_actual_write_at_the_exact_boundary() {
+    let (_root, router) = pin_guard_router();
+    let issued = 1000;
+    let expires = issued + 12 * 60 * 60;
+    let cookie = pin_guard_login(&router, issued);
+    let mut r = pin_guard_write_request(&cookie);
+    assert_guarded_setting_write(&router, &r, issued, 200);
+    r.body = br#"{"ai_launch_shell":"cmd"}"#.to_vec();
+    assert_guarded_setting_write(&router, &r, expires - 1, 200);
+    r.body = br#"{"ai_launch_shell":"pwsh"}"#.to_vec();
+    assert_guarded_setting_write(&router, &r, expires, 401);
+    assert_guarded_setting_write(&router, &r, expires + 1, 401);
+
+    // These base-guard routes deliberately remain usable without a live PIN;
+    // their successful responses must not be mistaken for protected API access.
+    let before = router.config.snapshot().unwrap();
+    let destination = router.paths.resource(crate::config::Resource::Config);
+    let before_bytes = std::fs::read(&destination).unwrap();
+    r.method = "GET".into();
+    r.path = "/api/auth/status".into();
+    let status = router.handle(&r, expires).response;
+    assert_eq!(status.status, 200);
+    assert_eq!(json_response(&status)["authed"], false);
+    r.method = "POST".into();
+    r.path = "/api/auth/logout".into();
+    assert_eq!(router.handle(&r, expires).response.status, 200);
+    assert_eq!(router.config.snapshot().unwrap().revision, before.revision);
+    assert_eq!(std::fs::read(destination).unwrap(), before_bytes);
+}
+
+#[test]
+fn remote_pin_device_nonce_and_logout_gate_actual_persisted_writes() {
+    let (_root, router) = pin_guard_router();
+    let cookie = pin_guard_login(&router, 1000);
+    let mut r = pin_guard_write_request("");
+    assert_guarded_setting_write(&router, &r, 1001, 401);
+    r = pin_guard_write_request(&cookie);
+    r.remote_addr = "203.0.113.2:1234".into();
+    assert_guarded_setting_write(&router, &r, 1001, 401);
+    r = pin_guard_write_request(&cookie);
+    r.headers[0].1 = "Firefox/100 Windows".into();
+    assert_guarded_setting_write(&router, &r, 1001, 401);
+    r.headers[0].1 = "Chrome/100 Android".into();
+    assert_guarded_setting_write(&router, &r, 1001, 401);
+    r = pin_guard_write_request(&cookie);
+    assert_guarded_setting_write(&router, &r, 1001, 200);
+    r.body = br#"{"ai_launch_shell":"cmd"}"#.to_vec();
+
+    // A new auth owner has the same persisted signing configuration but none
+    // of the old owner's live nonces. A signed cookie alone is insufficient.
+    let restarted = super::ServiceRouter::isolated(router.config.clone(), router.paths.clone());
+    assert_guarded_setting_write(&restarted, &r, 1002, 401);
+    assert_guarded_setting_write(&router, &r, 1002, 200);
+    let mut logout = r.clone();
+    logout.path = "/api/auth/logout".into();
+    let response = router.handle(&logout, 1003).response;
+    assert_eq!(response.status, 200);
+    assert!(response.cookies.iter().any(
+        |cookie| cookie.starts_with(&format!("{PIN_COOKIE}=")) && cookie.contains("Max-Age=0")
+    ));
+    r.body = br#"{"ai_launch_shell":"pwsh"}"#.to_vec();
+    assert_guarded_setting_write(&router, &r, 1003, 401);
+    r.headers.last_mut().unwrap().1 = pin_guard_login(&router, 1004);
+    assert_guarded_setting_write(&router, &r, 1004, 200);
+}
+
+#[test]
+fn protected_missing_base_credentials_cannot_mutate_config_even_with_a_valid_pin() {
+    let (_root, router) = pin_guard_router();
+    let cookie = pin_guard_login(&router, 1000);
+    let mut r = pin_guard_write_request(&cookie);
+    r.query.clear();
+    assert_guarded_setting_write(&router, &r, 1001, 401);
+    r.method = "DELETE".into();
+    r.host = "foreign.invalid".into();
+    r.headers[1].1 = "https://foreign.invalid".into();
+    assert_guarded_setting_write(&router, &r, 1001, 401);
+    r = pin_guard_write_request(&cookie);
+    assert_guarded_setting_write(&router, &r, 1001, 200);
+}
+
+#[test]
+fn remote_pin_revocation_between_admission_and_dispatch_rechecks_before_write() {
+    let (_root, router) = pin_guard_router();
+    let cookie = pin_guard_login(&router, 1000);
+    let mut r = pin_guard_write_request(&cookie);
+    router.preflight(&r, 1001).unwrap();
+    let mut logout = r.clone();
+    logout.path = "/api/auth/logout".into();
+    assert_eq!(router.handle(&logout, 1002).response.status, 200);
+    assert_guarded_setting_write(&router, &r, 1003, 401);
+
+    let issued = 1004;
+    r.headers.last_mut().unwrap().1 = pin_guard_login(&router, issued);
+    router.preflight(&r, issued + 12 * 60 * 60 - 1).unwrap();
+    assert_guarded_setting_write(&router, &r, issued + 12 * 60 * 60, 401);
+}
 #[test]
 fn service_pin_lockout_and_global_proxy_limit() {
     let mut limiter = super::pin::Limiter::default();

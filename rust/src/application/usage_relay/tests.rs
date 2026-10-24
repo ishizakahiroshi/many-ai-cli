@@ -300,17 +300,30 @@ async fn native_trial_port_and_redirect_never_reach_another_hub() {
         );
         socket.write_all(format!("HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:{other_port}/other\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
     });
-    let posted = tokio::time::timeout(
+    let mut relay_args = args("claude");
+    relay_args[2] = format!("--hub=http://127.0.0.1:{port}");
+    let warnings = Mutex::new(Vec::new());
+    let mut output = Vec::new();
+    let relayed = tokio::time::timeout(
         std::time::Duration::from_secs(3),
-        io.post(
-            &format!("http://127.0.0.1:{port}"),
-            "synthetic",
-            &serde_json::json!({"provider":"claude","session_id":7,"cost_from_relay":true}),
+        run_with_io(
+            &relay_args,
+            &["MANY_AI_CLI_HUB_TOKEN=synthetic".into()],
+            &mut Cursor::new(b"{}"),
+            &mut output,
+            &io,
+            &|warning| warnings.lock().unwrap().push(warning.to_owned()),
         ),
     )
     .await
     .unwrap();
-    assert!(posted.is_err());
+    assert!(
+        relayed.is_ok(),
+        "statusline must survive the rejected redirect"
+    );
+    assert!(!output.is_empty());
+    assert!(!String::from_utf8_lossy(&output).contains("synthetic"));
+    assert_eq!(*warnings.lock().unwrap(), vec!["usage POST failed"]);
     server.await.unwrap();
     assert!(
         tokio::time::timeout(std::time::Duration::from_millis(100), other.accept())

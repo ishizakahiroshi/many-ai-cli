@@ -161,6 +161,47 @@ async fn invalid_session_and_trial_port_are_rejected_before_any_http_call() {
     );
     assert!(f.io.receipts.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn missing_and_empty_hub_tokens_are_rejected_before_any_http_call() {
+    for token_entry in [None, Some("MANY_AI_CLI_HUB_TOKEN=")] {
+        let mut f = fixture();
+        f.cli
+            .environment
+            .retain(|entry| !entry.starts_with("MANY_AI_CLI_HUB_TOKEN="));
+        if let Some(entry) = token_entry {
+            f.cli.environment.push(entry.into());
+        }
+        for command in [
+            args(&["send", "--role", "review", "text"]),
+            args(&["spawn", "--role", "implementation", "prompt"]),
+            args(&["relay", "status"]),
+        ] {
+            let error = f
+                .cli
+                .run(&command, &Cancellation::default())
+                .await
+                .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("MANY_AI_CLI_HUB_TOKEN is not set")
+            );
+            assert!(f.io.receipts.lock().unwrap().is_empty());
+        }
+        f.cli
+            .environment
+            .push("MANY_AI_CLI_HUB_TOKEN=synthetic-private-hub-token".into());
+        f.cli
+            .run(
+                &args(&["spawn", "--role", "implementation", "prompt"]),
+                &Cancellation::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(f.io.receipts.lock().unwrap().len(), 1);
+    }
+}
 #[tokio::test]
 async fn relay_roles_plan_absolute_ack_and_filter_use_existing_source_routes() {
     let f = fixture();
@@ -209,6 +250,53 @@ async fn relay_roles_plan_absolute_ack_and_filter_use_existing_source_routes() {
     assert_eq!(
         f.io.receipts.lock().unwrap()[1].timeout,
         Duration::from_secs(30)
+    );
+}
+
+#[tokio::test]
+async fn literal_relay_start_is_rejected_without_http_but_implicit_plan_is_accepted() {
+    let f = fixture();
+    let rejected = f
+        .cli
+        .run(
+            &args(&["relay", "start", "--plan", "synthetic.md"]),
+            &Cancellation::default(),
+        )
+        .await
+        .unwrap_err();
+    assert!(rejected.to_string().contains("unknown action \"start\""));
+    assert!(f.io.receipts.lock().unwrap().is_empty());
+    *f.io.response.lock().unwrap() = Ok(HttpReply {
+        status: 200,
+        body: br#"{"ok":true,"relay":{"orchestration_id":"synthetic-relay","mode":"worktree","max_rounds":3}}"#.to_vec(),
+    });
+    let accepted = f
+        .cli
+        .run(
+            &args(&[
+                "relay",
+                "--plan",
+                "synthetic.md",
+                "--impl",
+                "codex",
+                "--review",
+                "claude",
+            ]),
+            &Cancellation::default(),
+        )
+        .await
+        .unwrap();
+    assert!(accepted.starts_with("relay started orchestration=synthetic-relay"));
+    let calls = f.io.receipts.lock().unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].path, "/api/sessions/11/relay");
+    assert!(
+        PathBuf::from(
+            calls[0].body.as_ref().unwrap()["plan_path"]
+                .as_str()
+                .unwrap()
+        )
+        .is_absolute()
     );
 }
 #[test]

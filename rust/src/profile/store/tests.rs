@@ -255,6 +255,69 @@ fn effective_override_sparse_delta_and_clear_rejection() {
     );
     assert_eq!(store.current("claude").unwrap().revision, saved.revision);
 }
+
+#[test]
+fn restore_rejects_stale_revision_and_invalid_backup_without_changing_head() {
+    let temp = tempfile::tempdir().unwrap();
+    let paths = paths(&temp);
+    let store = HistoryStore::new(&paths);
+    let baseline = embedded_definitions().unwrap().remove(0);
+    let first = store
+        .save_override(
+            "claude",
+            Definition {
+                id: "claude".into(),
+                display_name: "First synthetic name".into(),
+                ..Default::default()
+            },
+            &baseline,
+            "",
+            "edit",
+        )
+        .unwrap();
+    let second = store
+        .save_override(
+            "claude",
+            Definition {
+                id: "claude".into(),
+                display_name: "Second synthetic name".into(),
+                ..Default::default()
+            },
+            &baseline,
+            &first.revision,
+            "edit",
+        )
+        .unwrap();
+    let head = paths
+        .resource(Resource::ProviderOverrides)
+        .join("claude")
+        .join("HEAD");
+    let before = std::fs::read(&head).unwrap();
+    let count = store.list("claude").unwrap().unwrap().len();
+    assert!(matches!(
+        store.restore_backup("claude", &first.revision, &first.revision),
+        Err(StoreError::RevisionConflict { .. })
+    ));
+    assert_eq!(std::fs::read(&head).unwrap(), before);
+    for backup in ["", "../escape", "..\\escape", ".json"] {
+        assert!(
+            store
+                .restore_backup("claude", backup, &second.revision)
+                .is_err()
+        );
+        assert_eq!(std::fs::read(&head).unwrap(), before);
+        assert_eq!(store.current("claude").unwrap().revision, second.revision);
+        assert_eq!(store.list("claude").unwrap().unwrap().len(), count);
+    }
+    let restored = store
+        .restore_backup("claude", &first.revision, &second.revision)
+        .unwrap();
+    assert_ne!(restored.revision, second.revision);
+    assert_eq!(restored.payload.display_name, "First synthetic name");
+    assert_eq!(store.current("claude").unwrap().revision, restored.revision);
+    assert_ne!(std::fs::read(head).unwrap(), before);
+    assert_eq!(store.list("claude").unwrap().unwrap().len(), count + 1);
+}
 #[test]
 fn registry_loads_all_five_layers_and_survives_restart() {
     let temp = tempfile::tempdir().unwrap();

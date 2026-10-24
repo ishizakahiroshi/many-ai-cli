@@ -787,6 +787,62 @@ async fn wrapper_lost_registration_ack_consumes_no_provider_and_never_retries_pr
         vec![Some("single-attempt-synthetic".into())]
     );
 }
+
+#[tokio::test]
+async fn refused_or_zero_registration_ack_cannot_prepare_or_spawn_provider() {
+    for response in [
+        Message {
+            r#type: "error".into(),
+            session_id: 12,
+            ..Default::default()
+        },
+        Message {
+            r#type: "registered".into(),
+            session_id: 0,
+            ..Default::default()
+        },
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let (socket, tx, mut rx) = socket_pair();
+        let proofs = Arc::new(Mutex::new(vec![]));
+        let trace = proofs.clone();
+        let connector = ScriptConnector {
+            sockets: Mutex::new(VecDeque::from([socket])),
+            proofs,
+            alive: true,
+        };
+        let mut options = WrapperOptions::new(
+            Message {
+                provider: "synthetic".into(),
+                ..Default::default()
+            },
+            plan(root.path()),
+        );
+        options.initial_proof = Some("single-attempt-synthetic".into());
+        options.write_timeout = Duration::from_secs(1);
+        let run = tokio::spawn(async move {
+            runtime::run(
+                options,
+                &connector,
+                &NeverFactory,
+                &Cancellation::default(),
+                |_, _| panic!("preparation must wait for a valid positive registration ACK"),
+            )
+            .await
+        });
+        receive_type(&mut rx, "register").await;
+        tx.send(response).await.unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(3), run)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidData);
+        assert_eq!(
+            *trace.lock().unwrap(),
+            vec![Some("single-attempt-synthetic".into())]
+        );
+    }
+}
 #[tokio::test]
 async fn wrapper_explicit_hub_shutdown_keeps_provider_for_manual_restart() {
     let root = tempfile::tempdir().unwrap();

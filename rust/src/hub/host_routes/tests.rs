@@ -264,6 +264,235 @@ async fn picker_ignores_body_terminal_setting_publishes_before_failed_save() {
     get.method = "DELETE".into();
     assert_eq!(f.http.handle_authenticated(&get).await.unwrap().status, 405);
 }
+
+#[tokio::test]
+async fn terminal_app_failed_persist_keeps_memory_and_destination_then_recovers() {
+    let f = fixture();
+    let destination = f.http.paths.resource(Resource::Config);
+    std::fs::create_dir(&destination).unwrap();
+    let sentinel = destination.join("preserved");
+    std::fs::write(&sentinel, b"synthetic existing destination").unwrap();
+    let before = f.http.config.snapshot().unwrap();
+    let response = f
+        .http
+        .handle_authenticated(&request(
+            "/api/terminal-app",
+            serde_json::json!({"terminal_app":"  synthetic app.exe  "}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status, 500);
+    let after = f.http.config.snapshot().unwrap();
+    assert_ne!(after.revision, before.revision);
+    assert_eq!(after.config.terminal_app, "synthetic app.exe");
+    assert!(destination.is_dir());
+    assert_eq!(
+        std::fs::read(&sentinel).unwrap(),
+        b"synthetic existing destination"
+    );
+    assert_eq!(std::fs::read_dir(&destination).unwrap().count(), 1);
+    assert!(f.dispatch.opened.lock().unwrap().is_empty());
+    assert!(f.dispatch.picked.lock().unwrap().is_empty());
+
+    // Only the two synthetic fixture objects are removed to let the same
+    // owner's normal persistence path run after its earlier save failure.
+    std::fs::remove_file(sentinel).unwrap();
+    std::fs::remove_dir(&destination).unwrap();
+    let response = f
+        .http
+        .handle_authenticated(&request(
+            "/api/terminal-app",
+            serde_json::json!({"terminal_app":"second synthetic app.exe"}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status, 200);
+    assert_eq!(
+        f.http.config.snapshot().unwrap().config.terminal_app,
+        "second synthetic app.exe"
+    );
+    assert!(
+        std::fs::read_to_string(destination)
+            .unwrap()
+            .contains("second synthetic app.exe")
+    );
+    assert!(f.dispatch.opened.lock().unwrap().is_empty());
+    assert!(f.dispatch.picked.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn logical_remote_pin_scope_and_physical_open_guards_stay_distinct() {
+    use crate::application::agent_history::AgentHistory;
+    async fn owned_response(router: &crate::hub::ServiceRouter, request: &Request) -> Response {
+        let at = crate::proto::time::Timestamp::from_unix(1001, 0).unwrap();
+        // Follow the transport's real dispatch selection. Synchronous routes
+        // do not pass through the owner reserved for native/accepted work.
+        if !crate::hub::router::needs_owned_request(&request.path) {
+            return router.handle_async_at(request, at).await.response;
+        }
+        router
+            .handle_owned_async_at(
+                request,
+                at,
+                &TaskCancellation::default(),
+                &HttpWaitCancellation::default(),
+            )
+            .await
+            .response
+    }
+    let f = fixture();
+    let paths = f.http.paths.clone();
+    let config = f.http.config.clone();
+    let dispatch = f.dispatch.clone();
+    let mut initial = config.snapshot().unwrap();
+    initial.config.token = "synthetic".into();
+    initial.config.remote_pin_hash = bcrypt::hash("123456", 4).unwrap();
+    initial.config.auth_cookie_secret = "synthetic-secret".into();
+    initial.config.hub.allowed_hosts = vec!["synthetic.test".into()];
+    config.persist(initial.revision, initial.config).unwrap();
+    let before = std::fs::read(paths.resource(Resource::Config)).unwrap();
+    let core = Arc::new(SessionEngine::new(
+        EngineOptions::default(),
+        Arc::new(SessionJournal::new(
+            paths.clone(),
+            None,
+            JournalOptions::default(),
+        )),
+        Arc::new(Boundary),
+        Arc::new(Boundary),
+        Arc::new(Boundary),
+        CoreEventBus::new(32).unwrap(),
+    ));
+    let transcript = paths.root().join("synthetic-rollout.jsonl");
+    std::fs::write(&transcript, b"synthetic transcript").unwrap();
+    let at = crate::proto::time::Timestamp::from_unix(1000, 0).unwrap();
+    let binding = core
+        .register(
+            RegisterRequest {
+                message: crate::proto::Message {
+                    provider: "codex".into(),
+                    pid: 6011,
+                    cwd: paths.root().to_string_lossy().into_owned(),
+                    home_dir: paths.root().join("actor").to_string_lossy().into_owned(),
+                    cols: 120,
+                    rows: 30,
+                    ..Default::default()
+                },
+                spawn_proof: None,
+            },
+            WrapperConnectionId(6011),
+            at,
+        )
+        .await
+        .unwrap()
+        .binding;
+    core.apply_observation(
+        binding,
+        SessionObservation::Transcript {
+            path: transcript,
+            agent_session_id: "synthetic-thread".into(),
+            safe_offset: 0,
+            grew_at: String::new(),
+        },
+        at,
+    )
+    .unwrap();
+    // Normal history path policy still uses only this explicit temporary root;
+    // the OS opener is the recording fake, so no actual GUI is opened.
+    let history_paths = RuntimePaths::production(paths.root()).unwrap();
+    let history = AgentHistory::new(
+        core,
+        history_paths,
+        paths.root().join("actor"),
+        dispatch.clone(),
+        Arc::new(|_| panic!("no artifact reads in guard matrix")),
+    );
+    let hints = Arc::new(crate::hub::runtime_routes::NetHints::default());
+    let router = crate::hub::ServiceRouter::isolated(config, paths.clone())
+        .with_host(Arc::new(f.http))
+        .with_agent_history(Arc::new(
+            crate::hub::agent_history_routes::AgentHistoryHttp::new(history),
+        ))
+        .with_runtime_observations(hints.clone(), "synthetic-shell".into());
+    let mut forwarded = Request {
+        method: "POST".into(),
+        path: "/api/open-folder".into(),
+        host: "127.0.0.1:49297".into(),
+        remote_addr: "127.0.0.1:1234".into(),
+        query: "token=synthetic".into(),
+        headers: vec![
+            ("X-Forwarded-For".into(), "203.0.113.10".into()),
+            ("Origin".into(), "http://127.0.0.1:49297".into()),
+        ],
+        body: serde_json::to_vec(&serde_json::json!({"path":paths.root()})).unwrap(),
+        ..Default::default()
+    };
+    assert!(crate::hub::auth::logically_remote(&forwarded));
+    assert_eq!(owned_response(&router, &forwarded).await.status, 401);
+    assert!(dispatch.opened.lock().unwrap().is_empty());
+    let login_cookie = |peer: &str| {
+        let mut login = forwarded.clone();
+        login.remote_addr = peer.into();
+        login.path = "/api/auth/login".into();
+        login.body = br#"{"pin":"123456"}"#.to_vec();
+        let response = router.handle(&login, 1000).response;
+        assert_eq!(response.status, 200);
+        response.cookies[0].split(';').next().unwrap().to_owned()
+    };
+    let local_cookie = login_cookie("127.0.0.1:1234");
+    let remote_cookie = login_cookie("203.0.113.1:1234");
+    forwarded.headers.push(("Cookie".into(), local_cookie));
+    assert_eq!(owned_response(&router, &forwarded).await.status, 200);
+    assert_eq!(dispatch.opened.lock().unwrap().len(), 1);
+    forwarded.body = serde_json::to_vec(&serde_json::json!({"path":f._installed.path()})).unwrap();
+    assert_eq!(owned_response(&router, &forwarded).await.status, 403);
+    assert_eq!(dispatch.opened.lock().unwrap().len(), 1);
+    forwarded.path = "/api/agent-log/open".into();
+    forwarded.query.push_str("&session_id=bad");
+    assert_eq!(owned_response(&router, &forwarded).await.status, 400);
+    forwarded.query = format!("token=synthetic&session_id={}", binding.session.0);
+    assert_eq!(owned_response(&router, &forwarded).await.status, 200);
+    assert_eq!(
+        dispatch.opened.lock().unwrap()[1],
+        (
+            OpenKind::Directory,
+            paths.root().to_path_buf(),
+            String::new()
+        )
+    );
+    let mut remote = forwarded.clone();
+    remote.remote_addr = "203.0.113.1:1234".into();
+    remote.headers.last_mut().unwrap().1 = remote_cookie;
+    assert_eq!(owned_response(&router, &remote).await.status, 403);
+    remote.path = "/api/open-folder".into();
+    remote.body = serde_json::to_vec(&serde_json::json!({"path":paths.root()})).unwrap();
+    assert_eq!(owned_response(&router, &remote).await.status, 403);
+    assert_eq!(dispatch.opened.lock().unwrap().len(), 2);
+    forwarded.path = "/api/net-hint".into();
+    forwarded.body = br#"{"ssh":true,"host_label":"synthetic","env_kind":"remote"}"#.to_vec();
+    assert_eq!(owned_response(&router, &forwarded).await.status, 403);
+    assert!(!hints.snapshot().ssh);
+    forwarded
+        .headers
+        .retain(|(name, _)| name != "X-Forwarded-For");
+    assert!(!crate::hub::auth::logically_remote(&forwarded));
+    assert_eq!(owned_response(&router, &forwarded).await.status, 200);
+    assert!(hints.snapshot().ssh);
+    forwarded.host = "synthetic.test:49297".into();
+    forwarded.body = br#"{"ssh":false}"#.to_vec();
+    assert!(crate::hub::auth::logically_remote(&forwarded));
+    assert_eq!(owned_response(&router, &forwarded).await.status, 403);
+    assert!(hints.snapshot().ssh);
+    forwarded.path = "/api/open-folder".into();
+    forwarded.body = serde_json::to_vec(&serde_json::json!({"path":paths.root()})).unwrap();
+    assert_eq!(owned_response(&router, &forwarded).await.status, 200);
+    assert_eq!(dispatch.opened.lock().unwrap().len(), 3);
+    assert_eq!(
+        std::fs::read(paths.resource(Resource::Config)).unwrap(),
+        before
+    );
+    assert!(dispatch.picked.lock().unwrap().is_empty());
+}
 #[test]
 fn source_path_casefold_uses_unicode_classes_and_component_boundary() {
     assert!(ancestor(
