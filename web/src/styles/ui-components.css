@@ -28,6 +28,13 @@
 :root {
   --live-status-bg-default: rgba(13, 17, 23, 0.82);
   --live-status-fg-default: rgba(147, 197, 253, 0.92);
+  --live-idle: rgba(148, 163, 184, 0.78);
+  --live-done: rgba(148, 163, 184, 0.9);
+  --live-ok: rgba(134, 239, 172, 0.95);
+  --live-fail: rgba(252, 165, 165, 0.95);
+  --live-aborted: rgba(203, 213, 225, 0.9);
+  --live-wait: rgba(251, 191, 36, 0.95);
+  --live-dim: rgba(148, 163, 184, 0.85);
 }
 [data-theme="light"] {
   --live-status-bg-default: rgba(226, 232, 240, 0.92);

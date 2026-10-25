@@ -286,6 +286,14 @@ pub struct UserPrefsDisplay {
     pub live_status_bg: String,
     #[serde(rename = "live_status_fg")]
     pub live_status_fg: String,
+    #[serde(rename = "live_status_light_bg")]
+    pub live_status_light_bg: String,
+    #[serde(rename = "live_status_light_fg")]
+    pub live_status_light_fg: String,
+    #[serde(rename = "live_status_dark_bg")]
+    pub live_status_dark_bg: String,
+    #[serde(rename = "live_status_dark_fg")]
+    pub live_status_dark_fg: String,
     #[serde(rename = "custom_themes")]
     pub custom_themes: Vec<UserPrefsCustomTheme>,
 }
@@ -1370,6 +1378,34 @@ pub(super) fn schema(kind: &str) -> &'static [Field] {
             Field {
                 yaml: "live_status_fg",
                 json: "live_status_fg",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "live_status_light_bg",
+                json: "live_status_light_bg",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "live_status_light_fg",
+                json: "live_status_light_fg",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "live_status_dark_bg",
+                json: "live_status_dark_bg",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "live_status_dark_fg",
+                json: "live_status_dark_fg",
                 kind: "string",
                 yomit: true,
                 jomit: true,

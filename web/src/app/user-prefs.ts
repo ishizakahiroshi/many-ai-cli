@@ -76,9 +76,13 @@ export const STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY = 'anyai.voiceWhisperAutoSubm
 export const STORAGE_VOICE_WHISPER_AUTO_STOP_KEY = 'anyai.voiceWhisperAutoStop';
 export const STORAGE_DISPLAY_LOCKED_MODE_KEY  = 'ai_cli_hub_display_locked_mode';
 // ライブステータス帯（#terminal-live-status「実行中」）のユーザー配色。
-// 空文字＝未設定（既定の青系にフォールバック）。hex 文字列で保持。サーバ同期。
+// 空文字＝テーマ既定。旧共通色はダーク側だけの互換入力として保持する。
 export const STORAGE_LIVE_STATUS_BG_KEY       = 'ai_cli_hub_live_status_bg';
 export const STORAGE_LIVE_STATUS_FG_KEY       = 'ai_cli_hub_live_status_fg';
+export const STORAGE_LIVE_STATUS_LIGHT_BG_KEY = 'ai_cli_hub_live_status_light_bg';
+export const STORAGE_LIVE_STATUS_LIGHT_FG_KEY = 'ai_cli_hub_live_status_light_fg';
+export const STORAGE_LIVE_STATUS_DARK_BG_KEY  = 'ai_cli_hub_live_status_dark_bg';
+export const STORAGE_LIVE_STATUS_DARK_FG_KEY  = 'ai_cli_hub_live_status_dark_fg';
 export const STORAGE_CUSTOM_THEMES_KEY        = 'ai_cli_hub_custom_themes';
 // 承認 action-bar の折りたたみ（コンパクト）表示。device-local（端末ごとに保持）。
 // 大きな承認パネルで前後のターミナル本文が見切れる問題への対処として、
@@ -296,6 +300,10 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'display.lang':              [STORAGE_LANG_KEY,                  String],
   'display.live_status_bg':    [STORAGE_LIVE_STATUS_BG_KEY,        String],
   'display.live_status_fg':    [STORAGE_LIVE_STATUS_FG_KEY,        String],
+  'display.live_status_light_bg': [STORAGE_LIVE_STATUS_LIGHT_BG_KEY, String],
+  'display.live_status_light_fg': [STORAGE_LIVE_STATUS_LIGHT_FG_KEY, String],
+  'display.live_status_dark_bg':  [STORAGE_LIVE_STATUS_DARK_BG_KEY,  String],
+  'display.live_status_dark_fg':  [STORAGE_LIVE_STATUS_DARK_FG_KEY,  String],
   'display.custom_themes':     [STORAGE_CUSTOM_THEMES_KEY,         JSON.stringify],
 };
 // Voice engine selection is intentionally absent from server-synced user prefs.
@@ -323,6 +331,10 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'display.lang',
   'display.live_status_bg',
   'display.live_status_fg',
+  'display.live_status_light_bg',
+  'display.live_status_light_fg',
+  'display.live_status_dark_bg',
+  'display.live_status_dark_fg',
 ]);
 export const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
   'group_order',
@@ -337,6 +349,29 @@ export const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
 export const _USER_PREFS_NUMBER_ARRAY_PATHS = new Set([
   'session_order',
 ]);
+
+// Palette edits are patches: an unrelated save must not replay another mode's
+// stale local colors over a reset made on a different device.
+const paletteEdits = new Map<string, number>();
+let paletteEditVersion = 0;
+function isPalettePath(path: string): boolean {
+  return path.startsWith('display.live_status_');
+}
+
+function mirrorPaletteColors(prefs: UserPrefsObject): void {
+  // Before initial migration, local-only colors still need importing.
+  if (!prefs.migrated_from_localstorage) return;
+  for (const [path, [lsKey]] of Object.entries(_USER_PREFS_PATH_TO_LS)) {
+    if (!isPalettePath(path) || paletteEdits.has(path)) continue;
+    const field = path.split('.')[1];
+    const value = prefs.display?.[field];
+    try {
+      if (value == null || value === '') localStorage.removeItem(lsKey);
+      else localStorage.setItem(lsKey, String(value));
+    } catch (_) {}
+  }
+  document.dispatchEvent(new Event('live-status-colors-mirrored'));
+}
 
 // ドット区切りパスでオブジェクトの深いフィールドを設定する
 export function _setNestedValue(obj: UserPrefsObject, path: string, value: any): void {
@@ -414,6 +449,7 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
 export function _mergeStoredUserPrefs(current: UserPrefsObject): UserPrefsObject {
   for (const [path, [lsKey, _]] of Object.entries(_USER_PREFS_PATH_TO_LS)) {
     if (path === 'templates') continue; // Merged separately only for a local edit.
+    if (isPalettePath(path) && !paletteEdits.has(path)) continue;
     const raw = localStorage.getItem(lsKey);
     if (raw == null) continue;
     const parsed = _parseStoredUserPref(path, raw);
@@ -544,6 +580,7 @@ export async function _putUserPrefsNow() {
   const getRes = await apiFetch('/api/user-prefs');
   if (!getRes.ok) throw _userPrefsHttpError('GET', getRes);
   const current = await getRes.json();
+  const submittedPaletteEdits = new Map(paletteEdits);
   // localStorage の最新値を current にマージ
   _mergeStoredUserPrefs(current);
   const localTemplates = _parseStoredUserPref('templates', localStorage.getItem(STORAGE_TEMPLATES_KEY) || 'null');
@@ -566,6 +603,10 @@ export async function _putUserPrefsNow() {
   });
   if (putRes.status === 409) reportTemplateConflict();
   if (!putRes.ok) throw _userPrefsHttpError('PUT', putRes);
+  for (const [path, version] of submittedPaletteEdits) {
+    if (paletteEdits.get(path) === version) paletteEdits.delete(path);
+  }
+  mirrorPaletteColors(current);
   const savedVersion = putRes.headers.get('X-Template-Version') || '';
   if (templateSync.acknowledge(templateVersion)) {
     persistTemplateDirty();
@@ -620,6 +661,7 @@ export function setUserPref(path: string, value: any): void {
   // 1. localStorage に書く
   const entry = _USER_PREFS_PATH_TO_LS[path];
   if (entry) {
+    if (isPalettePath(path)) paletteEdits.set(path, ++paletteEditVersion);
     const [lsKey, serialize] = entry;
     try {
       const serialized = serialize(value);
@@ -645,11 +687,20 @@ export async function _mirrorUserPrefsFromServer() {
     // 各フィールドを localStorage にミラー（既存値を上書き）
     for (const [path, [lsKey, serialize]] of Object.entries(_USER_PREFS_PATH_TO_LS)) {
       if (path === 'templates') continue;
+      if (isPalettePath(path) && paletteEdits.has(path)) continue;
       const keys = path.split('.');
       let val = prefs;
       for (const k of keys) { if (val == null) break; val = val[k]; }
-      if (val == null) continue;
       try {
+        if (val == null) {
+          // Empty palette strings are omitted by the server. A complete snapshot
+          // must clear stale colors after another device resets them; retain
+          // local values until the first localStorage migration has run.
+          if (prefs.migrated_from_localstorage && isPalettePath(path)) {
+            localStorage.removeItem(lsKey);
+          }
+          continue;
+        }
         const serialized = serialize(val);
         if (serialized != null && serialized !== 'null') {
           localStorage.setItem(lsKey, serialized);

@@ -147,21 +147,21 @@
 /* 待機表示(idle): 更新が途切れたらグレーアウトしてスピナーを止め、枠は残したまま
    「もう動いていない＝終わっている」を明示する（消えない）。 */
 #terminal-live-status.idle {
-  color: rgba(148, 163, 184, 0.78);
+  color: var(--live-status-fg, var(--live-idle));
   border-color: rgba(100, 116, 139, 0.38);
   opacity: 0.82;
 }
 #terminal-live-status.idle .live-status-state { color: rgba(203, 213, 225, 0.75); }
 /* 承認待ち(waiting): アンバーで目立たせる（枠は残しスピナーは止める）。 */
 #terminal-live-status.waiting {
-  color: rgba(251, 191, 36, 0.95);
+  color: var(--live-status-fg, var(--live-wait));
   border-color: rgba(217, 119, 6, 0.5);
 }
 /* 完了サマリー(done): 待機中に「直前のターンで何が終わったか」を出す。端末へ本文を
    書かなくなった（hub-marker-filter.ts の案 G）ぶんの表示口なので、idle より前に出す。
    スピナーは idle と同じく止める。 */
 #terminal-live-status.done {
-  color: rgba(148, 163, 184, 0.9);
+  color: var(--live-status-fg, var(--live-done));
   border-color: rgba(100, 116, 139, 0.42);
 }
 /* 完了サマリーの色（緑・赤）は文字だけに乗せる。状態記号は「待機」を指しているので、
@@ -173,12 +173,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-#terminal-live-status.done-success  { color: rgba(134, 239, 172, 0.95); border-color: rgba(34, 197, 94, 0.42); }
-#terminal-live-status.done-failure  { color: rgba(252, 165, 165, 0.95); border-color: rgba(239, 68, 68, 0.5); }
-#terminal-live-status.done-aborted  { color: rgba(203, 213, 225, 0.9);  border-color: rgba(100, 116, 139, 0.5); }
-#terminal-live-status.done-needs-action { color: rgba(251, 191, 36, 0.95); border-color: rgba(217, 119, 6, 0.5); }
+#terminal-live-status.done-success  { color: var(--live-status-fg, var(--live-ok)); border-color: rgba(34, 197, 94, 0.42); }
+#terminal-live-status.done-failure  { color: var(--live-status-fg, var(--live-fail)); border-color: rgba(239, 68, 68, 0.5); }
+#terminal-live-status.done-aborted  { color: var(--live-status-fg, var(--live-aborted));  border-color: rgba(100, 116, 139, 0.5); }
+#terminal-live-status.done-needs-action { color: var(--live-status-fg, var(--live-wait)); border-color: rgba(217, 119, 6, 0.5); }
 /* unknown = Hub のフォールバック。異常ではないので警告色を使わず、いちばん弱く出す。 */
-#terminal-live-status.done-unknown  { color: rgba(148, 163, 184, 0.85); border-color: rgba(100, 116, 139, 0.35); }
+#terminal-live-status.done-unknown  { color: var(--live-status-fg, var(--live-dim)); border-color: rgba(100, 116, 139, 0.35); }
 /* hidden 属性より id セレクタが強いため、:not([hidden]) でのみ flex 化して非表示を保つ */
 #terminal-live-status:not([hidden]) {
   display: flex;
@@ -285,16 +285,16 @@
    ユーザーが 🎨 で選んだ色（インラインの --live-status-bg / -fg）は既定より優先する。
    状態ごとの文字色は上で暗い下地用の明るい値を直書きしているので、ライトでは同じ意味の
    濃い値へ置き換える。 */
-[data-theme="light"] #terminal-live-status.idle { color: var(--live-idle); border-color: var(--live-line); }
+[data-theme="light"] #terminal-live-status.idle { color: var(--live-status-fg, var(--live-idle)); border-color: var(--live-line); }
 [data-theme="light"] #terminal-live-status.idle .live-status-state { color: var(--live-dim); }
-[data-theme="light"] #terminal-live-status.waiting { color: var(--live-wait); border-color: var(--live-wait-line); }
-[data-theme="light"] #terminal-live-status.done { color: var(--live-idle); border-color: var(--live-line); }
+[data-theme="light"] #terminal-live-status.waiting { color: var(--live-status-fg, var(--live-wait)); border-color: var(--live-wait-line); }
+[data-theme="light"] #terminal-live-status.done { color: var(--live-status-fg, var(--live-idle)); border-color: var(--live-line); }
 [data-theme="light"] #terminal-live-status.done .live-status-state { color: var(--live-dim); }
-[data-theme="light"] #terminal-live-status.done-success  { color: var(--live-ok); border-color: var(--live-ok-line); }
-[data-theme="light"] #terminal-live-status.done-failure  { color: var(--live-fail); border-color: var(--live-fail-line); }
-[data-theme="light"] #terminal-live-status.done-aborted  { color: var(--live-idle); border-color: var(--live-line); }
-[data-theme="light"] #terminal-live-status.done-needs-action { color: var(--live-wait); border-color: var(--live-wait-line); }
-[data-theme="light"] #terminal-live-status.done-unknown  { color: var(--live-dim); border-color: var(--live-line); }
+[data-theme="light"] #terminal-live-status.done-success  { color: var(--live-status-fg, var(--live-ok)); border-color: var(--live-ok-line); }
+[data-theme="light"] #terminal-live-status.done-failure  { color: var(--live-status-fg, var(--live-fail)); border-color: var(--live-fail-line); }
+[data-theme="light"] #terminal-live-status.done-aborted  { color: var(--live-status-fg, var(--live-idle)); border-color: var(--live-line); }
+[data-theme="light"] #terminal-live-status.done-needs-action { color: var(--live-status-fg, var(--live-wait)); border-color: var(--live-wait-line); }
+[data-theme="light"] #terminal-live-status.done-unknown  { color: var(--live-status-fg, var(--live-dim)); border-color: var(--live-line); }
 [data-theme="light"] .live-status-state { color: var(--live-idle); }
 [data-theme="light"] .live-status-state.running { color: var(--live-run); }
 [data-theme="light"] .live-status-state.awaiting-approval { color: var(--live-wait); }
@@ -332,6 +332,7 @@
   color: var(--text-soft);
 }
 .live-status-palette-popover[hidden] { display: none; }
+.live-status-palette-mode { color: var(--muted); }
 .live-status-palette-row {
   display: flex;
   align-items: center;
@@ -551,7 +552,7 @@
     gap: 6px;
     border: 0;
     border-radius: 0;
-    background: transparent;
+    background: var(--live-status-bg, transparent);
     box-shadow: none;
     color: var(--live-status-fg, var(--live-status-fg-default));
     font-size: var(--fs-2xs);
@@ -560,29 +561,29 @@
     touch-action: manipulation;
   }
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.idle {
-    color: rgba(148, 163, 184, 0.78);
+    color: var(--live-status-fg, var(--live-idle));
     opacity: 0.78;
   }
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.waiting {
-    color: rgba(251, 191, 36, 0.95);
+    color: var(--live-status-fg, var(--live-wait));
   }
   /* モバイル帯は枠を持たないので、完了サマリーも色だけで区別する。 */
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done {
-    color: rgba(148, 163, 184, 0.85);
+    color: var(--live-status-fg, var(--live-dim));
     opacity: 1;
   }
-  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-success  { color: rgba(134, 239, 172, 0.95); }
-  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-failure  { color: rgba(252, 165, 165, 0.95); }
-  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-needs-action { color: rgba(251, 191, 36, 0.95); }
-  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-unknown  { color: rgba(148, 163, 184, 0.85); }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-success  { color: var(--live-status-fg, var(--live-ok)); }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-failure  { color: var(--live-status-fg, var(--live-fail)); }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-needs-action { color: var(--live-status-fg, var(--live-wait)); }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-unknown  { color: var(--live-status-fg, var(--live-dim)); }
   /* モバイル帯は下地が透明でテーマの背景に乗るので、ライトでは濃い色へ。 */
-  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.idle { color: var(--live-idle); }
-  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.waiting { color: var(--live-wait); }
-  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done { color: var(--live-idle); }
-  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-success  { color: var(--live-ok); }
-  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-failure  { color: var(--live-fail); }
-  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-needs-action { color: var(--live-wait); }
-  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-unknown  { color: var(--live-dim); }
+  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.idle { color: var(--live-status-fg, var(--live-idle)); }
+  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.waiting { color: var(--live-status-fg, var(--live-wait)); }
+  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done { color: var(--live-status-fg, var(--live-idle)); }
+  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-success  { color: var(--live-status-fg, var(--live-ok)); }
+  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-failure  { color: var(--live-status-fg, var(--live-fail)); }
+  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-needs-action { color: var(--live-status-fg, var(--live-wait)); }
+  [data-theme="light"] body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-unknown  { color: var(--live-status-fg, var(--live-dim)); }
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .card-state-svg {
     width: 11px;
     height: 11px;

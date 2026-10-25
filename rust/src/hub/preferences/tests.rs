@@ -209,6 +209,49 @@ fn fixed_go_get_put_decoder_sanitizers_hashes_and_saved_snapshots() {
 }
 
 #[test]
+fn theme_specific_live_status_colors_survive_api_and_yaml_round_trip() {
+    let f = fixture(json!({}), 0);
+    let display = json!({
+        "live_status_bg": "#0d1117",
+        "live_status_fg": "#93c5fd",
+        "live_status_light_bg": "#f1f5f9",
+        "live_status_light_fg": "#1e3a8a",
+        "live_status_dark_bg": "#172554",
+        "live_status_dark_fg": "#bfdbfe",
+    });
+    let saved = response(
+        &f,
+        &request("PUT", &json!({"display": display}).to_string(), "", ""),
+    );
+    assert_eq!(saved.status, 200);
+    assert_eq!(body(&saved)["display"], display);
+    assert_eq!(persisted(&f)["display"], display);
+    let fetched = response(&f, &request("GET", "", "", ""));
+    assert_eq!(fetched.status, 200);
+    assert_eq!(body(&fetched)["display"], display);
+
+    // PUT is a complete snapshot. Reset only light, retaining both the other
+    // mode and old shared colors so updating one palette cannot erase them.
+    let mut cleared = body(&saved);
+    cleared["display"]["live_status_light_bg"] = "".into();
+    cleared["display"]["live_status_light_fg"] = "".into();
+    let reset = response(&f, &request("PUT", &cleared.to_string(), "", ""));
+    assert_eq!(reset.status, 200);
+    let mut expected = display;
+    let fields = expected.as_object_mut().unwrap();
+    fields.remove("live_status_light_bg");
+    fields.remove("live_status_light_fg");
+    assert_eq!(body(&reset)["display"], expected);
+    assert_eq!(persisted(&f)["display"], expected);
+    let fetched = response(&f, &request("GET", "", "", ""));
+    assert_eq!(body(&fetched)["display"], expected);
+    let snapshot = f.store.snapshot().unwrap();
+    let palette = &snapshot.config.user_prefs.display;
+    assert!(palette.live_status_light_bg.is_empty());
+    assert!(palette.live_status_light_fg.is_empty());
+}
+
+#[test]
 fn get_effective_notification_is_detached_and_short_circuits_push_reader() {
     for (explicit, backends, push, effective, reads) in [
         (None, 0, false, false, 1),

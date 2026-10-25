@@ -1,15 +1,18 @@
 // ライブステータス帯（#terminal-live-status「実行中」）のユーザー配色。
 // 帯の右端にパレットボタンを置き、背景色・文字色をネイティブのカラーピッカーで
-// 自由に変えられるようにする。設定は user-prefs 経由でサーバ同期する（全端末共通）。
+// 自由に変えられるようにする。ライト・ダーク別にサーバ同期する（全端末共通）。
 //
 // 適用方式: documentElement に CSS 変数 --live-status-bg / --live-status-fg を立て、
 // terminal.css 側の #terminal-live-status がそれを参照する（未設定時は既定の青系に
-// フォールバック）。idle/waiting 状態は意味づけのため独自の文字色を上書きするので、
-// ユーザー配色が最も効くのは active（実行中）表示時。
+// フォールバック）。旧共通色はダークでのみ引き継ぎ、ライトには持ち越さない。
 
 import {
   STORAGE_LIVE_STATUS_BG_KEY,
   STORAGE_LIVE_STATUS_FG_KEY,
+  STORAGE_LIVE_STATUS_LIGHT_BG_KEY,
+  STORAGE_LIVE_STATUS_LIGHT_FG_KEY,
+  STORAGE_LIVE_STATUS_DARK_BG_KEY,
+  STORAGE_LIVE_STATUS_DARK_FG_KEY,
   setUserPref,
 } from './user-prefs.js';
 
@@ -19,6 +22,16 @@ const DEFAULT_FG = '#93c5fd';
 // ライトテーマの既定（terminal.css の [data-theme="light"] の --live-status-*-default と揃える）。
 const DEFAULT_BG_LIGHT = '#e2e8f0';
 const DEFAULT_FG_LIGHT = '#1d4ed8';
+
+type Mode = 'light' | 'dark';
+const COLOR_KEYS = {
+  light: { bg: STORAGE_LIVE_STATUS_LIGHT_BG_KEY, fg: STORAGE_LIVE_STATUS_LIGHT_FG_KEY },
+  dark: { bg: STORAGE_LIVE_STATUS_DARK_BG_KEY, fg: STORAGE_LIVE_STATUS_DARK_FG_KEY },
+};
+
+function currentMode(): Mode {
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+}
 
 function ti18n(key: string): string {
   const tfn = typeof window.t === 'function' ? window.t : (k: string) => k;
@@ -38,32 +51,48 @@ function readStored(key: string): string {
   }
 }
 
-// localStorage の現在値を CSS 変数へ反映する（未設定なら変数を消して既定へフォールバック）。
+function readColors(mode: Mode) {
+  return {
+    bg: readStored(COLOR_KEYS[mode].bg) || (mode === 'dark' ? readStored(STORAGE_LIVE_STATUS_BG_KEY) : ''),
+    fg: readStored(COLOR_KEYS[mode].fg) || (mode === 'dark' ? readStored(STORAGE_LIVE_STATUS_FG_KEY) : ''),
+  };
+}
+
+let syncPaletteInputs: (() => void) | null = null;
+
+// Apply only the current mode. Unset overrides leave the theme defaults intact.
 export function applyLiveStatusColors(): void {
   const root = document.documentElement;
-  const bg = readStored(STORAGE_LIVE_STATUS_BG_KEY);
-  const fg = readStored(STORAGE_LIVE_STATUS_FG_KEY);
+  const { bg, fg } = readColors(currentMode());
   if (bg) root.style.setProperty('--live-status-bg', bg);
   else root.style.removeProperty('--live-status-bg');
   if (fg) root.style.setProperty('--live-status-fg', fg);
   else root.style.removeProperty('--live-status-fg');
+  syncPaletteInputs?.();
 }
 
-function saveColor(which: 'bg' | 'fg', hex: string): void {
-  const key = which === 'bg' ? STORAGE_LIVE_STATUS_BG_KEY : STORAGE_LIVE_STATUS_FG_KEY;
+function saveColor(mode: Mode, which: 'bg' | 'fg', hex: string): void {
+  const key = COLOR_KEYS[mode][which];
   try { localStorage.setItem(key, hex); } catch (_) {}
-  setUserPref(which === 'bg' ? 'display.live_status_bg' : 'display.live_status_fg', hex);
+  setUserPref(`display.live_status_${mode}_${which}`, hex);
   applyLiveStatusColors();
 }
 
 function resetColors(): void {
-  try {
-    localStorage.removeItem(STORAGE_LIVE_STATUS_BG_KEY);
-    localStorage.removeItem(STORAGE_LIVE_STATUS_FG_KEY);
-  } catch (_) {}
-  // 空文字を送ってサーバ側もクリア（String('') → 削除扱い）
-  setUserPref('display.live_status_bg', '');
-  setUserPref('display.live_status_fg', '');
+  const mode = currentMode();
+  for (const which of ['bg', 'fg'] as const) {
+    try { localStorage.removeItem(COLOR_KEYS[mode][which]); } catch (_) {}
+    setUserPref(`display.live_status_${mode}_${which}`, '');
+  }
+  if (mode === 'dark') {
+    // An explicit reset must also stop the legacy dark colors resurfacing.
+    try {
+      localStorage.removeItem(STORAGE_LIVE_STATUS_BG_KEY);
+      localStorage.removeItem(STORAGE_LIVE_STATUS_FG_KEY);
+    } catch (_) {}
+    setUserPref('display.live_status_bg', '');
+    setUserPref('display.live_status_fg', '');
+  }
   applyLiveStatusColors();
 }
 
@@ -81,6 +110,7 @@ function isMobileViewport(): boolean {
 
 function closePopover(): void {
   if (popoverEl) popoverEl.hidden = true;
+  applyLiveStatusColors();
 }
 
 function openPalette(anchor: HTMLElement, syncInputs: () => void, positionPopover: (anchor: HTMLElement) => void): void {
@@ -106,6 +136,10 @@ function buildUI(): void {
   pop.className = 'live-status-palette-popover';
   pop.hidden = true;
 
+  const modeText = document.createElement('div');
+  modeText.className = 'live-status-palette-mode';
+  modeText.setAttribute('aria-live', 'polite');
+
   const bgRow = document.createElement('label');
   bgRow.className = 'live-status-palette-row';
   const bgText = document.createElement('span');
@@ -127,7 +161,7 @@ function buildUI(): void {
   resetBtn.className = 'ui-button ui-button--secondary ui-button--regular live-status-palette-reset';
   resetBtn.textContent = ti18n('live_status_palette_reset');
 
-  pop.append(bgRow, fgRow, resetBtn);
+  pop.append(modeText, bgRow, fgRow, resetBtn);
   bar.append(btn);
   // ポップオーバーは帯（#terminal-live-status: overflow:hidden）に入れると
   // 帯の枠外へ出た瞬間クリップされて見えなくなる。body 直下に出し、開くたびに
@@ -135,11 +169,26 @@ function buildUI(): void {
   document.body.append(pop);
   popoverEl = pop;
 
+  let paletteMode = currentMode();
   const syncInputs = () => {
-    const light = document.documentElement.getAttribute('data-theme') === 'light';
-    bgInput.value = readStored(STORAGE_LIVE_STATUS_BG_KEY) || (light ? DEFAULT_BG_LIGHT : DEFAULT_BG);
-    fgInput.value = readStored(STORAGE_LIVE_STATUS_FG_KEY) || (light ? DEFAULT_FG_LIGHT : DEFAULT_FG);
+    paletteMode = currentMode();
+    const light = paletteMode === 'light';
+    const { bg, fg } = readColors(paletteMode);
+    bgInput.value = bg || (light ? DEFAULT_BG_LIGHT : DEFAULT_BG);
+    fgInput.value = fg || (light ? DEFAULT_FG_LIGHT : DEFAULT_FG);
+    modeText.textContent = `${ti18n(light ? 'live_status_palette_light' : 'live_status_palette_dark')} · ${ti18n(bg || fg ? 'live_status_palette_custom' : 'live_status_palette_auto')}`;
   };
+  syncPaletteInputs = syncInputs;
+  syncInputs();
+  const syncLabels = () => {
+    btn.title = ti18n('live_status_palette_tooltip');
+    btn.setAttribute('aria-label', btn.title);
+    bgText.textContent = ti18n('live_status_palette_bg');
+    fgText.textContent = ti18n('live_status_palette_fg');
+    resetBtn.textContent = ti18n('live_status_palette_reset');
+    syncInputs();
+  };
+  document.addEventListener('i18n-ready', syncLabels);
 
   // ボタンの右上にポップオーバーを配置（帯の上側に出す）。
   const positionPopover = (anchor: HTMLElement = btn) => {
@@ -154,7 +203,7 @@ function buildUI(): void {
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (pop.hidden) openPalette(btn, syncInputs, positionPopover);
-    else pop.hidden = true;
+    else closePopover();
   });
 
   const cancelLongPress = () => {
@@ -177,10 +226,16 @@ function buildUI(): void {
   bar.addEventListener('touchend', cancelLongPress, { passive: true });
   bar.addEventListener('touchcancel', cancelLongPress, { passive: true });
   // 入力中（input）でライブプレビュー、確定（change）で保存
-  bgInput.addEventListener('input', () => document.documentElement.style.setProperty('--live-status-bg', bgInput.value));
-  fgInput.addEventListener('input', () => document.documentElement.style.setProperty('--live-status-fg', fgInput.value));
-  bgInput.addEventListener('change', () => saveColor('bg', bgInput.value));
-  fgInput.addEventListener('change', () => saveColor('fg', fgInput.value));
+  for (const [which, input] of [['bg', bgInput], ['fg', fgInput]] as const) {
+    input.addEventListener('input', () => {
+      if (pop.hidden || paletteMode !== currentMode()) return;
+      document.documentElement.style.setProperty(`--live-status-${which}`, input.value);
+    });
+    input.addEventListener('change', () => {
+      if (pop.hidden || paletteMode !== currentMode()) { applyLiveStatusColors(); return; }
+      saveColor(paletteMode, which, input.value);
+    });
+  }
   resetBtn.addEventListener('click', (e) => { e.stopPropagation(); resetColors(); syncInputs(); });
 
   pop.addEventListener('click', (e) => e.stopPropagation());
@@ -188,11 +243,25 @@ function buildUI(): void {
     if (Date.now() < suppressDocumentClickUntil) return;
     if (!pop.hidden && e.target !== btn && !pop.contains(e.target as Node)) closePopover();
   });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !pop.hidden) closePopover();
+  });
 }
 
 export function initLiveStatusColor(): void {
   applyLiveStatusColors();
   document.addEventListener('user-prefs-mirrored', applyLiveStatusColors);
+  document.addEventListener('live-status-colors-mirrored', applyLiveStatusColors);
+  // Settings and custom-theme previews both change this attribute.
+  let appliedMode = currentMode();
+  new MutationObserver(() => {
+    const mode = currentMode();
+    if (mode === appliedMode) return;
+    appliedMode = mode;
+    closePopover();
+  }).observe(document.documentElement, {
+    attributes: true, attributeFilter: ['data-theme'],
+  });
   buildUI();
 }
 

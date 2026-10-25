@@ -17,8 +17,8 @@ const response=(prefs:any,version:string,status=200)=>({ok:status>=200&&status<3
 // Run the actual integration module, including startup mirroring, its debounce
 // queue, HTTP headers, and localStorage writes. Only browser/HTTP boundaries and
 // the unrelated theme sanitizer are replaced; SharedTemplateSync is the real one.
-function fixture(storage=new Map<string,string>(), migrated=true){
-  let server:any={migrated_from_localstorage:migrated,templates:rows('server-original'),display:{theme:'light',font_size:'medium',lang:'en'}};
+function fixture(storage=new Map<string,string>(), migrated=true, display:Record<string,string>={}){
+  let server:any={migrated_from_localstorage:migrated,templates:rows('server-original'),display:{theme:'light',font_size:'medium',lang:'en',...display}};
   let version='version-1';const calls:Array<{method:string,headers:Record<string,string>,body:any}>=[];
   const timers=new Map<number,Function>();let timerID=0;
   const events:string[]=[];const warnings:unknown[]=[];
@@ -46,9 +46,75 @@ function fixture(storage=new Map<string,string>(), migrated=true){
   };
   ctx.apiFetch = ctx.fetch;
   const source=readFileSync(new URL('../src/app/user-prefs.ts',import.meta.url),'utf8').replace(/^import .*;\r?$/gm,'').replace(/^export /gm,'');
-  runInNewContext(new Bun.Transpiler({loader:'ts'}).transformSync(source)+'\nglobalThis.api={setUserPref,_putUserPrefsNow,flushUserPrefsPut,refreshSharedPromptTemplates,setSharedTemplateEditing,sharedTemplatesHaveConflict,resolveSharedTemplateConflict};',ctx);
-  return {storage,calls,timers,events,warnings,api:ctx.api,get server(){return server;},get version(){return version;},remote(templates:any,newVersion:string){server={...server};if(templates===undefined)delete server.templates;else server.templates=clone(templates);version=newVersion;},holdGet(){let release!:(value:any)=>void;nextGet=new Promise(resolve=>{release=resolve;});return release;},beforePut(fn:()=>void){beforePut=fn;},failNextPut(){nextPutError=new Error('synthetic offline');},async fireTimer(){const entry=timers.entries().next().value;if(!entry)throw new Error('No pending debounce');const [id,fn]=entry;timers.delete(id);fn();await settle();}};
+  runInNewContext(new Bun.Transpiler({loader:'ts'}).transformSync(source)+'\nglobalThis.api={setUserPref,_putUserPrefsNow,flushUserPrefsPut,refreshSharedPromptTemplates,setSharedTemplateEditing,sharedTemplatesHaveConflict,resolveSharedTemplateConflict,_mirrorUserPrefsFromServer};',ctx);
+  return {storage,calls,timers,events,warnings,api:ctx.api,get server(){return server;},get version(){return version;},remote(templates:any,newVersion:string){server={...server};if(templates===undefined)delete server.templates;else server.templates=clone(templates);version=newVersion;},remoteDisplay(display:Record<string,string>){server={...server,display:clone(display)};},holdGet(){let release!:(value:any)=>void;nextGet=new Promise(resolve=>{release=resolve;});return release;},beforePut(fn:()=>void){beforePut=fn;},failNextPut(){nextPutError=new Error('synthetic offline');},async fireTimer(){const entry=timers.entries().next().value;if(!entry)throw new Error('No pending debounce');const [id,fn]=entry;timers.delete(id);fn();await settle();}};
 }
+
+const palettePaths = ['live_status_light_bg','live_status_light_fg','live_status_dark_bg','live_status_dark_fg'];
+const paletteKey = (path:string) => `ai_cli_hub_${path}`;
+
+describe('theme palette through actual user-prefs persistence',()=>{
+  test('all four scoped paths save through PUT and reload from a remote snapshot',async()=>{
+    const values=['#f1f5f9','#1e3a8a','#172554','#bfdbfe'];
+    const f=fixture();await settle();
+    palettePaths.forEach((path,i)=>f.api.setUserPref(`display.${path}`,values[i]));
+    await f.api.flushUserPrefsPut();
+    const put=f.calls.findLast(call=>call.method==='PUT')!;
+    palettePaths.forEach((path,i)=>{expect(put.body.display[path]).toBe(values[i]);expect(f.server.display[path]).toBe(values[i]);});
+    const reloaded=fixture(new Map(),true,f.server.display);await settle();
+    palettePaths.forEach((path,i)=>expect(reloaded.storage.get(paletteKey(path))).toBe(values[i]));
+  });
+  test('complete migrated snapshots clear absent scoped and legacy palette keys',async()=>{
+    const keys=[...palettePaths,'live_status_bg','live_status_fg'];
+    const storage=new Map(keys.map(path=>[paletteKey(path),'#123456']));
+    const f=fixture(storage);await settle();
+    keys.forEach(path=>expect(storage.has(paletteKey(path))).toBe(false));
+    expect(f.events).toContain('user-prefs-mirrored');
+  });
+  test('pre-migration local colors survive the first mirror and migrate to server',async()=>{
+    const storage=new Map([[paletteKey('live_status_bg'),'#010203'],[paletteKey('live_status_light_bg'),'#f1f5f9']]);
+    const f=fixture(storage,false);await settle();
+    expect(storage.get(paletteKey('live_status_bg'))).toBe('#010203');
+    expect(storage.get(paletteKey('live_status_light_bg'))).toBe('#f1f5f9');
+    expect(f.server.display.live_status_bg).toBe('#010203');
+    expect(f.server.display.live_status_light_bg).toBe('#f1f5f9');
+  });
+  test('a remote reset cannot be resurrected by unrelated or other-mode saves',async()=>{
+    for(const path of ['display.theme','display.live_status_dark_bg']){
+      const f=fixture(new Map(),true,{live_status_light_bg:'#eeeeee'});await settle();
+      expect(f.storage.get(paletteKey('live_status_light_bg'))).toBe('#eeeeee');
+      f.remoteDisplay({theme:'light'});
+      f.api.setUserPref(path,path==='display.theme'?'dark':'#112233');await f.api.flushUserPrefsPut();
+      expect(f.server.display.live_status_light_bg??'').toBe('');
+      expect(f.storage.has(paletteKey('live_status_light_bg'))).toBe(false);
+    }
+  });
+  test('remote palette changes survive an unrelated PUT and update clean local keys',async()=>{
+    const f=fixture(new Map(),true,{live_status_light_bg:'#eeeeee'});await settle();
+    f.remoteDisplay({theme:'light',live_status_light_bg:'#ffeedd'});
+    f.api.setUserPref('display.font_size','large');await f.api.flushUserPrefsPut();
+    expect(f.server.display.live_status_light_bg).toBe('#ffeedd');
+    expect(f.storage.get(paletteKey('live_status_light_bg'))).toBe('#ffeedd');
+    expect(f.events).toContain('live-status-colors-mirrored');
+  });
+  test('an edit arriving during a PUT survives acknowledgement and is sent next',async()=>{
+    const f=fixture();await settle();f.api.setUserPref('display.live_status_light_bg','#eeeeee');
+    f.beforePut(()=>f.api.setUserPref('display.live_status_light_bg','#ffeedd'));
+    await f.api.flushUserPrefsPut();await settle();await f.api.flushUserPrefsPut();
+    const puts=f.calls.filter(call=>call.method==='PUT');
+    expect(puts[0].body.display.live_status_light_bg).toBe('#eeeeee');
+    expect(puts.at(-1)!.body.display.live_status_light_bg).toBe('#ffeedd');
+    expect(f.storage.get(paletteKey('live_status_light_bg'))).toBe('#ffeedd');
+    expect(f.server.display.live_status_light_bg).toBe('#ffeedd');
+  });
+  test('failed saves retain a dirty palette through mirror and successful retry',async()=>{
+    const f=fixture();await settle();f.api.setUserPref('display.live_status_light_bg','#ffeedd');
+    f.failNextPut();await expect(f.api._putUserPrefsNow()).rejects.toThrow('synthetic offline');
+    await f.api._mirrorUserPrefsFromServer();
+    expect(f.storage.get(paletteKey('live_status_light_bg'))).toBe('#ffeedd');
+    await f.api.flushUserPrefsPut();expect(f.server.display.live_status_light_bg).toBe('#ffeedd');
+  });
+});
 
 describe('shared templates through actual user-prefs module',()=>{
   test('stale unrelated preference save uses preserve and cannot replace remote templates',async()=>{
