@@ -207,3 +207,131 @@ async fn manual_note_masks_body_records_path_and_list_chooses_newest_successor()
     assert!(entries[2].get("note_paths").is_none());
     assert_eq!(f.http.store.read_session(1).unwrap().len(), 2);
 }
+
+#[tokio::test]
+async fn handoff_get_dispatches_a_recorded_transcript_effect_and_replaces_rendered_output() {
+    use crate::orchestration::handoff::KIND_TRANSCRIPT;
+    use std::sync::Mutex;
+    struct RecordedTranscript {
+        store: HandoffStore,
+        calls: Mutex<Vec<LiveSessionId>>,
+        pending: Mutex<Option<(LiveSessionId, PathBuf)>>,
+        appends: AtomicUsize,
+    }
+    impl HandoffHttpHooks for RecordedTranscript {
+        fn ensure_transcript(&self, id: LiveSessionId, at: Timestamp) -> Result<(), SessionError> {
+            self.calls.lock().unwrap().push(id);
+            let mut pending = self.pending.lock().unwrap();
+            if pending.as_ref().is_some_and(|(target, _)| *target == id) {
+                let (_, path) = pending.take().unwrap();
+                // This is an explicitly staged dependency effect, not the real
+                // SessionWorkers callback or a duplicate implementation of its
+                // eligibility policy. The real handoff store performs the write.
+                self.store
+                    .append(
+                        id.0,
+                        Record {
+                            kind: KIND_TRANSCRIPT.into(),
+                            transcript: path.to_string_lossy().into_owned(),
+                            ..Default::default()
+                        },
+                        at,
+                    )
+                    .unwrap();
+                self.appends.fetch_add(1, Ordering::SeqCst);
+            }
+            Ok(())
+        }
+        fn request_note<'a>(
+            &'a self,
+            _: LiveSessionId,
+            _: Timestamp,
+        ) -> CoreFuture<'a, Result<PathBuf, &'static str>> {
+            panic!("GET does not request a provider note")
+        }
+        fn warning(&self, _: &'static str) {
+            panic!("synthetic storage must succeed")
+        }
+    }
+    let mut f = fixture();
+    let transcript = f._root.path().join("synthetic-transcript.jsonl");
+    std::fs::write(&transcript, b"synthetic transcript content\n").unwrap();
+    f.http
+        .store
+        .append(
+            1,
+            Record {
+                kind: KIND_SESSION_START.into(),
+                provider: "codex".into(),
+                ..Default::default()
+            },
+            now(),
+        )
+        .unwrap();
+    let hook = Arc::new(RecordedTranscript {
+        store: f.http.store.clone(),
+        calls: Mutex::new(Vec::new()),
+        pending: Mutex::new(Some((LiveSessionId(1), transcript.clone()))),
+        appends: AtomicUsize::new(0),
+    });
+    f.http.hooks = hook.clone();
+    let rendered = f.http.store.rendered_path_for(1).unwrap();
+    assert!(!rendered.exists());
+    let listed = f
+        .http
+        .handle_authenticated(&request("GET", PATH, ""), now())
+        .await
+        .unwrap();
+    assert_eq!(listed.status, 200);
+    assert!(hook.calls.lock().unwrap().is_empty());
+    assert_eq!(hook.appends.load(Ordering::SeqCst), 0);
+    assert!(!rendered.exists());
+
+    let absent = value(
+        f.http
+            .handle_authenticated(&request("GET", "/api/handoff/999", ""), now())
+            .await
+            .unwrap(),
+    );
+    assert_eq!(absent["exists"], false);
+    assert_eq!(*hook.calls.lock().unwrap(), vec![LiveSessionId(999)]);
+    assert_eq!(hook.appends.load(Ordering::SeqCst), 0);
+    assert!(!f.http.store.path_for(999).unwrap().exists());
+    assert!(!f.http.store.rendered_path_for(999).unwrap().exists());
+    assert!(hook.pending.lock().unwrap().is_some());
+
+    std::fs::write(&rendered, b"stale rendered sentinel").unwrap();
+    for expected_calls in [2, 3] {
+        let preview = value(
+            f.http
+                .handle_authenticated(&request("GET", "/api/handoff/1", ""), now())
+                .await
+                .unwrap(),
+        );
+        assert_eq!(hook.calls.lock().unwrap().len(), expected_calls);
+        assert_eq!(hook.calls.lock().unwrap().last(), Some(&LiveSessionId(1)));
+        assert_eq!(hook.appends.load(Ordering::SeqCst), 1);
+        assert!(hook.pending.lock().unwrap().is_none());
+        let records = f.http.store.read_session(1).unwrap();
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[1].kind, KIND_TRANSCRIPT);
+        assert_eq!(records[1].transcript, transcript.to_string_lossy().as_ref());
+        assert_eq!(
+            preview["transcript_path"],
+            transcript.to_string_lossy().as_ref()
+        );
+        let actual_rendered = std::fs::read_to_string(&rendered).unwrap();
+        assert_eq!(preview["markdown"], actual_rendered);
+        assert!(actual_rendered.contains("codex"));
+        assert!(!actual_rendered.contains("stale rendered sentinel"));
+        assert_eq!(
+            std::fs::read(&transcript).unwrap(),
+            b"synthetic transcript content\n"
+        );
+        // The second GET must write the rendered file again without appending
+        // a second staged transcript record.
+        if expected_calls == 2 {
+            std::fs::write(&rendered, b"stale rendered sentinel").unwrap();
+        }
+    }
+}

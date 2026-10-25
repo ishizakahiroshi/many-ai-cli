@@ -311,6 +311,9 @@ impl ApprovalActionHttp {
             .core
             .details(claim.session())
             .ok_or(ApprovalActionError::NotFound)?;
+        if details.binding.incarnation != claim.incarnation() {
+            return Err(ApprovalActionError::StaleCandidate);
+        }
         let record = details
             .approval
             .record

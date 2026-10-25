@@ -16,6 +16,9 @@ use std::{
     io::{Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
+#[cfg(test)]
+#[path = "mutation/move_audit_tests.rs"]
+mod move_audit_tests;
 #[derive(Deserialize)]
 #[serde(default)]
 struct Mutation {
@@ -425,10 +428,14 @@ fn move_files(q: Mutation, s: &Scope) -> Result<Response> {
     }
     let plans: Vec<_> = plans.into_iter().flatten().collect();
     for (i, p) in plans.iter().enumerate() {
+        #[cfg(test)]
+        move_audit_tests::before_rename(i, false);
         if let Err(e) = p.parent.rename_to(&p.name, &target, &p.name) {
             results[i]["error"] = json!(format!("rename failed: {e}"));
             let mut detail = format!("rename failed: {e}");
             for (j, done) in plans[..i].iter().enumerate().rev() {
+                #[cfg(test)]
+                move_audit_tests::before_rename(j, true);
                 if let Err(e) = target.rename_to(&done.name, &done.parent, &done.name) {
                     let msg = format!(
                         "rollback failed; moved data remains at {}: {e}",
@@ -489,6 +496,8 @@ fn operation_error(msg: &str) -> (u16, &'static str) {
 #[cfg(test)]
 mod save_audit_tests {
     use super::*;
+    #[cfg(windows)]
+    mod windows_parent_pin_tests;
     #[test]
     fn audit_a04_competing_save_cannot_pass_the_same_mtime_check() {
         let temp = tempfile::tempdir().unwrap();

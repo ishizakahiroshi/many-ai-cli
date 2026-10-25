@@ -18,6 +18,8 @@ use std::{
     },
 };
 
+mod relay_assurance;
+
 // Failure-only CI evidence. Do not copy response text, Git stderr, arguments or
 // paths. A response cannot recover a process exit, runner timeout or duration.
 pub(super) fn test_snapshot_failure_diagnostic(response: &crate::hub::http::Response) -> String {

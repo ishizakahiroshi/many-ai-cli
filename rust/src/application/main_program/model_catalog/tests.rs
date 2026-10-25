@@ -394,6 +394,52 @@ async fn full_catalog_has_source_order_labels_fallback_routes_and_keyed_ttls() {
     assert_eq!(fake.defaults.load(Ordering::SeqCst), 2);
     assert_eq!(fake.native.load(Ordering::SeqCst), 7);
 }
+
+#[tokio::test(start_paused = true)]
+async fn models_get_fetches_nvidia_only_when_enabled_with_a_nonempty_key() {
+    let (_root, config, fake, owner) = fixture();
+    let request = crate::hub::http::Request {
+        method: "GET".into(),
+        path: "/api/models".into(),
+        ..Default::default()
+    };
+    for (enabled, key, expected_fetches, expected_group) in [
+        (false, "synthetic-key", 0, false),
+        (true, "", 0, false),
+        (true, "   ", 0, false),
+        (true, "synthetic-key", 1, true),
+        (false, "synthetic-key", 1, false),
+        (true, "", 1, false),
+        (true, "synthetic-key", 1, true),
+        (true, "synthetic-next-key", 2, true),
+    ] {
+        let mut snapshot = config.snapshot().unwrap();
+        snapshot.config.nvidia_nim.enabled = enabled;
+        let revision = config
+            .persist(snapshot.revision, snapshot.config)
+            .unwrap()
+            .revision;
+        *fake.key.lock().unwrap() = key.into();
+        let response = owner.handle(&request, &Cancellation::default()).await;
+        assert_eq!(response.status, 200);
+        let value: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
+        let group = value["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|group| group["label"] == "NVIDIA NIM");
+        assert_eq!(group.is_some(), expected_group);
+        if let Some(group) = group {
+            assert_eq!(group["models"][0]["id"], "nvidia/synthetic/model");
+        }
+        assert_eq!(fake.nvidia.load(Ordering::SeqCst), expected_fetches);
+        assert_eq!(
+            config.snapshot().unwrap().revision,
+            revision,
+            "GET cannot persist config"
+        );
+    }
+}
 #[tokio::test(start_paused = true)]
 async fn remote_failure_keeps_last_actual_value_until_force_discards_it() {
     let (_root, _config, fake, owner) = fixture();

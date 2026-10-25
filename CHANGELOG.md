@@ -11,6 +11,21 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Fixed
+- Windows file operations now hold the parent directory against replacement
+  before opening the selected file, preventing a renamed parent from redirecting
+  that open to a different file.
+- One-tap approval links now bind the session's incarnation as well as its
+  approval identity, so a link issued before a session is recreated cannot
+  approve the replacement. Normal wrapper reconnects retain valid links;
+  older token formats are rejected.
+- Updated vendored DOMPurify to 3.4.17, retaining upstream license terms and
+  matching the version shown in About and the frontend dependency list.
+- Updated the TLS verifier and bundled root certificate dependencies to
+  rustls-webpki 0.103.16 and webpki-root-certs 1.0.10, and pinned CI job Node.js
+  to the 22.23.4 security release with native-build version receipts.
+- Whisper uploads through the Hub now recheck authorization before starting
+  transcription. Access that expires or is revoked during upload is rejected;
+  transcription already started may finish.
 - Live status colors now follow the light or dark theme by default, with separate
   background and text overrides for each mode. The palette shows the mode being
   edited and can reset it without changing the other mode; legacy shared colors

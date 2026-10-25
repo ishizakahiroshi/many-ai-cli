@@ -44,6 +44,7 @@ impl WrappedSessionSpawner for Boundary {
 #[derive(Default)]
 struct Cli {
     calls: AtomicUsize,
+    usage_calls: AtomicUsize,
 }
 impl cli::SubscriptionCli for Cli {
     fn status<'a>(
@@ -69,6 +70,7 @@ impl appserver::SubscriptionUsageCli for Cli {
         _: &'a Path,
         _: &'a TaskCancellation,
     ) -> CoreFuture<'a, io::Result<appserver::CodexUsage>> {
+        self.usage_calls.fetch_add(1, Ordering::SeqCst);
         Box::pin(async { Err(io::Error::other("synthetic appserver unavailable")) })
     }
 }
@@ -321,4 +323,338 @@ fn subscription_ids_use_pinned_go_simple_lower_without_expansion() {
     assert!(config::validate_subscription_id(&config::normalize_subscription_id("İ")).is_ok());
     assert_eq!(slug(" Main profile "), "main-profile");
     assert_eq!(display_name(" x\u{0007}y "), "xy");
+}
+
+#[tokio::test]
+async fn refresh_wrong_session_profile_or_home_never_launches_usage_cli() {
+    let f = fixture();
+    for id in ["p1", "p2"] {
+        f.service
+            .add("codex", id, id)
+            .unwrap_or_else(|e| panic!("{}", e.detail));
+    }
+    let home = f
+        .service
+        .resolve("codex", "p1")
+        .unwrap_or_else(|e| panic!("{}", e.detail))
+        .unwrap()
+        .path;
+    let binding = f
+        .service
+        .core
+        .register(
+            RegisterRequest {
+                message: crate::proto::Message {
+                    provider: "codex".into(),
+                    cwd: f._root.path().to_string_lossy().into_owned(),
+                    pid: 3002,
+                    subscription_id: "p1".into(),
+                    codex_home: home.to_string_lossy().into_owned(),
+                    ..Default::default()
+                },
+                spawn_proof: None,
+            },
+            WrapperConnectionId(1),
+            Timestamp::now(),
+        )
+        .await
+        .unwrap()
+        .binding;
+    let before = f.service.config.snapshot().unwrap();
+    let bytes = std::fs::read(f.service.paths.resource(Resource::Config)).unwrap();
+    for session in [binding.session.0, i64::MAX] {
+        let error = f
+            .service
+            .refresh_codex("codex", "p2", session, &TaskCancellation::default())
+            .await
+            .err()
+            .unwrap();
+        assert_eq!((error.status, error.code), (409, "session_profile_changed"));
+    }
+    assert_eq!(f.cli.usage_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(f.cli.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        f.service.config.snapshot().unwrap().revision,
+        before.revision
+    );
+    assert_eq!(
+        std::fs::read(f.service.paths.resource(Resource::Config)).unwrap(),
+        bytes
+    );
+
+    // A valid binding reaches the fake CLI. A later rejected binding must not
+    // inherit that successful admission, or leave a refresh claim behind.
+    let error = f
+        .service
+        .refresh_codex(
+            "codex",
+            "p1",
+            binding.session.0,
+            &TaskCancellation::default(),
+        )
+        .await
+        .err()
+        .unwrap();
+    assert_ne!(error.code, "session_profile_changed");
+    assert_eq!(f.cli.usage_calls.load(Ordering::SeqCst), 1);
+    let error = f
+        .service
+        .refresh_codex(
+            "codex",
+            "p1",
+            binding.session.0,
+            &TaskCancellation::default(),
+        )
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(error.code, "usage_refresh_failed");
+    assert_eq!(f.cli.usage_calls.load(Ordering::SeqCst), 2);
+    let mut changed = f.service.config.snapshot().unwrap().config;
+    let changed_home = f
+        .service
+        .paths
+        .resource(Resource::Subscriptions)
+        .join("codex/other-owned-home");
+    std::fs::create_dir_all(&changed_home).unwrap();
+    changed.subscriptions.get_mut("codex").unwrap()[0].profile_dir =
+        changed_home.to_string_lossy().into_owned();
+    let revision = f.service.config.snapshot().unwrap().revision;
+    f.service
+        .config
+        .publish_then_persist_legacy(revision, changed)
+        .unwrap();
+    let error = f
+        .service
+        .refresh_codex(
+            "codex",
+            "p1",
+            binding.session.0,
+            &TaskCancellation::default(),
+        )
+        .await
+        .err()
+        .unwrap();
+    assert_eq!((error.status, error.code), (409, "session_profile_changed"));
+    assert_eq!(f.cli.usage_calls.load(Ordering::SeqCst), 2);
+}
+
+struct NoProbeSpawn;
+impl WrappedSessionSpawner for NoProbeSpawn {
+    fn spawn_and_wait<'a>(
+        &'a self,
+        _: WrappedSpawnSpec,
+        _: Duration,
+        _: &'a HttpWaitCancellation,
+    ) -> CoreFuture<'a, SpawnWaitOutcome> {
+        panic!("deleting an absent probe must not invoke any spawn")
+    }
+}
+#[tokio::test]
+async fn delete_absent_probe_does_not_create_marker_or_start_any_work() {
+    let f = fixture_with_spawner(Arc::new(NoProbeSpawn));
+    f.service
+        .add("claude", "p1", "synthetic")
+        .unwrap_or_else(|e| panic!("{}", e.detail));
+    let config_path = f.service.paths.resource(Resource::Config);
+    let before = std::fs::read(&config_path).unwrap();
+    let revision = f.service.config.snapshot().unwrap().revision;
+    for id in ["p1", "unregistered"] {
+        let error = f
+            .service
+            .probe(
+                "claude",
+                id,
+                true,
+                Timestamp::now(),
+                &TaskCancellation::default(),
+            )
+            .await
+            .err()
+            .unwrap();
+        assert_eq!((error.status, error.code), (404, "not_found"));
+    }
+    assert_eq!(f.cli.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(f.cli.usage_calls.load(Ordering::SeqCst), 0);
+    assert!(f.service.core.snapshots().is_empty());
+    assert!(!f.service.paths.root().join("usage-probe").exists());
+    assert_eq!(f._tasks.snapshot().effects.running, 0);
+    assert_eq!(f.service.config.snapshot().unwrap().revision, revision);
+    assert_eq!(std::fs::read(config_path).unwrap(), before);
+}
+
+#[tokio::test]
+async fn usage_get_runs_only_the_recorded_auth_status_effect_and_reuses_its_cache() {
+    let f = fixture_with_spawner(Arc::new(NoProbeSpawn));
+    f.service
+        .add("codex", "p1", "synthetic")
+        .unwrap_or_else(|e| panic!("{}", e.detail));
+    let path = f.service.paths.resource(Resource::Config);
+    let before = std::fs::read(&path).unwrap();
+    let revision = f.service.config.snapshot().unwrap().revision;
+    let http = crate::hub::subscription_routes::SubscriptionHttp::new(f.service.clone());
+    let mut request = crate::hub::http::Request {
+        method: "GET".into(),
+        path: "/api/subscription-usage".into(),
+        ..Default::default()
+    };
+    for (force, expected) in [(false, 1), (false, 1), (true, 2)] {
+        request.query = if force {
+            "refresh_auth=1".into()
+        } else {
+            String::new()
+        };
+        assert_eq!(
+            http.handle_authenticated(&request, Timestamp::now())
+                .await
+                .unwrap()
+                .status,
+            200
+        );
+        f._tasks.drain_effects().await;
+        assert_eq!(f.cli.calls.load(Ordering::SeqCst), expected);
+        assert_eq!(f.cli.usage_calls.load(Ordering::SeqCst), 0);
+    }
+    assert_eq!(f.service.config.snapshot().unwrap().revision, revision);
+    assert_eq!(std::fs::read(path).unwrap(), before);
+    assert!(f.service.core.snapshots().is_empty());
+}
+
+#[tokio::test]
+async fn usage_get_reads_synthetic_profile_logs_into_memory_without_provider_calls() {
+    use std::io::Write;
+    let f = fixture_with_spawner(Arc::new(NoProbeSpawn));
+    for provider in ["codex", "grok"] {
+        f.service
+            .add(provider, "p1", "synthetic")
+            .unwrap_or_else(|e| panic!("{}", e.detail));
+    }
+    let at = Timestamp::now();
+    for provider in ["codex", "grok"] {
+        f.service
+            .usage
+            .set_auth(provider, "p1", "authenticated", at);
+    }
+    let config = f.service.config.snapshot().unwrap();
+    let config_path = f.service.paths.resource(Resource::Config);
+    let config_bytes = std::fs::read(&config_path).unwrap();
+    let profile_path = |provider: &str| {
+        config::resolve_subscription_profile_dir(
+            &f.service.paths,
+            provider,
+            &config.config.subscriptions[provider][0],
+            Some(&f.service.home),
+        )
+        .unwrap()
+    };
+    let codex_log = profile_path("codex")
+        .join("sessions")
+        .join("rollout-synthetic.jsonl");
+    let grok_log = profile_path("grok").join("logs").join("unified.jsonl");
+    let http = crate::hub::subscription_routes::SubscriptionHttp::new(f.service.clone());
+    let request = crate::hub::http::Request {
+        method: "GET".into(),
+        path: "/api/subscription-usage".into(),
+        ..Default::default()
+    };
+    let row = |value: &Value, provider: &str| {
+        value["providers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|section| section["provider"] == provider)
+            .unwrap()["profiles"][0]
+            .clone()
+    };
+    let first = http.handle_authenticated(&request, at).await.unwrap();
+    assert_eq!(first.status, 200);
+    let first: Value = serde_json::from_slice(&first.body).unwrap();
+    assert!(row(&first, "codex").get("codex").is_none());
+    assert!(row(&first, "grok").get("grok").is_none());
+    std::fs::create_dir_all(codex_log.parent().unwrap()).unwrap();
+    std::fs::create_dir_all(grok_log.parent().unwrap()).unwrap();
+    let codex_event = |timestamp: &str, used: u8| {
+        serde_json::json!({
+            "timestamp":timestamp,"payload":{"type":"token_count","rate_limits":{
+                "primary":{"used_percent":used,"window_minutes":300},"plan_type":"synthetic"
+            }}
+        })
+        .to_string()
+            + "\n"
+    };
+    let grok_event = |timestamp: &str, used: u8| {
+        serde_json::json!({
+            "ts":timestamp,"msg":"billing: fetched credits config","ctx":{"config":{
+                "creditUsagePercent":used,"currentPeriod":{"type":"weekly"}
+            }}
+        })
+        .to_string()
+            + "\n"
+    };
+    std::fs::write(&codex_log, codex_event("2026-10-01T00:00:00Z", 80)).unwrap();
+    std::fs::write(&grok_log, grok_event("2026-10-01T00:00:00Z", 35)).unwrap();
+    for (codex_used, grok_used) in [(80, 35), (20, 65)] {
+        let expected_codex = std::fs::read(&codex_log).unwrap();
+        let expected_grok = std::fs::read(&grok_log).unwrap();
+        let response = http.handle_authenticated(&request, at).await.unwrap();
+        assert_eq!(response.status, 200);
+        let value: Value = serde_json::from_slice(&response.body).unwrap();
+        assert_eq!(
+            row(&value, "codex")["codex"]["primary"]["used_percent"].as_f64(),
+            Some(f64::from(codex_used))
+        );
+        assert_eq!(
+            row(&value, "codex")["codex"]["primary"]["remaining_percent"].as_f64(),
+            Some(f64::from(100 - codex_used))
+        );
+        assert_eq!(
+            row(&value, "grok")["grok"]["used_percent"].as_f64(),
+            Some(f64::from(grok_used))
+        );
+        assert_eq!(
+            row(&value, "grok")["grok"]["remaining_percent"].as_f64(),
+            Some(f64::from(100 - grok_used))
+        );
+        assert_eq!(row(&value, "grok")["grok"]["period_type"], "weekly");
+        assert_eq!(std::fs::read(&codex_log).unwrap(), expected_codex);
+        assert_eq!(std::fs::read(&grok_log).unwrap(), expected_grok);
+        if codex_used == 80 {
+            std::fs::OpenOptions::new()
+                .append(true)
+                .open(&codex_log)
+                .unwrap()
+                .write_all(codex_event("2026-10-01T00:00:01Z", 20).as_bytes())
+                .unwrap();
+            std::fs::OpenOptions::new()
+                .append(true)
+                .open(&grok_log)
+                .unwrap()
+                .write_all(grok_event("2026-10-01T00:00:01Z", 65).as_bytes())
+                .unwrap();
+        }
+    }
+    // Remove only these synthetic log files, then observe the owner's retained
+    // memory values through GET; no provider refresh can refill them.
+    std::fs::remove_file(&codex_log).unwrap();
+    std::fs::remove_file(&grok_log).unwrap();
+    let cached = http.handle_authenticated(&request, at).await.unwrap();
+    let cached: Value = serde_json::from_slice(&cached.body).unwrap();
+    assert_eq!(
+        row(&cached, "codex")["codex"]["primary"]["used_percent"].as_f64(),
+        Some(20.0)
+    );
+    assert_eq!(
+        row(&cached, "grok")["grok"]["used_percent"].as_f64(),
+        Some(65.0)
+    );
+    assert_eq!(f.cli.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(f.cli.usage_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(f._tasks.snapshot().effects.running, 0);
+    assert_eq!(f._tasks.snapshot().effects.completed, 0);
+    assert_eq!(
+        f.service.config.snapshot().unwrap().revision,
+        config.revision
+    );
+    assert_eq!(std::fs::read(config_path).unwrap(), config_bytes);
+    assert!(f.service.core.snapshots().is_empty());
 }

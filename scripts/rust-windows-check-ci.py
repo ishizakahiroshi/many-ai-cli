@@ -90,6 +90,7 @@ def host_gate() -> None:
 
 
 def toolchain_gate(versions: dict[str, str]) -> None:
+    candidate.require_node_version(versions.get("node", ""))
     if (not versions["rustc"].startswith("rustc 1.90.0 ")
             or candidate.host_from_verbose(versions["rustc"]) != TARGET):
         raise ValueError("native host or pinned Rust 1.90.0 mismatch")
@@ -227,7 +228,8 @@ def validate(args: argparse.Namespace, source: str, output: Path, receipt: dict)
     versions = {"python": sys.version.split()[0]}
     receipt["tool_versions"] = versions
     for name, command in (("rustc", ["rustc", "--version", "--verbose"]),
-                          ("go", ["go", "version"]), ("bun", ["bun", "--version"])):
+                          ("go", ["go", "version"]), ("bun", ["bun", "--version"]),
+                          ("node", ["node", "--version"])):
         path = output / f"{name}-version.txt"
         candidate.run(command, env, ROOT, stdout_file=path)
         versions[name] = path.read_text(encoding="utf-8").strip()

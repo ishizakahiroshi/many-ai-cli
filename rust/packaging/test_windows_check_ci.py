@@ -23,7 +23,7 @@ ENV = {"MANY_AI_REVIEW_HEAD_SHA": SHA, "RUNNER_OS": "Windows", "RUNNER_ARCH": "X
        "GITHUB_WORKFLOW_REF": "synthetic/repo/.github/workflows/rust-windows-check.yml@refs/heads/check",
        "GITHUB_WORKFLOW_SHA": "b" * 40}
 VERSIONS = {"rustc": "rustc 1.90.0 (synthetic)\nhost: x86_64-pc-windows-msvc",
-            "go": "go version go1.26.8 windows/amd64", "bun": "1.3.14"}
+            "go": "go version go1.26.8 windows/amd64", "bun": "1.3.14", "node": "v22.23.4"}
 
 
 class WindowsCheckTests(unittest.TestCase):
@@ -123,7 +123,8 @@ class WindowsCheckTests(unittest.TestCase):
         for key, value in (("rustc", "rustc 1.90.1 (synthetic)\nhost: x86_64-pc-windows-msvc"),
                            ("rustc", "rustc 1.90.0 (synthetic)\nhost: x86_64-unknown-linux-gnu"),
                            ("go", "go version go1.26.8 linux/amd64"),
-                           ("go", "go version go1.26.9 windows/amd64"), ("bun", "1.3.15")):
+                           ("go", "go version go1.26.9 windows/amd64"), ("bun", "1.3.15"),
+                           ("node", "v22.23.3"), ("node", "v24.22.1"), ("node", "")):
             with self.subTest(key=key, value=value), self.assertRaises(ValueError):
                 ci.toolchain_gate({**VERSIONS, key: value})
 

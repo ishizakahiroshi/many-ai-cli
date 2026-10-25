@@ -526,7 +526,11 @@ fn one_tap_tokens_bind_identity_epoch_action_and_expire_without_consuming_on_ver
     let now = Timestamp::UNIX_EPOCH + Duration::from_secs(1_000);
     let token = manager
         .issue(
-            LiveSessionId(3),
+            SessionBinding {
+                session: LiveSessionId(3),
+                incarnation: SessionIncarnation(7),
+                wrapper: WrapperConnectionId(1),
+            },
             "approval1",
             "sig",
             ApprovalSourceEpoch(8),
@@ -536,6 +540,7 @@ fn one_tap_tokens_bind_identity_epoch_action_and_expire_without_consuming_on_ver
         .unwrap();
     let claim = manager.verify(&token, now).unwrap();
     assert_eq!(claim.session(), LiveSessionId(3));
+    assert_eq!(claim.incarnation(), SessionIncarnation(7));
     assert_eq!(claim.epoch(), ApprovalSourceEpoch(8));
     assert_eq!(claim.action(), OneTapAction::Approve);
     assert!(manager.verify(&token, now).is_ok());

@@ -39,6 +39,7 @@ struct Fixture {
     sockets: Arc<SocketRegistry>,
     effects: Arc<EffectDriver>,
     services: Arc<ServiceRouter>,
+    websocket: Arc<WebSocketService>,
     cancel: Cancellation,
     server: Option<tokio::task::JoinHandle<std::io::Result<()>>>,
 }
@@ -133,7 +134,7 @@ async fn fixture_with_preparation(
         listener,
         services.clone(),
         effects.clone(),
-        websocket,
+        websocket.clone(),
         cancel.clone(),
     ));
     Fixture {
@@ -143,6 +144,7 @@ async fn fixture_with_preparation(
         sockets,
         effects,
         services,
+        websocket,
         cancel,
         server: Some(server),
     }
@@ -150,6 +152,9 @@ async fn fixture_with_preparation(
 struct Client(tokio::net::TcpStream);
 impl Client {
     async fn connect(port: u16, extra_headers: &str) -> (Self, String) {
+        Self::connect_host(port, &format!("127.0.0.1:{port}"), extra_headers).await
+    }
+    async fn connect_host(port: u16, host: &str, extra_headers: &str) -> (Self, String) {
         let mut stream = tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
             .await
             .unwrap();
@@ -157,7 +162,7 @@ impl Client {
         use base64::Engine as _;
         let key = base64::engine::general_purpose::STANDARD.encode([42; 16]);
         let request = format!(
-            "GET /ws HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n{extra_headers}\r\n"
+            "GET /ws HTTP/1.1\r\nHost: {host}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n{extra_headers}\r\n"
         );
         stream.write_all(request.as_bytes()).await.unwrap();
         let mut response = Vec::new();
@@ -243,6 +248,8 @@ impl Client {
     }
 }
 
+#[path = "ws_assurance_tests.rs"]
+mod assurance_tests;
 #[path = "ws_pin_tests.rs"]
 mod pin_tests;
 #[tokio::test]

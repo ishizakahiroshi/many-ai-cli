@@ -139,6 +139,67 @@ pub fn entries(paths: &RuntimePaths, path: &Path) -> io::Result<Vec<Entry>> {
 mod tests {
     use super::*;
     #[test]
+    fn trial_artifact_aliases_are_rejected_while_normal_file_open_follows_them() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("selected");
+        let installed = temp.path().join("installed");
+        fs::create_dir_all(root.join("records")).unwrap();
+        fs::create_dir_all(installed.join("records")).unwrap();
+        fs::write(root.join("records/events.jsonl"), b"owned record").unwrap();
+        fs::write(
+            installed.join("records/events.jsonl"),
+            b"foreign synthetic record",
+        )
+        .unwrap();
+        let paths = RuntimePaths::trial(&root, 49325, &installed).unwrap();
+        let normal = RuntimePaths::production(temp.path()).unwrap();
+        let aliases = [
+            (root.join("inside-alias"), root.join("records")),
+            (root.join("outside-alias"), installed.join("records")),
+            (temp.path().join("unselected"), root.join("records")),
+        ];
+        for (alias, target) in &aliases {
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(target, alias).unwrap();
+            #[cfg(windows)]
+            {
+                let status = std::process::Command::new("pwsh")
+                    .args(["-NoProfile", "-NonInteractive", "-Command",
+                        "New-Item -ItemType Junction -Path $env:ARTIFACT_FIXTURE_ALIAS -Target $env:ARTIFACT_FIXTURE_TARGET -ErrorAction Stop | Out-Null"])
+                    .env("ARTIFACT_FIXTURE_ALIAS", alias)
+                    .env("ARTIFACT_FIXTURE_TARGET", target)
+                    .status().unwrap();
+                assert!(status.success());
+            }
+            let file = alias.join("events.jsonl");
+            assert!(check_path(&paths, &file).is_err());
+            assert!(read_head(&paths, &file, 64).is_err());
+            assert!(read_tail(&paths, &file, 64).is_err());
+            assert!(open_directory(&paths, alias).is_err());
+            assert_eq!(
+                read_head(&normal, &file, 64).unwrap(),
+                fs::read(target.join("events.jsonl")).unwrap()
+            );
+        }
+        assert_eq!(
+            read_head(&paths, &root.join("records/events.jsonl"), 64).unwrap(),
+            b"owned record"
+        );
+        assert_eq!(
+            fs::read(installed.join("records/events.jsonl")).unwrap(),
+            b"foreign synthetic record"
+        );
+        // Remove each alias itself before the temporary tree is reclaimed.
+        for (alias, _) in &aliases {
+            #[cfg(unix)]
+            fs::remove_file(alias).unwrap();
+            #[cfg(windows)]
+            fs::remove_dir(alias).unwrap();
+        }
+        assert!(root.join("records/events.jsonl").is_file());
+        assert!(installed.join("records/events.jsonl").is_file());
+    }
+    #[test]
     fn native_trial_path_spelling_reads_through_owned_capability() {
         let root = tempfile::tempdir().unwrap();
         let installed = tempfile::tempdir().unwrap();

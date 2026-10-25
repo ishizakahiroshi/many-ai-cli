@@ -313,7 +313,7 @@ impl PushManager {
             use crate::approval::token::OneTapAction;
             payload.reject_token = tokens
                 .issue(
-                    session,
+                    details.binding,
                     &data.sig,
                     &data.sig,
                     data.candidate.source_epoch,
@@ -324,7 +324,7 @@ impl PushManager {
             if summary.risk != "high" {
                 payload.approve_token = tokens
                     .issue(
-                        session,
+                        details.binding,
                         &data.sig,
                         &data.sig,
                         data.candidate.source_epoch,

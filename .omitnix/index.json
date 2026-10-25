@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "f0601fbfb8d0550f3fa0b0cb2f65cd1fa126ecd2",
+    "commit": "802932eaa158018235ae1621ace23ba48a78bb3d",
     "dirty": false,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2028,
-    "analyzed": 1569,
+    "discovered": 2040,
+    "analyzed": 1581,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 449,
@@ -22839,6 +22839,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/application/event_observer/tests/relay_assurance.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "P004-C-N01/N02/N03: real core/observer/effect driver/notification manager,"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/application/grid_spawn.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -23964,6 +23993,35 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/application/main_program/tests/relay_callbacks.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Compose relay publication with the actual main-program completion owners."
         },
         "authentication": {
           "state": "not_configured"
@@ -27372,6 +27430,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/application/tray/windows/procedure_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "CLI-N08 exercises the real procedure and TrayOwner with synthetic window data."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/application/usage_hooks.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -28688,6 +28775,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/bin/many-ai-cli/uninstall_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "The binary's actual uninstall composition with synthetic Hub and platform IO."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/cli.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -29268,6 +29384,64 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/files/mutation/move_audit_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "FG-D05: observe real exclusive renames and their partial rollback result."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/files/mutation/save_audit_tests/windows_parent_pin_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Windows files-save transaction interleaving using the existing after-check seam."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/files/remote_attach.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -29326,6 +29500,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/files/safe_fs/windows_save_pin_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Native save-handle components: actual Windows sharing and held identity."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/files/scope.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -29362,6 +29565,35 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/files/tests/attachment_replacement.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "A real core replaces the wrapper after attachment creation but before its"
         },
         "authentication": {
           "state": "not_configured"
@@ -31402,6 +31634,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/hub/session_routes/tests/remote_process_guards.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Actual remote-file adapters with an owned SSH stand-in that never uses a network."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/hub/settings.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -31721,6 +31982,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/hub/transport/voice_auth_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "HTTP-N07: real transport/router authority, gated uploads and a loopback-only"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/hub/update_routes.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -31902,6 +32192,35 @@
         "summary": {
           "state": "value",
           "value": "Authenticated managed Whisper HTTP operations; install survives its waiter."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/hub/ws_assurance_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Supplemental negative cases use task-owned sockets and the actual core."
         },
         "authentication": {
           "state": "not_configured"
@@ -35331,6 +35650,37 @@
         "reads": {
           "state": "none_observed",
           "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/terminal/journal/failure_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Real JSONL and SQLite owners with independently failing sinks. Every path"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "value",
+          "value": [
+            "attachments"
+          ]
         },
         "writes": {
           "state": "none_observed",
@@ -49887,6 +50237,7 @@
       "name": "attachments",
       "read_by": [
         "go/internal/sessionstore/audit_store_test.go",
+        "rust/src/terminal/journal/failure_tests.rs",
         "rust/tests/storage_contracts.rs"
       ],
       "written_by": [

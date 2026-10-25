@@ -12,6 +12,7 @@ struct FakeIo {
     body: Mutex<Option<Vec<u8>>>,
     skills: Mutex<Vec<SlashCmd>>,
     reads: AtomicUsize,
+    contexts: Mutex<Vec<(String, String, String)>>,
 }
 impl SlashIo for FakeIo {
     fn read<'a>(&'a self, _: &'a str) -> CoreFuture<'a, io::Result<Vec<u8>>> {
@@ -24,7 +25,12 @@ impl SlashIo for FakeIo {
                 .ok_or_else(|| io::Error::other("synthetic source outage"))
         })
     }
-    fn skills(&self, _: &str, _: &SearchContext) -> Vec<SlashCmd> {
+    fn skills(&self, _: &str, context: &SearchContext) -> Vec<SlashCmd> {
+        self.contexts.lock().unwrap().push((
+            context.home_dir.clone(),
+            context.codex_home.clone(),
+            context.claude_dir.clone(),
+        ));
         self.skills.lock().unwrap().clone()
     }
 }
@@ -47,6 +53,7 @@ fn fixture() -> Fixture {
         body: Mutex::new(Some(b"| /remote | source command |".to_vec())),
         skills: Mutex::default(),
         reads: AtomicUsize::new(0),
+        contexts: Mutex::default(),
     });
     let owner = SlashCommands::with_io(
         config.clone(),
@@ -67,6 +74,126 @@ fn fixture() -> Fixture {
 }
 fn at() -> Timestamp {
     Timestamp::from_unix(1791158400, 0).unwrap()
+}
+
+struct NoSessionIo;
+impl WrapperTransport for NoSessionIo {
+    fn send<'a>(
+        &'a self,
+        _: SessionBinding,
+        _: crate::proto::Message,
+    ) -> CoreFuture<'a, Result<(), SessionError>> {
+        panic!("slash context lookup must not send wrapper input")
+    }
+}
+impl CoreEffectSink for NoSessionIo {
+    fn apply<'a>(&'a self, _: CoreEffects) -> CoreFuture<'a, Result<(), CoreEffectFailure>> {
+        panic!("slash context lookup must not dispatch core effects")
+    }
+}
+impl WrappedSessionSpawner for NoSessionIo {
+    fn spawn_and_wait<'a>(
+        &'a self,
+        _: WrappedSpawnSpec,
+        _: Duration,
+        _: &'a HttpWaitCancellation,
+    ) -> CoreFuture<'a, SpawnWaitOutcome> {
+        panic!("slash context lookup must not spawn a provider")
+    }
+}
+#[tokio::test]
+async fn unknown_slash_session_uses_default_context_and_still_returns_commands() {
+    let mut f = fixture();
+    let core = Arc::new(SessionEngine::new(
+        crate::terminal::session::EngineOptions::default(),
+        Arc::new(crate::terminal::journal::SessionJournal::new(
+            f.paths.clone(),
+            None,
+            crate::terminal::journal::JournalOptions::default(),
+        )),
+        Arc::new(NoSessionIo),
+        Arc::new(NoSessionIo),
+        Arc::new(NoSessionIo),
+        crate::terminal::events::CoreEventBus::new(16).unwrap(),
+    ));
+    let known_home = f
+        .paths
+        .root()
+        .join("known-home")
+        .to_string_lossy()
+        .into_owned();
+    let known = core
+        .register(
+            RegisterRequest {
+                message: crate::proto::Message {
+                    provider: "claude".into(),
+                    cwd: f.paths.root().to_string_lossy().into_owned(),
+                    pid: 3003,
+                    home_dir: known_home.clone(),
+                    ..Default::default()
+                },
+                spawn_proof: None,
+            },
+            WrapperConnectionId(1),
+            at(),
+        )
+        .await
+        .unwrap()
+        .binding;
+    Arc::get_mut(&mut f.owner).unwrap().core = Arc::downgrade(&core);
+    let http = SlashHttp::new(f.owner.clone());
+    let revision = f.config.snapshot().unwrap().revision;
+    for query in [
+        "provider=claude&session_id=9223372036854775807",
+        "provider=claude&session=9223372036854775807",
+        "provider=claude&session_id=-1",
+        "provider=claude&session_id=invalid",
+        "provider=claude",
+    ] {
+        let result = http
+            .handle_authenticated(
+                &Request {
+                    method: "GET".into(),
+                    path: COMMANDS_PATH.into(),
+                    query: query.into(),
+                    ..Default::default()
+                },
+                at(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.status, 200, "{query}");
+        let body: serde_json::Value = serde_json::from_slice(&result.body).unwrap();
+        assert_eq!(body["cmds"][0]["cmd"], "/remote");
+    }
+    // All unknown/absent IDs share the default-context cache, with fake IO
+    // only. No session lookup failure becomes an authorization rejection.
+    assert_eq!(f.io.reads.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        *f.io.contexts.lock().unwrap(),
+        [(String::new(), String::new(), String::new())]
+    );
+    assert_eq!(f.config.snapshot().unwrap().revision, revision);
+    assert!(!f.paths.resource(Resource::Config).exists());
+    let known_request = Request {
+        method: "GET".into(),
+        path: COMMANDS_PATH.into(),
+        query: format!("provider=claude&session_id={}", known.session.0),
+        ..Default::default()
+    };
+    assert_eq!(
+        http.handle_authenticated(&known_request, at())
+            .await
+            .unwrap()
+            .status,
+        200
+    );
+    assert_eq!(f.io.reads.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        f.io.contexts.lock().unwrap()[1],
+        (known_home, String::new(), String::new())
+    );
+    assert_eq!(core.snapshots().len(), 1);
 }
 #[test]
 fn markdown_corpus_matches_pinned_go_priority_greedy_plain_rows_and_ascii_whitespace() {

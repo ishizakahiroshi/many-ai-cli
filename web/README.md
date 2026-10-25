@@ -1,6 +1,6 @@
 # web/ — Hub UI frontend
 
-このディレクトリは Hub UI のフロントエンド（静的 HTML/CSS/TypeScript + `web/src/vendor/` のクラシックスクリプト）を管理する。Go 側は `web/dist/` を `//go:embed` で取り込むだけで、ここが真実のソース。
+このディレクトリは Hub UI のフロントエンド（静的 HTML/CSS/TypeScript + `web/src/vendor/` のクラシックスクリプト）を管理する。Rust本線の `rust/build.rs` は生成済み `web/dist/` をsourceとの対応を検査してから埋め込む。フロントエンドの正本は `web/src/` で、vendor変更後も埋め込み前に `bun run build` が必要。凍結済みGo側の旧 `//go:embed` は現行のビルド経路ではない。
 
 ## パッケージマネージャは **bun のみ**
 
@@ -27,11 +27,11 @@
 
 ## Vendor スクリプト
 
-`web/src/vendor/*.min.js` はクラシックスクリプト（ESM でない）として index.html から `<script>` タグで読み込まれる。バージョンと upstream URL は `web/src/vendor/THIRD_PARTY_LICENSES.txt` にまとめて記録している (2026-08-23 時点):
+`web/src/vendor/*.min.js` はクラシックスクリプト（ESM でない）として index.html から `<script>` タグで読み込まれる。バージョンと upstream URL は `web/src/vendor/THIRD_PARTY_LICENSES.txt` にまとめて記録している (2026-10-25 時点):
 
 | パッケージ | Version | URL |
 |---|---|---|
-| DOMPurify | 3.4.12 | https://github.com/cure53/DOMPurify/tree/3.4.12/ |
+| DOMPurify | 3.4.17 | https://github.com/cure53/DOMPurify/tree/3.4.17/ |
 | marked | 12.0.2 | https://github.com/markedjs/marked/tree/v12.0.2/ |
 | highlight.js | 11.10.0 | https://github.com/highlightjs/highlight.js/tree/11.10.0/ |
 | qrcode-generator | 1.4.4 | https://github.com/kazuhikoarase/qrcode-generator/tree/v1.4.4/ |

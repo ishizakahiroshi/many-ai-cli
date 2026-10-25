@@ -527,9 +527,14 @@ mod platform {
         _pins: Vec<File>,
     }
     fn pin(path: &Path) -> io::Result<File> {
-        use windows_sys::Win32::Storage::FileSystem::{FILE_READ_ATTRIBUTES, SYNCHRONIZE};
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, SYNCHRONIZE,
+        };
         let f = OpenOptions::new()
-            .access_mode(FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+            // A metadata-only open does not enforce the intended deny-delete
+            // share. Directory read access keeps this name pinned even before
+            // any child file has been opened.
+            .access_mode(FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
             // Do not deny ordinary writes merely because a directory is held.
             // Delete sharing stays absent, so the pinned name cannot be renamed.
             .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
@@ -960,6 +965,10 @@ impl Dir {
         Ok(directory)
     }
 }
+
+#[cfg(all(test, windows))]
+#[path = "safe_fs/windows_save_pin_tests.rs"]
+mod windows_save_pin_tests;
 
 #[cfg(all(test, windows))]
 mod windows_path_tests {

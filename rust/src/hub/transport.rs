@@ -288,6 +288,11 @@ async fn handle(
                 // audio; failures therefore don't wait on a slow upload.
                 let config=match voice.prepare(cancellation.token()).await {Ok(config)=>config,Err(response)=>return response};
                 let audio=match read_body(body,super::voice_routes::PATH).await {Ok(audio)=>audio,Err(_)=>return Response::error(400,"bad_request","read audio failed")};
+                // Uploads can outlive their token or PIN session. Admission to
+                // recognition uses current authority and time; accepted work
+                // keeps the existing request-owner cancellation contract.
+                let recognition_now=crate::proto::time::Timestamp::now().duration_since(crate::proto::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+                if let Err(rejection)=state.services.preflight(&request,recognition_now) {return rejection;}
                 voice.transcribe_audio(&config,&audio,cancellation.token()).await
             };
             tokio::select! {
@@ -617,6 +622,8 @@ impl HttpBody for FileBody {
     }
 }
 
+#[cfg(test)]
+mod voice_auth_tests;
 #[cfg(test)]
 mod tests {
     use super::*;

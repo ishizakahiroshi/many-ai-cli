@@ -497,3 +497,128 @@ fn cli_browser(
         );
     }
 }
+
+#[cfg(test)]
+mod assurance_tests {
+    use super::*;
+    use crate::{
+        config::{Resource, RuntimePaths},
+        hub::http::Request,
+        launcher::{ProfilesFile, UiServer},
+    };
+    use axum::{Router, extract::Request as HttpRequest, routing::any};
+
+    #[tokio::test]
+    async fn launcher_unowned_disconnect_keeps_registry_and_owned_cancellation_untouched() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("candidate");
+        let installed = temporary.path().join("installed");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&installed).unwrap();
+        let store =
+            LauncherStore::open(RuntimePaths::trial(&root, 49001, &installed).unwrap()).unwrap();
+        store.save_profiles(&ProfilesFile::fresh()).unwrap();
+        let profiles_path = store.paths.resource(Resource::LauncherProfiles);
+        let profiles_before = std::fs::read(&profiles_path).unwrap();
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let recorded = observed.clone();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let stop = Cancellation::default();
+        let stopped = stop.clone();
+        let peer = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().fallback(any(move |request: HttpRequest| {
+                    let recorded = recorded.clone();
+                    async move {
+                        recorded.lock().unwrap().push((
+                            request.method().to_string(),
+                            request.uri().path().to_owned(),
+                        ));
+                        "{}"
+                    }
+                })),
+            )
+            .with_graceful_shutdown(async move { stopped.cancelled().await })
+            .await
+            .unwrap();
+        });
+        let url = format!("http://127.0.0.1:{port}/?token=synthetic-disconnect");
+        store.register_active("foreign", &url).unwrap();
+        store.register_active("owned", &url).unwrap();
+        let active_path = store.paths.resource(Resource::LauncherActive);
+        let active_before = std::fs::read(&active_path).unwrap();
+        let manager = ConnectionManager::new(
+            store.clone(),
+            ConnectorConfig::new(store.paths.clone(), temporary.path().into()),
+        );
+        let owned_cancel = Cancellation::default();
+        manager.state.lock().await.connections.insert(
+            "owned".into(),
+            LiveConnection {
+                id: 1,
+                cancel: owned_cancel.clone(),
+            },
+        );
+        let server =
+            UiServer::from_token(manager.clone(), "synthetic-disconnect".into(), 49001).unwrap();
+        let mut request = Request {
+            path: "/api/disconnect".into(),
+            method: "POST".into(),
+            query: "token=synthetic-disconnect".into(),
+            host: "localhost:49001".into(),
+            body: br#"{"name":"foreign","mode":"disconnect"}"#.to_vec(),
+            ..Request::default()
+        };
+        let response = server.handle(&request, &Cancellation::default()).await;
+        assert_eq!(response.status, 400);
+        let body: Value = serde_json::from_slice(&response.body).unwrap();
+        assert_eq!(body["error"], "not owned by this launcher");
+        assert_eq!(std::fs::read(&active_path).unwrap(), active_before);
+        assert_eq!(std::fs::read(&profiles_path).unwrap(), profiles_before);
+        assert!(manager.owns("owned").await);
+        assert!(!owned_cancel.is_cancelled());
+        assert!(
+            observed
+                .lock()
+                .unwrap()
+                .iter()
+                .all(|(method, _)| method == "GET")
+        );
+
+        request.body = br#"{"name":"foreign","mode":"web"}"#.to_vec();
+        assert_eq!(
+            server
+                .handle(&request, &Cancellation::default())
+                .await
+                .status,
+            200
+        );
+        assert!(
+            observed
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|entry| { entry == &("POST".to_owned(), "/api/shutdown".to_owned()) })
+        );
+        assert!(!owned_cancel.is_cancelled());
+        request.body = br#"{"name":"owned","mode":"disconnect"}"#.to_vec();
+        assert_eq!(
+            server
+                .handle(&request, &Cancellation::default())
+                .await
+                .status,
+            200
+        );
+        assert!(owned_cancel.is_cancelled());
+        assert!(!manager.owns("owned").await);
+        let remaining = store.active_snapshot().unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].profile, "foreign");
+        assert_eq!(std::fs::read(&profiles_path).unwrap(), profiles_before);
+        stop.cancel();
+        peer.await.unwrap();
+        manager.close_all().await;
+    }
+}

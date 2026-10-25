@@ -23,6 +23,12 @@ TARGETS = {
 }
 WINDOWS_RUNTIME_NAMES = ('vcomp140.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
 PACKAGING_INPUTS = ('BUILD-INPUTS.json', 'CRATE-NOTICES.txt', 'build-inputs.spdx.json')
+PINNED_NODE_VERSION = 'v22.23.4'
+
+
+def require_node_version(version: str) -> None:
+    if version != PINNED_NODE_VERSION:
+        raise ValueError('pinned Node 22.23.4 toolchain mismatch')
 
 def release_version(tag: str) -> str:
     if not isinstance(tag, str):
@@ -349,6 +355,8 @@ def main() -> None:
         raise SystemExit("native runner host or pinned Rust version does not match matrix target")
     go = capture(["go", "version"])
     bun = capture(["bun", "--version"])
+    node = capture(["node", "--version"])
+    require_node_version(node)
     if not go.startswith("go version go1.26.8 ") or bun != "1.3.14":
         raise SystemExit("pinned Go/Bun toolchain mismatch")
     if capture(["git", "rev-parse", "HEAD"]) != source:
@@ -452,7 +460,7 @@ def main() -> None:
         "source_sha": source, "review_head_sha": env.get("MANY_AI_REVIEW_HEAD_SHA", source),
         "oracle_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
         "target": args.target, "target_name": TARGETS[args.target],
-        "rustc": rustc, "go": go, "bun": bun, "python": sys.version.split()[0],
+        "rustc": rustc, "go": go, "bun": bun, "node": node, "python": sys.version.split()[0],
         "version": env["MANY_AI_BUILD_VERSION"], "build_time": env["MANY_AI_BUILD_TIME"],
         "cargo_lock_sha256": digest(ROOT / "rust" / "Cargo.lock"),
         "binaries": binary_entries, "generated_web_asset_inputs": web_entries,

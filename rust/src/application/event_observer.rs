@@ -249,7 +249,7 @@ impl ApplicationEventObserver {
                     continue;
                 }
                 if let Ok(token) = tokens.issue(
-                    session,
+                    details.binding,
                     &record.sig,
                     &record.sig,
                     record.candidate.source_epoch,

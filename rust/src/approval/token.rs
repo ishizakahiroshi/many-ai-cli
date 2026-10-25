@@ -3,7 +3,7 @@
 use crate::proto::time::Timestamp;
 use crate::proto::{
     self,
-    core::{ApprovalSourceEpoch, LiveSessionId},
+    core::{ApprovalSourceEpoch, LiveSessionId, SessionBinding, SessionIncarnation},
     wire::{Field, GoWire, Schema},
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -37,6 +37,7 @@ impl OneTapAction {
 struct Claim {
     v: i64,
     sid: i64,
+    inc: u64,
     aid: String,
     sig: String,
     ep: u64,
@@ -56,6 +57,10 @@ impl GoWire for Claim {
             Field {
                 name: "sid",
                 kind: "int",
+            },
+            Field {
+                name: "inc",
+                kind: "uint64",
             },
             Field {
                 name: "aid",
@@ -89,6 +94,9 @@ pub struct VerifiedClaim(Claim);
 impl VerifiedClaim {
     pub fn session(&self) -> LiveSessionId {
         LiveSessionId(self.0.sid)
+    }
+    pub fn incarnation(&self) -> SessionIncarnation {
+        SessionIncarnation(self.0.inc)
     }
     pub fn approval_id(&self) -> &str {
         &self.0.aid
@@ -130,14 +138,15 @@ impl OneTapManager {
     }
     pub fn issue(
         &self,
-        session: LiveSessionId,
+        binding: SessionBinding,
         approval_id: &str,
         signature: &str,
         epoch: ApprovalSourceEpoch,
         action: OneTapAction,
         now: Timestamp,
     ) -> Result<String, TokenError> {
-        if session.0 <= 0
+        if binding.session.0 <= 0
+            || binding.incarnation.0 == 0
             || approval_id.trim().is_empty()
             || signature.trim().is_empty()
             || epoch.0 == 0
@@ -147,8 +156,9 @@ impl OneTapManager {
         let mut nonce = [0; 16];
         getrandom::fill(&mut nonce).map_err(|_| TokenError::RandomUnavailable)?;
         let claim = Claim {
-            v: 1,
-            sid: session.0,
+            v: 2,
+            sid: binding.session.0,
+            inc: binding.incarnation.0,
             aid: approval_id.into(),
             sig: signature.into(),
             ep: epoch.0,
@@ -176,8 +186,9 @@ impl OneTapManager {
             .decode(parts[0])
             .map_err(|_| TokenError::Invalid)?;
         let claim: Claim = proto::decode_wire(&raw).map_err(|_| TokenError::Invalid)?;
-        if claim.v != 1
+        if claim.v != 2
             || claim.sid <= 0
+            || claim.inc == 0
             || claim.aid.trim().is_empty()
             || claim.sig.trim().is_empty()
             || claim.ep == 0
@@ -214,6 +225,82 @@ fn unix(time: Timestamp) -> Result<i64, TokenError> {
             let d = e.duration();
             let seconds = i64::try_from(d.as_secs()).map_err(|_| TokenError::Invalid)?;
             Ok(-seconds - i64::from(d.subsec_nanos() > 0))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::proto::core::WrapperConnectionId;
+
+    #[test]
+    fn correctly_signed_legacy_or_missing_incarnation_claims_are_rejected() {
+        let manager = OneTapManager::new().unwrap();
+        let now = Timestamp::UNIX_EPOCH + Duration::from_secs(1_000);
+        let binding = SessionBinding {
+            session: LiveSessionId(3),
+            incarnation: SessionIncarnation(7),
+            wrapper: WrapperConnectionId(1),
+        };
+        let current = manager
+            .issue(
+                binding,
+                "approval",
+                "sig",
+                ApprovalSourceEpoch(8),
+                OneTapAction::Approve,
+                now,
+            )
+            .unwrap();
+        let encoded = current.split_once('.').unwrap().0;
+        let current_claim: serde_json::Value =
+            serde_json::from_slice(&URL_SAFE_NO_PAD.decode(encoded).unwrap()).unwrap();
+        let valid = manager.verify(&current, now).unwrap();
+        assert_eq!(valid.incarnation(), binding.incarnation);
+        for (version, incarnation) in [(1, Some(7)), (1, None), (2, None), (2, Some(0))] {
+            let mut claim = current_claim.clone();
+            claim["v"] = serde_json::json!(version);
+            if let Some(incarnation) = incarnation {
+                claim["inc"] = serde_json::json!(incarnation);
+            } else {
+                claim.as_object_mut().unwrap().remove("inc");
+            }
+            // Sign the altered claim with the actual manager, so rejection tests
+            // required semantic fields rather than merely a broken signature.
+            let encoded = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claim).unwrap());
+            let mac = manager.mac(encoded.as_bytes()).finalize().into_bytes();
+            let token = format!("{encoded}.{}", URL_SAFE_NO_PAD.encode(mac));
+            assert!(matches!(
+                manager.verify(&token, now),
+                Err(TokenError::Invalid)
+            ));
+        }
+        assert!(manager.verify(&current, now).is_ok());
+        manager.consume(&valid, now).unwrap();
+    }
+
+    #[test]
+    fn issuance_rejects_zero_incarnation_but_does_not_bind_wrapper_connection() {
+        let manager = OneTapManager::new().unwrap();
+        let now = Timestamp::UNIX_EPOCH + Duration::from_secs(1_000);
+        for (incarnation, valid) in [(0, false), (9, true)] {
+            let result = manager.issue(
+                SessionBinding {
+                    session: LiveSessionId(3),
+                    incarnation: SessionIncarnation(incarnation),
+                    wrapper: WrapperConnectionId(0),
+                },
+                "approval",
+                "sig",
+                ApprovalSourceEpoch(8),
+                OneTapAction::Approve,
+                now,
+            );
+            assert_eq!(result.is_ok(), valid);
+            if !valid {
+                assert_eq!(result, Err(TokenError::Invalid));
+            }
         }
     }
 }

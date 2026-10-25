@@ -2,7 +2,7 @@
 
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Go](https://img.shields.io/badge/go-1.25+-blue)
+![Rust](https://img.shields.io/badge/rust-1.90.0-blue)
 
 https://github.com/user-attachments/assets/5b330094-9609-40ec-b059-c3dae964684f
 
@@ -175,6 +175,7 @@ A relay stops for a round limit, timeout, missing verdict or review file, blocke
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `many-ai-cli` itself
 - **Remote access protection** — Settings → "Remote access protection" offers a **Revoke all access** kill switch (regenerates the token and auth cookie when a device is lost), an **optional PIN** required only for non-loopback access (off by default, with lockout), and **new-device connection notifications**
   - PIN expiry or logout disconnects remote screens using that PIN session. Changing, enabling, or disabling the PIN disconnects existing remote screens; reconnect and authenticate again as required. Running AI/terminal sessions and local screens stay connected. Input already accepted by the Hub finishes before the screen closes; new input and screen data stop when authorization expires.
+  - For Whisper audio uploaded through the Hub, authorization is checked again after upload and before transcription starts. A request that lost authorization is rejected before recognition; transcription already started may finish.
 - **Multiple subscriptions per provider** — seven CLIs in one Hub; Claude, Codex, Grok, and opencode can stack extra paid plans per session. The Settings → Usage view shows remaining quota per profile for Claude, Codex, and Grok (see below)
 
 ## Multiple subscriptions per provider
@@ -309,6 +310,8 @@ Linux/macOS builds are expected to work, but they have not been fully validated 
 ### Install via a package manager
 
 **Developer install (npm registry — recommended):**
+
+Use a supported Node.js release with current security fixes for the Node launcher (for example, Node.js 22.23.4 LTS or a later patched release). The package's engine range describes compatibility, not a security support policy. [Node.js security release](https://nodejs.org/en/blog/release/v22.23.4).
 
 ```powershell
 pnpm add -g many-ai-cli
@@ -1484,7 +1487,7 @@ When **Approval Buttons** is enabled, `many-ai-cli` writes only its marked appro
 
 ### Session handoff records
 
-`many-ai-cli` records a "handoff board" for every session (unless disabled) so that a session which hits its usage limit can hand its work off to a different AI CLI. What is allowed into a record is decided by a fixed, allowlisted Go type, not by scanning free text for secrets afterward: there is no field a PTY transcript, a file's contents, a diff, or an environment variable could be put into. The free-text fields it does carry — a completion summary, an optional one-line "next step" note — are passed through the same secret-masking used elsewhere before they are written.
+`many-ai-cli` records a "handoff board" for every session (unless disabled) so that a session which hits its usage limit can hand its work off to a different AI CLI. What is allowed into a record is decided by a fixed, allowlisted record type, not by scanning free text for secrets afterward: there is no field a PTY transcript, a file's contents, a diff, or an environment variable could be put into. The free-text fields it does carry — a completion summary, an optional one-line "next step" note — are passed through the same secret-masking used elsewhere before they are written.
 
 Records live at `~/.many-ai-cli/handoff/s<id>.jsonl` under your home directory (directory `0700` / file `0600`), never inside a repository, and are removed after `handoff.retention_days` (default 14 days) by the Hub's regular maintenance sweep regardless of whether recording is enabled. Set `handoff.enabled: false` to stop new writes entirely. `many-ai-cli doctor` reports the directory's file count and oldest file age.
 

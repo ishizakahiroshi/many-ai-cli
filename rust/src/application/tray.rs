@@ -28,6 +28,8 @@ pub trait TrayHooks: Send + Sync {
     fn open_url<'a>(&'a self, url: &'a str) -> CoreFuture<'a, io::Result<()>>;
     fn stop_hub(&self) -> CoreFuture<'_, io::Result<()>>;
 }
+#[cfg(test)]
+type TestErrorReporter = Arc<dyn Fn(&str) + Send + Sync>;
 pub struct TrayOwner {
     hooks: Arc<dyn TrayHooks>,
     cancel: Cancellation,
@@ -36,6 +38,8 @@ pub struct TrayOwner {
     actions: tokio::sync::Mutex<()>,
     opening: AtomicBool,
     last_open: Mutex<Option<tokio::time::Instant>>,
+    #[cfg(test)]
+    test_error_reporter: Option<TestErrorReporter>,
 }
 impl TrayOwner {
     pub fn new(hooks: Arc<dyn TrayHooks>) -> Arc<Self> {
@@ -47,6 +51,8 @@ impl TrayOwner {
             actions: tokio::sync::Mutex::new(()),
             opening: AtomicBool::new(false),
             last_open: Mutex::new(None),
+            #[cfg(test)]
+            test_error_reporter: None,
         })
     }
     pub async fn open_hub(&self) -> io::Result<()> {
@@ -121,6 +127,11 @@ impl TrayOwner {
                 && !owner.cancel.is_cancelled()
             {
                 let message = error.to_string();
+                #[cfg(test)]
+                if let Some(report) = &owner.test_error_reporter {
+                    report(&message);
+                    return;
+                }
                 let _ = tokio::task::spawn_blocking(move || report_error(&message)).await;
             }
         }));

@@ -604,6 +604,140 @@ fn launcher_tokens_scanner_limits_and_browser_argv() {
     assert!(hub_endpoint("http://example.invalid:49001/?token=abc", "/api/info").is_err());
 }
 
+fn guarded_profile_ui() -> (tempfile::TempDir, LauncherStore, Arc<UiServer>) {
+    let temporary = tempfile::tempdir().unwrap();
+    let store = store_at(&temporary.path().join("candidate"));
+    store
+        .save_profiles(&ProfilesFile {
+            profiles: Some(vec![ssh()]),
+            ..ProfilesFile::fresh()
+        })
+        .unwrap();
+    let manager = ConnectionManager::new(
+        store.clone(),
+        ConnectorConfig::new(store.paths.clone(), temporary.path().into()),
+    );
+    let server = UiServer::from_token(manager, "synthetic-profile-guard".into(), 49001).unwrap();
+    (temporary, store, server)
+}
+
+fn guarded_profile_request(profiles: Vec<Profile>) -> many_ai_cli::hub::http::Request {
+    many_ai_cli::hub::http::Request {
+        method: "POST".into(),
+        path: "/api/profiles".into(),
+        query: "token=synthetic-profile-guard".into(),
+        host: "localhost:49001".into(),
+        body: serde_json::to_vec(&serde_json::json!({"profiles": profiles})).unwrap(),
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn launcher_profile_guards_preserve_persisted_bytes_before_a_valid_write() {
+    let (_temporary, store, server) = guarded_profile_ui();
+    let path = store.paths.resource(Resource::LauncherProfiles);
+    let original = std::fs::read(&path).unwrap();
+    let loaded = store.load_profiles().unwrap();
+    let mut replacement = ssh();
+    replacement.name = "replacement".into();
+    for malformed in [false, true] {
+        for (has_token, expected) in [(false, 401), (true, 403)] {
+            let mut request = guarded_profile_request(vec![replacement.clone()]);
+            if !has_token {
+                request.query.clear();
+            }
+            request.host = "foreign.invalid".into();
+            if malformed {
+                request.body = b"{broken".to_vec();
+            }
+            let response = server.handle(&request, &Cancellation::default()).await;
+            assert_eq!(response.status, expected, "malformed={malformed}");
+            assert_eq!(std::fs::read(&path).unwrap(), original);
+            assert_eq!(store.load_profiles().unwrap(), loaded);
+        }
+    }
+    let request = guarded_profile_request(vec![replacement.clone()]);
+    assert_eq!(
+        server
+            .handle(&request, &Cancellation::default())
+            .await
+            .status,
+        200
+    );
+    assert_ne!(std::fs::read(&path).unwrap(), original);
+    assert_eq!(store.load_profiles().unwrap().list(), &[replacement]);
+}
+
+#[tokio::test]
+async fn launcher_unknown_path_cannot_dispatch_a_profile_replacement() {
+    let (_temporary, store, server) = guarded_profile_ui();
+    let path = store.paths.resource(Resource::LauncherProfiles);
+    let original = std::fs::read(&path).unwrap();
+    let status = server.manager.status().await;
+    let mut replacement = ssh();
+    replacement.name = "replacement".into();
+    let mut request = guarded_profile_request(vec![replacement.clone()]);
+    request.path = "/api/profiles/unknown".into();
+    assert_eq!(
+        server
+            .handle(&request, &Cancellation::default())
+            .await
+            .status,
+        404
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+    assert_eq!(server.manager.status().await, status);
+    assert!(store.active_snapshot().unwrap().is_empty());
+    request.path = "/api/profiles".into();
+    assert_eq!(
+        server
+            .handle(&request, &Cancellation::default())
+            .await
+            .status,
+        200
+    );
+    assert_eq!(store.load_profiles().unwrap().list(), &[replacement]);
+}
+
+#[tokio::test]
+async fn launcher_invalid_profiles_preserve_persisted_replacement_before_success() {
+    let (_temporary, store, server) = guarded_profile_ui();
+    let path = store.paths.resource(Resource::LauncherProfiles);
+    let original = std::fs::read(&path).unwrap();
+    let loaded = store.load_profiles().unwrap();
+    let mut unsupported = ssh();
+    unsupported.kind = "unsupported-synthetic-kind".into();
+    for (profiles, detail) in [
+        (vec![ssh(), ssh()], "duplicate name"),
+        (vec![unsupported], "unknown type"),
+    ] {
+        let request = guarded_profile_request(profiles);
+        let response = server.handle(&request, &Cancellation::default()).await;
+        assert_eq!(response.status, 400);
+        let body: Value = serde_json::from_slice(&response.body).unwrap();
+        assert_eq!(body["ok"], false);
+        assert!(
+            body["error"]
+                .as_str()
+                .is_some_and(|value| value.contains(detail))
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        assert_eq!(store.load_profiles().unwrap(), loaded);
+    }
+    let mut replacement = ssh();
+    replacement.name = "replacement".into();
+    let request = guarded_profile_request(vec![replacement.clone()]);
+    assert_eq!(
+        server
+            .handle(&request, &Cancellation::default())
+            .await
+            .status,
+        200
+    );
+    assert_ne!(std::fs::read(&path).unwrap(), original);
+    assert_eq!(store.load_profiles().unwrap().list(), &[replacement]);
+}
+
 #[cfg(unix)]
 #[test]
 fn launcher_ssh_join_and_remote_shell_deliver_exact_argv_env_cwd() {

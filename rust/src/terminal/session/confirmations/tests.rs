@@ -576,6 +576,106 @@ async fn auth_rotation_rejects_before_handoff_but_does_not_cancel_committed_task
         ConfirmationWaitOutcome::Decided(ConfirmationOutcome::SpawnFailed(_))
     ));
 }
+
+#[tokio::test]
+async fn stale_epoch_at_confirmation_accept_preserves_pending_and_admission_before_fresh_retry() {
+    for approved in [false, true] {
+        let f = fixture(true).await;
+        let registered = register(&f, "worker");
+        let proof = VerifiedConfirmationRequest::after_server_authentication(f.engine.auth_epoch());
+        let snapshots = f.executor.snapshots.load(Ordering::SeqCst);
+        drop(f.engine.invalidate_all_ui());
+        assert!(matches!(
+            f.engine.clone().accept_decision(
+                response(&registered.pending.id, approved),
+                proof,
+                now(),
+            ),
+            Err(SessionError::AuthenticationExpired)
+        ));
+        assert_eq!(f.executor.snapshots.load(Ordering::SeqCst), snapshots);
+        assert_eq!(f.executor.spawns.load(Ordering::SeqCst), 0);
+        assert_eq!(f.executor.refusals.load(Ordering::SeqCst), 0);
+        assert_eq!(f.executor.notifications.load(Ordering::SeqCst), 0);
+        assert_eq!(f.engine.pending()[0].id, registered.pending.id);
+        assert!(
+            f.engine
+                .admission_matches(&registered.pending.admission, f.parent.session, 1,)
+        );
+        assert!(
+            lock(&f.engine.state).confirmations[&registered.pending.id]
+                .decision
+                .is_none()
+        );
+        let outcome = accept(&f, &registered.pending.id, approved)
+            .run(TaskCancellation::default())
+            .unwrap()
+            .await;
+        if approved {
+            assert!(matches!(outcome, ConfirmationOutcome::SpawnFailed(_)));
+            assert_eq!(f.executor.spawns.load(Ordering::SeqCst), 1);
+            assert_eq!(f.executor.refusals.load(Ordering::SeqCst), 0);
+        } else {
+            assert_eq!(outcome, ConfirmationOutcome::Refused);
+            assert_eq!(f.executor.spawns.load(Ordering::SeqCst), 0);
+            assert_eq!(f.executor.refusals.load(Ordering::SeqCst), 1);
+        }
+        assert_eq!(
+            wait(registered.waiter).await,
+            ConfirmationWaitOutcome::Decided(outcome)
+        );
+    }
+}
+
+#[tokio::test]
+async fn rotation_during_confirmation_accept_snapshot_cannot_reserve_a_decision() {
+    for approved in [false, true] {
+        let f = fixture(true).await;
+        let registered = register(&f, "worker");
+        let proof = VerifiedConfirmationRequest::after_server_authentication(f.engine.auth_epoch());
+        let weak = Arc::downgrade(&f.engine);
+        *lock(&f.executor.snapshot_hook) = Some(Arc::new(move || {
+            drop(weak.upgrade().unwrap().invalidate_all_ui());
+        }));
+        assert!(matches!(
+            f.engine.clone().accept_decision(
+                response(&registered.pending.id, approved),
+                proof,
+                now(),
+            ),
+            Err(SessionError::AuthenticationExpired)
+        ));
+        assert_eq!(f.executor.spawns.load(Ordering::SeqCst), 0);
+        assert_eq!(f.executor.refusals.load(Ordering::SeqCst), 0);
+        assert_eq!(f.executor.notifications.load(Ordering::SeqCst), 0);
+        assert_eq!(f.engine.pending()[0].id, registered.pending.id);
+        assert!(
+            f.engine
+                .admission_matches(&registered.pending.admission, f.parent.session, 1,)
+        );
+        assert!(
+            lock(&f.engine.state).confirmations[&registered.pending.id]
+                .decision
+                .is_none()
+        );
+        let outcome = accept(&f, &registered.pending.id, approved)
+            .run(TaskCancellation::default())
+            .unwrap()
+            .await;
+        assert_eq!(
+            wait(registered.waiter).await,
+            ConfirmationWaitOutcome::Decided(outcome)
+        );
+        assert_eq!(
+            f.executor.spawns.load(Ordering::SeqCst),
+            usize::from(approved)
+        );
+        assert_eq!(
+            f.executor.refusals.load(Ordering::SeqCst),
+            usize::from(!approved)
+        );
+    }
+}
 #[tokio::test]
 async fn pending_survives_disconnect_and_warm_reattach_uses_current_parent_binding() {
     let f = fixture(true).await;
@@ -926,4 +1026,212 @@ async fn served_confirmation_uses_ordinary_guard_and_transfers_to_the_real_task_
     assert_eq!(owner.drain_effects().await.completed, 1);
     cancel.cancel();
     server.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn served_confirmation_rejects_epoch_rotation_at_accept_before_same_id_fresh_retry() {
+    use crate::hub::{
+        ServiceRouter, confirmations::ConfirmationHttp, task_owner::HubTaskOwner, transport,
+    };
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    struct RotateBeforeAccept {
+        core: Arc<SessionEngine>,
+        config: Arc<config::ConfigStore>,
+        rotate: AtomicBool,
+        accepts: AtomicUsize,
+    }
+    impl SpawnConfirmations for RotateBeforeAccept {
+        fn pending(&self) -> Vec<PendingSpawnConfirmation> {
+            self.core.pending()
+        }
+        fn register(
+            &self,
+            request: ConfirmationRequest,
+        ) -> Result<ConfirmationRegistration, AdmissionError> {
+            SpawnConfirmations::register(self.core.as_ref(), request)
+        }
+        fn accept_decision(
+            self: Arc<Self>,
+            response: SpawnConfirmationResponse,
+            proof: VerifiedConfirmationRequest,
+            at: Timestamp,
+        ) -> Result<Box<dyn AcceptedSpawnDecision>, SessionError> {
+            self.accepts.fetch_add(1, Ordering::SeqCst);
+            if self.rotate.swap(false, Ordering::SeqCst) {
+                // Inject the interleaving after the actual router authenticated
+                // and captured its proof, immediately before the real accept.
+                // All acceptance and decision ownership remain with SessionEngine.
+                let mut snapshot = self.config.snapshot().unwrap();
+                snapshot.config.token = "synthetic-confirm-fresh".into();
+                self.config
+                    .persist(snapshot.revision, snapshot.config)
+                    .unwrap();
+                drop(self.core.invalidate_all_ui());
+            }
+            self.core.clone().accept_decision(response, proof, at)
+        }
+        fn parent_ended(&self, parent: LiveSessionId) -> CoreEffects {
+            self.core.parent_ended(parent)
+        }
+    }
+    struct ServerGuard {
+        cancel: crate::process::Cancellation,
+        task: Option<tokio::task::JoinHandle<std::io::Result<()>>>,
+    }
+    impl Drop for ServerGuard {
+        fn drop(&mut self) {
+            self.cancel.cancel();
+            if let Some(task) = self.task.take() {
+                task.abort();
+            }
+        }
+    }
+    async fn post(port: u16, token: &str, body: &[u8]) -> Vec<u8> {
+        let mut client = tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
+            .await
+            .unwrap();
+        // Deliberately use a different positive URL parent: the stored
+        // confirmation ID remains the source of the actual target.
+        client.write_all(format!(
+            "POST /api/sessions/999999/spawn-confirm?token={token} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len(),
+        ).as_bytes()).await.unwrap();
+        client.write_all(body).await.unwrap();
+        let mut reply = Vec::new();
+        tokio::time::timeout(Duration::from_secs(3), client.read_to_end(&mut reply))
+            .await
+            .unwrap()
+            .unwrap();
+        reply
+    }
+
+    for approved in [false, true] {
+        let f = fixture(true).await;
+        let pending = register(&f, "worker");
+        let id = pending.pending.id.clone();
+        let initial_epoch = f.engine.auth_epoch();
+        let snapshots = f.executor.snapshots.load(Ordering::SeqCst);
+        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let paths = RuntimePaths::trial(f._root.path(), port, f._installed.path()).unwrap();
+        let config = Arc::new(
+            config::ConfigStore::load_or_create(paths, || Ok("synthetic-confirm-old".into()))
+                .unwrap(),
+        );
+        let boundary = Arc::new(RotateBeforeAccept {
+            core: f.engine.clone(),
+            config: config.clone(),
+            rotate: AtomicBool::new(true),
+            accepts: AtomicUsize::new(0),
+        });
+        let paths = RuntimePaths::trial(f._root.path(), port, f._installed.path()).unwrap();
+        let owner = HubTaskOwner::new(tokio::runtime::Handle::current());
+        let services = Arc::new(
+            ServiceRouter::new(config.clone(), paths, f.engine.clone(), port)
+                .unwrap()
+                .with_task_owner(owner.handle())
+                .with_confirmations(Arc::new(ConfirmationHttp::new(boundary.clone()))),
+        );
+        let cancel = crate::process::Cancellation::default();
+        let mut server = ServerGuard {
+            cancel: cancel.clone(),
+            task: Some(tokio::spawn(transport::serve(
+                listener,
+                services,
+                f.sink.clone(),
+                cancel,
+            ))),
+        };
+        let body = serde_json::to_vec(&response(&id, approved)).unwrap();
+
+        let rejected = post(port, "synthetic-confirm-old", &body).await;
+        assert!(String::from_utf8_lossy(&rejected).starts_with("HTTP/1.1 401"));
+        assert_eq!(boundary.accepts.load(Ordering::SeqCst), 1);
+        assert_ne!(f.engine.auth_epoch(), initial_epoch);
+        assert_eq!(f.executor.snapshots.load(Ordering::SeqCst), snapshots);
+        assert_eq!(f.executor.spawns.load(Ordering::SeqCst), 0);
+        assert_eq!(f.executor.refusals.load(Ordering::SeqCst), 0);
+        assert_eq!(f.executor.notifications.load(Ordering::SeqCst), 0);
+        assert!(lock(&f.sink.messages).is_empty());
+        assert_eq!(f.engine.pending().len(), 1);
+        assert_eq!(f.engine.pending()[0].id, id);
+        assert!(lock(&f.engine.state).confirmations[&id].decision.is_none());
+        assert!(
+            f.engine
+                .admission_matches(&pending.pending.admission, f.parent.session, 1)
+        );
+        let effects = owner.snapshot().effects;
+        assert_eq!(
+            (effects.unstarted, effects.running, effects.completed),
+            (0, 0, 0)
+        );
+        let rotated_revision = config.snapshot().unwrap().revision;
+
+        let stale_credential = post(port, "synthetic-confirm-old", &body).await;
+        assert!(String::from_utf8_lossy(&stale_credential).starts_with("HTTP/1.1 401"));
+        assert_eq!(boundary.accepts.load(Ordering::SeqCst), 1);
+        assert_eq!(config.snapshot().unwrap().revision, rotated_revision);
+        assert_eq!(f.engine.pending()[0].id, id);
+        assert!(lock(&f.engine.state).confirmations[&id].decision.is_none());
+        assert!(
+            f.engine
+                .admission_matches(&pending.pending.admission, f.parent.session, 1)
+        );
+        assert_eq!(f.executor.spawns.load(Ordering::SeqCst), 0);
+        assert_eq!(f.executor.refusals.load(Ordering::SeqCst), 0);
+
+        let accepted = post(port, "synthetic-confirm-fresh", &body).await;
+        assert!(String::from_utf8_lossy(&accepted).starts_with("HTTP/1.1 200"));
+        assert_eq!(boundary.accepts.load(Ordering::SeqCst), 2);
+        let outcome = wait(pending.waiter).await;
+        if approved {
+            assert!(matches!(
+                outcome,
+                ConfirmationWaitOutcome::Decided(ConfirmationOutcome::SpawnFailed(_))
+            ));
+            assert_eq!(*lock(&f.executor.parent_seen), Some(f.parent));
+        } else {
+            assert_eq!(
+                outcome,
+                ConfirmationWaitOutcome::Decided(ConfirmationOutcome::Refused)
+            );
+        }
+        assert_eq!(
+            f.executor.spawns.load(Ordering::SeqCst),
+            usize::from(approved)
+        );
+        assert_eq!(
+            f.executor.refusals.load(Ordering::SeqCst),
+            usize::from(!approved)
+        );
+        assert_eq!(f.executor.notifications.load(Ordering::SeqCst), 0);
+        assert!(f.engine.pending().is_empty());
+        assert!(
+            !f.engine
+                .admission_matches(&pending.pending.admission, f.parent.session, 1)
+        );
+        assert_eq!(config.snapshot().unwrap().revision, rotated_revision);
+        owner.stop_requests();
+        let requests = tokio::time::timeout(Duration::from_secs(3), owner.drain_requests())
+            .await
+            .unwrap();
+        assert_eq!(requests.completed, 2);
+        assert_eq!((requests.panicked, requests.cancelled), (0, 0));
+        f.engine.shutdown_confirmations();
+        owner.stop_effects().unwrap();
+        let effects = tokio::time::timeout(Duration::from_secs(3), owner.drain_effects())
+            .await
+            .unwrap();
+        assert_eq!(effects.completed, 1);
+        assert_eq!((effects.panicked, effects.cancelled), (0, 0));
+        server.cancel.cancel();
+        tokio::time::timeout(Duration::from_secs(3), server.task.take().unwrap())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    }
 }
