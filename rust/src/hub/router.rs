@@ -1551,7 +1551,21 @@ impl ServiceRouter {
                 ),
             }
         };
-        Dispatch::response(response)
+        let effects = if matches!(
+            request.path.as_str(),
+            "/api/auth/login" | "/api/auth/logout" | "/api/auth/set-pin"
+        ) {
+            self.core
+                .as_ref()
+                .map(|core| {
+                    self.auth
+                        .revoke_invalid_uis(&self.config, core.as_ref(), now)
+                })
+                .unwrap_or_default()
+        } else {
+            CoreEffects::default()
+        };
+        Dispatch { response, effects }
     }
 }
 fn validate_bound_port(paths: &RuntimePaths, port: u16) -> std::io::Result<()> {

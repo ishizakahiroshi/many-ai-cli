@@ -11,6 +11,8 @@ mod marker_suppression;
 mod reattach_transaction;
 #[path = "session_engine/startup_registration.rs"]
 mod startup_registration;
+#[path = "session_engine/ui_authorization.rs"]
+mod ui_authorization;
 use many_ai_cli::{
     config::{Resource, RuntimePaths},
     proto::{self, core::*},

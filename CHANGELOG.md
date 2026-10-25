@@ -15,6 +15,10 @@ Release artifacts are published at
   background and text overrides for each mode. The palette shows the mode being
   edited and can reset it without changing the other mode; legacy shared colors
   remain available in dark mode only.
+- Remote browser connections now expire with their PIN session and disconnect
+  on logout or PIN changes. New input and UI data are rejected after revocation;
+  already accepted input drains while local screens and terminal sessions stay
+  connected. Failed PIN persistence keeps existing connections authorized.
 - Subscription probe and login cleanup now rechecks the exact session connection
   while dismissing it, so cleanup from an older connection cannot remove a
   reconnected session or emit a duplicate dismissal after removal.

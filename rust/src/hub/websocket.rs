@@ -233,7 +233,7 @@ impl WebSocketService {
             return Err(SessionError::AuthenticationExpired);
         }
         drop(preauth);
-        let writer = Box::new(WsWriter(writer));
+        let writer: Box<dyn FrameWriter> = Box::new(WsWriter(writer));
         if first.role == "ui" {
             self.services
                 .note_authenticated_remote(&request, "ws", Timestamp::now());
@@ -241,8 +241,27 @@ impl WebSocketService {
                 connection: self.sockets.next_ui()?,
                 auth_epoch: epoch,
             };
+            let pin = if auth::logically_remote(&request) {
+                Some(self.services.auth.bind_remote_ui(
+                    &request,
+                    &self.services.config,
+                    binding,
+                    Timestamp::now(),
+                )?)
+            } else {
+                None
+            };
+            let writer: Box<dyn FrameWriter> = match &pin {
+                Some(pin) => Box::new(PinUiWriter {
+                    inner: writer,
+                    authorization: pin.authorization(),
+                }),
+                None => writer,
+            };
             let closed = self.sockets.insert_ui(binding, writer)?;
-            let result = self.ui_loop(binding, first, &mut reader, &closed).await;
+            let result = self
+                .ui_loop(binding, first, &mut reader, &closed, pin.as_ref())
+                .await;
             // Exact binding only. A revoke may already have detached/closed it.
             let detached = self.core.detach_ui(binding);
             if let Err(failure) = self.effects.apply(detached).await {
@@ -446,10 +465,19 @@ impl WebSocketService {
         first: proto::Message,
         reader: &mut SplitStream<WebSocket>,
         closed: &Cancellation,
+        pin: Option<&super::pin::RemotePinUi<'_>>,
     ) -> Result<(), SessionError> {
         let active =
             (first.ui_active_session_id > 0).then_some(LiveSessionId(first.ui_active_session_id));
-        let priming = self.core.attach_ui(binding, active, size(&first))?;
+        let priming = match pin {
+            Some(pin) => self.core.attach_ui_authorized(
+                binding,
+                active,
+                size(&first),
+                pin.authorization(),
+            )?,
+            None => self.core.attach_ui(binding, active, size(&first))?,
+        };
         if let Some(session) = active {
             match self
                 .core
@@ -474,15 +502,24 @@ impl WebSocketService {
         let cancel = TaskCancellation::default();
         let ended = Cancellation::default();
         let (inputs, receiver) = tokio::sync::mpsc::unbounded_channel();
+        let expiry = async {
+            match pin {
+                Some(pin) => pin.expiry().await,
+                None => std::future::pending().await,
+            }
+        };
+        tokio::pin!(expiry);
         let receive_loop = async {
             let result = loop {
                 tokio::select! {
                     _ = self.shutdown.cancelled() => break Ok(()),
                     _ = closed.cancelled() => break Ok(()),
                     _ = ended.cancelled() => break Ok(()),
+                    _ = &mut expiry => break Err(SessionError::AuthenticationExpired),
                 incoming = receive(reader, &self.shutdown) => {
                     let message = match incoming { Ok(Some(message)) => message, Ok(None) => break Ok(()), Err(error) => break Err(error) };
                     if self.core.auth_epoch() != binding.auth_epoch { break Err(SessionError::AuthenticationExpired); }
+                    if pin.is_some_and(|pin| !pin.is_valid()) { break Err(SessionError::AuthenticationExpired); }
                     let session = LiveSessionId(message.session_id);
                     let at = Timestamp::now();
                     let _accepted = if message.r#type == "pty_input" { None } else {
@@ -720,6 +757,34 @@ fn authorize_first(
             ))
 }
 struct WsWriter(SplitSink<WebSocket, WsMessage>);
+struct PinUiWriter {
+    inner: Box<dyn FrameWriter>,
+    authorization: Arc<dyn UiAuthorization>,
+}
+impl FrameWriter for PinUiWriter {
+    fn write<'a>(&'a mut self, frame: WireFrame) -> CoreFuture<'a, Result<(), SessionError>> {
+        self.write_guarded(frame, Box::new(|dispatch| dispatch()))
+    }
+    fn write_guarded<'a>(
+        &'a mut self,
+        frame: WireFrame,
+        guard: InputSendGuard<'a>,
+    ) -> CoreFuture<'a, Result<(), SessionError>> {
+        if matches!(frame, WireFrame::Close) {
+            return self.inner.write_guarded(frame, guard);
+        }
+        let authorization = self.authorization.clone();
+        self.inner.write_guarded(
+            frame,
+            Box::new(move |dispatch| {
+                if !authorization.is_valid() {
+                    return Err(SessionError::AuthenticationExpired);
+                }
+                guard(dispatch)
+            }),
+        )
+    }
+}
 impl FrameWriter for WsWriter {
     fn write<'a>(&'a mut self, frame: WireFrame) -> CoreFuture<'a, Result<(), SessionError>> {
         Box::pin(async move {
@@ -1012,3 +1077,7 @@ mod tests {
 #[cfg(test)]
 #[path = "ws_transport_tests.rs"]
 mod transport_tests;
+
+#[cfg(test)]
+#[path = "ws_pin_writer_tests.rs"]
+mod pin_writer_tests;

@@ -174,6 +174,7 @@ A relay stops for a round limit, timeout, missing verdict or review file, blocke
 - **Language switching** (English / Japanese / Vietnamese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `many-ai-cli` itself
 - **Remote access protection** — Settings → "Remote access protection" offers a **Revoke all access** kill switch (regenerates the token and auth cookie when a device is lost), an **optional PIN** required only for non-loopback access (off by default, with lockout), and **new-device connection notifications**
+  - PIN expiry or logout disconnects remote screens using that PIN session. Changing, enabling, or disabling the PIN disconnects existing remote screens; reconnect and authenticate again as required. Running AI/terminal sessions and local screens stay connected. Input already accepted by the Hub finishes before the screen closes; new input and screen data stop when authorization expires.
 - **Multiple subscriptions per provider** — seven CLIs in one Hub; Claude, Codex, Grok, and opencode can stack extra paid plans per session. The Settings → Usage view shows remaining quota per profile for Claude, Codex, and Grok (see below)
 
 ## Multiple subscriptions per provider

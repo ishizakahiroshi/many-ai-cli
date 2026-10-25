@@ -113,6 +113,7 @@ Giới hạn đã biết: cơ chế cố ý nhẹ. Board poll 2 giây + inject E
 - **Đổi ngôn ngữ UI** (English / 日本語 / **Tiếng Việt**) — Settings → Language; file locale `web/src/i18n/{en,ja,vi}.json`
 - **UI local-first** — HTTP/WebSocket Hub chỉ bind `127.0.0.1`; bản thân `many-ai-cli` không telemetry
 - **Bảo vệ truy cập remote** — Settings → «Remote access protection»: **Thu hồi toàn bộ truy cập** (regenerate token + cookie), **PIN tùy chọn** chỉ khi non-loopback (mặc định tắt, có lockout), **thông báo thiết bị mới**
+  - Khi PIN hết hạn hoặc đăng xuất, các màn hình remote dùng phiên PIN đó sẽ bị ngắt. Đổi, bật hoặc tắt PIN sẽ ngắt các màn hình remote hiện có; hãy kết nối lại và xác thực khi được yêu cầu. Phiên AI/terminal đang chạy và màn hình local vẫn được giữ. Hub hoàn tất phần nhập đã tiếp nhận trước khi đóng màn hình; dữ liệu nhập mới và dữ liệu gửi tới màn hình bị từ chối sau khi quyền hết hiệu lực.
 
 ---
 

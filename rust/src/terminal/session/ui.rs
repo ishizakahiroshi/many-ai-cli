@@ -55,6 +55,27 @@ impl SessionEngine {
         active: Option<LiveSessionId>,
         initial_size: Option<TerminalSize>,
     ) -> Result<UiPriming, SessionError> {
+        self.attach_ui_with_authorization(ui, active, initial_size, None)
+    }
+    pub fn attach_ui_authorized(
+        &self,
+        ui: UiBinding,
+        active: Option<LiveSessionId>,
+        initial_size: Option<TerminalSize>,
+        authorization: Arc<dyn UiAuthorization>,
+    ) -> Result<UiPriming, SessionError> {
+        self.attach_ui_with_authorization(ui, active, initial_size, Some(authorization))
+    }
+    fn attach_ui_with_authorization(
+        &self,
+        ui: UiBinding,
+        active: Option<LiveSessionId>,
+        initial_size: Option<TerminalSize>,
+        authorization: Option<Arc<dyn UiAuthorization>>,
+    ) -> Result<UiPriming, SessionError> {
+        if authorization.as_ref().is_some_and(|auth| !auth.is_valid()) {
+            return Err(SessionError::AuthenticationExpired);
+        }
         let mut state = lock(&self.state);
         let disclosure = if state.confirmations.is_empty() {
             None
@@ -66,7 +87,9 @@ impl SessionEngine {
             state = lock(&self.state);
             Some(result)
         };
-        if state.auth_epoch != ui.auth_epoch {
+        if state.auth_epoch != ui.auth_epoch
+            || authorization.as_ref().is_some_and(|auth| !auth.is_valid())
+        {
             return Err(SessionError::AuthenticationExpired);
         }
         if state.uis.contains_key(&ui.connection) {
@@ -86,6 +109,7 @@ impl SessionEngine {
             ui.connection,
             UiState {
                 binding: ui,
+                authorization,
                 active,
                 sizes: BTreeMap::new(),
                 priming: true,

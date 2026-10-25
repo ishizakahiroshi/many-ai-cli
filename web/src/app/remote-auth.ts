@@ -9,11 +9,6 @@ import { appConfirm } from './settings.js';
 //   - ロックアウト中は Retry-After を表示する。
 // loopback（このPC）からは PIN 不要・モーダルも出さない。
 
-function isLoopbackHost(): boolean {
-  const h = location.hostname;
-  return h === '127.0.0.1' || h === 'localhost' || h === '::1' || h === '[::1]';
-}
-
 function authApi(path: string, init?: RequestInit): Promise<Response> {
   return apiFetch(path, init);
 
@@ -155,20 +150,24 @@ async function submitPINLogin(): Promise<void> {
   }
 }
 
-// 起動時: remote かつ PIN 有効で未認証なら PIN ログインモーダルを出す。
+// The server also recognizes forwarded loopback connections as remote.
+// Recheck after WS closure so expiry does not leave the browser retrying unseen.
 async function checkRemotePINGate(): Promise<void> {
-  if (isLoopbackHost()) return;
   try {
     const res = await authApi('/api/auth/status');
     if (!res.ok) return;
     const data = await res.json();
     if (data.pin_enabled && data.remote && !data.authed) {
       showPINLogin();
+    } else {
+      const overlay = document.getElementById('pin-login-overlay');
+      if (overlay) overlay.hidden = true;
     }
   } catch (_) {}
 }
 
 export function initRemoteAuth(): void {
+  document.addEventListener('remote-auth-check', () => void checkRemotePINGate());
   const revokeBtn = document.getElementById('revoke-all-btn');
   revokeBtn?.addEventListener('click', (e) => {
     e.stopPropagation();

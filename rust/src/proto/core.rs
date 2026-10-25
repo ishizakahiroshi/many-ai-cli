@@ -1407,6 +1407,17 @@ pub trait SessionCore:
         active: Option<LiveSessionId>,
         initial_size: Option<TerminalSize>,
     ) -> Result<UiPriming, SessionError>;
+    /// Attach a UI with an additional server-owned authorization lifetime.
+    /// Adapters without this boundary must fail closed.
+    fn attach_ui_authorized(
+        &self,
+        _ui: UiBinding,
+        _active: Option<LiveSessionId>,
+        _initial_size: Option<TerminalSize>,
+        _authorization: Arc<dyn UiAuthorization>,
+    ) -> Result<UiPriming, SessionError> {
+        Err(SessionError::AuthenticationExpired)
+    }
     /// Nonempty drains keep priming active. Apply the batch, repeat, and only
     /// an empty drain atomically transitions the UI to live delivery.
     fn finish_ui_priming(&self, ui: UiBinding) -> Result<CoreEffects, SessionError>;
@@ -1450,6 +1461,12 @@ pub trait SessionCore:
 /// Opaque RAII authorization lease owned by the single SessionCore. Dropping
 /// the lease releases accepted-work accounting even on future cancellation.
 pub trait AcceptedUiWork: Send {}
+
+/// Server-owned connection authorization. Called under the core state lock:
+/// implementations must not block, perform I/O, or acquire application locks.
+pub trait UiAuthorization: Send + Sync {
+    fn is_valid(&self) -> bool;
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub enum GitTurnType {

@@ -38,6 +38,7 @@ struct Fixture {
     core: Arc<dyn SessionCore>,
     sockets: Arc<SocketRegistry>,
     effects: Arc<EffectDriver>,
+    services: Arc<ServiceRouter>,
     cancel: Cancellation,
     server: Option<tokio::task::JoinHandle<std::io::Result<()>>>,
 }
@@ -130,7 +131,7 @@ async fn fixture_with_preparation(
     let websocket = Arc::new(websocket);
     let server = tokio::spawn(transport::serve_with_websockets(
         listener,
-        services,
+        services.clone(),
         effects.clone(),
         websocket,
         cancel.clone(),
@@ -141,6 +142,7 @@ async fn fixture_with_preparation(
         core,
         sockets,
         effects,
+        services,
         cancel,
         server: Some(server),
     }
@@ -192,10 +194,20 @@ impl Client {
         self.0.write_all(&frame).await.unwrap();
     }
     async fn frame(&mut self) -> Option<serde_json::Value> {
-        tokio::time::timeout(Duration::from_secs(2), async {
+        self.frame_with_timeout(Duration::from_secs(2)).await
+    }
+    async fn frame_with_timeout(&mut self, timeout: Duration) -> Option<serde_json::Value> {
+        tokio::time::timeout(timeout, async {
             let first = match self.0.read_u8().await {
                 Ok(v) => v,
-                Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => return None,
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::ConnectionReset
+                    ) =>
+                {
+                    return None;
+                }
                 Err(error) => panic!("frame header: {error}"),
             };
             let second = self.0.read_u8().await.unwrap();
@@ -230,6 +242,9 @@ impl Client {
         panic!("frame {kind} never arrived")
     }
 }
+
+#[path = "ws_pin_tests.rs"]
+mod pin_tests;
 #[tokio::test]
 async fn loopback_first_frame_auth_real_core_output_input_and_shutdown() {
     let fixture = fixture().await;

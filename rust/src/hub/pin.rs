@@ -14,6 +14,9 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, sync::Mutex};
 
+mod ui;
+pub(super) use ui::RemotePinUi;
+
 pub const UI_ORIGIN_COOKIE: &str = "MANY_AI_CLI_ui_origin";
 const PIN_TTL: i64 = 12 * 60 * 60;
 fn hex(bytes: impl AsRef<[u8]>) -> String {
@@ -182,10 +185,12 @@ struct Session {
     expiry: i64,
     device: String,
     issued: u64,
+    policy: [u8; 32],
 }
 #[derive(Default)]
 struct State {
     sessions: BTreeMap<String, Session>,
+    remote_uis: BTreeMap<crate::proto::core::UiConnectionId, ui::RemoteUi>,
     limiter: Limiter,
     ui_secret: String,
     sequence: u64,
@@ -241,29 +246,31 @@ pub fn cookie(name: &str, value: &str, strict: bool, max_age: i64, request: &Req
 }
 impl AuthService {
     pub fn has_valid_pin(&self, request: &Request, config: &Config, now: i64) -> bool {
-        let Some(value) = request.cookie(PIN_COOKIE) else {
-            return false;
-        };
-        let Some(payload) = verify_signed(&config.auth_cookie_secret, value, "") else {
-            return false;
-        };
+        self.pin_session(request, config, now).is_some()
+    }
+    fn pin_session(&self, request: &Request, config: &Config, now: i64) -> Option<(String, i64)> {
+        let value = request.cookie(PIN_COOKIE)?;
+        let payload = verify_signed(&config.auth_cookie_secret, value, "")?;
         let parts: Vec<_> = payload.split('.').collect();
         if parts.len() != 3 || parts[1].is_empty() {
-            return false;
+            return None;
         }
         let Ok(expiry) = parts[0].parse::<i64>() else {
-            return false;
+            return None;
         };
         if expiry <= now || !valid_token(parts[2], &device_hash(request)) {
-            return false;
+            return None;
         }
         let Ok(mut s) = self.state.lock() else {
-            return false;
+            return None;
         };
         s.sessions.retain(|_, v| v.expiry > now);
-        s.sessions
-            .get(parts[1])
-            .is_some_and(|v| v.expiry == expiry && valid_token(&v.device, parts[2]))
+        let valid = s.sessions.get(parts[1]).is_some_and(|v| {
+            v.expiry == expiry
+                && valid_token(&v.device, parts[2])
+                && v.policy == ui::policy_key(&config.auth_cookie_secret, &config.remote_pin_hash)
+        });
+        valid.then(|| (parts[1].to_owned(), expiry))
     }
     pub fn guard(
         &self,
@@ -282,7 +289,13 @@ impl AuthService {
         }
         Ok(())
     }
-    fn issue(&self, request: &Request, secret: &str, now: i64) -> Result<String, Response> {
+    fn issue(
+        &self,
+        request: &Request,
+        secret: &str,
+        pin_hash: &str,
+        now: i64,
+    ) -> Result<String, Response> {
         let nonce = random_hex(16)
             .map_err(|_| Response::error(500, "internal", "failed to create pin session"))?;
         let expiry = now + PIN_TTL;
@@ -309,6 +322,7 @@ impl AuthService {
                 expiry,
                 device: device.clone(),
                 issued,
+                policy: ui::policy_key(secret, pin_hash),
             },
         );
         Ok(signed(secret, &format!("{expiry}.{nonce}.{device}"), ""))
@@ -400,7 +414,12 @@ impl AuthService {
             if let Ok(mut s) = self.state.lock() {
                 s.limiter.success(&key);
             }
-            let value = match self.issue(request, &config.auth_cookie_secret, now) {
+            let value = match self.issue(
+                request,
+                &config.auth_cookie_secret,
+                &config.remote_pin_hash,
+                now,
+            ) {
                 Ok(v) => v,
                 Err(e) => return e,
             };
@@ -449,7 +468,12 @@ impl AuthService {
             if body.clear || body.pin.trim().is_empty() {
                 snapshot.config.remote_pin_hash.clear();
                 return match store.persist(snapshot.revision, snapshot.config) {
-                    Ok(_) => Response::json(200, &json!({"ok":true,"pin_enabled":false})),
+                    Ok(_) => {
+                        if let Ok(mut state) = self.state.lock() {
+                            state.sessions.clear();
+                        }
+                        Response::json(200, &json!({"ok":true,"pin_enabled":false}))
+                    }
                     Err(_) => Response::error(500, "internal", "failed to persist config"),
                 };
             }
@@ -470,10 +494,14 @@ impl AuthService {
                 snapshot.config.auth_cookie_secret = candidate;
             }
             let secret = snapshot.config.auth_cookie_secret.clone();
+            let pin_hash = snapshot.config.remote_pin_hash.clone();
             if store.persist(snapshot.revision, snapshot.config).is_err() {
                 return Response::error(500, "internal", "failed to persist config");
             }
-            let value = match self.issue(request, &secret, now) {
+            if let Ok(mut state) = self.state.lock() {
+                state.sessions.clear();
+            }
+            let value = match self.issue(request, &secret, &pin_hash, now) {
                 Ok(v) => v,
                 Err(e) => return e,
             };

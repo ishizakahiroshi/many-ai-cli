@@ -202,6 +202,7 @@ pub struct SessionObservationSnapshot {
 }
 struct UiState {
     binding: UiBinding,
+    authorization: Option<Arc<dyn UiAuthorization>>,
     active: Option<LiveSessionId>,
     sizes: BTreeMap<LiveSessionId, TerminalSize>,
     priming: bool,
@@ -440,10 +441,9 @@ impl State {
     }
     fn authorized(&self, ui: UiBinding) -> bool {
         self.auth_epoch == ui.auth_epoch
-            && self
-                .uis
-                .get(&ui.connection)
-                .is_some_and(|s| s.binding == ui)
+            && self.uis.get(&ui.connection).is_some_and(|s| {
+                s.binding == ui && s.authorization.as_ref().is_none_or(|auth| auth.is_valid())
+            })
     }
     /// Expand broadcast effects while holding the exact state snapshot lock.
     /// Priming is unbounded like the Go baseline; do not invent a disconnect cap.
@@ -849,6 +849,15 @@ impl SessionCore for SessionEngine {
         size: Option<TerminalSize>,
     ) -> Result<UiPriming, SessionError> {
         SessionEngine::attach_ui(self, ui, active, size)
+    }
+    fn attach_ui_authorized(
+        &self,
+        ui: UiBinding,
+        active: Option<LiveSessionId>,
+        size: Option<TerminalSize>,
+        authorization: Arc<dyn UiAuthorization>,
+    ) -> Result<UiPriming, SessionError> {
+        SessionEngine::attach_ui_authorized(self, ui, active, size, authorization)
     }
     fn finish_ui_priming(&self, ui: UiBinding) -> Result<CoreEffects, SessionError> {
         SessionEngine::finish_ui_priming(self, ui)

@@ -256,6 +256,7 @@ export function _connectWs() {
     resetApprovalStore();
     renderSessionList();
     if (_wsIntentionalClose) return;
+    document.dispatchEvent(new Event('remote-auth-check'));
     // 指数バックオフで自動再接続
     document.getElementById('summary').textContent = t('ws_close', { code: e.code });
     const nsBtn = document.getElementById('new-session-btn') as HTMLButtonElement | null;
