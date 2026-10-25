@@ -1630,7 +1630,7 @@ Rust mainline; see the [release procedure](docs/manual_release.md).
 
 ## Remote server / Docker deployment (auto-update)
 
-> **v1.0.0 support scope:** Official Docker images, container builds and automatic updates are unsupported. The current container build has a known failure. Automatic image publishing has stopped; existing images and recipes are retained as historical references, with no active publishing or update guarantee. Linux binaries and SSH remote operation remain in the v1.0.0 release scope. See the [Docker support policy](deploy/docker/README.md).
+> **v1.0.0 support scope:** Official Docker images, container builds and automatic updates are unsupported. The current container build has a known failure. Automatic image publishing has stopped, and the former GHCR images were deleted on 2026-10-25 because they bundled a Node.js release affected by CVE-2026-111497; the recipes are retained as historical references, with no active publishing or update guarantee. Linux binaries and SSH remote operation remain in the v1.0.0 release scope. See the [Docker support policy](deploy/docker/README.md).
 
 Docker is not required for remote-server use. For a small team, normal SSH plus `tmux`, `screen`, or `systemd` can work as long as each person signs in with their own AI CLI account and has a separate OS user, home directory, working directory, and Hub port. For v1.0.0 remote setups, run the Linux binary directly.
 
@@ -1648,7 +1648,7 @@ The following build, compose and cron examples describe the former Docker setup.
 
 Container assets remain under [`deploy/docker/`](deploy/docker/) (one user = one container; the Hub is published on `127.0.0.1` only and is meant to be reached through an SSH tunnel or similar). The former setup started from [`deploy/docker/users/example.yaml`](deploy/docker/users/example.yaml), copied it to `users/<user>.yaml`, and replaced the example user name and port before adding it to `compose.yaml`.
 
-The former GitHub Actions publisher built images after successful validation of `main` / `develop` pushes. Automatic publishing has stopped, and [`docker-image.yml`](.github/workflows/docker-image.yml) is being replaced with a manual informational notice. These retained GHCR tag names do not promise current builds or updates:
+The former GitHub Actions publisher built images after successful validation of `main` / `develop` pushes. Automatic publishing has stopped, and [`docker-image.yml`](.github/workflows/docker-image.yml) is being replaced with a manual informational notice. The GHCR package was deleted on 2026-10-25, so these former tag names can no longer be pulled:
 
 ```
 ghcr.io/ishizakahiroshi/many-ai-cli:latest      # historical main tag

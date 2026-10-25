@@ -407,6 +407,12 @@ Release artifacts are published at
   preventing token exposure in browser history, server access logs, and shared links.
 - **Dependency `golang.org/x/crypto` updated to v0.57.0**, eliminating upstream advisory GO-2025-3486.
 
+### Security
+- **The pre-v1 GHCR container images were deleted (2026-10-25).** All tags of
+  `ghcr.io/ishizakahiroshi/many-ai-cli` bundled a Node.js 22 release affected by the
+  Brotli decoder vulnerability CVE-2026-111497, and image publishing has stopped,
+  so they would never receive the fix. Use the Linux binary instead.
+
 
 ## [0.9.0] - 2026-09-27
 

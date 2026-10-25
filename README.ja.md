@@ -1558,7 +1558,7 @@ runner で行います。手動実行の `rust-migration.yml` は未受入候補
 
 ## リモートサーバー / Docker 運用（自動更新）
 
-> **v1.0.0 のサポート範囲:** 公式 Docker image・コンテナビルド・自動更新はサポート対象外です。現在のコンテナビルドには既知の失敗があります。image の自動公開は停止し、既存 image と資材は履歴として保持しますが、継続公開・自動更新は保証しません。Linux バイナリと SSH によるリモート運用は v1.0.0 の対象に残ります。[Docker のサポート方針](deploy/docker/README.md)も参照してください。
+> **v1.0.0 のサポート範囲:** 公式 Docker image・コンテナビルド・自動更新はサポート対象外です。現在のコンテナビルドには既知の失敗があります。image の自動公開は停止しました。GHCR に残していた旧 image は、CVE-2026-111497 の影響を受ける Node.js を含んでいたため 2026-10-25 に削除しました。資材は履歴として保持しますが、継続公開・自動更新は保証しません。Linux バイナリと SSH によるリモート運用は v1.0.0 の対象に残ります。[Docker のサポート方針](deploy/docker/README.md)も参照してください。
 
 Docker はリモートサーバー運用の必須条件ではありません。複数人で使う場合でも、各利用者が自分の AI CLI アカウントでログインし、OS ユーザー / ホームディレクトリ / 作業フォルダ / Hub ポートを分ければ、通常の SSH + `tmux` / `screen` / `systemd` でも運用できます。まずは自分たちのチームに合う方法を試してください。
 
@@ -1576,7 +1576,7 @@ Docker を使わない場合は、特に次の点に注意してください。
 
 コンテナ運用一式は [`deploy/docker/`](deploy/docker/) に保持しています（1 ユーザー = 1 コンテナ。Hub の公開は `127.0.0.1` 限定で、SSH トンネル等を介して到達する前提です。前節「ローカル実行限定」の通り、外部公開は行わないでください）。従来は [`deploy/docker/users/example.yaml`](deploy/docker/users/example.yaml) を `users/<user>.yaml` にコピーし、ユーザー名とポートを置き換えて `compose.yaml` に追加していました。
 
-従来は `main` / `develop` の push に対する検証成功後、GitHub Actions が GHCR へ image を公開していました。自動公開は停止し、[`docker-image.yml`](.github/workflows/docker-image.yml) は手動の案内 job へ置き換えます。以下の既存タグ名は、現在のビルドや更新を保証するものではありません:
+従来は `main` / `develop` の push に対する検証成功後、GitHub Actions が GHCR へ image を公開していました。自動公開は停止し、[`docker-image.yml`](.github/workflows/docker-image.yml) は手動の案内 job へ置き換えます。GHCR のパッケージは 2026-10-25 に削除したため、以下の旧タグ名はもう pull できません:
 
 ```
 ghcr.io/ishizakahiroshi/many-ai-cli:latest      # 旧 main タグ
