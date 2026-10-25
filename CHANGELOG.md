@@ -11,6 +11,10 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Fixed
+- Updated Tokio to 1.53.3 and the Web Push P-256 dependency to 0.14.0,
+  including crypto-bigint 0.7.8 and ctutils 0.4.5 security fixes. Unix PTY I/O
+  now explicitly registers its owned file descriptor under Tokio's lifetime
+  contract; Web Push retains its encryption and signature wire formats.
 - Windows file operations now hold the parent directory against replacement
   before opening the selected file, preventing a renamed parent from redirecting
   that open to a different file.

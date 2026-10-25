@@ -5,8 +5,7 @@ fn fixture_store() -> Store {
     let key = SecretKey::from_slice(&private).unwrap();
     Store {
         vapid_private_key: URL_SAFE_NO_PAD.encode(private),
-        vapid_public_key: URL_SAFE_NO_PAD
-            .encode(key.public_key().to_encoded_point(false).as_bytes()),
+        vapid_public_key: URL_SAFE_NO_PAD.encode(key.public_key().to_sec1_point(false).as_bytes()),
         ..Default::default()
     }
 }
