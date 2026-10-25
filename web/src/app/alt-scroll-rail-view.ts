@@ -23,7 +23,7 @@ import {
   isConfirmedAltScreenChange,
   type TerminalScreenSnapshot,
 } from './terminal-history-strategy.js';
-import { canPageAltBuffer, markTerminalManualScrollIntent, scrollAltBufferPage } from './terminal.js';
+import { canPageAltBuffer, captureTerminalScreenSnapshot, markTerminalManualScrollIntent, scrollAltBufferPage, sendAltBufferBurst } from './terminal.js';
 import { probe } from '../debug/probe.js';
 
 /** イベントを流す間隔（ms）。1 ドラッグでホイールを連投して TUI を壊さないための律速。 */
@@ -41,12 +41,12 @@ const CONFIRM_TIMEOUT_MS = 350;
 const MAX_CONSECUTIVE_UNCONFIRMED = 3;
 /** 端まで移動（↑ up / ↓ down）で送るノッチ数の上限。CLI が止まらない画面を描き続けた場合の蓋。 */
 const MAX_EDGE_NOTCHES = 5000;
-/**
- * 下端移動でレール位置が 0 に達した後、さらに送ってよいノッチ数。
- * レール位置は近似なので 0 でも CLI 側にはまだ下があり得る。一方で出力中の CLI は
- * 新しい行で画面が上へずれ続け「下へ動いた」と確定し続けるため、ここで打ち切る。
- */
-const EDGE_OVERSHOOT_NOTCHES = 24;
+/** 端まで移動で、1 回の pump（PUMP_INTERVAL_MS ごと）にまとめて送るノッチ数。 */
+const EDGE_BURST_NOTCHES = 4;
+/** 端まで移動で、画面が変わらない pump がこの回数続いたら端に着いたとみなす。 */
+const EDGE_IDLE_TICKS = 6;
+/** 下端移動で送るノッチ数の上限。出力中の CLI は画面が変わり続けるため、静止検知とは別に蓋をする。 */
+const EDGE_BOTTOM_MAX_NOTCHES = 400;
 
 interface PendingNotch {
   direction: number;
@@ -77,8 +77,10 @@ interface RailEntry {
   unconfirmedCount: number;
   /** 端まで移動中の方向（-1 = 最上部へ / 1 = 最下部へ）。null なら target による移動。 */
   edge: number | null;
-  /** 下端移動でレール位置 0 に達した後に送ったノッチ数。 */
-  edgeOvershoot: number;
+  /** 端まで移動中、直前の pump 時点の可視本文。静止検知用。 */
+  edgeLastSig: string | null;
+  /** 端まで移動中、可視本文が変わらなかった pump の連続回数。 */
+  edgeIdle: number;
 }
 
 const rails = new Map<number, RailEntry>();
@@ -166,18 +168,45 @@ function stopUnconfirmedRequest(entry: RailEntry): void {
   stopPump(entry);
 }
 
+// 端まで移動の終了。確認なしで送ったのでレール位置は近似で置く:
+// 下端＝ライブ（0）、上端＝送ったぶんだけ遡った（1 以上）。
+function finishEdge(id: number, entry: RailEntry): void {
+  const toBottom = entry.edge !== null && entry.edge > 0;
+  const wasUp = entry.state.notchesUp > 0;
+  entry.state = altRailApplyNotches(entry.state, toBottom ? 0 : Math.max(1, entry.travelSent));
+  stopUnconfirmedRequest(entry);
+  renderRail(id);
+  if (toBottom && wasUp) announceBackToLive(id);
+}
+
 function pump(id: number): void {
   const entry = rails.get(id);
   if (!entry) return;
   let direction: number;
   if (entry.edge !== null) {
-    if (entry.travelSent >= MAX_EDGE_NOTCHES
-      || (entry.edge > 0 && entry.state.notchesUp === 0 && entry.edgeOvershoot >= EDGE_OVERSHOOT_NOTCHES)) {
+    // 端まで移動は 1 ノッチごとの画面変化確認をしない（確認判定は厳しく、外れると途中で止まる）。
+    // まとめて送り、可視本文が EDGE_IDLE_TICKS 回続けて変わらなければ端に着いたとみなす。
+    const edgeT = terminals.get(id);
+    if (!edgeT) {
+      stopUnconfirmedRequest(entry);
+      return;
+    }
+    const sig = captureTerminalScreenSnapshot(edgeT).lines.map(line => line.trimEnd()).join('\n');
+    if (entry.edgeLastSig !== null && sig === entry.edgeLastSig) entry.edgeIdle++;
+    else entry.edgeIdle = 0;
+    entry.edgeLastSig = sig;
+    const limit = entry.edge > 0 ? EDGE_BOTTOM_MAX_NOTCHES : MAX_EDGE_NOTCHES;
+    if (entry.edgeIdle >= EDGE_IDLE_TICKS || entry.travelSent >= limit) {
+      finishEdge(id, entry);
+      return;
+    }
+    if (!sendAltBufferBurst(id, edgeT, entry.edge, EDGE_BURST_NOTCHES)) {
       stopUnconfirmedRequest(entry);
       renderRail(id);
       return;
     }
-    direction = entry.edge;
+    entry.travelSent += EDGE_BURST_NOTCHES;
+    return;
   } else {
     if (entry.target === null) {
       stopPump(entry);
@@ -197,9 +226,6 @@ function pump(id: number): void {
   if (!t) {
     stopUnconfirmedRequest(entry);
     return;
-  }
-  if (entry.edge !== null && entry.edge > 0 && entry.state.notchesUp === 0 && entry.pending === null) {
-    entry.edgeOvershoot++;
   }
   // 位置の計上は PTY 応答後の confirm で行う。
   const sent = scrollAltBufferPage(id, t, direction);
@@ -275,7 +301,9 @@ export function requestEdge(id: number, edge: 'top' | 'bottom'): boolean {
   entry.travelConfirmed = 0;
   entry.travelFrom = entry.state.notchesUp;
   entry.unconfirmedCount = 0;
-  entry.edgeOvershoot = 0;
+  entry.edgeLastSig = null;
+  entry.edgeIdle = 0;
+  clearPending(entry);
   entry.target = null;
   entry.edge = direction;
   probe('altscroll.request', () => ({
@@ -375,7 +403,8 @@ export function ensureAltScrollRail(id: number, t: any): void {
     travelFrom: 0,
     unconfirmedCount: 0,
     edge: null,
-    edgeOvershoot: 0,
+    edgeLastSig: null,
+    edgeIdle: 0,
   };
   rails.set(id, entry);
   bindPointer(id, entry);

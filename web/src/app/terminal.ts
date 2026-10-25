@@ -1181,6 +1181,20 @@ export function scrollAltBufferPage(sessionId, t, direction) {
   return true;
 }
 
+// ↑ up / ↓ down ボタン（端まで移動）用。画面変化の確認を待たず、同じ方向の入力を
+// count 個まとめて送る。止める判断は呼び元（alt-scroll-rail-view の画面静止検知）が持つ。
+export function sendAltBufferBurst(sessionId, t, direction, count): boolean {
+  if (!canPageAltBuffer(sessionId, t)) return false;
+  const requestedMode: WheelEncoding = t.mouseMode?.tracking
+    ? (t.mouseMode.sgr ? 'sgr' : 'x10')
+    : 'page';
+  const mode: WheelEncoding = requestedMode === 'x10' && !isX10CoordinateSafe(t.term.cols, t.term.rows)
+    ? 'page'
+    : requestedMode;
+  const key = encodeWheelSeq(direction, t.term.cols, t.term.rows, mode);
+  return sendText(sessionId, key.repeat(Math.max(1, count)));
+}
+
 // ページ送りで CLI が過去の画面を描いている最中か。
 //
 // 代替画面バッファの provider では、ホイールも ↑up / ↓down ボタンも疑似レールも
