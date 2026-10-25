@@ -1015,11 +1015,12 @@ header {
   /* サイドバーは 220〜520px で可変だが、設定画面の左ナビは 260px 固定（settings.css の .settings-layout）。
      フッターがナビより広いと右ペインへ食い込むので、左配置ではナビの幅までに収める。 */
   body:not(.sidebar-right):has(#settings-panel:not([hidden])) .session-footer {
+    width: 100%;
     max-width: 260px;
     margin-right: auto;
   }
 }
-.session-footer > #settings-btn { flex: 1 1 0; min-width: 0; }
+.session-footer > #settings-btn { flex: 1 1 0; min-width: 0; max-width: 248px; }
 .session-footer .footer-action-icon { width: 14px; height: 14px; flex-shrink: 0; }
 .session-footer #settings-btn { justify-content: center; min-width: 0; }
 @media (max-width: 720px) {
