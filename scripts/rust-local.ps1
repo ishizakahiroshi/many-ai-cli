@@ -11,6 +11,7 @@
 .EXAMPLE
   pwsh scripts\rust-local.ps1              # 修正元をビルド（debug）→ version 表示
   pwsh scripts\rust-local.ps1 -Run         # 上に加えて serve を別ウィンドウで起動し、URL を表示
+  pwsh scripts\rust-local.ps1 -Real -Run -WebDebug   # 画面の観測 sink（web/src/debug/）を入れてビルド・起動（調査用。通常は付けない）
   pwsh scripts\rust-local.ps1 -Stop        # 起動した trial の Hub を止める
   pwsh scripts\rust-local.ps1 -Release     # release ビルド（CI と同じ形・時間がかかる）
   pwsh scripts\rust-local.ps1 -Clean       # worktree を片付ける（trial root は残す）
@@ -23,7 +24,8 @@ param(
     [switch]$Release,
     [switch]$Clean,
     [switch]$SkipWeb,
-    [switch]$CopySettings,   # 実際の config.yaml を trial root へコピー（読むだけ・実物は変更しない。秘密を含む）
+    [switch]$WebDebug,       # 画面資材を MAI_DEBUG=1 でビルドする（web/src/debug/ の観測 sink が入る。既定では入らない）
+    [switch]$CopySettings,  # 実際の config.yaml を trial root へコピー（読むだけ・実物は変更しない。秘密を含む）
     [switch]$Real,           # trial でなく通常モード。ただし home を F:\build\rust-home に向け、実際の ~/.many-ai-cli・DB・Go 版の Hub には触れない
     [switch]$CopyDb,         # -Real のとき、DB（any-ai-cli.db と -wal/-shm）のスナップショットも、コピーして持ち込む（予定の実行が二重に走る可能性があるので既定では持ち込まない）
     [string]$Branch = 'develop',
@@ -174,12 +176,18 @@ if ($Source) {
 if ($SkipWeb) {
     Step '画面資材: 省略（-SkipWeb）'
 } else {
-    Step '画面資材をビルド（bun）'
+    Step ('画面資材をビルド（bun）' + $(if ($WebDebug) { ' ※観測 sink あり（MAI_DEBUG=1）' } else { '' }))
     Push-Location (Join-Path $Worktree 'web')
+    $prevMaiDebug = $env:MAI_DEBUG
     try {
+        # 呼び出し元の環境変数に左右されないよう、-WebDebug の有無で必ず上書きする（終了後に元へ戻す）。
+        if ($WebDebug) { $env:MAI_DEBUG = '1' } else { Remove-Item Env:MAI_DEBUG -ErrorAction SilentlyContinue }
         Native 'bun install' { & bun install --frozen-lockfile }
         Native 'bun run build' { & bun run build }
-    } finally { Pop-Location }
+    } finally {
+        if ($null -eq $prevMaiDebug) { Remove-Item Env:MAI_DEBUG -ErrorAction SilentlyContinue } else { $env:MAI_DEBUG = $prevMaiDebug }
+        Pop-Location
+    }
 }
 
 # --- Rust ---

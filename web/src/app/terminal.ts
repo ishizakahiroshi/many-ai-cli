@@ -696,13 +696,18 @@ export function whenLayoutReady(id, container, attempt = 0, generation = null) {
         // 触っていないのに最下部吸着が外れ、CLI 内容の下にターミナルの空行帯が残っていた。
         // 手動操作は lastTerminalManualScrollAt(wheel/pointerdown で更新)で判定する。
         const manualRecently = Date.now() - lastTerminalManualScrollAt < 400;
+        const autoBefore = t.autoScroll;
+        let followBranch = 'hold';
         if (atBottom) {
           // 最下部に居るなら常に吸着 ON（down ボタン表示とも整合）。
           t.autoScroll = true;
+          followBranch = 'at-bottom';
         } else if (manualRecently) {
           // ユーザーが上へスクロールして履歴を読み始めた → 吸着 OFF にして位置を保つ。
           t.autoScroll = false;
+          followBranch = 'manual-off';
         } else if (t.autoScroll && !t._snappingToBottom) {
+          followBranch = 'snap';
           // 手動意図のない programmatic scroll(CLI の TUI 再描画)で最下部から外れた場合は、
           // 吸着 ON のまま直ちに最下部へ戻す。これにより CLI 内容の下に空行帯が残らない。
           // autoScroll=false(ユーザーが履歴閲覧中)のときは何もせず現在位置を保つ。
@@ -711,6 +716,15 @@ export function whenLayoutReady(id, container, attempt = 0, generation = null) {
           try { t.term.scrollToBottom(); syncViewportScrollbarToBottom(t); }
           finally { t._snappingToBottom = false; }
         }
+        probe('scroll.follow', () => ({
+          sessionId: id,
+          branch: followBranch,
+          autoBefore,
+          autoAfter: t.autoScroll,
+          viewportY: t.term?.buffer?.active?.viewportY ?? -1,
+          baseY: t.term?.buffer?.active?.baseY ?? -1,
+          sinceManualMs: Date.now() - lastTerminalManualScrollAt,
+        }));
         if (id === activeSessionId) updateScrollLockBtn(!t.autoScroll);
         updateHistoryHint(id);
       });
@@ -1310,8 +1324,18 @@ document.addEventListener('wheel', (e) => {
   markTerminalManualScrollIntent();
   const lineHeight = 24;
   const lines = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / lineHeight));
+  const wheelAutoBefore = t.autoScroll;
   try { t.term.scrollLines(lines); } catch (_) {}
   t.autoScroll = isTerminalAtBottom(t);
+  probe('scroll.follow', () => ({
+    sessionId: targetSessionId,
+    branch: 'wheel',
+    autoBefore: wheelAutoBefore,
+    autoAfter: t.autoScroll,
+    viewportY: t.term?.buffer?.active?.viewportY ?? -1,
+    baseY: t.term?.buffer?.active?.baseY ?? -1,
+    sinceManualMs: 0,
+  }));
   if (targetSessionId === activeSessionId) updateScrollLockBtn(!t.autoScroll);
   e.preventDefault();
   e.stopPropagation();
