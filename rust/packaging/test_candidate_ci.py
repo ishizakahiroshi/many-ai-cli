@@ -8,6 +8,7 @@ import subprocess
 import struct
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -131,7 +132,7 @@ class CandidateReceiptTests(unittest.TestCase):
             self.assertEqual(capture.call_count, 2)
             self.assertFalse((root / '.rust-candidate-artifacts').exists())
 
-    def synthetic_native(self, *, release=True, windows=False, moved_tag=False):
+    def synthetic_native(self, *, release=True, windows=False, moved_tag=False, smoke='passed'):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         root = Path(temp.name).resolve()
@@ -184,6 +185,13 @@ class CandidateReceiptTests(unittest.TestCase):
                     (folder / name).write_bytes(b'synthetic packaging evidence')
             if kwargs.get('stdout_file'):
                 kwargs['stdout_file'].write_text('{}\n')
+            if len(args) > 1 and args[1] == ci.SMOKE_SCRIPT:
+                # The helper itself is tested in test_candidate_smoke.py; here only its contract.
+                if smoke != 'missing':
+                    Path(args[args.index('--result') + 1]).write_text(json.dumps({
+                        'schema_version': 1, 'status': 'passed' if smoke == 'passed' else 'failed',
+                        'failure': None if smoke == 'passed' else {'check': 'serve-start', 'code': 'serve_not_ready'}}))
+                return 0 if smoke == 'passed' else 1
             return 0
         argv = ['native', '--target', target] + (['--release-tag', 'v1.0.0'] if release else [])
         api = self.icon_api({(14, 1): self.group_icon(icon_payload), (3, 7): icon_payload})
@@ -195,6 +203,9 @@ class CandidateReceiptTests(unittest.TestCase):
                                                      'CARGO_TARGET_DIR': str(root / 'rust/target')}), patch.object(sys, 'argv', argv), patch.object(ctypes, 'WinDLL', return_value=api, create=True):
                             if moved_tag:
                                 with self.assertRaisesRegex(ValueError, 'tag commit does not match'):
+                                    ci.main()
+                            elif smoke != 'passed':
+                                with self.assertRaisesRegex(SystemExit, 'runtime smoke failed'):
                                     ci.main()
                             else:
                                 ci.main()
@@ -224,6 +235,81 @@ class CandidateReceiptTests(unittest.TestCase):
         self.assertEqual(receipt['build_kind'], 'candidate')
         self.assertIsNone(receipt['release_tag'])
         self.assertTrue((output / 'NOT-FOR-CUTOVER.txt').exists())
+
+    def smoke_call(self, calls):
+        found = [args for args, _ in calls if len(args) > 1 and args[1] == ci.SMOKE_SCRIPT]
+        self.assertEqual(len(found), 1)
+        args = found[0]
+        return {args[i]: args[i + 1] for i in range(2, len(args) - 1, 2)}
+
+    def test_runtime_smoke_starts_the_built_main_binary_with_the_build_stamp(self):
+        for windows in (False, True):
+            with self.subTest(windows=windows):
+                output, calls = self.synthetic_native(windows=windows, release=False)
+                options = self.smoke_call(calls)
+                name = 'many-ai-cli.exe' if windows else 'many-ai-cli'
+                self.assertEqual(options['--binary'], str(output / name))
+                self.assertEqual(options['--binary-sha256'], ci.digest(output / name))
+                self.assertEqual(options['--target'], 'x86_64-pc-windows-msvc' if windows else 'x86_64-unknown-linux-gnu')
+                receipt = json.loads((output / 'BUILD-RECEIPT.json').read_text())
+                self.assertEqual(options['--expected-version'], receipt['version'])
+                self.assertEqual(options['--expected-commit'], receipt['build_commit'])
+                self.assertEqual(options['--expected-build-time'], receipt['build_time'])
+                self.assertEqual(receipt['runtime_smoke']['status'], 'passed')
+                self.assertEqual(receipt['runtime_smoke']['helper_exit_code'], 0)
+                self.assertEqual(options['--result'], str(output / ci.SMOKE_RESULT_NAME))
+
+    def test_release_build_runs_the_same_smoke_with_the_release_version(self):
+        output, calls = self.synthetic_native(release=True)
+        self.assertEqual(self.smoke_call(calls)['--expected-version'], '1.0.0')
+        self.assertEqual(json.loads((output / 'BUILD-RECEIPT.json').read_text())['runtime_smoke']['status'], 'passed')
+
+    def test_failed_smoke_keeps_the_receipt_and_fails_the_job(self):
+        output, _ = self.synthetic_native(release=False, smoke='failed')
+        receipt = json.loads((output / 'BUILD-RECEIPT.json').read_text())
+        self.assertEqual(receipt['runtime_smoke']['status'], 'failed')
+        self.assertEqual(receipt['runtime_smoke']['failure'], {'check': 'serve-start', 'code': 'serve_not_ready'})
+        self.assertEqual(receipt['runtime_smoke']['helper_exit_code'], 1)
+        self.assertTrue((output / 'NOT-FOR-CUTOVER.txt').exists())
+
+    def test_missing_smoke_result_is_a_failure_not_a_pass(self):
+        output, _ = self.synthetic_native(release=False, smoke='missing')
+        smoke = json.loads((output / 'BUILD-RECEIPT.json').read_text())['runtime_smoke']
+        self.assertEqual(smoke['status'], 'failed')
+        self.assertEqual(smoke['failure'], {'check': 'helper', 'code': 'result_missing_or_invalid'})
+
+    def test_smoke_summary_needs_both_a_passed_result_and_exit_zero(self):
+        with tempfile.TemporaryDirectory() as temp:
+            result = Path(temp) / 'smoke.json'
+            self.assertEqual(ci.smoke_summary(result, 0)['failure']['code'], 'result_missing_or_invalid')
+            self.assertEqual(ci.smoke_summary(result, 1, timed_out=True)['failure']['code'], 'helper_timed_out')
+            result.write_text('not json')
+            self.assertEqual(ci.smoke_summary(result, 0)['status'], 'failed')
+            result.write_text(json.dumps({'status': 'passed'}))
+            self.assertEqual(ci.smoke_summary(result, 0), {'status': 'passed', 'helper_exit_code': 0})
+            disagreement = ci.smoke_summary(result, 3)
+            self.assertEqual(disagreement['status'], 'failed')
+            self.assertEqual(disagreement['failure']['code'], 'result_and_exit_code_disagree')
+            result.write_text(json.dumps({'status': 'failed', 'failure': {'check': 'stop', 'code': 'x'}}))
+            self.assertEqual(ci.smoke_summary(result, 0)['status'], 'failed')
+            self.assertEqual(ci.smoke_summary(result, 0)['failure'], {'check': 'stop', 'code': 'x'})
+            result.write_text(json.dumps({'status': 'maybe'}))
+            self.assertEqual(ci.smoke_summary(result, 0)['failure']['code'], 'result_missing_or_invalid')
+
+    def test_run_timeout_kills_a_hung_command_and_records_it(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with patch.object(ci, 'ROOT', root), patch.object(ci, 'OUTPUT', root), patch.object(ci, 'STEPS', []):
+                started = time.monotonic()
+                code = ci.run([sys.executable, '-c', 'import time;print("started",flush=True);time.sleep(60)'],
+                              os.environ.copy(), root, check=False, timeout=1.5)
+                self.assertNotEqual(code, 0)
+                self.assertLess(time.monotonic() - started, 30)
+                self.assertTrue(ci.STEPS[0]['timed_out'])
+                self.assertIn('started', (root / ci.STEPS[0]['log']).read_text())
+                quick = ci.run([sys.executable, '-c', 'print("done")'], os.environ.copy(), root, timeout=30)
+                self.assertEqual(quick, 0)
+                self.assertNotIn('timed_out', ci.STEPS[1])
 
     def test_tag_move_during_preparation_blocks_all_cargo_commands(self):
         _, calls = self.synthetic_native(moved_tag=True)

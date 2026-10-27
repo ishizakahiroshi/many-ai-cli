@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "60b1513a80e8ecf5484cf6b7f8d79c5a33e35d43",
+    "commit": "03d9b89e268174e55e8dbabb5d98280c2b6ae15c",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2038,
-    "analyzed": 1579,
+    "discovered": 2040,
+    "analyzed": 1581,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 449,
@@ -21850,6 +21850,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/packaging/test_candidate_smoke.py",
+      "adapter": "python",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Runtime-smoke logic against a stand-in for the product's observable CLI contract."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/packaging/test_ci_checkout_eol.py",
       "adapter": "python",
       "status": "analyzed",
@@ -41805,6 +41834,35 @@
         "summary": {
           "state": "value",
           "value": "Clean native build-only receipts for #3. Never publishes/releases or installs candidates."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "scripts/rust-candidate-smoke.py",
+      "adapter": "python",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Runtime smoke of one native candidate: version -> serve -> status -> reuse -> stop."
         },
         "authentication": {
           "state": "not_configured"

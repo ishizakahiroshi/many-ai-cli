@@ -12,6 +12,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import threading
 import time
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,6 +25,11 @@ TARGETS = {
 WINDOWS_RUNTIME_NAMES = ('vcomp140.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
 PACKAGING_INPUTS = ('BUILD-INPUTS.json', 'CRATE-NOTICES.txt', 'build-inputs.spdx.json')
 PINNED_NODE_VERSION = 'v22.23.4'
+# The helper bounds every step itself (about 240 s in total plus cleanup); this outer
+# limit only stops a helper that has hung, well before the job's own 45 minutes.
+SMOKE_SCRIPT = 'scripts/rust-candidate-smoke.py'
+SMOKE_RESULT_NAME = 'RUNTIME-SMOKE.json'
+SMOKE_OUTER_TIMEOUT_SECONDS = 420
 
 
 def require_node_version(version: str) -> None:
@@ -235,9 +241,12 @@ STEPS: list[dict[str, object]] = []
 OUTPUT: Path | None = None
 
 def run(args: list[str], env: dict[str, str], cwd: Path = ROOT,
-        *, stdout_file: Path | None = None, check: bool = True) -> int:
-    """Retain command, exit and complete output, including failed validation."""
+        *, stdout_file: Path | None = None, check: bool = True, timeout: float | None = None) -> int:
+    """Retain command, exit and complete output, including failed validation.
+
+    `timeout` (streamed commands only) kills a command that hangs and records that."""
     assert OUTPUT is not None
+    assert timeout is None or stdout_file is None
     name = f"{len(STEPS) + 1:02d}-{Path(args[0]).stem}-{args[1] if len(args) > 1 else 'run'}"
     name = "".join(c if c.isalnum() or c in "-." else "-" for c in name)
     log = OUTPUT / f"{name}.log"
@@ -252,12 +261,24 @@ def run(args: list[str], env: dict[str, str], cwd: Path = ROOT,
                 process = subprocess.Popen(args, cwd=cwd, env=env,
                                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                 assert process.stdout is not None
-                for line in process.stdout:
-                    diagnostics.write(line)
-                    diagnostics.flush()
-                    sys.stdout.buffer.write(line)
-                    sys.stdout.buffer.flush()
-                code = process.wait()
+                timer = None
+                if timeout is not None:
+                    def expire() -> None:
+                        step["timed_out"] = True
+                        process.kill()
+                    timer = threading.Timer(timeout, expire)
+                    timer.daemon = True
+                    timer.start()
+                try:
+                    for line in process.stdout:
+                        diagnostics.write(line)
+                        diagnostics.flush()
+                        sys.stdout.buffer.write(line)
+                        sys.stdout.buffer.flush()
+                    code = process.wait()
+                finally:
+                    if timer is not None:
+                        timer.cancel()
                 process.stdout.close()
             else:
                 with stdout_file.open("wb") as output:
@@ -325,6 +346,24 @@ def windows_runtime_receipt(path: Path, source: str, *, binary: Path | None = No
 
 def host_from_verbose(version: str) -> str:
     return next((line.removeprefix("host: ") for line in version.splitlines() if line.startswith("host: ")), "")
+
+def smoke_summary(result: Path, exit_code: int, *, timed_out: bool = False) -> dict:
+    """Receipt entry for the runtime smoke. It passes only if the helper says so AND exited 0."""
+    record = None
+    try:
+        parsed = json.loads(result.read_text(encoding='utf-8'))
+        if isinstance(parsed, dict) and parsed.get('status') in ('passed', 'failed'):
+            record = parsed
+    except (OSError, ValueError):
+        pass
+    if record is None:
+        return {'schema_version': 1, 'status': 'failed', 'helper_exit_code': exit_code,
+                'failure': {'check': 'helper', 'code': 'helper_timed_out' if timed_out else 'result_missing_or_invalid'}}
+    record['helper_exit_code'] = exit_code
+    if (record['status'] == 'passed') != (exit_code == 0):
+        record['status'] = 'failed'
+        record['failure'] = record.get('failure') or {'check': 'helper', 'code': 'result_and_exit_code_disagree'}
+    return record
 
 def main() -> None:
     global OUTPUT
@@ -431,6 +470,18 @@ def main() -> None:
         runtime_receipt = confirmed
     if resources is not None:
         resources = verify_windows_resources(output, stamp['version'], resources)
+    # Start the release many-ai-cli that was just built, in an isolated throw-away
+    # runtime, and prove version -> status -> reuse -> stop. A failure is kept in the
+    # receipt and fails the job after the receipt and artifacts are written below.
+    main_name = 'many-ai-cli' + ('.exe' if 'windows' in args.target else '')
+    main_binary = next(entry for entry in binary_entries if entry['name'] == main_name)
+    smoke_path = output / SMOKE_RESULT_NAME
+    smoke_exit = run([sys.executable, SMOKE_SCRIPT, '--target', args.target,
+                      '--binary', str(output / main_binary['name']), '--binary-sha256', main_binary['sha256'],
+                      '--expected-version', stamp['version'], '--expected-commit', stamp['build_commit'],
+                      '--expected-build-time', stamp['build_time'], '--result', str(smoke_path)],
+                     env, check=False, timeout=SMOKE_OUTER_TIMEOUT_SECONDS)
+    runtime_smoke = smoke_summary(smoke_path, smoke_exit, timed_out=bool(STEPS and STEPS[-1].get('timed_out')))
     web_entries = [{"path": path.relative_to(ROOT / "web" / "dist").as_posix(), "sha256": digest(path)}
                    for path in sorted((ROOT / "web" / "dist").rglob("*")) if path.is_file()]
     notice_entries = []
@@ -470,7 +521,8 @@ def main() -> None:
         "packaging_inputs": packaging_inputs,
         "validation_steps": STEPS, "packaging_input_exit_code": packaging_exit,
         "launcher_ui_input_sha256": digest(ROOT / "rust" / "assets" / "launcher" / "ui" / "index.html"),
-        "receipt_scope": "native validation/build plus input hashes; linked runtime asset retention is not yet verified",
+        "runtime_smoke": runtime_smoke,
+        "receipt_scope": "native validation/build plus input hashes and a synthetic isolated start/status/reuse/stop smoke of many-ai-cli; linked runtime asset retention is not yet verified",
         "pending": ["binary-entrypoint-and-asset-retention", "full-application-behavior", "native-device-remote-acceptance", "signed-channel-packaging", "rollback-rehearsal", "user-cutover-approval"],
     }
     (output / "BUILD-RECEIPT.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
@@ -480,8 +532,14 @@ def main() -> None:
         (output / "NOT-FOR-CUTOVER.txt").write_text("WIP Rust migration candidate. Native compilation and synthetic tests are not full compatibility, signing, packaging, rollback or user acceptance. Do not replace an installed Go binary.\n", encoding="utf-8")
     print("CANDIDATE-BINARY-HASHES " + json.dumps({"source_sha": source, "target": args.target,
           "cargo_lock_sha256": receipt["cargo_lock_sha256"], "binaries": binary_entries}), flush=True)
+    incomplete = []
     if packaging_exit:
-        raise SystemExit("native binaries built; packaging input evidence is incomplete (see receipt)")
+        incomplete.append("packaging input evidence is incomplete")
+    if runtime_smoke['status'] != 'passed':
+        failure = runtime_smoke.get('failure') or {}
+        incomplete.append(f"runtime smoke failed at {failure.get('check', '?')}: {failure.get('code', '?')}")
+    if incomplete:
+        raise SystemExit("native binaries built; " + "; ".join(incomplete) + " (see receipt)")
     print(f"Native {stamp['build_kind']} receipt: {TARGETS[args.target]} / {source}", flush=True)
 
 if __name__ == "__main__":
