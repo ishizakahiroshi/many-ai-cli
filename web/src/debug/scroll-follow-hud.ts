@@ -1,6 +1,7 @@
 // scroll-follow-hud.ts — 一時観測専用。端末が最下部へ追従しない不具合の観測。
 //
-// 症状が出た瞬間をスクリーンショットで読めるよう、画面の隅に小さな表示を出す。
+// 症状が出た瞬間をスクリーンショットで読めるよう、画面の隅に小さな表示を出す
+// （既定は非表示。Ctrl+Alt+H で表示/非表示）。
 // DevTools もログファイルも使わない。保存・送信はせず、数値と分岐名だけを画面に出す
 // （端末の本文・パス・入力は読まない）。
 //
@@ -107,6 +108,10 @@ function render(el: HTMLElement): void {
   ].join('\n');
 }
 
+// 表示は既定で OFF。Ctrl+Alt+H で ON/OFF を切り替え、状態は localStorage に残す
+// （収集は常に動くので、ON にした瞬間から直近の分岐が読める）。
+const FLAG_KEY = 'mai.debugHud';
+
 function mount(): void {
   const el = document.createElement('div');
   el.id = 'mai-scroll-follow-hud';
@@ -116,8 +121,21 @@ function mount(): void {
     'background:rgba(0,0,0,.82)', 'color:#7CFC00',
     'font:11px/1.35 Consolas,monospace', 'white-space:pre', 'pointer-events:none',
   ].join(';');
+  const enabled = (): boolean => {
+    try { return localStorage.getItem(FLAG_KEY) === '1'; } catch { return false; }
+  };
+  const apply = (): void => {
+    el.style.display = enabled() ? '' : 'none';
+    if (enabled()) render(el);
+  };
   document.body.appendChild(el);
-  setInterval(() => render(el), 300);
+  apply();
+  setInterval(() => { if (enabled()) render(el); }, 300);
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey && e.altKey && !e.shiftKey && e.code === 'KeyH')) return;
+    try { localStorage.setItem(FLAG_KEY, enabled() ? '0' : '1'); } catch { /* observation only */ }
+    apply();
+  });
 }
 
 if (document.body) mount();
