@@ -1627,8 +1627,14 @@ impl crate::hub::websocket::RegistrationPreparation for HubRegistrationPreparati
     }
     fn prepare<'a>(&'a self) -> CoreFuture<'a, Result<(), SessionError>> {
         Box::pin(async move {
+            // 一時観測 rust-spawn-probe: 準備の内訳。呼び出し元（hub/websocket.rs）が
+            // 同じ pid のファイルに残す hub_prepare_begin / hub_prepared の間に入る。
+            crate::logging::spawn_probe::mark("hub_rules_registered_begin", None, None);
             self.rules.registered(&self.cancel).await;
+            crate::logging::spawn_probe::mark("hub_rules_registered", None, None);
+            crate::logging::spawn_probe::mark("hub_usage_registered_begin", None, None);
             self.usage.registered();
+            crate::logging::spawn_probe::mark("hub_usage_registered", None, None);
             Ok(())
         })
     }

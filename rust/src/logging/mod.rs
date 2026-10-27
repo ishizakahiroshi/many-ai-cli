@@ -79,6 +79,8 @@ pub(crate) mod spawn_probe {
     pub(crate) fn init(_: &Path) {}
     #[inline(always)]
     pub(crate) fn mark(_: &'static str, _: Option<u32>, _: Option<i64>) {}
+    #[inline(always)]
+    pub(crate) fn mark_provider(_: &'static str, _: Option<u32>, _: Option<i64>, _: &str) {}
 }
 
 use crate::{

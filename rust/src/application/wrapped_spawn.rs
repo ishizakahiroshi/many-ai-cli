@@ -561,7 +561,12 @@ async fn lifecycle(
                 "wrapper startup closed",
             ));
         }
-        crate::logging::spawn_probe::mark("hub_native_spawn_begin", None, None);
+        crate::logging::spawn_probe::mark_provider(
+            "hub_native_spawn_begin",
+            None,
+            None,
+            &spec.provider,
+        );
         let owner = WrapperStartup::spawn(
             entry.attempt,
             &prepared.process,
