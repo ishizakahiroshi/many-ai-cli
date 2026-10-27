@@ -294,6 +294,10 @@ class SmokeTests(unittest.TestCase):
         record = self.attempt(never_ready=True, ignore_terminate=True, stop_does_not_end_hub=True)
         self.assertEqual(record['failure'], {'check': 'serve-start', 'code': 'serve_not_ready'})
         self.assertGreater(record['checks'][3]['detail']['status_polls'], 10)
+        # This fake Hub is up (ledger written, port open) but `status` never says running: the
+        # failure report must show that, as opposed to the stand-in below that never comes up.
+        self.assertIs(record['checks'][3]['detail']['ledger_present'], True)
+        self.assertIs(record['checks'][3]['detail']['port_listening'], True)
         self.assertLess(record['total_seconds'], smoke.START_SECONDS + 60)
         self.assertEqual(self.product.signals, ['terminate', 'kill'])
         self.assertTrue(record['cleanup']['graceful_stop_attempted'])
@@ -559,10 +563,14 @@ class RealProcessTests(unittest.TestCase):
 # stop.rs): version/status/stop commands, a ledger file, a loopback server that wants the
 # token, and a `stop` that decides the Hub is gone with kill(pid, 0) like the real one.
 STAND_IN = r"""
-import hashlib, http.client, http.server, json, os, secrets, sys, threading, time, urllib.parse
+import hashlib, http.client, http.server, json, os, secrets, socket, socketserver, sys, threading, time, urllib.parse
 
 VERSION, COMMIT, BUILD_TIME = '__VERSION__', '__COMMIT__', '__BUILD_TIME__'
 IGNORE_SHUTDOWN, HANG_START, EXIT_CODE = __IGNORE_SHUTDOWN__, __HANG_START__, __EXIT_CODE__
+BLOCK_LOOKUP = __BLOCK_LOOKUP__
+if BLOCK_LOOKUP:
+    # A host whose reverse lookup does not come back in time (seen on macOS CI runners).
+    socket.getfqdn = socket.gethostbyaddr = socket.getnameinfo = lambda *ignored: time.sleep(BLOCK_LOOKUP)
 args = sys.argv[1:]
 assert args[0] == '--trial-root' and args[2] == '--trial-port', args
 root, port, tail = args[1], int(args[3]), args[4:]
@@ -573,6 +581,22 @@ config = os.path.join(root, 'config.yaml')
 def log(level, message, detail=''):
     sys.stderr.write(f'time=2026-10-27T00:00:00+00:00 level={level} msg="{message}" detail="{detail}"\n')
     sys.stderr.flush()
+
+
+def trace(step):
+    # No level= field, so the receipt's per-level counts ignore it; a failed start shows it in
+    # stderr_tail, which tells where a stand-in that never came up was stuck.
+    sys.stderr.write('stand-in: ' + step + '\n')
+    sys.stderr.flush()
+
+
+class Server(http.server.ThreadingHTTPServer):
+    def server_bind(self):
+        # HTTPServer.server_bind also calls socket.getfqdn(host), a reverse lookup the stand-in has
+        # no use for. It can block for longer than the start window on a macOS runner (before the
+        # ledger is written and before anything is logged), so bind the socket and nothing else.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 def token():
@@ -623,7 +647,9 @@ def running():
 
 
 def serve():
+    trace('serve entered')
     secret = token()
+    trace('token ready')
     if HANG_START:
         time.sleep(600)
     me = os.path.realpath(sys.argv[0])
@@ -664,7 +690,9 @@ def serve():
             if not IGNORE_SHUTDOWN:
                 threading.Thread(target=server.shutdown, daemon=True).start()
 
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', port), Handler)
+    trace('binding')
+    server = Server(('127.0.0.1', port), Handler)
+    trace('bound')
     with open(ledger, 'w') as handle:
         json.dump({'version': 1, 'pid': os.getpid(), 'port': port, 'started_at': '2026-10-27T00:00:00Z'}, handle)
     log('INFO', 'MANY-AI-CLI started', 'pid=%d port=%d' % (os.getpid(), port))
@@ -691,7 +719,7 @@ elif tail == ['stop']:
         request('POST', '/api/shutdown', token())
     except OSError:
         pass
-    deadline = time.time() + 2
+    deadline = time.time() + 5  # the product waits 5 s for the Hub to go (stop.rs)
     while time.time() < deadline:
         if not alive(pid):
             os.remove(ledger)
@@ -714,10 +742,12 @@ class StandInProcessTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.parent = Path(self.temp.name)
 
-    def attempt(self, *, ignore_shutdown=False, hang_start=False, exit_code=0, start_seconds=20.0):
+    def attempt(self, *, ignore_shutdown=False, hang_start=False, exit_code=0, start_seconds=20.0,
+                block_lookup=False):
         text = (STAND_IN.replace('__VERSION__', VERSION).replace('__COMMIT__', COMMIT)
                 .replace('__BUILD_TIME__', BUILD_TIME).replace('__IGNORE_SHUTDOWN__', repr(ignore_shutdown))
-                .replace('__HANG_START__', repr(hang_start)).replace('__EXIT_CODE__', repr(exit_code)))
+                .replace('__HANG_START__', repr(hang_start)).replace('__EXIT_CODE__', repr(exit_code))
+                .replace('__BLOCK_LOOKUP__', repr(600 if block_lookup else 0)))
         binary = self.parent / 'many-ai-cli'
         binary.write_text(f'#!{sys.executable}\n' + text, encoding='utf-8')
         os.chmod(binary, 0o755)
@@ -751,6 +781,15 @@ class StandInProcessTests(unittest.TestCase):
         self.assertIsNone(re.search(r'[0-9a-f]{64}', shipped))  # nothing token-shaped
         self.assertEqual([p.name for p in self.parent.iterdir()], ['many-ai-cli'])
 
+    def test_stand_in_comes_up_on_a_host_whose_reverse_lookup_never_returns(self):
+        # macOS runners failed `serve-start` (serve_not_ready, empty stderr, no ledger) because
+        # http.server's HTTPServer.server_bind calls socket.getfqdn() before the stand-in writes its
+        # ledger. The stand-in must not depend on a reverse lookup, whatever the host's resolver does.
+        record = self.attempt(block_lookup=True)
+        self.assertEqual(record['failure'], None, record)
+        self.assertEqual(record['status'], 'passed')
+        self.assertLess(record['total_seconds'], 15)
+
     def test_hub_that_ignores_the_shutdown_request_is_found_and_terminated(self):
         record = self.attempt(ignore_shutdown=True)
         self.assertEqual(record['failure'], {'check': 'stop', 'code': 'stop_exit_nonzero'})
@@ -763,6 +802,9 @@ class StandInProcessTests(unittest.TestCase):
     def test_hub_that_never_binds_times_out_and_is_terminated(self):
         record = self.attempt(hang_start=True, start_seconds=3.0)
         self.assertEqual(record['failure'], {'check': 'serve-start', 'code': 'serve_not_ready'})
+        detail = next(c['detail'] for c in record['checks'] if c['id'] == 'serve-start')
+        self.assertEqual((detail['ledger_present'], detail['port_listening']), (False, False))
+        self.assertIn('stand-in: token ready', detail['stderr_tail'])
         self.assertTrue(record['cleanup']['hub_stopped'])
         self.assertTrue(record['cleanup']['forced_termination'])
         self.assertTrue(record['cleanup']['root_removed'])

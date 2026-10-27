@@ -475,6 +475,12 @@ class Smoke:
         except OSError:
             return ""
 
+    def _port_listening(self) -> bool | None:
+        try:
+            return bool(self.port_open(self.port))
+        except OSError:
+            return None
+
     def _check(self, name: str, function: Callable[[], dict | None]) -> None:
         if self.failure is not None:
             return
@@ -564,6 +570,10 @@ class Smoke:
                 raise SmokeFailure("serve_not_ready", {
                     "status_polls": polls, "status_timeouts": timeouts,
                     "last_status_exit": last.code, "last_status_stderr": self._tail(last.stderr),
+                    # Tells "never came up" from "came up, but `status` does not see it" (for
+                    # example a ledger written somewhere `status` does not look).
+                    "ledger_present": (self.root / "state" / "hub-runtime.json").exists(),
+                    "port_listening": self._port_listening(),
                     "stderr_tail": self._serve_tail()})
             self.clock.sleep(POLL_SECONDS)
 
