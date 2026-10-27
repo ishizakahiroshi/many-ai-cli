@@ -57,6 +57,7 @@
 | `/review` | Review code changes. | Ask Copilot to inspect the current diff. |
 | `/rewind` | Rewind session state. | Return to an earlier point in the conversation. |
 | `/rubber-duck` | Get an independent critique of your current work. | When you want a rubber-duck style review from another agent. |
+| `/sandbox` | Manage sandbox settings, including file path and network permissions. | When tightening or relaxing what Copilot can access. |
 | `/search` | Search. | Find context or content from the CLI. |
 | `/security-review` | Analyze pending changes for security issues. | Scan the current diff for vulnerabilities. |
 | `/session` | Show session details. | Inspect current session metadata. |

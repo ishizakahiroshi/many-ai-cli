@@ -3,11 +3,13 @@
 | Command | Purpose | When to use it |
 |---|---|---|
 | `/agent` | Switch the active agent thread. | Inspect or continue work in a spawned subagent thread. |
+| `/agents` | Open the agent command center. | When managing agent threads. |
 | `/app` | Continue the current session in the ChatGPT desktop app. | When you want to keep the same session in the desktop app. |
 | `/approve` | Approve one retry of a recent auto-review denial. | Retry an action that the automatic reviewer denied. |
 | `/apps` | Browse apps and insert them into your prompt. | Attach an app before asking Codex to use it. |
 | `/archive` | Archive the current session and exit Codex. | Preserve a session and free the workspace before starting another. |
 | `/btw` | Start an ephemeral side conversation. | Ask focused follow-ups without disrupting the main thread. |
+| `/cd` | Change the session's working directory. | When you want to switch directories without restarting. |
 | `/clear` | Clear the terminal and start a fresh chat. | Reset the UI and conversation together. |
 | `/compact` | Summarize the visible conversation to free tokens. | After long runs, to retain key points while reclaiming context. |
 | `/copy` | Copy the latest completed Codex output. | Grab finished responses without manual selection. |
@@ -16,6 +18,7 @@
 | `/diff` | Show the Git diff including untracked files. | Review edits before committing or testing. |
 | `/exit` | Exit the CLI. | Leave the session immediately. |
 | `/experimental` | Toggle experimental features. | Enable optional features such as subagents. |
+| `/export` | Export the conversation as Markdown. | When you want to save the conversation to a file. |
 | `/fast` | Toggle the Fast service tier. | Turn the current model's Fast tier on or off. |
 | `/feedback` | Send logs to Codex maintainers. | Report issues or share diagnostics. |
 | `/fork` | Fork the current conversation into a new thread. | Branch the session to explore alternatives. |
@@ -39,8 +42,10 @@
 | `/plan` | Switch to plan mode and optionally send a prompt. | Request an execution plan before implementation work. |
 | `/plugins` | Browse installed and discoverable plugins. | Inspect tools, install suggested plugins, or manage availability. |
 | `/ps` | Show background terminals and their status. | Check long-running commands without leaving the transcript. |
+| `/pwd` | Show the working directory. | When you need to confirm where Codex is working. |
 | `/quit` | Exit the CLI. | Leave the session immediately. |
 | `/raw` | Toggle raw scrollback mode. | Make terminal selection and copying more direct. |
+| `/recap` | Generate a summary of the current conversation. | When you want a quick reminder of where you left off. |
 | `/rename` | Rename the current task. | Give a session a memorable label. |
 | `/resume` | Resume a saved conversation from the session list. | Continue work from a previous CLI session. |
 | `/review` | Ask Codex to review your working tree. | Run after completion or for a second opinion on changes. |
@@ -56,3 +61,5 @@
 | `/title` | Configure terminal window or tab title fields interactively. | When choosing title items for the current terminal. |
 | `/usage` | View account token usage and rate-limit reset. | Inspect quota consumption between tasks. |
 | `/vim` | Toggle Vim mode for the composer. | Switch between Vim and default editing behavior. |
+| `/warnings` | View retained warnings and diagnostics. | When troubleshooting a session. |
+| `/worktree` | Start or continue a chat in a managed Git worktree. | When working on a branch in isolation. |

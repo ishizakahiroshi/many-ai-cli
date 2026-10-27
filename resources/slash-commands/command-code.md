@@ -27,6 +27,7 @@
 | `/ide` | Connect your IDE to share the open file and selected lines. | When you want the agent to see what you have open in the editor. |
 | `/import` | Import setup such as skills, agents, commands, MCP, and memory from another coding agent. | When migrating your configuration from another coding agent. |
 | `/init` | Initialize AGENTS.md for this project. | When setting up project guidance for Command Code to follow. |
+| `/learn` | Open the Command Code learn hub in your browser. | When you want to learn through guided courses. |
 | `/learn-taste` | Learn your taste from sessions with other coding agents. | When you want Command Code to pick up your style from past work in another tool. |
 | `/login` | Log in to Command Code. | When authenticating your account in a new environment. |
 | `/logout` | Log out of Command Code. | When you want to remove the current authentication from this environment. |
@@ -41,6 +42,7 @@
 | `/plans` | Browse, review, and annotate saved plans. | When managing plans saved across sessions. |
 | `/pr-comments` | Fetch all PR comments for the current branch. | When you want the agent to see reviewer feedback on your PR. |
 | `/quit` | Exit Command Code. | When you are done working and want to leave the session. |
+| `/rc` | Remote-control this session from Telegram or Discord. | When you want to steer the session away from the terminal. |
 | `/reload` | Restart Command Code and resume this session. | When applying a staged update without losing your session. |
 | `/rename` | Rename the current session. | When you want a memorable label for the session. |
 | `/resume` | Resume a past conversation. | When you want to continue work from an earlier session. |

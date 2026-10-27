@@ -4,7 +4,7 @@
 |---|---|---|
 | `/add-dir` | Add a working directory for file access. | When Claude needs files from an external directory. |
 | `/advisor` | Toggle secondary-model advisor guidance. | When you want a second-opinion advisor on the current turn. |
-| `/agents` | Manage subagent configurations. | When delegating tasks to background agents. |
+| `/agents` | Show how to create or manage subagents. | When you want to set up subagents. |
 | `/artifacts` | List and manage artifacts you own or that are shared with you. | Review or organize artifacts created during sessions. |
 | `/auto-mode-setup` | Draft autoMode.environment entries from your project. | Set up automatic environment detection for autonomous runs. |
 | `/autocompact` | Set how full context gets before auto-compacting. | When managing long conversations that risk overflow. |
@@ -17,6 +17,7 @@
 | `/cd` | Change the session's working directory. | When you want to switch cwd without restarting the session. |
 | `/chrome` | Configure Claude in Chrome settings. | When managing the Chrome extension integration. |
 | `/claude-api` | Load Claude API reference material or migrate API code. | When building with or upgrading Claude API code. |
+| `/claude-in-chrome` | Have Claude carry out a task in your browser. | When testing a page, filling a form, or reading console logs. |
 | `/clear` | Clear conversation history. | Start a clean thread without leaving the session. |
 | `/code-review` | Review the current diff for bugs and cleanups. | Before shipping code or when you want quality feedback. |
 | `/color` | Set the prompt bar color for the current session. | When you want visual differentiation between sessions. |
@@ -30,7 +31,7 @@
 | `/deep-research` | Fan out web searches and synthesize a cited report. | When researching complex topics that need verification. |
 | `/design` | Draft UI mockups and screen flows as artboards. | Sketch a UI design before implementation. |
 | `/design-login` | Authorize access to design-system assets. | When enabling design system export from a design tool. |
-| `/design-sync` | Convert a design system into React components. | When importing a design system into a React codebase. |
+| `/design-sync` | Convert your React design system and upload it to Claude Design. | When you want designs built from your real components. |
 | `/desktop` | Continue the current session in the Desktop app. | When switching from CLI to desktop. |
 | `/diff` | Open an interactive diff viewer of uncommitted changes. | When reviewing what code changed during a session. |
 | `/doctor` | Run environment diagnostics. | Troubleshoot local setup and runtime issues. |
@@ -41,13 +42,13 @@
 | `/feedback` | Submit feedback or report a bug to Anthropic. | When reporting issues or sharing feedback. |
 | `/fewer-permission-prompts` | Add an allowlist for common read-only calls. | When you are tired of permission prompts for safe operations. |
 | `/focus` | Toggle the focus view showing only the last prompt and response. | When you want a cleaner interface. |
-| `/fork` | Spawn a forked subagent from the current conversation. | When you want an independent thread from the same context. |
+| `/fork` | Copy the conversation into a new background session. | When you want a parallel session from the same context. |
 | `/goal` | Set a completion condition and auto-continue turns until it is met. | Let Claude keep working toward a stated goal; /goal clear cancels. |
 | `/heapdump` | Write a JavaScript heap snapshot for diagnosing memory usage. | When Claude Code is using too much memory. |
 | `/help` | Show help. | Check available commands and usage. |
 | `/hooks` | View and manage hook configurations for tool events. | When managing automation and tool permissions. |
 | `/ide` | Manage IDE integrations and show status. | When configuring VS Code or JetBrains integration. |
-| `/import` | Bring configuration over from Codex or Gemini CLI. | When migrating from another coding agent. |
+| `/import` | Bring configuration over from Codex, Gemini CLI, or Cursor. | When migrating from another coding agent. |
 | `/init` | Initialize CLAUDE.md guidance. | Bootstrap project instructions for Claude Code. |
 | `/insights` | Generate a report analyzing your Claude Code sessions. | When reviewing usage patterns and friction points. |
 | `/install-github-app` | Set up the Claude GitHub Actions app. | When enabling Claude in your GitHub workflow. |
@@ -73,6 +74,7 @@
 | `/privacy-settings` | View and update your privacy settings. | When managing data and telemetry preferences. |
 | `/quiet` | Suppress notifications and reduce output verbosity. | When you want a minimal, focused interface. |
 | `/radio` | Open Claude FM lo-fi radio in your browser. | When you want background music while coding. |
+| `/rate-limit-options` | Show ways to keep working when a usage limit blocks a request. | When a claude.ai usage limit stops your work. |
 | `/recap` | Generate a one-line summary of the current session. | When you want a quick reminder of session context. |
 | `/release-notes` | View the changelog in an interactive version picker. | When checking what's new in Claude Code. |
 | `/reload-plugins` | Reload all active plugins to apply pending changes. | When you have modified plugin code during a session. |
@@ -81,7 +83,7 @@
 | `/remote-env` | Configure the default remote environment for web sessions. | When setting up default tools for cloud sessions. |
 | `/rename` | Rename the current session. | When you want a memorable label in the session picker. |
 | `/resume` | Resume a prior conversation. | Continue work from an earlier thread. |
-| `/review` | Review a pull request locally. | When analyzing code changes in a PR. |
+| `/review` | Review the current diff or a pull request, same as code-review. | Before shipping code or when you want quality feedback. |
 | `/rewind` | Rewind the conversation and code to a previous point. | When you want to undo changes and conversation. |
 | `/run` | Launch and drive your project's app to see a change working. | When testing changes in a running application. |
 | `/run-skill-generator` | Teach /run and /verify how to build and launch your project. | When setting up automated build and launch recipes. |
@@ -98,6 +100,7 @@
 | `/simplify` | Review code for cleanup and apply fixes. | When optimizing code without hunting for bugs. |
 | `/skill-doctor` | Show a skill and plugin usage report: cost, tokens, uses, and unused plugins. | Audit which skills and plugins are actually being used. |
 | `/skills` | List available skills. | When discovering what skills are available. |
+| `/slides` | Make a presentation as a Claude Slides artifact from a brief. | When you want a slide deck drafted quickly. |
 | `/stats` | Show usage statistics on the Stats tab. | When viewing usage statistics. |
 | `/status` | Show current status. | Inspect account, connectivity, and runtime state. |
 | `/statusline` | Configure Claude Code's status line display. | When customizing the status bar. |
@@ -110,10 +113,14 @@
 | `/theme` | Set the display theme. | Switch between light, dark, or other color themes. |
 | `/thinking` | Toggle extended thinking. | When you want the model to think longer before responding. |
 | `/uninstall` | Remove installed skills, plugins, or MCP servers. | When cleaning up unused extensions. |
+| `/update-config` | Change settings.json by describing the change. | When allowing a command, setting an env var, or adding a hook. |
 | `/upgrade` | Open the upgrade page. | When switching to a higher plan tier. |
 | `/usage` | Show usage statistics. | Review limits and ongoing usage trends. |
+| `/usage-credits` | Configure usage credits or request them from your admin. | When you hit a usage limit and want to keep working. |
 | `/verify` | Confirm a code change by building and running the app. | When validating changes work in the running application. |
 | `/version` | Show Claude Code version. | Confirm which CLI version is installed. |
 | `/web` | Use web browsing and search capabilities. | When researching or fetching online content. |
+| `/web-setup` | Connect GitHub to cloud sessions using your local gh credentials. | Before using cloud sessions. |
 | `/why` | Explain the reasoning behind recent actions. | When you want the decision-making made explicit. |
+| `/workflows` | Open the workflow progress view. | When watching, pausing, or resuming dynamic workflows. |
 | `/worktrees` | Manage git worktrees for parallel branches. | When juggling multiple branches without switching cwd. |
