@@ -2,26 +2,7 @@
 //! storage component; callers supply the live log configuration explicitly.
 mod diagnostic;
 pub(crate) use diagnostic::write_diagnostic;
-// 一時観測 rust-input-probe（instrumentation.json）。debug ビルドだけ本体を組み込み、
-// それ以外は何もしない空実装にする。撤去するときはこの 2 つの塊と、`input_probe::` の
-// 呼び出し点（main_program/context.rs・terminal/session/input.rs・wrapper/runtime.rs・
-// wrapper/input.rs）を消す。
-#[cfg(debug_assertions)]
-pub(crate) mod input_probe;
-#[cfg(not(debug_assertions))]
-pub(crate) mod input_probe {
-    use crate::proto::core::InputAuthority;
-    use std::path::Path;
-    #[inline(always)]
-    pub(crate) fn init(_: &Path) {}
-    #[inline(always)]
-    pub(crate) fn hub_input(_: i64, _: i64, _: &InputAuthority, _: &[u8]) {}
-    #[inline(always)]
-    pub(crate) fn wrapper_receive(_: i64, _: i64, _: bool, _: &[u8]) {}
-    #[inline(always)]
-    pub(crate) fn wrapper_write(_: &str, _: &[u8]) {}
-}
-// 一時観測 rust-branch-probe（instrumentation.json）。input_probe と同じく debug ビルドだけ
+// 一時観測 rust-branch-probe（instrumentation.json）。debug ビルドだけ
 // 本体を組み込み、それ以外は何もしない空実装にする。撤去するときはこの 2 つの塊と、
 // `branch_probe::` の呼び出し点（main_program/context.rs・files/branch.rs・
 // session_workers/branch_refresh.rs・terminal/session/lifecycle.rs・terminal/session/branch.rs）を消す。

@@ -327,11 +327,7 @@ where
             let result = if duplicate {
                 Ok(())
             } else if frame.attach {
-                let result = write_all(input_pty.as_ref(), &frame.data).await;
-                if result.is_ok() {
-                    crate::logging::input_probe::wrapper_write(&provider, &frame.data);
-                }
-                result
+                write_all(input_pty.as_ref(), &frame.data).await
             } else {
                 write_input(input_pty.as_ref(), &provider, &frame.data).await
             };
@@ -525,12 +521,6 @@ where
             }
             Event::Frame(Ok(frame)) => match frame.r#type.as_str() {
                 "pty_input" if !frame.data.is_empty() => {
-                    crate::logging::input_probe::wrapper_receive(
-                        session_id,
-                        frame.input_seq,
-                        false,
-                        &frame.data,
-                    );
                     marks
                         .lock()
                         .map_err(|_| poison())?
@@ -549,12 +539,6 @@ where
                     }
                 }
                 "attach_file" if !frame.inject.is_empty() => {
-                    crate::logging::input_probe::wrapper_receive(
-                        session_id,
-                        0,
-                        true,
-                        frame.inject.as_bytes(),
-                    );
                     if input_tx
                         .try_send(InputFrame {
                             seq: 0,
