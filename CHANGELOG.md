@@ -10,7 +10,28 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [1.0.0]
+
+This release replaces the Go implementation of many-ai-cli with a Rust one.
+
+- **Same commands, same places for your data.** The command names, settings and
+  data locations are unchanged: the configuration stays in
+  `~/.many-ai-cli/config.yaml` and your data under `~/.many-ai-cli/`. Updating
+  carries over your settings and conversations.
+- **Going back.** Before updating, copy `~/.many-ai-cli/`. To return to the Go
+  version, reinstall v0.9.0 and write the copy back. Steps:
+  [Upgrading to 1.0 (Rust)](README.md#upgrading-to-10-rust).
+- **No official Docker image.** Official Docker images, container builds and
+  automatic updates are not part of v1.0.0, and automatic image publishing is
+  stopped (see `deploy/docker/README.md`). Use the Linux binary instead.
+- **Known limitations.** None confirmed so far; slow startup is still being
+  investigated. (To be finalized before release.)
+
 ### Fixed
+- The ↑ up / ↓ down buttons that jump to the start or the end of a full-screen
+  (alternate-screen) CLI's history no longer stop partway. They now send four
+  scroll steps at a time instead of waiting for each step to be confirmed on
+  screen, and treat the edge as reached once the visible text stops changing.
 - Updated Tokio to 1.53.3 and the Web Push P-256 dependency to 0.14.0,
   including crypto-bigint 0.7.8 and ctutils 0.4.5 security fixes. Unix PTY I/O
   now explicitly registers its owned file descriptor under Tokio's lifetime
@@ -70,6 +91,15 @@ Release artifacts are published at
   blames a terminal redraw.
 
 ### Added
+- **The slash-command lists gained 22 commands and 5 refreshed descriptions.**
+  New in Claude Code: `/claude-in-chrome`, `/rate-limit-options`, `/slides`,
+  `/update-config`, `/usage-credits`, `/web-setup` and `/workflows`. New in
+  Codex: `/agents`, `/cd`, `/export`, `/pwd`, `/recap`, `/warnings` and
+  `/worktree`. New in OpenCode: `/copy`, `/fork`, `/rename`, `/timeline` and
+  `/update`. New in Command Code: `/learn` and `/rc`. New in Copilot:
+  `/sandbox`. The Claude Code descriptions of `/agents`, `/design-sync`,
+  `/fork`, `/import` and `/review` were updated
+  (`resources/slash-commands/`).
 - Foreground Hub startup displays its logo, build version, actual runtime and
   connection instructions in an interactive terminal. Background launches and
   redirected output do not receive the authentication URL. npm update guidance
@@ -265,8 +295,13 @@ Release artifacts are published at
   Linux binaries and SSH remote operation remain in the v1.0.0 release scope.
 - **Development moved to the Rust version.** The `develop` branch now carries the
   Rust implementation as the main line. The Go sources moved to `go/` unchanged
-  and are no longer built or tested; `make build` builds the Rust binaries. The
-  released packages remain the Go v0.9.x line until the Rust release.
+  and are no longer built or tested; `make build` builds the Rust binaries.
+  Releases up to v0.9.0 were built from the Go version; v1.0.0 is the first
+  release built from the Rust version.
+- The first screen shown while no session is open (both the getting-started
+  guide and the guide shown when no AI CLI is found) now has the app icon above
+  its heading, and the getting-started title spells the product name as
+  MANY-AI-CLI in English, Japanese and Vietnamese.
 - On Windows, session cards count changed files and lines again only after a
   file in the repository changes (2 seconds after the first change), and at
   least once a minute in case a change notification was lost. Counts are no
