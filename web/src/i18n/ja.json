@@ -130,7 +130,7 @@
   "remove_paste": "ペーストを削除",
   "no_sessions": "セッションなし",
   "zero_session_kicker": "はじめに",
-  "zero_session_title": "many-ai-cli の使い方",
+  "zero_session_title": "MANY-AI-CLI の使い方",
   "zero_session_intro": "セッションを 1 本起動すると、この画面が進行と承認待ちの見張り台になります。使い方は 4 ステップです。",
   "zero_session_install_title": "CLI をインストールする",
   "zero_session_install_body": "many-ai-cli は AI 本体ではありません。Claude Code や Codex など、使いたい AI の公式ターミナル CLI を先にインストールしてください。下の一覧で、この PC で見つかったものに ✓ が付きます。",

@@ -130,7 +130,7 @@
   "remove_paste": "Remove paste",
   "no_sessions": "No sessions",
   "zero_session_kicker": "Getting started",
-  "zero_session_title": "How many-ai-cli works",
+  "zero_session_title": "How MANY-AI-CLI works",
   "zero_session_intro": "Start one session and this screen becomes your watchtower for progress and approval requests. It takes four steps.",
   "zero_session_install_title": "Install a CLI",
   "zero_session_install_body": "many-ai-cli is not an AI itself. First install the official terminal CLI for the AI you want to use, such as Claude Code or Codex. The list below marks the ones already found on this PC with a check mark.",

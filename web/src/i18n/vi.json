@@ -130,7 +130,7 @@
   "remove_paste": "Xóa đoạn dán",
   "no_sessions": "Không có session",
   "zero_session_kicker": "Bắt đầu",
-  "zero_session_title": "Cách many-ai-cli hoạt động",
+  "zero_session_title": "Cách MANY-AI-CLI hoạt động",
   "zero_session_intro": "Khởi động một session và màn hình này trở thành đài quan sát tiến độ và yêu cầu phê duyệt. Chỉ bốn bước.",
   "zero_session_install_title": "Cài đặt CLI",
   "zero_session_install_body": "many-ai-cli không phải là AI. Hãy cài CLI terminal chính thức của AI bạn muốn dùng trước, ví dụ Claude Code hoặc Codex. Danh sách bên dưới sẽ đánh dấu ✓ cho những gì đã tìm thấy trên máy này.",
