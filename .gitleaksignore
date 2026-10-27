@@ -32,3 +32,7 @@ a02223c622345e44c6da8cbcc4e2e9da1b225ded:rust/tests/fixtures/core/journal/mask_o
 4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf:docs/bot/rust-recovery-resume/G1-CI-41e4b8.json:generic-api-key:702
 # G1 macOS Intel CI receipt: verified public source commit identity.
 4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf:docs/bot/rust-recovery-resume/G1-CI-41e4b8.json:generic-api-key:990
+
+# Recovery validation receipt: the value is a 40-hex git blob id under
+# unchanged_scan_input_blobs (key = .github/workflows/secret-scan.yml), not a credential.
+2ef6d3c8aa366bf86162cbf205598030f6750961:docs/bot/rust-recovery-resume/VALIDATION-4dc961ce.json:generic-api-key:1413
