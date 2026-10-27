@@ -1,6 +1,7 @@
 #terminal-area-wrapper { position: relative; }
 #zero-session-empty-state { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; padding: clamp(20px, 5vw, 56px); background: var(--bg); overflow: auto; }
 .zero-session-card { width: min(680px, 100%); text-align: center; }
+.zero-session-icon { display: block; width: 64px; height: 64px; margin: 0 auto 14px; border-radius: var(--radius-md); object-fit: contain; }
 .zero-session-kicker { color: var(--accent); font-size: var(--fs-sm); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .zero-session-card h1 { margin: 10px 0 8px; color: var(--text); font-size: clamp(1.45rem, 3vw, 2rem); }
 .zero-session-intro { margin: 0 auto 26px; max-width: 560px; color: var(--muted); line-height: 1.65; }

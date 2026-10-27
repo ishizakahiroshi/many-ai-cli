@@ -70,6 +70,7 @@ function renderUsageGuide(unsorted: CliInstallStatus[] | null): void {
   const collapsible = !!statuses?.length;
   root.innerHTML = `
     <section class="zero-session-card${collapsible ? ' has-status is-steps-collapsed' : ''}" aria-labelledby="zero-session-title">
+      <img class="zero-session-icon" src="/icon.svg" alt="">
       <div class="zero-session-kicker">${t('zero_session_kicker')}</div>
       <h1 id="zero-session-title">${t('zero_session_title')}</h1>
       <p class="zero-session-intro">${t('zero_session_intro')}</p>
@@ -142,6 +143,7 @@ function renderMissingGuide(entries: CliInstallStatus[]): void {
   root.className = 'zero-session';
   root.innerHTML = `
     <section class="zero-session-card" aria-labelledby="zero-session-title">
+      <img class="zero-session-icon" src="/icon.svg" alt="">
       <div class="zero-session-kicker">${t('zero_session_missing_kicker')}</div>
       <h1 id="zero-session-title">${t('zero_session_missing_title')}</h1>
       <p class="zero-session-intro">${t('zero_session_missing_intro')}</p>
