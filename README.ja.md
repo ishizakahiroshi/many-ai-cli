@@ -18,20 +18,6 @@ https://github.com/user-attachments/assets/5b330094-9609-40ec-b059-c3dae964684f
 <details>
 <summary>承認操作のデモを見る</summary>
 
-https://github.com/user-attachments/assets/5b330094-9609-40ec-b059-c3dae964684f
-
-*20 秒でわかる many-ai-cli · 日本語・音楽あり · 画面はデモ用の再現です。*
-
-<details>
-<summary>動画のクレジット</summary>
-
-音楽: [Happy Beats & Business Moves Vol. 1](https://ende.app/en/song/12866-happy-beats-business-moves-vol-1) — Sascha Ende、[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。20 秒への短縮、音量調整、フェード、効果音の追加を行っています。効果音: Kenney、CC0。制作: [brag](https://github.com/latent-spaces/brag) / Hyperframes。
-
-</details>
-
-<details>
-<summary>承認操作のデモを見る</summary>
-
 ![many-ai-cli デモ: 指揮者 AI が子 AI を 2 本立ち上げていいか聞き、承認すると子が動き、1 本が質問で止まり、1 クリックで答えると 2 本とも完了報告を出す](https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/assets/demo-approval.gif)
 
 </details>
