@@ -14,7 +14,7 @@
 .session-list-tab-stopped { flex-shrink: 0; min-width: 15px; padding: 0 2px; border-radius: var(--radius-sm); color: var(--badge-standby-text, #cbd5e1); border: 1px solid color-mix(in srgb, var(--badge-standby-text, #cbd5e1) 70%, transparent); font-size: 10px; line-height: 11px; text-align: center; }
 /* The same mark on the session card: its standby dot turns yellow until the session is opened, then goes
    back to the standby gray from styles.css (this file loads later). Yellow, not the approval amber (--warn). */
-.card-state-pill.stopped-unseen { color: var(--yellow); }
+.card-state-pill.stopped-unseen { color: var(--state-stop); }
 #session-list-tab-add { flex: 0 0 32px; width: var(--ui-control-size, var(--ui-control-regular))    ; cursor: pointer; }
 #session-list-tab-add svg { width: 21px; height: 21px; vertical-align: middle; }
 .session-list-tab:focus-visible, #session-list-tab-add:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
