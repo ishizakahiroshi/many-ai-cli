@@ -46,6 +46,8 @@ Music: [Happy Beats & Business Moves Vol. 1](https://ende.app/en/song/12866-happ
 
 When you run several AI coding CLIs in parallel across multiple terminals, it's easy to lose track of which session has stopped — so you end up checking the terminals over and over. `many-ai-cli` wraps each CLI in a PTY and notifies your desktop or phone the moment it detects an approval prompt, a finished task, or an error. It also lets you handle approvals and monitor progress from a single browser-based Hub UI. The CLI itself works exactly as before; `many-ai-cli` only adds notifications and an approval GUI on top.
 
+> **Updating from v0.9.0?** v1.0.0 replaces the program inside the release: the executables are now built from Rust (`rust/`) instead of Go. The command names, the settings file (`~/.many-ai-cli/config.yaml`) and the data folder (`~/.many-ai-cli/`) are unchanged. See [Upgrading to 1.0 (Rust)](#upgrading-to-10-rust).
+
 **This role survives the shift toward automatic approvals.** As permission models like Claude Code's auto mode — which only stops for irreversible or destructive actions — become the norm, approval prompts get rarer. They do not disappear: sessions run silently for much longer and then stop just once. When you are running several in parallel, that occasional stop is the easier one to miss. Approval models also differ per CLI and are not being automated in lockstep, so running multiple vendors side by side still needs one place that collects their state. `many-ai-cli` is not a tool for pressing approval buttons on your behalf; it is a tool for **detecting that something has stopped and telling you**.
 
 ```
@@ -297,13 +299,13 @@ If `command`'s executable is not on PATH, the session ends the same way a missin
 
 ## Requirements
 
-Rust, Bun, and Go below are development tools; users of prebuilt packages do not need them.
+Rust and Bun below are only needed to build from source, and Go only for a few historical compatibility tests; users of prebuilt packages do not need any of them.
 
 | Item | Requirement |
 |---|---|
-| Rust | 1.90.0, including Cargo (source builds) |
+| Rust | 1.90.0, including Cargo (source builds; pinned in `rust/rust-toolchain.toml`) |
 | Bun | 1.3.14 (generate and check the Web UI before Cargo) |
-| Go | 1.26.8 for compatibility generators and synthetic validation fixtures; the frozen Go application is not built |
+| Go | Optional. 1.26.8, only for the historical compatibility tests and fixture tooling that expect a pinned Go. Not needed to build or run `many-ai-cli`; the frozen Go application under `go/` is never built |
 | OS | Windows 10/11, macOS, Linux |
 | Browser | Chrome / Edge / Firefox / Safari |
 | AI CLI | Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI, opencode, Command Code (install the providers you intend to use separately) |
@@ -367,8 +369,8 @@ Once installed → [Getting started](#getting-started-right-after-install).
 Download the package from [GitHub Releases](https://github.com/ishizakahiroshi/many-ai-cli/releases/latest), then:
 
 ```bash
-sudo dpkg -i many-ai-cli_<version>_amd64.deb && many-ai-cli setup   # Debian / Ubuntu
-sudo rpm -i many-ai-cli-<version>.x86_64.rpm && many-ai-cli setup   # RHEL family
+sudo dpkg -i many-ai-cli-<version>-linux-x64.deb && many-ai-cli setup   # Debian / Ubuntu
+sudo rpm -i many-ai-cli-<version>-1.x86_64.rpm && many-ai-cli setup   # RHEL family
 ```
 
 Once installed → [Getting started](#getting-started-right-after-install).
@@ -384,7 +386,7 @@ Get the latest release from [GitHub Releases](https://github.com/ishizakahiroshi
 | macOS (Apple Silicon) | `many-ai-cli-<version>-macos-apple-silicon.zip` |
 | Linux (x64) | `many-ai-cli-<version>-linux-x64.zip` |
 
-Extract the zip and place the binary somewhere on your `PATH`.
+Extract the zip. It contains `many-ai-cli` and `many-ai-cli-launcher`; place them somewhere on your `PATH`.
 
 > Settings and logs are stored in `~/.many-ai-cli/` (created on first run).
 > Session logs contain user input and AI output. Treat them as sensitive data.
@@ -460,6 +462,35 @@ cosign verify-blob \
 ```bash
 sha256sum -c SHA256SUMS.txt
 ```
+
+---
+
+## Upgrading to 1.0 (Rust)
+
+v1.0.0 replaces the program inside the release: the executables (`many-ai-cli` and `many-ai-cli-launcher`) are now built from Rust (`rust/`) instead of Go. The command names, the settings file (`~/.many-ai-cli/config.yaml`) and the data folder (`~/.many-ai-cli/`) are the same, so updating keeps your existing settings and conversations. The current public release before it is v0.9.0 (the Go version).
+
+**Update**
+
+1. Choose a moment when no AI work is in progress, then stop the running Hub with `many-ai-cli stop` (or the `⏻` button in Settings → Hub, or the tray's **"Hub を停止"**). See [Shutdown, zombie protection & Hub crash resilience](#shutdown-zombie-protection--hub-crash-resilience) for what stopping does to running sessions.
+2. Copy your data first (see **Back up before updating** below).
+3. Install v1.0.0 the same way you installed before; the commands are in [Quick Download](#quick-download). For an npm install, that is `pnpm add -g many-ai-cli@<version>`, as described in [Getting started](#getting-started-right-after-install).
+4. On Windows, run `many-ai-cli setup` again from the new version so the shortcuts point at the new executable ([Getting started](#getting-started-right-after-install)).
+5. Start the Hub again (the desktop shortcut, or `many-ai-cli serve --open`). A Hub that was left running keeps the old version even after the files are replaced; in that case the dashboard shows a banner saying the Hub is running an OLD build. Run `many-ai-cli stop`, then start it again.
+
+**Back up before updating**
+
+With the Hub stopped, copy the whole `~/.many-ai-cli/` folder (Windows: `%USERPROFILE%\.many-ai-cli\`), subfolders included, to a safe place. Data written by the Rust version may not be readable by v0.9.0, so this copy is what lets you go back. The copy contains your Hub token, the sign-in state of any subscription profiles (`subscriptions/`) and session logs; treat it as sensitive.
+
+**Going back to v0.9.0**
+
+1. Stop the Hub (`many-ai-cli stop`).
+2. Install v0.9.0 again from its [GitHub Releases page](https://github.com/ishizakahiroshi/many-ai-cli/releases/tag/v0.9.0), or through the same package manager at that version (for npm: `pnpm add -g many-ai-cli@0.9.0`).
+3. Replace `~/.many-ai-cli/` with the copy you made before updating. Do not leave data that the Rust version has already written next to v0.9.0.
+4. Start the Hub again.
+
+### Known limitations
+
+(To be finalized before release)
 
 ---
 
@@ -665,7 +696,7 @@ The launcher does not change the Hub's security model:
 - Passwords and key passphrases are never saved; key-based authentication is required (`-o BatchMode=yes`)
 - The token retrieved by `token_command` is used only for the current session and is not written to `launcher-profiles.yaml`
 
-For the full profile schema, see the `Profile` struct in [internal/launcher/profile.go](internal/launcher/profile.go); the connection flow is in [internal/launcher/connect.go](internal/launcher/connect.go).
+For the full profile schema, see the `Profile` struct in [rust/src/launcher/profile.rs](rust/src/launcher/profile.rs); the connection flow is in [rust/src/launcher/connector.rs](rust/src/launcher/connector.rs).
 
 #### If Windows blocks the launcher: remote-server access without local `.exe`
 
@@ -684,7 +715,7 @@ Launching from a terminal (via `CreateProcess`) does not go through Explorer's r
 - **Hub 🖥 Server button** — run `many-ai-cli serve` (or just start the Hub), open the dashboard, and click **🖥 Server** in the header. Manage connection profiles and connect/disconnect there; a successful connection opens the target Hub in a new tab. The SSH/WSL child process is held by the Hub itself, so no extra console window stays open.
 - **`many-ai-cli connect`** — `many-ai-cli connect --profile <name>` (or `--last`) runs the same connection flow as the launcher straight from the terminal.
 
-If you still hit a SmartScreen *dialog* (not an actual virus detection), clear the Mark-of-the-Web first: run `unblock-windows.cmd` from the extracted folder, or `Unblock-File` the binaries in PowerShell. Note this only dismisses the reputation prompt — if Microsoft Defender actually quarantines the binary (Go binaries are sometimes false-positives), code signing / an exclusion / a false-positive report is needed instead. Installing via a package manager avoids the Mark-of-the-Web entirely (the binary is built locally).
+If you still hit a SmartScreen *dialog* (not an actual virus detection), clear the Mark-of-the-Web first: run `unblock-windows.cmd` from the extracted folder, or `Unblock-File` the binaries in PowerShell. Note this only dismisses the reputation prompt — if Microsoft Defender actually quarantines the binary (unsigned executables are sometimes flagged falsely), code signing / an exclusion / a false-positive report is needed instead. Installing via a package manager avoids the browser-download step that normally adds the Mark-of-the-Web.
 
 **What is saved where**
 
@@ -1261,7 +1292,7 @@ voice:
     language: "ja"          # ja / en / auto, etc.
     timeout_seconds: 60
 
-log:                        # hub.log rotation (lumberjack)
+log:                        # hub.log rotation (size-based)
   enabled: true
   max_size_mb: 10           # max size per file
   max_backups: 3            # number of rotated files to keep
@@ -1378,11 +1409,13 @@ AI CLI (claude / codex / copilot / cursor-agent / opencode / grok / command-code
     └──────┬──────┘
            │ WebSocket
     ┌──────▼──────┐
-    │ Browser UI  │  xterm.js / Vanilla JS
+    │ Browser UI  │  xterm.js / TypeScript
     └─────────────┘
 ```
 
 The Hub server acts as a relay between PTY sessions and the browser UI. Each AI CLI runs inside a PTY wrapper that forwards I/O over WebSocket to the Hub, which in turn serves the browser UI.
+
+The Hub, the PTY wrapper and the launcher are Rust (`rust/`, built into the `many-ai-cli` and `many-ai-cli-launcher` executables). The browser UI is TypeScript built from `web/` and embedded into the executable at build time. The frozen Go sources remain under `go/` and are not built.
 
 ---
 
@@ -1392,7 +1425,7 @@ The Hub server acts as a relay between PTY sessions and the browser UI. Each AI 
 
 | Type | Path | Content |
 |---|---|---|
-| Hub log | `~/.many-ai-cli/logs/hub.log` | Hub server runtime logs (rotated by lumberjack; configured via the `log:` section). Independent of session logging |
+| Hub log | `~/.many-ai-cli/logs/hub.log` | Hub server runtime logs (rotated by size; configured via the `log:` section). Independent of session logging |
 | Session raw log | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.log` | Raw PTY stream for each wrapped session (includes ANSI sequences) |
 | Session history | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.jsonl` | Structured session events (`session_start`, `user_input`, `pty_output`, `attach`, `session_end`, `session_dismiss`) |
 | Clean transcript | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.txt` | Human-readable text (ANSI / spinners / control bytes stripped). Generated automatically on session end; any sessions missed due to a Hub crash are reconstructed at the next `serve` startup |
@@ -1436,7 +1469,7 @@ Session-log attachment is **off by default**. It runs only after you explicitly 
 
 If you installed Claude Code, Codex CLI, or another wrapped CLI via a package manager, the Hub may fail to spawn it with the session card flipping to `Disconnected` within a second and a 0-byte raw log. The card now also shows a short reason such as `reason: codex not found in PATH`.
 
-The Hub inherits the `PATH` snapshot of the shell that launched it. If that shell did not have `PNPM_HOME` exported, the persistent `%PNPM_HOME%\bin` entry in your USER `Path` is not expanded by Windows at process start and the pnpm bin directory effectively drops out — so `exec.LookPath("<provider>")` inside the wrap subprocess fails.
+The Hub inherits the `PATH` snapshot of the shell that launched it. If that shell did not have `PNPM_HOME` exported, the persistent `%PNPM_HOME%\bin` entry in your USER `Path` is not expanded by Windows at process start and the pnpm bin directory effectively drops out — so the lookup of `<provider>` on `PATH` inside the wrap subprocess fails.
 
 **To recover:**
 
@@ -1444,7 +1477,7 @@ The Hub inherits the `PATH` snapshot of the shell that launched it. If that shel
 2. Open an interactive PowerShell where `$env:PNPM_HOME` resolves correctly (verify with `$env:PATH -split ';' | Select-String pnpm`).
 3. From that shell, run `many-ai-cli claude`, `many-ai-cli codex`, `many-ai-cli copilot`, `many-ai-cli cursor-agent`, or `many-ai-cli grok` — the Hub will be re-spawned with the fresh `PATH` snapshot.
 
-Hub diagnostics for each spawn are written to `~/.many-ai-cli/logs/spawn/<provider>-<timestamp>.log` and include the resolved `PATH`, detected package managers, and an explicit hint when `executable file not found` is the underlying cause.
+The output of each spawned wrapper process is appended to `~/.many-ai-cli/logs/spawn/<provider>-<timestamp>.log`.
 
 > **v0.2.0 and later:** The Hub re-expands `%VAR%`-style entries in the inherited USER `Path` just before spawning a wrap process (reading `HKCU\Environment` and falling back to `%LOCALAPPDATA%\pnpm` when the directory exists), so this manual restart is normally no longer needed. The recovery procedure above remains as a fallback when the fix cannot resolve the variable.
 
@@ -1608,10 +1641,11 @@ The only supported configuration is localhost reachability, as described above. 
 
 ## Build from Source
 
-The `develop` mainline builds the Rust application. Use Rust 1.90.0, Bun 1.3.14,
-and your platform's native compiler/linker for Cargo's native dependencies.
-Go 1.26.8 is used for compatibility generators and synthetic validation fixtures,
-not to build the frozen application under `go/`.
+The `develop` mainline builds the Rust application. Use Rust 1.90.0 (pinned in
+`rust/rust-toolchain.toml`), Bun 1.3.14, and your platform's native compiler/linker
+for Cargo's native dependencies. Go is not needed: the frozen application under
+`go/` is not built, and Go 1.26.8 is only for the historical compatibility tests
+and fixture tooling that expect a pinned Go.
 
 Run from the repository root (the same commands work in PowerShell 7):
 
@@ -1629,6 +1663,10 @@ cargo +1.90.0 build --locked --manifest-path rust/Cargo.toml --bins
 ```
 
 Both executables are written under `rust/target/debug/`, with `.exe` on Windows.
+For an optimized build, add `--release` to the `cargo` command; the executables are
+then written under `rust/target/release/`. `make build` and `make build-release`
+(see the `Makefile`) run the Web build followed by the same `cargo` command, without
+the `bun run check` type check.
 The launcher UI comes from `rust/assets/launcher/ui/index.html`; product resources
 are no longer read from the frozen Go source tree. An ordinary source build is
 not a signed release or installation/update acceptance. The [Rust packaging
@@ -1646,7 +1684,7 @@ Rust mainline; see the [release procedure](docs/manual_release.md).
 
 ---
 
-## Remote server / Docker deployment (auto-update)
+## Remote server / Docker deployment
 
 > **v1.0.0 support scope:** Official Docker images, container builds and automatic updates are unsupported. The current container build has a known failure. Automatic image publishing has stopped, and the former GHCR images were deleted on 2026-10-25 because they bundled a Node.js release affected by CVE-2026-111497; the recipes are retained as historical references, with no active publishing or update guarantee. Linux binaries and SSH remote operation remain in the v1.0.0 release scope. See the [Docker support policy](deploy/docker/README.md).
 
@@ -1666,7 +1704,7 @@ The following build, compose and cron examples describe the former Docker setup.
 
 Container assets remain under [`deploy/docker/`](deploy/docker/) (one user = one container; the Hub is published on `127.0.0.1` only and is meant to be reached through an SSH tunnel or similar). The former setup started from [`deploy/docker/users/example.yaml`](deploy/docker/users/example.yaml), copied it to `users/<user>.yaml`, and replaced the example user name and port before adding it to `compose.yaml`.
 
-The former GitHub Actions publisher built images after successful validation of `main` / `develop` pushes. Automatic publishing has stopped, and [`docker-image.yml`](.github/workflows/docker-image.yml) is being replaced with a manual informational notice. The GHCR package was deleted on 2026-10-25, so these former tag names can no longer be pulled:
+The former GitHub Actions publisher built images after successful validation of `main` / `develop` pushes. Automatic publishing has stopped, and [`docker-image.yml`](.github/workflows/docker-image.yml) is now a manual, notice-only workflow (no image build, login or push). The GHCR package was deleted on 2026-10-25, so these former tag names can no longer be pulled:
 
 ```
 ghcr.io/ishizakahiroshi/many-ai-cli:latest      # historical main tag
@@ -1739,33 +1777,34 @@ The retained input-pin checks are static protection; passing them does not estab
 
 ## Uninstall
 
-Since `many-ai-cli` is a single binary you download and run directly (no installer), uninstalling is done by running the binary with the `uninstall` subcommand from wherever you placed it.
+`many-ai-cli` ships as two executables (`many-ai-cli` and `many-ai-cli-launcher`) with no installer of its own. If you placed the executable yourself (the zip download), uninstall by running it with the `uninstall` subcommand from wherever you placed it. If you installed through a package manager, also remove the package with that package manager.
 
 **Windows** — run from the folder containing `many-ai-cli.exe`:
 
 ```powershell
 .\many-ai-cli.exe uninstall          # removes settings and logs (~/.many-ai-cli/)
-.\many-ai-cli.exe uninstall --purge  # also removes the binary itself
+.\many-ai-cli.exe uninstall --purge  # also removes the many-ai-cli executable itself
 ```
 
 **macOS / Linux / WSL** — run from the folder containing `many-ai-cli`:
 
 ```bash
 ./many-ai-cli uninstall          # removes settings and logs (~/.many-ai-cli/)
-./many-ai-cli uninstall --purge  # also removes the binary itself
+./many-ai-cli uninstall --purge  # also removes the many-ai-cli executable itself
 ```
 
 You will be shown exactly what will be deleted and asked to confirm before anything is removed.
 
 | Option | What is removed |
 |---|---|
-| (none) | `~/.many-ai-cli/` (config, logs, attachments). The binary path is printed — delete it manually. |
-| `--purge` | Everything above, plus the binary itself. |
+| (none) | `~/.many-ai-cli/` (config, logs, attachments) and, on Windows, the sign-in entry in the Startup folder. The executable's path is printed — delete it manually. |
+| `--purge` | Everything above, plus the `many-ai-cli` executable itself. |
 
 **Manual removal** — if you prefer to delete files by hand:
 
 1. Delete `~/.many-ai-cli/` (Windows: `%USERPROFILE%\.many-ai-cli\`)
-2. Delete the binary (`many-ai-cli.exe` / `many-ai-cli`)
+2. Delete the executables (`many-ai-cli.exe` / `many-ai-cli`, and `many-ai-cli-launcher.exe` / `many-ai-cli-launcher`)
+3. Delete the shortcuts that `setup` created (Windows: the desktop and Startup-folder "MANY-AI-CLI"; macOS / Linux: "Many AI Hub Start" and "Many AI Hub Stop")
 
 > **Browser data is not cleared.** `uninstall` cannot reach your browser's storage. Most settings (theme, language, font size, favorites, quick commands, etc.) live server-side under `~/.many-ai-cli/` and are removed, but per-browser display state kept in `localStorage` (files-tree expansion, pane layout, scrollback size) remains. To clear it, open the tab where the Hub was running, press `F12`, and run `localStorage.clear()` in the console.
 

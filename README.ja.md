@@ -46,6 +46,8 @@ https://github.com/user-attachments/assets/5b330094-9609-40ec-b059-c3dae964684f
 
 複数のターミナルで AI コーディング CLI を並列実行していると、どのセッションが止まっているか気づけず、ターミナルを何度も見にいくことになります。`many-ai-cli` は各 CLI を PTY でラップし、承認待ち・タスク完了・エラーを検出した瞬間にデスクトップ／スマホへ通知します。さらにブラウザの Hub UI で承認操作・進捗監視を一元的に行えます。CLI 本体の機能はそのままで、通知と承認 GUI を追加する設計です。
 
+> **v0.9.0 から更新する場合:** v1.0.0 では配布物の中身が Go 版から Rust 版（`rust/`）に替わります。コマンド名、設定ファイル（`~/.many-ai-cli/config.yaml`）、データの置き場（`~/.many-ai-cli/`）は変わりません。手順は「[1.0（Rust 版）への更新](#10rust-版への更新)」を参照してください。
+
 **承認の自動化が進んでも、この役割は残ります。** Claude Code の auto mode のように危険な操作だけを止める方式が広がると、承認プロンプトの頻度は下がります。ただし止まらなくなるわけではなく、セッションが長く黙って走ったあとに突然 1 回だけ止まる形に変わります。並列運用では、この「たまに止まる」ほうが気づきにくくなります。加えて承認モデルは CLI ごとに異なり、同時に自動化されるわけでもないため、複数ベンダーを並べて使うなら状態を 1 か所へ集める層が必要になります。`many-ai-cli` は承認ボタンを代行する道具ではなく、**止まっている事実を検知して届ける**道具として設計しています。
 
 ```
@@ -257,13 +259,13 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 
 ## 動作要件
 
-下の Rust・Bun・Go は開発用ツールです。配布済みパッケージを使うだけなら不要です。
+下の Rust と Bun はソースからビルドするときだけ、Go は過去の互換性テストの一部だけで必要です。配布済みパッケージを使うだけなら、どれも不要です。
 
 | 項目 | 要件 |
 |---|---|
-| Rust | 1.90.0、Cargo を含む（ソースビルド時） |
+| Rust | 1.90.0、Cargo を含む（ソースビルド時。`rust/rust-toolchain.toml` で固定） |
 | Bun | 1.3.14（Cargo より先に Web UI を生成・検査する） |
-| Go | 1.26.8（互換データ生成・合成検証 fixture 用。凍結した Go アプリはビルドしない） |
+| Go | 任意。1.26.8（固定した Go を前提とする過去の互換性テストと fixture 用ツールだけで使う）。many-ai-cli のビルドにも実行にも不要。`go/` に凍結した Go アプリはビルドしない |
 | OS | Windows 10/11、macOS、Linux |
 | ブラウザ | Chrome / Edge / Firefox / Safari |
 | AI CLI | Claude Code、Codex CLI、GitHub Copilot CLI、Cursor Agent CLI、Grok Build CLI、opencode、Command Code（使う provider は別途インストール済みであること） |
@@ -328,8 +330,8 @@ brew install --cask ishizakahiroshi/tap/many-ai-cli && many-ai-cli setup
 リリースページからパッケージをダウンロードして:
 
 ```bash
-sudo dpkg -i many-ai-cli_<version>_amd64.deb && many-ai-cli setup   # Debian / Ubuntu
-sudo rpm -i many-ai-cli-<version>.x86_64.rpm && many-ai-cli setup   # RHEL 系
+sudo dpkg -i many-ai-cli-<version>-linux-x64.deb && many-ai-cli setup   # Debian / Ubuntu
+sudo rpm -i many-ai-cli-<version>-1.x86_64.rpm && many-ai-cli setup   # RHEL 系
 ```
 
 インストールできたら → 「[はじめる](#はじめるインストール直後にやること)」へ。
@@ -344,6 +346,8 @@ sudo rpm -i many-ai-cli-<version>.x86_64.rpm && many-ai-cli setup   # RHEL 系
 | macOS (Intel) | `many-ai-cli-<version>-macos-intel.zip` |
 | macOS (Apple Silicon) | `many-ai-cli-<version>-macos-apple-silicon.zip` |
 | Linux (x64) | `many-ai-cli-<version>-linux-x64.zip` |
+
+zip を展開し、中の `many-ai-cli` と `many-ai-cli-launcher` を `PATH` の通った場所に置きます。
 
 > 設定・ログは `~/.many-ai-cli/`（初回起動時に作成）に保存されます。
 > セッションログにはユーザー入力・AI 出力が保存されます。機密情報として扱ってください。
@@ -408,6 +412,35 @@ cosign verify-blob \
 ```bash
 sha256sum -c SHA256SUMS.txt
 ```
+
+---
+
+## 1.0（Rust 版）への更新
+
+v1.0.0 では、配布物の中身が Go 版から Rust 版に替わります。実行ファイル（`many-ai-cli` と `many-ai-cli-launcher`）は Go ではなく Rust（`rust/`）からビルドされます。コマンド名、設定ファイル（`~/.many-ai-cli/config.yaml`）、データの置き場（`~/.many-ai-cli/`）は同じなので、更新すれば既存の設定と会話を引き継ぎます。これより前の現在の公開版は v0.9.0（Go 版）です。
+
+**更新の手順**
+
+1. 進行中の AI 作業がないときを選び、動いている Hub を `many-ai-cli stop`（または設定 → Hub の `⏻` ボタン、トレイの **「Hub を停止」**）で止めます。停止が実行中のセッションにどう効くかは「[シャットダウン・ゾンビセッション対策・Hub クラッシュ耐性](#シャットダウンゾンビセッション対策hub-クラッシュ耐性)」を参照してください。
+2. 先にデータをコピーします（下の「**更新前のコピー**」）。
+3. これまでと同じ方法で v1.0.0 を入れます。コマンドは「[クイックダウンロード](#クイックダウンロード)」にあります。npm で入れている場合は、「[はじめる](#はじめるインストール直後にやること)」にあるとおり `pnpm add -g many-ai-cli@<version>` です。
+4. Windows では、新しい版から `many-ai-cli setup` をもう一度実行し、ショートカットが新しい実行ファイルを指すようにします（「[はじめる](#はじめるインストール直後にやること)」）。
+5. Hub をもう一度起動します（デスクトップのショートカット、または `many-ai-cli serve --open`）。動いたままの Hub は、ファイルを入れ替えても古い版のままです。その場合、ダッシュボードに「この Hub は古いビルドで動いています」という警告帯が出ます。`many-ai-cli stop` で止めてから起動し直してください。
+
+**更新前のコピー**
+
+Hub を止めた状態で、`~/.many-ai-cli/` フォルダ（Windows: `%USERPROFILE%\.many-ai-cli\`）をサブフォルダごとまるごと、安全な場所へコピーします。Rust 版が書き込んだデータを v0.9.0 が読めるとは限らないため、戻すときはこのコピーが頼りになります。コピーには Hub の token、サブスクリプション profile（`subscriptions/`）のログイン状態、セッションログが入ります。機密情報として扱ってください。
+
+**v0.9.0 へ戻す手順**
+
+1. Hub を止めます（`many-ai-cli stop`）。
+2. v0.9.0 の [GitHub Releases ページ](https://github.com/ishizakahiroshi/many-ai-cli/releases/tag/v0.9.0) から入れ直します。パッケージマネージャで入れていた場合は、同じパッケージマネージャでその版を指定します（npm なら `pnpm add -g many-ai-cli@0.9.0`）。
+3. `~/.many-ai-cli/` を、更新前に作ったコピーで置き換えます。Rust 版がすでに書き込んだデータを、v0.9.0 のまま残さないでください。
+4. Hub をもう一度起動します。
+
+### 既知の制限
+
+（リリース前に確定）
 
 ---
 
@@ -614,7 +647,7 @@ many-ai-cli-launcher.exe --ui             # 常に選択画面を表示
 - パスワード・鍵のパスフレーズは保存しません。鍵認証が必要です（`-o BatchMode=yes` で対話を禁止）
 - `token_command` で取得したトークンは現在のセッション中のみ使用し、`launcher-profiles.yaml` には書き込みません
 
-プロファイルの全フィールドは [internal/launcher/profile.go](internal/launcher/profile.go) の `Profile` 構造体、接続フローは [internal/launcher/connect.go](internal/launcher/connect.go) を参照してください。
+プロファイルの全フィールドは [rust/src/launcher/profile.rs](rust/src/launcher/profile.rs) の `Profile` 構造体、接続フローは [rust/src/launcher/connector.rs](rust/src/launcher/connector.rs) を参照してください。
 
 #### Windows がランチャーをブロックする場合: ローカル `.exe` なしでリモートサーバーに接続
 
@@ -632,7 +665,7 @@ Windows SmartScreen や会社 PC のポリシーで `many-ai-cli-launcher.exe` �
 - **Hub の 🖥 Server ボタン** — `many-ai-cli serve`（または通常どおり Hub 起動）後、ダッシュボードのヘッダーにある **🖥 Server** をクリック。プロファイル一覧の接続/切断/追加ができ、接続成功で対象 Hub が新しいタブで開きます。SSH/WSL の子プロセスは Hub 自身が抱えるため、余分なコンソール窓は残りません。
 - **`many-ai-cli connect`** — `many-ai-cli connect --profile <名前>`（または `--last`）で、ランチャーと同じ接続フローをターミナルから直接実行します。
 
-それでも SmartScreen の*ダイアログ*（実ウイルス検知ではない）が出る場合は、まず Mark-of-the-Web を解除してください。展開フォルダの `unblock-windows.cmd` を実行するか、PowerShell の `Unblock-File` でバイナリを解除します。これは評価ダイアログを消すだけで、Microsoft Defender が実際に隔離した場合（Go バイナリは誤検知され得る）は署名・除外設定・誤検知報告が別途必要です。パッケージマネージャ経由で導入すればバイナリはローカル生成のため Mark-of-the-Web 自体が付きません。
+それでも SmartScreen の*ダイアログ*（実ウイルス検知ではない）が出る場合は、まず Mark-of-the-Web を解除してください。展開フォルダの `unblock-windows.cmd` を実行するか、PowerShell の `Unblock-File` でバイナリを解除します。これは評価ダイアログを消すだけで、Microsoft Defender が実際に隔離した場合（未署名の実行ファイルは誤検知され得る）は署名・除外設定・誤検知報告が別途必要です。パッケージマネージャ経由で導入すれば、Mark-of-the-Web が付く原因になるブラウザでのダウンロードを省けます。
 
 **どの設定がどこに保存されるか**
 
@@ -1192,7 +1225,7 @@ voice:
     language: "ja"          # ja / en / auto など
     timeout_seconds: 60
 
-log:                        # hub.log のローテーション設定（lumberjack）
+log:                        # hub.log のローテーション設定（サイズ基準）
   enabled: true
   max_size_mb: 10           # 1 ファイルの上限サイズ
   max_backups: 3            # 保持するローテーション後ファイル数
@@ -1309,11 +1342,13 @@ AI CLI (claude / codex / copilot / cursor-agent / opencode / grok / command-code
     └──────┬──────┘
            │ WebSocket
     ┌──────▼──────┐
-    │ Browser UI  │  xterm.js / Vanilla JS
+    │ Browser UI  │  xterm.js / TypeScript
     └─────────────┘
 ```
 
 Hub サーバは PTY セッションとブラウザ UI の間のリレーとして動作します。各 AI CLI は PTY ラッパー内で動作し、入出力を WebSocket で Hub へ転送します。Hub はそれを受けてブラウザ UI を配信します。
+
+Hub・PTY ラッパー・ランチャーは Rust（`rust/`）で、実行ファイル `many-ai-cli` と `many-ai-cli-launcher` にビルドされます。ブラウザ UI は `web/` の TypeScript をビルドし、ビルド時に実行ファイルへ同梱します。凍結した Go のソースは `go/` に残してあり、ビルドしません。
 
 ---
 
@@ -1323,7 +1358,7 @@ Hub サーバは PTY セッションとブラウザ UI の間のリレーとし�
 
 | 種類 | パス | 内容 |
 |---|---|---|
-| Hub ログ | `~/.many-ai-cli/logs/hub.log` | Hub サーバの動作ログ（lumberjack でローテーション。設定は `log:` セクション参照）。セッションログとは独立 |
+| Hub ログ | `~/.many-ai-cli/logs/hub.log` | Hub サーバの動作ログ（サイズ基準でローテーション。設定は `log:` セクション参照）。セッションログとは独立 |
 | セッション生ログ | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.log` | 各 wrap セッションの PTY 生ログ（ANSI 含む） |
 | セッション履歴 | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.jsonl` | セッションイベント履歴（`session_start` / `user_input` / `pty_output` / `attach` / `session_end` / `session_dismiss`） |
 | クリーン transcript | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.txt` | 人間が読めるテキスト版（ANSI / スピナー / 制御コードを除去）。セッション終了時に自動生成。Hub クラッシュ等で生成漏れがあった場合は次回 `serve` 起動時に補完される |
@@ -1367,7 +1402,7 @@ many-ai-cli issue --provider codex --dry-run
 
 `pnpm add -g` などのパッケージマネージャで Claude Code / Codex CLI / その他 wrap 対象 CLI を入れている場合、Hub UI からの spawn 直後にカードが `切断` 表示になり、PTY 生ログが 0 バイトのままになることがあります。カードには `理由: codex が PATH に見つかりません` のような短い理由表示も付きます。
 
-Hub は起動時に親シェルの `PATH` スナップショットを継承します。Hub を立ち上げたシェルで `PNPM_HOME` が export されていなかった場合、永続 USER `Path` に書かれた `%PNPM_HOME%\bin` を Windows がプロセス起動時に展開できず、pnpm bin が PATH から事実上脱落します。これにより wrap サブプロセス内の `exec.LookPath("<provider>")` が失敗します。
+Hub は起動時に親シェルの `PATH` スナップショットを継承します。Hub を立ち上げたシェルで `PNPM_HOME` が export されていなかった場合、永続 USER `Path` に書かれた `%PNPM_HOME%\bin` を Windows がプロセス起動時に展開できず、pnpm bin が PATH から事実上脱落します。これにより wrap サブプロセス内で `<provider>` を `PATH` から探す処理が失敗します。
 
 **回復手順:**
 
@@ -1375,7 +1410,7 @@ Hub は起動時に親シェルの `PATH` スナップショットを継承し�
 2. `$env:PNPM_HOME` が解決される対話 PowerShell を開く（`$env:PATH -split ';' | Select-String pnpm` で確認）
 3. その PowerShell から `many-ai-cli claude` / `many-ai-cli codex` / `many-ai-cli copilot` / `many-ai-cli cursor-agent` / `many-ai-cli grok` のいずれかを実行 — Hub が新しい PATH スナップショットで再生成されます
 
-各 spawn の診断情報は `~/.many-ai-cli/logs/spawn/<provider>-<timestamp>.log` に出力されます（解決後の PATH エントリ数・検出されたパッケージマネージャ一覧・`executable file not found` 検知時の対処ヒントを含む）。
+spawn した wrapper プロセスの出力は、`~/.many-ai-cli/logs/spawn/<provider>-<timestamp>.log` に追記されます。
 
 > **v0.2.0 以降:** Hub は spawn 直前に USER `Path` の `%VAR%` 形式エントリを再展開します（`HKCU\Environment` を読み、`%LOCALAPPDATA%\pnpm` が実在する場合はそれを fallback として埋める）。通常はこの手動再起動は不要ですが、再展開でも解決できなかった場合の保険として上記手順を残しています。
 
@@ -1539,9 +1574,10 @@ Hub UI には「ログフォルダを OS のファイルマネージャで開く
 
 ## ソースからビルド
 
-`develop` の本線は Rust 版です。Rust 1.90.0、Bun 1.3.14 と、Cargo の native
-依存に必要な各 OS のコンパイラ・リンカーを用意します。Go 1.26.8 は互換データ生成と
-合成検証 fixture 用で、`go/` に凍結したアプリをビルドするためのものではありません。
+`develop` の本線は Rust 版です。Rust 1.90.0（`rust/rust-toolchain.toml` で固定）、
+Bun 1.3.14 と、Cargo の native 依存に必要な各 OS のコンパイラ・リンカーを用意します。
+Go は不要です。`go/` に凍結したアプリはビルドせず、Go 1.26.8 は固定した Go を前提と
+する過去の互換性テストと fixture 用ツールだけで使います。
 
 リポジトリのルートで次を実行します（PowerShell 7 でも同じコマンドです）。
 
@@ -1559,6 +1595,10 @@ cargo +1.90.0 build --locked --manifest-path rust/Cargo.toml --bins
 ```
 
 2 本の実行ファイルは `rust/target/debug/` にできます（Windows は `.exe` 付き）。
+最適化ビルドにするには `cargo` コマンドに `--release` を足します。このとき実行ファイルは
+`rust/target/release/` にできます。`make build` と `make build-release`（`Makefile` を参照）は、
+Web 資材のビルドに続けて同じ `cargo` コマンドを実行します（`bun run check` の型検査は
+行いません）。
 ランチャー画面は `rust/assets/launcher/ui/index.html` から同梱し、凍結した Go ツリーを
 製品資材の参照先にはしません。通常のソースビルドは署名済み配布や導入・更新の受入を
 意味しません。正式 Windows 資材・runtime と配布の条件は [Rust 梱包手順](rust/packaging/README.md#formal-rust-release-orchestration)
@@ -1574,7 +1614,7 @@ runner で行います。手動実行の `rust-migration.yml` は未受入候補
 
 ---
 
-## リモートサーバー / Docker 運用（自動更新）
+## リモートサーバー / Docker 運用
 
 > **v1.0.0 のサポート範囲:** 公式 Docker image・コンテナビルド・自動更新はサポート対象外です。現在のコンテナビルドには既知の失敗があります。image の自動公開は停止しました。GHCR に残していた旧 image は、CVE-2026-111497 の影響を受ける Node.js を含んでいたため 2026-10-25 に削除しました。資材は履歴として保持しますが、継続公開・自動更新は保証しません。Linux バイナリと SSH によるリモート運用は v1.0.0 の対象に残ります。[Docker のサポート方針](deploy/docker/README.md)も参照してください。
 
@@ -1594,7 +1634,7 @@ Docker を使わない場合は、特に次の点に注意してください。
 
 コンテナ運用一式は [`deploy/docker/`](deploy/docker/) に保持しています（1 ユーザー = 1 コンテナ。Hub の公開は `127.0.0.1` 限定で、SSH トンネル等を介して到達する前提です。前節「ローカル実行限定」の通り、外部公開は行わないでください）。従来は [`deploy/docker/users/example.yaml`](deploy/docker/users/example.yaml) を `users/<user>.yaml` にコピーし、ユーザー名とポートを置き換えて `compose.yaml` に追加していました。
 
-従来は `main` / `develop` の push に対する検証成功後、GitHub Actions が GHCR へ image を公開していました。自動公開は停止し、[`docker-image.yml`](.github/workflows/docker-image.yml) は手動の案内 job へ置き換えます。GHCR のパッケージは 2026-10-25 に削除したため、以下の旧タグ名はもう pull できません:
+従来は `main` / `develop` の push に対する検証成功後、GitHub Actions が GHCR へ image を公開していました。自動公開は停止し、[`docker-image.yml`](.github/workflows/docker-image.yml) は、手動実行で案内を表示するだけの workflow になりました（image のビルド・ログイン・push は行いません）。GHCR のパッケージは 2026-10-25 に削除したため、以下の旧タグ名はもう pull できません:
 
 ```
 ghcr.io/ishizakahiroshi/many-ai-cli:latest      # 旧 main タグ
@@ -1667,33 +1707,34 @@ Docker をローカルビルドするときは、作業中のホームディレ�
 
 ## アンインストール
 
-`many-ai-cli` はインストーラなしの単体バイナリです。アンインストールは、バイナリを置いたフォルダで `uninstall` サブコマンドを実行します。
+`many-ai-cli` は 2 本の実行ファイル（`many-ai-cli` と `many-ai-cli-launcher`）で、専用のインストーラはありません。zip の実行ファイルを自分で置いた場合は、置いたフォルダで `uninstall` サブコマンドを実行します。パッケージマネージャで導入した場合は、そのパッケージマネージャでもパッケージを削除してください。
 
 **Windows** — `many-ai-cli.exe` を置いたフォルダで実行:
 
 ```powershell
 .\many-ai-cli.exe uninstall          # 設定・ログ（~/.many-ai-cli/）を削除
-.\many-ai-cli.exe uninstall --purge  # 上記 + バイナリ本体も削除
+.\many-ai-cli.exe uninstall --purge  # 上記 + many-ai-cli の実行ファイル本体も削除
 ```
 
 **macOS / Linux / WSL** — `many-ai-cli` を置いたフォルダで実行:
 
 ```bash
 ./many-ai-cli uninstall          # 設定・ログ（~/.many-ai-cli/）を削除
-./many-ai-cli uninstall --purge  # 上記 + バイナリ本体も削除
+./many-ai-cli uninstall --purge  # 上記 + many-ai-cli の実行ファイル本体も削除
 ```
 
 削除対象が表示され、確認後に実行されます。
 
 | オプション | 削除されるもの |
 |---|---|
-| (なし) | `~/.many-ai-cli/`（設定・ログ・添付ファイル）。バイナリのパスを表示するので手動で削除してください |
-| `--purge` | 上記 + バイナリ本体 |
+| (なし) | `~/.many-ai-cli/`（設定・ログ・添付ファイル）と、Windows ではスタートアップフォルダのログイン時の起動エントリ。実行ファイルのパスを表示するので手動で削除してください |
+| `--purge` | 上記 + `many-ai-cli` の実行ファイル本体 |
 
 **手動で削除する場合**
 
 1. `~/.many-ai-cli/`（Windows: `%USERPROFILE%\.many-ai-cli\`）を削除
-2. ダウンロードしたバイナリ（`many-ai-cli.exe` / `many-ai-cli`）を削除
+2. 実行ファイル（`many-ai-cli.exe` / `many-ai-cli`、および `many-ai-cli-launcher.exe` / `many-ai-cli-launcher`）を削除
+3. `setup` が作ったショートカットを削除（Windows: デスクトップとスタートアップフォルダの「MANY-AI-CLI」、macOS / Linux: 「Many AI Hub Start」「Many AI Hub Stop」）
 
 > **ブラウザのデータは削除されません。** `uninstall` はブラウザのストレージに触れられません。大半の設定（テーマ・言語・フォントサイズ・お気に入り・クイックコマンド等）はサーバ側 `~/.many-ai-cli/` に保存されているため削除されますが、端末ごとの表示状態（ファイルツリーの開閉・ペインのレイアウト・スクロールバック量）は `localStorage` に残ります。消去するには Hub を開いていたタブで `F12` を押し、コンソールで `localStorage.clear()` を実行してください。
 
