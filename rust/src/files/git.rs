@@ -70,11 +70,15 @@ impl<'a> Git<'a> {
     fn new(service: &'a FilesService, seconds: u64) -> Self {
         Self {
             service,
-            until: Instant::now() + Duration::from_secs(seconds),
+            until: service.git_now() + Duration::from_secs(seconds),
         }
     }
+    /// What is left of this operation's own budget.
+    fn remaining(&self) -> Duration {
+        self.until.saturating_duration_since(self.service.git_now())
+    }
     /// Expire only the owner whose resolution already succeeded. A fresh
-    /// materialization owner retains its real deadline and runs actual Git.
+    /// materialization owner keeps its own deadline and runs actual Git.
     #[cfg(test)]
     fn expire_completed_resolution_for_test(&mut self) {
         use std::sync::atomic::Ordering;
@@ -83,7 +87,7 @@ impl<'a> Git<'a> {
             .expire_next_git_resolution
             .swap(false, Ordering::SeqCst)
         {
-            self.until = Instant::now();
+            self.until = self.service.git_now();
             self.service
                 .expired_git_resolutions
                 .fetch_add(1, Ordering::SeqCst);
@@ -120,7 +124,7 @@ impl<'a> Git<'a> {
         env: BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>>,
         combined: bool,
     ) -> std::result::Result<String, String> {
-        let timeout = self.until.saturating_duration_since(Instant::now());
+        let timeout = self.remaining();
         if timeout.is_zero() {
             return Err("git command timed out".into());
         }
@@ -262,6 +266,33 @@ pub fn sanitize_error(s: &str) -> String {
     out
 }
 impl FilesService {
+    /// The instant a Git operation's budget is counted from. Production always
+    /// reads the monotonic clock. A test may freeze it (`pin_git_clock`), so
+    /// that a budget is "fresh" or "expired" only by which budget an operation
+    /// was handed, never by how long real Git processes took on that machine.
+    fn git_now(&self) -> Instant {
+        #[cfg(test)]
+        {
+            let pinned = self
+                .pinned_git_clock
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(pinned) = *pinned {
+                return pinned;
+            }
+        }
+        Instant::now()
+    }
+    /// Freeze the budget clock at the current instant. Only the counting of
+    /// budgets stops: each Git process still runs for real and is still killed
+    /// at the (full) time its own budget leaves it.
+    #[cfg(test)]
+    pub(crate) fn pin_git_clock(&self) {
+        *self
+            .pinned_git_clock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Instant::now());
+    }
     pub(super) async fn git_handle(&self, r: &Request, core: &dyn SessionCore) -> Result<Response> {
         match r.path.as_str() {
             "/api/git-lock-leftovers" => {

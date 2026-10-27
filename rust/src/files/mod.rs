@@ -42,6 +42,9 @@ pub struct FilesService {
     pub(crate) expire_next_git_resolution: std::sync::atomic::AtomicBool,
     #[cfg(test)]
     pub(crate) expired_git_resolutions: std::sync::atomic::AtomicUsize,
+    /// A test may freeze the instant Git budgets are counted from (`pin_git_clock`).
+    #[cfg(test)]
+    pub(crate) pinned_git_clock: std::sync::Mutex<Option<std::time::Instant>>,
     history: Option<std::sync::Arc<dyn PersistenceEffectSink>>,
 }
 impl FilesService {
@@ -62,6 +65,8 @@ impl FilesService {
             expire_next_git_resolution: Default::default(),
             #[cfg(test)]
             expired_git_resolutions: Default::default(),
+            #[cfg(test)]
+            pinned_git_clock: Default::default(),
             history: None,
         }
     }

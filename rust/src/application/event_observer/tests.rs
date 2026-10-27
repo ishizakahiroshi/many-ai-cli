@@ -580,6 +580,11 @@ async fn unbound_observer_fails_closed_and_snapshot_failure_is_best_effort() {
 #[tokio::test]
 async fn start_capture_materialization_has_an_independent_resolution_budget() {
     let f = fixture(false, false).await;
+    // What is under test is which budget the materialization owner holds, not
+    // how fast Git runs: with the budget clock frozen a fresh budget cannot be
+    // used up by a slow machine, so a budget can only be exhausted here by
+    // being the completed resolver's expired one. Real Git still runs.
+    f.files.pin_git_clock();
     f.files
         .expire_next_git_resolution
         .store(true, Ordering::SeqCst);
@@ -589,7 +594,9 @@ async fn start_capture_materialization_has_an_independent_resolution_budget() {
     let reservation = f.files.reserve_git_turn_end(f.binding);
     assert!(
         reservation.is_some(),
-        "actual start snapshot reused the completed resolver's expired budget"
+        "actual start snapshot reused the completed resolver's expired budget \
+         (detail_class=budget_exhausted_before_command) or Git itself failed; warnings={:?}",
+        f.warnings.lock().unwrap().as_slice(),
     );
     assert!(f.warnings.lock().unwrap().is_empty());
     drop(reservation);
@@ -605,6 +612,9 @@ async fn start_capture_materialization_has_an_independent_resolution_budget() {
 #[tokio::test]
 async fn end_capture_materialization_has_an_independent_resolution_budget() {
     let f = fixture(false, false).await;
+    // Same reason as the start capture: the budget clock is frozen, so a fresh
+    // budget (the baseline's included) cannot be used up by a slow machine.
+    f.files.pin_git_clock();
     f.observer.observe(&event(f.binding, false)).await.unwrap();
     let reservation = f.files.reserve_git_turn_end(f.binding);
     assert!(reservation.is_some(), "initial actual Git baseline missing");
@@ -621,7 +631,9 @@ async fn end_capture_materialization_has_an_independent_resolution_budget() {
     assert_eq!(
         messages.len(),
         1,
-        "actual end snapshot reused the completed resolver's expired budget"
+        "actual end snapshot reused the completed resolver's expired budget \
+         (detail_class=budget_exhausted_before_command) or Git itself failed; warnings={:?}",
+        f.warnings.lock().unwrap().as_slice(),
     );
     assert_eq!(messages[0].turn, 1);
     assert_eq!(messages[0].files_changed, 1);

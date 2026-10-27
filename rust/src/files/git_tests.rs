@@ -301,6 +301,41 @@ async fn a_commit_stopped_at_its_limit_leaves_a_lock_that_is_listed_and_removed(
         assert_eq!(service.locks.list(), vec![found]);
     }
 }
+/// The seam the turn-capture budget tests rely on: with the clock frozen a
+/// budget is spent only by being expired, and one operation's expiry never
+/// reaches another operation's budget. Real Git still runs under the fresh one.
+#[tokio::test]
+async fn a_frozen_budget_clock_expires_only_the_budget_that_was_expired() {
+    use std::sync::atomic::Ordering;
+    let (_dir, service, root) = repo().await;
+    service.pin_git_clock();
+    let fresh = Git::new(&service, 5);
+    let mut spent = Git::new(&service, 5);
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    assert_eq!(fresh.remaining(), Duration::from_secs(5));
+    assert_eq!(spent.remaining(), Duration::from_secs(5));
+    service
+        .expire_next_git_resolution
+        .store(true, Ordering::SeqCst);
+    spent.expire_completed_resolution_for_test();
+    assert_eq!(service.expired_git_resolutions.load(Ordering::SeqCst), 1);
+    assert_eq!(spent.remaining(), Duration::ZERO);
+    assert_eq!(fresh.remaining(), Duration::from_secs(5));
+    // An expired budget refuses before any process is started.
+    assert_eq!(
+        spent.run(&root, &["rev-parse", "--git-dir"]).await,
+        Err("git command timed out".into())
+    );
+    assert_eq!(
+        fresh
+            .run(&root, &["rev-parse", "--git-dir"])
+            .await
+            .unwrap()
+            .trim(),
+        ".git"
+    );
+    assert_eq!(fresh.remaining(), Duration::from_secs(5));
+}
 #[tokio::test]
 async fn empty_repository_log_is_successful_empty_array() {
     let (_dir, service, root) = repo().await;
