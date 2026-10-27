@@ -20,7 +20,7 @@ This release replaces the Go implementation of many-ai-cli with a Rust one.
   carries over your settings and conversations.
 - **Going back.** Before updating, copy `~/.many-ai-cli/`. To return to the Go
   version, reinstall v0.9.0 and write the copy back. Steps:
-  [Upgrading to 1.0 (Rust)](README.md#upgrading-to-10-rust).
+  [Upgrading to 1.0 (Rust)](https://github.com/ishizakahiroshi/many-ai-cli#upgrading-to-10-rust).
 - **No official Docker image.** Official Docker images, container builds and
   automatic updates are not part of v1.0.0, and automatic image publishing is
   stopped (see `deploy/docker/README.md`). Use the Linux binary instead.
