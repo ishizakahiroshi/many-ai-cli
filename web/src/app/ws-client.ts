@@ -2,7 +2,6 @@ import { noteSpawnCorrelation, noteSpawnDisconnected, noteSpawnSessions, noteSpa
 import { noteSessionListTurnEnd, preserveSessionListSelection } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { probe } from '../debug/probe.js';
 import { showToast, token } from './util.js';
 import { isDetachedTabView } from './detached-view-mode.js';
 import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, autoDismissTimers, chatHistory, deriveProjectKeyFromCwd, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
@@ -348,12 +347,6 @@ export function _connectWs() {
     if (isLiveRendered && !t.pendingFlushActive && !isLiveOutputBatching(t)) {
       writePTYChunk(id, t.term, xtermBytes, () => {
         if (t.autoScroll) t.term.scrollToBottom();
-        probe('scroll.output', () => ({
-          sessionId: id,
-          autoScroll: t.autoScroll,
-          viewportY: t.term?.buffer?.active?.viewportY ?? -1,
-          baseY: t.term?.buffer?.active?.baseY ?? -1,
-        }));
       });
     } else {
       // 非アクティブセッションは everAttached に関わらず pendingChunks に溜める。

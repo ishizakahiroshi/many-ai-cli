@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "784c21ef2b08bc1623400ca93bd53e330c56c898",
+    "commit": "60b1513a80e8ecf5484cf6b7f8d79c5a33e35d43",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2039,
-    "analyzed": 1580,
+    "discovered": 2038,
+    "analyzed": 1579,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 449,
@@ -47800,36 +47800,6 @@
         "summary": {
           "state": "value",
           "value": "probe.ts — 恒久の観測フック。sink が 1 つも無ければ完全な no-op。"
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "none_observed",
-          "value": []
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "web/src/debug/scroll-follow-hud.ts",
-      "adapter": "tsjs",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "scroll-follow-hud.ts — 一時観測専用。端末が最下部へ追従しない不具合の観測。"
         },
         "authentication": {
           "state": "not_configured"

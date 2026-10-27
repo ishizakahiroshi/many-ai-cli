@@ -550,11 +550,10 @@
     },
     {
       "id": "web-scroll-follow-hud",
-      "status": "active",
+      "status": "removed",
       "purpose": "端末が最下部へ自動追従しない不具合（Claude・Codex とも通常の 1 画面で再現）の観測。追従フラグ autoScroll がどの分岐で倒れるか、追従 ON のまま scrollToBottom が効かないかを、画面の隅の小さな表示で読めるようにする",
       "addedIn": "unreleased",
       "gate": "opt-in build: MAI_DEBUG=1 / --debug のウェブビルドだけ。通常ビルドでは sink が成果物に入らない。保存・送信・ログ出力はせず、画面の隅に数値と分岐名を出すだけ。端末の本文・パス・入力は読まない",
-      "due": "2026-10-28",
       "files": [
         "web/src/debug/scroll-follow-hud.ts"
       ],
@@ -571,7 +570,9 @@
         "scroll-follow (debug)"
       ],
       "removalCondition": "原因を特定して修正し、利用者が通常ビルドで追従を確認した後、または次回リリース前の早い方で make debug-purge id=web-scroll-follow-hud を実行する。共有フック（terminal.ts の scroll.follow 2 か所、ws-client.ts の scroll.output と probe の import）は、purge が sink と登録だけを片付けるので、必要なら手で外す",
-      "reason": "2026-10-25 利用者報告: セッションの作業が進んでも CLI の画面が自動で一番下へ行かない。Claude でも Codex でも通常の 1 画面で再現する。静的に読むと autoScroll を倒す分岐が複数あり（onScroll の manual-off、ホイール、▲ボタン）、どれが効いているかはコードだけでは決められない。直近のコミットにスクロール追従を変えたものはなく、いつからかも履歴から絞れない。症状が出た瞬間のスクリーンショットから、追従フラグ・viewportY・baseY・直前の分岐を読むために入れる"
+      "reason": "2026-10-25 利用者報告: セッションの作業が進んでも CLI の画面が自動で一番下へ行かない。Claude でも Codex でも通常の 1 画面で再現する。静的に読むと autoScroll を倒す分岐が複数あり（onScroll の manual-off、ホイール、▲ボタン）、どれが効いているかはコードだけでは決められない。直近のコミットにスクロール追従を変えたものはなく、いつからかも履歴から絞れない。症状が出た瞬間のスクリーンショットから、追従フラグ・viewportY・baseY・直前の分岐を読むために入れる\n2026-10-27 利用者判断（A4）: この数日は再発なしのため撤去",
+      "removedIn": "unreleased",
+      "removedOn": "2026-10-27"
     }
   ]
 }
