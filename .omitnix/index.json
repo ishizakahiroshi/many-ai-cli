@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "321d7a99259b215dafc2ab48bc2218561b719a7b",
+    "commit": "784c21ef2b08bc1623400ca93bd53e330c56c898",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2040,
-    "analyzed": 1581,
+    "discovered": 2039,
+    "analyzed": 1580,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 449,
@@ -32722,35 +32722,6 @@
         "summary": {
           "state": "value",
           "value": "Incremental migration candidate. See the contract inventory for pending callers."
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "rust/src/logging/branch_probe.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "一時観測 `rust-branch-probe`（instrumentation.json に登録）。原因が確定したら撤去する。"
         },
         "authentication": {
           "state": "not_configured"

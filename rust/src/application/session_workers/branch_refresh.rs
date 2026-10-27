@@ -169,12 +169,10 @@ impl Owner {
         mut flight: Flight,
     ) {
         loop {
-            let waiting_since = std::time::Instant::now();
             let slot = tokio::select! { biased;
                 _ = cancel.token().cancelled() => return,
                 slot = self.slots.clone().acquire_owned() => match slot { Ok(slot) => slot, Err(_) => return },
             };
-            let slot_wait = waiting_since.elapsed();
             let refresh = async {
                 let Some(worker) = self.worker.upgrade() else {
                     return;
@@ -182,46 +180,31 @@ impl Owner {
                 let Ok(core) = worker.core() else {
                     return;
                 };
-                // 一時観測 rust-branch-probe: 記録するだけで、取得・適用の中身は変えない。
-                let started = std::time::Instant::now();
-                let ((result, probe_branch), probe) = crate::logging::branch_probe::scope(async {
-                    let branch = self.source.branch(&cwd).await;
-                    let probe_branch = branch.clone();
-                    let changes = self.changes(&cwd).await;
-                    // Go checks the current sessions after branch/stats finish.
-                    let project_id = if core.branch_project_needed(&cwd, &ids) {
-                        self.source.project(&cwd).await
-                    } else {
-                        None
-                    };
-                    let git_root = project_id
-                        .as_ref()
-                        .filter(|root| !root.is_empty())
-                        .map(PathBuf::from);
-                    let observation = SessionObservation::Branch {
-                        branch,
-                        git_root,
-                        changes,
-                        project_id,
-                    };
-                    let result = match core.apply_branch_refresh(&cwd, &ids, observation) {
-                        Ok(effects) => worker.apply(effects).await,
-                        Err(error) => Err(error),
-                    };
-                    (result, probe_branch)
-                })
-                .await;
+                let branch = self.source.branch(&cwd).await;
+                let changes = self.changes(&cwd).await;
+                // Go checks the current sessions after branch/stats finish.
+                let project_id = if core.branch_project_needed(&cwd, &ids) {
+                    self.source.project(&cwd).await
+                } else {
+                    None
+                };
+                let git_root = project_id
+                    .as_ref()
+                    .filter(|root| !root.is_empty())
+                    .map(PathBuf::from);
+                let observation = SessionObservation::Branch {
+                    branch,
+                    git_root,
+                    changes,
+                    project_id,
+                };
+                let result = match core.apply_branch_refresh(&cwd, &ids, observation) {
+                    Ok(effects) => worker.apply(effects).await,
+                    Err(error) => Err(error),
+                };
                 if let Err(error) = result {
                     (worker.warning)("branch refresh publication", &error);
                 }
-                crate::logging::branch_probe::record_refresh(
-                    &cwd,
-                    &ids.iter().map(|id| id.0).collect::<Vec<_>>(),
-                    &probe_branch,
-                    &probe,
-                    slot_wait,
-                    started.elapsed(),
-                );
             };
             tokio::select! { biased;
                 _ = cancel.token().cancelled() => return,
