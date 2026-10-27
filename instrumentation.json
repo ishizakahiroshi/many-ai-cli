@@ -533,8 +533,12 @@
         "rust/src/application/main_program/context.rs",
         "rust/src/application/main_program/serve.rs",
         "rust/src/application/wrapped_spawn.rs",
+        "rust/src/application/instruction_rules.rs",
+        "rust/src/application/usage_hooks.rs",
         "rust/src/hub/websocket.rs",
+        "rust/src/terminal/session/lifecycle.rs",
         "rust/src/wrapper/entry.rs",
+        "rust/src/wrapper/hooks/codex.rs",
         "rust/src/wrapper/runtime.rs",
         "rust/src/wrapper/transport.rs"
       ],
@@ -546,7 +550,7 @@
         "spawn-probe"
       ],
       "removalCondition": "遅い段階を特定し、修正して再計測で改善を確かめた後に、files を消し sharedFiles の空実装・spawn_probe:: の呼び出し点を単独の撤去 commit で除去する。リリース前に必ず撤去する",
-      "reason": "起動が遅い原因の段階が未特定で、推測で高速化すると効かない場所を直すことになる。利用者が普段使う中で数回起動して記録を集めるため debug ビルドで既定記録とし、保存は 7 日・合計 20MB・1 ファイル 4MB で自動的に消す\n2026-10-27 利用者判断（A3）: 起動遅延は直してから出す。起動ログ 136 回の集計で、wrapper が登録を送ってから Hub が受け付けるまで（wrapper_register_begin から hub_registration_accepted）が中央 302ms・p95 1,178ms で遅い回の主因だったため、その内訳を測る段階（wrapper_connected・wrapper_register_sent・hub_core_register_begin/registered・hub_before_ack_begin/done・hub_prepare_begin/prepared・hub_rules_registered_begin/registered・hub_usage_registered_begin/registered）と、spawn の最初の行（hub_native_spawn_begin）の provider 名を追加し、期限を 2026-11-03 へ延ばした。hub_rules_* と hub_usage_* は準備に引数が無く subject を持たないため、Hub の pid のファイルで hub_prepare_begin と hub_prepared の間の時刻順で突き合わせる"
+      "reason": "起動が遅い原因の段階が未特定で、推測で高速化すると効かない場所を直すことになる。利用者が普段使う中で数回起動して記録を集めるため debug ビルドで既定記録とし、保存は 7 日・合計 20MB・1 ファイル 4MB で自動的に消す\n2026-10-27 利用者判断（A3）: 起動遅延は直してから出す。起動ログ 136 回の集計で、wrapper が登録を送ってから Hub が受け付けるまで（wrapper_register_begin から hub_registration_accepted）が中央 302ms・p95 1,178ms で遅い回の主因だったため、その内訳を測る段階（wrapper_connected・wrapper_register_sent・hub_core_register_begin/registered・hub_before_ack_begin/done・hub_prepare_begin/prepared・hub_rules_registered_begin/registered・hub_usage_registered_begin/registered）と、spawn の最初の行（hub_native_spawn_begin）の provider 名を追加し、期限を 2026-11-03 へ延ばした。hub_rules_* と hub_usage_* は準備に引数が無く subject を持たないため、Hub の pid のファイルで hub_prepare_begin と hub_prepared の間の時刻順で突き合わせる\n2026-10-28: 登録受付の内訳をさらに細かくした。コアの登録（hub_register_branch_done・hub_register_mutex_acquired・hub_register_ordered・hub_register_attach_begin/attached）、指示ルール（hub_rules_lock_acquired・hub_rules_resolve_root_begin/done・hub_rules_targets_done・hub_rules_persisted・hub_rules_injected・hub_rules_removed）、使用量フック（hub_usage_inject_begin/done・hub_usage_codex_lock_acquired）を追加した。resolve_root の組の数が git を起動した回数になる。期限は 2026-11-03 のまま"
     },
     {
       "id": "web-scroll-follow-hud",

@@ -19,6 +19,20 @@
 //! コアの登録・ACK 前の準備・登録準備の前後（`hub_core_register_begin` / `hub_core_registered` /
 //! `hub_before_ack_begin` / `hub_before_ack_done` / `hub_prepare_begin` / `hub_prepared`）と、準備の中の
 //! 指示ルールと使用量フックの前後（`hub_rules_registered_*` / `hub_usage_registered_*`。`subject` なし）を残す。
+//!
+//! 登録受付の内訳の続き（遅い回の中身を分ける）:
+//! - コアの登録（`hub_core_register_begin` から `hub_core_registered` の間。`subject` は wrapper の pid）:
+//!   `hub_register_branch_done`（ブランチ取得の後）・`hub_register_mutex_acquired`（登録 mutex の後）・
+//!   `hub_register_ordered`（永続化レーンの順番待ちの後）・`hub_register_attach_begin` /
+//!   `hub_register_attached`（保存先の紐づけの前後。この 2 つだけセッション番号つき）。初回登録だけ
+//! - 指示ルール（`hub_rules_registered_begin` から `hub_rules_registered` の間。`subject` なし）:
+//!   `hub_rules_lock_acquired`（known の lock の後）・`hub_rules_resolve_root_begin` /
+//!   `hub_rules_resolve_root_done`（git の起動 1 回ごとの前後。組の数が起動した回数）・
+//!   `hub_rules_targets_done`（対象の洗い出しの後）・`hub_rules_persisted`（最初の保存の後）・
+//!   `hub_rules_injected`（注入の後）・`hub_rules_removed`（不要になった分の削除の後）
+//! - 使用量フック（`hub_usage_registered_begin` から `hub_usage_registered` の間。`subject` なし）:
+//!   `hub_usage_inject_begin` / `hub_usage_inject_done`（codex のセッション 1 件ごとの前後。
+//!   セッション番号つき）・`hub_usage_codex_lock_acquired`（設定ファイルのロックを取れた後。セッション番号つき）
 use serde_json::{Map, Value, json};
 use std::{
     ffi::OsStr,
@@ -242,6 +256,66 @@ mod tests {
         (
             "hub_usage_registered",
             include_str!("../application/main_program/serve.rs"),
+        ),
+        (
+            "hub_register_branch_done",
+            include_str!("../terminal/session/lifecycle.rs"),
+        ),
+        (
+            "hub_register_mutex_acquired",
+            include_str!("../terminal/session/lifecycle.rs"),
+        ),
+        (
+            "hub_register_ordered",
+            include_str!("../terminal/session/lifecycle.rs"),
+        ),
+        (
+            "hub_register_attach_begin",
+            include_str!("../terminal/session/lifecycle.rs"),
+        ),
+        (
+            "hub_register_attached",
+            include_str!("../terminal/session/lifecycle.rs"),
+        ),
+        (
+            "hub_rules_lock_acquired",
+            include_str!("../application/instruction_rules.rs"),
+        ),
+        (
+            "hub_rules_resolve_root_begin",
+            include_str!("../application/instruction_rules.rs"),
+        ),
+        (
+            "hub_rules_resolve_root_done",
+            include_str!("../application/instruction_rules.rs"),
+        ),
+        (
+            "hub_rules_targets_done",
+            include_str!("../application/instruction_rules.rs"),
+        ),
+        (
+            "hub_rules_persisted",
+            include_str!("../application/instruction_rules.rs"),
+        ),
+        (
+            "hub_rules_injected",
+            include_str!("../application/instruction_rules.rs"),
+        ),
+        (
+            "hub_rules_removed",
+            include_str!("../application/instruction_rules.rs"),
+        ),
+        (
+            "hub_usage_inject_begin",
+            include_str!("../application/usage_hooks.rs"),
+        ),
+        (
+            "hub_usage_inject_done",
+            include_str!("../application/usage_hooks.rs"),
+        ),
+        (
+            "hub_usage_codex_lock_acquired",
+            include_str!("../wrapper/hooks/codex.rs"),
         ),
     ];
 

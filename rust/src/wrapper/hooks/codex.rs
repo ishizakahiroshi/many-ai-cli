@@ -184,6 +184,8 @@ impl CodexStopHooks {
         let _serial = CONFIG.lock().unwrap_or_else(|p| p.into_inner());
         let dir = self.directory()?;
         let _lock = Lock::acquire(&dir)?;
+        // 一時観測 rust-spawn-probe: 設定ファイルの排他ロック（ファイル）を取れた時点。
+        crate::logging::spawn_probe::mark("hub_usage_codex_lock_acquired", None, Some(p.session));
         let bytes = match read(&dir, "config.toml") {
             Ok(v) => v,
             Err(e) if e.kind() == io::ErrorKind::NotFound => vec![],
