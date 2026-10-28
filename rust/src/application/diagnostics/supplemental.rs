@@ -104,6 +104,70 @@ pub(super) fn custom(owner: &Diagnostics, cfg: &Config) -> Vec<Check> {
     }
     out
 }
+/// The running Hub writes the approval rules into each live session's
+/// instruction file, and a failed write only reaches the Hub's stderr. Read the
+/// targets it recorded and name the ones that do not carry the rules.
+pub(super) fn approval_instructions(owner: &Diagnostics, cfg: &Config) -> Vec<Check> {
+    let paths = &owner.deps.paths;
+    let json = |resource| {
+        read(owner, &paths.resource(resource))
+            .ok()
+            .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+    };
+    // Without a live Hub the recorded targets are leftovers its next start
+    // recovers, so their missing rules are expected.
+    let hub_alive = json(Resource::Runtime)
+        .and_then(|v| v["pid"].as_u64())
+        .and_then(|v| u32::try_from(v).ok())
+        .is_some_and(|pid| pid > 0 && owner.deps.io.pid_alive(pid));
+    if !cfg.approval.enabled || !hub_alive {
+        return vec![];
+    }
+    let Some(journal) = json(Resource::ApprovalRuleTargets) else {
+        return vec![];
+    };
+    let targets = journal["targets"].as_array().cloned().unwrap_or_default();
+    if targets.is_empty() {
+        return vec![];
+    }
+    let missing = targets
+        .iter()
+        .filter_map(|t| {
+            let path = t["path"].as_str().filter(|p| !p.trim().is_empty())?;
+            let provider = if t["mode"].as_str() == Some("claude_import") {
+                "claude"
+            } else {
+                "codex"
+            };
+            let present = read(owner, Path::new(path))
+                .is_ok_and(|b| crate::wrapper::approval_injection::rules_present(provider, &b));
+            (!present).then(|| path.to_string())
+        })
+        .collect::<Vec<_>>();
+    vec![if missing.is_empty() {
+        Check::new(
+            "approval rules",
+            "OK",
+            format!(
+                "起動中のセッションの指示ファイル {} 件すべてに承認ルールが入っています",
+                targets.len()
+            ),
+            "",
+        )
+    } else {
+        Check::new(
+            "approval rules",
+            "WARN",
+            format!(
+                "起動中のセッションの指示ファイル {} 件中 {} 件に承認ルールが入っていません。そのセッションの AI は選択肢を Web の画面のボタンで出せません: {}",
+                targets.len(),
+                missing.len(),
+                missing.join(", ")
+            ),
+            "Hub を再起動すると入れ直します。直らないときは config.yaml の log.enabled を true にして Hub を再起動し、hub.log の approval instruction injection failed を確認してください",
+        )
+    }]
+}
 fn keys(keys: &[String]) -> String {
     if keys.len() <= 4 {
         keys.join(", ")

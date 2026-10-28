@@ -410,23 +410,36 @@ impl InstructionRules {
             }
         }
         crate::logging::spawn_probe::mark("hub_rules_injected", None, None);
-        let keys = active.iter().map(|v| key(&v.path)).collect::<BTreeSet<_>>();
-        let inactive = merge(legacy.into_iter().chain(known.values().cloned()).collect())
-            .into_iter()
-            .filter(|v| !keys.contains(&key(&v.path)))
-            .collect();
+        let inactive = self.inactive(&active, legacy, &known);
         self.remove(inactive, &mut known, true);
         crate::logging::spawn_probe::mark("hub_rules_removed", None, None);
     }
     pub async fn ended(&self, cancel: &Cancellation) {
         let mut known = self.known.lock().await;
         let (active, legacy) = self.targets(cancel).await;
-        let keys = active.iter().map(|v| key(&v.path)).collect::<BTreeSet<_>>();
-        let inactive = merge(legacy.into_iter().chain(known.values().cloned()).collect())
-            .into_iter()
-            .filter(|v| !keys.contains(&key(&v.path)))
-            .collect();
+        let inactive = self.inactive(&active, legacy, &known);
         self.remove(inactive, &mut known, true);
+    }
+    /// Known and legacy targets no live session still uses. A target sharing its
+    /// real file with an active one (two profiles linking one CLAUDE.md) stays
+    /// until the last of them ends, so one session ending cannot strip the
+    /// rules another is still reading.
+    fn inactive(
+        &self,
+        active: &[Target],
+        legacy: Vec<Target>,
+        known: &BTreeMap<String, Target>,
+    ) -> Vec<Target> {
+        let keys = active
+            .iter()
+            .flat_map(|v| [key(&v.path), key(&self.files.real(&v.path))])
+            .collect::<BTreeSet<_>>();
+        merge(legacy.into_iter().chain(known.values().cloned()).collect())
+            .into_iter()
+            .filter(|v| {
+                !keys.contains(&key(&v.path)) && !keys.contains(&key(&self.files.real(&v.path)))
+            })
+            .collect()
     }
     pub async fn shutdown(&self, cancel: &Cancellation) {
         let mut known = self.known.lock().await;

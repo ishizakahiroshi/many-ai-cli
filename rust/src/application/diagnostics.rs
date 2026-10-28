@@ -117,6 +117,7 @@ impl Diagnostics {
             local::handoff(self, &cfg),
         ];
         checks.extend(supplemental::residue(self, &cfg, cancel).await);
+        checks.extend(supplemental::approval_instructions(self, &cfg));
         checks.extend(self.command_code(cancel).await);
         checks.extend(supplemental::subscriptions(self, &cfg, cancel).await);
         checks.extend(supplemental::custom(self, &cfg));

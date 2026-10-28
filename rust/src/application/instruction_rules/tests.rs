@@ -52,12 +52,28 @@ struct Fixture {
     root_calls: Arc<std::sync::atomic::AtomicUsize>,
 }
 fn fixture() -> Fixture {
+    build(false)
+}
+/// `production` uses the installed-style runtime, where instruction targets are
+/// written through the user's links instead of the trial's lexical walk.
+fn build(production: bool) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let installed = tempfile::tempdir().unwrap();
-    let paths = RuntimePaths::trial(root.path(), 49337, installed.path()).unwrap();
-    let home = root.path().join("actor");
+    // Production walks from the drive root without following links, so start
+    // from the real spelling of the temporary folder (macOS reaches it via /var).
+    let base = if production {
+        std::fs::canonicalize(root.path()).unwrap()
+    } else {
+        root.path().to_path_buf()
+    };
+    let home = base.join("actor");
     std::fs::create_dir(&home).unwrap();
-    let cwd = root.path().join("project");
+    let paths = if production {
+        RuntimePaths::production(&home).unwrap()
+    } else {
+        RuntimePaths::trial(root.path(), 49337, installed.path()).unwrap()
+    };
+    let cwd = base.join("project");
     std::fs::create_dir(&cwd).unwrap();
     let core = Arc::new(SessionEngine::new(
         EngineOptions::default(),
@@ -79,7 +95,7 @@ fn fixture() -> Fixture {
         paths.clone(),
         home.clone(),
         vec![],
-        root.path().to_path_buf(),
+        base,
         config.clone(),
         core.clone(),
         Arc::new(Root(cwd, root_calls.clone())),
@@ -125,6 +141,66 @@ async fn register(f: &Fixture, provider: &str, pid: i64) -> SessionBinding {
         .await
         .unwrap()
         .binding
+}
+fn link_file(source: &Path, alias: &Path) {
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(source, alias).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_file(source, alias).unwrap();
+}
+async fn register_claude(f: &Fixture, pid: i64, claude_dir: &Path) -> SessionBinding {
+    f.core
+        .register(
+            RegisterRequest {
+                message: proto::Message {
+                    provider: "claude".into(),
+                    pid,
+                    cwd: f.home.to_string_lossy().into_owned(),
+                    home_dir: f.home.to_string_lossy().into_owned(),
+                    claude_dir: claude_dir.to_string_lossy().into_owned(),
+                    ..Default::default()
+                },
+                spawn_proof: None,
+            },
+            WrapperConnectionId(pid as u64),
+            at(),
+        )
+        .await
+        .unwrap()
+        .binding
+}
+#[tokio::test]
+async fn two_profiles_linking_one_claude_md_keep_the_import_until_the_last_session_ends() {
+    let f = build(true);
+    let base = f.home.parent().unwrap().to_path_buf();
+    std::fs::create_dir(base.join("dotfiles")).unwrap();
+    let shared = base.join("dotfiles").join("CLAUDE.md");
+    std::fs::write(&shared, b"custom\n").unwrap();
+    let mut bindings = vec![];
+    for (pid, profile) in [(2041, "first"), (2042, "second")] {
+        let dir = f.home.join("subscriptions").join(profile);
+        std::fs::create_dir_all(&dir).unwrap();
+        link_file(&shared, &dir.join("CLAUDE.md"));
+        bindings.push(register_claude(&f, pid, &dir).await);
+    }
+    let cancel = Cancellation::default();
+    f.owner.change("enable", &cancel).await.unwrap();
+    // The exact import bytes are pinned by the approval_injection tests.
+    let injected =
+        crate::wrapper::approval_injection::inject_rules_content("claude", b"custom\n", b"")
+            .unwrap();
+    assert_ne!(injected, b"custom\n");
+    assert_eq!(std::fs::read(&shared).unwrap(), injected);
+    let second = bindings.pop().unwrap();
+    let first = bindings.pop().unwrap();
+    f.core.disconnected(first, at()).unwrap();
+    f.owner.ended(&cancel).await;
+    assert_eq!(std::fs::read(&shared).unwrap(), injected);
+    f.core.disconnected(second, at()).unwrap();
+    f.owner.ended(&cancel).await;
+    assert_eq!(std::fs::read(&shared).unwrap(), b"custom\n");
+    assert!(!f.paths.root().join("approval-rule-targets.json").exists());
+    assert!(f.warnings.lock().unwrap().is_empty());
 }
 #[tokio::test]
 async fn source_shared_provider_lifetime_keeps_block_until_last_actual_session_ends() {

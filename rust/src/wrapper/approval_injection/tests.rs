@@ -160,6 +160,108 @@ fn held_trial_parent_rejects_symlink_instruction_targets() {
     assert_eq!(std::fs::read(&foreign).unwrap(), b"foreign");
 }
 
+/// Link a folder the way users do: a symlink on Unix, a junction on Windows
+/// (the form worktree and profile folders use; no privilege needed).
+fn link_directory(source: &Path, alias: &Path) {
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(source, alias).unwrap();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let status = std::process::Command::new("cmd.exe")
+            .args(["/d", "/c", "mklink", "/J"])
+            .arg(alias)
+            .arg(source)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW)
+            .status()
+            .unwrap();
+        assert!(
+            status.success(),
+            "synthetic fixture junction creation failed"
+        );
+    }
+}
+fn link_file(source: &Path, alias: &Path) {
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(source, alias).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_file(source, alias).unwrap();
+}
+#[test]
+fn production_targets_reached_through_user_links_are_written_at_the_real_file() {
+    let temp = tempfile::tempdir().unwrap();
+    // Production walks from the drive root without following links, so start
+    // from the real spelling of the temporary folder (macOS reaches it via /var).
+    let base = std::fs::canonicalize(temp.path()).unwrap();
+    let home = base.join("home");
+    std::fs::create_dir(&home).unwrap();
+    let files =
+        InstructionFiles::new(RuntimePaths::production(&home).unwrap(), home.clone()).unwrap();
+    // A profile folder reached through a linked folder (subscriptions, worktrees).
+    let real = base.join("real");
+    std::fs::create_dir_all(real.join("p1")).unwrap();
+    std::fs::write(real.join("p1/AGENTS.md"), b"original").unwrap();
+    link_directory(&real, &home.join("subscriptions"));
+    let through = home.join("subscriptions").join("p1").join("AGENTS.md");
+    files.inject("codex", &through).unwrap();
+    files.delegation("codex", &through, true).unwrap();
+    let body = std::fs::read(real.join("p1/AGENTS.md")).unwrap();
+    assert!(rules_present("codex", &body));
+    assert!(
+        body.windows(DELEGATE_START.len())
+            .any(|v| v == DELEGATE_START.as_bytes())
+    );
+    files.remove("codex", &through, true).unwrap();
+    assert_eq!(
+        std::fs::read(real.join("p1/AGENTS.md")).unwrap(),
+        b"original"
+    );
+    // A file (and folder) not yet created beneath a linked folder appears at
+    // the real place.
+    let fresh = home.join("subscriptions").join("p2").join("AGENTS.md");
+    files.inject("codex", &fresh).unwrap();
+    assert!(rules_present(
+        "codex",
+        &std::fs::read(real.join("p2/AGENTS.md")).unwrap()
+    ));
+    // A dotfiles-style link of the instruction file itself keeps the link and
+    // changes the file it points to.
+    std::fs::create_dir(base.join("dotfiles")).unwrap();
+    let shared = base.join("dotfiles").join("CLAUDE.md");
+    std::fs::write(&shared, b"custom\n").unwrap();
+    std::fs::create_dir(home.join(".claude")).unwrap();
+    let linked = home.join(".claude").join("CLAUDE.md");
+    link_file(&shared, &linked);
+    files.inject("claude", &linked).unwrap();
+    assert_eq!(
+        std::fs::read(&shared).unwrap(),
+        format!("custom\n\n{IMPORT}\n").as_bytes()
+    );
+    assert!(
+        std::fs::symlink_metadata(&linked)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(files.real(&linked), files.real(&shared));
+    files.remove("claude", &linked, true).unwrap();
+    assert_eq!(std::fs::read(&shared).unwrap(), b"custom\n");
+    // A broken link is refused rather than replaced by a plain file.
+    let dangling = home.join(".claude").join("dangling.md");
+    link_file(&base.join("missing.md"), &dangling);
+    assert!(files.inject("claude", &dangling).is_err());
+    assert!(
+        std::fs::symlink_metadata(&dangling)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert!(!base.join("missing.md").exists());
+}
+
 #[test]
 fn oversize_instruction_rmw_rejects_before_mutation_and_preserves_actual_tail() {
     use std::io::{Read, Seek, SeekFrom, Write};

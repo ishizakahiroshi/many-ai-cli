@@ -92,8 +92,9 @@ impl DiagnosticIo for FakeIo {
             Ok(200)
         })
     }
-    fn pid_alive(&self, _: u32) -> bool {
-        false
+    // Only this test process counts as a live Hub.
+    fn pid_alive(&self, pid: u32) -> bool {
+        pid == std::process::id()
     }
 }
 impl SubscriptionCli for FakeIo {
@@ -218,6 +219,80 @@ async fn real_checks_have_source_order_bounded_probes_and_disabled_profile_never
             .unwrap()
             .contains("synthetic-private-token")
     );
+}
+#[test]
+fn approval_rules_check_names_live_targets_without_the_rules_only_while_the_hub_runs() {
+    let f = fixture();
+    let root = f.paths.root().to_path_buf();
+    let mut cfg = f.config.snapshot().unwrap().config;
+    cfg.approval.enabled = true;
+    let delivered = root.join("delivered").join("AGENTS.md");
+    let claude = root.join("profile").join("CLAUDE.md");
+    let missed = root.join("missed").join("AGENTS.md");
+    let import =
+        crate::wrapper::approval_injection::inject_rules_content("claude", b"custom\n", b"")
+            .unwrap();
+    for (path, body) in [
+        (
+            &delivered,
+            &b"custom\n<!-- many-ai-cli:approval-rules -->\nrules\n<!-- /many-ai-cli:approval-rules -->\n"[..],
+        ),
+        (&claude, &import[..]),
+        (&missed, &b"custom\n"[..]),
+    ] {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, body).unwrap();
+    }
+    let target =
+        |path: &Path, mode: &str| serde_json::json!({"path": path, "providers": [], "mode": mode});
+    std::fs::write(
+        root.join("approval-rule-targets.json"),
+        serde_json::to_vec(&serde_json::json!({"version": 1, "targets": [
+            target(&delivered, "shared_block"),
+            target(&claude, "claude_import"),
+            target(&missed, "shared_block"),
+        ]}))
+        .unwrap(),
+    )
+    .unwrap();
+    // No Hub runtime record: leftovers wait for the next start's recovery.
+    assert!(supplemental::approval_instructions(&f.doctor, &cfg).is_empty());
+    std::fs::write(
+        root.join("hub-runtime.json"),
+        serde_json::to_vec(
+            &serde_json::json!({"version": 1, "pid": std::process::id(), "port": 49614}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let checks = supplemental::approval_instructions(&f.doctor, &cfg);
+    assert_eq!(checks.len(), 1);
+    assert_eq!(checks[0].level, "WARN");
+    assert!(checks[0].message.contains("3 件中 1 件"));
+    assert!(
+        checks[0]
+            .message
+            .contains(&missed.to_string_lossy().into_owned())
+    );
+    assert!(
+        !checks[0]
+            .message
+            .contains(&delivered.to_string_lossy().into_owned())
+    );
+    assert!(
+        !checks[0]
+            .message
+            .contains(&claude.to_string_lossy().into_owned())
+    );
+    std::fs::write(
+        &missed,
+        "custom\n<!-- any-ai-cli:approval-rules -->\nold\n<!-- /any-ai-cli:approval-rules -->\n",
+    )
+    .unwrap();
+    let checks = supplemental::approval_instructions(&f.doctor, &cfg);
+    assert_eq!(checks[0].level, "OK");
+    cfg.approval.enabled = false;
+    assert!(supplemental::approval_instructions(&f.doctor, &cfg).is_empty());
 }
 #[tokio::test]
 async fn cancellation_propagates_without_launching_new_work() {

@@ -28,6 +28,14 @@ This release replaces the Go implementation of many-ai-cli with a Rust one.
   investigated. (To be finalized before release.)
 
 ### Fixed
+- Approval rules now reach instruction files you reach through a link, such as
+  a worktree or profile folder that is a junction or symlink, or a `CLAUDE.md`
+  symlinked from your dotfiles. As in v0.9.0, the rules are written to the file
+  the link points to, and two profiles linking one file keep the rules until
+  the last of their sessions ends. Earlier 1.0 builds silently gave these
+  sessions no rules, so their AI could not offer choices as dashboard buttons. Trial runs
+  still refuse links. `many-ai-cli doctor` (and Settings → doctor) now names
+  live sessions whose instruction file is missing the rules.
 - The ↑ up / ↓ down buttons that jump to the start or the end of a full-screen
   (alternate-screen) CLI's history no longer stop partway. They now send four
   scroll steps at a time instead of waiting for each step to be confirmed on

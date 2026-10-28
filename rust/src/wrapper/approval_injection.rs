@@ -111,6 +111,16 @@ fn append(content: &mut Vec<u8>, start: &str, end: &str, body: &[u8]) {
     content.extend_from_slice(&trimmed);
     content.extend_from_slice(format!("\n{end}\n").as_bytes());
 }
+/// Whether an instruction file already carries the rules (the same scan that
+/// lets inject skip it). Doctor uses this to report targets the Hub missed.
+pub fn rules_present(provider: &str, content: &[u8]) -> bool {
+    let markers: &[&str] = if provider == "claude" {
+        &[IMPORT]
+    } else {
+        &[START, OLD_START]
+    };
+    scan(content, markers).unwrap_or(false)
+}
 pub fn inject_rules_content(provider: &str, content: &[u8], central: &[u8]) -> io::Result<Vec<u8>> {
     let markers = if provider == "claude" {
         vec![IMPORT]
@@ -206,6 +216,23 @@ impl InstructionFiles {
         }
         Ok(dir)
     }
+    /// Instruction targets are the user's own files, and users reach them
+    /// through links they placed themselves (a junction for a worktree or a
+    /// profile folder, a dotfiles symlink for CLAUDE.md). Follow those links
+    /// once, as the Go version's plain writes did, then open the real location
+    /// with the no-follow walk below. A trial keeps the lexical walk so a link
+    /// can never lead it out of its root.
+    fn resolve(&self, path: &Path) -> io::Result<PathBuf> {
+        if self.paths.is_trial() {
+            return Ok(path.to_path_buf());
+        }
+        crate::files::scope::canonical(path)
+    }
+    /// The real file a target is written through, so two spellings of one file
+    /// (two profiles linking the same CLAUDE.md) are known to be one target.
+    pub fn real(&self, path: &Path) -> PathBuf {
+        self.resolve(path).unwrap_or_else(|_| path.to_path_buf())
+    }
     fn selected(&self, path: &Path, create: bool) -> io::Result<(Dir, String)> {
         if !path.is_absolute()
             || path
@@ -280,6 +307,7 @@ impl InstructionFiles {
             "<!-- version: 25 -->",
             RULES.as_bytes(),
         )?;
+        let path = &self.resolve(path)?;
         let content = match self.read(path) {
             Ok(v) => v,
             Err(e) if e.kind() == io::ErrorKind::NotFound => vec![],
@@ -295,6 +323,7 @@ impl InstructionFiles {
         let _guard = OPERATIONS
             .lock()
             .map_err(|_| io::Error::other("instruction lock failed"))?;
+        let path = &self.resolve(path)?;
         let content = match self.read(path) {
             Ok(v) => v,
             Err(e) if e.kind() == io::ErrorKind::NotFound => vec![],
@@ -322,6 +351,7 @@ impl InstructionFiles {
         let _guard = OPERATIONS
             .lock()
             .map_err(|_| io::Error::other("instruction lock failed"))?;
+        let path = &self.resolve(path)?;
         let content = match self.read(path) {
             Ok(v) => v,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
