@@ -25,7 +25,7 @@ import { clearSequentialChoiceState, getActionBarButtons, handleBatchNumberKey, 
 import { isAskUserQuestionPending, noteApprovalAnsweredByTyping } from './app/approval.js';
 import { emptySubmitHitsFoldedHighRiskApproval, forgetApprovalSession } from './app/approval-store.js';
 import { chatHistoryCommitOutput, isTranscriptBackedSession, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
-import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
+import { askRemoteAttachChoice, attachThumbnails, flushPendingAttach, isRemoteAttachChoicePending, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
 import { getExposeStatus, fetchExposeStatus, disableExpose } from './app/host-expose.js';
 import './app/detached-grid-launcher.js';
@@ -573,6 +573,20 @@ export function sendSubmittedBody(sessionId, bodyText, opts: any = {}) {
   return true;
 }
 
+// 添付の送り先を決めてもらうために止めた送信を、決まった後に送り直す。
+// 止めたときの下書きと同じ（入力欄・チップ・添付が窓を開いている間に変わっていない）ときだけ自動で送る。
+// 変わっていたら、何を送るかは利用者が見直すので、送らずに「もう一度送信してください」と知らせる。
+// 止めた送信は何も消費していないので、ここで送り直しても二重にはならない。
+function resendAfterRemoteAttachChoice(draft: ComposerDraft): void {
+  if (!isComposerOwnerLive(draft) || activeSessionId !== draft.sessionId) return;
+  inputEl.focus(); // 窓に移っていた入力の位置を、入力欄へ戻す
+  if ((composerDraftVersions.get(draft.sessionId) || 0) !== draft.version) {
+    showToast(t('remote_attach_resend'), undefined, 4500);
+    return;
+  }
+  void doSend(draft.sessionId);
+}
+
 // 送ると本文が空になるか（doSend と同じく、自動送信のトリガーフレーズは除いて見る）。
 // 空白だけの本文も、送れば最後に確定の '\r' が届く（buildBodySubmitPart の遅延 Enter）ので空に数える。
 function isEmptySubmit() {
@@ -597,6 +611,16 @@ export async function doSend(sessionId) {
   if (isEmptySubmit() && emptySubmitHitsFoldedHighRiskApproval(sessionId)) {
     showToast(t('toast_folded_high_risk_empty_submit'), undefined, 4500);
     return;
+  }
+  // シェルのセッションで添付の送り先をまだ選んでいないときは、何も送らずに送り先の窓を開く。
+  // 選ばないまま送ると、ssh 先から読めない PC 上のパスが入力に入る（長文の貼り付けも、送る瞬間に
+  // ファイルになる添付として数える）。入力欄・チップ・添付は消さず、予約済みの確定 Enter や送信中の
+  // 表示にも触れないよう、それらより前に止める。接続が切れているときは窓を出さず、下の送信失敗の通知に任せる。
+  // 窓で決めると resendAfterRemoteAttachChoice が送り直す（bugfix_shell-long-paste-local-path-without-remote-target_2026-10-28.md）。
+  if (isWebSocketSendReady() && isRemoteAttachChoicePending(sessionId)
+      && prepareComposerSend(draft).attachments.length > 0
+      && askRemoteAttachChoice(sessionId, () => resendAfterRemoteAttachChoice(draft))) {
+    return false;
   }
   // 後続の単行送信が deferred-enter 予約をキャンセルしないと、遅延 \r / ペースト本体が
   // 次メッセージの後ろに注入される。送信確定の直前に必ず消す。

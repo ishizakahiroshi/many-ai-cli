@@ -10,6 +10,23 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Added
+- **Files on the ssh destination can be opened without downloading.** With a
+  destination set in a shell session, clicking a path the remote AI printed
+  offers "👁️ Open from <destination>" next to "⬇️ Fetch", and the "⬇ Fetch"
+  window gained an "Open" button. The Hub reads the file over the same ssh and
+  shows it in a read-only view: text files and Markdown up to 1 MB, images up
+  to 20 MB; anything else asks you to use Fetch. Paths inside the
+  destination's Markdown (relative, `/…`, `file:`) cannot be clicked, so no file
+  on this PC is opened by mistake; `http(s)` links work as before.
+
+### Fixed
+- **Sending an attachment from a shell session with no destination chosen now
+  asks first.** Images, files and long pastes used to be sent silently with a
+  path on this PC, which an AI running on the ssh machine could not open. A
+  window now appears before sending: enter the ssh destination and press Save,
+  or press "Read on this PC". Your input and attachments are kept.
+
 ## [1.0.0]
 
 This release replaces the Go implementation of many-ai-cli with a Rust one.

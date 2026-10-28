@@ -2231,8 +2231,14 @@ export const FilesPreview = (function () {
     markedBaseConfigured = true;
   }
 
-  /** marked で Markdown → HTML 変換し、DOMPurify でサニタイズ */
-  function renderMarkdown(content, baseDir, onLinkClick) {
+  /**
+   * marked で Markdown → HTML 変換し、DOMPurify でサニタイズ。
+   * options.remote: ssh 先のファイルの Markdown（remote-file-view.ts が FilesPreview.renderMarkdown 経由で使う）。
+   * その文書の相対パス・/ で始まるパス・file: などのリンクと画像は、PC のファイルとして開かれてしまう
+   * （別のマシンの話なのに PC の中身が出る）ので、押せない文字・代わりの文字にして出す。http(s) のリンクは通常と同じ。
+   */
+  function renderMarkdown(content, baseDir, onLinkClick, options: any = {}) {
+    const remote = !!(options && options.remote);
     if (typeof marked === 'undefined') return `<pre>${escapeHtml(content)}</pre>`;
     ensureMarkedBaseConfigured();
 
@@ -2265,6 +2271,10 @@ export const FilesPreview = (function () {
         // クリック時の動きは描画後の bindUrlLinksIn が付ける
         return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer"${safeTitle}>${safeText}</a>${escapeHtml(tail)}`;
       }
+      if (remote) {
+        // 押せるリンクにしない（data 属性にすると、押したとき PC のファイルとして開かれる）。文字だけ残す。
+        return `<span class="files-md-link files-md-link--inert"${safeTitle}>${safeText}</span>`;
+      }
       if (/\.(md|txt)$/i.test(href) && !/^https?:\/\//i.test(href) && !href.startsWith('/')) {
         // 相対 md リンク → data 属性で処理
         return `<a href="#" data-files-rel-link="${safeHref}" class="files-md-link"${safeTitle}>${safeText}</a>`;
@@ -2272,6 +2282,25 @@ export const FilesPreview = (function () {
       // その他（絶対OSパス等）→ data 属性
       return `<a href="#" data-files-path-link="${safeHref}" class="files-md-link"${safeTitle}>${safeText}</a>`;
     };
+
+    if (remote) {
+      // ssh 先の文書の画像。相対パスや /api/files-asset?path=… のような PC の Hub の URL を <img> にすると、
+      // 読み込んだ瞬間に PC のファイルが画面に出る。埋め込み画像（data:image）だけ画像にし、残りは代わりの文字を出す。
+      renderer.image = (href, title, text) => {
+        if (href && typeof href === 'object') {
+          const token = href;
+          href = token.href || '';
+          title = token.title || '';
+          text = token.text || '';
+        }
+        const src = String(href || '');
+        const alt = escapeHtml(text || '');
+        if (/^data:image\/(?:png|jpe?g|gif|webp|bmp);base64,[A-Za-z0-9+/=]+$/i.test(src)) {
+          return `<img src="${escapeHtml(src)}" alt="${alt}">`;
+        }
+        return `<span class="files-md-link files-md-link--inert" title="${escapeHtml(src)}">🖼 ${alt}</span>`;
+      };
+    }
 
     // ```lang ... ``` → highlight.js で色付け（hljs 未ロード時はプレーン表示にフォールバック）
     renderer.code = function (codeObj, infoArg) {
@@ -2316,11 +2345,20 @@ export const FilesPreview = (function () {
     if (typeof DOMPurify === 'undefined' || DOMPurify.isSupported === false) {
       return `<pre class="files-preview-plain">${escapeHtml(content)}</pre>`;
     }
-    return DOMPurify.sanitize(html, {
+    const sanitizeConfig: any = {
       ADD_ATTR: ['target', 'data-files-rel-link', 'data-files-path-link', 'data-files-skip-search'],
       FORBID_TAGS: ['form', 'button', 'input', 'select', 'option', 'textarea', 'fieldset', 'style', 'link', 'base'],
       FORBID_ATTR: ['action', 'method', 'form', 'formaction', 'formmethod', 'formenctype', 'formtarget', 'style'],
-    });
+    };
+    if (remote) {
+      // Markdown の中に直接書かれた HTML（<a href="/…"> <img src="/…"> <video src> など）も同じ扱いにする。
+      // URL を持つ属性は http(s) だけ通し、相対・絶対パス・file: などは属性ごと外す（<img src="data:…"> は別枠で通る）。
+      sanitizeConfig.ALLOWED_URI_REGEXP = /^(?:https?:)/i;
+      sanitizeConfig.ADD_ATTR = ['target', 'data-files-skip-search'];
+      sanitizeConfig.FORBID_TAGS = sanitizeConfig.FORBID_TAGS.concat(['video', 'audio', 'source', 'track', 'picture', 'iframe', 'frame', 'frameset', 'object', 'embed', 'svg', 'math']);
+      sanitizeConfig.FORBID_ATTR = sanitizeConfig.FORBID_ATTR.concat(['srcset', 'poster', 'ping', 'background', 'xlink:href']);
+    }
+    return DOMPurify.sanitize(html, sanitizeConfig);
   }
 
   /**
@@ -3112,7 +3150,8 @@ export const FilesPreview = (function () {
     delete containerEl._filesPreview;
   }
 
-  return { bind, unbind };
+  // renderMarkdown は ssh 先のファイルの表示（remote-file-view.ts）も使う。
+  return { bind, unbind, renderMarkdown };
 })();
 
 /**

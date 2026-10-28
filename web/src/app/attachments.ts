@@ -6,6 +6,7 @@ import { basenameForPath, copyPathText } from './path-links.js';
 import { appendComposerAttachment, captureComposerOwner, inputEl, isComposerOwnerLive, isInteractiveFocusTarget, removeComposerAttachment, stagePastedText, updateInputAffordance } from '../app.js';
 import { pushMessage } from './chat-history.js';
 import { openLightbox } from './lightbox.js';
+import { isFetchableRemotePath, isRemoteViewablePath, openRemoteFileView } from './remote-file-view.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -164,7 +165,11 @@ if (agentLogBtn) {
 const REMOTE_TARGETS_KEY = 'remoteAttachTargetsV1';
 const MAX_REMOTE_TARGETS = 50;
 
-type RemoteTargetEntry = { key: string; target: string };
+// 1 セッションにつき 1 件。target があれば「その ssh 先へ送る」、target が空で local が true なら
+// 「このPCで読むと決めた」。記録が無い（または target も local も無い）のは「まだ選んでいない」。
+// 以前は「このPCに戻す」で記録そのものを消していたので、この 2 つを区別できなかった。
+// 既存の保存値（key と target だけ）はそのまま読める。
+type RemoteTargetEntry = { key: string; target: string; local?: boolean };
 
 function remoteTargetKey(sessionId: number): string | null {
   const session = sessions.get(sessionId);
@@ -172,7 +177,12 @@ function remoteTargetKey(sessionId: number): string | null {
   return `${sessionId}|${String(session.started_at || '')}`;
 }
 
+// localStorage が使えない（書けない）ときだけ、このページを開いている間の分を持つ。
+// 持たないと、選んでも「まだ選んでいない」のままになり、送るたびに窓が出続けて添付を送れなくなる。
+let remoteTargetsInMemory: RemoteTargetEntry[] | null = null;
+
 function loadRemoteTargets(): RemoteTargetEntry[] {
+  if (remoteTargetsInMemory) return remoteTargetsInMemory;
   try {
     const parsed = JSON.parse(localStorage.getItem(REMOTE_TARGETS_KEY) || '[]');
     if (!Array.isArray(parsed)) return [];
@@ -183,30 +193,51 @@ function loadRemoteTargets(): RemoteTargetEntry[] {
 }
 
 function storeRemoteTargets(entries: RemoteTargetEntry[]): void {
+  const kept = entries.slice(-MAX_REMOTE_TARGETS);
   try {
-    localStorage.setItem(REMOTE_TARGETS_KEY, JSON.stringify(entries.slice(-MAX_REMOTE_TARGETS)));
-  } catch (_) {}
+    localStorage.setItem(REMOTE_TARGETS_KEY, JSON.stringify(kept));
+    remoteTargetsInMemory = null;
+  } catch (_) {
+    remoteTargetsInMemory = kept;
+  }
 }
 
-/** 送り先が無い（このPCで読む）ときは空文字。シェル以外のセッションは常に空文字。 */
-export function remoteAttachTarget(sessionId: number | null): string {
-  if (sessionId === null) return '';
+function remoteAttachEntry(sessionId: number | null): RemoteTargetEntry | undefined {
+  if (sessionId === null) return undefined;
   const key = remoteTargetKey(sessionId);
-  if (!key) return '';
-  return loadRemoteTargets().find((e) => e.key === key)?.target || '';
+  if (!key) return undefined;
+  return loadRemoteTargets().find((e) => e.key === key);
 }
 
+/** 送り先が無い（このPCで読む／まだ選んでいない）ときは空文字。シェル以外のセッションは常に空文字。 */
+export function remoteAttachTarget(sessionId: number | null): string {
+  return remoteAttachEntry(sessionId)?.target || '';
+}
+
+/**
+ * シェルのセッションで、添付の送り先をまだ選んでいない（ssh 先も「このPCで読む」も決めていない）か。
+ * シェル以外のセッションは常に false。選ばないまま添付を送ると、ssh 先から読めない PC 上のパスが入る。
+ */
+export function isRemoteAttachChoicePending(sessionId: number | null): boolean {
+  if (sessionId === null || !remoteTargetKey(sessionId)) return false;
+  const entry = remoteAttachEntry(sessionId);
+  return !(entry && (entry.target || entry.local === true));
+}
+
+/** target が空なら「このPCで読む」を選んだこととして記録する（記録は消さない）。 */
 function setRemoteAttachTarget(sessionId: number, target: string): void {
   const key = remoteTargetKey(sessionId);
   if (!key) return;
   const entries = loadRemoteTargets().filter((e) => e.key !== key);
-  if (target) entries.push({ key, target });
+  entries.push(target ? { key, target } : { key, target: '', local: true });
   storeRemoteTargets(entries);
 }
 
 function recentRemoteTargets(): string[] {
   const seen = new Set<string>();
-  for (const entry of loadRemoteTargets().reverse()) seen.add(entry.target);
+  for (const entry of loadRemoteTargets().slice().reverse()) {
+    if (entry.target) seen.add(entry.target);
+  }
   return [...seen];
 }
 
@@ -247,10 +278,19 @@ function syncRemoteAttachButton(): void {
   const shown = target.length > 24 ? `${target.slice(0, 23)}…` : target;
   attachRemoteBtn.textContent = target
     ? t('remote_attach_button_remote', { target: shown })
-    : t('remote_attach_button_local');
+    : isRemoteAttachChoicePending(activeSessionId)
+      ? t('remote_attach_button_unset')
+      : t('remote_attach_button_local');
 }
 
-function openRemoteAttachPopup(anchor: HTMLButtonElement, sessionId: number): void {
+type RemoteAttachPopupOpts = {
+  /** 添付を送ろうとして止めたとき。送る前に選んでもらう説明を出す。 */
+  beforeSend?: boolean;
+  /** 送り先（ssh 先か「このPCで読む」）を決めて窓を閉じた後に呼ぶ。決めずに閉じたら呼ばない。 */
+  onDecided?: () => void;
+};
+
+function openRemoteAttachPopup(anchor: HTMLButtonElement, sessionId: number, opts: RemoteAttachPopupOpts = {}): void {
   if (!remoteAttachPopup) {
     remoteAttachPopup = document.createElement('div');
     remoteAttachPopup.className = 'agent-log-popup remote-attach-popup';
@@ -269,6 +309,14 @@ function openRemoteAttachPopup(anchor: HTMLButtonElement, sessionId: number): vo
   const hint = document.createElement('div');
   hint.className = 'agent-log-popup-title remote-attach-hint';
   hint.textContent = t('remote_attach_hint');
+  // 添付を送ろうとして止めたときは、なぜ今選ぶのか（選ばないと PC 上のパスが入る）を先に見せる。
+  let choose: HTMLDivElement | null = null;
+  if (opts.beforeSend) {
+    choose = document.createElement('div');
+    choose.className = 'agent-log-popup-title remote-attach-hint';
+    choose.setAttribute('role', 'status');
+    choose.textContent = t('remote_attach_choose_first');
+  }
 
   const listId = 'remote-attach-recent';
   const input = document.createElement('input');
@@ -299,6 +347,8 @@ function openRemoteAttachPopup(anchor: HTMLButtonElement, sessionId: number): vo
     closeRemoteAttachPopup();
     syncRemoteAttachButton();
     showToast(target ? t('remote_attach_saved', { target }) : t('remote_attach_cleared'), anchor);
+    // 一度だけ呼ぶ（窓を閉じた後なので、同じ窓から 2 回目の決定は来ない）。
+    opts.onDecided?.();
   };
   input.addEventListener('input', () => input.removeAttribute('aria-invalid'));
   input.addEventListener('keydown', (e) => {
@@ -308,7 +358,9 @@ function openRemoteAttachPopup(anchor: HTMLButtonElement, sessionId: number): vo
     } else if (e.key === 'Escape') {
       e.preventDefault();
       closeRemoteAttachPopup();
-      anchor.focus();
+      // 送る途中で開いたときは、入力欄へ戻す（何も送っておらず、入力欄の中身はそのまま）。
+      if (opts.beforeSend) inputEl.focus();
+      else anchor.focus();
     }
   });
 
@@ -322,22 +374,43 @@ function openRemoteAttachPopup(anchor: HTMLButtonElement, sessionId: number): vo
   const localBtn = document.createElement('button');
   localBtn.type = 'button';
   localBtn.className = 'ui-button ui-button--quiet ui-button--compact';
-  localBtn.textContent = t('remote_attach_use_local');
+  // 送り先がまだ無いときの「戻す」は、戻る先が無いので「このPCで読む」と言う。
+  localBtn.textContent = t(remoteAttachTarget(sessionId) ? 'remote_attach_use_local' : 'remote_attach_read_local');
   localBtn.addEventListener('click', () => {
     input.value = '';
     save();
   });
   actions.append(saveBtn, localBtn);
 
-  box.append(title, hint, input, recent, actions);
+  box.append(title, ...(choose ? [choose] : []), hint, input, recent, actions);
   box.hidden = false;
-  const rect = anchor.getBoundingClientRect();
+  // スマホ幅では添付欄ごと隠れていて、ボタンの位置が取れない（全部 0）。そのときは入力欄の上に出す。
+  let rect = anchor.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) rect = inputEl.getBoundingClientRect();
   const width = box.offsetWidth;
   box.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, rect.left))}px`;
   box.style.top = `${Math.max(8, rect.top - box.offsetHeight - 8)}px`;
   anchor.setAttribute('aria-expanded', 'true');
   input.focus();
   input.select();
+}
+
+/**
+ * シェルのセッションで送り先をまだ選んでいないまま添付を送ろうとしたとき、送る前に送り先の窓を開く
+ * （呼び出し側は、true が返ったら何も送らず入力欄・チップ・添付もそのまま残す）。
+ * 窓は今のクリックが終わってから開く（送信ボタンのクリックは document まで届き、開いた窓を閉じてしまうため）。
+ * 利用者が ssh 先か「このPCで読む」を決めたら onDecided を呼ぶ。決めずに閉じたら呼ばない。
+ * 窓を出せない（シェルのセッションでない・もう選んである・ボタンが無い）ときは false で、何もしない。
+ */
+export function askRemoteAttachChoice(sessionId: number, onDecided?: () => void): boolean {
+  if (!attachRemoteBtn || !isRemoteAttachChoicePending(sessionId)) return false;
+  setTimeout(() => {
+    if (activeSessionId !== sessionId || !isRemoteAttachChoicePending(sessionId)) return;
+    syncRemoteAttachButton();
+    closeRemoteFetchPopup();
+    openRemoteAttachPopup(attachRemoteBtn, sessionId, { beforeSend: true, onDecided });
+  }, 0);
+  return true;
 }
 
 if (attachRemoteBtn) {
@@ -365,11 +438,7 @@ if (attachRemoteBtn) {
 const MAX_RECENT_FETCH_PATHS = 10;
 const recentFetchPaths: string[] = [];
 
-// Hub 側（remote_attach.rs の validate_remote_path）と同じ規則。相対パスは送り先の作業フォルダが分からないので受けない。
-export function isFetchableRemotePath(path: string): boolean {
-  const rest = path.startsWith('~/') ? path.slice(2) : path.startsWith('/') ? path : '';
-  return rest !== '' && rest !== '/' && !rest.endsWith('/') && path.length <= 4096 && !/[\u0000-\u001f\u007f-\u009f]/.test(path);
-}
+// 送り先のパスとして受けてよい形かの規則（isFetchableRemotePath）は、「開く」と共有するため remote-file-view.ts に置いた。
 
 function rememberFetchPath(path: string): void {
   const index = recentFetchPaths.indexOf(path);
@@ -420,13 +489,29 @@ export async function fetchRemoteFile(sessionId: number, remotePath: string, anc
   }
 }
 
-/** 端末に出たパスのメニューへ足す項目。送り先を決めたシェルのセッションで、送り先のパスとして読めるものだけ。 */
+/**
+ * ssh 先のファイルを、ダウンロードせずに読み取り専用の画面（モーダル）で開く。「取ってくる」と同じ Hub の経路で読む
+ * （remote-file-view.ts）。画面の「取ってくる」ボタンから同じファイルを保存もできる。
+ */
+function openRemoteFile(sessionId: number, path: string): Promise<boolean> {
+  return openRemoteFileView(sessionId, remoteAttachTarget(sessionId), path, { onFetch: () => { void fetchRemoteFile(sessionId, path); } });
+}
+
+/**
+ * 端末に出たパスのメニューへ足す項目。送り先を決めたシェルのセッションで、送り先のパスとして読めるものだけ。
+ * 「開く」（画面に表示できる種類のときだけ）を先に、「取ってくる」を後に並べる。
+ */
 export function remoteFetchMenuItems(sessionId: number | null, path: string): any[] {
   if (sessionId === null) return [];
   const target = remoteAttachTarget(sessionId);
   if (!target || !isFetchableRemotePath(path)) return [];
   // メニューは押した時点で閉じる（取り終わるまで開いたままにしない）。経過と結果はトーストで出す。
-  return [{ icon: '⬇️', label: t('remote_fetch_menu', { target }), action: () => { void fetchRemoteFile(sessionId, path); } }];
+  const items: any[] = [];
+  if (isRemoteViewablePath(path)) {
+    items.push({ icon: '👁️', label: t('remote_view_menu', { target }), action: () => { void openRemoteFile(sessionId, path); } });
+  }
+  items.push({ icon: '⬇️', label: t('remote_fetch_menu', { target }), action: () => { void fetchRemoteFile(sessionId, path); } });
+  return items;
 }
 
 function openRemoteFetchPopup(anchor: HTMLButtonElement, sessionId: number): void {
@@ -473,10 +558,15 @@ function openRemoteFetchPopup(anchor: HTMLButtonElement, sessionId: number): voi
   fetchBtn.type = 'button';
   fetchBtn.className = 'ui-button ui-button--primary ui-button--compact';
   fetchBtn.textContent = t('remote_fetch_submit');
-  actions.append(fetchBtn);
+  // 「開く」は画面に表示するだけ（保存しない）。「取ってくる」の隣に、先に並べる。
+  const openBtn = document.createElement('button');
+  openBtn.type = 'button';
+  openBtn.className = 'ui-button ui-button--secondary ui-button--compact';
+  openBtn.textContent = t('remote_view_submit');
+  actions.append(openBtn, fetchBtn);
 
   const submit = async () => {
-    if (fetchBtn.disabled) return;
+    if (fetchBtn.disabled || openBtn.disabled) return;
     const path = input.value.trim();
     if (!isFetchableRemotePath(path)) {
       input.setAttribute('aria-invalid', 'true');
@@ -484,13 +574,33 @@ function openRemoteFetchPopup(anchor: HTMLButtonElement, sessionId: number): voi
       return;
     }
     fetchBtn.disabled = true;
+    openBtn.disabled = true;
     fetchBtn.textContent = t('remote_fetch_busy');
     const ok = await fetchRemoteFile(sessionId, path, anchor);
     fetchBtn.disabled = false;
+    openBtn.disabled = false;
     fetchBtn.textContent = t('remote_fetch_submit');
     if (ok) closeRemoteFetchPopup();
   };
+  const openInView = async () => {
+    if (fetchBtn.disabled || openBtn.disabled) return;
+    const path = input.value.trim();
+    if (!isFetchableRemotePath(path)) {
+      input.setAttribute('aria-invalid', 'true');
+      showToast(t('remote_fetch_invalid'), input);
+      return;
+    }
+    // 開けない種類・失敗の知らせは openRemoteFileView が出す。画面が出ている間は二重に押せないようにする。
+    rememberFetchPath(path);
+    fetchBtn.disabled = true;
+    openBtn.disabled = true;
+    const ok = await openRemoteFile(sessionId, path);
+    fetchBtn.disabled = false;
+    openBtn.disabled = false;
+    if (ok) closeRemoteFetchPopup();
+  };
   fetchBtn.addEventListener('click', () => { void submit(); });
+  openBtn.addEventListener('click', () => { void openInView(); });
   input.addEventListener('input', () => input.removeAttribute('aria-invalid'));
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.isComposing) {

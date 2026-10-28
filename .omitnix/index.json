@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "03d9b89e268174e55e8dbabb5d98280c2b6ae15c",
-    "dirty": true,
+    "commit": "5bb1a5e14af7f26cc20b81faa905e9ba98054253",
+    "dirty": false,
     "tool": "omitnix 0.1.4",
     "partial": false,
     "adapters": [
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2040,
-    "analyzed": 1581,
+    "discovered": 2043,
+    "analyzed": 1584,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 449,
@@ -45744,6 +45744,36 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/remote-file-view.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "ssh 先（送り先）のファイルを 1 つ、ダウンロードせずに読み取り専用のモーダルで開く"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/residue-sweep.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -49243,6 +49273,36 @@
       "unresolved": []
     },
     {
+      "path": "web/tests/attachments-remote-choice.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/tests/boot-guard.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -49604,6 +49664,36 @@
     },
     {
       "path": "web/tests/remote-auth.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/remote-file-view.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

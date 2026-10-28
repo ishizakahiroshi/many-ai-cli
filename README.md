@@ -1336,6 +1336,7 @@ You can send image files from the Hub UI to a wrapped session.
 When a shell session uses `ssh` to run an AI CLI on another machine, a path saved on this PC cannot be opened there. Enter the ssh destination (a `~/.ssh/config` Host, `user@host` or `ssh://user@host:port`) in **📤 Send to** next to the attachment area.
 
 - From then on, images, files and long pastes attached in that session are sent over ssh to `~/.many-ai-cli/remote-attachments/` on the destination, and the destination's path is put in the input (a copy also stays on this PC)
+- If a shell session has no destination chosen yet when you send an attachment (a long paste included), a window asks you to choose first: enter an ssh destination and press **Save**, or press **Read on this PC**. Your input and attachments are kept
 - Key-based login only (`BatchMode=yes`). When the transfer fails, ssh's error is shown
 - Files sent to the destination are removed by a later transfer once they are 7 days old
 - The destination is stored per session in the browser. It is not shown for sessions that launched an AI CLI directly
@@ -1344,6 +1345,7 @@ When a shell session uses `ssh` to run an AI CLI on another machine, a path save
 
 With a destination set, files can also be brought from that machine to this PC.
 
+- To read a destination file without downloading it, click its path in the terminal and choose **👁️ Open from 〈destination〉** (or press **Open** in the **⬇ Fetch** window). It appears in a read-only view: text files and Markdown up to 1 MB, images up to 20 MB. Links inside the destination's Markdown that point to paths (not `http(s)`) are not clickable, so nothing on this PC is opened
 - Click a destination path shown in the terminal (one starting with `/` or `~/`) and choose **⬇️ Fetch from 〈destination〉**, or paste the path into **⬇ Fetch** next to the attachment area
 - The Hub reads the file over the same ssh and hands it to the browser as a download (where it lands follows your browser settings; the Hub keeps no copy)
 - Up to 50 MB per file. Use `scp` for larger files or folders

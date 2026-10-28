@@ -224,6 +224,7 @@ export function renderPathPopupItems(popup, items, clientX, clientY) {
 
 export let fileModalEl = null;
 let fileModalKeyHandler = null;
+let fileModalOnClose: (() => void) | null = null;
 
 export function closeFileModal() {
   if (fileModalKeyHandler) {
@@ -234,6 +235,42 @@ export function closeFileModal() {
     fileModalEl.remove();
     fileModalEl = null;
   }
+  const onClose = fileModalOnClose;
+  fileModalOnClose = null;
+  if (onClose) onClose();
+}
+
+/**
+ * ファイルのモーダルの枠（背景・パネル・本文の入れ物）を作って画面に置く。Esc と背景クリックで閉じる。
+ * 開いている枠は常に 1 枚で、先に開いていたものはここで閉じる。openFileModal と ssh 先のファイルの
+ * モーダル（remote-file-view.ts）が同じ枠を使うので、どちらを後から開いても 2 枚は重ならない。
+ * onClose は閉じるときに 1 回だけ呼ばれる（通信の中止・Blob URL の解放などの後始末用）。
+ */
+export function openFileModalShell(onClose?: () => void) {
+  closeFileModal(); // 二重起動防止
+
+  const overlay = document.createElement('div');
+  overlay.className = 'aac-file-modal-overlay aac-wheel-overlay';
+  const dialogEl = document.createElement('div');
+  dialogEl.className = 'ui-modal ui-modal--lg aac-file-modal';
+  const body = document.createElement('div');
+  body.className = 'ui-modal__body aac-file-modal-body';
+  dialogEl.appendChild(body);
+  overlay.appendChild(dialogEl);
+  document.body.appendChild(overlay);
+  fileModalEl = overlay;
+  fileModalOnClose = onClose || null;
+
+  // 背景（オーバーレイ自身）クリックで閉じる。パネル内クリックは閉じない。
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeFileModal(); });
+
+  // Esc で閉じる（capture で他ハンドラより先に処理し、ターミナル等への波及を防ぐ）
+  fileModalKeyHandler = (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); closeFileModal(); }
+  };
+  document.addEventListener('keydown', fileModalKeyHandler, true);
+
+  return { dialogEl, body };
 }
 
 /** プレビューの起点（相対パス表示と FilesPreview の filesRoot / gitRoot）。モーダルと別窓で同じ決め方にする。 */
@@ -279,27 +316,7 @@ export function openFileInWindow(filePath, sessionId, cwd, size: DetachedWindowS
 export function openFileModal(filePath, sessionId, cwdOverride = '') {
   const cwd = resolveFilePreviewCwd(filePath, sessionId, cwdOverride);
   if (!cwd) { showToast(t('link_open_error')); return; }
-  closeFileModal(); // 二重起動防止
-
-  const overlay = document.createElement('div');
-  overlay.className = 'aac-file-modal-overlay aac-wheel-overlay';
-  const panel = document.createElement('div');
-  panel.className = 'ui-modal ui-modal--lg aac-file-modal';
-  const body = document.createElement('div');
-  body.className = 'ui-modal__body aac-file-modal-body';
-  panel.appendChild(body);
-  overlay.appendChild(panel);
-  document.body.appendChild(overlay);
-  fileModalEl = overlay;
-
-  // 背景（オーバーレイ自身）クリックで閉じる。パネル内クリックは閉じない。
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeFileModal(); });
-
-  // Esc で閉じる（capture で他ハンドラより先に処理し、ターミナル等への波及を防ぐ）
-  fileModalKeyHandler = (e) => {
-    if (e.key === 'Escape') { e.stopPropagation(); closeFileModal(); }
-  };
-  document.addEventListener('keydown', fileModalKeyHandler, true);
+  const { dialogEl, body } = openFileModalShell(); // 先に開いていたモーダルはここで閉じる（二重起動防止）
 
   // モーダルなので filesRoot/gitRoot は cwd 起点。内蔵の ✕ の代わりに、モーダル全体を閉じる専用ボタンを置く。
   const toolbar = mountSingleFilePreview(body, filePath, sessionId, cwd);
@@ -317,7 +334,7 @@ export function openFileModal(filePath, sessionId, cwdOverride = '') {
       // Markdown のリンクで別のファイルへ移っていることがあるので、開いたときではなく表示中のパスを渡す
       const current = preview?.currentPath?.() || filePath;
       // 別窓はモーダルと同じ大きさで開く（位置はブラウザ任せ。サブモニターへは自分で動かす）
-      const rect = panel.getBoundingClientRect();
+      const rect = dialogEl.getBoundingClientRect();
       if (openFileInWindow(current, sessionId, cwd, { width: rect.width, height: rect.height })) closeFileModal();
     });
     toolbar.appendChild(popOut);
