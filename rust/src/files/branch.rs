@@ -1,5 +1,6 @@
 //! Session Git observations, matching the fixed Go branch/project helpers.
-//! Each lookup owns one 250 ms budget, including its fallback command.
+//! Each lookup owns one budget, including its fallback command: 250 ms, or
+//! `CHANGES_TIMEOUT` for the worktree statistics.
 use super::FilesService;
 use crate::{
     process::{
@@ -16,6 +17,14 @@ use std::{
 };
 
 const LOOKUP_TIMEOUT: Duration = Duration::from_millis(250);
+/// `status` and `diff --numstat` walk the whole worktree and routinely exceed
+/// 250 ms on large or cloud-backed trees. On Windows a timed-out lookup
+/// terminates its Job, which stops the real Git mid-scan (Go killed only the
+/// `cmd\git.exe` launcher). A Git stopped while reading a streaming cloud
+/// folder was observed to stay terminated but never torn down, leaking one
+/// process per slow refresh. Refreshes already run per-cwd single-flight in
+/// Hub-owned workers, so the longer budget does not delay the UI.
+const CHANGES_TIMEOUT: Duration = Duration::from_secs(5);
 const OUTPUT_CAP: usize = 16 * 1024 * 1024;
 
 /// `Some("")` is a definitive absence of a project; `None` must be retried.
@@ -63,7 +72,7 @@ impl GitBranchSource for FilesService {
             if cwd.trim().is_empty() {
                 return (0, 0, 0);
             }
-            let git = Lookup::new(self);
+            let git = Lookup::with_budget(self, CHANGES_TIMEOUT);
             let Ok(status) = git.run(cwd, &["status", "--porcelain"]).await else {
                 return (0, 0, 0);
             };
@@ -71,7 +80,14 @@ impl GitBranchSource for FilesService {
                 .split('\n')
                 .filter(|line| !line.trim().is_empty())
                 .count() as i64;
-            let Ok(numstat) = git.run(cwd, &["diff", "--numstat", "HEAD"]).await else {
+            // Porcelain `git diff` rewrites the index (taking index.lock) to
+            // record refreshed stat data even with GIT_OPTIONAL_LOCKS=0. The
+            // plumbing equivalent compares the same HEAD/worktree pair without
+            // writing; -M keeps porcelain's default rename pairing.
+            let Ok(numstat) = git
+                .run(cwd, &["diff-index", "-M", "--numstat", "HEAD"])
+                .await
+            else {
                 return (files, 0, 0);
             };
             let (added, deleted) = change_lines(&numstat);
@@ -135,9 +151,13 @@ impl LookupError {
 
 impl<'a> Lookup<'a> {
     fn new(service: &'a FilesService) -> Self {
+        Self::with_budget(service, LOOKUP_TIMEOUT)
+    }
+
+    fn with_budget(service: &'a FilesService, budget: Duration) -> Self {
         Self {
             service,
-            until: Instant::now() + LOOKUP_TIMEOUT,
+            until: Instant::now() + budget,
         }
     }
 
@@ -156,13 +176,18 @@ impl<'a> Lookup<'a> {
         }
         let mut argv = vec![OsString::from("-C"), OsString::from(cwd)];
         argv.extend(args.iter().map(OsString::from));
+        let mut env = self.service.git_environment.clone();
+        // Display lookups only observe. Skipping optional locks (status's
+        // opportunistic index refresh) means a stopped lookup cannot strand
+        // `.git/index.lock` and block the user's own Git commands.
+        env.insert("GIT_OPTIONAL_LOCKS".into(), Some("0".into()));
         Ok(ProcessPlan {
             executable,
             args: argv,
             // Go passes only -C; a nonexistent target must reach Git, rather
             // than becoming an indistinguishable pre-exec chdir failure.
             cwd: self.service.hub_cwd.clone(),
-            env: self.service.git_environment.clone(),
+            env,
             stdin: vec![],
             timeout,
             output_cap: OUTPUT_CAP,
@@ -301,7 +326,7 @@ mod tests {
 
     // Go's project_id.go documents cold Git exceeding 250ms, and
     // branch_refresh.go retries on later cycles. Wait for fixture observations
-    // to converge without changing any production lookup's 250ms budget.
+    // to converge without changing any production lookup's budget.
     async fn observe_git<T, F, Fut>(
         description: &str,
         expected: &T,
@@ -739,10 +764,17 @@ mod tests {
             .map(OsString::from)
         );
         assert_eq!(first.cwd, fixture.service.hub_cwd);
-        assert_eq!(first.env, fixture.service.git_environment);
+        let mut expected_env = fixture.service.git_environment.clone();
+        expected_env.insert("GIT_OPTIONAL_LOCKS".into(), Some("0".into()));
+        assert_eq!(first.env, expected_env);
         assert_eq!(first.output_cap, OUTPUT_CAP);
         assert_eq!(first.pipe_drain_timeout, LOOKUP_TIMEOUT);
         assert!(first.timeout <= LOOKUP_TIMEOUT && second.timeout <= first.timeout);
+        let stats = Lookup::with_budget(&fixture.service, CHANGES_TIMEOUT)
+            .plan("target with spaces", &["status", "--porcelain"])
+            .unwrap();
+        assert!(stats.timeout > LOOKUP_TIMEOUT && stats.timeout <= CHANGES_TIMEOUT);
+        assert_eq!(stats.env, expected_env);
         let expired = Lookup {
             service: &fixture.service,
             until: Instant::now(),
@@ -751,6 +783,64 @@ mod tests {
             expired.plan("cwd", &["status"]),
             Err(LookupError::Expired)
         ));
+    }
+
+    #[tokio::test]
+    async fn changes_lookup_leaves_the_index_and_its_lock_alone() {
+        let fixture = Fixture::new();
+        fixture.init().await;
+        let tracked = fixture.root.join("tracked.txt");
+        fs::write(&tracked, "same\n").unwrap();
+        fixture.commit().await;
+        // Same content, newer stat data: a refresh would rewrite the index.
+        fs::File::options()
+            .write(true)
+            .open(&tracked)
+            .unwrap()
+            .set_modified(std::time::SystemTime::now() + Duration::from_secs(10))
+            .unwrap();
+        // One untracked file makes a successful status distinguishable from
+        // the all-zero failure result.
+        fs::write(fixture.root.join("untracked.txt"), "new\n").unwrap();
+        let index = fixture.root.join(".git").join("index");
+        let before = fs::read(&index).unwrap();
+        assert_eq!(
+            fixture.observed_changes(fixture.cwd(), (1, 0, 0)).await,
+            (1, 0, 0)
+        );
+        assert_eq!(fs::read(&index).unwrap(), before);
+        assert!(!fixture.root.join(".git").join("index.lock").exists());
+        // Control: the porcelain numstat used before does rewrite it in the
+        // same state, so the unchanged index above is the lookup's doing.
+        fixture
+            .git(&fixture.root, &["diff", "--numstat", "HEAD"])
+            .await;
+        assert_ne!(fs::read(&index).unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn changes_line_counts_match_porcelain_diff_for_renames_and_edits() {
+        let fixture = Fixture::new();
+        fixture.init().await;
+        fs::write(fixture.root.join("moved.txt"), "a\nb\nc\nd\ne\n").unwrap();
+        fs::write(fixture.root.join("edited.txt"), "one\ntwo\n").unwrap();
+        fixture.commit().await;
+        fixture
+            .git(&fixture.root, &["mv", "moved.txt", "renamed.txt"])
+            .await;
+        fs::write(fixture.root.join("edited.txt"), "one\nthree\nfour\n").unwrap();
+        let (added, deleted) = change_lines(
+            &fixture
+                .git(&fixture.root, &["diff", "--numstat", "HEAD"])
+                .await,
+        );
+        // A rename paired as one entry contributes no lines; unpaired it
+        // would add and delete the whole file.
+        assert_eq!((added, deleted), (2, 1));
+        assert_eq!(
+            fixture.observed_changes(fixture.cwd(), (2, 2, 1)).await,
+            (2, 2, 1)
+        );
     }
 
     #[test]
@@ -833,6 +923,19 @@ mod tests {
             "if [ \"$3\" = status ]; then printf ' M one\\n\\n?? two\\n'; else exit 128; fi",
         );
         assert_eq!(fixture.service.changes(fixture.cwd()).await, (2, 0, 0));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn changes_wait_past_the_short_lookup_budget_instead_of_stopping_git() {
+        let mut fixture = Fixture::new();
+        // Each command takes longer than the 250 ms lookup budget but stays
+        // well inside the statistics budget.
+        script(
+            &mut fixture,
+            "sleep 0.6\nif [ \"$3\" = status ]; then printf ' M one\\n'; else printf '2\\t1\\tone\\n'; fi",
+        );
+        assert_eq!(fixture.service.changes(fixture.cwd()).await, (1, 2, 1));
     }
 
     #[cfg(unix)]
