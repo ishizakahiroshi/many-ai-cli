@@ -72,19 +72,17 @@ impl UsageHooks {
         // Canonical registry, including hidden usage-probe sessions. No second
         // session map and no per-wrapper remove that can erase a sibling hook.
         for snapshot in self.core.usage_hook_sessions() {
-            if snapshot.provider != "codex" {
-                continue;
-            }
-            // 一時観測 rust-spawn-probe: codex のセッション 1 件ごとの注入の前後。
-            crate::logging::spawn_probe::mark("hub_usage_inject_begin", None, Some(snapshot.id.0));
-            let injected = self.codex.inject(&HookParams {
-                hub_url: &url,
-                token: &config.token,
-                session: snapshot.id.0,
-                executable: &self.executable,
-            });
-            crate::logging::spawn_probe::mark("hub_usage_inject_done", None, Some(snapshot.id.0));
-            if injected.is_err() {
+            if snapshot.provider == "codex"
+                && self
+                    .codex
+                    .inject(&HookParams {
+                        hub_url: &url,
+                        token: &config.token,
+                        session: snapshot.id.0,
+                        executable: &self.executable,
+                    })
+                    .is_err()
+            {
                 (self.warning)("Codex usage hook injection failed");
             }
         }

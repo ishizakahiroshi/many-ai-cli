@@ -285,8 +285,6 @@ impl WebSocketService {
             let closed = self.sockets.reserve_wrapper(connection, writer)?;
             let requested = first.session_id;
             let reattach = first.r#type == "reattach";
-            // 一時観測 rust-spawn-probe: 登録メッセージの pid は wrapper 自身の pid。
-            let probe_subject = u32::try_from(first.pid).ok().filter(|pid| *pid > 0);
             let restored_metadata = if reattach {
                 self.registration_preparation
                     .as_ref()
@@ -307,8 +305,7 @@ impl WebSocketService {
                     .await
                     .map(|r| (r.binding, r.reattached, r.after_reattached, None, None))
             } else {
-                crate::logging::spawn_probe::mark("hub_core_register_begin", probe_subject, None);
-                let registered = SessionCore::register(
+                SessionCore::register(
                     self.core.as_ref(),
                     RegisterRequest {
                         message: first,
@@ -317,13 +314,8 @@ impl WebSocketService {
                     connection,
                     Timestamp::now(),
                 )
-                .await;
-                crate::logging::spawn_probe::mark(
-                    "hub_core_registered",
-                    probe_subject,
-                    registered.as_ref().ok().map(|r| r.binding.session.0),
-                );
-                registered.map(|r| {
+                .await
+                .map(|r| {
                     (
                         r.binding,
                         r.registered,
@@ -351,23 +343,9 @@ impl WebSocketService {
             };
             let prepared = async {
                 if let Some(preparation) = &self.registration_preparation {
-                    // 一時観測 rust-spawn-probe: 初回登録だけ残す（再接続は登録の内訳に含めない）。
-                    let probe = |stage: &'static str| {
-                        if !reattach {
-                            crate::logging::spawn_probe::mark(
-                                stage,
-                                probe_subject,
-                                Some(binding.session.0),
-                            );
-                        }
-                    };
-                    probe("hub_before_ack_begin");
                     preparation.before_ack(binding, reattach).await?;
-                    probe("hub_before_ack_done");
                     if !reattach {
-                        probe("hub_prepare_begin");
                         preparation.prepare().await?;
-                        probe("hub_prepared");
                     }
                 }
                 Ok::<(), SessionError>(())

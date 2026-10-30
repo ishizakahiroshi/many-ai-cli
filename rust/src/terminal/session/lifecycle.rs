@@ -1,9 +1,4 @@
 use super::*;
-/// 一時観測 rust-spawn-probe: 登録メッセージの pid（wrapper 自身の pid）を観測の `subject` にする。
-/// hub/websocket.rs の `probe_subject` と同じ読み替えで、同じ起動の行を突き合わせられる。
-fn probe_wrapper_pid(pid: i64) -> Option<u32> {
-    u32::try_from(pid).ok().filter(|pid| *pid > 0)
-}
 impl Session {
     fn spawn_correlation(&self, hub_instance: &str) -> Option<SpawnCorrelationNotification> {
         if self.snapshot.client_request_id.is_empty() || self.usage_probe {
@@ -54,15 +49,9 @@ impl SessionEngine {
         // Like Go registration, resolve the initial branch before publishing the
         // card, without holding the session-state or admission locks.
         let branch = (self.options.branch_lookup)(request.message.cwd.clone()).await;
-        // 一時観測 rust-spawn-probe: 登録の中の待ちの内訳（hub/websocket.rs の hub_core_register_begin から
-        // hub_core_registered の間）。ブランチ取得・登録 mutex・永続化レーンの順に、終わった時点を残す。
-        let probe_subject = probe_wrapper_pid(request.message.pid);
-        crate::logging::spawn_probe::mark("hub_register_branch_done", probe_subject, None);
         let _registration = self.registration.lock().await;
-        crate::logging::spawn_probe::mark("hub_register_mutex_acquired", probe_subject, None);
         let persistence_order = { lock(&self.state).persistence_lane.reserve() };
         persistence_order.wait_ordered().await;
-        crate::logging::spawn_probe::mark("hub_register_ordered", probe_subject, None);
         let m = request.message;
         // Native startup ownership matches the actual owned PID; ordinary
         // manual registrations retain Go's signed wire PID compatibility.
@@ -265,18 +254,7 @@ impl SessionEngine {
             board_path: metadata.board_path.clone(),
             worktree_branch: metadata.worktree_branch.clone(),
         };
-        // 一時観測 rust-spawn-probe: 初回登録（append なし）の保存先の紐づけ。再接続は残さない。
-        let probe = |stage: &'static str| {
-            if !append {
-                crate::logging::spawn_probe::mark(
-                    stage,
-                    probe_wrapper_pid(m.pid),
-                    Some(binding.session.0),
-                );
-            }
-        };
-        probe("hub_register_attach_begin");
-        let attached = self.journal.attach_session(
+        let (paths, db_id, card) = self.journal.attach_session(
             binding,
             start,
             SessionCardMeta {
@@ -286,9 +264,7 @@ impl SessionEngine {
             started_text,
             append,
             !m.usage_probe,
-        );
-        probe("hub_register_attached");
-        let (paths, db_id, card) = attached?;
+        )?;
         let snapshot = SessionSnapshot {
             id: binding.session,
             provider: m.provider.clone(),

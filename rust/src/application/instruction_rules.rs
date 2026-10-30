@@ -178,13 +178,7 @@ impl InstructionRules {
         if let Some(root) = roots.get(&k) {
             return root.clone();
         }
-        // 一時観測 rust-spawn-probe: 解決（git rev-parse の起動）1 回ごとに 1 組残す。
-        // 同じ cwd の 2 回目以降は上で戻るので、組の数がそのまま起動した回数になる。registered の
-        // 外（ended / shutdown）からの呼び出しも同じ行を残すので、数えるのは registered の
-        // hub_rules_lock_acquired から hub_rules_targets_done の間だけ。
-        crate::logging::spawn_probe::mark("hub_rules_resolve_root_begin", None, None);
         let root = self.resolver.root(Path::new(trimmed), cancel).await;
-        crate::logging::spawn_probe::mark("hub_rules_resolve_root_done", None, None);
         roots.insert(k, root.clone());
         root
     }
@@ -363,9 +357,6 @@ impl InstructionRules {
         // Read the published flag only after owning the mutation lane: a sweep
         // waiting behind disable must not re-inject from an older snapshot.
         let mut known = self.known.lock().await;
-        // 一時観測 rust-spawn-probe: 指示ルールの登録の内訳（serve.rs の hub_rules_registered_begin から
-        // hub_rules_registered の間）。ここまでが known の lock 待ち。
-        crate::logging::spawn_probe::mark("hub_rules_lock_acquired", None, None);
         let Ok(config) = self.config.snapshot() else {
             (self.warning)("approval instruction settings unavailable");
             return;
@@ -374,7 +365,6 @@ impl InstructionRules {
             return;
         }
         let (active, legacy) = self.targets(cancel).await;
-        crate::logging::spawn_probe::mark("hub_rules_targets_done", None, None);
         // Persist intent before touching any user's instruction file. A crash
         // after an atomic replacement must leave a discoverable recovery target.
         for target in &active {
@@ -386,9 +376,7 @@ impl InstructionRules {
                 known.insert(k, target.clone());
             }
         }
-        let persisted = self.persist(&known);
-        crate::logging::spawn_probe::mark("hub_rules_persisted", None, None);
-        if persisted.is_err() {
+        if self.persist(&known).is_err() {
             (self.warning)("approval instruction journal persistence failed; injection skipped");
             return;
         }
@@ -409,10 +397,8 @@ impl InstructionRules {
                 (self.warning)("delegation instruction injection failed");
             }
         }
-        crate::logging::spawn_probe::mark("hub_rules_injected", None, None);
         let inactive = self.inactive(&active, legacy, &known);
         self.remove(inactive, &mut known, true);
-        crate::logging::spawn_probe::mark("hub_rules_removed", None, None);
     }
     pub async fn ended(&self, cancel: &Cancellation) {
         let mut known = self.known.lock().await;

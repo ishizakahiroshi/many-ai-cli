@@ -162,11 +162,8 @@ pub async fn register(
     cancel: &crate::process::Cancellation,
 ) -> io::Result<(Box<dyn HubSocket>, Message)> {
     let handshake = async {
-        let probe_pid = Some(std::process::id());
         let mut socket = connector.connect(proof).await?;
-        crate::logging::spawn_probe::mark("wrapper_connected", probe_pid, None);
         socket.send(registration).await?;
-        crate::logging::spawn_probe::mark("wrapper_register_sent", probe_pid, None);
         let response = socket.receive().await?;
         if response.r#type != "registered" || response.session_id <= 0 {
             return Err(io::Error::new(

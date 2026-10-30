@@ -126,8 +126,6 @@ where
     }
     options.registration.r#type = "register".into();
     options.registration.role = "wrapper".into();
-    let probe_pid = Some(std::process::id());
-    crate::logging::spawn_probe::mark("wrapper_register_begin", probe_pid, None);
     let (mut socket, mut registered) = super::transport::register(
         connector,
         &options.registration,
@@ -136,7 +134,6 @@ where
         cancel,
     )
     .await?;
-    crate::logging::spawn_probe::mark("wrapper_registered", probe_pid, Some(registered.session_id));
     if registered.started_at.is_empty() {
         registered.started_at =
             chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
@@ -228,12 +225,8 @@ where
         Some(options.registration.token.clone().into()),
     );
     let size = PtySize::from_wire(registered.cols, registered.rows).unwrap_or_default();
-    crate::logging::spawn_probe::mark("wrapper_pty_spawn_begin", probe_pid, None);
     let pty = match factory.spawn(&options.process, size) {
-        Ok(pty) => {
-            crate::logging::spawn_probe::mark("wrapper_pty_spawned", probe_pid, None);
-            pty
-        }
+        Ok(pty) => pty,
         Err(error) => {
             let mut socket = socket;
             let end = Message {
@@ -279,16 +272,10 @@ where
                 end: replay.total(),
             });
         };
-        let mut probe_first_output = true;
         loop {
             let n = match reader_pty.read(&mut bytes).await {
                 Ok(0) => break,
-                Ok(n) => {
-                    if std::mem::take(&mut probe_first_output) {
-                        crate::logging::spawn_probe::mark("wrapper_first_output", probe_pid, None);
-                    }
-                    n
-                }
+                Ok(n) => n,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
                 Err(_) => {
                     reader_pty.close();

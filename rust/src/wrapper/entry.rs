@@ -336,7 +336,6 @@ pub async fn run_cli(
         output_cap: 16 * 1024 * 1024,
         pipe_drain_timeout: Duration::from_secs(2),
     };
-    crate::logging::spawn_probe::mark("wrapper_prepared", Some(std::process::id()), None);
     super::startup::strip_provider_environment(&mut process);
     clear_inherited_raw_cmd_bootstrap(&mut process);
     let internal_launch_env = [
