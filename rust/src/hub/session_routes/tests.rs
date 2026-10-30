@@ -554,6 +554,8 @@ fn start(f: &Fixture, live: i64, suffix: &str) -> DbSessionId {
         })
         .unwrap()
 }
+/// Conversation bodies are not persisted, so tests that need a stored chat row
+/// use an attachment name instead.
 fn message(f: &Fixture, live: i64, text: &str) {
     f.store
         .as_ref()
@@ -561,7 +563,7 @@ fn message(f: &Fixture, live: i64, text: &str) {
         .store_event(
             LiveSessionId(live),
             HistoryEvent(
-                json!({"type":"user_input", "ts":"2026-01-01T00:00:01Z", "text":text})
+                json!({"type":"attach", "ts":"2026-01-01T00:00:01Z", "filename":text, "path":""})
                     .as_object()
                     .unwrap()
                     .clone(),

@@ -17,7 +17,41 @@ pub(super) fn open_connection(
     let conn = Connection::open_with_flags(path.as_ref(), flags)
         .map_err(|e| sql_error(StorageErrorKind::Open, e))?;
     let fts = initialize(&conn, init_timeout)?;
+    purge_message_bodies(&conn, fts, init_timeout)?;
     Ok((conn, fts))
+}
+/// Databases written by earlier versions hold conversation bodies. Remove them
+/// once (zeroing freed pages) so a stored secret does not outlive the upgrade.
+fn purge_message_bodies(conn: &Connection, fts: bool, timeout: Duration) -> StorageResult<()> {
+    let stale = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM messages WHERE NOT (role='system' AND kind='attach')) OR EXISTS(SELECT 1 FROM events) OR EXISTS(SELECT 1 FROM sessions WHERE COALESCE(first_message,'')<>'' OR COALESCE(last_message,'')<>'')",
+            [],
+            |r| r.get::<_, bool>(0),
+        )
+        .map_err(|e| sql_error(StorageErrorKind::Open, e))?;
+    if !stale {
+        return Ok(());
+    }
+    deadline(conn, Instant::now() + timeout).map_err(|e| sql_error(StorageErrorKind::Open, e))?;
+    let purged = (|| -> rusqlite::Result<()> {
+        conn.execute_batch("PRAGMA secure_delete=ON")?;
+        if fts {
+            conn.execute_batch("INSERT INTO messages_fts(messages_fts) VALUES('delete-all')")?;
+        }
+        conn.execute_batch("DELETE FROM messages WHERE NOT (role='system' AND kind='attach'); DELETE FROM events; UPDATE sessions SET first_message=NULL,last_message=NULL WHERE first_message IS NOT NULL OR last_message IS NOT NULL;")?;
+        if fts {
+            conn.execute_batch("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')")?;
+        }
+        // Reclaiming the file is best effort; the rows above are already gone.
+        let _ = conn.execute_batch("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);");
+        Ok(())
+    })()
+    .map_err(|e| sql_error(StorageErrorKind::Open, e));
+    let _ = conn.execute_batch("PRAGMA secure_delete=OFF");
+    conn.progress_handler(0, None::<fn() -> bool>)
+        .map_err(|e| sql_error(StorageErrorKind::Open, e))?;
+    purged
 }
 fn initialize(conn: &Connection, init_timeout: Duration) -> StorageResult<bool> {
     // The timeout must precede even journal mode: the first pragma can contend.

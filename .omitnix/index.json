@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "52291a344c7760e59332d809c83e3b7025e2f7fe",
+    "commit": "ce7fb9e65c045131c52019b205a17635f6be65a6",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -35385,13 +35385,20 @@
         "reads": {
           "state": "value",
           "value": [
+            "attachments",
+            "events",
             "messages",
             "sessions"
           ]
         },
         "writes": {
-          "state": "none_observed",
-          "value": []
+          "state": "value",
+          "value": [
+            "events",
+            "messages",
+            "messages_fts",
+            "sessions"
+          ]
         },
         "screen_to_api": {
           "state": "out_of_scope"
@@ -35428,7 +35435,6 @@
           "value": [
             "approvals",
             "attachments",
-            "events",
             "messages",
             "messages_fts",
             "sessions"
@@ -35467,12 +35473,17 @@
         "reads": {
           "state": "value",
           "value": [
+            "events",
+            "messages",
             "sessions"
           ]
         },
         "writes": {
           "state": "value",
           "value": [
+            "events",
+            "messages",
+            "messages_fts",
             "sessions"
           ]
         },
@@ -50356,6 +50367,7 @@
       "name": "attachments",
       "read_by": [
         "go/internal/sessionstore/audit_store_test.go",
+        "rust/src/storage/mod.rs",
         "rust/src/terminal/journal/failure_tests.rs",
         "rust/tests/storage_contracts.rs"
       ],
@@ -50377,12 +50389,15 @@
       "read_by": [
         "go/internal/sessionstore/audit_store_test.go",
         "go/internal/sessionstore/store.go",
+        "rust/src/storage/mod.rs",
         "rust/src/storage/repository.rs",
+        "rust/src/storage/schema.rs",
         "rust/tests/storage_contracts.rs"
       ],
       "written_by": [
         "go/internal/sessionstore/store.go",
-        "rust/src/storage/repository.rs",
+        "rust/src/storage/mod.rs",
+        "rust/src/storage/schema.rs",
         "rust/src/storage/schema.sql",
         "rust/tests/fixtures/core/storage/old-schema.sql",
         "rust/tests/storage_contracts.rs"
@@ -50402,13 +50417,16 @@
         "rust/src/storage/history.rs",
         "rust/src/storage/mod.rs",
         "rust/src/storage/repository.rs",
+        "rust/src/storage/schema.rs",
         "rust/tests/journal_contracts.rs",
         "rust/tests/storage_contracts.rs"
       ],
       "written_by": [
         "go/internal/sessionstore/store.go",
         "rust/src/storage/history.rs",
+        "rust/src/storage/mod.rs",
         "rust/src/storage/repository.rs",
+        "rust/src/storage/schema.rs",
         "rust/src/storage/schema.sql",
         "rust/tests/fixtures/core/storage/old-schema.sql",
         "rust/tests/storage_contracts.rs"
@@ -50427,7 +50445,9 @@
       "written_by": [
         "go/internal/sessionstore/store.go",
         "rust/src/storage/history.rs",
+        "rust/src/storage/mod.rs",
         "rust/src/storage/repository.rs",
+        "rust/src/storage/schema.rs",
         "rust/tests/storage_contracts.rs"
       ],
       "in_schema_snapshot": false,
@@ -50451,6 +50471,7 @@
       "written_by": [
         "go/internal/sessionstore/store.go",
         "rust/src/storage/history.rs",
+        "rust/src/storage/mod.rs",
         "rust/src/storage/repository.rs",
         "rust/src/storage/schema.rs",
         "rust/src/storage/schema.sql",

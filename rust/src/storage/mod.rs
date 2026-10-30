@@ -223,6 +223,77 @@ mod tests {
                 .clone(),
         )
     }
+    fn attach(n: u64) -> HistoryEvent {
+        HistoryEvent(
+            json!({"type":"attach","path":format!("synthetic-{n}"),"filename":"synthetic.txt"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+    }
+    #[test]
+    fn conversation_bodies_are_never_persisted() {
+        let (_root, _installed, store) = fixture(8);
+        for body in [
+            json!({"type":"user_input","text":"synthetic-user-body"}),
+            json!({"type":"pty_output","text":"synthetic-ai-body"}),
+        ] {
+            store
+                .store_event(
+                    LiveSessionId(1),
+                    HistoryEvent(body.as_object().unwrap().clone()),
+                )
+                .unwrap();
+        }
+        store.update_session_messages(LiveSessionId(1), "synthetic-first", "synthetic-last");
+        let counts: (i64, i64, i64) = store
+            .with_conn(StorageErrorKind::Query, |c| {
+                c.query_row(
+                    "SELECT (SELECT COUNT(*) FROM messages),(SELECT COUNT(*) FROM events),(SELECT COUNT(*) FROM sessions WHERE COALESCE(first_message,'')<>'' OR COALESCE(last_message,'')<>'')",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+            })
+            .unwrap();
+        assert_eq!(counts, (0, 0, 0));
+    }
+    #[test]
+    fn legacy_bodies_are_purged_when_the_database_is_opened() {
+        let root = tempfile::tempdir().unwrap();
+        let installed = tempfile::tempdir().unwrap();
+        let paths = RuntimePaths::trial(root.path(), 49115, installed.path()).unwrap();
+        let options = || StorageOptions::baseline(paths.resource(Resource::Logs));
+        let store = SqliteSessionStorage::open(&paths, options()).unwrap();
+        store
+            .start_session(SessionStart {
+                live_session_id: LiveSessionId(1),
+                ..Default::default()
+            })
+            .unwrap();
+        store
+            .with_conn(StorageErrorKind::Write, |c| {
+                c.execute_batch(
+                    "INSERT INTO messages(session_id,ts,role,kind,text,raw_text) VALUES (1,'t','user','text','synthetic-legacy','synthetic-legacy');
+                     INSERT INTO messages_fts(rowid,text,raw_text) VALUES (1,'synthetic-legacy','synthetic-legacy');
+                     INSERT INTO events(session_id,ts,type,payload_json) VALUES (1,'t','user_input','{\"text\":\"synthetic-legacy\"}');
+                     UPDATE sessions SET first_message='synthetic-legacy',last_message='synthetic-legacy';",
+                )
+            })
+            .unwrap();
+        let path = store.database_path().to_owned();
+        store.close().unwrap();
+        drop(store);
+        let reopened = SqliteSessionStorage::open(&paths, options()).unwrap();
+        reopened.close().unwrap();
+        let mut bytes = std::fs::read(&path).unwrap();
+        if let Ok(wal) = std::fs::read(companion(&path, "-wal")) {
+            bytes.extend(wal);
+        }
+        assert!(
+            !bytes.windows(16).any(|w| w == b"synthetic-legacy"),
+            "legacy body text must not remain in the database files"
+        );
+    }
     #[test]
     fn bounded_queue_drop_count_is_nonblocking_under_database_backpressure() {
         let (_root, _installed, store) = fixture(2);
@@ -279,10 +350,10 @@ mod tests {
         assert_eq!(report.written, 1);
         assert_eq!(report.remaining, 0);
         let c = Connection::open(store.database_path()).unwrap();
-        let body: String = c
-            .query_row("SELECT text FROM messages", [], |r| r.get(0))
+        let stored: i64 = c
+            .query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(body, "synthetic-100");
+        assert_eq!(stored, 0, "conversation bodies must not be persisted");
     }
     #[test]
     fn single_connection_pragmas_reapply_on_every_explicit_open() {
@@ -407,11 +478,16 @@ mod tests {
         let blocker = Connection::open(store.database_path()).unwrap();
         blocker.execute_batch("BEGIN IMMEDIATE").unwrap();
         let began = Instant::now();
-        assert!(store.store_event(LiveSessionId(1), event(1)).is_err());
+        assert!(store.store_event(LiveSessionId(1), attach(1)).is_err());
         assert!(began.elapsed() < Duration::from_millis(250));
         blocker.execute_batch("ROLLBACK").unwrap();
-        store.store_event(LiveSessionId(1), event(2)).unwrap();
-        assert_eq!(store.usage_summary().unwrap().total_messages, 1);
+        store.store_event(LiveSessionId(1), attach(2)).unwrap();
+        let attachments: i64 = store
+            .with_conn(StorageErrorKind::Query, |c| {
+                c.query_row("SELECT COUNT(*) FROM attachments", [], |r| r.get(0))
+            })
+            .unwrap();
+        assert_eq!(attachments, 1);
     }
     #[test]
     fn recovery_metadata_targets_database_identity_without_reviving_or_replacing_a_row() {

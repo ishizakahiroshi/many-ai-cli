@@ -115,7 +115,7 @@ mod tests {
             })
             .unwrap();
         store.inner.with_conn(StorageErrorKind::Write, |connection| {
-            connection.execute_batch("CREATE TRIGGER reject_async BEFORE INSERT ON events WHEN NEW.type='reject' BEGIN SELECT RAISE(ABORT,'synthetic'); END")
+            connection.execute_batch("CREATE TRIGGER reject_async BEFORE INSERT ON attachments WHEN NEW.path='reject' BEGIN SELECT RAISE(ABORT,'synthetic'); END")
         }).unwrap();
         let (entered_tx, entered_rx) = mpsc::channel();
         let (release_tx, release_rx) = mpsc::channel();
@@ -127,7 +127,7 @@ mod tests {
         })));
         let event = |kind: &str| {
             HistoryEvent(
-                serde_json::json!({"type":kind,"text":"synthetic"})
+                serde_json::json!({"type":"attach","path":kind,"text":"synthetic"})
                     .as_object()
                     .unwrap()
                     .clone(),
@@ -207,7 +207,7 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap();
-            store.inner.with_conn(StorageErrorKind::Write,|c|c.execute_batch("CREATE TRIGGER reject_async BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT,'synthetic'); END")).unwrap();
+            store.inner.with_conn(StorageErrorKind::Write,|c|c.execute_batch("CREATE TRIGGER reject_async BEFORE INSERT ON attachments BEGIN SELECT RAISE(ABORT,'synthetic'); END")).unwrap();
             let (entered_tx, entered_rx) = mpsc::channel();
             let (release_tx, release_rx) = mpsc::channel();
             let (observer_tx, observer_rx) = mpsc::channel();
@@ -222,7 +222,7 @@ mod tests {
             store.store_event_async(
                 LiveSessionId(1),
                 HistoryEvent(
-                    serde_json::json!({"type":"reject"})
+                    serde_json::json!({"type":"attach","path":"reject"})
                         .as_object()
                         .unwrap()
                         .clone(),

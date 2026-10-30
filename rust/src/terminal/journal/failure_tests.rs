@@ -233,7 +233,7 @@ async fn full_sqlite_queue_warns_and_drops_only_database_copy_while_jsonl_keeps_
     {
         let connection = rusqlite::Connection::open(f.store.database_path()).unwrap();
         connection.execute_batch(
-            "CREATE TRIGGER fail_gate_event BEFORE INSERT ON events WHEN NEW.type='synthetic_gate' BEGIN SELECT RAISE(ABORT,'synthetic bounded gate'); END"
+            "CREATE TRIGGER fail_gate_event BEFORE INSERT ON attachments WHEN NEW.filename='synthetic_gate' BEGIN SELECT RAISE(ABORT,'synthetic bounded gate'); END"
         ).unwrap();
     }
     let (entered_tx, entered_rx) = mpsc::channel();
@@ -250,7 +250,7 @@ async fn full_sqlite_queue_warns_and_drops_only_database_copy_while_jsonl_keeps_
                 .expect("the test-owned writer gate must be released");
         })));
     let event = HistoryEvent(
-        serde_json::json!({"type":"synthetic_gate"})
+        serde_json::json!({"type":"attach","filename":"synthetic_gate","path":"synthetic-path"})
             .as_object()
             .unwrap()
             .clone(),

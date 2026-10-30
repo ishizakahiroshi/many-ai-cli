@@ -196,8 +196,8 @@ impl SessionStorage for SqliteSessionStorage {
     fn close_stale_sessions(&self, ended_at: Timestamp, reason: &str) -> StorageResult<i64> {
         self.with_conn(StorageErrorKind::Write, |c| c.execute("UPDATE sessions SET state='disconnected',end_reason=COALESCE(NULLIF(?, ''),end_reason),ended_at=?,updated_at=? WHERE ended_at IS NULL", params![reason,timestamp(ended_at)?,now()]).map(|n| n as i64))
     }
-    fn update_session_messages(&self, session: LiveSessionId, first: &str, last: &str) {
-        self.execute(session,"UPDATE sessions SET first_message=CASE WHEN first_message='' OR first_message IS NULL THEN ? ELSE first_message END,last_message=?,updated_at=? WHERE live_session_id=? AND ended_at IS NULL",params![first,last,now(),session.0]);
+    fn update_session_messages(&self, _session: LiveSessionId, _first: &str, _last: &str) {
+        // Message bodies are not persisted; see `store_event`.
     }
     fn update_session_state(&self, session: LiveSessionId, state: &str, last_output_at: &str) {
         if state.trim().is_empty() && last_output_at.trim().is_empty() {
@@ -248,7 +248,7 @@ impl SessionStorage for SqliteSessionStorage {
         let result = self.with_conn(StorageErrorKind::Write, |c| {
             let Some(id) = resolve(c,d.live_session_id,true)? else { return Ok(()); };
             let options = serde_json::to_string(&d.options).unwrap_or_else(|_| "null".into());
-            c.execute("INSERT INTO approvals(session_id,sig,source,kind,provider,question,context,options_json,block,candidate_key,source_epoch,state,detected_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending',?) ON CONFLICT(session_id,sig) DO UPDATE SET source=excluded.source,kind=excluded.kind,provider=excluded.provider,question=excluded.question,context=excluded.context,options_json=excluded.options_json,block=excluded.block,candidate_key=excluded.candidate_key,source_epoch=excluded.source_epoch,state='pending',detected_at=excluded.detected_at,resolved_at=NULL",params![id,d.sig,d.source,d.kind,d.provider,d.question,d.context,options,d.block,d.candidate_key,d.source_epoch.0 as i64,timestamp(d.detected_at.unwrap_or_else(Timestamp::now))?]).map(|_| ())
+            c.execute("INSERT INTO approvals(session_id,sig,source,kind,provider,question,context,options_json,block,candidate_key,source_epoch,state,detected_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending',?) ON CONFLICT(session_id,sig) DO UPDATE SET source=excluded.source,kind=excluded.kind,provider=excluded.provider,question=excluded.question,context=excluded.context,options_json=excluded.options_json,block=excluded.block,candidate_key=excluded.candidate_key,source_epoch=excluded.source_epoch,state='pending',detected_at=excluded.detected_at,resolved_at=NULL",params![id,d.sig,d.source,d.kind,d.provider,text::mask_secrets(&d.question),text::mask_secrets(&d.context),options,text::mask_secrets(&d.block),d.candidate_key,d.source_epoch.0 as i64,timestamp(d.detected_at.unwrap_or_else(Timestamp::now))?]).map(|_| ())
         });
         self.inner.notify(d.live_session_id, result);
     }
@@ -551,115 +551,63 @@ impl SessionStorage for SqliteSessionStorage {
     }
 }
 
+/// Conversation bodies (user input, AI output, event payloads) are deliberately
+/// not persisted: pattern masking cannot catch every secret, and each CLI keeps
+/// its own raw transcript. Only session lifecycle and attachment names are kept.
 pub(super) fn store_event(
     c: &mut Connection,
     fts: bool,
     live: LiveSessionId,
     event: &HistoryEvent,
 ) -> rusqlite::Result<()> {
+    let kind = text::value(event, "type");
+    if !matches!(
+        kind.as_str(),
+        "session_start" | "session_reattach" | "session_end" | "attach"
+    ) {
+        return Ok(());
+    }
     let Some(id) = resolve(c, live, true)? else {
         return Ok(());
     };
     let ts = text::value(event, "ts");
-    let kind = text::value(event, "type");
-    let kind = if kind.is_empty() { "event" } else { &kind };
-    let payload = if kind == "pty_output" {
-        String::new()
-    } else {
-        serde_json::to_string(&event.0).unwrap()
-    };
     let tx = c.transaction()?;
-    if kind != "pty_output" {
-        tx.execute(
-            "INSERT INTO events(session_id,ts,type,payload_json) VALUES (?,?,?,?)",
-            params![id, ts, kind, payload],
-        )?;
-    }
-    match kind {
-        "user_input" => {
-            let body = text::mask_secrets(&text::value(event, "text"))
-                .trim_end_matches(['\r', '\n'])
-                .to_owned();
-            if !body.trim().is_empty() {
-                insert_message(&tx, fts, id, &ts, "user", "text", &body, &payload)?;
-            }
-        }
-        "pty_output" => {
-            let provider: Option<String> =
-                tx.query_row("SELECT provider FROM sessions WHERE id=?", [id], |r| {
-                    r.get(0)
-                })?;
-            if !matches!(provider.as_deref(), Some("claude" | "codex")) {
-                let body = text::visible(&text::value(event, "text")).trim().to_owned();
-                if !text::noise(&body) {
-                    insert_message(&tx, fts, id, &ts, "ai", "text", &body, "")?;
-                }
-            }
-        }
+    match kind.as_str() {
         "attach" => {
             let file = text::value(event, "filename");
             let path = text::value(event, "path");
-            let body = if file.is_empty() { &path } else { &file };
-            if !body.is_empty() {
+            if !file.is_empty() || !path.is_empty() {
                 tx.execute(
                     "INSERT INTO attachments(session_id,ts,path,filename) VALUES (?,?,?,?)",
                     params![id, ts, path, file],
                 )?;
-                insert_message(&tx, fts, id, &ts, "system", "attach", body, &payload)?;
+                let name = if file.is_empty() { &path } else { &file };
+                let payload = serde_json::to_string(&event.0).unwrap();
+                tx.execute("INSERT INTO messages(session_id,ts,role,kind,text,raw_text,payload_json) VALUES (?,?,?,?,?,?,?)",params![id,ts,"system","attach",name,name,payload])?;
+                if fts
+                    && tx
+                        .execute(
+                            "INSERT INTO messages_fts(rowid,text,raw_text) VALUES (?,?,?)",
+                            params![tx.last_insert_rowid(), name, name],
+                        )
+                        .is_err()
+                {
+                    crate::logging::write_diagnostic(
+                        "sessionstore: search index update failed; message saved
+",
+                    );
+                }
             }
         }
-        _ => {}
-    }
-    match kind {
         "session_start" | "session_reattach" => {
             tx.execute("UPDATE sessions SET branch=COALESCE(NULLIF(?,''),branch),label=COALESCE(NULLIF(?,''),label),model=COALESCE(NULLIF(?,''),model),shell=COALESCE(NULLIF(?,''),shell),updated_at=? WHERE live_session_id=? AND ended_at IS NULL",params![text::value(event,"branch"),text::value(event,"label"),text::value(event,"model"),text::value(event,"shell"),now(),live.0])?;
         }
-        "session_end" => {
+        _ => {
             let current = now();
             tx.execute("UPDATE sessions SET state=COALESCE(NULLIF(?,''),state),end_reason=COALESCE(NULLIF(?,''),end_reason),ended_at=COALESCE(NULLIF(?,''),?),updated_at=? WHERE live_session_id=? AND ended_at IS NULL",params![text::value(event,"state"),text::value(event,"reason"),ts,current,current,live.0])?;
         }
-        "user_input" => {
-            let body = text::value(event, "text")
-                .trim_end_matches(['\r', '\n'])
-                .to_owned();
-            if !body.trim().is_empty() {
-                let last = if body.bytes().all(|b| b.is_ascii_digit()) {
-                    ""
-                } else {
-                    &body
-                };
-                tx.execute("UPDATE sessions SET first_message=CASE WHEN first_message IS NULL OR first_message='' THEN ? ELSE first_message END,last_message=COALESCE(NULLIF(?,''),last_message),updated_at=? WHERE live_session_id=? AND ended_at IS NULL",params![body,last,now(),live.0])?;
-            }
-        }
-        _ => {}
     }
     tx.commit()
-}
-#[allow(clippy::too_many_arguments)]
-fn insert_message(
-    c: &Connection,
-    fts: bool,
-    id: i64,
-    ts: &str,
-    role: &str,
-    kind: &str,
-    body: &str,
-    payload: &str,
-) -> rusqlite::Result<()> {
-    c.execute("INSERT INTO messages(session_id,ts,role,kind,text,raw_text,payload_json) VALUES (?,?,?,?,?,?,?)",params![id,ts,role,kind,body,body,payload])?;
-    if fts
-        && c.execute(
-            "INSERT INTO messages_fts(rowid,text,raw_text) VALUES (?,?,?)",
-            params![c.last_insert_rowid(), body, body],
-        )
-        .is_err()
-    {
-        // Match baseline soft-failure visibility without logging SQL or contents.
-        crate::logging::write_diagnostic(
-            "sessionstore: search index update failed; message saved\n",
-        );
-    }
-    Ok(())
 }
 fn placeholders(count: usize) -> String {
     vec!["?"; count].join(",")
