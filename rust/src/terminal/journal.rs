@@ -4,13 +4,10 @@
 use crate::proto::time::Timestamp;
 use crate::{
     config::{Resource, RuntimePaths},
-    files::safe_fs::Dir,
-    proto::{core::*, provider::to_go_json, time},
+    proto::{core::*, time},
 };
 use std::{
     collections::BTreeMap,
-    fs::File,
-    io::{self, Write},
     path::PathBuf,
     sync::{
         Arc, Mutex, RwLock,
@@ -39,20 +36,14 @@ pub struct SessionJournal {
     paths: RuntimePaths,
     storage: Option<Arc<dyn SessionStorage>>,
     enabled: AtomicBool,
-    max_bytes: i64,
     warning: RwLock<JournalWarningHandler>,
     ordering: Mutex<()>,
     writers: Mutex<BTreeMap<LiveSessionId, BoundWriter>>,
 }
+/// Owns the binding capability for one live session. No `.jsonl` file is
+/// written any more; the raw `.log` and the SQLite metadata are the only records.
 struct BoundWriter {
     binding: SessionBinding,
-    writer: Option<JsonlWriter>,
-}
-struct JsonlWriter {
-    file: Option<File>,
-    written: u64,
-    max_bytes: i64,
-    truncated: bool,
 }
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
@@ -107,7 +98,6 @@ impl SessionJournal {
             paths,
             storage,
             enabled: AtomicBool::new(options.session_enabled),
-            max_bytes: options.max_bytes,
             warning: RwLock::new(Arc::new(|id, error| {
                 eprintln!("session journal {}: {error:?}", id.0)
             })),
@@ -201,25 +191,12 @@ impl SessionJournal {
     fn bind_writer(
         &self,
         binding: SessionBinding,
-        paths: &JournalPaths,
-        append: bool,
+        _paths: &JournalPaths,
+        _append: bool,
     ) -> Result<(), SessionError> {
         // Replacing a capability closes its old writer now. A later stale
         // cleanup must not close this newly-bound writer or end its DB row.
-        lock(&self.writers).insert(
-            binding.session,
-            BoundWriter {
-                binding,
-                writer: None,
-            },
-        );
-        if self.enabled() {
-            let writer = self.make_writer(paths, append)?;
-            lock(&self.writers)
-                .get_mut(&binding.session)
-                .expect("owned writer slot")
-                .writer = Some(writer);
-        }
+        lock(&self.writers).insert(binding.session, BoundWriter { binding });
         Ok(())
     }
     /// Registration is one persistence transaction boundary: writer binding,
@@ -256,66 +233,6 @@ impl SessionJournal {
         }
         Ok((paths, db_id, card))
     }
-    fn make_writer(&self, paths: &JournalPaths, append: bool) -> Result<JsonlWriter, SessionError> {
-        // Pin each component before creating children. No path is re-opened after
-        // validation; create/open reject symlinks and non-regular files.
-        let logs_path = self.paths.resource(Resource::Logs);
-        let mut ancestor = logs_path.as_path();
-        let mut missing = Vec::new();
-        while !ancestor.exists() {
-            missing.push(
-                ancestor
-                    .file_name()
-                    .ok_or_else(|| failure("log directory has no parent"))?
-                    .to_string_lossy()
-                    .into_owned(),
-            );
-            ancestor = ancestor
-                .parent()
-                .ok_or_else(|| failure("log directory has no parent"))?;
-        }
-        let mut logs =
-            Dir::open(ancestor).map_err(|_| failure("cannot open owned log directory"))?;
-        for component in missing.iter().rev() {
-            logs = logs
-                .child_dir(component, true)
-                .map_err(|_| failure("cannot create owned log directory"))?;
-        }
-        let dir = logs
-            .child_dir("sessions", true)
-            .map_err(|_| failure("cannot open session log directory"))?;
-        let name = paths
-            .jsonl
-            .file_name()
-            .and_then(|n| n.to_str())
-            .ok_or_else(|| failure("invalid session log filename"))?;
-        let file = if append {
-            dir.open_append(name)
-                .map_err(|_| failure("cannot append session history"))?
-        } else {
-            match dir.create_new(name, &[], 0o600) {
-                Ok(()) => {}
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-                Err(_) => return Err(failure("cannot create session history")),
-            }
-            let file = dir
-                .open_file(name, true)
-                .map_err(|_| failure("cannot open session history"))?;
-            file.set_len(0)
-                .map_err(|_| failure("cannot reset session history"))?;
-            file
-        };
-        let written = file
-            .metadata()
-            .map_err(|_| failure("cannot inspect session history"))?
-            .len();
-        Ok(JsonlWriter {
-            file: Some(file),
-            written,
-            max_bytes: self.max_bytes,
-            truncated: false,
-        })
-    }
     pub fn close_writer(&self, id: LiveSessionId) {
         let _order = lock(&self.ordering);
         lock(&self.writers).remove(&id);
@@ -328,15 +245,6 @@ impl SessionJournal {
         if !self.enabled() {
             return Ok(());
         }
-        // A JSONL failure must not prevent the independent accepted SQLite write.
-        // Neither operation is retried here, including a partial filesystem write.
-        let file_result = match lock(&self.writers)
-            .get_mut(&id)
-            .and_then(|slot| slot.writer.as_mut())
-        {
-            Some(writer) => writer.event(&event, Timestamp::now()),
-            None => Ok(()),
-        };
         if let Some(storage) = &self.storage {
             match storage.store_event_async(id, event) {
                 EnqueueOutcome::Dropped { cumulative_count } if cumulative_count % 1000 == 1 => {
@@ -350,9 +258,6 @@ impl SessionJournal {
                 }
                 _ => {}
             }
-        }
-        if let Err(error) = file_result {
-            self.warn(id, &error);
         }
         // Go history failures are best effort and do not prevent live output.
         Ok(())
@@ -490,16 +395,6 @@ impl SessionJournal {
                         }
                     }
                     let event = HistoryEvent(data);
-                    let result = match lock(&self.writers)
-                        .get_mut(&session)
-                        .and_then(|slot| slot.writer.as_mut())
-                    {
-                        Some(writer) => writer.event(&event, ended_at),
-                        None => Ok(()),
-                    };
-                    if let Err(error) = result {
-                        self.warn(session, &error);
-                    }
                     if kind == "session_dismiss"
                         && let Some(s) = storage
                     {
@@ -508,11 +403,6 @@ impl SessionJournal {
                 }
                 if let Some(s) = storage {
                     s.end_session(session, &state, &reason, ended_at);
-                }
-                // Keep the bound capability slot with no live file so stale
-                // effects cannot become unbound writes after terminal cleanup.
-                if let Some(slot) = lock(&self.writers).get_mut(&session) {
-                    slot.writer = None;
                 }
             }
             PersistenceEffect::ClearSessionHistory(id) => {
@@ -524,43 +414,6 @@ impl SessionJournal {
             }
         }
         Ok(())
-    }
-}
-impl JsonlWriter {
-    fn line(&mut self, line: &[u8]) -> Result<(), SessionError> {
-        let file = self
-            .file
-            .as_mut()
-            .ok_or_else(|| failure("session history writer is closed"))?;
-        if file.write_all(line).is_err() {
-            self.file = None;
-            return Err(failure("session history write failed"));
-        }
-        self.written = self.written.saturating_add(line.len() as u64);
-        Ok(())
-    }
-    fn event(&mut self, event: &HistoryEvent, now: Timestamp) -> Result<(), SessionError> {
-        if self.file.is_none() {
-            return Err(failure("session history writer is closed"));
-        }
-        let mut line =
-            to_go_json(&event.0).map_err(|_| failure("session history encoding failed"))?;
-        line.push(b'\n');
-        if self.max_bytes > 0 && self.written >= self.max_bytes as u64 {
-            if !self.truncated {
-                self.truncated = true;
-                let at = time::format_with_offset(now, 0, false)
-                    .map_err(|_| failure("session log timestamp is unsupported"))?;
-                let mut marker = to_go_json(&serde_json::json!({"type":"log_truncated", "at":at}))
-                    .map_err(|_| failure("session history encoding failed"))?;
-                marker.push(b'\n');
-                self.line(&marker)?;
-            }
-            if event.0.get("type").and_then(|v| v.as_str()) != Some("session_end") {
-                return Ok(());
-            }
-        }
-        self.line(&line)
     }
 }
 /// Baseline filename normalization is byte-bounded, not character-bounded.

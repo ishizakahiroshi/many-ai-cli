@@ -21,6 +21,7 @@ async fn registered_http_session_routes_preserve_guards_and_real_store_effects()
     f.config.token = "synthetic-session-http-token".into();
     let id = register(&f).await;
     let snapshot = f.core.snapshot(id).unwrap();
+    std::fs::create_dir_all(std::path::Path::new(&snapshot.log_path).parent().unwrap()).unwrap();
     std::fs::write(&snapshot.log_path, b"ordinary loopback log").unwrap();
     message(&f, id.0, "loopback message");
     let owner = HubTaskOwner::new(tokio::runtime::Handle::current());

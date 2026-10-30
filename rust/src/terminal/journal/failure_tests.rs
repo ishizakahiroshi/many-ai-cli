@@ -2,14 +2,13 @@
 //! and database belongs to this fixture; no product runtime is started.
 use super::*;
 use crate::storage::SqliteSessionStorage;
-use std::{fs, sync::mpsc, time::Duration};
+use std::{sync::mpsc, time::Duration};
 
 struct Fixture {
     _root: tempfile::TempDir,
     _installed: tempfile::TempDir,
     journal: SessionJournal,
     store: Arc<SqliteSessionStorage>,
-    logs: JournalPaths,
     warnings: Arc<Mutex<Vec<(LiveSessionId, SessionError)>>>,
 }
 fn instant() -> Timestamp {
@@ -43,7 +42,7 @@ fn fixture(capacity: usize) -> Fixture {
     journal.set_warning_handler(Arc::new(move |session, error| {
         lock(&captured).push((session, error.clone()));
     }));
-    let logs = journal
+    journal
         .open(
             LiveSessionId(1),
             "copilot",
@@ -57,7 +56,6 @@ fn fixture(capacity: usize) -> Fixture {
         _installed: installed,
         journal,
         store,
-        logs,
         warnings,
     }
 }
@@ -101,17 +99,6 @@ fn warning_details(f: &Fixture) -> Vec<String> {
         })
         .collect()
 }
-fn jsonl_names(f: &Fixture) -> Vec<String> {
-    fs::read_to_string(&f.logs.jsonl)
-        .unwrap()
-        .lines()
-        .map(|line| {
-            let value: serde_json::Value = serde_json::from_str(line).unwrap();
-            assert_eq!(value["type"], "attach");
-            value["filename"].as_str().unwrap().to_owned()
-        })
-        .collect()
-}
 fn stored_names(f: &Fixture) -> Vec<String> {
     let connection = rusqlite::Connection::open(f.store.database_path()).unwrap();
     let mut statement = connection
@@ -144,58 +131,7 @@ async fn drain(f: &Fixture) -> ShutdownReport {
 }
 
 #[tokio::test]
-async fn jsonl_write_failure_keeps_independent_sqlite_attachment_writes_and_reopen_control() {
-    let f = fixture(4);
-    let bytes_before = fs::read(&f.logs.jsonl).unwrap();
-    {
-        let mut writers = lock(&f.journal.writers);
-        let writer = writers
-            .get_mut(&LiveSessionId(1))
-            .unwrap()
-            .writer
-            .as_mut()
-            .unwrap();
-        // Replace only the test-owned descriptor. Actual File::write_all on a
-        // read-only OS handle fails; no mocked writer or runtime seam is used.
-        writer.file = Some(File::open(&f.logs.jsonl).unwrap());
-    }
-    append(&f, "first-accepted-by-sqlite.txt");
-    append(&f, "second-accepted-by-sqlite.txt");
-    assert_eq!(fs::read(&f.logs.jsonl).unwrap(), bytes_before);
-    assert_eq!(
-        warning_details(&f),
-        [
-            "session history write failed",
-            "session history writer is closed"
-        ]
-    );
-    f.journal
-        .open(
-            LiveSessionId(1),
-            "copilot",
-            "/synthetic/project",
-            instant(),
-            true,
-        )
-        .unwrap();
-    append(&f, "positive-reopened-writer.txt");
-    f.journal.close_all();
-    let report = drain(&f).await;
-    assert_eq!(
-        stored_names(&f),
-        [
-            "first-accepted-by-sqlite.txt",
-            "second-accepted-by-sqlite.txt",
-            "positive-reopened-writer.txt"
-        ]
-    );
-    assert_eq!(jsonl_names(&f), ["positive-reopened-writer.txt"]);
-    assert_eq!(warning_details(&f).len(), 2);
-    assert_eq!(report.written, 3);
-}
-
-#[tokio::test]
-async fn closed_sqlite_enqueue_has_its_own_warning_while_jsonl_keeps_the_attachment() {
+async fn closed_sqlite_enqueue_has_its_own_warning() {
     let f = fixture(4);
     append(&f, "positive-before-close.txt");
     let report = drain(&f).await;
@@ -204,10 +140,6 @@ async fn closed_sqlite_enqueue_has_its_own_warning_while_jsonl_keeps_the_attachm
     f.journal.close_all();
     assert_eq!(warning_details(&f), ["session history database is closed"]);
     assert_eq!(stored_names(&f), ["positive-before-close.txt"]);
-    assert_eq!(
-        jsonl_names(&f),
-        ["positive-before-close.txt", "jsonl-only-after-close.txt"]
-    );
     assert_eq!(report.written, 1);
 }
 
@@ -228,7 +160,7 @@ impl Drop for WriterGate {
 }
 
 #[tokio::test]
-async fn full_sqlite_queue_warns_and_drops_only_database_copy_while_jsonl_keeps_both_attachments() {
+async fn full_sqlite_queue_warns_and_drops_the_overflowing_attachment() {
     let f = fixture(1);
     {
         let connection = rusqlite::Connection::open(f.store.database_path()).unwrap();
@@ -267,10 +199,6 @@ async fn full_sqlite_queue_warns_and_drops_only_database_copy_while_jsonl_keeps_
     assert_eq!(
         warning_details(&f),
         ["session history queue is full; event was dropped"]
-    );
-    assert_eq!(
-        jsonl_names(&f),
-        ["queued-in-both-sinks.txt", "dropped-only-from-database.txt"]
     );
     gate.release();
     f.store.set_on_write_error(None);

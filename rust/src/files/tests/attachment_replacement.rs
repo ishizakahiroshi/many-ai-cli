@@ -85,6 +85,7 @@ struct Fixture {
     _temp: tempfile::TempDir,
     service: FilesService,
     journal: Arc<SessionJournal>,
+    store: Arc<crate::storage::SqliteSessionStorage>,
     core: Arc<SessionEngine>,
     sink: Arc<JournalEffects>,
     history: Arc<AttachmentHistory>,
@@ -94,9 +95,18 @@ struct Fixture {
 impl Fixture {
     async fn new() -> Self {
         let (temp, service, _) = setup();
+        let store = Arc::new(
+            crate::storage::SqliteSessionStorage::open(
+                &service.paths,
+                crate::proto::core::StorageOptions::baseline(
+                    service.paths.resource(crate::config::Resource::Logs),
+                ),
+            )
+            .unwrap(),
+        );
         let journal = Arc::new(SessionJournal::new(
             service.paths.clone(),
-            None,
+            Some(store.clone() as Arc<dyn crate::proto::core::SessionStorage>),
             JournalOptions {
                 session_enabled: true,
                 max_bytes: 0,
@@ -156,6 +166,7 @@ impl Fixture {
             _temp: temp,
             service,
             journal,
+            store,
             core,
             sink,
             history,
@@ -214,14 +225,30 @@ impl Fixture {
             })
         })
     }
+    /// Attachment events are persisted by the storage writer thread, so wait
+    /// until two reads 50 ms apart agree before trusting the result.
     fn attachment_records(&self) -> Vec<Value> {
-        let path = self.core.snapshot(self.initial.session).unwrap().jsonl_path;
-        fs::read_to_string(path)
-            .unwrap()
-            .lines()
-            .map(|line| serde_json::from_str::<Value>(line).unwrap())
-            .filter(|record| record["type"] == "attach")
-            .collect()
+        let read = || -> Vec<Value> {
+            let connection = rusqlite::Connection::open(self.store.database_path()).unwrap();
+            let mut statement = connection
+                .prepare("SELECT payload_json FROM messages WHERE kind='attach' ORDER BY id")
+                .unwrap();
+            statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .unwrap()
+                .map(|payload| serde_json::from_str::<Value>(&payload.unwrap()).unwrap())
+                .collect()
+        };
+        let mut previous = read();
+        for _ in 0..40 {
+            std::thread::sleep(Duration::from_millis(50));
+            let current = read();
+            if current == previous {
+                return current;
+            }
+            previous = current;
+        }
+        previous
     }
     fn assert_replacement_untouched(&self, replacement: SessionBinding) {
         assert!(!self.core.is_current(self.initial));

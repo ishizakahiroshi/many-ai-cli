@@ -275,35 +275,7 @@ async fn attachment_http_and_ws_use_real_bound_journal() {
                 None,
             )
             .unwrap();
-        let log = std::path::PathBuf::from(&f.core.snapshot(id).unwrap().log_path)
-            .with_extension("jsonl");
-        let history = std::fs::read_to_string(log).unwrap_or_default();
-        let events: Vec<Value> = history
-            .lines()
-            .map(|line| serde_json::from_str(line).unwrap())
-            .collect();
-        assert_eq!(
-            events.iter().filter(|e| e["type"] == "attach").count(),
-            if enabled { 3 } else { 0 }
-        );
-        if enabled {
-            let attachments: Vec<_> = events.iter().filter(|e| e["type"] == "attach").collect();
-            for (event, (filename, path)) in attachments
-                .iter()
-                .zip(["image.png", "paste.txt"].into_iter().zip(saved_paths))
-            {
-                assert_eq!(event["filename"], filename);
-                assert_eq!(event["path"], path);
-                assert_eq!(event["provider"], "claude");
-                assert_eq!(event["session_id"], id.0);
-            }
-            assert_eq!(attachments[2]["filename"], "ws.png");
-            assert_eq!(
-                std::fs::read(attachments[2]["path"].as_str().unwrap()).unwrap(),
-                b"synthetic ws image"
-            );
-        }
-        // JSONL writes are synchronous, but SQLite events are queued independently.
+        // SQLite events are queued on the writer thread.
         // Drain accepted writes before reopening this owned database for readback.
         let cancellation = HubShutdownCancellation::default();
         let report = f
@@ -667,6 +639,7 @@ async fn log_purge_keeps_active_files_and_legacy_notice_publishes_before_failed_
     let active = f.core.snapshot(id).unwrap();
     // Registration publishes paths; files are materialized only on output.
     // Create the active artifacts so this fixture proves purge protection.
+    std::fs::create_dir_all(Path::new(&active.log_path).parent().unwrap()).unwrap();
     std::fs::write(&active.log_path, b"synthetic active").unwrap();
     std::fs::write(&active.jsonl_path, b"synthetic active jsonl").unwrap();
     let sessions = crate::files::safe_fs::Dir::open(Path::new(&f.config.hub.log_dir))
@@ -1030,6 +1003,7 @@ async fn current_and_persisted_logs_share_tail_range_and_masking_contract() {
     let id = register(&f).await;
     let snapshot = f.core.snapshot(id).unwrap();
     let bytes = b"\x1b[31mhello\xff\x1b[0m API_KEY=synthetic-value tail";
+    std::fs::create_dir_all(Path::new(&snapshot.log_path).parent().unwrap()).unwrap();
     std::fs::write(&snapshot.log_path, bytes).unwrap();
     let full = read(
         &f,
