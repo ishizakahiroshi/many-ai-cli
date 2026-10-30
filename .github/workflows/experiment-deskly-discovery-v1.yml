@@ -1,0 +1,32 @@
+name: Deskly discovery v1 offline contract
+on:
+  push:
+    branches:
+      - 'experiment/deskly-polling-adapter-20261030'
+    paths:
+      - '.github/workflows/experiment-deskly-discovery-v1.yml'
+      - 'experiments/deskly-polling/discovery_v1.rs'
+      - 'experiments/deskly-polling/mock.rs'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deskly-v1-rust-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  offline-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Compile and run prior offline 300s polling mock
+        run: |
+          rustc --edition 2021 --test experiments/deskly-polling/mock.rs -o "$RUNNER_TEMP/deskly-original-mock"
+          "$RUNNER_TEMP/deskly-original-mock"
+      - name: Compile and run typed discovery v1 boundary
+        run: |
+          rustc --edition 2021 --test experiments/deskly-polling/discovery_v1.rs -o "$RUNNER_TEMP/deskly-v1-contract"
+          "$RUNNER_TEMP/deskly-v1-contract"
