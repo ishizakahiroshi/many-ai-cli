@@ -40,6 +40,12 @@ Release artifacts are published at
   destination's Markdown (relative, `/…`, `file:`) cannot be clicked, so no file
   on this PC is opened by mistake; `http(s)` links work as before.
 
+### Security
+- **The Claude Code bundled in the Docker image is updated to 2.1.179.**
+  2.1.163 had a plugin hash-pin bypass (GHSA-pq7j-f95f-qfcv, high) that let a
+  plugin skip hash pinning. This only affects people who run `many-ai-cli` from
+  the Docker image, which ships the provider CLIs inside it.
+
 ### Fixed
 - **The retention settings take effect again.** `log.session_retention_days`
   (default 7), `handoff.retention_days` (14) and `log.attachment_retention_days`
