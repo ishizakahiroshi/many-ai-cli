@@ -113,7 +113,17 @@ mapping. If any part is unavailable, **hold**. After genuine current-state
 claim/handoff/validate and crash-safe local journal reconciliation are proven,
 a read-only PR summary can be attempted as a separate authorized milestone.
 
-Deskly PR #132 includes nine new synthetic service/MCP tests, **not yet run**.
-They must not be reported as passing; the Draft workflow's recent jobs were
-skipped. No automated Rust process launch, live polling, deploy or merge is
-authorized by these experimental changes.
+Deskly PR #132 synthetic service/MCP tests **passed 9/9** at tested
+commit `ddda878609cfbc6429582e25efd1d2f70080b782`:
+[bounded Deskly CI evidence](https://github.com/ishizakahiroshi/deskly-private/actions/runs/40992856578).
+This is not real provider polling, ACK, PR HEAD verification or execution.
+
+The independent Rust `experiments/deskly-polling/discovery_v1.rs` now tests
+separate authenticated read-only proof from advisory discovery, matching
+revision/generation/authorization_epoch/session, explicit local consent,
+stale repo/SHA, expiry, truncated batches, unknown consumption, duplicate
+and two-client one-time authority simulation. It is **not** a production
+client/decoder/Hub adapter. At commit `37ec0491515485562066e3e9271068d3029857f3`,
+the bounded [Rust Actions run 40993174070](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/40993174070)
+completed **3/3 existing mock and 7/7 typed contract tests**. No
+automated Rust process launch, live polling, deploy or merge is authorized.
