@@ -66,6 +66,11 @@ Release artifacts are published at
   so this was not reachable, but the dependency audit now reports no
   vulnerability.
 
+- **The `crypto-bigint` library behind the Web Push signature is updated to
+  0.7.10.** The version we shipped, 0.7.8, had been withdrawn (yanked) from the
+  crates.io registry. No security advisory is attached to it; this keeps the
+  build on a published version, so the dependency audit now reports no warning.
+
 ### Fixed
 - **The retention settings take effect again.** `log.session_retention_days`
   (default 7), `handoff.retention_days` (14) and `log.attachment_retention_days`
