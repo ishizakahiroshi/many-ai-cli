@@ -22,23 +22,45 @@ pub(super) fn open_connection(
     Ok((conn, fts))
 }
 /// Approval rows written before their text was masked may hold a secret in the
-/// question, context or raw block. Mask them in place; rows already masked are
-/// left untouched, so this is cheap on every later open.
+/// question, context, raw block, choices or chosen text. Mask them in place;
+/// rows already masked are left untouched, so this is cheap on every later open.
 fn mask_stored_approvals(conn: &Connection) -> rusqlite::Result<()> {
     let rows = conn
-        .prepare("SELECT id,COALESCE(question,''),COALESCE(context,''),COALESCE(block,'') FROM approvals")?
-        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?)))?
+        .prepare("SELECT id,COALESCE(question,''),COALESCE(context,''),COALESCE(block,''),options_json,COALESCE(selected_text,'') FROM approvals")?
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, Option<String>>(4)?, r.get::<_, String>(5)?)))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    for (id, question, context, block) in rows {
+    for (id, question, context, block, options, selected) in rows {
+        // Choices are compared decoded, so a row is not rewritten on every open
+        // just because its JSON is re-encoded. Unreadable choices are already
+        // shown as an empty list; their raw text is masked as plain text.
+        let (masked_options, options_changed) = match options.as_deref() {
+            None => (None, false),
+            Some(raw) => match serde_json::from_str::<Vec<crate::proto::ApprovalOption>>(raw) {
+                Ok(list) => {
+                    let masked = text::masked_options(&list);
+                    let changed = masked != list;
+                    (
+                        Some(serde_json::to_string(&masked).unwrap_or_else(|_| "null".into())),
+                        changed,
+                    )
+                }
+                Err(_) => {
+                    let masked = text::mask_secrets(raw);
+                    let changed = masked != raw;
+                    (Some(masked), changed)
+                }
+            },
+        };
         let masked = (
             text::mask_secrets(&question),
             text::mask_secrets(&context),
             text::mask_secrets(&block),
+            text::mask_secrets(&selected),
         );
-        if masked != (question, context, block) {
+        if options_changed || masked != (question, context, block, selected) {
             conn.execute(
-                "UPDATE approvals SET question=?,context=?,block=? WHERE id=?",
-                params![masked.0, masked.1, masked.2, id],
+                "UPDATE approvals SET question=?,context=?,block=?,selected_text=NULLIF(?,''),options_json=? WHERE id=?",
+                params![masked.0, masked.1, masked.2, masked.3, masked_options, id],
             )?;
         }
     }

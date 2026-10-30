@@ -24,11 +24,16 @@ Release artifacts are published at
   in a memo still works.
 - **The session raw log (`.log`) masks secrets before writing.** Tokens, private
   key blocks and `user:password@` URLs are masked, including ones split across
-  reads. The headless run log is masked too. Plain-text passwords are still not
-  recognized, which is why session logging stays opt-in.
+  reads and ones that cross the 64 KiB point where a line without a newline is
+  written anyway. The headless run log is masked too. Plain-text passwords are
+  still not recognized, which is why session logging stays opt-in.
 - **Card titles, notes and summaries are masked before they are stored in the
   SQLite history.** Known token shapes in what you type there are replaced with
   `***`; the text itself is otherwise kept as you wrote it.
+- **Approval choices and the chosen answer are masked before they are stored.**
+  A choice such as "don't ask again for" a command could carry a token into the
+  approval ledger; the question and context already were masked, and the
+  choices and answer now are too, including rows saved by earlier versions.
 - **The Session log setting now says what it really does.** Its description
   (English, Japanese, Vietnamese), `doctor` and the README state that only the
   `.log` is written, that a plain-text password cannot be recognized, and that

@@ -247,7 +247,7 @@ impl SessionStorage for SqliteSessionStorage {
         }
         let result = self.with_conn(StorageErrorKind::Write, |c| {
             let Some(id) = resolve(c,d.live_session_id,true)? else { return Ok(()); };
-            let options = serde_json::to_string(&d.options).unwrap_or_else(|_| "null".into());
+            let options = serde_json::to_string(&text::masked_options(&d.options)).unwrap_or_else(|_| "null".into());
             c.execute("INSERT INTO approvals(session_id,sig,source,kind,provider,question,context,options_json,block,candidate_key,source_epoch,state,detected_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending',?) ON CONFLICT(session_id,sig) DO UPDATE SET source=excluded.source,kind=excluded.kind,provider=excluded.provider,question=excluded.question,context=excluded.context,options_json=excluded.options_json,block=excluded.block,candidate_key=excluded.candidate_key,source_epoch=excluded.source_epoch,state='pending',detected_at=excluded.detected_at,resolved_at=NULL",params![id,d.sig,d.source,d.kind,d.provider,text::mask_secrets(&d.question),text::mask_secrets(&d.context),options,text::mask_secrets(&d.block),d.candidate_key,d.source_epoch.0 as i64,timestamp(d.detected_at.unwrap_or_else(Timestamp::now))?]).map(|_| ())
         });
         self.inner.notify(d.live_session_id, result);
@@ -264,7 +264,7 @@ impl SessionStorage for SqliteSessionStorage {
         }
         let result = self.with_conn(StorageErrorKind::Write, |c| {
             let Some(id) = resolve(c,session,true)? else { return Ok(()); };
-            c.execute("UPDATE approvals SET state='resolved',selected_text=?,resolved_at=? WHERE session_id=? AND sig=?",params![selected_text,timestamp(resolved_at)?,id,sig]).map(|_| ())
+            c.execute("UPDATE approvals SET state='resolved',selected_text=?,resolved_at=? WHERE session_id=? AND sig=?",params![text::mask_secrets(selected_text),timestamp(resolved_at)?,id,sig]).map(|_| ())
         });
         self.inner.notify(session, result);
     }

@@ -104,6 +104,21 @@ fn replace_raw_spans(raw: &[u8], regex: &Regex, url_password: bool) -> Vec<u8> {
     result.extend_from_slice(&raw[cursor..]);
     result
 }
+/// Stored approval choices can quote a command ("don't ask again for ..."), so
+/// each text field is masked before the list is encoded. Masking the encoded
+/// JSON instead could consume its closing quote.
+pub(super) fn masked_options(
+    options: &[crate::proto::ApprovalOption],
+) -> Vec<crate::proto::ApprovalOption> {
+    options
+        .iter()
+        .map(|o| crate::proto::ApprovalOption {
+            label: mask_secrets(&o.label),
+            send_text: mask_secrets(&o.send_text),
+            ..o.clone()
+        })
+        .collect()
+}
 pub(super) fn visible(value: &str) -> String {
     let mut out = value.to_owned();
     for re in ANSI.iter() {

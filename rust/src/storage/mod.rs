@@ -311,24 +311,111 @@ mod tests {
         store
             .with_conn(StorageErrorKind::Write, |c| {
                 c.execute(
-                    "INSERT INTO approvals(session_id,sig,question,context,block,state) VALUES (1,'s',?,?,?,'pending')",
+                    "INSERT INTO approvals(session_id,sig,question,context,block,options_json,selected_text,state) VALUES (1,'s',?,?,?,?,?,'resolved')",
                     params![format!("q {secret}"), "plain", format!("block
-API_KEY=synthetic-value {secret}")],
+API_KEY=synthetic-value {secret}"), format!(r#"[{{"num":1,"label":"Yes"}},{{"num":2,"label":"allow PASSWORD=synthetic-value {secret}","send_text":"2"}}]"#), format!("chosen {secret}")],
+                )?;
+                c.execute(
+                    "INSERT INTO approvals(session_id,sig,question,options_json,state) VALUES (1,'t','plain','[{\"num\":1,\"label\":\"Yes\"}]','pending')",
+                    [],
                 )
             })
             .unwrap();
         store.close().unwrap();
         drop(store);
         let reopened = SqliteSessionStorage::open(&paths, options()).unwrap();
-        let (q, c, b): (String, String, String) = reopened
+        let (q, c, b, o, s): (String, String, String, String, String) = reopened
             .with_conn(StorageErrorKind::Query, |c| {
-                c.query_row("SELECT question,context,block FROM approvals", [], |r| {
-                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+                c.query_row("SELECT question,context,block,options_json,selected_text FROM approvals WHERE sig='s'", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
                 })
             })
             .unwrap();
-        assert!(!q.contains("AAAA") && !b.contains("AAAA") && !b.contains("synthetic-value"));
+        let all = format!("{q} {b} {o} {s}");
+        assert!(
+            !all.contains("AAAA") && !all.contains("synthetic-value"),
+            "{all}"
+        );
         assert_eq!(c, "plain");
+        let decoded: Vec<crate::proto::ApprovalOption> = serde_json::from_str(&o).unwrap();
+        assert_eq!(decoded.len(), 2);
+        assert_eq!(decoded[1].send_text, "2");
+        // An already clean row keeps its stored bytes and a NULL chosen text.
+        let (o, s): (String, Option<String>) = reopened
+            .with_conn(StorageErrorKind::Query, |c| {
+                c.query_row(
+                    "SELECT options_json,selected_text FROM approvals WHERE sig='t'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+            })
+            .unwrap();
+        assert_eq!(o, "[{\"num\":1,\"label\":\"Yes\"}]");
+        assert_eq!(s, None);
+    }
+    #[test]
+    fn approval_choices_and_chosen_text_are_masked_before_they_are_stored() {
+        let (_root, _installed, store) = fixture(2);
+        let secret = format!("ghp_{}", "A".repeat(30));
+        let option = |num: i64, label: String| crate::proto::ApprovalOption {
+            num,
+            label,
+            send_text: num.to_string(),
+            ..Default::default()
+        };
+        store.store_approval_detected(ApprovalDetected {
+            live_session_id: LiveSessionId(1),
+            sig: "s".into(),
+            source: "go_vt".into(),
+            kind: "native".into(),
+            provider: "copilot".into(),
+            question: "q".into(),
+            context: String::new(),
+            block: String::new(),
+            candidate_key: "k".into(),
+            source_epoch: ApprovalSourceEpoch(1),
+            options: vec![
+                option(1, "Yes".into()),
+                option(
+                    2,
+                    format!("Yes, and don't ask again for curl -H 'Bearer {secret}'"),
+                ),
+            ],
+            detected_at: None,
+        });
+        store.store_approval_consumed(
+            LiveSessionId(1),
+            "s",
+            &format!("API_KEY=synthetic-value {secret}"),
+            Timestamp::now(),
+        );
+        let row = store
+            .approvals_by_live_session(LiveSessionId(1), 10, false)
+            .unwrap()
+            .unwrap()
+            .remove(0);
+        let all = format!(
+            "{} {}",
+            row.options
+                .iter()
+                .map(|o| o.label.as_str())
+                .collect::<Vec<_>>()
+                .join(" "),
+            row.selected_text
+        );
+        assert!(
+            !all.contains("AAAA") && !all.contains("synthetic-value"),
+            "{all}"
+        );
+        assert_eq!(row.state, "resolved");
+        assert_eq!(row.options.len(), 2);
+        assert_eq!(row.options[0].label, "Yes");
+        assert_eq!(row.options[1].send_text, "2");
+        assert!(
+            row.options[1]
+                .label
+                .starts_with("Yes, and don't ask again for curl")
+        );
     }
     #[test]
     fn card_title_note_and_summary_are_masked_before_they_are_stored() {

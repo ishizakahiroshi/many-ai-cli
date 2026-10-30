@@ -40,13 +40,16 @@ impl RawLog {
     }
     fn drain(&mut self, all: bool) {
         let len = self.pending.len();
-        let cut = if all || len >= HOLD_CAP {
+        let line = match self.pending.iter().rposition(|b| *b == b'\n') {
+            Some(i) if !open_private_key(&self.pending[..=i]) => i + 1,
+            _ => 0,
+        };
+        let cut = if all {
             len
+        } else if line == 0 && len >= HOLD_CAP {
+            word_cut(&self.pending)
         } else {
-            match self.pending.iter().rposition(|b| *b == b'\n') {
-                Some(i) if !open_private_key(&self.pending[..=i]) => i + 1,
-                _ => 0,
-            }
+            line
         };
         if cut == 0 {
             return;
@@ -59,6 +62,31 @@ impl RawLog {
             self.written = self.written.saturating_add(masked.len() as i64);
         }
     }
+}
+
+/// Where to split a line that reached the hold-back cap. A token never contains
+/// the masker's delimiters, but a `KEY: value` or `Bearer value` pair does, and
+/// the value may still be growing, so the last two words are always held back.
+/// A cut is used only if it leaves the masked result unchanged; a single run
+/// without a usable cut is written whole, as before.
+fn word_cut(bytes: &[u8]) -> usize {
+    let delimiter = |b: u8| matches!(b, b'\t' | b'\n' | b'\x0c' | b'\r' | b' ');
+    let full = crate::storage::mask_secret_bytes(bytes);
+    (1..bytes.len())
+        .rev()
+        .filter(|&i| delimiter(bytes[i - 1]) && !delimiter(bytes[i]))
+        .skip(1)
+        .take(16)
+        .find(|&i| {
+            let (head, tail) = bytes.split_at(i);
+            if open_private_key(head) {
+                return false;
+            }
+            let mut split = crate::storage::mask_secret_bytes(head);
+            split.extend(crate::storage::mask_secret_bytes(tail));
+            split == full
+        })
+        .unwrap_or(bytes.len())
 }
 
 /// A PEM block spans lines, so it is only masked once its END line has arrived.
@@ -104,6 +132,53 @@ mod tests {
         let (a, b) = key.split_at(key.find("synthetic").unwrap() + 4);
         let text = String::from_utf8(run(&[a.as_bytes(), b.as_bytes()])).unwrap();
         assert!(!text.contains("synthetic-body"), "{text}");
+    }
+
+    /// Feeds `text` in 4 KiB reads, like the PTY reader, with no newline.
+    fn run_without_newlines(text: &str) -> String {
+        let chunks: Vec<&[u8]> = text.as_bytes().chunks(4096).collect();
+        String::from_utf8(run(&chunks)).unwrap()
+    }
+
+    #[test]
+    fn a_secret_across_the_hold_back_cap_is_still_masked() {
+        let token = format!("ghp_{}", "A".repeat(30));
+        for offset in [1, 10, 20, 33] {
+            let pad = "x ".repeat((HOLD_CAP - offset) / 2);
+            let text = run_without_newlines(&format!("{pad}{token} tail"));
+            assert!(!text.contains("AAAA"), "offset {offset}");
+            assert!(text.ends_with("*** tail"), "offset {offset}");
+        }
+    }
+
+    #[test]
+    fn a_key_and_value_across_the_hold_back_cap_are_masked_together() {
+        for (key, value) in [
+            ("Bearer ", "synthetic-value"),
+            ("PASSWORD: ", "synthetic-value"),
+        ] {
+            for offset in [1, 4, 8, 12, 20] {
+                let pad = "x ".repeat((HOLD_CAP - offset) / 2);
+                let text = run_without_newlines(&format!("{pad}{key}{value} tail"));
+                assert!(!text.contains("synthetic"), "{key} offset {offset}");
+                assert!(
+                    text.ends_with(&format!("{key}*** tail")),
+                    "{key} offset {offset}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_run_without_delimiters_is_still_written_at_the_cap() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("raw.log");
+        let mut log = RawLog::new(File::create(&path).unwrap(), 0);
+        for chunk in "x".repeat(HOLD_CAP + 10).as_bytes().chunks(4096) {
+            log.write(chunk);
+        }
+        assert!(log.pending.len() < 4096);
+        assert_eq!(std::fs::read(&path).unwrap().len(), HOLD_CAP);
     }
 
     #[test]
