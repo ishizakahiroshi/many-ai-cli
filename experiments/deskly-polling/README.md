@@ -193,7 +193,9 @@ Order in `IntakeCoordinator`:
 - Q3 caller: the Hub calls claim/handoff for that work kind; the Node PC relay
   receiver does not handle it.
 - Q4 key: Windows Credential Manager generic credential
-  `many-ai-cli/deskly-orchestrator-key` (`key_store.rs`).
+  `many-ai-cli/deskly-orchestrator-key` (`key_store.rs`). The owner keeps the
+  backup copy in Chrome's password manager; the Hub never reads Chrome's store
+  (it is encrypted for Chrome only and has no supported API for other apps).
 - Q5 GitHub: no credential; public repositories only. Private PRs stop as
   `NotVisible`.
 
