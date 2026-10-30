@@ -83,6 +83,7 @@ impl SpawnLaunchPolicy for Policy {
 struct Hooks {
     registered: AtomicUsize,
     warnings: AtomicUsize,
+    messages: Mutex<Vec<&'static str>>,
 }
 impl OrdinarySpawnHooks for Hooks {
     fn registered<'a>(
@@ -95,8 +96,9 @@ impl OrdinarySpawnHooks for Hooks {
             Ok(())
         })
     }
-    fn warning(&self, _: &'static str) {
+    fn warning(&self, operation: &'static str) {
         self.warnings.fetch_add(1, Ordering::SeqCst);
+        self.messages.lock().unwrap().push(operation);
     }
 }
 struct Boundary;
@@ -122,6 +124,9 @@ struct Fixture {
     policy: Arc<Policy>,
     hooks: Arc<Hooks>,
     repo: PathBuf,
+    retained: Arc<RetainedWorktrees>,
+    git: PathBuf,
+    env: BTreeMap<OsString, Option<OsString>>,
     _tasks: crate::hub::task_owner::HubTaskOwner,
 }
 impl Fixture {
@@ -241,12 +246,22 @@ impl Fixture {
         let policy = Arc::new(Policy::default());
         let hooks = Arc::new(Hooks::default());
         let tasks = crate::hub::task_owner::HubTaskOwner::new(tokio::runtime::Handle::current());
+        let retained = Arc::new(RetainedWorktrees::new(
+            crate::files::safe_fs::Dir::open_or_create_private_components(
+                &root.path().join("runtime-state"),
+            )
+            .unwrap(),
+        ));
         let service = OrdinarySpawnService::new(OrdinarySpawnDependencies {
             core,
             config,
             policy: policy.clone(),
             registry: Arc::new(move || Ok(registry.clone())),
-            worktrees: NormalWorktreeLifecycle::new(repo.clone(), WorktreeGit::new(git, env)),
+            worktrees: NormalWorktreeLifecycle::new(
+                repo.clone(),
+                WorktreeGit::new(git.clone(), env.clone()),
+            ),
+            retained: Some(retained.clone()),
             hooks: hooks.clone(),
             hub_cwd: repo.clone(),
             home,
@@ -263,8 +278,72 @@ impl Fixture {
             policy,
             hooks,
             repo,
+            retained,
+            git,
+            env,
             _tasks: tasks,
         }
+    }
+    /// Synthetic Git with the fixture's isolated configuration.
+    fn git(&self, cwd: &Path, argv: &[&str]) -> String {
+        let mut command = std::process::Command::new(&self.git);
+        command.current_dir(cwd).args(argv);
+        for (key, value) in &self.env {
+            if let Some(value) = value {
+                command.env(key, value);
+            } else {
+                command.env_remove(key);
+            }
+        }
+        let output = command.output().unwrap();
+        assert!(
+            output.status.success(),
+            "synthetic Git {argv:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    }
+    async fn prepare(&self, label: &str) -> NormalWorktree {
+        self.service
+            .worktrees
+            .prepare(
+                &self.repo,
+                label,
+                UNIX_EPOCH + Duration::from_secs(1767323045),
+                0,
+            )
+            .await
+            .unwrap()
+    }
+    fn commit(&self, tree: &NormalWorktree, file: &str) {
+        let path = Path::new(&tree.path);
+        std::fs::write(path.join(file), "synthetic work\n").unwrap();
+        self.git(path, &["add", file]);
+        self.git(
+            path,
+            &[
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "core.hooksPath=",
+                "commit",
+                "-qm",
+                "synthetic work",
+            ],
+        );
+    }
+    async fn close(&self, tree: &NormalWorktree) {
+        self.service
+            .dismissed(&SessionSnapshot {
+                normal_worktree: tree.clone(),
+                worktree_cleanup: "delete".into(),
+                ..Default::default()
+            })
+            .await;
+        self._tasks.drain_effects().await;
+    }
+    fn messages(&self) -> Vec<&'static str> {
+        self.hooks.messages.lock().unwrap().clone()
     }
     async fn spawn(
         &self,
@@ -447,6 +526,124 @@ async fn dropped_http_future_does_not_cancel_owned_worktree_or_start_workflow() 
     assert!(Path::new(&metadata.normal_worktree.path).is_dir());
     f.service.startup_failed(&metadata).await;
     f.service.core.spawn_failed(attempt, "copilot").unwrap();
+}
+
+// (b) through the service: closing runs as a Hub-owned effect, keeps and lists
+// the unmerged tree, and the next start removes it once merged.
+#[tokio::test]
+async fn closed_unmerged_tree_is_listed_and_a_later_start_removes_it_once_merged() {
+    let f = Fixture::new(SpawnStartOutcome::Started { pid: 42 });
+    let tree = f.prepare("closed").await;
+    f.commit(&tree, "work.txt");
+    f.close(&tree).await;
+    assert!(Path::new(&tree.path).is_dir());
+    assert_eq!(f.messages(), ["dismissed worktree cleanup failed"]);
+    assert_eq!(f.retained.load().unwrap().len(), 1);
+    f.git(&f.repo, &["merge", "--ff-only", &tree.branch]);
+    let report = f
+        .service
+        .recheck_retained_worktrees(&Cancellation::default())
+        .await;
+    assert_eq!(report.removed, 1);
+    assert!(!Path::new(&tree.path).exists());
+    assert!(f.retained.load().unwrap().is_empty());
+    assert_eq!(f.messages().len(), 1);
+}
+
+// (d) through the service: an unreachable upstream keeps the tree with its own
+// warning, at close and at the startup recheck.
+#[tokio::test]
+async fn unreachable_upstream_warns_at_close_and_at_recheck() {
+    let f = Fixture::new(SpawnStartOutcome::Started { pid: 42 });
+    let branch = f.git(&f.repo, &["rev-parse", "--abbrev-ref", "HEAD"]);
+    let missing = f._root.path().join("missing-origin.git");
+    f.git(
+        &f.repo,
+        &["remote", "add", "origin", missing.to_str().unwrap()],
+    );
+    f.git(
+        &f.repo,
+        &[
+            "update-ref",
+            &format!("refs/remotes/origin/{branch}"),
+            "HEAD",
+        ],
+    );
+    f.git(
+        &f.repo,
+        &["branch", &format!("--set-upstream-to=origin/{branch}")],
+    );
+    let tree = f.prepare("offline").await;
+    f.commit(&tree, "work.txt");
+    f.close(&tree).await;
+    assert!(Path::new(&tree.path).is_dir());
+    assert_eq!(
+        f.messages(),
+        ["dismissed worktree upstream fetch failed; worktree retained"]
+    );
+    let report = f
+        .service
+        .recheck_retained_worktrees(&Cancellation::default())
+        .await;
+    assert_eq!(report.fetch_failed, 1);
+    assert!(Path::new(&tree.path).is_dir());
+    assert_eq!(f.retained.load().unwrap().len(), 1);
+    assert_eq!(
+        f.messages().last(),
+        Some(&"retained worktree upstream fetch failed; worktrees retained")
+    );
+}
+
+// (f) through the core: a wrapper that outlived the previous Hub reattaches
+// with its cwd inside a listed tree. Neither the recheck nor closing another
+// session of that tree removes it while the session lives.
+#[tokio::test]
+async fn reattached_session_keeps_its_tree_through_recheck_and_close() {
+    let f = Fixture::new(SpawnStartOutcome::Started { pid: 42 });
+    let tree = f.prepare("running").await;
+    f.retained.remember(&tree).unwrap();
+    let cwd = Path::new(&tree.path).join("sub");
+    std::fs::create_dir(&cwd).unwrap();
+    let session = f
+        .service
+        .core
+        .reattach(
+            ReattachRequest {
+                restored_metadata: None,
+                message: proto::Message {
+                    session_id: 7,
+                    provider: "claude".into(),
+                    cwd: cwd.to_string_lossy().into_owned(),
+                    pid: 4242,
+                    cols: 120,
+                    rows: 30,
+                    ..Default::default()
+                },
+            },
+            WrapperConnectionId(9),
+            Timestamp::now(),
+        )
+        .await
+        .unwrap()
+        .binding
+        .session;
+    let report = f
+        .service
+        .recheck_retained_worktrees(&Cancellation::default())
+        .await;
+    assert_eq!(report.in_use, 1);
+    assert!(Path::new(&tree.path).is_dir());
+    f.close(&tree).await;
+    assert!(Path::new(&tree.path).is_dir());
+    assert_eq!(f.messages(), ["dismissed worktree cleanup failed"]);
+    assert_eq!(f.retained.load().unwrap().len(), 1);
+    let _ = f.service.core.dismiss(session, Timestamp::now()).unwrap();
+    let report = f
+        .service
+        .recheck_retained_worktrees(&Cancellation::default())
+        .await;
+    assert_eq!(report.removed, 1);
+    assert!(!Path::new(&tree.path).exists());
 }
 
 #[test]

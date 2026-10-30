@@ -45,6 +45,11 @@ mod subscriptions;
 #[path = "workspace.rs"]
 mod workspace;
 
+/// Wrappers that outlive a Hub retry their reattach every 2 seconds
+/// (`wrapper::runtime`); waiting this long lets them rejoin the core before the
+/// retained-worktree recheck asks which trees live sessions use.
+const RETAINED_WORKTREE_RECHECK_DELAY: Duration = Duration::from_secs(60);
+
 /// Actual constructed owners for further endpoint integrations. A caller can
 /// add routes with these same owners; it cannot substitute a second core/store.
 pub struct HubCompositionDependencies {
@@ -819,6 +824,11 @@ impl HubComposition {
                         files.git_environment.clone(),
                     ),
                 ),
+                retained: Some(Arc::new(
+                    crate::orchestration::normal_worktree::RetainedWorktrees::new(
+                        Dir::open_or_create_private_components(paths.root())?,
+                    ),
+                )),
                 hooks: Arc::new(OrdinaryHooks(
                     workers.clone(),
                     logger.clone(),
@@ -1450,6 +1460,25 @@ impl HubComposition {
                         "CLI update log cleanup",
                         &SessionError::InvalidRequest("private log cleanup failed".into()),
                     );
+                }
+            }));
+        }
+        // Worktrees still unmerged when their session closed are judged again
+        // once per start, in the background so neither the start nor an
+        // unreachable remote waits on it. The delay lets wrappers that outlived
+        // the previous Hub reattach first; a tree a session uses is skipped.
+        // Trial Hubs make no automatic external changes.
+        if self.paths.automatic_external_actions_allowed()
+            && let Ok(permit) = self.dependencies.tasks.effect_permit()
+        {
+            let ordinary = self.dependencies.ordinary.clone();
+            let cancel = self.service_cancel.clone();
+            drop(permit.start(async move {
+                tokio::select! {
+                    _ = cancel.cancelled() => {}
+                    _ = tokio::time::sleep(RETAINED_WORKTREE_RECHECK_DELAY) => {
+                        ordinary.recheck_retained_worktrees(&cancel).await;
+                    }
                 }
             }));
         }

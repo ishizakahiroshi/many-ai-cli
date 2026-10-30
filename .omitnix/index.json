@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "5bb1a5e14af7f26cc20b81faa905e9ba98054253",
-    "dirty": false,
+    "commit": "52291a344c7760e59332d809c83e3b7025e2f7fe",
+    "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
     "adapters": [
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2043,
-    "analyzed": 1584,
+    "discovered": 2044,
+    "analyzed": 1585,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 449,
@@ -33368,6 +33368,35 @@
         "summary": {
           "state": "value",
           "value": "Ordinary-session worktree lifecycle from `internal/hub/normal_worktree.go`."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/orchestration/normal_worktree/retained.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Hub-owned list of ordinary worktrees that were still unmerged (or otherwise"
         },
         "authentication": {
           "state": "not_configured"

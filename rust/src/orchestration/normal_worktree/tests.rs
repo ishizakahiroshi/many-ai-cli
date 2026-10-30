@@ -123,6 +123,109 @@ impl Fixture {
             .await
             .unwrap_or_else(|error| panic!("prepare: {error}"))
     }
+    /// A clone whose `develop` tracks `origin/develop` on a bare synthetic
+    /// origin, and a second clone standing in for whoever merges there.
+    async fn tracked(&self, name: &str) -> Tracked {
+        let origin = self.root.join(format!("{name}-origin.git"));
+        fs::create_dir(&origin).unwrap();
+        self.git(&origin, &["init", "-q", "--bare"]).await;
+        let repo = self.repo(name).await;
+        self.git(&repo, &["branch", "-M", "develop"]).await;
+        self.git(
+            &repo,
+            &["remote", "add", "origin", origin.to_str().unwrap()],
+        )
+        .await;
+        self.git(&repo, &["push", "-q", "-u", "origin", "develop"])
+            .await;
+        let other = self.root.join(format!("{name}-other"));
+        self.git(
+            &self.root,
+            &[
+                "clone",
+                "-q",
+                "-b",
+                "develop",
+                origin.to_str().unwrap(),
+                other.to_str().unwrap(),
+            ],
+        )
+        .await;
+        Tracked {
+            repo,
+            origin,
+            other,
+        }
+    }
+    async fn commit(&self, tree: &NormalWorktree, file: &str) {
+        let path = Path::new(&tree.path);
+        fs::write(path.join(file), "synthetic work\n").unwrap();
+        self.git(path, &["add", file]).await;
+        self.git(path, &["commit", "-qm", "synthetic work"]).await;
+    }
+    /// Commit, then publish the branch the way a session pushes its work.
+    async fn publish(&self, tree: &NormalWorktree, file: &str) {
+        self.commit(tree, file).await;
+        self.git(
+            Path::new(&tree.path),
+            &["push", "-q", "origin", &tree.branch],
+        )
+        .await;
+    }
+    /// A merge commit on origin's develop, made in the other clone, so this
+    /// clone's local develop and its `origin/develop` both stay behind.
+    async fn merge_on_origin(&self, tracked: &Tracked, branch: &str) {
+        self.git(&tracked.other, &["fetch", "-q", "origin"]).await;
+        self.git(
+            &tracked.other,
+            &[
+                "merge",
+                "-q",
+                "--no-ff",
+                "-m",
+                "synthetic merge",
+                &format!("origin/{branch}"),
+            ],
+        )
+        .await;
+        self.git(&tracked.other, &["push", "-q", "origin", "develop"])
+            .await;
+    }
+    async fn is_ancestor(&self, repo: &Path, branch: &str, target: &str) -> bool {
+        self.lifecycle
+            .run(
+                repo,
+                &args(&["merge-base", "--is-ancestor", branch, target]),
+                Instant::now() + Duration::from_secs(10),
+                GitOutput::Discard,
+            )
+            .await
+            .is_ok()
+    }
+    fn store(&self) -> RetainedWorktrees {
+        RetainedWorktrees::new(
+            crate::files::safe_fs::Dir::open_or_create_private_components(
+                &self.root.join("runtime"),
+            )
+            .unwrap(),
+        )
+    }
+    async fn recheck(&self, store: &RetainedWorktrees) -> RecheckReport {
+        self.lifecycle
+            .recheck_retained(store, &|_| false, &Cancellation::default())
+            .await
+    }
+}
+struct Tracked {
+    repo: PathBuf,
+    origin: PathBuf,
+    other: PathBuf,
+}
+fn not_merged(tree: &NormalWorktree) -> String {
+    format!(
+        "worktree retained: branch {} is not merged",
+        quote(&tree.branch)
+    )
 }
 fn now() -> Timestamp {
     parse_rfc3339("2026-07-11T12:34:59.000000123+09:00").unwrap()
@@ -520,4 +623,281 @@ async fn cleanup_clean_check_leaves_the_worktree_index_and_its_lock_alone() {
         .unwrap();
     assert!(control.status.success());
     assert_ne!(fs::read(&index).unwrap(), before);
+}
+
+// (a) Sessions push their work to the remote branch; the parent's own develop
+// stays old until someone pulls. Closing must still see the merge.
+#[tokio::test]
+async fn upstream_merge_removes_the_tree_while_local_develop_stays_behind() {
+    let f = Fixture::new();
+    let t = f.tracked("pushed").await;
+    let tree = f.prepare(&t.repo, "worker").await;
+    f.publish(&tree, "work.txt").await;
+    f.merge_on_origin(&t, &tree.branch).await;
+    let develop = f.git(&t.repo, &["rev-parse", "develop"]).await;
+    // Neither the local HEAD nor the not-yet-fetched origin/develop has it.
+    assert!(!f.is_ancestor(&t.repo, &tree.branch, "HEAD").await);
+    assert!(
+        !f.is_ancestor(&t.repo, &tree.branch, "refs/remotes/origin/develop")
+            .await
+    );
+    f.lifecycle.cleanup(&tree, "delete").await.unwrap();
+    assert!(!Path::new(&tree.path).exists());
+    assert_eq!(f.git(&t.repo, &["rev-parse", "develop"]).await, develop);
+    assert!(
+        !f.git(&t.repo, &["rev-parse", "--verify", &tree.branch])
+            .await
+            .is_empty()
+    );
+    assert!(
+        f.is_ancestor(&t.repo, &tree.branch, "refs/remotes/origin/develop")
+            .await
+    );
+}
+
+// (b) Unmerged when its session closed, merged afterwards: the next start's
+// recheck removes it and drops it from the list.
+#[tokio::test]
+async fn merged_after_close_is_removed_by_the_startup_recheck() {
+    let f = Fixture::new();
+    let t = f.tracked("later").await;
+    let tree = f.prepare(&t.repo, "worker").await;
+    f.publish(&tree, "work.txt").await;
+    let store = f.store();
+    assert_eq!(
+        f.lifecycle.cleanup(&tree, "delete").await.unwrap_err(),
+        not_merged(&tree)
+    );
+    store.remember(&tree).unwrap();
+    assert_eq!(f.recheck(&store).await.retained, 1);
+    f.merge_on_origin(&t, &tree.branch).await;
+    assert_eq!(
+        f.recheck(&store).await,
+        RecheckReport {
+            removed: 1,
+            forgotten: 1,
+            ..Default::default()
+        }
+    );
+    assert!(!Path::new(&tree.path).exists());
+    assert!(store.load().unwrap().is_empty());
+}
+
+// (c) Uncommitted work, or a branch merged nowhere (the upstream is fetched
+// and checked too), is kept at close and by every recheck.
+#[tokio::test]
+async fn dirty_or_unmerged_everywhere_is_kept_and_stays_listed() {
+    let f = Fixture::new();
+    let t = f.tracked("kept").await;
+    let dirty = f.prepare(&t.repo, "dirty").await;
+    fs::write(Path::new(&dirty.path).join("base.txt"), "changed\n").unwrap();
+    let unmerged = f.prepare(&t.repo, "unmerged").await;
+    f.publish(&unmerged, "work.txt").await;
+    let store = f.store();
+    assert_eq!(
+        f.lifecycle.cleanup(&dirty, "delete").await.unwrap_err(),
+        "worktree retained: uncommitted changes"
+    );
+    assert_eq!(
+        f.lifecycle.cleanup(&unmerged, "delete").await.unwrap_err(),
+        not_merged(&unmerged)
+    );
+    store.remember(&dirty).unwrap();
+    store.remember(&unmerged).unwrap();
+    assert_eq!(
+        f.recheck(&store).await,
+        RecheckReport {
+            retained: 2,
+            ..Default::default()
+        }
+    );
+    assert!(Path::new(&dirty.path).is_dir() && Path::new(&unmerged.path).is_dir());
+    assert_eq!(store.load().unwrap().len(), 2);
+}
+
+// (d) An unreachable remote is never taken as "merged": the tree stays, stays
+// listed, and the failure is reported for a warning.
+#[tokio::test]
+async fn failed_fetch_keeps_the_tree_and_reports_it() {
+    let f = Fixture::new();
+    let t = f.tracked("offline").await;
+    let tree = f.prepare(&t.repo, "worker").await;
+    f.publish(&tree, "work.txt").await;
+    f.merge_on_origin(&t, &tree.branch).await;
+    fs::rename(&t.origin, f.root.join("offline-moved.git")).unwrap();
+    let error = f.lifecycle.cleanup(&tree, "delete").await.unwrap_err();
+    assert!(error.starts_with(UPSTREAM_FETCH_FAILED), "{error}");
+    assert!(Path::new(&tree.path).is_dir());
+    let store = f.store();
+    store.remember(&tree).unwrap();
+    assert_eq!(
+        f.recheck(&store).await,
+        RecheckReport {
+            fetch_failed: 1,
+            ..Default::default()
+        }
+    );
+    assert!(Path::new(&tree.path).is_dir());
+    assert_eq!(store.load().unwrap().len(), 1);
+}
+
+// (e) No upstream: only the local HEAD decides, exactly as before, and no
+// fetch is attempted (this remote would fail one).
+#[tokio::test]
+async fn without_upstream_only_the_local_head_decides() {
+    let f = Fixture::new();
+    let repo = f.repo("local").await;
+    let missing = f.root.join("missing-origin.git");
+    f.git(
+        &repo,
+        &["remote", "add", "origin", missing.to_str().unwrap()],
+    )
+    .await;
+    let tree = f.prepare(&repo, "worker").await;
+    f.commit(&tree, "work.txt").await;
+    assert_eq!(
+        f.lifecycle.cleanup(&tree, "delete").await.unwrap_err(),
+        not_merged(&tree)
+    );
+    f.git(&repo, &["merge", "--ff-only", &tree.branch]).await;
+    f.lifecycle.cleanup(&tree, "delete").await.unwrap();
+    assert!(!Path::new(&tree.path).exists());
+}
+
+// (f) A live session inside the tree (here: in a subdirectory) blocks removal
+// at recheck; the record waits for a later start.
+#[tokio::test]
+async fn a_tree_a_live_session_uses_is_not_removed_by_the_recheck() {
+    let f = Fixture::new();
+    let repo = f.repo("busy").await;
+    let tree = f.prepare(&repo, "worker").await;
+    let store = f.store();
+    store.remember(&tree).unwrap();
+    let cwd = Path::new(&tree.path).join("sub");
+    fs::create_dir(&cwd).unwrap();
+    let in_use = move |path: &Path| path_within(&cwd, path);
+    assert_eq!(
+        f.lifecycle
+            .recheck_retained(&store, &in_use, &Cancellation::default())
+            .await,
+        RecheckReport {
+            in_use: 1,
+            ..Default::default()
+        }
+    );
+    assert!(Path::new(&tree.path).is_dir());
+    assert_eq!(store.load().unwrap().len(), 1);
+    assert_eq!(f.recheck(&store).await.removed, 1);
+    assert!(!Path::new(&tree.path).exists());
+}
+
+#[tokio::test]
+async fn one_fetch_per_parent_serves_every_record_of_the_recheck() {
+    let f = Fixture::new();
+    let t = f.tracked("shared").await;
+    let first = f.prepare(&t.repo, "a-first").await;
+    let second = f.prepare(&t.repo, "b-second").await;
+    f.publish(&first, "first.txt").await;
+    f.publish(&second, "second.txt").await;
+    f.merge_on_origin(&t, &first.branch).await;
+    f.merge_on_origin(&t, &second.branch).await;
+    let store = f.store();
+    store.remember(&first).unwrap();
+    store.remember(&second).unwrap();
+    // Once the first record is removed, the remote vanishes: a second fetch
+    // for the same parent would fail and keep the second tree.
+    let (origin, moved) = (t.origin.clone(), f.root.join("shared-moved.git"));
+    let first_path = PathBuf::from(&first.path);
+    let in_use = move |_: &Path| {
+        if !first_path.exists() && origin.exists() {
+            fs::rename(&origin, &moved).unwrap();
+        }
+        false
+    };
+    assert_eq!(
+        f.lifecycle
+            .recheck_retained(&store, &in_use, &Cancellation::default())
+            .await,
+        RecheckReport {
+            removed: 2,
+            forgotten: 2,
+            ..Default::default()
+        }
+    );
+    assert!(!t.origin.exists());
+}
+
+#[tokio::test]
+async fn a_tree_moved_off_its_branch_is_forgotten_not_removed() {
+    let f = Fixture::new();
+    let repo = f.repo("detached").await;
+    let tree = f.prepare(&repo, "worker").await;
+    let path = Path::new(&tree.path);
+    f.git(path, &["checkout", "-q", "--detach"]).await;
+    f.commit(&tree, "only-on-detached-head.txt").await;
+    let error = f.lifecycle.cleanup(&tree, "delete").await.unwrap_err();
+    assert!(error.starts_with(NOT_ON_BRANCH), "{error}");
+    let store = f.store();
+    store.remember(&tree).unwrap();
+    assert_eq!(
+        f.recheck(&store).await,
+        RecheckReport {
+            forgotten: 1,
+            ..Default::default()
+        }
+    );
+    assert!(path.join("only-on-detached-head.txt").is_file());
+    assert!(store.load().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn unreadable_list_is_left_alone_and_removes_nothing() {
+    let f = Fixture::new();
+    let repo = f.repo("corrupt").await;
+    let tree = f.prepare(&repo, "worker").await;
+    let store = f.store();
+    let file = f
+        .root
+        .join("runtime")
+        .join("normal-worktrees-retained.json");
+    fs::write(&file, "{ not json").unwrap();
+    assert!(store.remember(&tree).is_err());
+    assert_eq!(fs::read_to_string(&file).unwrap(), "{ not json");
+    assert_eq!(
+        f.recheck(&store).await,
+        RecheckReport {
+            store_failed: true,
+            ..Default::default()
+        }
+    );
+    assert!(Path::new(&tree.path).is_dir());
+    // Records outside the ordinary layout are never listed.
+    fs::remove_file(&file).unwrap();
+    let mut foreign = tree.clone();
+    foreign.branch = "feature/not-ours".into();
+    store.remember(&foreign).unwrap();
+    assert!(store.load().unwrap().is_empty());
+}
+
+#[test]
+fn path_within_follows_spelling_and_component_boundaries() {
+    let root = Path::new("/synthetic/repo/.git-worktrees/worker");
+    assert!(path_within(
+        Path::new("/synthetic/repo/.git-worktrees/worker/sub/"),
+        root
+    ));
+    assert!(path_within(
+        Path::new("\\synthetic\\repo\\.git-worktrees\\worker"),
+        root
+    ));
+    assert!(!path_within(
+        Path::new("/synthetic/repo/.git-worktrees/worker-2"),
+        root
+    ));
+    assert!(!path_within(Path::new("/synthetic/repo"), root));
+    #[cfg(windows)]
+    assert!(path_within(
+        Path::new("C:\\Synthetic\\Repo\\.git-worktrees\\Worker"),
+        Path::new("c:/synthetic/repo/.git-worktrees/worker")
+    ));
 }

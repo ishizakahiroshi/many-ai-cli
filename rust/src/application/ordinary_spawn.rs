@@ -8,13 +8,19 @@ use crate::{
     orchestration::{
         child_launch::{cwd_too_broad, prompt::sanitize_inject_text},
         normal_worktree::{
-            NormalWorktreeLifecycle, effective_worktree_cleanup, valid_worktree_cleanup,
+            NormalWorktreeLifecycle, RecheckReport, RetainedWorktrees, UPSTREAM_FETCH_FAILED,
+            WORKTREE_CLEANUP_DELETE, effective_worktree_cleanup, path_within,
+            valid_worktree_cleanup,
         },
     },
+    process::Cancellation,
     proto::{core::*, time::Timestamp},
     terminal::session::SessionEngine,
 };
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 mod request;
 pub use request::OrdinarySpawnRequest;
 #[cfg(test)]
@@ -51,6 +57,7 @@ pub struct OrdinarySpawnService {
     policy: Arc<dyn SpawnLaunchPolicy>,
     registry: RegistrySnapshot,
     worktrees: NormalWorktreeLifecycle,
+    retained: Option<Arc<RetainedWorktrees>>,
     hooks: Arc<dyn OrdinarySpawnHooks>,
     hub_cwd: PathBuf,
     home: PathBuf,
@@ -64,6 +71,9 @@ pub struct OrdinarySpawnDependencies {
     pub policy: Arc<dyn SpawnLaunchPolicy>,
     pub registry: RegistrySnapshot,
     pub worktrees: NormalWorktreeLifecycle,
+    /// Worktrees kept when their session closed, judged again at Hub start.
+    /// `None` keeps nothing between Hub runs.
+    pub retained: Option<Arc<RetainedWorktrees>>,
     pub hooks: Arc<dyn OrdinarySpawnHooks>,
     pub hub_cwd: PathBuf,
     pub home: PathBuf,
@@ -122,6 +132,7 @@ impl OrdinarySpawnService {
             policy: deps.policy,
             registry: deps.registry,
             worktrees: deps.worktrees,
+            retained: deps.retained,
             hooks: deps.hooks,
             hub_cwd: deps.hub_cwd,
             home: deps.home,
@@ -493,15 +504,88 @@ impl OrdinarySpawnService {
             self.hooks.warning("unregistered worktree cleanup failed");
         }
     }
+    /// Cleanup may fetch the upstream, so it runs as a Hub-owned effect: a slow
+    /// or unreachable remote never holds the caller (the UI socket's receive
+    /// loop). A tree that stays is remembered for the next Hub start.
     pub async fn dismissed(&self, snapshot: &SessionSnapshot) {
-        if self
-            .worktrees
-            .cleanup(&snapshot.normal_worktree, &snapshot.worktree_cleanup)
-            .await
-            .is_err()
-        {
-            self.hooks.warning("dismissed worktree cleanup failed");
+        let tree = snapshot.normal_worktree.clone();
+        let policy = snapshot.worktree_cleanup.clone();
+        if !tree.created || effective_worktree_cleanup(&policy) != WORKTREE_CLEANUP_DELETE {
+            return;
         }
+        let worktrees = self.worktrees.clone();
+        let retained = self.retained.clone();
+        let hooks = self.hooks.clone();
+        let core = self.core.clone();
+        match self.tasks.effect_permit() {
+            Ok(permit) => {
+                let cancel = permit.cancellation();
+                drop(permit.start(async move {
+                    // The dismissed session has already left the core, so only
+                    // another live session inside the tree keeps it.
+                    let in_use = move |path: &Path| session_uses(&core, path);
+                    let result = worktrees
+                        .cleanup_guarded(&tree, &policy, &in_use, cancel.token())
+                        .await;
+                    settle_dismissed(&tree, result, retained.as_deref(), hooks.as_ref());
+                }));
+            }
+            Err(_) => self
+                .hooks
+                .warning("dismissed worktree cleanup admission failed"),
+        }
+    }
+    /// Startup recheck of the remembered worktrees (see `recheck_retained`).
+    /// The caller waits first so wrappers that outlived the previous Hub can
+    /// reattach; a tree any live session uses is never removed.
+    pub async fn recheck_retained_worktrees(&self, cancel: &Cancellation) -> RecheckReport {
+        let Some(store) = &self.retained else {
+            return RecheckReport::default();
+        };
+        let core = self.core.clone();
+        let in_use = move |path: &Path| session_uses(&core, path);
+        let report = self
+            .worktrees
+            .recheck_retained(store, &in_use, cancel)
+            .await;
+        if report.fetch_failed > 0 {
+            self.hooks
+                .warning("retained worktree upstream fetch failed; worktrees retained");
+        }
+        if report.store_failed {
+            self.hooks.warning("retained worktree list unavailable");
+        }
+        report
+    }
+}
+/// Every session the core holds, connected or waiting for its wrapper to
+/// reattach, counts; usage probes are excluded by `snapshots`.
+fn session_uses(core: &SessionEngine, path: &Path) -> bool {
+    core.snapshots()
+        .iter()
+        .any(|session| !session.cwd.is_empty() && path_within(Path::new(&session.cwd), path))
+}
+fn settle_dismissed(
+    tree: &NormalWorktree,
+    result: Result<(), String>,
+    retained: Option<&RetainedWorktrees>,
+    hooks: &dyn OrdinarySpawnHooks,
+) {
+    let recorded = match result {
+        Ok(()) => retained.map(|store| store.forget(&tree.path)),
+        Err(error) => {
+            hooks.warning(if error.starts_with(UPSTREAM_FETCH_FAILED) {
+                "dismissed worktree upstream fetch failed; worktree retained"
+            } else {
+                "dismissed worktree cleanup failed"
+            });
+            retained
+                .filter(|_| Path::new(&tree.path).is_dir())
+                .map(|store| store.remember(tree))
+        }
+    };
+    if matches!(recorded, Some(Err(_))) {
+        hooks.warning("retained worktree list unavailable");
     }
 }
 pub(crate) fn policy_error(error: std::io::Error) -> SpawnError {

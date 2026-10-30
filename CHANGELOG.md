@@ -26,6 +26,15 @@ Release artifacts are published at
   path on this PC, which an AI running on the ssh machine could not open. A
   window now appears before sending: enter the ssh destination and press Save,
   or press "Read on this PC". Your input and attachments are kept.
+- **A session's dedicated worktree is removed once its branch is merged on the
+  remote, and one left behind is checked again at the next Hub start.** With
+  `worktree_cleanup: delete`, closing a session now also fetches the upstream of
+  the repository's current branch (`HEAD@{upstream}`, e.g. `origin/develop`) and
+  counts the branch as merged when it is there, not only in the local HEAD; a
+  worktree still unmerged when its session closed is judged again each time the
+  Hub starts, skipping any a running session uses. An unreachable remote keeps
+  the worktree and logs a warning, and the branch is never deleted. A squash or
+  rebase merge on GitHub creates new commits, so it is not recognized as merged.
 
 ## [1.0.0]
 
