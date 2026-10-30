@@ -9,6 +9,7 @@ import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, batchFreeText, approvalAutoSwitchQueue, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals, forgetAllAnsweredApprovals, forgetAnsweredApprovals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
+import { projectKeyForSession } from './app/sidebar-tree.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
 import { disposeAltScrollRail } from './app/alt-scroll-rail-view.js';
 import { altDragSelectionText, disposeAltDragSelect } from './app/alt-drag-select-view.js';
@@ -1845,9 +1846,16 @@ export function removeLocalSession(id) {
   if (activeSessionId === id) {
     try {
       const ordered = orderSessions();
-      const idx = ordered.findIndex(s => s.id === id);
-      if (idx > 0) neighborId = ordered[idx - 1].id;
-      else if (idx === 0 && ordered.length > 1) neighborId = ordered[1].id;
+      // 隣は同じプロジェクトの箱の中から選ぶ。全体の並びで取ると、箱 B の先頭を閉じたとき
+      // 箱 A の末尾へ飛んでしまう。箱の中に他が無いときだけ全体の隣へ倒す。
+      const all = Array.from(sessions.values());
+      const closing = sessions.get(id);
+      const key = closing ? projectKeyForSession(closing, all) : null;
+      const pool = key === null ? ordered : ordered.filter(s => projectKeyForSession(s, all) === key);
+      const candidates = pool.length > 1 ? pool : ordered;
+      const idx = candidates.findIndex(s => s.id === id);
+      if (idx > 0) neighborId = candidates[idx - 1].id;
+      else if (idx === 0 && candidates.length > 1) neighborId = candidates[1].id;
     } catch (_) {}
   }
   cleanupRemovedSessionState(id);
