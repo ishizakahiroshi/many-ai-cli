@@ -46,6 +46,14 @@ Release artifacts are published at
   plugin skip hash pinning. This only affects people who run `many-ai-cli` from
   the Docker image, which ships the provider CLIs inside it.
 
+- **The `zip` library used to unpack the Whisper download is updated to 9.1.3.**
+  8.6.0 had three advisories (RUSTSEC-2026-0367, -0368, -0369; one rated
+  critical) about the library's own `extract()` creating symbolic links outside
+  the target and keeping SUID/SGID bits. Whisper's unpacking does not call that
+  function and already rejects symbolic links and paths that leave the target,
+  so this was not reachable, but the dependency audit now reports no
+  vulnerability.
+
 ### Fixed
 - **The retention settings take effect again.** `log.session_retention_days`
   (default 7), `handoff.retention_days` (14) and `log.attachment_retention_days`

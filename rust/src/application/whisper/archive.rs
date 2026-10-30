@@ -304,7 +304,14 @@ fn extract_to(
                 let mut entry = archive.by_index(index).map_err(|_| {
                     WhisperError::new(500, "whisper_install_failed", "invalid Whisper ZIP entry")
                 })?;
-                let chosen = selected(entry.name(), binary)?;
+                let name = entry.name().map_err(|_| {
+                    WhisperError::new(
+                        500,
+                        "whisper_install_failed",
+                        "invalid Whisper ZIP entry name",
+                    )
+                })?;
+                let chosen = selected(&name, binary)?;
                 if entry.is_dir() {
                     continue;
                 }
