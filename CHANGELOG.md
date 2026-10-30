@@ -35,6 +35,16 @@ Release artifacts are published at
   Hub starts, skipping any a running session uses. An unreachable remote keeps
   the worktree and logs a warning, and the branch is never deleted. A squash or
   rebase merge on GitHub creates new commits, so it is not recognized as merged.
+- **Commands an AI runs no longer write color codes into pipes and files.**
+  With "Always show colors (recommended)", sessions received `FORCE_COLOR=3`
+  and `CLICOLOR_FORCE=1`, and the AI CLI passes its environment to every
+  command it runs, so `gh … --json`, test runners and other tools colored
+  their output even when it was piped (JSON from `gh` could not be parsed).
+  The setting now removes inherited `NO_COLOR`, `FORCE_COLOR`,
+  `CLICOLOR_FORCE` and `CLICOLOR` instead and leaves color detection to the
+  terminal pane, which still reports `TERM=xterm-256color` and
+  `COLORTERM=truecolor`. "Follow the launch environment" and "No colors" are
+  unchanged. Applies to newly started sessions.
 
 ## [1.0.0]
 

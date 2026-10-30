@@ -532,23 +532,27 @@ pub fn prepare_claude_session_args(
 
 /// Environment ordering is intentional: the process adapter must implement
 /// last-value-wins semantics. Proof credentials are removed even from extras.
+///
+/// `force` clears the inherited color switches and lets the CLI detect the pane
+/// (a PTY with the TERM/COLORTERM below). It does not export FORCE_COLOR or
+/// CLICOLOR_FORCE: the AI CLI hands its environment to every command it runs,
+/// and those switches colored piped output too (`gh --json` returned SGR codes
+/// that JSON parsers rejected, 2026-10-29).
 pub fn child_env(base: &[String], terminal_color: &str, extra: &[String]) -> Vec<String> {
     let color = config::normalize_terminal_color(terminal_color);
-    let excluded = match color {
-        "force" => Some("NO_COLOR"),
-        "off" => Some("CLICOLOR_FORCE"),
-        _ => None,
+    let excluded: &[&str] = match color {
+        "force" => &["NO_COLOR", "FORCE_COLOR", "CLICOLOR_FORCE", "CLICOLOR"],
+        "off" => &["CLICOLOR_FORCE"],
+        _ => &[],
     };
-    let mut result = env_without(base, &excluded.into_iter().collect::<Vec<_>>());
+    let mut result = env_without(base, excluded);
     result.extend(strings(&[
         "TERM=xterm-256color",
         "COLORTERM=truecolor",
         "MANY_AI_CLI=1",
     ]));
-    match color {
-        "force" => result.extend(strings(&["FORCE_COLOR=3", "CLICOLOR_FORCE=1"])),
-        "off" => result.extend(strings(&["NO_COLOR=1", "FORCE_COLOR=0"])),
-        _ => {}
+    if color == "off" {
+        result.extend(strings(&["NO_COLOR=1", "FORCE_COLOR=0"]));
     }
     result.extend_from_slice(extra);
     env_without(&result, &[crate::proto::core::SPAWN_PROOF_ENV])
@@ -1059,6 +1063,7 @@ mod tests {
             "no_color=".into(),
             "FORCE_COLOR=0".into(),
             "clicolor_force=1".into(),
+            "CLICOLOR=0".into(),
             format!("{proof}=synthetic"),
             format!("{}=synthetic", proof.to_ascii_lowercase()),
         ];
@@ -1066,6 +1071,12 @@ mod tests {
             format!("{proof}=must-not-survive"),
             "TERM=caller-override".into(),
         ];
+        let has = |env: &[String], name: &str| {
+            env.iter().any(|v| {
+                v.split_once('=')
+                    .is_some_and(|(key, _)| key.eq_ignore_ascii_case(name))
+            })
+        };
         for mode in ["force", "inherit", "off", "invalid"] {
             let env = child_env(&base, mode, &extra);
             assert!(
@@ -1074,12 +1085,17 @@ mod tests {
             );
             assert_eq!(env.last().unwrap(), "TERM=caller-override");
             assert!(env.contains(&"MANY_AI_CLI=1".into()));
+            assert!(env.contains(&"COLORTERM=truecolor".into()));
             if matches!(mode, "force" | "invalid") {
-                assert!(!env.iter().any(|v| v.eq_ignore_ascii_case("NO_COLOR=")));
-                assert!(env.contains(&"FORCE_COLOR=3".into()));
+                // Nothing that forces or suppresses color reaches the CLI or the
+                // commands it runs; the pane's TERM/COLORTERM decide.
+                for name in ["NO_COLOR", "FORCE_COLOR", "CLICOLOR_FORCE", "CLICOLOR"] {
+                    assert!(!has(&env, name), "{mode} must not pass {name}");
+                }
             }
             if mode == "inherit" {
                 assert!(env.contains(&"no_color=".into()));
+                assert!(env.contains(&"clicolor_force=1".into()));
                 assert!(!env.contains(&"FORCE_COLOR=3".into()));
             }
             if mode == "off" {
