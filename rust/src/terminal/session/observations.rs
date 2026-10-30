@@ -21,10 +21,8 @@ impl SessionEngine {
             &chunk.bytes,
             &model_clean,
         );
-        if self.journal.enabled() {
-            let masked = crate::storage::mask_secret_bytes(&chunk.bytes);
-            effects.0.push(history(binding.session,now,"pty_output",object(serde_json::json!({"data_b64":STANDARD.encode(&masked),"text":identity::strip_ansi(&proto::wire::go_utf8_lossy(&masked))})))?);
-        }
+        // PTY output is deliberately not journaled: the masked `.log` is the only
+        // record, and per-read masking here missed secrets split across reads.
         s.replay.append(&chunk.bytes);
         s.pty_bytes_seen = s.pty_bytes_seen.saturating_add(chunk.bytes.len() as i64);
         s.vt.write(&chunk.bytes);

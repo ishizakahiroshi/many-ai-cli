@@ -1417,7 +1417,7 @@ The Hub, the PTY wrapper and the launcher are Rust (`rust/`, built into the `man
 |---|---|---|
 | Hub log | `~/.many-ai-cli/logs/hub.log` | Hub server runtime logs (rotated by size; configured via the `log:` section). Independent of session logging |
 | Session raw log | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.log` | Raw PTY stream for each wrapped session (includes ANSI sequences) |
-| Session history | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.jsonl` | Structured session events (`session_start`, `user_input`, `pty_output`, `attach`, `session_end`, `session_dismiss`) |
+| Session history | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.jsonl` | Structured session events (`session_start`, `user_input`, `attach`, `session_end`, `session_dismiss`) |
 | Clean transcript | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.txt` | Human-readable text (ANSI / spinners / control bytes stripped). Generated automatically on session end; any sessions missed due to a Hub crash are reconstructed at the next `serve` startup |
 
 Each wrapped session produces **three files that share the same basename** (`.log` / `.jsonl` / `.txt`) on purpose — they are not duplicates but serve different access patterns:

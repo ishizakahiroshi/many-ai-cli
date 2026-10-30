@@ -1350,7 +1350,7 @@ Hub・PTY ラッパー・ランチャーは Rust（`rust/`）で、実行ファ�
 |---|---|---|
 | Hub ログ | `~/.many-ai-cli/logs/hub.log` | Hub サーバの動作ログ（サイズ基準でローテーション。設定は `log:` セクション参照）。セッションログとは独立 |
 | セッション生ログ | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.log` | 各 wrap セッションの PTY 生ログ（ANSI 含む） |
-| セッション履歴 | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.jsonl` | セッションイベント履歴（`session_start` / `user_input` / `pty_output` / `attach` / `session_end` / `session_dismiss`） |
+| セッション履歴 | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.jsonl` | セッションイベント履歴（`session_start` / `user_input` / `attach` / `session_end` / `session_dismiss`） |
 | クリーン transcript | `~/.many-ai-cli/logs/sessions/<provider>_<YYYY-MM-DD_HHMMSS>_<folder>_s<id>.txt` | 人間が読めるテキスト版（ANSI / スピナー / 制御コードを除去）。セッション終了時に自動生成。Hub クラッシュ等で生成漏れがあった場合は次回 `serve` 起動時に補完される |
 
 各 wrap セッションは、**同じベース名を共有する 3 つのファイル**（`.log` / `.jsonl` / `.txt`）を意図的に生成します。これらは重複ではなく、それぞれ異なるアクセス用途を担っています。
