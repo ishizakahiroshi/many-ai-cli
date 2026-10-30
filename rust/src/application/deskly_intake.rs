@@ -14,6 +14,7 @@
 //! contract for that binding yet, so the production source refuses.
 pub mod github;
 pub mod journal;
+pub mod key_store;
 pub mod launch;
 pub mod mcp;
 #[cfg(test)]

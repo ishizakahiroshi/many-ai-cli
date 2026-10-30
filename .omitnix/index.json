@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "5ff5ad8b742afeaa49e71aead288c25b08614292",
+    "commit": "2e929c27b45f85936daed459740a5284f3bee3a3",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2055,
-    "analyzed": 1592,
+    "discovered": 2056,
+    "analyzed": 1593,
     "unresolved": 11,
     "unknown": 0,
     "unclaimed": 452,
@@ -22737,6 +22737,35 @@
           "detail": "sqlglot could not read: SELECT request_id, generation, attempt_id, state, reason, revision, au..."
         }
       ]
+    },
+    {
+      "path": "rust/src/application/deskly_intake/key_store.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "The Deskly orchestrator key lives in Windows Credential Manager as a"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
     },
     {
       "path": "rust/src/application/deskly_intake/launch.rs",

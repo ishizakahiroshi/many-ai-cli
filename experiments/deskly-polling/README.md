@@ -183,6 +183,22 @@ Order in `IntakeCoordinator`:
 3. Any unknown reply, `spent`, refusal after the claim, or launch error ends
    in `held` with a reason. Nothing in the module ever leaves `held`.
 
+### Owner decisions (2026-10-30)
+
+- Q1 binding: Deskly fixes repository, PR number, HEAD SHA and read-only
+  scope at approval time and returns them over MCP. Deskly defines the shape;
+  until it exists `NoTargetContract` stays the production source.
+- Q2 authority: Deskly adds a separate "read PR only" work kind instead of
+  reusing the Slack worker handoff.
+- Q3 caller: the Hub calls claim/handoff for that work kind; the Node PC relay
+  receiver does not handle it.
+- Q4 key: Windows Credential Manager generic credential
+  `many-ai-cli/deskly-orchestrator-key` (`key_store.rs`).
+- Q5 GitHub: no credential; public repositories only. Private PRs stop as
+  `NotVisible`.
+
+The list below is kept as the original record of what was open.
+
 ### Not decided / not implemented (do not guess)
 
 - **Target binding**: Deskly has no authenticated contract binding a stage-4

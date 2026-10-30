@@ -450,9 +450,27 @@ fn intake_never_mints_a_hub_confirmation_proof() {
         include_str!("journal.rs"),
         include_str!("github.rs"),
         include_str!("wire.rs"),
+        include_str!("key_store.rs"),
     ] {
         assert!(!source.contains("after_server_authentication"));
         assert!(!source.contains("after_server_verification"));
+    }
+}
+#[test]
+fn credential_blob_is_utf16_key_and_never_printed() {
+    use super::key_store::{CredentialError, decode_blob};
+    let utf16 = |s: &str| -> Vec<u8> { s.encode_utf16().flat_map(u16::to_le_bytes).collect() };
+    let key = decode_blob(&utf16(TEST_KEY)).unwrap();
+    assert!(!format!("{key:?}").contains("synthetic"));
+    for bad in [
+        Vec::new(),
+        vec![0x41],
+        TEST_KEY.as_bytes().to_vec()[..33].to_vec(),
+        utf16("short"),
+        utf16("has space in it 0123456789"),
+        vec![0x00, 0xd8, 0x41, 0x00],
+    ] {
+        assert!(matches!(decode_blob(&bad), Err(CredentialError::Invalid)));
     }
 }
 #[test]
