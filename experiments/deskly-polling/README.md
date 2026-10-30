@@ -63,3 +63,57 @@ event path once its contract exists.
 Crash-injection tests around every journal/claim/launch boundary, simultaneous
 device claims, permission changes, stale SHA and restart recovery remain to be
 designed and run. There is no implementation of this recovery proposal here.
+
+
+## 2026-10-30 Deskly PR #132 discovery endpoint reconciliation
+
+Deskly Draft PR #132 now contains an **unmerged, not deployed, default-off**
+authenticated MCP read API `development_runtime_discover_approved_relay`.
+This is **not** a standalone HTTP `poll` endpoint, nor a device-registration
+mechanism. It is offered only through the existing machine MCP endpoint
+(`POST /mcp/development-runtime`) with a valid registered orchestrator key
+and PC relay opt-in. The arguments must be exactly `{}`.
+
+The non-authoritative MCP tool content is:
+
+```json
+{
+  "profile": "pc_relay_discovery_v1",
+  "work": [
+    {
+      "request_id": "<Deskly UUID>",
+      "expected_revision": 3,
+      "generation": 1,
+      "authorization_epoch": 1,
+      "session_id": "<observed worker session>"
+    }
+  ],
+  "truncated": false
+}
+```
+
+The numeric fields are examples. The tool runs the **existing Deskly
+PC-relay claim eligibility checks** over current `wired` work, but returns
+neither a claim, a delivery receipt nor execution permission.
+
+**Critical mismatch with `mock.rs`:** the experiment's synthetic `Work`
+includes `device`, `repo`, `sha`, `deadline`, `approved`, and
+`read_only`, whereas the current Deskly discovery result **does not supply
+any of those fields**. Do not deserialize a real response directly into this
+synthetic `Work`, invent default values, or treat advisory candidate metadata
+as trusted GitHub PR read authorization.
+
+Before any connection or session start, a separately reviewed and authenticated
+resolution must supply the permitted repository/PR and immutable current HEAD
+SHA, approved read-only scope, deadline, owner-local confirmation, and the
+existing authority/attempt tuple. A Rust `SessionEngine` session must also
+match the independently observed `session_id` expected by Deskly
+`development_runtime_relay_claim`; the current mock has not established that
+mapping. If any part is unavailable, **hold**. After genuine current-state
+claim/handoff/validate and crash-safe local journal reconciliation are proven,
+a read-only PR summary can be attempted as a separate authorized milestone.
+
+Deskly PR #132 includes nine new synthetic service/MCP tests, **not yet run**.
+They must not be reported as passing; the Draft workflow's recent jobs were
+skipped. No automated Rust process launch, live polling, deploy or merge is
+authorized by these experimental changes.
