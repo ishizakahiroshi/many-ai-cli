@@ -49,9 +49,12 @@ if ($Source) {
 }
 $TrialRoot = Join-Path $BuildRoot 'rust-accept-user'
 $Toolchain = '1.90.0'   # CI の固定版（scripts/rust-candidate-ci.py と .github/workflows と同じ）
-$RealUserHome = $env:USERPROFILE                 # 実際の home（読むだけ。ここへは書かない）
+# 実際の home（読むだけ。ここへは書かない）。仮 home の Hub から起動した AI のセッションで実行すると
+# USERPROFILE は仮 home を指すので、OS のプロファイルの場所を使う（2026-10-29）
+$RealUserHome = [Environment]::GetFolderPath('UserProfile')
 $FakeHome  = Join-Path $BuildRoot 'rust-home'    # -Real のときの home（Rust は USERPROFILE を home とする）
 $AppHome   = Join-Path $FakeHome '.many-ai-cli'
+if (-not $RealUserHome -or $RealUserHome -eq $FakeHome) { throw "実際の home を特定できません: '$RealUserHome'" }
 
 # 子プロセスだけ、home を差し替えて実行する（呼び出し元のシェルの環境は、必ず元に戻す）
 function Invoke-WithFakeHome([scriptblock]$cmd) {
@@ -68,6 +71,11 @@ function Remove-FakeHome {
         $item = Get-Item -LiteralPath $junction -Force
         if ($item.LinkType -eq 'Junction') { [System.IO.Directory]::Delete($junction, $false) }
         elseif ($item.PSIsContainer) { throw "subscriptions が junction ではありません。安全のため削除しません: $junction" }
+    }
+    # .docsweep は実際の home の .docsweep への junction。リンクだけを外す（実体のフォルダなら仮 home の記録なので、下で一緒に消してよい）
+    $docsweepLink = Join-Path $FakeHome '.docsweep'
+    if ((Test-Path -LiteralPath $docsweepLink) -and (Get-Item -LiteralPath $docsweepLink -Force).LinkType) {
+        [System.IO.Directory]::Delete($docsweepLink, $false)
     }
     Remove-Item -LiteralPath $FakeHome -Recurse -Force
     Write-Host "削除しました: $FakeHome"
@@ -266,6 +274,29 @@ if ($Real) {
         $target = Join-Path $realApp 'subscriptions'
         if (Test-Path -LiteralPath $target) { New-Item -ItemType Junction -Path $junction -Target $target | Out-Null }
         else { Write-Host '実際の subscriptions が見つかりません。サブスクリプションは使えません。' -ForegroundColor Yellow }
+    }
+    # docsweep は home の .docsweep から設定（roots・provenance・user）と記録を読む。仮 home に別のフォルダがあると
+    # 本来の設定を読まず、「スキャン範囲外」「provenance が無効」になり、new の AI の欄も黙って入らない（2026-10-29 までに 10 回）。
+    # 実際の home の .docsweep を junction で見せる（docsweep の記録は実際の home と共有になる。-Clean ではリンクだけを外す）。
+    $docsweepLink = Join-Path $FakeHome '.docsweep'
+    $realDocsweep = Join-Path $RealUserHome '.docsweep'
+    if (Test-Path -LiteralPath $realDocsweep -PathType Container) {
+        $existing = Get-Item -LiteralPath $docsweepLink -Force -ErrorAction SilentlyContinue
+        if ($existing -and -not $existing.LinkType) {
+            # 以前の起動で仮 home にできた docsweep の記録。消さずに名前を変えて残す
+            $aside = '.docsweep.pre-link-' + (Get-Date -Format 'yyyyMMdd_HHmmss')
+            try {
+                Rename-Item -LiteralPath $docsweepLink -NewName $aside -ErrorAction Stop
+                $existing = $null
+                Write-Host "仮 home の .docsweep を $aside へ退避しました。"
+            } catch {
+                Write-Host "仮 home の .docsweep を退避できませんでした（docsweep が使用中かもしれません）。junction は作りません: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+        }
+        if (-not $existing) {
+            New-Item -ItemType Junction -Path $docsweepLink -Target $realDocsweep | Out-Null
+            Write-Host "docsweep は、実際の home の .docsweep を使います（junction）: $docsweepLink"
+        }
     }
     if ($CopyDb) {
         foreach ($f in 'any-ai-cli.db', 'any-ai-cli.db-wal', 'any-ai-cli.db-shm') {
