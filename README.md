@@ -1426,7 +1426,7 @@ A wrapped session now writes only the **`.log`** file. The structured `.jsonl` e
 - **`.jsonl`** (legacy) was the structured event timeline. It is no longer written.
 - **`.txt`** is a human-readable transcript that `log-clean` generates from a legacy `.jsonl` on request.
 
-Session logs are local private storage (`0700` directories / `0600` files where applicable), but they can still contain prompts, file paths, and other user-provided text. Known token patterns are masked before the `.log` is written, but this is heuristic and plain-text passwords are not recognized — which is the main reason session logging is opt-in. Remove `~/.many-ai-cli/logs/` if you accidentally paste sensitive material.
+Session logs are local private storage (`0700` directories / `0600` files where applicable), but they can still contain prompts, file paths, and other user-provided text. Known token patterns are masked before the `.log` is written, but this is heuristic and plain-text passwords are not recognized — which is the main reason session logging is opt-in. This setting does not reach the raw transcripts that each AI CLI (Claude, Codex, …) keeps for itself; delete those with the AI CLI's own tools. Remove `~/.many-ai-cli/logs/` if you accidentally paste sensitive material.
 
 From a session's raw-transcript dialog, the Hub UI lets you copy the full raw-log path or open its containing folder in the system file manager.
 

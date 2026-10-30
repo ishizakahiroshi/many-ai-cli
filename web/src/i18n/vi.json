@@ -371,7 +371,7 @@
   "settings_log": "Cài đặt nhật ký",
   "settings_file_log": "Nhật ký file",
   "settings_session_log": "Nhật ký session",
-  "settings_session_log_desc": "Mặc định TẮT — khuyến nghị. Khi BẬT, mọi session được ghi ra đĩa (.log / .jsonl / .txt và lịch sử SQLite); thông tin nhạy cảm bạn gõ hoặc dán trong session — mật khẩu, API key, token — cũng bị ghi vào log. Không thể che an toàn. Chỉ BẬT khi bạn hiểu và chấp nhận rủi ro. Đó là lý do khuyến nghị TẮT. Áp dụng cho session mới. Lưu ý: khi TẮT, tab lịch sử Chat và chế độ split vẫn hiện hội thoại session hiện tại trực tiếp (từ luồng terminal). Lưu đĩa — duyệt session cũ và khôi phục scrollback khi kết nối lại — bị tắt.",
+  "settings_session_log_desc": "Mặc định TẮT — khuyến nghị. Khi BẬT, tệp .log của mỗi session (nội dung terminal đã hiển thị) được ghi ra đĩa. Các bí mật có dạng nhận biết được — API key, token, khóa riêng — được che trước khi ghi, nhưng một câu như \"mật khẩu là hunter2\" không thể nhận ra và vẫn còn nguyên. Chỉ BẬT khi bạn hiểu và chấp nhận rủi ro. Nội dung hội thoại không bao giờ được lưu vào lịch sử SQLite, dù BẬT hay TẮT. Log gốc mà mỗi AI CLI (Claude, Codex, …) tự giữ là riêng và không bị cài đặt này ảnh hưởng. Áp dụng cho session mới. Lưu ý: khi TẮT, tab lịch sử Chat và chế độ split vẫn hiện hội thoại session hiện tại trực tiếp (từ luồng terminal). Lưu đĩa — duyệt session cũ và khôi phục scrollback khi kết nối lại — bị tắt.",
   "settings_max_size": "Tối đa (MB)",
   "settings_max_backups": "Bản sao lưu",
   "settings_session_retention": "Giữ nhật ký session (ngày)",

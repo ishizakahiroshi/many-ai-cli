@@ -17,6 +17,8 @@ use std::{
 const DAY: Duration = Duration::from_secs(24 * 60 * 60);
 /// Written once the pre-masking `.log` files have been scrubbed.
 const SCRUB_MARKER: &str = ".logs-masked-v1";
+/// Written when the attachment retention setting first took effect.
+const ATTACHMENT_MARKER: &str = ".attachment-retention-started";
 /// A file touched this recently may still be open for writing by a wrapper.
 const LIVE_GRACE: Duration = Duration::from_secs(5 * 60);
 
@@ -35,12 +37,40 @@ impl Sweep {
         self.remove_old_session_files(now);
         self.prune_handoff(now);
         self.prune_history(now);
-        let log = &self.config.log;
-        let _ = self.files.clean_attachments(
-            log.attachment_retention_days,
-            (log.attachment_max_total_mb.max(0) as u64).saturating_mul(1024 * 1024),
-            now,
-        );
+        if self.attachment_grace_over(now) {
+            let log = &self.config.log;
+            let _ = self.files.clean_attachments(
+                log.attachment_retention_days,
+                (log.attachment_max_total_mb.max(0) as u64).saturating_mul(1024 * 1024),
+                now,
+            );
+        }
+    }
+    /// The attachment setting was never applied before, so a first sweep would
+    /// delete everything older than the retention period at once. Remember when
+    /// the setting first took effect and start deleting one period after that.
+    fn attachment_grace_over(&self, now: SystemTime) -> bool {
+        let days = self.config.log.attachment_retention_days;
+        if days <= 0 {
+            // Only the total-size limit can apply; it never surprised anyone by age.
+            return true;
+        }
+        let Ok(root) = Dir::open_or_create_private_components(self.paths.root()) else {
+            return false;
+        };
+        let started = root
+            .metadata(ATTACHMENT_MARKER)
+            .ok()
+            .and_then(|metadata| metadata.modified().ok());
+        match started {
+            Some(started) => {
+                now.duration_since(started).unwrap_or_default() >= DAY * days.min(3650) as u32
+            }
+            None => {
+                let _ = root.replace(ATTACHMENT_MARKER, b"", 0o600);
+                false
+            }
+        }
     }
     fn cutoff(now: SystemTime, days: i64) -> Option<SystemTime> {
         (days > 0).then(|| now - DAY * days.min(3650) as u32)
@@ -180,6 +210,35 @@ mod tests {
         assert!(!dir.join("old.jsonl").exists());
         assert!(dir.join("new.log").exists());
         assert!(dir.join("other.dat").exists());
+    }
+
+    #[test]
+    fn attachments_are_kept_for_one_retention_period_after_the_setting_first_applies() {
+        let (_root, _installed, paths) = root();
+        let dir = paths.resource(Resource::Attachments).join("1");
+        std::fs::create_dir_all(&dir).unwrap();
+        let old = dir.join("old.bin");
+        std::fs::write(&old, b"x").unwrap();
+        set_age(&old, DAY * 30);
+        let mut config = Config::default();
+        config.log.attachment_retention_days = 7;
+        config.log.session_retention_days = 0;
+        let sweep = sweep(&paths, config);
+        sweep.run(SystemTime::now());
+        assert!(
+            old.exists(),
+            "first start only records when the setting began"
+        );
+        let marker = paths.root().join(ATTACHMENT_MARKER);
+        assert!(marker.exists());
+        sweep.run(SystemTime::now());
+        assert!(old.exists(), "still inside the grace period");
+        set_age(&marker, DAY * 8);
+        sweep.run(SystemTime::now());
+        assert!(
+            !old.exists(),
+            "after one retention period the old attachment goes"
+        );
     }
 
     #[test]

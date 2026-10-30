@@ -26,6 +26,13 @@ Release artifacts are published at
   key blocks and `user:password@` URLs are masked, including ones split across
   reads. The headless run log is masked too. Plain-text passwords are still not
   recognized, which is why session logging stays opt-in.
+- **Card titles, notes and summaries are masked before they are stored in the
+  SQLite history.** Known token shapes in what you type there are replaced with
+  `***`; the text itself is otherwise kept as you wrote it.
+- **The Session log setting now says what it really does.** Its description
+  (English, Japanese, Vietnamese), `doctor` and the README state that only the
+  `.log` is written, that a plain-text password cannot be recognized, and that
+  the raw logs each AI CLI keeps for itself are not affected by the setting.
 - **The structured session history (`.jsonl`) is no longer written.** The `.log`
   is the only per-session file now. Files from older versions stay until the
   retention sweep removes them, and `log-clean` still reads them.
@@ -59,7 +66,9 @@ Release artifacts are published at
   (default 7), `handoff.retention_days` (14) and `log.attachment_retention_days`
   (7) were never read, so old session files, handoff records, history rows and
   attachments stayed forever. The Hub now applies them once at each start;
-  zero or less keeps everything.
+  zero or less keeps everything. Attachments wait one retention period after
+  the first start with this version, so nothing you attached earlier is removed
+  all at once.
 - **Secrets saved before the masking was added are masked on the next start.**
   Existing `.log` files are masked once as a whole (so a key split across reads
   or a multi-line private key is caught), and approval texts already in the

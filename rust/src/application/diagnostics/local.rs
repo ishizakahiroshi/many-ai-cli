@@ -157,13 +157,16 @@ fn walk(dir: &Dir) -> io::Result<(usize, u64)> {
     }
     Ok((count, size))
 }
+/// The session-log setting does not reach the logs each AI CLI keeps for itself.
+const AI_CLI_LOGS_NOTE: &str =
+    "AI CLI（Claude・Codex など）が自分で持つ生ログは、この設定とは別に残ります";
 pub(super) fn session_log(owner: &Diagnostics, cfg: &Config) -> Check {
     if !cfg.log.session_enabled {
         return Check::new(
             "session log",
             "OK",
             "セッションログは無効です（log.session_enabled: false）",
-            "",
+            AI_CLI_LOGS_NOTE,
         );
     }
     let missing = || {
@@ -247,7 +250,7 @@ pub(super) fn session_log(owner: &Diagnostics, cfg: &Config) -> Check {
             human_bytes(entry_size)
         )
     }
-    Check::new("session log", "OK", message, "")
+    Check::new("session log", "OK", message, AI_CLI_LOGS_NOTE)
 }
 fn human_bytes(n: u64) -> String {
     if n >= 1024 * 1024 {

@@ -219,7 +219,7 @@ impl SessionStorage for SqliteSessionStorage {
         session: LiveSessionId,
         meta: SessionCardMeta,
     ) -> StorageResult<()> {
-        self.with_conn(StorageErrorKind::Write, |c| c.execute("UPDATE sessions SET label=?,pinned=?,color=?,note=?,auto_title=?,updated_at=? WHERE live_session_id=? AND ended_at IS NULL",params![meta.label,meta.pinned,meta.color,meta.note,meta.auto_title,now(),session.0]).map(|_| ()))
+        self.with_conn(StorageErrorKind::Write, |c| c.execute("UPDATE sessions SET label=?,pinned=?,color=?,note=?,auto_title=?,updated_at=? WHERE live_session_id=? AND ended_at IS NULL",params![text::mask_secrets(&meta.label),meta.pinned,meta.color,text::mask_secrets(&meta.note),text::mask_secrets(&meta.auto_title),now(),session.0]).map(|_| ()))
     }
     fn end_session(&self, session: LiveSessionId, state: &str, reason: &str, ended_at: Timestamp) {
         let result = self.with_conn(StorageErrorKind::Write, |c| c.execute("UPDATE sessions SET state=COALESCE(NULLIF(?, ''),state),end_reason=COALESCE(NULLIF(?, ''),end_reason),ended_at=?,updated_at=? WHERE live_session_id=? AND ended_at IS NULL",params![state,reason,timestamp(ended_at)?,now(),session.0]).map(|_| ()));
@@ -472,7 +472,7 @@ impl SessionStorage for SqliteSessionStorage {
     ) -> StorageResult<SessionOverview> {
         self.with_conn(StorageErrorKind::Write, |c| {
             let Some(id)=resolve(c,session,true)? else { return Ok(SessionOverview::default()); };
-            c.execute("UPDATE sessions SET title=?,tags_json=?,summary=?,archived=?,updated_at=? WHERE id=?",params![text::trim(title.trim(),160),serde_json::to_string(&text::tags(tags)).unwrap(),text::trim(summary.trim(),4000),archived,now(),id])?;
+            c.execute("UPDATE sessions SET title=?,tags_json=?,summary=?,archived=?,updated_at=? WHERE id=?",params![text::mask_secrets(&text::trim(title.trim(),160)),serde_json::to_string(&text::tags(&tags.iter().map(|t| text::mask_secrets(t)).collect::<Vec<_>>())).unwrap(),text::mask_secrets(&text::trim(summary.trim(),4000)),archived,now(),id])?;
             overview(c,id)
         })
     }

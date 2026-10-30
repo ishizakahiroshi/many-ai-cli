@@ -331,6 +331,42 @@ API_KEY=synthetic-value {secret}")],
         assert_eq!(c, "plain");
     }
     #[test]
+    fn card_title_note_and_summary_are_masked_before_they_are_stored() {
+        let (_root, _installed, store) = fixture(2);
+        let secret = format!("ghp_{}", "A".repeat(30));
+        store
+            .update_session_card_meta(
+                LiveSessionId(1),
+                SessionCardMeta {
+                    label: format!("label {secret}"),
+                    note: format!("API_KEY=synthetic-value {secret}"),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let meta = store
+            .update_session_meta(
+                LiveSessionId(1),
+                &format!("title {secret}"),
+                &[format!("tag-{secret}")],
+                &format!("summary {secret}"),
+                false,
+            )
+            .unwrap();
+        let card = store
+            .session_card_meta_by_live_session(LiveSessionId(1))
+            .unwrap();
+        let all = format!(
+            "{} {} {} {} {} {:?}",
+            card.label, card.note, meta.title, meta.summary, card.auto_title, meta.tags
+        );
+        assert!(
+            !all.contains("AAAA") && !all.contains("synthetic-value"),
+            "{all}"
+        );
+        assert!(card.label.starts_with("label "));
+    }
+    #[test]
     fn bounded_queue_drop_count_is_nonblocking_under_database_backpressure() {
         let (_root, _installed, store) = fixture(2);
         let barrier = store.inner.history.write().unwrap();
