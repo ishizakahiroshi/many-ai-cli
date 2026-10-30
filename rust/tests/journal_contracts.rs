@@ -177,8 +177,10 @@ fn paths_are_sanitized_and_runtime_derived_for_multibyte_and_empty_parts() {
 }
 #[cfg(unix)]
 #[test]
-fn existing_symlink_is_rejected_and_created_file_is_private() {
-    use std::os::unix::{fs::PermissionsExt, fs::symlink};
+fn a_symlink_planted_at_the_old_jsonl_path_is_never_written_through() {
+    // The `.jsonl` used to be created here (and an existing symlink was refused).
+    // Nothing is written there any more, so a planted link must stay exactly as it is.
+    use std::{fs, os::unix::fs::symlink};
     let (_r, _i, _s, j) = fixture(true, 0);
     let outside = tempfile::tempdir().unwrap();
     let target = outside.path().join("untouched");
@@ -188,18 +190,6 @@ fn existing_symlink_is_rejected_and_created_file_is_private() {
         .unwrap();
     fs::create_dir_all(paths.jsonl.parent().unwrap()).unwrap();
     symlink(&target, &paths.jsonl).unwrap();
-    assert!(
-        j.open(
-            LiveSessionId(1),
-            "copilot",
-            "/synthetic/project",
-            instant(),
-            false
-        )
-        .is_err()
-    );
-    assert_eq!(fs::read(&target).unwrap(), b"original");
-    fs::remove_file(&paths.jsonl).unwrap();
     j.open(
         LiveSessionId(1),
         "copilot",
@@ -208,9 +198,15 @@ fn existing_symlink_is_rejected_and_created_file_is_private() {
         false,
     )
     .unwrap();
-    assert_eq!(
-        fs::metadata(paths.jsonl).unwrap().permissions().mode() & 0o777,
-        0o600
+    write_attach(&j, "first");
+    write(&j, "user_input", "synthetic private body");
+    j.close_all();
+    assert_eq!(fs::read(&target).unwrap(), b"original");
+    assert!(
+        fs::symlink_metadata(&paths.jsonl)
+            .unwrap()
+            .file_type()
+            .is_symlink()
     );
 }
 
