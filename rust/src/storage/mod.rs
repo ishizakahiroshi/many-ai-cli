@@ -295,6 +295,42 @@ mod tests {
         );
     }
     #[test]
+    fn approval_text_saved_before_masking_is_masked_when_the_database_is_opened() {
+        let root = tempfile::tempdir().unwrap();
+        let installed = tempfile::tempdir().unwrap();
+        let paths = RuntimePaths::trial(root.path(), 49116, installed.path()).unwrap();
+        let options = || StorageOptions::baseline(paths.resource(Resource::Logs));
+        let store = SqliteSessionStorage::open(&paths, options()).unwrap();
+        store
+            .start_session(SessionStart {
+                live_session_id: LiveSessionId(1),
+                ..Default::default()
+            })
+            .unwrap();
+        let secret = format!("ghp_{}", "A".repeat(30));
+        store
+            .with_conn(StorageErrorKind::Write, |c| {
+                c.execute(
+                    "INSERT INTO approvals(session_id,sig,question,context,block,state) VALUES (1,'s',?,?,?,'pending')",
+                    params![format!("q {secret}"), "plain", format!("block
+API_KEY=synthetic-value {secret}")],
+                )
+            })
+            .unwrap();
+        store.close().unwrap();
+        drop(store);
+        let reopened = SqliteSessionStorage::open(&paths, options()).unwrap();
+        let (q, c, b): (String, String, String) = reopened
+            .with_conn(StorageErrorKind::Query, |c| {
+                c.query_row("SELECT question,context,block FROM approvals", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+                })
+            })
+            .unwrap();
+        assert!(!q.contains("AAAA") && !b.contains("AAAA") && !b.contains("synthetic-value"));
+        assert_eq!(c, "plain");
+    }
+    #[test]
     fn bounded_queue_drop_count_is_nonblocking_under_database_backpressure() {
         let (_root, _installed, store) = fixture(2);
         let barrier = store.inner.history.write().unwrap();

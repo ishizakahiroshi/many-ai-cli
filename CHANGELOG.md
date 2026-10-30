@@ -41,6 +41,15 @@ Release artifacts are published at
   on this PC is opened by mistake; `http(s)` links work as before.
 
 ### Fixed
+- **The retention settings take effect again.** `log.session_retention_days`
+  (default 7), `handoff.retention_days` (14) and `log.attachment_retention_days`
+  (7) were never read, so old session files, handoff records, history rows and
+  attachments stayed forever. The Hub now applies them once at each start;
+  zero or less keeps everything.
+- **Secrets saved before the masking was added are masked on the next start.**
+  Existing `.log` files are masked once as a whole (so a key split across reads
+  or a multi-line private key is caught), and approval texts already in the
+  database are masked in place.
 - **The handoff directory no longer grows by repeating the same transcript path.**
   A record was appended every time the transcript file changed, although the
   path rarely did (133 MB of a 145 MB directory in one install). A path equal to

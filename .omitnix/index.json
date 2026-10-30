@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "59b74af5f468b5aee3380f74ce02699ea84585a5",
+    "commit": "dc7875a55dec059ab9790ba09c091cb2488db593",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2045,
-    "analyzed": 1586,
+    "discovered": 2046,
+    "analyzed": 1587,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 449,
@@ -23877,6 +23877,35 @@
         "summary": {
           "state": "value",
           "value": "Lifetime ownership precedes database open/reset and any Hub registration."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/application/main_program/retention.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Start-time retention sweep. The retention settings (`session_retention_days`,"
         },
         "authentication": {
           "state": "not_configured"

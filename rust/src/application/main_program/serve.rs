@@ -793,12 +793,19 @@ impl HubComposition {
             Dir::open_or_create_private_components(paths.root())?,
         )));
         let handoff = HandoffStore::new(paths.clone());
-        {
-            // Older versions appended the same transcript path on every change.
-            let handoff = handoff.clone();
-            std::thread::spawn(move || {
-                let _ = handoff.compact_transcripts();
-            });
+        if let Ok(snapshot) = context.config.snapshot() {
+            // Retention settings and old-format cleanups run once per start, off
+            // the start path, so a large directory never delays the Hub.
+            let sweep = super::retention::Sweep {
+                paths: paths.clone(),
+                config: snapshot.config,
+                handoff: handoff.clone(),
+                storage: storage
+                    .clone()
+                    .map(|storage| storage as Arc<dyn SessionStorage>),
+                files: files.clone(),
+            };
+            std::thread::spawn(move || sweep.run(std::time::SystemTime::now()));
         }
         let workspace = Arc::new(workspace::Workspace {
             memos: memos.clone(),

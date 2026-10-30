@@ -18,7 +18,31 @@ pub(super) fn open_connection(
         .map_err(|e| sql_error(StorageErrorKind::Open, e))?;
     let fts = initialize(&conn, init_timeout)?;
     purge_message_bodies(&conn, fts, init_timeout)?;
+    mask_stored_approvals(&conn).map_err(|e| sql_error(StorageErrorKind::Open, e))?;
     Ok((conn, fts))
+}
+/// Approval rows written before their text was masked may hold a secret in the
+/// question, context or raw block. Mask them in place; rows already masked are
+/// left untouched, so this is cheap on every later open.
+fn mask_stored_approvals(conn: &Connection) -> rusqlite::Result<()> {
+    let rows = conn
+        .prepare("SELECT id,COALESCE(question,''),COALESCE(context,''),COALESCE(block,'') FROM approvals")?
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for (id, question, context, block) in rows {
+        let masked = (
+            text::mask_secrets(&question),
+            text::mask_secrets(&context),
+            text::mask_secrets(&block),
+        );
+        if masked != (question, context, block) {
+            conn.execute(
+                "UPDATE approvals SET question=?,context=?,block=? WHERE id=?",
+                params![masked.0, masked.1, masked.2, id],
+            )?;
+        }
+    }
+    Ok(())
 }
 /// Databases written by earlier versions hold conversation bodies. Remove them
 /// once (zeroing freed pages) so a stored secret does not outlive the upgrade.
