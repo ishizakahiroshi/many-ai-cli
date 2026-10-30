@@ -127,3 +127,80 @@ client/decoder/Hub adapter. At commit `37ec0491515485562066e3e9271068d3029857f3`
 the bounded [Rust Actions run 40993174070](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/40993174070)
 completed **3/3 existing mock and 7/7 typed contract tests**. No
 automated Rust process launch, live polling, deploy or merge is authorized.
+
+## 2026-10-30 Hub-side intake module (default off, not composed)
+
+`rust/src/application/deskly_intake.rs` and its submodules move the offline
+contract into the Rust crate. Nothing calls it from `serve`, so the shipped
+Hub behaves exactly as before. Pieces:
+
+- `mcp.rs`: stateless JSON-RPC `tools/call` to Deskly's existing
+  `POST /mcp/development-runtime` with `Authorization: Bearer <registered
+  orchestrator key>`. Endpoint rule copied from Deskly `targetUrl` (HTTPS, or
+  literal-loopback HTTP; exact path; no userinfo/query/fragment). Redirects are
+  not followed, bodies are bounded, the key's `Debug` is redacted. Reply is
+  plain JSON or one SSE `data:` frame; `isError` becomes a refusal. Failure
+  classes: `Unauthorized` / `Rejected` / `NotDelivered` (connect failed) /
+  `Unknown` (may have reached the server). For a mutating step, `Unknown` and
+  an "ok" reply whose shape we refuse both mean *outcome unknown*.
+- `wire.rs`: closed (`deny_unknown_fields`) decoders for discovery v1, claim /
+  handoff previews (`preview_token`), claim apply, handoff apply
+  (`issued` / `spent`) and `pc_relay_issued_validation_v1`, following the
+  shapes and checks in Deskly PR #132 `agent-development-pc-relay-tools.ts`
+  and `agent-development-pc-relay-model.ts`. The Slack wire `text` is dropped
+  at decode time and never parsed into a command.
+- `github.rs`: one unauthenticated `GET /repos/{o}/{r}/pulls/{n}` to read the
+  live HEAD SHA, state and base repository. Read-only by construction; private
+  repositories report `NotVisible`.
+- `journal.rs`: SQLite (`WAL`, `synchronous=FULL`) row per
+  `(request_id, generation)`. Holds only ids, revision, epoch, session id,
+  repo/PR/SHA and state; no wire text, preview token or key. Opening it is
+  recovery: any in-flight row (`approved` .. `launch_sent`) becomes `held`.
+  It never authorizes or retries; Deskly stays canonical.
+- `launch.rs`: launch goes through `OrdinarySpawnService::spawn`, so
+  `SessionEngine` stays the only admission/registration owner. It requires the
+  owner's `VerifiedConfirmationRequest` and checks its auth epoch against
+  `SessionEngine::auth_epoch()`. Only `claude` (`permission_mode=plan`) and
+  `codex` (`sandbox=read-only`, `ask_for_approval=untrusted`) are offered;
+  `client_request_id = deskly-<attempt>` correlates the registration with the
+  journal row. The prompt names only repo / PR / SHA.
+
+Order in `IntakeCoordinator`:
+
+1. `poll_once`: discovery (advisory). Truncated or failed reads do nothing.
+   Each new candidate needs a bound `ApprovedTarget` from `TargetSource`
+   whose request/revision/epoch match discovery, scope exactly `["read"]`,
+   not expired, repository in the owner's local allowlist, and a live PR
+   that is open in that repository at exactly the bound SHA. Only then is
+   an `owner_pending` row written. Poll never calls claim.
+2. `approve`: the owner's approval names the SHA they saw; it must match
+   the row, and the Hub auth epoch must be current. Target and live HEAD
+   are re-checked (TOCTOU). Then claim preview -> durable `claim_sent` ->
+   claim apply -> handoff preview (confirmation session must match) ->
+   durable `handoff_sent` -> handoff apply with `client_attempt_id` =
+   journal attempt -> issued tuple check -> `validate_issued` ->
+   durable `launch_sent` -> launch.
+3. Any unknown reply, `spent`, refusal after the claim, or launch error ends
+   in `held` with a reason. Nothing in the module ever leaves `held`.
+
+### Not decided / not implemented (do not guess)
+
+- **Target binding**: Deskly has no authenticated contract binding a stage-4
+  request to a repository, PR number, immutable HEAD SHA and read-only scope.
+  The production `TargetSource` (`NoTargetContract`) therefore always refuses,
+  and the coordinator records nothing. The handoff wire is a Slack worker
+  message (`transport=slack_auto`, `kind=code`), not a PR-read instruction.
+- **Which process owns claim/handoff**: the existing Node PC relay receiver
+  also calls `relay_claim` / `relay_handoff` and keeps its own pending
+  journal. Running both for the same orchestrator key would make two owners.
+  Whether the Hub replaces the receiver for this work kind, or calls into it,
+  is undecided.
+- **Credentials**: where the orchestrator key is stored on the PC, and which
+  GitHub credential (if any) may read private repositories, are undecided.
+  Reading token scopes to prove a GitHub credential is read-only is not
+  implemented; the reader sends no credential.
+- **Owner approval UI / route and `serve` composition**: no HTTP route,
+  scheduler (300 s default is only a constant) or UI exists yet.
+- **Result evidence and reconciliation**: no result report to Deskly; `held`
+  rows need a manual reconciliation procedure that does not exist yet.
+- **Decline**: local only; no Deskly call for an owner decline is known.
