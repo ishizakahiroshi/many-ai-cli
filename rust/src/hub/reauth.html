@@ -37,6 +37,8 @@ code{background:#1b1d22;padding:.1em .35em;border-radius:.25em}
   if (tried) { giveUp(); return; }
   try { sessionStorage.setItem('__GUARD_KEY__', '1'); } catch (e) { /* private mode 等 */ }
   var here = location.pathname + location.search + location.hash;
+  // 先頭が // や /\ だと、location.replace が別サイトへの URL として解釈する。
+  if (here.charAt(0) !== '/' || here.charAt(1) === '/' || here.charAt(1) === '\\') { here = '/'; }
   fetch('/', {
     method: 'GET',
     credentials: 'same-origin',

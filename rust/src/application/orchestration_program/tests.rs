@@ -683,6 +683,34 @@ async fn startup_failure_requires_confirmed_delivery_and_never_writes_progress()
     let evidence = std::fs::read_to_string(&f.path).unwrap();
     assert!(evidence.contains("Hub has no other evidence of why it stopped"));
 }
+#[test]
+fn startup_failed_tail_masks_secrets_and_keeps_only_the_last_five_lines() {
+    // 合成の値だけ。接頭辞と本体を分けて組み立て、秘密の検査に当たらないようにする。
+    let key = format!("{}{}", "ghp_", "A".repeat(30));
+    let bearer = format!("{}{}", "Bearer ", "b".repeat(20));
+    let screen = vec![
+        "dropped one".to_owned(),
+        "dropped two".to_owned(),
+        format!("ANTHROPIC_API_KEY={key}"),
+        "│ boxed line is skipped".to_owned(),
+        "   ".to_owned(),
+        format!("Authorization: {bearer}"),
+        format!("pasted {key} inline"),
+        "last line".to_owned(),
+        "after".to_owned(),
+    ];
+    let tail = lifecycle::startup_failed_tail(&screen);
+    assert!(!tail.contains(&key), "raw key leaked: {tail}");
+    assert!(!tail.contains(&"b".repeat(20)), "raw bearer leaked: {tail}");
+    assert!(tail.contains("ANTHROPIC_API_KEY=***"), "{tail}");
+    assert!(
+        tail.contains("last line") && tail.contains("after"),
+        "{tail}"
+    );
+    assert!(!tail.contains("dropped"), "{tail}");
+    assert!(!tail.contains("boxed line"), "{tail}");
+    assert_eq!(tail.lines().count(), 5, "{tail}");
+}
 #[tokio::test]
 async fn progress_and_new_pty_activity_prevent_timeout_but_elapsed_inactivity_fires_once() {
     let f = fixture().await;

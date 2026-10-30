@@ -1012,6 +1012,8 @@ fn service_reauth_page_cookie_and_public_assets_policy() {
     let html = String::from_utf8(response.body).unwrap();
     assert!(html.contains("many-ai-cli-token"));
     assert!(!html.contains("__NONCE__"));
+    // 戻り先が //evil や /\evil のとき、別サイトへ飛ばさず / に戻すガード（実行はできないので文面で固定する）。
+    assert!(html.contains("here.charAt(1) === '/'") && html.contains("here.charAt(1) === '\\\\'"));
     assert!(response.headers["Content-Security-Policy"].contains("nonce-"));
     r.path = "/app.js".into();
     r.host = "evil.invalid".into();

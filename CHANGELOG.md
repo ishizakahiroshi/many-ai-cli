@@ -66,6 +66,22 @@ Release artifacts are published at
   so this was not reachable, but the dependency audit now reports no
   vulnerability.
 
+- **A start-failure note no longer copies secrets from the child's screen.**
+  When a child session fails to start, the Hub writes the last lines of its
+  screen to the orchestration board and to the parent session. A token printed
+  there was stored as it appeared; those lines are now masked like the rest of
+  the stored text.
+
+- **The re-sign-in page returns only to a path on this Hub.** A signed-out
+  browser that still held a valid token could be sent to another site by a link
+  such as `http://127.0.0.1:<port>//example.invalid/`. The token was not sent
+  (the referrer policy blocks it), and the page now returns to `/` in that case.
+
+- **The security notes in the README now say what the token allows.** It gives
+  full control of the Hub, it is passed to every AI CLI the Hub starts, and it
+  can appear on process command lines, so the Hub is meant for a machine only
+  you use. The notes also say that Git runs in each session's folder.
+
 - **The `crypto-bigint` library behind the Web Push signature is updated to
   0.7.10.** The version we shipped, 0.7.8, had been withdrawn (yanked) from the
   crates.io registry. No security advisory is attached to it; this keeps the

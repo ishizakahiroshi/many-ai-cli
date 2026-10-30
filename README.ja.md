@@ -1428,6 +1428,8 @@ Claude Code はこの設定に一度も触れていない場合、**端末幅が
 - ランダムトークンを起動時に生成し、URL に付与します（`?token=xxx`）
 - token なしアクセスは明示的な opt-in です。SSH ローカルフォワードやユーザー専用 WireGuard/Docker gateway など、入口が別の私設経路で保護されている場合だけ `hub.allow_loopback_without_token: true`、`hub.trusted_networks: ["172.19.0.1/32"]`、`hub.allowed_hosts: ["10.8.0.1"]` のように狭く設定してください。公開 bind、リバースプロキシ、共有 shell ホスト、`0.0.0.0/0` のような広い CIDR では使わないでください。`/24`（IPv6 は `/64`）より広い CIDR は設定エラーになります。tailnet 全体のような広い私設範囲から届かせたい場合は `hub.trusted_networks` ではなく `hub.allowed_hosts` + token（+ 任意 PIN）を使ってください。 <!-- secrets-scan: allow 172.19.0.1 secrets-scan: allow 10.8.0.1 -->
 - `many-ai-cli` 自身はテレメトリ・利用状況の送信を一切行いません
+- **1 人が 1 台で使う前提です。** token は Hub の全権で、ファイルの読み取り、どのセッションへの入力、承認への回答、セッションの起動ができます。`many-ai-cli` は、起動するすべての AI CLI の環境変数（`MANY_AI_CLI_HUB_TOKEN`。`orchestrate` コマンドと使用量フックが使います）に token を入れるので、セッションの中で動くプログラムは、あなたと同じ方法で Hub を使えます。token は、ブラウザを開くコマンドラインと、Claude Code のステータスライン・Codex の使用量フックを実行するコマンドラインにも現れ、同じ Linux・macOS を使う別のユーザーがプロセス一覧から読める場合があります。Hub は、あなただけが使う PC やリモートホストで動かしてください。
+- Hub は、ブランチと変更を表示するために、各セッションのフォルダーで `git` を実行します。Git を使うほかのツールと同じく、他人が `.git/config` を書いたリポジトリ（アーカイブから展開したものなど）では、その人が選んだコマンドを Git が実行することがあります。信頼できるリポジトリだけを開いてください。
 
 ### Claude Workflow journal のメタ情報
 

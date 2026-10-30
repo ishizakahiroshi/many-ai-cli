@@ -2323,7 +2323,7 @@ export const FilesPreview = (function () {
           } else if (lang) {
             // 未知の言語名 → エスケープのみ
             body = escapeHtml(code);
-            langClass = ' language-' + lang;
+            langClass = ' language-' + escapeHtml(lang);
           } else {
             // 言語指定なし → 自動判定（短いスニペットでは外しがちなので保険）
             const auto = hljs.highlightAuto(code);

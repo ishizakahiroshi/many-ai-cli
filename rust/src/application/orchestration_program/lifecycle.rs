@@ -421,19 +421,7 @@ pub(super) async fn poll(owner: &OrchestrationProgram, now: Timestamp) -> Result
     for timer in timers {
         match timer.kind {
             "startup_failed" => {
-                let tail = timer
-                    .screen
-                    .iter()
-                    .rev()
-                    .filter(|line| !line.trim().is_empty() && !line.trim().starts_with(['│', '┃']))
-                    .take(5)
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .rev()
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                let tail = child_launch::prompt::sanitize_inject_text(&tail);
+                let tail = startup_failed_tail(&timer.screen);
                 owner.boards.append(&timer.path,"hub",&format!("startup failed: role={} id={} went idle for {}s after its initial prompt was delivered and never wrote its progress file. screen tail:\n{tail}\n",timer.role,timer.child.0,timer.threshold),now).map_err(|e|SessionError::Transport(e.to_string()))?;
                 let detail = format!(
                     "role={} id={}: the child went idle for {}s after its initial prompt was delivered and never wrote its progress file. Hub has no other evidence of why it stopped; read the screen tail below before retrying the same role/provider. screen tail: {tail}",
@@ -540,4 +528,21 @@ fn error_detail(error: &SessionError) -> String {
         _ => "child retry failed",
     };
     crate::storage::mask_secrets(detail)
+}
+
+/// 子の起動失敗で board と親への通知に書く、端末の最後の 5 行。画面にはトークンなどが映りうるので、
+/// 書く前にマスクする。
+pub(super) fn startup_failed_tail(screen: &[String]) -> String {
+    let tail = screen
+        .iter()
+        .rev()
+        .filter(|line| !line.trim().is_empty() && !line.trim().starts_with(['│', '┃']))
+        .take(5)
+        .cloned()
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join("\n");
+    crate::storage::mask_secrets(&child_launch::prompt::sanitize_inject_text(&tail))
 }
