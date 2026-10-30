@@ -10,6 +10,26 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Changed
+- **Conversation text is no longer stored in the SQLite history.** What you type
+  and what the AI prints used to be saved (after pattern-based masking, which
+  cannot catch a password written as plain text), so a secret could stay in the
+  database. Only session start/end, attachment names, card settings (title,
+  tags, pin, color, note, archive), parent/child links and the approval ledger
+  are kept; the first start after the update deletes the conversation text
+  already stored. Session search now finds attachment names only, and the
+  history view of a session that is not Claude or Codex has no text to show
+  (Claude and Codex keep using their own transcripts). A remote client can no
+  longer open a file just because the chat mentioned its path; a path written
+  in a memo still works.
+- **The session raw log (`.log`) masks secrets before writing.** Tokens, private
+  key blocks and `user:password@` URLs are masked, including ones split across
+  reads. The headless run log is masked too. Plain-text passwords are still not
+  recognized, which is why session logging stays opt-in.
+- **The structured session history (`.jsonl`) is no longer written.** The `.log`
+  is the only per-session file now. Files from older versions stay until the
+  retention sweep removes them, and `log-clean` still reads them.
+
 ### Added
 - **Files on the ssh destination can be opened without downloading.** With a
   destination set in a shell session, clicking a path the remote AI printed
@@ -21,6 +41,11 @@ Release artifacts are published at
   on this PC is opened by mistake; `http(s)` links work as before.
 
 ### Fixed
+- **The handoff directory no longer grows by repeating the same transcript path.**
+  A record was appended every time the transcript file changed, although the
+  path rarely did (133 MB of a 145 MB directory in one install). A path equal to
+  the previous one is skipped, and the Hub start folds the repeats already
+  written; the handoff note shows the same content.
 - **Sending an attachment from a shell session with no destination chosen now
   asks first.** Images, files and long pastes used to be sent silently with a
   path on this PC, which an AI running on the ssh machine could not open. A
