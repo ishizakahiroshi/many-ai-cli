@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "ce7fb9e65c045131c52019b205a17635f6be65a6",
+    "commit": "527e738e79b95cbc9833d203f22924f7ed8cdf0d",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2044,
-    "analyzed": 1585,
+    "discovered": 2045,
+    "analyzed": 1586,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 449,
@@ -37072,6 +37072,35 @@
         "summary": {
           "state": "value",
           "value": "Go pumpChunk and Windows-1252 mojibake repair. Incomplete UTF-8 bytes survive"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/wrapper/raw_log.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Raw session log writer. Output is masked before it reaches disk; the pattern"
         },
         "authentication": {
           "state": "not_configured"

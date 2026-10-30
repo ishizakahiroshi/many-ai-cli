@@ -180,7 +180,7 @@ where
             registered.jsonl_path = path.with_extension("jsonl").to_string_lossy().into_owned();
         }
         match opened {
-            Ok(file) => Some((file, policy.max_bytes, 0i64)),
+            Ok(file) => Some(super::raw_log::RawLog::new(file, policy.max_bytes)),
             Err(_) => {
                 eprintln!("wrapper: opted-in raw session log could not be opened");
                 None
@@ -267,14 +267,8 @@ where
             if bytes.is_empty() {
                 return;
             }
-            if let Some((file, limit, written)) = &mut raw_log
-                && (*limit <= 0 || *written < *limit)
-            {
-                use std::io::Write;
-                // The source checks the cap before each complete chunk.
-                // A raw-log write failure never blocks provider progress.
-                let _ = file.write_all(&bytes);
-                *written = written.saturating_add(bytes.len() as i64);
+            if let Some(log) = &mut raw_log {
+                log.write(&bytes);
             }
             let Ok(mut replay) = reader_replay.lock() else {
                 return;
@@ -312,6 +306,9 @@ where
             emit(bytes);
         }
         emit(normalize.finish());
+        if let Some(log) = &mut raw_log {
+            log.finish();
+        }
         done_tx.send_replace(true);
     });
     let (input_tx, mut inputs) = mpsc::channel::<InputFrame>(options.input_capacity.max(1));

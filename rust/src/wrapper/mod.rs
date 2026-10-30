@@ -10,6 +10,7 @@ pub mod approval_injection;
 pub mod entry;
 pub mod hooks;
 pub mod output;
+mod raw_log;
 
 #[doc(hidden)]
 pub mod launch_payload;

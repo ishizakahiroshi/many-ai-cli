@@ -186,7 +186,9 @@ fn deliver(
     emit: &mut impl FnMut(&[u8]),
 ) {
     if let Some(file) = raw
-        && let Err(error) = file.write_all(line).and_then(|_| file.write_all(b"\n"))
+        && let Err(error) = file
+            .write_all(&crate::storage::mask_secret_bytes(line))
+            .and_then(|_| file.write_all(b"\n"))
     {
         errors.push(format!("raw {stream:?}: {error}"));
         *raw = None;
