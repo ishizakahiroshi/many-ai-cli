@@ -711,23 +711,10 @@ async fn restored_card_label_is_distinct_from_wrapper_launch_identity() {
     let f = fixture();
     let b = register(&f).await.binding;
     // This assertion concerns metadata restored before the reattach event.
-    // The baseline asynchronous lifecycle event can overwrite a later rename;
-    // observe its registration commit before performing the card edit here.
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            let events = f
-                .store
-                .timeline_by_live_session(b.session, 10)
-                .unwrap()
-                .unwrap_or_default();
-            if events.iter().any(|event| event.r#type == "session_start") {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("registration history event did not commit before the card edit");
+    // The baseline asynchronous lifecycle event can overwrite a later rename.
+    // Event payloads are no longer stored, so there is nothing to observe; give
+    // the queued registration event time to commit before the card edit.
+    tokio::time::sleep(Duration::from_millis(300)).await;
     let effects = f
         .engine
         .update_card_meta(
@@ -998,42 +985,6 @@ async fn reattach_ack_is_exact_minimal_go_frame_and_dismissal_precedes_bad_repla
 }
 
 #[tokio::test]
-async fn output_history_keeps_every_raw_byte_across_split_utf8_chunks() {
-    use base64::{Engine, engine::general_purpose::STANDARD};
-    let f = fixture();
-    let r = register(&f).await;
-    let b = r.binding;
-    let raw = "始め 👩🏽‍🚀 e\u{301} 終わり".as_bytes();
-    for (i, byte) in raw.iter().enumerate() {
-        let effects = f
-            .engine
-            .observe_output(
-                b,
-                OutputChunk {
-                    bytes: vec![*byte],
-                    total_pty_bytes: (i + 1) as i64,
-                },
-                now(),
-            )
-            .unwrap();
-        f.sink.apply(effects).await.unwrap();
-    }
-    let records = std::fs::read_to_string(&r.snapshot.jsonl_path).unwrap();
-    let mut replay = Vec::new();
-    for line in records.lines() {
-        let event: serde_json::Value = serde_json::from_str(line).unwrap();
-        if event["type"] == "pty_output" {
-            replay.extend(
-                STANDARD
-                    .decode(event["data_b64"].as_str().unwrap())
-                    .unwrap(),
-            );
-        }
-    }
-    assert_eq!(replay, raw);
-}
-
-#[tokio::test]
 async fn delayed_old_disconnect_cannot_close_rebound_journal_or_end_restored_database_row() {
     let f = fixture();
     let b = register(&f).await.binding;
@@ -1065,68 +1016,6 @@ async fn delayed_old_disconnect_cannot_close_rebound_journal_or_end_restored_dat
         )
         .await
         .unwrap();
-    assert!(
-        std::fs::read_to_string(r.snapshot.jsonl_path)
-            .unwrap()
-            .contains("new connection output")
-    );
-}
-
-#[tokio::test]
-async fn provider_output_during_send_is_persisted_before_post_send_user_history() {
-    let f = fixture();
-    let r = register(&f).await;
-    let b = r.binding;
-    let u = ui(&f, 1);
-    let weak = Arc::downgrade(&f.engine);
-    let sink = f.sink.clone();
-    *f.transport.on_send.lock().unwrap() = Some(Arc::new(move |binding, _message| {
-        let weak = weak.clone();
-        let sink = sink.clone();
-        Box::pin(async move {
-            let engine = weak.upgrade().unwrap();
-            let effects = engine
-                .observe_output(
-                    binding,
-                    OutputChunk {
-                        bytes: b"provider output".to_vec(),
-                        total_pty_bytes: 15,
-                    },
-                    now(),
-                )
-                .unwrap();
-            sink.apply(effects).await.unwrap();
-        })
-    }));
-    let receipt = f
-        .engine
-        .submit(
-            b,
-            InputRequest {
-                bytes: b"send this turn\r".to_vec(),
-                authority: InputAuthority::Ui(u),
-            },
-            now(),
-            &TaskCancellation::default(),
-        )
-        .await;
-    assert!(matches!(
-        receipt.disposition,
-        InputDisposition::TransportWritten { .. }
-    ));
-    let lines = std::fs::read_to_string(r.snapshot.jsonl_path).unwrap();
-    let kinds: Vec<String> = lines
-        .lines()
-        .map(|line| {
-            serde_json::from_str::<serde_json::Value>(line).unwrap()["type"]
-                .as_str()
-                .unwrap()
-                .to_owned()
-        })
-        .collect();
-    let output = kinds.iter().position(|kind| kind == "pty_output").unwrap();
-    let input = kinds.iter().position(|kind| kind == "user_input").unwrap();
-    assert!(output < input);
 }
 
 #[tokio::test]

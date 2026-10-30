@@ -340,23 +340,9 @@ async fn roundtrip(fixture: &Fixture, hub_pid: u32, output: &mut Vec<u8>) {
     assert!(session > 0);
     output_until(&mut ui, session, output, &["SYNTH_READY", "SYNTH_STDERR"]).await;
 
-    let journal = PathBuf::from(registered["jsonl_path"].as_str().unwrap());
-    let journal = journal.canonicalize().unwrap();
-    let sessions_root = fixture
-        .paths
-        .resource(Resource::Logs)
-        .join("sessions")
-        .canonicalize()
-        .unwrap();
-    assert!(journal.starts_with(sessions_root));
-    // Public session cards omit PID. Registration's real wrapper PID is instead
-    // recorded in its ordered session_start event before any PTY output.
-    let entries = journal_entries(&journal);
-    let start = entries
-        .iter()
-        .find(|entry| entry["type"] == "session_start" && entry["session_id"] == session)
-        .expect("actual wrapper registration must be journaled");
-    let wrapper_pid = start["pid"].as_i64().unwrap();
+    // Public session cards omit PID, and no `.jsonl` journal records it any more,
+    // so find the real wrapper as the Hub's own child process.
+    let wrapper_pid = hub_child_pid(hub_pid).await;
     assert!(wrapper_pid > 0 && wrapper_pid != i64::from(hub_pid));
 
     // Go's idleAfter is 3s; its 200ms tick derives standby from output-idle
@@ -428,22 +414,20 @@ async fn roundtrip(fixture: &Fixture, hub_pid: u32, output: &mut Vec<u8>) {
     let decoded: proto::Message = serde_json::from_value(ended).unwrap();
     assert_eq!(decoded.exit_code, 0, "omitted Go-compatible wire default");
 
-    let entries = journal_entries(&journal);
-    let ends: Vec<_> = entries
-        .iter()
-        .filter(|entry| entry["type"] == "session_end" && entry["session_id"] == session)
-        .collect();
-    assert_eq!(
-        ends.len(),
-        1,
-        "actual wrapper end must be persisted exactly once"
-    );
-    assert_eq!(ends[0]["state"], "completed");
-    assert_eq!(
-        ends[0].get("exit_code"),
-        Some(&json!(0)),
-        "actual provider exit"
-    );
+    // The end is persisted in the database row exactly once; the session
+    // history file no longer records it.
+    let row: (String, String) = rusqlite::Connection::open(
+        fixture.paths.resource(Resource::Database),
+    )
+    .unwrap()
+    .query_row(
+        "SELECT COALESCE(state,''), COALESCE(ended_at,'') FROM sessions WHERE live_session_id=?",
+        [session],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )
+    .unwrap();
+    assert_eq!(row.0, "completed");
+    assert!(!row.1.is_empty(), "actual wrapper end must be persisted");
 
     let final_snapshot = fixture.snapshot().await;
     let completed = final_snapshot["sessions"]
@@ -470,12 +454,29 @@ async fn roundtrip(fixture: &Fixture, hub_pid: u32, output: &mut Vec<u8>) {
     assert_eq!(response.status(), reqwest::StatusCode::OK);
 }
 
-fn journal_entries(path: &Path) -> Vec<Value> {
-    fs::read_to_string(path)
-        .unwrap()
-        .lines()
-        .map(|line| serde_json::from_str(line).unwrap())
-        .collect()
+/// The wrapper is spawned by the Hub, so it is the Hub's child process.
+async fn hub_child_pid(hub_pid: u32) -> i64 {
+    let deadline = Instant::now() + STEP;
+    loop {
+        let output = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                &format!(
+                    "Get-CimInstance Win32_Process -Filter 'ParentProcessId={hub_pid}' | Where-Object {{ $_.Name -like 'many-ai-cli*' }} | Select-Object -First 1 -ExpandProperty ProcessId"
+                ),
+            ])
+            .output()
+            .expect("powershell is required to find the wrapper process");
+        if let Ok(pid) = String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .parse::<i64>()
+        {
+            return pid;
+        }
+        assert!(Instant::now() < deadline, "wrapper child process not found");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

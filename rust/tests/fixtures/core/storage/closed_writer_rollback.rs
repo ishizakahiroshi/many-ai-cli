@@ -18,9 +18,11 @@ fn open(paths: &RuntimePaths) -> SqliteSessionStorage {
     )
     .unwrap()
 }
-fn event(kind: &str, text: &str) -> HistoryEvent {
+/// Conversation bodies are no longer persisted, so a stored chat row is made
+/// from an attachment event; `_kind` only keeps the call sites readable.
+fn event(_kind: &str, text: &str) -> HistoryEvent {
     HistoryEvent(
-        json!({"type":kind,"text":text,"ts":"2025-01-01T01:00:00Z"})
+        json!({"type":"attach","filename":text,"path":"","ts":"2025-01-01T01:00:00Z"})
             .as_object()
             .unwrap()
             .clone(),
@@ -243,11 +245,9 @@ fn closed_writer_copy_restore_go_continuation_and_rust_reread() {
             .iter()
             .map(|message| message.raw_text.as_str())
             .collect::<Vec<_>>(),
-        vec![
-            "synthetic rollback query",
-            "synthetic answer",
-            "synthetic Go rollback continuation"
-        ]
+        // The Go oracle appended a conversation row; opening the database removes
+        // legacy conversation bodies, so only the attachment rows remain.
+        vec!["synthetic rollback query", "synthetic answer"]
     );
     assert_eq!(
         reopened
@@ -263,13 +263,11 @@ fn closed_writer_copy_restore_go_continuation_and_rust_reread() {
             .unwrap_or_default()
             .is_empty()
     );
-    assert_eq!(
+    assert!(
         reopened
             .search_messages("continuation", 10)
             .unwrap()
-            .unwrap()
-            .len(),
-        1
+            .is_none()
     );
     assert_eq!(
         std::fs::read(paths.resource(Resource::Config)).unwrap(),

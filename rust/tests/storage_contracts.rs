@@ -52,13 +52,17 @@ fn start(id: i64, provider: &str) -> SessionStart {
         ..Default::default()
     }
 }
+/// Conversation bodies are no longer persisted, so a stored chat row is made
+/// from an attachment event (its name becomes the row text). Other event types
+/// keep their own shape.
 fn event(kind: &str, body: &str) -> HistoryEvent {
-    HistoryEvent(
-        json!({"type":kind,"text":body,"ts":"2025-01-01T01:00:00Z"})
-            .as_object()
-            .unwrap()
-            .clone(),
-    )
+    let value = match kind {
+        "user_input" | "pty_output" => {
+            json!({"type":"attach","filename":body,"path":"","ts":"2025-01-01T01:00:00Z"})
+        }
+        _ => json!({"type":kind,"text":body,"ts":"2025-01-01T01:00:00Z"}),
+    };
+    HistoryEvent(value.as_object().unwrap().clone())
 }
 fn detected(id: i64, sig: &str, seconds: u64) -> ApprovalDetected {
     ApprovalDetected {
@@ -99,19 +103,16 @@ fn restore_search_prune_and_all_session_metadata() {
         .chat_messages_by_live_session(LiveSessionId(1), 100)
         .unwrap()
         .unwrap();
-    assert_eq!(messages.len(), 2);
-    assert_eq!(messages[0].role, "user");
-    assert_eq!(
-        messages[1].raw_text,
-        "SQLite retention search result\nsecond chunk"
-    );
+    // Only attachment names are stored; typed text and AI output never are.
+    assert_eq!(messages.len(), 3);
+    assert!(messages.iter().all(|message| message.role == "system"));
     assert_eq!(
         store
             .chat_messages_by_session_id(id, 100)
             .unwrap()
             .unwrap()
             .len(),
-        2
+        3
     );
     assert_eq!(
         store
@@ -133,27 +134,28 @@ fn restore_search_prune_and_all_session_metadata() {
     assert_eq!(meta.tags, vec!["sqlite", "retention"]);
     assert_eq!(meta.title, "SQLite work");
     assert_eq!(meta.summary, "summary text");
-    let timeline = store
-        .timeline_by_live_session(LiveSessionId(1), 10)
-        .unwrap()
-        .unwrap();
-    assert_eq!(timeline.len(), 2);
-    assert_eq!(timeline[1].r#type, "user_input");
+    assert!(
+        store
+            .timeline_by_live_session(LiveSessionId(1), 10)
+            .unwrap()
+            .is_none(),
+        "event payloads are not stored"
+    );
     let list = store.list_sessions(10, false).unwrap().unwrap();
     assert_eq!(list.len(), 1);
     assert_eq!(list[0].message_count, 3);
-    assert_eq!(list[0].event_count, 2);
+    assert_eq!(list[0].event_count, 0);
     let usage = store.usage_summary().unwrap();
     assert_eq!(usage.total_sessions, 1);
     assert_eq!(usage.total_messages, 3);
     let bucket = &usage.providers.unwrap()[0];
-    assert_eq!(bucket.ai_msgs, 2);
-    assert_eq!(bucket.user_msgs, 1);
+    assert_eq!(bucket.ai_msgs, 0);
+    assert_eq!(bucket.user_msgs, 0);
     store.update_session_messages(LiveSessionId(1), "do not overwrite first", "last updated");
     store.update_session_state(LiveSessionId(1), "running", "2025-01-02T01:00:00Z");
     let overview = store.session_overview_by_session_id(id).unwrap();
-    assert_eq!(overview.first_message, "調査して");
-    assert_eq!(overview.last_message, "last updated");
+    assert_eq!(overview.first_message, "");
+    assert_eq!(overview.last_message, "");
     assert_eq!(overview.state, "running");
     store.end_session(
         LiveSessionId(1),
@@ -172,13 +174,11 @@ fn restore_search_prune_and_all_session_metadata() {
     store
         .store_event(LiveSessionId(1), event("late", "not recorded"))
         .unwrap();
-    assert_eq!(
+    assert!(
         store
             .timeline_by_live_session(LiveSessionId(1), 10)
             .unwrap()
-            .unwrap()
-            .len(),
-        2
+            .is_none()
     );
     store.prune_older_than(Timestamp::now()).unwrap();
     assert!(
@@ -345,7 +345,7 @@ fn approval_ledger_marker_resolution_latest_and_redetection() {
     );
 }
 #[test]
-fn transcript_selection_noise_masking_and_user_only_mentions() {
+fn conversation_bodies_are_never_persisted_for_any_provider() {
     let fixture = Fixture::new();
     let store = fixture.open();
     for (id, provider) in [
@@ -355,82 +355,37 @@ fn transcript_selection_noise_masking_and_user_only_mentions() {
         (4, "command-code"),
     ] {
         store.start_session(start(id, provider)).unwrap();
-        store
-            .store_event(LiveSessionId(id), event("pty_output", "real output"))
+        for raw in [
+            json!({"type":"pty_output","text":"real output"}),
+            json!({"type":"user_input","text":"read /synthetic/user.md"}),
+        ] {
+            store
+                .store_event(
+                    LiveSessionId(id),
+                    HistoryEvent(raw.as_object().unwrap().clone()),
+                )
+                .unwrap();
+        }
+        assert!(
+            store
+                .chat_messages_by_live_session(LiveSessionId(id), 0)
+                .unwrap()
+                .is_none_or(|rows| rows.is_empty())
+        );
+        let overview = store
+            .session_overview_by_live_session(LiveSessionId(id))
             .unwrap();
-        let rows = store
-            .chat_messages_by_live_session(LiveSessionId(id), 0)
-            .unwrap()
-            .unwrap();
-        assert_eq!(rows.len(), usize::from(id > 2));
+        assert_eq!(overview.message_count, 0);
+        assert_eq!(overview.first_message, "");
+        assert_eq!(overview.last_message, "");
     }
-    for noise in [
-        "",
-        "·",
-        "Thinking",
-        "Working",
-        "✳ Imploring… (12s · ↑3.2k tokens · esc to interrupt)",
-        "thinking with medium effort✳3thinking with medium effort\n✶✷✻ still thinking with medium effort",
-        "1.8924 Opus ↑111.0k ↓764\nauto mode on (shift+tab to cycle)",
-    ] {
-        store
-            .store_event(LiveSessionId(3), event("pty_output", noise))
-            .unwrap();
-    }
-    for body in ["OK", "No", "はい", "\x1b[31mcolored\x1b[0m\r\ntext"] {
-        store
-            .store_event(LiveSessionId(3), event("pty_output", body))
-            .unwrap();
-    }
-    assert_eq!(
-        store
-            .session_overview_by_live_session(LiveSessionId(3))
-            .unwrap()
-            .message_count,
-        5
-    );
-    assert!(
-        store
-            .timeline_by_live_session(LiveSessionId(3), 0)
-            .unwrap()
-            .is_none()
-    );
-    store
-        .store_event(
-            LiveSessionId(3),
-            event("pty_output", "/synthetic/ai-only.md"),
-        )
-        .unwrap();
     assert!(
         !store
-            .messages_mention_text(LiveSessionId(3), &["/synthetic/ai-only.md".into()])
-            .unwrap()
+            .messages_mention_text(LiveSessionId(3), &["/synthetic/user.md".into()])
+            .unwrap(),
+        "a path mentioned in chat can no longer grant a remote read"
     );
-    store
-        .store_event(
-            LiveSessionId(3),
-            event("user_input", "read /synthetic/user.md"),
-        )
-        .unwrap();
-    assert!(
-        store
-            .messages_mention_text(LiveSessionId(3), &["".into(), "/synthetic/user.md".into()])
-            .unwrap()
-    );
-    store
-        .store_event(
-            LiveSessionId(1),
-            event("user_input", "OPENAI_API_KEY=synthetic-key-value\r"),
-        )
-        .unwrap();
-    assert_eq!(
-        store
-            .chat_messages_by_live_session(LiveSessionId(1), 10)
-            .unwrap()
-            .unwrap()[0]
-            .raw_text,
-        "OPENAI_API_KEY=***"
-    );
+    assert_eq!(scalar(&fixture.sql(), "SELECT COUNT(*) FROM events"), 0);
 }
 #[test]
 fn clear_and_reset_preserve_only_latest_metadata_and_remove_all_children() {
@@ -471,7 +426,7 @@ fn clear_and_reset_preserve_only_latest_metadata_and_remove_all_children() {
     assert_eq!(overview.first_message, "");
     assert_eq!(
         scalar(&fixture.sql(), "SELECT COUNT(*) FROM attachments"),
-        1
+        2
     );
     store.clear_session_history(LiveSessionId(999)).unwrap();
     let result = store
@@ -479,7 +434,7 @@ fn clear_and_reset_preserve_only_latest_metadata_and_remove_all_children() {
         .unwrap();
     assert_eq!(result.sessions, 2);
     assert_eq!(result.messages, 2);
-    assert_eq!(result.attachments, 1);
+    assert_eq!(result.attachments, 2);
     assert_eq!(result.preserved, 1);
     assert_eq!(store.history_generation(), HistoryGeneration(1));
     assert_eq!(store.list_sessions(0, true).unwrap().unwrap().len(), 1);
@@ -609,10 +564,15 @@ async fn shutdown_reports_write_errors_without_discarding_later_work() {
         count.fetch_add(1, Ordering::SeqCst);
         seen.lock().unwrap().push((id, error));
     })));
-    fixture.sql().execute_batch("CREATE TRIGGER reject_synthetic_event BEFORE INSERT ON events WHEN NEW.type='reject' BEGIN SELECT RAISE(ABORT,'synthetic-rejection'); END").unwrap();
+    fixture.sql().execute_batch("CREATE TRIGGER reject_synthetic_event BEFORE INSERT ON attachments WHEN NEW.filename='reject' BEGIN SELECT RAISE(ABORT,'synthetic-rejection'); END").unwrap();
     store.store_event_async(
         LiveSessionId(1),
-        event("reject", "sensitive synthetic payload never in error"),
+        HistoryEvent(
+            json!({"type":"attach","filename":"reject","path":"sensitive synthetic payload never in error"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        ),
     );
     store.store_event_async(LiveSessionId(1), event("user_input", "accepted"));
     let report = store
@@ -802,15 +762,19 @@ fn fixed_go_cross_read_and_rollback_continuation() {
         .chat_messages_by_live_session(LiveSessionId(1), 100)
         .unwrap()
         .unwrap();
-    assert_eq!(messages.len(), 3);
-    assert_eq!(messages[2].raw_text, "synthetic Go rollback continuation");
-    assert_eq!(
+    // The Go oracle appended a conversation row after the copy was taken; opening
+    // the database removes legacy conversation bodies, so only attachment rows stay.
+    assert_eq!(messages.len(), 2);
+    assert!(
+        messages
+            .iter()
+            .all(|message| message.raw_text != "synthetic Go rollback continuation")
+    );
+    assert!(
         reopened
             .search_messages("continuation", 10)
             .unwrap()
-            .unwrap()
-            .len(),
-        1
+            .is_none()
     );
 }
 
@@ -920,13 +884,9 @@ fn event_and_clear_failures_rollback_all_related_rows() {
             .store_event(LiveSessionId(1), event("user_input", "must rollback"))
             .is_err()
     );
-    assert_eq!(scalar(&fixture.sql(), "SELECT COUNT(*) FROM events"), 0);
     assert_eq!(
-        store
-            .session_overview_by_live_session(LiveSessionId(1))
-            .unwrap()
-            .first_message,
-        ""
+        scalar(&fixture.sql(), "SELECT COUNT(*) FROM attachments"),
+        0
     );
     fixture
         .sql()
@@ -935,7 +895,7 @@ fn event_and_clear_failures_rollback_all_related_rows() {
     store
         .store_event(LiveSessionId(1), event("user_input", "keep on failure"))
         .unwrap();
-    fixture.sql().execute_batch("CREATE TRIGGER reject_clear BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT,'synthetic'); END").unwrap();
+    fixture.sql().execute_batch("CREATE TRIGGER reject_clear BEFORE DELETE ON attachments BEGIN SELECT RAISE(ABORT,'synthetic'); END").unwrap();
     assert!(store.clear_session_history(LiveSessionId(1)).is_err());
     assert_eq!(
         store

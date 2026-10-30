@@ -179,6 +179,7 @@ async fn warm_invalid_clock_preserves_exact_journal_binding_and_database_identit
         "ts": proto::time::format_rfc3339(now()).unwrap(),
         "session_id": old.session.0,
     });
+    // apply_bound refuses (StaleBinding) unless the old exact binding is intact.
     f.sink
         .journal
         .apply_bound(
@@ -190,11 +191,6 @@ async fn warm_invalid_clock_preserves_exact_journal_binding_and_database_identit
             },
         )
         .unwrap();
-    let records = std::fs::read_to_string(&original.snapshot.jsonl_path).unwrap();
-    assert!(records.lines().any(
-        |line| serde_json::from_str::<serde_json::Value>(line).unwrap()["type"]
-            == "reattach_failure_probe"
-    ));
     assert!(!replacement_path.exists());
     let after = f
         .store
@@ -284,21 +280,16 @@ async fn warm_reattach_admission_uses_parent_changed_during_initialization() {
     let old = register(&f).await.binding;
     let parent = register(&f).await.binding.session;
     let replacement = request(old.session, b"");
-    let replacement_path = f
-        .sink
-        .journal
-        .paths_for_timestamp(
-            old.session,
-            "copilot",
-            "/fixture/project",
-            &replacement.message.started_at,
-        )
-        .unwrap()
-        .jsonl;
-    // A directory at the proposed file path makes optional writer creation warn
+    // A database that refuses the registration write makes the journal warn
     // synchronously. Use its existing callback to change the retained parent
     // after initialize received its metadata, without a production test hook.
-    std::fs::create_dir(&replacement_path).unwrap();
+    rusqlite::Connection::open(f.store.database_path())
+        .unwrap()
+        .execute_batch(
+            "CREATE TRIGGER refuse_registration_insert BEFORE INSERT ON sessions BEGIN SELECT RAISE(ABORT,'synthetic'); END;
+             CREATE TRIGGER refuse_registration_update BEFORE UPDATE ON sessions BEGIN SELECT RAISE(ABORT,'synthetic'); END;",
+        )
+        .unwrap();
     let engine = Arc::downgrade(&f.engine);
     let warnings = Arc::new(AtomicUsize::new(0));
     let observed = warnings.clone();

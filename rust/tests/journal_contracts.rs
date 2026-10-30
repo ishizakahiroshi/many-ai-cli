@@ -5,7 +5,7 @@ use many_ai_cli::{
     storage::SqliteSessionStorage,
     terminal::journal::*,
 };
-use std::{fs, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 fn fixture(
     enabled: bool,
     max_bytes: i64,
@@ -99,41 +99,28 @@ fn disabled_body_gate_keeps_registration_metadata_but_neither_body_store() {
     assert_eq!(store.usage_summary().unwrap().total_messages, 0);
     store.close().unwrap();
 }
-#[test]
-fn writes_go_escaped_jsonl_and_sqlite_once_in_the_same_order() {
-    let (_r, _i, store, journal) = fixture(true, 0);
-    let paths = journal
-        .open(
-            LiveSessionId(1),
-            "copilot",
-            "/synthetic/project",
-            instant(),
-            false,
-        )
-        .unwrap();
-    write(&journal, "user_input", "first <&> \u{2028}");
-    write(&journal, "user_input", "second");
-    journal.close_all();
-    store.close().unwrap();
-    let lines = fs::read_to_string(paths.jsonl).unwrap();
-    assert!(lines.contains("\\u003c\\u0026\\u003e \\u2028"));
-    let records: Vec<serde_json::Value> = lines
-        .lines()
-        .map(|l| serde_json::from_str(l).unwrap())
-        .collect();
-    assert_eq!(records.len(), 2);
-    assert_eq!(records[1]["text"], "second");
-    let connection = rusqlite::Connection::open(store.database_path()).unwrap();
-    assert_eq!(
-        connection
-            .query_row("SELECT count(*) FROM messages", [], |r| r.get::<_, i64>(0))
-            .unwrap(),
-        2
-    );
+fn attach(name: &str) -> HistoryEvent {
+    HistoryEvent(
+        serde_json::json!({"type":"attach","filename":name,"path":"","ts":"2026-01-02T03:04:05Z"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    )
+}
+fn write_attach(j: &SessionJournal, name: &str) {
+    bound_apply(
+        j,
+        PersistenceEffect::Event {
+            session: LiveSessionId(1),
+            event: attach(name),
+        },
+    )
+    .unwrap();
 }
 #[test]
-fn size_limit_marks_once_retains_end_and_append_starts_at_existing_size() {
-    let (_r, _i, _store, journal) = fixture(true, 1);
+fn no_jsonl_file_is_written_and_events_reach_sqlite_once_in_order() {
+    // A size limit used to cap the `.jsonl`; with no file to cap it changes nothing.
+    let (_r, _i, store, journal) = fixture(true, 1);
     let paths = journal
         .open(
             LiveSessionId(1),
@@ -143,37 +130,21 @@ fn size_limit_marks_once_retains_end_and_append_starts_at_existing_size() {
             false,
         )
         .unwrap();
-    write(&journal, "user_input", "first");
-    write(&journal, "user_input", "dropped");
-    write(&journal, "user_input", "dropped again");
-    write(&journal, "session_end", "");
-    journal.close_writer(LiveSessionId(1));
-    let lines: Vec<serde_json::Value> = fs::read_to_string(&paths.jsonl)
-        .unwrap()
-        .lines()
-        .map(|l| serde_json::from_str(l).unwrap())
-        .collect();
-    assert_eq!(
-        lines
-            .iter()
-            .map(|v| v["type"].as_str().unwrap())
-            .collect::<Vec<_>>(),
-        ["user_input", "log_truncated", "session_end"]
-    );
-    journal
-        .open(
-            LiveSessionId(1),
-            "copilot",
-            "/synthetic/project",
-            instant(),
-            true,
-        )
-        .unwrap();
-    write(&journal, "user_input", "also dropped");
+    write_attach(&journal, "first");
+    write_attach(&journal, "second");
+    write(&journal, "user_input", "synthetic private body");
     journal.close_all();
-    let lines = fs::read_to_string(paths.jsonl).unwrap();
-    assert_eq!(lines.lines().count(), 4);
-    assert!(!lines.contains("also dropped"));
+    store.close().unwrap();
+    assert!(!paths.jsonl.exists());
+    let connection = rusqlite::Connection::open(store.database_path()).unwrap();
+    let names: Vec<String> = connection
+        .prepare("SELECT text FROM messages ORDER BY id")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(names, ["first", "second"]);
 }
 #[test]
 fn paths_are_sanitized_and_runtime_derived_for_multibyte_and_empty_parts() {
@@ -325,13 +296,10 @@ fn source_tolerated_persistence_failure_warns_without_aborting_remaining_effects
         PersistenceEffect::ClearSessionHistory(LiveSessionId(1)),
     )
     .unwrap();
-    write(&journal, "user_input", "JSONL remains writable");
+    // A failed database write only warns; later effects are still accepted.
+    write_attach(&journal, "still accepted");
     assert!(!warnings.lock().unwrap().is_empty());
-    assert!(
-        fs::read_to_string(paths.jsonl)
-            .unwrap()
-            .contains("JSONL remains writable")
-    );
+    assert!(!paths.jsonl.exists());
 }
 
 fn bound_apply(journal: &SessionJournal, effect: PersistenceEffect) -> Result<(), SessionError> {
