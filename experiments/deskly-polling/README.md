@@ -1,0 +1,65 @@
+# Offline Deskly polling experiment
+
+This is an isolated synthetic experiment, not a Hub feature or a Deskly client.
+Run from the repository root with Rust 1.90.0:
+
+```powershell
+rustc +1.90.0 --edition 2021 --test experiments/deskly-polling/mock.rs -o $env:TEMP/deskly-mock-test.exe
+& $env:TEMP/deskly-mock-test.exe
+```
+
+The clock is simulated by explicit ticks. The 300 second value is only a default
+in the fixture; no scheduler or configurable production setting exists. Work,
+identity, approval, claim and ACK are synthetic, not authenticated. The reader
+is a counter, not a GitHub client. The in-memory set is lost on restart and must
+never be used as a production deduplication guarantee.
+
+## Proposed Hub boundary
+
+`rust/src/application/main_program/serve.rs` composes `SessionEngine`,
+`OrchestrationProgram`, and `OrdinarySpawnService`, starts owned producers in
+`run`, then stops and joins them before effect admission closes. A future opt-in
+polling service belongs at this composition/lifecycle boundary, with injected
+Deskly transport, durable recovery store, clock, local approval and a narrowly
+typed read-only launch interface. It must stop and join with the Hub; no
+polling loop belongs in `SessionEngine` or `child_launch`.
+
+`SessionEngine` remains the owner of session admission and registration.
+`OrdinarySpawnService::spawn` currently requires a verified confirmation and
+owns task admission; a new adapter must preserve those checks, not fabricate a
+`VerifiedConfirmationRequest`. Whether its interface can serve a locally
+approved read-only request requires implementation review. `child_launch`
+and `OrchestrationProgram` manage child roles and conductor/board lifecycle;
+they are candidates only when a real parent/conductor exists. Do not bypass
+their existing ownership to manufacture one. No connection is implemented.
+
+## Restart and uncertain delivery proposal
+
+Deskly remains the authoritative request, policy, authority and delivery state.
+Discovery is advisory. Before any launch, verify registered identity, local
+consent, approved read-only capability, current repo/PR head, expiry, generation
+and authorization epoch. An atomic server-side one-time authority consumption
+must bind the exact request, generation, identity and session attempt. The
+server contract is not yet available; a client-side set or lease alone cannot
+ensure exactly-once execution across devices or crashes.
+
+Persist a minimal local recovery journal before the claim is sent, keyed by
+request and generation and bound to identity and a unique attempt. Record
+claim-sent, confirmed consumption, launch-intent and proven local session
+identity with crash-safe ordering. Persisted values are recovery hints, not a
+second authority; protect them and avoid storing request contents or secrets.
+After restart, reconcile every nonterminal attempt with Deskly and inspect
+reliable local session evidence before accepting another launch for that tuple.
+If either side is unavailable, the journal is missing/corrupt, a response was
+lost, or evidence cannot exclude a surviving process, hold for reconciliation.
+Absence of a local session record is not proof no process was started. A timeout,
+expired lease, disconnect, duplicate poll, or lost ACK must never itself permit
+retry. Only a server decision backed by evidence that no prior start occurred
+can authorize a fresh attempt; otherwise require manual resolution. Recheck
+revocation and target SHA at the launch boundary. ACK proves receipt only, not
+execution or completion; report verified results through Deskly's canonical
+event path once its contract exists.
+
+Crash-injection tests around every journal/claim/launch boundary, simultaneous
+device claims, permission changes, stale SHA and restart recovery remain to be
+designed and run. There is no implementation of this recovery proposal here.

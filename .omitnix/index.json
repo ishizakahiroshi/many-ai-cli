@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "5bb1a5e14af7f26cc20b81faa905e9ba98054253",
-    "dirty": false,
+    "commit": "0f671c403940c446b3ed97b4ead84c4cff04cce1",
+    "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
     "adapters": [
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2043,
-    "analyzed": 1584,
+    "discovered": 2046,
+    "analyzed": 1585,
     "unresolved": 10,
     "unknown": 0,
-    "unclaimed": 449,
+    "unclaimed": 451,
     "skipped_by_config": 0
   },
   "files": [
@@ -602,6 +602,14 @@
     },
     {
       "path": "docs/bot/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/deskly-integration/PLAN-20261030.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -1512,6 +1520,43 @@
       "fields": {},
       "unresolved": [],
       "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "experiments/deskly-polling/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "experiments/deskly-polling/mock.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Offline experiment only. No Hub registration, network, process launch or persistence."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
     },
     {
       "path": "go/.goreleaser.yaml",
