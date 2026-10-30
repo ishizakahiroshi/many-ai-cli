@@ -792,9 +792,17 @@ impl HubComposition {
         let memos = Arc::new(MemoManager::open(Arc::new(
             Dir::open_or_create_private_components(paths.root())?,
         )));
+        let handoff = HandoffStore::new(paths.clone());
+        {
+            // Older versions appended the same transcript path on every change.
+            let handoff = handoff.clone();
+            std::thread::spawn(move || {
+                let _ = handoff.compact_transcripts();
+            });
+        }
         let workspace = Arc::new(workspace::Workspace {
             memos: memos.clone(),
-            handoff: HandoffStore::new(paths.clone()),
+            handoff,
         });
         let hints = Arc::new(crate::hub::runtime_routes::NetHints::default());
         let jev = Arc::new(crate::hub::jev_routes::JevHttp::new(

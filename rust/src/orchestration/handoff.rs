@@ -12,10 +12,11 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashMap,
     fs,
     io::{self, BufRead, Read, Write},
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -190,10 +191,16 @@ pub fn sanitize(mut record: Record) -> Record {
 #[derive(Clone)]
 pub struct HandoffStore {
     paths: RuntimePaths,
+    /// Last transcript path appended per session. The transcript file changes
+    /// constantly while the path rarely does; repeating it only grows the file.
+    last_transcript: Arc<Mutex<HashMap<i64, String>>>,
 }
 impl HandoffStore {
     pub fn new(paths: RuntimePaths) -> Self {
-        Self { paths }
+        Self {
+            paths,
+            last_transcript: Arc::default(),
+        }
     }
     pub fn directory(&self) -> PathBuf {
         self.paths.resource(Resource::Handoff)
@@ -225,14 +232,59 @@ impl HandoffStore {
         if record.ts.trim().is_empty() {
             record.ts = format_rfc3339(now).map_err(io::Error::other)?;
         }
+        let transcript = (record.kind == KIND_TRANSCRIPT).then(|| record.transcript.clone());
         let mut line =
             crate::proto::provider::to_go_json(&sanitize(record)).map_err(io::Error::other)?;
         line.push(b'\n');
         let _guard = APPEND_LOCK
             .lock()
             .map_err(|_| io::Error::other("handoff append lock poisoned"))?;
+        if let Some(path) = &transcript {
+            let mut last = self
+                .last_transcript
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            if last.get(&session_id) == Some(path) {
+                return Ok(());
+            }
+            last.insert(session_id, path.clone());
+        }
         let path = self.path_for(session_id)?;
         private_io::open_append(&path)?.write_all(&line)
+    }
+    /// Drops transcript records that repeat the previous transcript path, which
+    /// older versions appended on every change. Rendering reads only the latest
+    /// path, so nothing a reader can see is lost. Returns the bytes reclaimed.
+    pub fn compact_transcripts(&self) -> io::Result<u64> {
+        let directory = match Dir::open(&self.directory()) {
+            Ok(directory) => directory,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(0),
+            Err(e) => return Err(e),
+        };
+        let mut reclaimed = 0u64;
+        for name in directory.entries()? {
+            if !(name.starts_with('s') && name.ends_with(".jsonl")) {
+                continue;
+            }
+            let _guard = APPEND_LOCK
+                .lock()
+                .map_err(|_| io::Error::other("handoff append lock poisoned"))?;
+            let mut original = Vec::new();
+            if directory
+                .open_file(&name, false)
+                .and_then(|mut file| file.read_to_end(&mut original))
+                .is_err()
+            {
+                continue;
+            }
+            let compacted = drop_repeated_transcripts(&original);
+            if compacted.len() < original.len()
+                && directory.replace(&name, &compacted, 0o600).is_ok()
+            {
+                reclaimed += (original.len() - compacted.len()) as u64;
+            }
+        }
+        Ok(reclaimed)
     }
     pub fn read_session(&self, id: i64) -> io::Result<Vec<Record>> {
         match read_all(&self.path_for(id)?) {
@@ -312,6 +364,25 @@ pub struct DirStatus {
     pub exists: bool,
     pub files: usize,
     pub oldest_age: Duration,
+}
+fn drop_repeated_transcripts(bytes: &[u8]) -> Vec<u8> {
+    const MARK: &[u8] = b"\"kind\":\"transcript\"";
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut previous: Option<String> = None;
+    for line in bytes.split_inclusive(|b| *b == b'\n') {
+        if line.windows(MARK.len()).any(|w| w == MARK)
+            && let Ok(value) = serde_json::from_slice::<serde_json::Value>(line)
+            && value["kind"] == KIND_TRANSCRIPT
+            && let Some(path) = value["transcript"].as_str()
+        {
+            if previous.as_deref() == Some(path) {
+                continue;
+            }
+            previous = Some(path.to_owned());
+        }
+        out.extend_from_slice(line);
+    }
+    out
 }
 pub fn is_handoff_file_name(name: &str) -> bool {
     name.ends_with(".jsonl") || name.ends_with("_handoff.md") || name.ends_with(".note.md")
@@ -510,6 +581,67 @@ fn git_turn_line(record: &Record) -> String {
 }
 fn go_quote(text: &str) -> String {
     crate::proto::go_quote::quote(text)
+}
+#[cfg(test)]
+mod transcript_dedupe_tests {
+    use super::*;
+
+    fn transcript(path: &str) -> Record {
+        Record {
+            kind: KIND_TRANSCRIPT.into(),
+            transcript: path.into(),
+            ..Record::default()
+        }
+    }
+    fn store() -> (tempfile::TempDir, tempfile::TempDir, HandoffStore) {
+        let root = tempfile::tempdir().unwrap();
+        let installed = tempfile::tempdir().unwrap();
+        let paths = RuntimePaths::trial(root.path(), 49120, installed.path()).unwrap();
+        (root, installed, HandoffStore::new(paths))
+    }
+
+    #[test]
+    fn an_unchanged_transcript_path_is_not_appended_again() {
+        let (_root, _installed, store) = store();
+        let now = Timestamp::now();
+        for path in ["a.jsonl", "a.jsonl", "b.jsonl", "b.jsonl", "a.jsonl"] {
+            store.append(1, transcript(path), now).unwrap();
+        }
+        let kept: Vec<_> = store
+            .read_session(1)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.transcript)
+            .collect();
+        assert_eq!(kept, ["a.jsonl", "b.jsonl", "a.jsonl"]);
+    }
+
+    #[test]
+    fn compaction_keeps_the_latest_path_and_every_other_record() {
+        let (_root, _installed, store) = store();
+        let path = store.path_for(2).unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut lines = String::new();
+        for body in [
+            r#"{"version":1,"kind":"session_start","session_id":2}"#,
+            r#"{"version":1,"kind":"transcript","transcript":"a.jsonl"}"#,
+            r#"{"version":1,"kind":"transcript","transcript":"a.jsonl"}"#,
+            r#"{"version":1,"kind":"done","text":"finished"}"#,
+            r#"{"version":1,"kind":"transcript","transcript":"a.jsonl"}"#,
+            r#"{"version":1,"kind":"transcript","transcript":"b.jsonl"}"#,
+            r#"{"version":1,"kind":"transcript","transcript":"b.jsonl"}"#,
+        ] {
+            lines.push_str(body);
+            lines.push('\n');
+        }
+        std::fs::write(&path, &lines).unwrap();
+        assert!(store.compact_transcripts().unwrap() > 0);
+        let records = store.read_session(2).unwrap();
+        let kinds: Vec<_> = records.iter().map(|r| r.kind.as_str()).collect();
+        assert_eq!(kinds, ["session_start", "transcript", "done", "transcript"]);
+        assert_eq!(records.last().unwrap().transcript, "b.jsonl");
+        assert_eq!(store.compact_transcripts().unwrap(), 0);
+    }
 }
 #[cfg(test)]
 mod quote_consumer_tests {

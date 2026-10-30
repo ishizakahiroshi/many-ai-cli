@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "67293ae267d6e1d2cf1e81eeb7119448e24f2455",
+    "commit": "9aa5babcb843b570b7e328a8f6fca5e1bab64f02",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -29631,8 +29631,10 @@
           "state": "not_configured"
         },
         "reads": {
-          "state": "none_observed",
-          "value": []
+          "state": "value",
+          "value": [
+            "messages"
+          ]
         },
         "writes": {
           "state": "none_observed",
@@ -50443,6 +50445,7 @@
       "read_by": [
         "go/internal/sessionstore/audit_store_test.go",
         "go/internal/sessionstore/store.go",
+        "rust/src/files/tests/attachment_replacement.rs",
         "rust/src/storage/history.rs",
         "rust/src/storage/mod.rs",
         "rust/src/storage/repository.rs",
