@@ -537,13 +537,24 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 /* inline help 付きのチェックと ? ヘルプボタンを 1 行に並べる。 */
 .spawn-inline-help-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-2);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+/* ラベルが折り返しても、チェックと ? は 1 行目の高さに揃える（中央揃えだと 2 行の間に浮く）。 */
+.spawn-inline-help-row .spawn-risk-label {
+  align-items: flex-start;
+}
+.spawn-inline-help-row .spawn-risk-label input[type="checkbox"] {
+  margin-top: calc((1lh - 14px) / 2);
 }
 .spawn-inline-help-btn {
   flex-shrink: 0;
   width: 16px;
   height: 16px;
+  line-height: inherit;
+  margin-top: calc((1lh - 16px) / 2);
 }
 
 .spawn-inline-help-btn[aria-expanded="true"] {
@@ -553,10 +564,10 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 /* 指で押す端末では 16px の丸は小さすぎるので、入力欄と同じ breakpoint で広げる。 */
 @media (max-width: 720px), (pointer: coarse) {
   .spawn-inline-help-btn {
-  width: 24px;
+    width: 24px;
     height: 24px;
-}
-
+    margin-top: calc((1lh - 24px) / 2);
+  }
 }
 
 /* ---- C2: Detached 設定セクション ---- */
