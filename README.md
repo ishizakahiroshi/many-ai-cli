@@ -339,7 +339,7 @@ winget install ishizakahiroshi.many-ai-cli; & "$env:LOCALAPPDATA\Microsoft\WinGe
 Once installed → [Getting started](#getting-started-right-after-install).
 
 > Immediately after `winget install`, the current window does not have the new `PATH`, so `setup` is invoked through the winget shim directory with its full path (opening a fresh terminal and running `many-ai-cli setup` works too).
-> Available once the first winget manifest PR is merged into `microsoft/winget-pkgs`. Until then, use the zip download below.
+> A new version appears in winget only after its manifest PR is merged into `microsoft/winget-pkgs`, which happens some time after the GitHub Release. If `winget` still shows an older version, use the zip download below.
 > On Windows, the package-manager path is preferred when available because it avoids the browser-downloaded zip/exe flow that commonly carries Mark-of-the-Web. It is still not a substitute for Authenticode code signing or organization allowlisting.
 
 **macOS (Homebrew) — one-line paste:**
@@ -476,7 +476,7 @@ With the Hub stopped, copy the whole `~/.many-ai-cli/` folder (Windows: `%USERPR
 
 ### Known limitations
 
-(To be finalized before release)
+Starting an AI CLI session usually shows its first output in well under a second, but now and then it takes two to four seconds (measured on one machine over 24 launches: median 0.34 s, 95th percentile 0.9 s, slowest 4.0 s). The cause has not been found.
 
 ---
 

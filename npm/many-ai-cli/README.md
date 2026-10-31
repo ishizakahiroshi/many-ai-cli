@@ -1,7 +1,7 @@
 # many-ai-cli
 
 Web dashboard to manage approvals and progress across multiple AI coding CLIs
-(Claude Code / Codex) running in parallel — a single local Hub + browser UI.
+(Claude Code / Codex / Copilot / Cursor / OpenCode / Grok / Command Code) running in parallel — a single local Hub + browser UI.
 
 ## Install
 
@@ -23,10 +23,10 @@ If the command is not found after installation, open a terminal with your packag
 manager's global bin directory on `PATH` before running `setup`.
 
 The npm wrapper launches that executable; it is independent of whether the
-installed release was built from Go or Rust. The v1.0.0 Rust candidate retains
-these package names and paths. **Source support for Rust is not evidence that a
-Rust release has been published to the npm registry.** Check the selected
-release's notes and version before switching from a personal executable.
+installed release was built from Go or Rust. From v1.0.0 the executable is the
+Rust build, and the package names and paths are unchanged from v0.9.0 (Go).
+Check the selected release's notes and version before switching from a
+personal executable.
 
 Installing through a package manager avoids manually downloading and locating
 an executable. It does **not** guarantee the absence of Windows SmartScreen or

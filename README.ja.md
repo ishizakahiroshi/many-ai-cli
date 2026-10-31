@@ -300,7 +300,7 @@ winget install ishizakahiroshi.many-ai-cli; & "$env:LOCALAPPDATA\Microsoft\WinGe
 インストールできたら → 「[はじめる](#はじめるインストール直後にやること)」へ。
 
 > `winget install` 直後は現在のウィンドウに PATH が反映されないため、`setup` は winget の shim ディレクトリからフルパスで呼び出します（新しいターミナルを開き直してから `many-ai-cli setup` を実行しても同じです）。
-> 初回の winget manifest PR が `microsoft/winget-pkgs` にマージされてから利用可能になります。それまでは下記の zip ダウンロードを使ってください。
+> 新しい版は、その manifest PR が `microsoft/winget-pkgs` にマージされてから winget に出ます。GitHub Release より少し遅れます。`winget` に古い版しか出ないときは、下記の zip ダウンロードを使ってください。
 > Windows では、利用可能になり次第 package manager 経由を推奨します。ブラウザで zip / exe を直接ダウンロードする導線に比べ、Mark-of-the-Web 起因の警告に入りにくくなります。ただし Authenticode コード署名や組織の許可リスト登録の代替ではありません。
 
 **macOS (Homebrew) — 1 行貼り付け:**
@@ -426,7 +426,7 @@ Hub を止めた状態で、`~/.many-ai-cli/` フォルダ（Windows: `%USERPROF
 
 ### 既知の制限
 
-（リリース前に確定）
+AI CLI のセッションを始めると、最初の出力は通常 1 秒よりずっと早く出ますが、ときどき 2〜4 秒かかります（1 台の PC で 24 回起動して測定：中央値 0.34 秒、95 パーセンタイル 0.9 秒、最も遅いもので 4.0 秒）。原因は見つかっていません。
 
 ---
 
