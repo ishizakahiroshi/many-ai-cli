@@ -901,12 +901,13 @@ export async function flushPendingAttach(sessionId, capturedFiles?: any[]) {
   const toSend = capturedFiles || pendingAttachFiles.splice(0);
   if (toSend.length === 0) return [];
   const injects = [];
+  let failed = false;
   // chatHistory 用: 送信に成功した添付の情報を集める
   const historyAttachments = [];
   // シェルのセッションで送り先（ssh 先）が決まっていれば、Hub が ssh で送って送り先のパスを返す。
   const remoteTarget = remoteAttachTarget(sessionId);
   const remoteQuery = remoteTarget ? `&remote_target=${encodeURIComponent(remoteTarget)}` : '';
-  for (const { buf, filename, wrapper } of toSend) {
+  for (const { buf, filename } of toSend) {
     try {
       const formData = new FormData();
       formData.append('file', new Blob([buf]), filename || 'blob');
@@ -915,6 +916,7 @@ export async function flushPendingAttach(sessionId, capturedFiles?: any[]) {
         { method: 'POST', body: formData }
       );
       if (!res.ok) {
+        failed = true;
         if (remoteTarget) {
           // ssh の失敗理由（鍵が無い・ホスト名違い等）は利用者が直すものなので、Hub の detail をそのまま見せる。
           const detail = await res.json().then((body) => String(body?.detail || ''), () => '');
@@ -925,7 +927,12 @@ export async function flushPendingAttach(sessionId, capturedFiles?: any[]) {
       } else {
         try {
           const data = await res.json();
-          if (data && data.inject) injects.push(data.inject);
+          if (!data || !data.inject) {
+            failed = true;
+            showToast('Attachment response parse failed');
+            continue;
+          }
+          injects.push(data.inject);
           const attachKind = /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(filename || '') ? 'image' : 'file';
           const blob = new Blob([buf]);
           historyAttachments.push({
@@ -936,17 +943,16 @@ export async function flushPendingAttach(sessionId, capturedFiles?: any[]) {
             url: attachKind === 'image' ? URL.createObjectURL(blob) : null,
           });
         } catch (_) {
+          failed = true;
           showToast('Attachment response parse failed');
         }
       }
     } catch (_) {
+      failed = true;
       showToast('Attachment send failed');
     }
-    if (wrapper) {
-      wrapper.remove();
-      updateAttachClearBtn();
-    }
   }
+  if (failed) return null;
   // chatHistory: attach を user/attach として 1 メッセージにまとめて push
   if (historyAttachments.length > 0) {
     pushMessage(sessionId, {
