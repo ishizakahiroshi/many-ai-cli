@@ -10,88 +10,32 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-31
+
+This release replaces the Go implementation of many-ai-cli with a Rust one.
+
+- **Same commands, same places for your data.** The command names, settings and
+  data locations are unchanged: the configuration stays in
+  `~/.many-ai-cli/config.yaml` and your data under `~/.many-ai-cli/`. Updating
+  carries over your settings and your session list (sessions older than the
+  retention period are removed at each start, as in v0.9.0). The text of past
+  conversations is not carried over: this version no longer stores it, and the
+  first start after the update deletes what v0.9.0 saved (see "Changed").
+- **Going back.** Before updating, copy `~/.many-ai-cli/`. To return to the Go
+  version, reinstall v0.9.0 and write the copy back. Steps:
+  [Upgrading to 1.0 (Rust)](https://github.com/ishizakahiroshi/many-ai-cli#upgrading-to-10-rust).
+- **No official Docker image.** Official Docker images, container builds and
+  automatic updates are not part of v1.0.0, and automatic image publishing is
+  stopped (see `deploy/docker/README.md`). Use the Linux binary instead.
+- **Known limitations.** Starting an AI CLI session usually shows its first
+  output in well under a second, but now and then it takes two to four seconds
+  (measured on one machine over 24 launches: median 0.34 s, 95th percentile
+  0.9 s, slowest 4.0 s). The cause has not been found.
+
 ### Fixed
 - Keep all long pasted texts before sending, and retain the draft when an
   attachment upload fails instead of sending an incomplete message.
 
-### Changed
-- **Conversation text is no longer stored in the SQLite history.** What you type
-  and what the AI prints used to be saved (after pattern-based masking, which
-  cannot catch a password written as plain text), so a secret could stay in the
-  database. Only session start/end, attachment names, card settings (title,
-  tags, pin, color, note, archive), parent/child links and the approval ledger
-  are kept; the first start after the update deletes the conversation text
-  already stored. Session search now finds attachment names only, and the
-  history view of a session that is not Claude or Codex has no text to show
-  (Claude and Codex keep using their own transcripts). A remote client can no
-  longer open a file just because the chat mentioned its path; a path written
-  in a memo still works.
-- **The session raw log (`.log`) masks secrets before writing.** Tokens, private
-  key blocks and `user:password@` URLs are masked, including ones split across
-  reads and ones that cross the 64 KiB point where a line without a newline is
-  written anyway. The headless run log is masked too. Plain-text passwords are
-  still not recognized, which is why session logging stays opt-in.
-- **Card titles, notes and summaries are masked before they are stored in the
-  SQLite history.** Known token shapes in what you type there are replaced with
-  `***`; the text itself is otherwise kept as you wrote it.
-- **Approval choices and the chosen answer are masked before they are stored.**
-  A choice such as "don't ask again for" a command could carry a token into the
-  approval ledger; the question and context already were masked, and the
-  choices and answer now are too, including rows saved by earlier versions.
-- **The Session log setting now says what it really does.** Its description
-  (English, Japanese, Vietnamese), `doctor` and the README state that only the
-  `.log` is written, that a plain-text password cannot be recognized, and that
-  the raw logs each AI CLI keeps for itself are not affected by the setting.
-- **The structured session history (`.jsonl`) is no longer written.** The `.log`
-  is the only per-session file now. Files from older versions stay until the
-  retention sweep removes them, and `log-clean` still reads them.
-
-### Added
-- **Files on the ssh destination can be opened without downloading.** With a
-  destination set in a shell session, clicking a path the remote AI printed
-  offers "👁️ Open from <destination>" next to "⬇️ Fetch", and the "⬇ Fetch"
-  window gained an "Open" button. The Hub reads the file over the same ssh and
-  shows it in a read-only view: text files and Markdown up to 1 MB, images up
-  to 20 MB; anything else asks you to use Fetch. Paths inside the
-  destination's Markdown (relative, `/…`, `file:`) cannot be clicked, so no file
-  on this PC is opened by mistake; `http(s)` links work as before.
-
-### Security
-- **The Claude Code bundled in the Docker image is updated to 2.1.179.**
-  2.1.163 had a plugin hash-pin bypass (GHSA-pq7j-f95f-qfcv, high) that let a
-  plugin skip hash pinning. This only affects people who run `many-ai-cli` from
-  the Docker image, which ships the provider CLIs inside it.
-
-- **The `zip` library used to unpack the Whisper download is updated to 9.1.3.**
-  8.6.0 had three advisories (RUSTSEC-2026-0367, -0368, -0369; one rated
-  critical) about the library's own `extract()` creating symbolic links outside
-  the target and keeping SUID/SGID bits. Whisper's unpacking does not call that
-  function and already rejects symbolic links and paths that leave the target,
-  so this was not reachable, but the dependency audit now reports no
-  vulnerability.
-
-- **A start-failure note no longer copies secrets from the child's screen.**
-  When a child session fails to start, the Hub writes the last lines of its
-  screen to the orchestration board and to the parent session. A token printed
-  there was stored as it appeared; those lines are now masked like the rest of
-  the stored text.
-
-- **The re-sign-in page returns only to a path on this Hub.** A signed-out
-  browser that still held a valid token could be sent to another site by a link
-  such as `http://127.0.0.1:<port>//example.invalid/`. The token was not sent
-  (the referrer policy blocks it), and the page now returns to `/` in that case.
-
-- **The security notes in the README now say what the token allows.** It gives
-  full control of the Hub, it is passed to every AI CLI the Hub starts, and it
-  can appear on process command lines, so the Hub is meant for a machine only
-  you use. The notes also say that Git runs in each session's folder.
-
-- **The `crypto-bigint` library behind the Web Push signature is updated to
-  0.7.10.** The version we shipped, 0.7.8, had been withdrawn (yanked) from the
-  crates.io registry. No security advisory is attached to it; this keeps the
-  build on a published version, so the dependency audit now reports no warning.
-
-### Fixed
 - **The retention settings take effect again.** `log.session_retention_days`
   (default 7), `handoff.retention_days` (14) and `log.attachment_retention_days`
   (7) were never read, so old session files, handoff records, history rows and
@@ -133,24 +77,6 @@ Release artifacts are published at
   `COLORTERM=truecolor`. "Follow the launch environment" and "No colors" are
   unchanged. Applies to newly started sessions.
 
-## [1.0.0]
-
-This release replaces the Go implementation of many-ai-cli with a Rust one.
-
-- **Same commands, same places for your data.** The command names, settings and
-  data locations are unchanged: the configuration stays in
-  `~/.many-ai-cli/config.yaml` and your data under `~/.many-ai-cli/`. Updating
-  carries over your settings and conversations.
-- **Going back.** Before updating, copy `~/.many-ai-cli/`. To return to the Go
-  version, reinstall v0.9.0 and write the copy back. Steps:
-  [Upgrading to 1.0 (Rust)](https://github.com/ishizakahiroshi/many-ai-cli#upgrading-to-10-rust).
-- **No official Docker image.** Official Docker images, container builds and
-  automatic updates are not part of v1.0.0, and automatic image publishing is
-  stopped (see `deploy/docker/README.md`). Use the Linux binary instead.
-- **Known limitations.** None confirmed so far; slow startup is still being
-  investigated. (To be finalized before release.)
-
-### Fixed
 - Approval rules now reach instruction files you reach through a link, such as
   a worktree or profile folder that is a junction or symlink, or a `CLAUDE.md`
   symlinked from your dotfiles. As in v0.9.0, the rules are written to the file
@@ -222,6 +148,15 @@ This release replaces the Go implementation of many-ai-cli with a Rust one.
   blames a terminal redraw.
 
 ### Added
+- **Files on the ssh destination can be opened without downloading.** With a
+  destination set in a shell session, clicking a path the remote AI printed
+  offers "👁️ Open from <destination>" next to "⬇️ Fetch", and the "⬇ Fetch"
+  window gained an "Open" button. The Hub reads the file over the same ssh and
+  shows it in a read-only view: text files and Markdown up to 1 MB, images up
+  to 20 MB; anything else asks you to use Fetch. Paths inside the
+  destination's Markdown (relative, `/…`, `file:`) cannot be clicked, so no file
+  on this PC is opened by mistake; `http(s)` links work as before.
+
 - **The slash-command lists gained 22 commands and 5 refreshed descriptions.**
   New in Claude Code: `/claude-in-chrome`, `/rate-limit-options`, `/slides`,
   `/update-config`, `/usage-credits`, `/web-setup` and `/workflows`. New in
@@ -419,6 +354,37 @@ This release replaces the Go implementation of many-ai-cli with a Rust one.
   there yet.
 
 ### Changed
+- **Conversation text is no longer stored in the SQLite history.** What you type
+  and what the AI prints used to be saved (after pattern-based masking, which
+  cannot catch a password written as plain text), so a secret could stay in the
+  database. Only session start/end, attachment names, card settings (title,
+  tags, pin, color, note, archive), parent/child links and the approval ledger
+  are kept; the first start after the update deletes the conversation text
+  already stored. Session search now finds attachment names only, and the
+  history view of a session that is not Claude or Codex has no text to show
+  (Claude and Codex keep using their own transcripts). A remote client can no
+  longer open a file just because the chat mentioned its path; a path written
+  in a memo still works.
+- **The session raw log (`.log`) masks secrets before writing.** Tokens, private
+  key blocks and `user:password@` URLs are masked, including ones split across
+  reads and ones that cross the 64 KiB point where a line without a newline is
+  written anyway. The headless run log is masked too. Plain-text passwords are
+  still not recognized, which is why session logging stays opt-in.
+- **Card titles, notes and summaries are masked before they are stored in the
+  SQLite history.** Known token shapes in what you type there are replaced with
+  `***`; the text itself is otherwise kept as you wrote it.
+- **Approval choices and the chosen answer are masked before they are stored.**
+  A choice such as "don't ask again for" a command could carry a token into the
+  approval ledger; the question and context already were masked, and the
+  choices and answer now are too, including rows saved by earlier versions.
+- **The Session log setting now says what it really does.** Its description
+  (English, Japanese, Vietnamese), `doctor` and the README state that only the
+  `.log` is written, that a plain-text password cannot be recognized, and that
+  the raw logs each AI CLI keeps for itself are not affected by the setting.
+- **The structured session history (`.jsonl`) is no longer written.** The `.log`
+  is the only per-session file now. Files from older versions stay until the
+  retention sweep removes them, and `log-clean` still reads them.
+
 - Official Docker images, container builds and automatic updates are excluded
   from v1.0.0 support and its release gate. Automatic image publishing is stopped
   while the current container build has a known failure. Existing images and
@@ -597,6 +563,40 @@ This release replaces the Go implementation of many-ai-cli with a Rust one.
 - **Dependency `golang.org/x/crypto` updated to v0.57.0**, eliminating upstream advisory GO-2025-3486.
 
 ### Security
+- **The Claude Code bundled in the Docker image is updated to 2.1.179.**
+  2.1.163 had a plugin hash-pin bypass (GHSA-pq7j-f95f-qfcv, high) that let a
+  plugin skip hash pinning. This only affects people who run `many-ai-cli` from
+  the Docker image, which ships the provider CLIs inside it.
+
+- **The `zip` library used to unpack the Whisper download is updated to 9.1.3.**
+  8.6.0 had three advisories (RUSTSEC-2026-0367, -0368, -0369; one rated
+  critical) about the library's own `extract()` creating symbolic links outside
+  the target and keeping SUID/SGID bits. Whisper's unpacking does not call that
+  function and already rejects symbolic links and paths that leave the target,
+  so this was not reachable, but the dependency audit now reports no
+  vulnerability.
+
+- **A start-failure note no longer copies secrets from the child's screen.**
+  When a child session fails to start, the Hub writes the last lines of its
+  screen to the orchestration board and to the parent session. A token printed
+  there was stored as it appeared; those lines are now masked like the rest of
+  the stored text.
+
+- **The re-sign-in page returns only to a path on this Hub.** A signed-out
+  browser that still held a valid token could be sent to another site by a link
+  such as `http://127.0.0.1:<port>//example.invalid/`. The token was not sent
+  (the referrer policy blocks it), and the page now returns to `/` in that case.
+
+- **The security notes in the README now say what the token allows.** It gives
+  full control of the Hub, it is passed to every AI CLI the Hub starts, and it
+  can appear on process command lines, so the Hub is meant for a machine only
+  you use. The notes also say that Git runs in each session's folder.
+
+- **The `crypto-bigint` library behind the Web Push signature is updated to
+  0.7.10.** The version we shipped, 0.7.8, had been withdrawn (yanked) from the
+  crates.io registry. No security advisory is attached to it; this keeps the
+  build on a published version, so the dependency audit now reports no warning.
+
 - **The pre-v1 GHCR container images were deleted (2026-10-25).** All tags of
   `ghcr.io/ishizakahiroshi/many-ai-cli` bundled a Node.js 22 release affected by the
   Brotli decoder vulnerability CVE-2026-111497, and image publishing has stopped,
@@ -3980,7 +3980,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.6.0...v0.7.0

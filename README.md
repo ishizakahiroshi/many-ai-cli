@@ -453,7 +453,7 @@ sha256sum -c SHA256SUMS.txt
 
 ## Upgrading to 1.0 (Rust)
 
-v1.0.0 replaces the program inside the release: the executables (`many-ai-cli` and `many-ai-cli-launcher`) are now built from Rust (`rust/`) instead of Go. The command names, the settings file (`~/.many-ai-cli/config.yaml`) and the data folder (`~/.many-ai-cli/`) are the same, so updating keeps your existing settings and conversations. The current public release before it is v0.9.0 (the Go version).
+v1.0.0 replaces the program inside the release: the executables (`many-ai-cli` and `many-ai-cli-launcher`) are now built from Rust (`rust/`) instead of Go. The command names, the settings file (`~/.many-ai-cli/config.yaml`) and the data folder (`~/.many-ai-cli/`) are the same, so updating keeps your existing settings and your session list (sessions older than the retention period are removed at each start, as in v0.9.0). The text of past conversations is not carried over: v1.0.0 no longer stores conversation text in the history database, and the first start after the update deletes what v0.9.0 saved (see the CHANGELOG). The current public release before it is v0.9.0 (the Go version).
 
 **Update**
 
