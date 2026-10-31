@@ -5,11 +5,11 @@
     "authority": "Authoritative current source-binding view; top-level routes/dynamic_operations and earlier receipt fields are historical compatibility data.",
     "source_index": "rust/inventory/recovery-current-20261005.json",
     "counts": {
-      "http_registrations": 155,
-      "http_source_bound": 155,
+      "http_registrations": 154,
+      "http_source_bound": 154,
       "http_source_binding_missing": 0,
-      "dynamic_operation_rows": 49,
-      "dynamic_source_bound": 49,
+      "dynamic_operation_rows": 44,
+      "dynamic_source_bound": 44,
       "dynamic_source_binding_missing": 0,
       "cli_entries": 32,
       "cli_source_dispatch_present": 32,
@@ -166,13 +166,6 @@
         "main_binding": "with_provider_routes",
         "state": "source_implemented_bound_unaccepted",
         "source_index_json_pointer": "/http/20"
-      },
-      {
-        "path": "/api/provider-distributions/",
-        "rust_owner": "rust/src/hub/distribution_routes.rs",
-        "main_binding": "with_provider_assets",
-        "state": "source_implemented_bound_unaccepted",
-        "source_index_json_pointer": "/http/21"
       },
       {
         "path": "/api/provider-icons/",
@@ -1440,138 +1433,6 @@
             {
               "file": "rust/src/application/main_program/serve.rs",
               "line": 1202
-            }
-          ]
-        },
-        "product_accepted": false,
-        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
-      },
-      {
-        "pattern": "/api/provider-distributions/status",
-        "methods": [
-          "GET"
-        ],
-        "source_handler": "handleProviderDistributionStatus",
-        "state": "source_dispatch_bound_unaccepted",
-        "rust_owner": "rust/src/hub/distribution_routes.rs",
-        "dispatch_refs": [
-          {
-            "file": "rust/src/hub/distribution_routes.rs",
-            "line": 29
-          }
-        ],
-        "main_binding": {
-          "constructor_or_builder": "with_provider_assets",
-          "refs": [
-            {
-              "file": "rust/src/application/main_program/serve.rs",
-              "line": 1131
-            }
-          ]
-        },
-        "product_accepted": false,
-        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
-      },
-      {
-        "pattern": "/api/provider-distributions/diff",
-        "methods": [
-          "GET"
-        ],
-        "source_handler": "handleProviderDistributionDiff",
-        "state": "source_dispatch_bound_unaccepted",
-        "rust_owner": "rust/src/hub/distribution_routes.rs",
-        "dispatch_refs": [
-          {
-            "file": "rust/src/hub/distribution_routes.rs",
-            "line": 29
-          }
-        ],
-        "main_binding": {
-          "constructor_or_builder": "with_provider_assets",
-          "refs": [
-            {
-              "file": "rust/src/application/main_program/serve.rs",
-              "line": 1131
-            }
-          ]
-        },
-        "product_accepted": false,
-        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
-      },
-      {
-        "pattern": "/api/provider-distributions/check",
-        "methods": [
-          "POST"
-        ],
-        "source_handler": "handleProviderDistributionCheck",
-        "state": "source_dispatch_bound_unaccepted",
-        "rust_owner": "rust/src/hub/distribution_routes.rs",
-        "dispatch_refs": [
-          {
-            "file": "rust/src/hub/distribution_routes.rs",
-            "line": 29
-          }
-        ],
-        "main_binding": {
-          "constructor_or_builder": "with_provider_assets",
-          "refs": [
-            {
-              "file": "rust/src/application/main_program/serve.rs",
-              "line": 1131
-            }
-          ]
-        },
-        "product_accepted": false,
-        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
-        "expected_unavailable_contract": "Fixed Go ships no trusted catalog signing keys; composed check/accept explicitly return503 distribution_keys_unconfigured. This is not a missing route or successful catalog download/signature acceptance."
-      },
-      {
-        "pattern": "/api/provider-distributions/accept",
-        "methods": [
-          "POST"
-        ],
-        "source_handler": "handleProviderDistributionAccept",
-        "state": "source_dispatch_bound_unaccepted",
-        "rust_owner": "rust/src/hub/distribution_routes.rs",
-        "dispatch_refs": [
-          {
-            "file": "rust/src/hub/distribution_routes.rs",
-            "line": 29
-          }
-        ],
-        "main_binding": {
-          "constructor_or_builder": "with_provider_assets",
-          "refs": [
-            {
-              "file": "rust/src/application/main_program/serve.rs",
-              "line": 1131
-            }
-          ]
-        },
-        "product_accepted": false,
-        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
-        "expected_unavailable_contract": "Fixed Go ships no trusted catalog signing keys; composed check/accept explicitly return503 distribution_keys_unconfigured. This is not a missing route or successful catalog download/signature acceptance."
-      },
-      {
-        "pattern": "/api/provider-distributions/rollback",
-        "methods": [
-          "POST"
-        ],
-        "source_handler": "handleProviderDistributionRollback",
-        "state": "source_dispatch_bound_unaccepted",
-        "rust_owner": "rust/src/hub/distribution_routes.rs",
-        "dispatch_refs": [
-          {
-            "file": "rust/src/hub/distribution_routes.rs",
-            "line": 29
-          }
-        ],
-        "main_binding": {
-          "constructor_or_builder": "with_provider_assets",
-          "refs": [
-            {
-              "file": "rust/src/application/main_program/serve.rs",
-              "line": 1131
             }
           ]
         },

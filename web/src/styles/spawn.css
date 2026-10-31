@@ -617,10 +617,6 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   border-color: var(--accent);
   color: var(--accent-text);
 }
-.spawn-radio-label--disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
 .spawn-radio-label input[type="radio"] {
   accent-color: var(--accent);
   width: 12px;
@@ -628,7 +624,6 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   margin: 0;
   cursor: pointer;
 }
-.spawn-radio-label--disabled input[type="radio"] { cursor: not-allowed; }
 
 .spawn-detached-opts {
   display: flex;

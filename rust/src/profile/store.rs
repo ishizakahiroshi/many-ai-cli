@@ -20,7 +20,7 @@ use crate::{
     proto::provider::*,
 };
 pub use accepted::AcceptedDistributionStore;
-pub use distribution::{DistributionPointerSnapshot, DistributionStore, diff_distribution};
+pub use distribution::diff_distribution;
 pub use history::{HistoryStore, definition_digest, revision_id};
 use serde::Serialize;
 use std::{

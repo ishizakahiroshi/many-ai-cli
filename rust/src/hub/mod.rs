@@ -30,7 +30,6 @@ pub mod child_control;
 pub mod child_routes;
 pub mod confirmations;
 pub mod diagnostic_routes;
-pub mod distribution_routes;
 pub mod handoff_routes;
 pub mod host_routes;
 pub mod icon_routes;

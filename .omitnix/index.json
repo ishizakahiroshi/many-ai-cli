@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "06ec745df7d8a06882592f033d9d02f625912fc0",
+    "commit": "a679d4166b5158d4ea87755f1abecd26a026c3ee",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2046,
-    "analyzed": 1587,
+    "discovered": 2044,
+    "analyzed": 1585,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 449,
@@ -30351,64 +30351,6 @@
       "unresolved": []
     },
     {
-      "path": "rust/src/hub/distribution_routes.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "Official signing keys are deliberately empty in the fixed Go source."
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "rust/src/hub/distribution_routes/tests.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
       "path": "rust/src/hub/grid_spawn_routes.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -34326,7 +34268,7 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "Fixed Go distribution pointer transactions. No download or trust bypass API."
+          "value": "Three-way provider definition diff shared by the provider history API."
         },
         "authentication": {
           "state": "not_configured"

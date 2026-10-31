@@ -338,9 +338,6 @@ async fn handle(
                     | "/api/shutdown"
                     | "/api/notify-generate-topic"
                     | "/api/slash-commands"
-                    | "/api/provider-distributions/check"
-                    | "/api/provider-distributions/accept"
-                    | "/api/provider-distributions/rollback"
             ))
         && !matches!(
             request.path.as_str(),

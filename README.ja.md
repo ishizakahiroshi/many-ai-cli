@@ -150,7 +150,7 @@ custom_providers:
 
 子は画面からも立てられます。AI セッションのカードにある 🌱 ボタンで派生ダイアログが開くので、種別に「子」を選び、役割・CLI・subscription profile・モデル・effort・実行モード・権限の段を選んで、最初の指示を直してから起動します。この経路で立てた子には**確認ダイアログが出ません**（ボタンを押したことがそのまま承認です）。権限は `attended` なので、子の承認プロンプトは自分で立てた普通のセッションと同じく Hub の承認パネルへ来ます。深さと本数の上限は指揮者からの spawn とまったく同じに効きます。ダイアログにはその子が実際に持つ権限が出るので、CLI や段を切り替えると何が変わるかを起動前に読めます。**「この役割では次回もこの段を使う」**にチェックを入れると、選んだ段がその役割に記憶されます。次に同じ役割を選んだときは派生ダイアログがその段で開き、AI がその役割の子を要求したときは確認ダイアログがその段で開きます。記憶を書けるのはこのチェックボックスだけで（AI の spawn 要求からは書けません）、外せばその役割の記憶は消えます。同じダイアログのもう 1 つの種別「引き継ぎ」は[セッション引き継ぎ記録（handoff）](#セッション引き継ぎ記録handoff)節にあります。
 
-既知の制約: 意図的に軽量な仕組みです。board の変更は 2 秒ポーリングで検知され、通知は `orchestration.board_notify_mode` に従います（既定 `queue-until-idle`、バッジのみは `soft-notify`、即時 Enter 付き inject は `interrupt`）。子セッションは自走のため既定で全許可バイパスします（`orchestration.child_full_bypass`、既定 `true`）。具体的には codex の子が `--sandbox danger-full-access --ask-for-approval never` で、それ以外は各 CLI の全許可指定に変換されて起動します。指揮者からの spawn は人間の確認を待ちます（`orchestration.spawn_confirm_mode`、既定 `on`）が、relay の子は設計上この確認を通りません。`child_full_bypass` を `false` にすると高リスク権限の自動確認は避けられますが、relay の子は答える人のいない承認プロンプトで止まります。完了判定は子が `## DONE <role> session=<child_id>` を書き込むことに依存し、job DAG・retry キュー・自動 merge はありません。
+既知の制約: 意図的に軽量な仕組みです。board の変更は 2 秒ポーリングで検知され、通知は `orchestration.board_notify_mode` に従います（既定はバッジのみの `soft-notify`、セッションが空くまで待たせるのは `queue-until-idle`、即時 Enter 付き inject は `interrupt`）。子セッションは自走のため既定で全許可バイパスします（`orchestration.child_full_bypass`、既定 `true`）。具体的には codex の子が `--sandbox danger-full-access --ask-for-approval never` で、それ以外は各 CLI の全許可指定に変換されて起動します。指揮者からの spawn は人間の確認を待ちます（`orchestration.spawn_confirm_mode`、既定 `on`）が、relay の子は設計上この確認を通りません。`child_full_bypass` を `false` にすると高リスク権限の自動確認は避けられますが、relay の子は答える人のいない承認プロンプトで止まります。完了判定は子が `## DONE <role> session=<child_id>` を書き込むことに依存し、job DAG・retry キュー・自動 merge はありません。
 
 ### Orchestration relay loop
 
@@ -618,7 +618,7 @@ many-ai-cli --version
 #### 起動
 
 ```powershell
-many-ai-cli-launcher.exe                    # プロファイル 1 件なら即接続。複数なら選択画面を表示
+many-ai-cli-launcher.exe                    # 選択画面を表示
 many-ai-cli-launcher.exe --profile my-remote  # 指定プロファイルで接続
 many-ai-cli-launcher.exe --last            # 前回使ったプロファイルで接続
 many-ai-cli-launcher.exe --ui             # 常に選択画面を表示
@@ -854,7 +854,7 @@ Hub 自体はどこでも `47777` のままで構いません。変えるのは�
 
 - **iOS はバックグラウンドのアプリを凍結する** ため、Termius を裏に回すとしばらくしてトンネルが切れます。ホスト側のセッションは動き続けるので、Termius を開き直せば再接続され、PWA は続きから使えます。
 - **Web Push**（設定で有効化・購読済みの場合）はトンネル切断中でも通知自体は届きますが、通知から Hub を開くにはトンネルの再接続が必要です。
-- token は Hub 再起動で再生成されます。ブラウザが 403 になったら最新の token を取り直してください。
+- token は `config.yaml` に保存され、`token:` を変えるか消すまで Hub を再起動しても変わりません。ブラウザが 403 になったら最新の token を取り直してください。
 
 ### トンネル切断中でも承認通知を受け取る（ntfy / webhook）
 
@@ -1034,9 +1034,9 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 - **左サイドバー（セッション一覧）**
   - 上部: `+ 新しいセッション` ボタン（クリックで spawn ダイアログを開く）。provider 一覧の末尾 **AI CLIを追加** は **設定 → AI CLI連携** と同じ追加ダイアログを開く
   - 起動 cwd 直下の **プロジェクトフォルダ単位**でグルーピング表示。フォルダ名横にもセッション数チップと Files 導線
-  - 各セッションカード: `📌`（最上部の「Pinned」グループへ固定）／ `×`（閉じる）／ プロバイダ色のドット ＋ 番号 ＋ 状態バッジ（実行中 / スタンバイ / 待機中 / 完了 / エラー / 切断）／ Git ブランチバッジ（取得できる場合）／ 最終応答時刻 ／ 直近の出力プレビュー
+  - 各セッションカード: `×`（閉じる）／ プロバイダ色のドット ＋ 番号 ＋ 状態バッジ（実行中 / スタンバイ / 待機中 / エラー / 切断）／ Git ブランチバッジ（取得できる場合）／ 直近の出力プレビュー
   - カード右クリックで Git ビューを開く、Files タブを開く、セッションをアクティブ化、セッションIDコピーが可能
-  - 完了・エラーのセッションも一覧に残ります（手動で `×` を押すまで保持）
+  - エラーのセッションも一覧に残ります（手動で `×` を押すまで保持）
   - 下部の固定フッターは `設定` のみです。開くたびに既存の一般設定が初期表示されます。設定ナビの `Usage` で契約残量・リンク、`Hub` で外部公開・スマホ接続（QR）・Hub の停止・バグ報告を利用できます。他の設定も同じナビ（基本 / 接続・契約 / 入力 / 承認・通知 / 保守）から選べます。左上の検索欄で項目を絞り込め、`閉じる` ボタンか Esc で閉じます
 - **右ペイン（ターミナル + 入力）**
   - 上部バー: アクティブセッションのプロバイダ・cwd、`↑最上部へ`（PTY バッファの先頭にスクロール）
@@ -1126,7 +1126,7 @@ Hub UI の入力欄に音声でテキストを入力できます。
 
 ### エンジンの使い分け
 
-- **Whisper（ローカル）** — 音声データを外部サービスへ送りたくない人向け。録音は Hub 経由でローカルの whisper.cpp サーバに渡され、外には出ません（`voice.whisper.server_url` を `127.0.0.1` / `localhost` のままにしている限り）。精度はモデルと CPU 性能次第。
+- **Whisper（ローカル）** — 音声データを外部サービスへ送りたくない人向け。録音は Hub 経由でローカルの whisper.cpp サーバに渡され、外には出ません（Hub は `voice.whisper.server_url` に localhost の `http://` アドレスしか受け付けません）。精度はモデルと CPU 性能次第。
 - **ブラウザ内蔵** — Chrome / Edge の Web Speech API。**音声データは Google / Microsoft の認識サーバへ送信されます**。精度・反応速度は良好。プライバシーより精度・手軽さを優先する場面向け。
 - **スマホからの利用** — Hub の音声入力エンジンを使わず、**スマホ OS の音声入力 / IME**（iPhone の場合は `Gboard` 等のサードパーティ IME も含む）を使う選択肢もあります。クラウド処理である点はブラウザ内蔵と同じですが、スマホは IME 経由のほうが反応が良いことが多いです。
 
@@ -1144,7 +1144,7 @@ Hub UI の入力欄に音声でテキストを入力できます。
 > **Whisper（ローカル）**: ブラウザで録音した WAV を Hub 経由で Whisper サーバへ送信。Windows x64 の Hub では設定パネルから whisper.cpp server とモデルを `~/.many-ai-cli/whisper/` にインストール・起動できます。その他の環境では手動で Whisper 互換サーバを起動し、`voice.whisper.server_url` を設定してください。
 > 初回使用時にマイクへのアクセス許可が必要です。
 
-> ⚠️ **プライバシー注意**: ブラウザ内蔵認識では、録音された音声は **ブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます**。Whisper は `voice.whisper.server_url` が `http://127.0.0.1:...` / `http://localhost:...` のローカルサーバを指す場合だけローカル処理です。将来外部 API URL を設定した場合、音声データはその外部サービスへ送信されます。管理インストーラーは whisper.cpp を GitHub Releases から、モデルを Hugging Face から取得します。詳細は「セキュリティ → 外部への通信について」と [`docs/manual_whisper.md`](docs/manual_whisper.md) を参照してください。
+> ⚠️ **プライバシー注意**: ブラウザ内蔵認識では、録音された音声は **ブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます**。Whisper はローカル処理です。Hub は `voice.whisper.server_url` に `http://127.0.0.1:...` / `http://localhost:...` のような localhost の `http://` アドレスしか受け付けません。管理インストーラーは whisper.cpp を GitHub Releases から、モデルを Hugging Face から取得します。詳細は「セキュリティ → 外部への通信について」と [`docs/manual_whisper.md`](docs/manual_whisper.md) を参照してください。
 
 ### Whisper サーバ推奨設定
 
@@ -1194,8 +1194,7 @@ Whisper で `Whisper サーバがインストールされていません` / `Whi
 ```yaml
 hub:
   port: 47777               # デフォルトポート（衝突時は 47778, 47779... と自動探索）
-  open_browser: false       # true にすると serve 起動時にブラウザを自動で開く
-  auto_shutdown: true       # 全ラッパーが終了したら Hub も自動停止
+  auto_shutdown: true       # true = Hub との接続が切れたラッパーは CLI を終える。false = Hub が応答しない間は再接続を待つ
   log_dir: ""               # 空 = ~/.many-ai-cli/logs
   idle_timeout_min: 60      # アイドル状態のセッションを自動切断するまでの分数（0 = 無効）
   wrapper_reconnect_grace_sec: 3600  # Hub クラッシュ / 再起動時に wrap セッションが復帰を待つ秒数（0–86400）
@@ -1488,7 +1487,8 @@ Grok セッションでは、生成された子は親自身のセッションフ
 - **モデル候補の一覧の取得（Hub 本体の通信）**: 新規セッションの画面・派生ダイアログ・spawn 確認ダイアログが初めてモデル候補を出すときと、モデル欄の横の ↻ を押したとき、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/models/defaults.json`（Claude Code・Codex・Copilot のモデル候補と、Cursor Agent・Grok の予備の候補）を取得し、24 時間キャッシュします。取得元 URL は `config.yaml` の `models_source` で変更できます。取得できないときはこれらの候補が空になり、モデル名は手で入力できます。
 - **NVIDIA NIM のモデルカタログと接続試験（Hub 本体の通信 / opt-in のみ）**: NVIDIA NIM を設定している場合（上記の [NVIDIA NIM trial route](#nvidia-nim-trial-routeopencode-専用) 参照）、Hub は NVIDIA の `/v1/models` endpoint を呼び、モデルピッカーの一覧取得と設定画面の接続試験に使います。推論そのものは proxy されず、OpenCode から NVIDIA の Chat Completions endpoint へ直接送られます。
 - **Web Push 通知（Hub 本体の通信 / opt-in のみ）**: プッシュ通知を有効にした場合、Hub は暗号化された Web Push request をブラウザベンダーの push サービスへ HTTPS 送信します。承認 payload には OS 通知表示に必要なセッション ID / 名前、provider、承認質問・文脈の短い抜粋が含まれます。Workflow 完了 payload はセッション名と agent 集計件数だけです。Hub URL token、journal の result 本文、agent ID は含めません。VAPID 鍵と購読情報は `~/.many-ai-cli/push_store.json` にローカル保存されます。SSH トンネルが切れていても通知配送自体は届く場合がありますが、通知から Hub を開くにはトンネルと Hub に到達できる必要があります。
-- **音声入力（使用時のみ）**: ブラウザ内蔵認識は Web Speech API を使用しており、Chrome / Edge では **マイク音声がブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます**。Whisper モードでは音声が Hub へ送られ、Hub が `voice.whisper.server_url` の Whisper サーバへ中継します。ローカル処理にしたい場合は `127.0.0.1` / `localhost` のローカルサーバだけを指定してください。外部 API URL を設定した場合、音声データはその外部サービスへ送信されます。「音声入力」節の注意書きも参照。
+- **Jev によるプロンプト評価（Hub 本体の通信 / opt-in のみ）**: Hub の環境に `TYPESAFE_API_KEY` があり、このブラウザで評価をオンにした場合だけ、評価ボタンを押すとプロンプトの文を最大 4096 バイト `api.typesafe.ai` へ送ります。TypeSafe 側でキーに課金されることがあります。結果は表示だけで、どの AI を動かすかは変えません。
+- **音声入力（使用時のみ）**: ブラウザ内蔵認識は Web Speech API を使用しており、Chrome / Edge では **マイク音声がブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます**。Whisper モードでは音声が Hub へ送られ、Hub が `voice.whisper.server_url` の Whisper サーバへ中継します。Hub は `voice.whisper.server_url` に localhost の `http://` アドレスしか受け付けないため、Whisper の音声はこの端末の中で処理されます。「音声入力」節の注意書きも参照。
 - **Whisper 管理インストール（Windows x64 Hub / opt-in のみ）**: **設定パネル → 音声入力 → インストール** を押した場合だけ、Hub は whisper.cpp の Windows x64 release archive を GitHub Releases から、選択した ggml モデルを Hugging Face から `~/.many-ai-cli/whisper/` へ HTTPS ダウンロードします。release archive は展開前に SHA-256 を照合します。公開ハッシュ未設定のモデルは HTTPS ダウンロードとして扱い、UI ではハッシュ未検証として表示します。
 - **wrap 対象 CLI の API 通信（CLI 自身の通信）**: ラップ対象である Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI / opencode / Command Code 自身は、それぞれのバックエンドと HTTPS で直接通信します。公式 5 CLI はそれぞれのベンダー API（Anthropic / OpenAI / GitHub / Cursor / xAI）、opencode と Command Code は設定したモデルプロバイダー（opencode は NVIDIA NIM を含む。上記参照）です。`many-ai-cli` は PTY の入出力をローカル WebSocket で中継するだけで、これらの API 通信を傍受・記録・プロキシすることはありません。元の CLI のネットワーク挙動がそのまま適用されます。
 

@@ -47,7 +47,6 @@ pub struct ServiceRouter {
     push: Option<Arc<super::push_routes::PushHttp>>,
     security: Option<Arc<crate::application::push::security::SecurityNotifications>>,
     icons: Option<Arc<super::icon_routes::IconHttp>>,
-    distributions: Option<Arc<super::distribution_routes::DistributionHttp>>,
     diagnostics: Option<Arc<super::diagnostic_routes::DiagnosticHttp>>,
     agent_history: Option<Arc<super::agent_history_routes::AgentHistoryHttp>>,
     grid: Option<Arc<super::grid_spawn_routes::GridHttp>>,
@@ -229,7 +228,6 @@ impl ServiceRouter {
             push: None,
             security: None,
             icons: None,
-            distributions: None,
             diagnostics: None,
             agent_history: None,
             grid: None,
@@ -431,13 +429,8 @@ impl ServiceRouter {
             owner.note_authenticated(request, via, now);
         }
     }
-    pub fn with_provider_assets(
-        mut self,
-        icons: Arc<super::icon_routes::IconHttp>,
-        distributions: Arc<super::distribution_routes::DistributionHttp>,
-    ) -> Self {
+    pub fn with_provider_assets(mut self, icons: Arc<super::icon_routes::IconHttp>) -> Self {
         self.icons = Some(icons);
-        self.distributions = Some(distributions);
         self
     }
     pub fn with_diagnostics(
@@ -1097,7 +1090,6 @@ impl ServiceRouter {
             push: None,
             security: None,
             icons: None,
-            distributions: None,
             diagnostics: None,
             agent_history: None,
             grid: None,
@@ -1364,18 +1356,6 @@ impl ServiceRouter {
                         "provider registry is unavailable",
                     ),
                 },
-                p if super::distribution_routes::DistributionHttp::methods(p).is_some() => {
-                    match &self.distributions {
-                        Some(owner) => owner
-                            .handle_authenticated(request)
-                            .expect("recognized distribution route"),
-                        None => Response::error(
-                            503,
-                            "distribution_store_unavailable",
-                            "distribution store is unavailable",
-                        ),
-                    }
-                }
                 path if super::push_routes::methods(path).is_some() => match &self.push {
                     Some(owner) => owner
                         .handle_authenticated(request, at)
@@ -1680,9 +1660,6 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
         }
         p if super::icon_routes::IconHttp::methods(p).is_some() => {
             super::icon_routes::IconHttp::methods(p).unwrap()
-        }
-        p if super::distribution_routes::DistributionHttp::methods(p).is_some() => {
-            super::distribution_routes::DistributionHttp::methods(p).unwrap()
         }
         p if p.starts_with("/api/providers/") && p.ends_with("/recovery") => &["GET", "POST"],
         p if p.starts_with("/api/providers/")

@@ -10,12 +10,6 @@ Release artifacts are published at
 
 ## [Unreleased]
 
-### Fixed
-
-- Shell attachment destinations can specify an SSH private key file for uploads,
-  downloads, and remote file previews, including keys passed with `ssh -i` when
-  connecting in the terminal.
-
 ## [1.0.0] - 2026-10-31
 
 This release replaces the Go implementation of many-ai-cli with a Rust one.
@@ -39,6 +33,9 @@ This release replaces the Go implementation of many-ai-cli with a Rust one.
   0.9 s, slowest 4.0 s). The cause has not been found.
 
 ### Fixed
+- Shell attachment destinations can specify an SSH private key file for uploads,
+  downloads, and remote file previews, including keys passed with `ssh -i` when
+  connecting in the terminal.
 - Keep all long pasted texts before sending, and retain the draft when an
   attachment upload fails instead of sending an incomplete message.
 
@@ -448,6 +445,18 @@ This release replaces the Go implementation of many-ai-cli with a Rust one.
   the input when context, compaction or the rate limit is close to its limit. The
   settings panel no longer lists the "AI / model" and "effort / thinking" segments,
   which now appear only in the details opened from the "…" button.
+
+### Removed
+- **Official AI CLI catalog import.** The Hub no longer serves
+  `/api/provider-distributions/*`, and the note about it under
+  Settings → AI CLI integrations is gone. The import never worked in a release:
+  no signing keys were configured, so checking and accepting a catalog always
+  returned 503. Your own provider definitions and their history are unchanged.
+- **The "Attach to grid" option in New Session.** It was always disabled; the
+  "Hub tab" and "Detached window" choices remain.
+- **README descriptions of `hub.open_browser`.** The setting has never had an
+  effect (only `serve --open` opens the browser). An existing value in
+  `config.yaml` is still accepted and ignored.
 
 ### Fixed
 - The Git panel's read-only views (changed files, diffs and the commit-message

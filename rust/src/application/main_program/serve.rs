@@ -1217,21 +1217,14 @@ impl HubComposition {
             servers.clone(),
         )))
         .with_models(models.clone())
-        .with_provider_assets(
-            crate::hub::icon_routes::IconHttp::new(
-                crate::application::provider_assets::ProviderAssets::new(
-                    &paths,
-                    registry.clone(),
-                    {
-                        let logger = logger.clone();
-                        Arc::new(move |_, _| {
-                            logger.write("WARN", "provider icon", "provider icon operation failed")
-                        })
-                    },
-                ),
-            ),
-            crate::hub::distribution_routes::DistributionHttp::new(&paths, registry.clone()),
-        )
+        .with_provider_assets(crate::hub::icon_routes::IconHttp::new(
+            crate::application::provider_assets::ProviderAssets::new(&paths, registry.clone(), {
+                let logger = logger.clone();
+                Arc::new(move |_, _| {
+                    logger.write("WARN", "provider icon", "provider icon operation failed")
+                })
+            }),
+        ))
         .with_slash_commands(Arc::new(crate::hub::slash_routes::SlashHttp::new(slash)))
         .with_host(Arc::new(crate::hub::host_routes::HostHttp::new(
             paths.clone(),

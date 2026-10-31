@@ -565,19 +565,6 @@ async fn actual_http_composition_keeps_relay_guards_and_trial_notification_denia
     }
     assert_eq!(
         client
-            .request(
-                reqwest::Method::TRACE,
-                endpoint("/api/provider-distributions/unknown")
-            )
-            .send()
-            .await
-            .unwrap()
-            .status()
-            .as_u16(),
-        404
-    );
-    assert_eq!(
-        client
             .post(endpoint("/api/jev/evaluate"))
             .body("{")
             .send()
