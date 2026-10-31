@@ -130,6 +130,7 @@ describe('端末のパスのメニュー（attachments.ts の remoteFetchMenuIte
     const ctx: any = {
       t: (key: string, vars?: Record<string, unknown>) => (vars ? `${key}|${JSON.stringify(vars)}` : key),
       remoteAttachTarget: (id: number) => (id === 7 ? 'dev@host' : ''),
+      remoteAttachIdentity: () => 'D:/synthetic keys/id_ed25519',
       isFetchableRemotePath: f.api.isFetchableRemotePath,
       isRemoteViewablePath: f.api.isRemoteViewablePath,
       openRemoteFileView: async (...args: unknown[]) => { calls.push({ fn: 'open', args }); return true; },
@@ -149,6 +150,7 @@ describe('端末のパスのメニュー（attachments.ts の remoteFetchMenuIte
     list[0].action();
     expect(calls[0].fn).toBe('open');
     expect(calls[0].args.slice(0, 3)).toEqual([7, 'dev@host', '/srv/a.md']);
+    expect((calls[0].args[3] as { identity: string }).identity).toBe('D:/synthetic keys/id_ed25519');
     (calls[0].args[3] as { onFetch: () => void }).onFetch();
     expect(calls[1]).toEqual({ fn: 'fetch', args: [7, '/srv/a.md'] });
     list[1].action();
@@ -261,6 +263,14 @@ describe('FilesPreview.renderMarkdown の remote モード', () => {
 });
 
 describe('openRemoteFileView', () => {
+  test('プレビュー取得にも指定した秘密鍵パスを渡す', async () => {
+    const f = fixture();
+    const identity = 'D:/synthetic keys/id_ed25519';
+    f.setResponse(async () => f.response({ ok: false, status: 502, json: { detail: 'synthetic failure' } }));
+    expect(await f.api.openRemoteFileView(7, 'dev@host', '/srv/a.md', { identity })).toBe(false);
+    expect(new URL(f.fetches[0], 'http://localhost').searchParams.get('remote_identity')).toBe(identity);
+  });
+
   test('送り先が無い・パスが / か ~/ で始まらない・開けない種類のときは、通信もモーダルも出さない', async () => {
     const f = fixture();
     expect(await f.api.openRemoteFileView(7, '', '/srv/a.md')).toBe(false);

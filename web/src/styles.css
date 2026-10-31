@@ -2070,6 +2070,8 @@ color: var(--warn);
 #attach-fetch-btn { white-space: nowrap; }
 .remote-attach-hint { margin-bottom: 8px; line-height: 1.45; }
 .remote-attach-input { width: 100%; }
+.remote-attach-popup label { display: block; margin-top: 8px; }
+.remote-attach-popup { max-height: calc(100dvh - 16px); overflow-y: auto; }
 
 #attach-copy-cwd-btn {
   margin-left: 2px;

@@ -34,7 +34,7 @@ describe('composer input protection', () => {
   test('a failed upload returns no injects and preserves thumbnails', async () => {
     let count = 0, removed = 0, history = 0;
     const state: any = {
-      pendingAttachFiles: [], remoteAttachTarget: () => '', token: '', FormData, Blob, URL,
+      pendingAttachFiles: [], remoteAttachTarget: () => '', remoteAttachIdentity: () => '', token: '', FormData, Blob, URL,
       apiFetch: async () => ++count === 1 ? { ok: true, json: async () => ({ inject: '@first' }) } : { ok: false, status: 500 },
       showToast() {}, t: (x: string) => x, pushMessage() { history++; },
     };

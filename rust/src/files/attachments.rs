@@ -34,6 +34,7 @@ impl FilesService {
             .filter(|s| s.connected && !s.snapshot.provider.is_empty())
             .ok_or_else(|| err(404, "not_found", "session not found"))?;
         let target = r.query("remote_target");
+        let identity = r.query("remote_identity");
         let remote = if target.is_empty() {
             None
         } else {
@@ -52,9 +53,15 @@ impl FilesService {
                 stamp_prefix(SystemTime::now())?,
                 sanitized_filename(&filename, &data)
             );
-            let path =
-                remote_attach::upload(&self.ssh_executable, &self.hub_cwd, target, &name, &data)
-                    .await?;
+            let path = remote_attach::upload(
+                &self.ssh_executable,
+                &self.hub_cwd,
+                target,
+                &identity,
+                &name,
+                &data,
+            )
+            .await?;
             Some(RemoteCopy {
                 target: target.to_owned(),
                 path,
@@ -96,8 +103,15 @@ impl FilesService {
         let target = r.query("remote_target");
         let target = remote_attach::validate_target(&target)?;
         let path = r.query("path");
-        let data =
-            remote_attach::download(&self.ssh_executable, &self.hub_cwd, target, &path).await?;
+        let identity = r.query("remote_identity");
+        let data = remote_attach::download(
+            &self.ssh_executable,
+            &self.hub_cwd,
+            target,
+            &identity,
+            &path,
+        )
+        .await?;
         let name = path.rsplit('/').next().unwrap_or_default();
         let mut response = Response::bytes(200, "application/octet-stream", data).no_store();
         response

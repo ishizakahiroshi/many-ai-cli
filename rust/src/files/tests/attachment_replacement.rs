@@ -295,6 +295,42 @@ impl Drop for Fixture {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transfer_routes_reject_invalid_identity_before_starting_ssh() {
+    let mut fixture = Fixture::new().await;
+    fixture.service.ssh_executable = fixture.service.hub_cwd.join("missing-synthetic-ssh.exe");
+    let query = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("session_id", &fixture.initial.session.0.to_string())
+        .append_pair("session", &fixture.initial.session.0.to_string())
+        .append_pair("remote_target", "user@example.com")
+        .append_pair("remote_identity", "key\nnext")
+        .append_pair("path", "/tmp/synthetic.txt")
+        .finish();
+    let request = Request {
+        method: "POST".into(),
+        path: "/api/attach".into(),
+        query,
+        headers: [("Content-Type".into(), "multipart/form-data; boundary=bound".into())].into(),
+        body: b"--bound\r\nContent-Disposition: form-data; name=\"file\"; filename=\"synthetic.txt\"\r\n\r\nsynthetic\r\n--bound--\r\n".to_vec(),
+        ..Default::default()
+    };
+    let upload = fixture
+        .service
+        .attach(&request, fixture.core.as_ref(), None)
+        .await
+        .unwrap_err();
+    let download = fixture
+        .service
+        .remote_download(&request, fixture.core.as_ref())
+        .await
+        .unwrap_err();
+    for error in [upload, download] {
+        assert_eq!(error.status, 400);
+        assert!(String::from_utf8_lossy(&error.body).contains("invalid_remote_identity"));
+    }
+    assert!(fixture.history.calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn actual_core_replacement_during_attachment_save_rolls_back_only_new_local_file() {
     let fixture = Fixture::new().await;
     let mut created = None;

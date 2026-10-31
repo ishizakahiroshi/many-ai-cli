@@ -121,9 +121,10 @@ type FetchResult =
   | { reason: 'too_large'; size: number }
   | { reason: 'failed'; detail: string };
 
-async function fetchRemoteBytes(sessionId: number, target: string, path: string, maxBytes: number, signal: AbortSignal): Promise<FetchResult> {
+async function fetchRemoteBytes(sessionId: number, target: string, path: string, maxBytes: number, signal: AbortSignal, identity = ''): Promise<FetchResult> {
+  const identityQuery = identity ? `&remote_identity=${encodeURIComponent(identity)}` : '';
   const res = await apiFetch(
-    `/api/files-download?session=${encodeURIComponent(sessionId)}&remote_target=${encodeURIComponent(target)}&path=${encodeURIComponent(path)}`,
+    `/api/files-download?session=${encodeURIComponent(sessionId)}&remote_target=${encodeURIComponent(target)}&path=${encodeURIComponent(path)}${identityQuery}`,
     { signal },
   );
   if (!res.ok) {
@@ -194,7 +195,7 @@ export async function openRemoteFileView(
   sessionId: number,
   target: string,
   remotePath: string,
-  options: { onFetch?: () => void } = {},
+  options: { onFetch?: () => void; identity?: string } = {},
 ): Promise<boolean> {
   const host = String(target || '').trim();
   const path = String(remotePath || '').trim();
@@ -248,7 +249,7 @@ export async function openRemoteFileView(
   const limit = kind === 'image' ? REMOTE_VIEW_MAX_IMAGE_BYTES : REMOTE_VIEW_MAX_TEXT_BYTES;
   let result: FetchResult;
   try {
-    result = await fetchRemoteBytes(sessionId, host, path, limit, state.abort.signal);
+    result = await fetchRemoteBytes(sessionId, host, path, limit, state.abort.signal, options.identity);
   } catch (_) {
     if (state.closed) return false; // 利用者が閉じて通信を止めた
     closeFileModal();

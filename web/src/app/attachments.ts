@@ -169,7 +169,7 @@ const MAX_REMOTE_TARGETS = 50;
 // 「このPCで読むと決めた」。記録が無い（または target も local も無い）のは「まだ選んでいない」。
 // 以前は「このPCに戻す」で記録そのものを消していたので、この 2 つを区別できなかった。
 // 既存の保存値（key と target だけ）はそのまま読める。
-type RemoteTargetEntry = { key: string; target: string; local?: boolean };
+type RemoteTargetEntry = { key: string; target: string; identity?: string; local?: boolean };
 
 function remoteTargetKey(sessionId: number): string | null {
   const session = sessions.get(sessionId);
@@ -214,6 +214,11 @@ export function remoteAttachTarget(sessionId: number | null): string {
   return remoteAttachEntry(sessionId)?.target || '';
 }
 
+export function remoteAttachIdentity(sessionId: number | null): string {
+  const entry = remoteAttachEntry(sessionId);
+  return entry?.target && typeof entry.identity === 'string' ? entry.identity : '';
+}
+
 /**
  * シェルのセッションで、添付の送り先をまだ選んでいない（ssh 先も「このPCで読む」も決めていない）か。
  * シェル以外のセッションは常に false。選ばないまま添付を送ると、ssh 先から読めない PC 上のパスが入る。
@@ -225,11 +230,11 @@ export function isRemoteAttachChoicePending(sessionId: number | null): boolean {
 }
 
 /** target が空なら「このPCで読む」を選んだこととして記録する（記録は消さない）。 */
-function setRemoteAttachTarget(sessionId: number, target: string): void {
+function setRemoteAttachTarget(sessionId: number, target: string, identity = ''): void {
   const key = remoteTargetKey(sessionId);
   if (!key) return;
   const entries = loadRemoteTargets().filter((e) => e.key !== key);
-  entries.push(target ? { key, target } : { key, target: '', local: true });
+  entries.push(target ? { key, target, ...(identity ? { identity } : {}) } : { key, target: '', local: true });
   storeRemoteTargets(entries);
 }
 
@@ -336,14 +341,37 @@ function openRemoteAttachPopup(anchor: HTMLButtonElement, sessionId: number, opt
     recent.appendChild(option);
   }
 
+  const identityLabel = document.createElement('label');
+  identityLabel.className = 'agent-log-popup-title remote-attach-hint';
+  identityLabel.textContent = t('remote_attach_identity');
+  identityLabel.htmlFor = 'remote-attach-identity';
+  const identityInput = document.createElement('input');
+  identityInput.id = 'remote-attach-identity';
+  identityInput.type = 'text';
+  identityInput.className = 'ui-input remote-attach-input';
+  identityInput.value = remoteAttachIdentity(sessionId);
+  identityInput.placeholder = t('remote_attach_identity_placeholder');
+  identityInput.spellcheck = false;
+  identityInput.autocomplete = 'off';
+  identityInput.setAttribute('aria-label', t('remote_attach_identity'));
+  const identityHint = document.createElement('div');
+  identityHint.className = 'agent-log-popup-title remote-attach-hint';
+  identityHint.textContent = t('remote_attach_identity_hint');
+
   const save = () => {
     const target = input.value.trim();
+    const identity = identityInput.value.trim();
     if (target && !isValidRemoteTarget(target)) {
       input.setAttribute('aria-invalid', 'true');
       showToast(t('remote_attach_invalid'), input);
       return;
     }
-    setRemoteAttachTarget(sessionId, target);
+    if (target && (identity.length > 4096 || identity.startsWith('-') || /[\x00-\x1f\x7f-\x9f]/.test(identity))) {
+      identityInput.setAttribute('aria-invalid', 'true');
+      showToast(t('remote_attach_identity_invalid'), identityInput);
+      return;
+    }
+    setRemoteAttachTarget(sessionId, target, identity);
     closeRemoteAttachPopup();
     syncRemoteAttachButton();
     showToast(target ? t('remote_attach_saved', { target }) : t('remote_attach_cleared'), anchor);
@@ -351,7 +379,8 @@ function openRemoteAttachPopup(anchor: HTMLButtonElement, sessionId: number, opt
     opts.onDecided?.();
   };
   input.addEventListener('input', () => input.removeAttribute('aria-invalid'));
-  input.addEventListener('keydown', (e) => {
+  identityInput.addEventListener('input', () => identityInput.removeAttribute('aria-invalid'));
+  const onKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Enter' && !e.isComposing) {
       e.preventDefault();
       save();
@@ -362,7 +391,9 @@ function openRemoteAttachPopup(anchor: HTMLButtonElement, sessionId: number, opt
       if (opts.beforeSend) inputEl.focus();
       else anchor.focus();
     }
-  });
+  };
+  input.addEventListener('keydown', onKeydown);
+  identityInput.addEventListener('keydown', onKeydown);
 
   const actions = document.createElement('div');
   actions.className = 'agent-log-popup-actions';
@@ -382,7 +413,7 @@ function openRemoteAttachPopup(anchor: HTMLButtonElement, sessionId: number, opt
   });
   actions.append(saveBtn, localBtn);
 
-  box.append(title, ...(choose ? [choose] : []), hint, input, recent, actions);
+  box.append(title, ...(choose ? [choose] : []), hint, input, recent, identityLabel, identityInput, identityHint, actions);
   box.hidden = false;
   // スマホ幅では添付欄ごと隠れていて、ボタンの位置が取れない（全部 0）。そのときは入力欄の上に出す。
   let rect = anchor.getBoundingClientRect();
@@ -462,8 +493,10 @@ export async function fetchRemoteFile(sessionId: number, remotePath: string, anc
   rememberFetchPath(path);
   showToast(t('remote_fetch_started', { target }), anchor);
   try {
+    const identity = remoteAttachIdentity(sessionId);
+    const identityQuery = identity ? `&remote_identity=${encodeURIComponent(identity)}` : '';
     const res = await apiFetch(
-      `/api/files-download?session=${encodeURIComponent(sessionId)}&remote_target=${encodeURIComponent(target)}&path=${encodeURIComponent(path)}`
+      `/api/files-download?session=${encodeURIComponent(sessionId)}&remote_target=${encodeURIComponent(target)}&path=${encodeURIComponent(path)}${identityQuery}`
     );
     if (!res.ok) {
       const detail = await res.json().then((body) => String(body?.detail || ''), () => '');
@@ -494,7 +527,7 @@ export async function fetchRemoteFile(sessionId: number, remotePath: string, anc
  * （remote-file-view.ts）。画面の「取ってくる」ボタンから同じファイルを保存もできる。
  */
 function openRemoteFile(sessionId: number, path: string): Promise<boolean> {
-  return openRemoteFileView(sessionId, remoteAttachTarget(sessionId), path, { onFetch: () => { void fetchRemoteFile(sessionId, path); } });
+  return openRemoteFileView(sessionId, remoteAttachTarget(sessionId), path, { identity: remoteAttachIdentity(sessionId), onFetch: () => { void fetchRemoteFile(sessionId, path); } });
 }
 
 /**
@@ -906,7 +939,8 @@ export async function flushPendingAttach(sessionId, capturedFiles?: any[]) {
   const historyAttachments = [];
   // シェルのセッションで送り先（ssh 先）が決まっていれば、Hub が ssh で送って送り先のパスを返す。
   const remoteTarget = remoteAttachTarget(sessionId);
-  const remoteQuery = remoteTarget ? `&remote_target=${encodeURIComponent(remoteTarget)}` : '';
+  const identity = remoteAttachIdentity(sessionId);
+  const remoteQuery = remoteTarget ? `&remote_target=${encodeURIComponent(remoteTarget)}${identity ? `&remote_identity=${encodeURIComponent(identity)}` : ''}` : '';
   for (const { buf, filename } of toSend) {
     try {
       const formData = new FormData();

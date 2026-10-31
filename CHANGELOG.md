@@ -10,6 +10,12 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Fixed
+
+- Shell attachment destinations can specify an SSH private key file for uploads,
+  downloads, and remote file previews, including keys passed with `ssh -i` when
+  connecting in the terminal.
+
 ## [1.0.0] - 2026-10-31
 
 This release replaces the Go implementation of many-ai-cli with a Rust one.

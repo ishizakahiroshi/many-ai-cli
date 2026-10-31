@@ -57,7 +57,7 @@ function fixture(opts: { stored?: unknown; storageBroken?: boolean } = {}) {
   ]);
   const ctx: any = {
     Element: FakeEl, HTMLElement: FakeEl, HTMLTextAreaElement: class {}, HTMLInputElement: class {},
-    URL, File, Blob, setTimeout,
+    URL, File, Blob, FormData, setTimeout,
     document: {
       body,
       getElementById: (id: string) => (id === 'attach-remote-btn' ? remoteBtn : null),
@@ -95,6 +95,53 @@ function fixture(opts: { stored?: unknown; storageBroken?: boolean } = {}) {
 }
 
 describe('添付の送り先: 「まだ選んでいない」と「このPCで読むと決めた」を区別して覚える', () => {
+  test('秘密鍵パスを保存して再読込し、セッションごとに保持する。ローカルへ戻すと解除する', () => {
+    const f = fixture();
+    f.remoteBtn.fire('click');
+    f.inputBox().value = 'user@example.com';
+    const keyInput = f.popup().children.find((c) => c.id === 'remote-attach-identity')!;
+    keyInput.value = 'D:/synthetic keys/id_ed25519';
+    f.findButton('remote_attach_save').fire('click');
+    const restored = fixture({ stored: f.stored() });
+    expect(restored.ctx.remoteAttachIdentity(7)).toBe(keyInput.value);
+    expect(restored.ctx.remoteAttachIdentity(9)).toBe('');
+    restored.ctx.setRemoteAttachTarget(7, '');
+    expect(restored.ctx.remoteAttachIdentity(7)).toBe('');
+    expect(restored.stored()[0].identity).toBeUndefined();
+  });
+
+  test('送信と取得は保存した秘密鍵パスを API へ渡す', async () => {
+    const f = fixture();
+    const key = 'D:/synthetic keys/id_ed25519';
+    f.ctx.setRemoteAttachTarget(7, 'user@example.com', key);
+    const requests: string[] = [];
+    f.ctx.apiFetch = async (url: string) => {
+      requests.push(url);
+      return { ok: false, status: 502, json: async () => ({ detail: 'synthetic failure' }) };
+    };
+    const files = [{ filename: 'a.txt', buf: new Uint8Array([1]).buffer }];
+    expect(await f.ctx.flushPendingAttach(7, files)).toBeNull();
+    f.ctx.isFetchableRemotePath = () => true;
+    expect(await f.ctx.fetchRemoteFile(7, '/tmp/a.txt')).toBe(false);
+    expect(requests).toHaveLength(2);
+    for (const url of requests) {
+      const params = new URL(url, 'http://localhost').searchParams;
+      expect(params.get('remote_identity')).toBe(key);
+      expect(params.get('remote_target')).toBe('user@example.com');
+    }
+    expect(files).toHaveLength(1);
+  });
+
+  test('鍵パスに改行を含むと保存せず、窓を閉じない', () => {
+    const f = fixture();
+    f.remoteBtn.fire('click');
+    f.inputBox().value = 'user@example.com';
+    f.popup().children.find((c) => c.id === 'remote-attach-identity')!.value = 'key\nnext';
+    f.findButton('remote_attach_save').fire('click');
+    expect(f.popup().hidden).toBe(false);
+    expect(f.stored()).toEqual([]);
+  });
+
   test('シェルのセッションは記録が無ければ未選択。シェル以外・セッション無しは未選択扱いにしない', () => {
     const f = fixture();
     expect(f.ctx.isRemoteAttachChoicePending(7)).toBe(true);

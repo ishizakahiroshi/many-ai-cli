@@ -128,11 +128,20 @@ pub fn fetch_script() -> String {
 
 /// ssh joins everything after the destination with spaces and hands it to the
 /// destination's login shell, so the script and its arguments are quoted for it.
-fn ssh_command(target: &str, script: &str, argv0: &str, script_args: &[&str]) -> Vec<String> {
+fn ssh_command(
+    target: &str,
+    identity: &str,
+    script: &str,
+    argv0: &str,
+    script_args: &[&str],
+) -> Vec<String> {
     let mut args: Vec<String> = ["-T", "-o", "BatchMode=yes", "-o"]
         .map(String::from)
         .to_vec();
     args.push(format!("ConnectTimeout={CONNECT_TIMEOUT_SECS}"));
+    if !identity.is_empty() {
+        args.extend(["-i".into(), identity.into()]);
+    }
     args.extend([
         "--".into(),
         target.into(),
@@ -145,16 +154,42 @@ fn ssh_command(target: &str, script: &str, argv0: &str, script_args: &[&str]) ->
     args
 }
 
-pub fn ssh_args(target: &str, name: &str) -> Vec<String> {
-    ssh_command(target, &remote_script(), "many-ai-cli-attach", &[name])
+pub fn ssh_args(target: &str, identity: &str, name: &str) -> Vec<String> {
+    ssh_command(
+        target,
+        identity,
+        &remote_script(),
+        "many-ai-cli-attach",
+        &[name],
+    )
 }
 
-pub fn fetch_args(target: &str, path: &RemotePath) -> Vec<String> {
+pub fn fetch_args(target: &str, identity: &str, path: &RemotePath) -> Vec<String> {
     let (path, base) = match path {
         RemotePath::Absolute(p) => (*p, "absolute"),
         RemotePath::Home(p) => (*p, "home"),
     };
-    ssh_command(target, &fetch_script(), "many-ai-cli-fetch", &[path, base])
+    ssh_command(
+        target,
+        identity,
+        &fetch_script(),
+        "many-ai-cli-fetch",
+        &[path, base],
+    )
+}
+
+/// A local filename only, never SSH options or private key contents.
+pub fn validate_identity(identity: &str) -> Result<&str> {
+    if identity.len() > 4096 || identity.chars().any(char::is_control) || identity.starts_with('-')
+    {
+        Err(err(
+            400,
+            "invalid_remote_identity",
+            "identity must be a local private key file path",
+        ))
+    } else {
+        Ok(identity)
+    }
 }
 
 pub fn parse_remote_path(stdout: &[u8], name: &str) -> Option<String> {
@@ -236,13 +271,14 @@ pub async fn upload(
     ssh: &Path,
     cwd: &Path,
     target: &str,
+    identity: &str,
     name: &str,
     data: &[u8],
 ) -> Result<String> {
     let output = run_ssh(
         ssh,
         cwd,
-        ssh_args(target, name),
+        ssh_args(target, validate_identity(identity)?, name),
         Some(data),
         1024 * 1024,
         "remote_upload_failed",
@@ -266,14 +302,20 @@ pub async fn upload(
     }
 }
 
-pub async fn download(ssh: &Path, cwd: &Path, target: &str, path: &str) -> Result<Vec<u8>> {
+pub async fn download(
+    ssh: &Path,
+    cwd: &Path,
+    target: &str,
+    identity: &str,
+    path: &str,
+) -> Result<Vec<u8>> {
     let path = validate_remote_path(path)?;
     // Room for whatever a login shell prints before the marker.
     let cap = FETCH_MAX + 64 * 1024;
     let output = run_ssh(
         ssh,
         cwd,
-        fetch_args(target, &path),
+        fetch_args(target, validate_identity(identity)?, &path),
         None,
         cap,
         "remote_fetch_failed",
@@ -352,7 +394,7 @@ mod tests {
 
     #[test]
     fn destination_follows_the_option_terminator_and_the_command_is_quoted() {
-        let args = ssh_args("myserver", "20261015_000000001_shot.png");
+        let args = ssh_args("myserver", "", "20261015_000000001_shot.png");
         let dashdash = args.iter().position(|a| a == "--").unwrap();
         assert_eq!(args[dashdash + 1], "myserver");
         assert!(args[..dashdash].contains(&"BatchMode=yes".to_owned()));
@@ -368,6 +410,31 @@ mod tests {
         assert!(!script.contains('\\'));
         assert!(script.contains(REMOTE_DIR));
         assert!(script.contains(&format!("-mtime +{}", REMOTE_RETENTION_DAYS - 1)));
+    }
+
+    #[test]
+    fn identity_is_one_local_argument_for_both_transfer_directions() {
+        let identity = "D:/synthetic keys/key';$(echo no)";
+        assert!(validate_identity(identity).is_ok());
+        for args in [
+            ssh_args("user@example.com", identity, "shot.png"),
+            fetch_args("user@example.com", identity, &RemotePath::Home("shot.png")),
+        ] {
+            let key = args.iter().position(|a| a == "-i").unwrap();
+            let separator = args.iter().position(|a| a == "--").unwrap();
+            assert_eq!(args[key + 1], identity);
+            assert!(key + 1 < separator);
+            assert!(!args[separator + 1..].iter().any(|a| a.contains(identity)));
+        }
+        assert!(
+            !ssh_args("myserver", "", "shot.png")
+                .iter()
+                .any(|a| a == "-i")
+        );
+        for bad in ["-oProxyCommand=anything", "a\nb", "a\0b"] {
+            assert!(validate_identity(bad).is_err());
+        }
+        assert!(validate_identity(&"a".repeat(4097)).is_err());
     }
 
     #[test]
@@ -408,7 +475,7 @@ mod tests {
     async fn an_unstartable_ssh_is_reported_instead_of_a_local_path() {
         let dir = tempfile::tempdir().unwrap();
         let missing = dir.path().join("missing-ssh-for-test.exe");
-        let error = upload(&missing, dir.path(), "myserver", "a.txt", b"synthetic")
+        let error = upload(&missing, dir.path(), "myserver", "", "a.txt", b"synthetic")
             .await
             .unwrap_err();
         assert_eq!(error.status, 502);
@@ -444,14 +511,14 @@ mod tests {
 
     #[test]
     fn fetch_quotes_the_path_after_the_destination() {
-        let args = fetch_args("myserver", &RemotePath::Home("it's here.png"));
+        let args = fetch_args("myserver", "", &RemotePath::Home("it's here.png"));
         let dashdash = args.iter().position(|a| a == "--").unwrap();
         assert_eq!(args[dashdash + 1], "myserver");
         assert_eq!(args[dashdash + 2..dashdash + 4], ["sh", "-c"]);
         assert_eq!(args[dashdash + 5], "many-ai-cli-fetch");
         assert_eq!(args[dashdash + 6], "'it'\\''s here.png'");
         assert_eq!(args[dashdash + 7], "'home'");
-        let absolute = fetch_args("myserver", &RemotePath::Absolute("/tmp/a.png"));
+        let absolute = fetch_args("myserver", "", &RemotePath::Absolute("/tmp/a.png"));
         assert_eq!(absolute.last().unwrap(), "'absolute'");
     }
 
@@ -484,12 +551,12 @@ mod tests {
     async fn an_unstartable_ssh_fails_the_fetch_and_a_relative_path_never_starts_it() {
         let dir = tempfile::tempdir().unwrap();
         let missing = dir.path().join("missing-ssh-for-test.exe");
-        let error = download(&missing, dir.path(), "myserver", "/tmp/a.png")
+        let error = download(&missing, dir.path(), "myserver", "", "/tmp/a.png")
             .await
             .unwrap_err();
         assert_eq!(error.status, 502);
         assert!(String::from_utf8_lossy(&error.body).contains("remote_fetch_failed"));
-        let error = download(&missing, dir.path(), "myserver", "a.png")
+        let error = download(&missing, dir.path(), "myserver", "", "a.png")
             .await
             .unwrap_err();
         assert_eq!(error.status, 400);
