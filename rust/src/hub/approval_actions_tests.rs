@@ -325,7 +325,7 @@ fn issue(f: &Fixture, binding: SessionBinding, action: OneTapAction) -> String {
     let b = bound(f, binding);
     f.manager
         .issue(
-            binding.session,
+            binding,
             &b.sig,
             &b.sig,
             b.source_epoch,
@@ -450,7 +450,17 @@ async fn invalid_expired_and_mismatched_tokens_never_send_or_consume() {
     ] {
         let token = f
             .manager
-            .issue(sid, aid, sig, epoch, OneTapAction::Approve, now())
+            .issue(
+                SessionBinding {
+                    session: sid,
+                    ..session
+                },
+                aid,
+                sig,
+                epoch,
+                OneTapAction::Approve,
+                now(),
+            )
             .unwrap();
         error(&call(&f, &token).await, 409, "approval_not_pending");
         let claim = f.manager.verify(&token, now()).unwrap();
@@ -986,7 +996,11 @@ fn nanosecond_expiry_boundary_matches_extracted_fixed_go_consumption() {
         let manager = OneTapManager::new().unwrap();
         let token = manager
             .issue(
-                LiveSessionId(1),
+                SessionBinding {
+                    session: LiveSessionId(1),
+                    incarnation: SessionIncarnation(1),
+                    wrapper: WrapperConnectionId(1),
+                },
                 "sig",
                 "sig",
                 ApprovalSourceEpoch(1),
@@ -1092,6 +1106,327 @@ async fn served_one_tap_ignores_body_and_survives_http_disconnect_until_effect_d
     assert_eq!(rows[0].selected_text, "\r");
     cancel.cancel();
     server.await.unwrap().unwrap();
+}
+
+struct ServedOneTap {
+    port: u16,
+    client: reqwest::Client,
+    owner: crate::hub::task_owner::HubTaskOwner,
+    cancel: crate::process::Cancellation,
+    server: Option<tokio::task::JoinHandle<std::io::Result<()>>>,
+}
+impl Drop for ServedOneTap {
+    fn drop(&mut self) {
+        // Assertion failures must not leave a detached loopback server running.
+        self.cancel.cancel();
+        if let Some(server) = self.server.take() {
+            server.abort();
+        }
+    }
+}
+impl ServedOneTap {
+    async fn start(f: &Fixture) -> Self {
+        use crate::hub::{ServiceRouter, task_owner::HubTaskOwner, transport};
+        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let paths = RuntimePaths::trial(f._root.path(), port, f._installed.path()).unwrap();
+        let config = Arc::new(
+            crate::config::ConfigStore::load_or_create(paths.clone(), || {
+                Ok("synthetic-one-tap-ordinary-token".into())
+            })
+            .unwrap(),
+        );
+        let owner = HubTaskOwner::new(tokio::runtime::Handle::current());
+        let router = Arc::new(
+            ServiceRouter::new(config, paths, f.core.clone(), port)
+                .unwrap()
+                .with_approval_actions(f.http.clone(), Arc::new(Rules::default()))
+                .with_task_owner(owner.handle()),
+        );
+        let cancel = crate::process::Cancellation::default();
+        let server = tokio::spawn(transport::serve(
+            listener,
+            router,
+            f.sink.clone(),
+            cancel.clone(),
+        ));
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(3))
+            .build()
+            .unwrap();
+        Self {
+            port,
+            client,
+            owner,
+            cancel,
+            server: Some(server),
+        }
+    }
+    async fn post(&self, f: &Fixture, token: &str) -> (u16, serde_json::Value) {
+        // Deliberately omit ordinary Hub credentials: only the signed capability
+        // authorizes this route. The client has no proxy, redirect or cookie jar.
+        let response = self
+            .client
+            .post(format!(
+                "http://127.0.0.1:{}/api/approval-action/{token}",
+                self.port
+            ))
+            .send()
+            .await
+            .unwrap();
+        let status = response.status().as_u16();
+        let body = response.json().await.unwrap();
+        f.tasks.drain().await;
+        (status, body)
+    }
+    async fn stop(mut self) {
+        self.owner.stop_requests();
+        tokio::time::timeout(Duration::from_secs(3), self.owner.drain_requests())
+            .await
+            .unwrap();
+        self.owner.stop_effects().unwrap();
+        tokio::time::timeout(Duration::from_secs(3), self.owner.drain_effects())
+            .await
+            .unwrap();
+        self.cancel.cancel();
+        tokio::time::timeout(Duration::from_secs(3), self.server.take().unwrap())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn served_one_tap_rejects_each_tampered_signed_field_without_consuming_the_valid_token() {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    let f = fixture();
+    let binding = native(&f, "git status").await;
+    let original = bound(&f, binding);
+    let token = issue(&f, binding, OneTapAction::Approve);
+    let (encoded, signature) = token.split_once('.').unwrap();
+    let claim: serde_json::Value =
+        serde_json::from_slice(&URL_SAFE_NO_PAD.decode(encoded).unwrap()).unwrap();
+    let served = ServedOneTap::start(&f).await;
+    let messages = f.sink.messages.lock().unwrap().len();
+    let rows_before = f
+        .store
+        .approvals_by_live_session(binding.session, 10, false)
+        .unwrap()
+        .unwrap();
+    for (field, value) in [
+        ("v", json!(3)),
+        ("sid", json!(binding.session.0 + 1)),
+        ("inc", json!(binding.incarnation.0 + 1)),
+        ("aid", json!("different-approval")),
+        ("sig", json!("different-signature")),
+        ("ep", json!(original.source_epoch.0 + 1)),
+        ("act", json!("reject")),
+        ("exp", json!(1_800_000_000)),
+        ("n", json!("different-nonce")),
+    ] {
+        let mut altered = claim.clone();
+        altered[field] = value;
+        let invalid = format!(
+            "{}.{signature}",
+            URL_SAFE_NO_PAD.encode(serde_json::to_vec(&altered).unwrap())
+        );
+        let (status, body) = served.post(&f, &invalid).await;
+        assert_eq!(status, 401, "signed field {field}");
+        assert_eq!(
+            body["error"], "invalid_action_token",
+            "signed field {field}"
+        );
+        assert_eq!(bound(&f, binding), original, "signed field {field}");
+        assert!(frames(&f).is_empty(), "signed field {field}");
+        assert_eq!(f.sink.consumed.load(Ordering::SeqCst), 0);
+        assert_eq!(f.sink.messages.lock().unwrap().len(), messages);
+        let rows = f
+            .store
+            .approvals_by_live_session(binding.session, 10, false)
+            .unwrap()
+            .unwrap();
+        assert_eq!(rows.len(), rows_before.len());
+        assert_eq!(rows[0].state, rows_before[0].state);
+        assert_eq!(rows[0].selected_text, rows_before[0].selected_text);
+    }
+    let mut signature_bytes = URL_SAFE_NO_PAD.decode(signature).unwrap();
+    signature_bytes[0] ^= 1;
+    let invalid = format!("{encoded}.{}", URL_SAFE_NO_PAD.encode(signature_bytes));
+    assert_eq!(served.post(&f, &invalid).await.0, 401);
+    *f.clock.lock().unwrap() = now() + ONE_TAP_TTL;
+    assert_eq!(served.post(&f, &token).await.0, 401);
+    assert!(frames(&f).is_empty());
+    assert_eq!(bound(&f, binding), original);
+    *f.clock.lock().unwrap() = now();
+    assert_eq!(served.post(&f, &token).await.0, 200);
+    assert_eq!(frames(&f), vec![b"\r".to_vec()]);
+    assert_eq!(f.sink.consumed.load(Ordering::SeqCst), 1);
+    assert_eq!(served.post(&f, &token).await.0, 409);
+    assert_eq!(frames(&f).len(), 1);
+    served.stop().await;
+}
+
+#[tokio::test]
+async fn served_one_tap_rejects_independently_signed_candidate_mismatches_before_valid_action() {
+    let f = fixture();
+    let binding = native(&f, "git status").await;
+    let original = bound(&f, binding);
+    let served = ServedOneTap::start(&f).await;
+    for (sid, aid, sig, epoch) in [
+        (
+            LiveSessionId(987),
+            original.sig.as_str(),
+            original.sig.as_str(),
+            original.source_epoch,
+        ),
+        (
+            binding.session,
+            "different-approval",
+            original.sig.as_str(),
+            original.source_epoch,
+        ),
+        (
+            binding.session,
+            original.sig.as_str(),
+            "different-signature",
+            original.source_epoch,
+        ),
+        (
+            binding.session,
+            original.sig.as_str(),
+            original.sig.as_str(),
+            ApprovalSourceEpoch(original.source_epoch.0 + 1),
+        ),
+    ] {
+        let token = f
+            .manager
+            .issue(
+                SessionBinding {
+                    session: sid,
+                    ..binding
+                },
+                aid,
+                sig,
+                epoch,
+                OneTapAction::Approve,
+                now(),
+            )
+            .unwrap();
+        let (status, body) = served.post(&f, &token).await;
+        assert_eq!(status, 409);
+        assert_eq!(body["error"], "approval_not_pending");
+        assert!(frames(&f).is_empty());
+        assert_eq!(bound(&f, binding), original);
+        assert_eq!(f.sink.consumed.load(Ordering::SeqCst), 0);
+        // A rejected correctly signed capability was not consumed.
+        let claim = f.manager.verify(&token, now()).unwrap();
+        f.manager.consume(&claim, now()).unwrap();
+    }
+    let valid = issue(&f, binding, OneTapAction::Reject);
+    assert_eq!(served.post(&f, &valid).await.0, 200);
+    assert_eq!(frames(&f), vec![b"2\r".to_vec()]);
+    served.stop().await;
+}
+
+#[tokio::test]
+async fn served_one_tap_rejects_a_previous_incarnation_before_dispatching_to_the_replacement() {
+    let f = fixture();
+    let old = native(&f, "git status").await;
+    let old_approval = bound(&f, old);
+    let old_token = issue(&f, old, OneTapAction::Approve);
+    // Removing a connected session deliberately permits its wrapper to reattach
+    // cold under the same live ID; the real core assigns a fresh incarnation.
+    // Effects are not executed here: no real process is cancelled or UI opened.
+    drop(f.core.dismiss(old.session, now()).unwrap());
+    let replacement = f
+        .core
+        .reattach(
+            ReattachRequest {
+                restored_metadata: None,
+                message: proto::Message {
+                    session_id: old.session.0,
+                    provider: "claude".into(),
+                    cwd: "/synthetic/project".into(),
+                    pid: 7,
+                    cols: 120,
+                    rows: 30,
+                    ..Default::default()
+                },
+            },
+            WrapperConnectionId(2),
+            now(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(replacement.binding.session, old.session);
+    assert_ne!(replacement.binding.incarnation, old.incarnation);
+    drop(replacement.after_reattached);
+    repaint(&f, replacement.binding, "git status", true).await;
+    let replacement_approval = bound(&f, replacement.binding);
+    // Keep every existing signed candidate field equal, isolating incarnation.
+    assert_eq!(replacement_approval.sig, old_approval.sig);
+    assert_eq!(replacement_approval.source_epoch, old_approval.source_epoch);
+    let served = ServedOneTap::start(&f).await;
+    let (status, _) = served.post(&f, &old_token).await;
+    assert_eq!(
+        status, 409,
+        "a prior incarnation cannot authorize its replacement"
+    );
+    assert!(frames(&f).is_empty());
+    assert_eq!(bound(&f, replacement.binding), replacement_approval);
+    assert_eq!(f.sink.consumed.load(Ordering::SeqCst), 0);
+    let fresh = issue(&f, replacement.binding, OneTapAction::Reject);
+    assert_eq!(served.post(&f, &fresh).await.0, 200);
+    assert_eq!(frames(&f), vec![b"2\r".to_vec()]);
+    served.stop().await;
+}
+
+#[tokio::test]
+async fn served_one_tap_preserves_authority_across_a_warm_wrapper_reattach() {
+    let f = fixture();
+    let old = native(&f, "git status").await;
+    let old_approval = bound(&f, old);
+    let token = issue(&f, old, OneTapAction::Approve);
+    let replacement = f
+        .core
+        .reattach(
+            ReattachRequest {
+                restored_metadata: None,
+                message: proto::Message {
+                    session_id: old.session.0,
+                    provider: "claude".into(),
+                    cwd: "/synthetic/project".into(),
+                    pid: 7,
+                    cols: 120,
+                    rows: 30,
+                    ..Default::default()
+                },
+            },
+            WrapperConnectionId(2),
+            now(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(replacement.binding.session, old.session);
+    assert_eq!(replacement.binding.incarnation, old.incarnation);
+    assert_ne!(replacement.binding.wrapper, old.wrapper);
+    drop(replacement.after_reattached);
+    let current = bound(&f, replacement.binding);
+    assert_eq!(current.sig, old_approval.sig);
+    assert_eq!(current.source_epoch, old_approval.source_epoch);
+    let served = ServedOneTap::start(&f).await;
+    let (status, body) = served.post(&f, &token).await;
+    assert_eq!(status, 200);
+    assert_eq!(body["session_id"], old.session.0);
+    assert_eq!(frames(&f), vec![b"\r".to_vec()]);
+    assert!(!pending(&f, replacement.binding));
+    assert_eq!(f.sink.consumed.load(Ordering::SeqCst), 1);
+    served.stop().await;
 }
 
 #[tokio::test]

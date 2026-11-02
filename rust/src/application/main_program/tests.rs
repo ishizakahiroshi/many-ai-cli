@@ -5,6 +5,7 @@ use crate::{
     proto::core::TerminalSize,
 };
 use std::{sync::Arc, time::Duration};
+mod relay_callbacks;
 async fn fixture_context(root: &tempfile::TempDir) -> MainContext {
     let socket = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
         .await

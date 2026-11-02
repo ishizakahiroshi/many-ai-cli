@@ -27,7 +27,7 @@ base64 = "=0.22.1"
 getrandom = "=0.4.3"
 url = "=2.5.8"
 serde-saphyr = "=1.3.0"
-tokio = { version = "=1.53.1", features = ["rt-multi-thread", "macros", "process", "io-util", "time", "sync", "signal", "net"] }
+tokio = { version = "=1.53.3", features = ["rt-multi-thread", "macros", "process", "io-util", "time", "sync", "signal", "net"] }
 
 rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled", "backup", "hooks"] }
 portable-pty = "=0.9.0"
@@ -50,7 +50,7 @@ reqwest = { version = "=0.13.5", default-features = false, features = ["rustls",
 flate2 = "=1.1.10"
 zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 tar = { version = "=0.4.46", default-features = false }
-p256 = { version = "=0.13.2", default-features = false, features = ["ecdh", "ecdsa", "std"] }
+p256 = { version = "=0.14.0", default-features = false, features = ["ecdh", "ecdsa", "std"] }
 aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "alloc"] }
 hkdf = "=0.12.4"
 sha2_010 = { package = "sha2", version = "=0.10.9" }
@@ -63,7 +63,7 @@ windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Secu
 
 [dev-dependencies]
 tempfile = "=3.27.0"
-tokio = { version = "=1.53.1", features = ["test-util"] }
+tokio = { version = "=1.53.3", features = ["test-util"] }
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

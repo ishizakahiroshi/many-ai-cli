@@ -2,7 +2,7 @@
 
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Go](https://img.shields.io/badge/go-1.25+-blue)
+![Rust](https://img.shields.io/badge/rust-1.90.0-blue)
 
 ![many-ai-cli dashboard](assets/readme-dashboard.png)
 
@@ -114,6 +114,7 @@ Giới hạn đã biết: cơ chế cố ý nhẹ. Board poll 2 giây + inject E
 - **UI local-first** — HTTP/WebSocket Hub chỉ bind `127.0.0.1`; bản thân `many-ai-cli` không telemetry
 - **Bảo vệ truy cập remote** — Settings → «Remote access protection»: **Thu hồi toàn bộ truy cập** (regenerate token + cookie), **PIN tùy chọn** chỉ khi non-loopback (mặc định tắt, có lockout), **thông báo thiết bị mới**
   - Khi PIN hết hạn hoặc đăng xuất, các màn hình remote dùng phiên PIN đó sẽ bị ngắt. Đổi, bật hoặc tắt PIN sẽ ngắt các màn hình remote hiện có; hãy kết nối lại và xác thực khi được yêu cầu. Phiên AI/terminal đang chạy và màn hình local vẫn được giữ. Hub hoàn tất phần nhập đã tiếp nhận trước khi đóng màn hình; dữ liệu nhập mới và dữ liệu gửi tới màn hình bị từ chối sau khi quyền hết hiệu lực.
+  - Với âm thanh Whisper tải lên qua Hub, quyền truy cập được kiểm tra lại sau khi tải lên và ngay trước khi bắt đầu nhận dạng. Yêu cầu đã hết quyền sẽ bị từ chối trước khi nhận dạng; quá trình nhận dạng đã bắt đầu có thể hoàn tất.
 
 ---
 
@@ -158,6 +159,8 @@ Build Linux/macOS được kỳ vọng chạy được nhưng chưa validate đ�
 
 **Cài cho developer (npm registry — khuyến nghị):**
 
+Dùng Node.js còn được hỗ trợ và đã có bản vá bảo mật cho launcher Node (ví dụ Node.js 22.23.4 LTS hoặc bản mới hơn đã vá). Phạm vi engine của package mô tả khả năng tương thích, không bảo đảm thời hạn hỗ trợ bảo mật. [Bản vá Node.js](https://nodejs.org/en/blog/release/v22.23.4).
+
 ```powershell
 pnpm add -g many-ai-cli
 ```
@@ -171,7 +174,7 @@ npm install -g many-ai-cli
 
 Sau cài → [Bắt đầu ngay sau cài](#bắt-đầu-ngay-sau-cài). Nếu shell chưa nhận global bin: `pnpm exec many-ai-cli setup` vẫn tạo shortcut.
 
-> Publish npm từ v0.3.0. Package ship binary Go native theo platform dạng optional dependency — không tải qua trình duyệt; launcher sinh local lúc cài, không dính Mark-of-the-Web (tránh một lớp SmartScreen). **Không** thay Authenticode signing: Smart App Control / WDAC / AppLocker / EDR / AV xử lý riêng. Lệnh global không thấy: `pnpm setup` hoặc mở lại shell để `PATH` có global bin.
+> Publish npm từ v0.3.0. Package cài binary native theo platform dạng optional dependency; launcher Node nhỏ tìm và khởi chạy binary. Cài qua package manager bỏ qua bước tải bằng trình duyệt nhưng không bảo đảm Windows cho phép thực thi. SmartScreen, Smart App Control / WDAC / AppLocker / EDR / AV vẫn áp dụng riêng. Lệnh global không thấy: `pnpm setup` hoặc mở lại shell để `PATH` có global bin.
 
 **Windows (winget) — dán một dòng:**
 

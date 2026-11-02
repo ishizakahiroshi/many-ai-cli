@@ -200,7 +200,11 @@ pub fn spawn(plan: &ProcessPlan, dimensions: PtySize) -> io::Result<Arc<dyn PtyS
     if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
         return Err(io::Error::last_os_error());
     }
-    let descriptor = Arc::new(AsyncFd::new(file)?);
+    // SAFETY: `file` exclusively owns the valid F_DUPFD_CLOEXEC descriptor.
+    // Moving it into AsyncFd keeps that descriptor open and unchanged until
+    // deregistration; all shared I/O keeps the same Arc alive. The portable
+    // master owns a separate descriptor, so closing it does not close this one.
+    let descriptor = Arc::new(unsafe { AsyncFd::register(file)? });
     let mut command = CommandBuilder::new(&plan.executable);
     command.args(&plan.args);
     command.cwd(&plan.cwd);

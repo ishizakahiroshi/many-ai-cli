@@ -1,4 +1,4 @@
-# Rust migration candidate
+# Rust development mainline
 
 Since 2026-10-19 this Rust version is the main line on `develop`. The frozen Go
 sources moved to [`../go/`](../go/) and are neither built nor checked. Source
@@ -7,8 +7,9 @@ to them, where those paths are at the repository root. Assets that the Rust
 build embeds (launcher UI, provider manifests, Windows runtime payload) live in
 [`assets/`](assets/); nothing in the product reads `go/`.
 
-This directory began as an incremental implementation of the fixed Go contracts,
-not a replacement for the running Go application. Follow
+This directory began as an incremental implementation of the fixed Go contracts.
+The Rust Hub, wrapper and launcher now provide the runtime entry points on
+`develop`. Historical migration checkpoints are recorded in
 [`docs/bot/rust-migration/README.md`](../docs/bot/rust-migration/README.md) and the
 [progress ledger](../docs/bot/rust-migration/PROGRESS.md).
 
@@ -28,37 +29,39 @@ cutover acceptance remains pending.
 
 ## Validation
 
-Use Rust 1.90.0, Go 1.26.8 and Bun 1.3.14. The original dependency snapshot and official input
+Use Rust 1.90.0 and Bun 1.3.14. The original dependency snapshot and official input
 checksums are in `inventory/dependencies.json`; the current `Cargo.lock` fixes
 resolved inputs. Final dependency license/SBOM distribution acceptance is pending.
 
 ```sh
 (cd ../web && bun install --frozen-lockfile && bun run check && bun run build)
-cargo fmt -- --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked
-cargo build --locked --bins
+cargo +1.90.0 fmt -- --check
+cargo +1.90.0 clippy --locked --all-targets -- -D warnings
+cargo +1.90.0 test --locked
 ```
 
 The build requires the real generated Web bundle and embeds it plus the existing
 launcher UI; it does not substitute an empty dashboard. No working-directory
-lookup is required at runtime. Windows resource/native runtime packaging, signed
-distribution and clean native acceptance on every target remain pending.
+lookup is required at runtime. Formal Windows builds require prepared icon/version
+resources and verified runtime inputs; see [packaging/README.md](packaging/README.md)
+for the current contract. Building and starting the product are separate operator
+actions under the repository's agent guidance. Final distribution and acceptance
+of the same candidate on every target remain separate gates.
 
-Regenerate the protocol DTOs and synthetic Go serialization oracle from the repo
-root, then format and run the Rust contracts:
+Protocol DTOs and compatibility fixtures are checked in. Rust contract tests read
+those fixed inputs; routine validation does not regenerate them or rebuild the
+frozen Go application. From the repository root, run:
 
 ```sh
-python3 rust/scripts/generate-proto.py
-go run ./rust/tests/oracle > rust/tests/fixtures/foundation/proto-golden.json
-cargo fmt --manifest-path rust/Cargo.toml
-cargo test --locked --manifest-path rust/Cargo.toml --test proto_golden
+cargo +1.90.0 test --locked --manifest-path rust/Cargo.toml --test proto_golden
 ```
 
-The oracle imports only the frozen protocol package and emits synthetic data. It
-never loads real configuration, contacts providers, or starts a Hub. Tests use
-temporary roots and fake processes. Cross-target `cargo check` proves source
-compilation, not native PTY/process/ACL/mobile/device acceptance.
+Some historical compatibility tests explicitly require a pinned Go oracle. Their
+results belong to the environment that actually runs them; an unavailable oracle
+must not be reported as a successful compatibility check or worked around by
+weakening assertions. Tests use temporary roots and fake processes. Cross-target
+`cargo check` proves source compilation, not native PTY/process/ACL/mobile/device
+or update/recovery acceptance.
 
 ## Shared foundation
 
@@ -66,7 +69,7 @@ compilation, not native PTY/process/ACL/mobile/device acceptance.
   optional zero values, explicit activity flags and nullable required arrays
 - `proto/core.rs`: distinct session/database/epoch identities; session/storage,
   input, approvals, event, admission and spawn/update interfaces; real in-memory
-  admission invariant helpers, with downstream service implementations pending
+  admission invariant helpers
 - `config/`: explicit root/resource paths, private atomic files and typed settings
 - `process/`: bounded owned subprocess capture, input, cancellation and outcome
 - `inventory/`: source-to-contract inventories; null implementation/receipt fields
@@ -74,18 +77,20 @@ compilation, not native PTY/process/ACL/mobile/device acceptance.
 
 Do not install over an existing application or run old/new writers on one database.
 A trial requires an explicit disjoint root and non-default loopback port. The
-current app entry refuses unintegrated runtime commands. Real-data rollback,
-operator acceptance, merge, release and cutover have not occurred.
+Rust Hub, wrapper and launcher are wired into the binary entry points on
+`develop`. Source integration does not establish formal release, copied-data
+rollback or operator acceptance. Official Docker distribution is outside the
+v1.0.0 support scope.
 
 
 ## Recovery validation boundaries
 
 The immutable recovered checkpoint and the newly implemented recovery candidate
 are separate inputs. A lost later source tree cannot be reconstructed by reusing
-its historical test count. The latest completed local all-target receipt has
-1151 passing tests, zero failures and zero ignored tests, including signal-error
-handling. Matching strict Clippy passed. Binary/browser checks, clean four-target
-CI and production acceptance are recorded separately.
+its historical test count. Earlier recovery receipts and their test counts are
+historical checkpoints. Binary/browser checks, clean four-target CI and
+production acceptance are recorded separately and must be matched to the source
+and candidate that actually ran.
 The progress ledger records that distinction.
 
 The candidate CI script requires a clean checkout before using HEAD as its build

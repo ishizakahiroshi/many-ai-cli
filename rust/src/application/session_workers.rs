@@ -84,6 +84,8 @@ pub struct SessionWorkers {
     observation_registry: OnceLock<super::spawn_policy::RegistrySnapshot>,
     observation_temporary: OnceLock<PathBuf>,
     workflow_completion: OnceLock<Arc<WorkflowCompletion>>,
+    #[cfg(test)]
+    completion_append_hook: OnceLock<Arc<dyn Fn() + Send + Sync>>,
 }
 pub struct SessionWorkerGuard {
     cancel: HubShutdownCancellation,
@@ -152,7 +154,13 @@ impl SessionWorkers {
             observation_registry: OnceLock::new(),
             observation_temporary: OnceLock::new(),
             workflow_completion: OnceLock::new(),
+            #[cfg(test)]
+            completion_append_hook: OnceLock::new(),
         })
+    }
+    #[cfg(test)]
+    pub(crate) fn set_completion_append_hook(&self, hook: Arc<dyn Fn() + Send + Sync>) {
+        assert!(self.completion_append_hook.set(hook).is_ok());
     }
     pub fn set_observation_registry(
         &self,
@@ -375,6 +383,12 @@ impl SessionWorkers {
                 ..Default::default()
             },
         )?;
+        // A per-instance test seam makes a later append fail after the first
+        // real append committed, without replacing storage or racing the OS.
+        #[cfg(test)]
+        if let Some(hook) = self.completion_append_hook.get() {
+            hook();
+        }
         use std::sync::LazyLock;
         static NEXT: LazyLock<regex::Regex> = LazyLock::new(|| {
             regex::Regex::new(r"(?:^|(?-u:\s))次:(?-u:\s)*(.+?)(?:(?-u:\s)+未検証:|$)").unwrap()

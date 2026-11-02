@@ -9,7 +9,7 @@ use hkdf::Hkdf;
 use p256::{
     PublicKey, SecretKey,
     ecdsa::{Signature, SigningKey, signature::Signer},
-    elliptic_curve::sec1::ToEncodedPoint,
+    elliptic_curve::sec1::ToSec1Point,
 };
 use sha2_010::Sha256;
 use std::io;
@@ -29,7 +29,7 @@ pub(super) fn generate() -> io::Result<(String, String)> {
     let secret = random_secret()?;
     Ok((
         URL_SAFE_NO_PAD.encode(secret.to_bytes()),
-        URL_SAFE_NO_PAD.encode(secret.public_key().to_encoded_point(false).as_bytes()),
+        URL_SAFE_NO_PAD.encode(secret.public_key().to_sec1_point(false).as_bytes()),
     ))
 }
 fn decode_subscription(raw: &str) -> io::Result<Vec<u8>> {
@@ -105,7 +105,7 @@ fn encode_with(
         return Err(error());
     }
     let remote = PublicKey::from_sec1_bytes(&dh).map_err(|_| error())?;
-    let local = secret.public_key().to_encoded_point(false);
+    let local = secret.public_key().to_sec1_point(false);
     let shared = p256::ecdh::diffie_hellman(secret.to_nonzero_scalar(), remote.as_affine());
     let mut info = b"WebPush: info\0".to_vec();
     info.extend(&dh);

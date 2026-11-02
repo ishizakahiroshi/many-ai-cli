@@ -420,6 +420,62 @@ mod tests {
     }
 
     #[test]
+    fn unsupported_process_inspection_preserves_lock_bytes_and_tracked_identity() {
+        let (_dir, root) = repo();
+        let watch = LockWatch::default();
+        let path = lock(&root, b"synthetic lock to retain");
+        let since = SystemTime::now() - Duration::from_secs(60);
+        let entry = watch
+            .inspect(&root, since, SystemTime::now(), "session", 1, idle)
+            .unwrap();
+        let before = fs::read(&path).unwrap();
+        let modified = fs::metadata(&path).unwrap().modified().unwrap();
+        let result = watch.remove(entry.id, |asked| {
+            assert_eq!(asked, root);
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "synthetic platform cannot inspect Git processes",
+            ))
+        });
+        assert!(matches!(result, Err(Refusal::Unverifiable(ref detail))
+            if detail == "synthetic platform cannot inspect Git processes"));
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), modified);
+        assert_eq!(watch.list().len(), 1);
+        assert_eq!(watch.list()[0].id, entry.id);
+        assert!(watch.remove(entry.id, idle).is_ok());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn modified_time_only_change_rejects_before_process_inspection_and_keeps_bytes() {
+        let (_dir, root) = repo();
+        let watch = LockWatch::default();
+        let path = lock(&root, b"same bytes and size");
+        let since = SystemTime::now() - Duration::from_secs(60);
+        let entry = watch
+            .inspect(&root, since, SystemTime::now(), "session", 1, idle)
+            .unwrap();
+        let before = fs::read(&path).unwrap();
+        let old_time = fs::metadata(&path).unwrap().modified().unwrap();
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(old_time + Duration::from_secs(2)))
+            .unwrap();
+        assert_ne!(fs::metadata(&path).unwrap().modified().unwrap(), old_time);
+        assert_eq!(
+            watch.remove(entry.id, |_| panic!(
+                "changed lock must reject before inspection"
+            )),
+            Err(Refusal::Changed)
+        );
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert!(path.exists());
+    }
+
+    #[test]
     fn remove_refuses_a_lock_rewritten_after_it_was_listed() {
         let (_dir, root) = repo();
         let watch = LockWatch::default();

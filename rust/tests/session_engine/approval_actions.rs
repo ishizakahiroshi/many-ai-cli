@@ -389,7 +389,7 @@ async fn failed_send_releases_reservation_and_nonce_is_consumed_only_before_comm
     let tokens = OneTapManager::new().unwrap();
     let token = tokens
         .issue(
-            session.session,
+            session,
             &bound.sig,
             &bound.sig,
             bound.source_epoch,
@@ -438,7 +438,7 @@ async fn failed_nonce_consume_releases_only_lease_without_clearing_pending_recor
     let tokens = OneTapManager::new().unwrap();
     let token = tokens
         .issue(
-            session.session,
+            session,
             &bound.sig,
             &bound.sig,
             bound.source_epoch,

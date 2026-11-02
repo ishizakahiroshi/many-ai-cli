@@ -5,6 +5,7 @@ use std::{
     path::Path,
     time::{Duration, UNIX_EPOCH},
 };
+mod attachment_replacement;
 struct Workspace(Vec<(String, String)>);
 impl WorkspaceReads for Workspace {
     fn memo_mentions(&self) -> Vec<(String, String)> {

@@ -331,3 +331,49 @@ async fn native_trial_port_and_redirect_never_reach_another_hub() {
             .is_err()
     );
 }
+
+#[tokio::test]
+async fn native_nonloopback_targets_reject_before_http_and_preserve_statusline() {
+    let native = NativeRelayIo::new(None);
+    for target in [
+        "http://192.0.2.17:1",
+        "https://relay.example.invalid",
+        "http://127.0.0.2:1",
+    ] {
+        // The real native owner returns InvalidInput in validate_target before
+        // constructing an HTTP client. No resolver or remote peer is required.
+        let rejected = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            native.post(target, "synthetic", &serde_json::json!({})),
+        )
+        .await
+        .unwrap()
+        .unwrap_err();
+        assert_eq!(rejected.kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(
+            rejected.to_string(),
+            "Hub URL must be loopback HTTP or HTTPS"
+        );
+        let mut relay_args = args("claude");
+        relay_args[2] = format!("--hub={target}");
+        let warnings = Mutex::new(Vec::new());
+        let mut output = Vec::new();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            run_with_io(
+                &relay_args,
+                &["MANY_AI_CLI_HUB_TOKEN=synthetic".into()],
+                &mut Cursor::new(b"{}"),
+                &mut output,
+                &native,
+                &|warning| warnings.lock().unwrap().push(warning.to_owned()),
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(!output.is_empty());
+        assert!(!String::from_utf8_lossy(&output).contains("synthetic"));
+        assert_eq!(*warnings.lock().unwrap(), ["usage POST failed"]);
+    }
+}
