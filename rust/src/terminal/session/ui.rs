@@ -45,6 +45,12 @@ impl SessionEngine {
     pub fn broadcast_git_turn(&self, event: GitTurnNotification) -> CoreEffects {
         lock(&self.state).route(CoreEffects(vec![CoreEffect::BroadcastGitTurn(event)]))
     }
+    pub fn broadcast_turn_end(&self, event: TurnEndNotification) -> CoreEffects {
+        lock(&self.state).route(CoreEffects(vec![CoreEffect::BroadcastTurnEnd(event)]))
+    }
+    pub fn broadcast_turn_start(&self, event: TurnStartNotification) -> CoreEffects {
+        lock(&self.state).route(CoreEffects(vec![CoreEffect::BroadcastTurnStart(event)]))
+    }
     pub fn attach_ui(
         &self,
         ui: UiBinding,
@@ -149,7 +155,31 @@ impl SessionEngine {
             hub_instance: self.options.hub_instance.clone(),
             sessions,
             ordered_frames: frames,
+            open_turns: self.open_turn_notifications(&state)?,
         })
+    }
+    /// The Hub's own answer to "which sessions are inside a turn right now".
+    /// A client that just connected (or reconnected) restores this state instead
+    /// of inventing one, so an unseen "stopped" mark stays hidden while the turn
+    /// the Hub still has open is running (parent review R5).
+    fn open_turn_notifications(
+        &self,
+        state: &State,
+    ) -> Result<Vec<TurnStartNotification>, SessionError> {
+        let mut open = Vec::new();
+        for s in state.sessions.values().filter(|s| !s.usage_probe) {
+            let Some(turn) = &s.completion.open_provider_turn else {
+                continue;
+            };
+            open.push(TurnStartNotification {
+                r#type: TurnStartType::TurnStart,
+                session_id: s.binding.session.0,
+                turn_id: turn.turn_id.clone(),
+                provider: s.snapshot.provider.clone(),
+                started_at: timestamp(turn.started_at)?,
+            });
+        }
+        Ok(open)
     }
     pub fn finish_ui_priming(&self, ui: UiBinding) -> Result<CoreEffects, SessionError> {
         let mut state = lock(&self.state);
@@ -177,6 +207,16 @@ impl SessionEngine {
                         best_effort: false,
                     },
                     UiFrame::SpawnCorrelation(event) => CoreEffect::SendUiSpawnCorrelation {
+                        binding: ui,
+                        event,
+                        best_effort: false,
+                    },
+                    UiFrame::TurnEnd(event) => CoreEffect::SendUiTurnEnd {
+                        binding: ui,
+                        event,
+                        best_effort: false,
+                    },
+                    UiFrame::TurnStart(event) => CoreEffect::SendUiTurnStart {
                         binding: ui,
                         event,
                         best_effort: false,

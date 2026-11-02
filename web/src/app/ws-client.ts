@@ -9,7 +9,8 @@ import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLoca
 import { migratePinnedSessionsOnce, activateSession, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
 import { applyRemotePtyResize, ensureTerminal, forgetSentPtySize, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup, isSessionCurrentlyViewed, playNotificationSound, showDesktopTurnEndNotification } from './settings.js';
-import { forgetTurnEndNotify, observeStoppedMarkCandidate, observeTurnEndCandidate, shouldNotifyTurnEnd, turnEndRunningStartedAt } from './turn-end-notify-store.js';
+import { confirmTurnEnd, forgetTurnEndNotify, noteStoppedMarkSessionState, noteTurnStarted, shouldNotifyTurnEnd } from './turn-end-notify-store.js';
+import type { TurnEndEvidenceLike } from './turn-end-notify-store.js';
 import { clearAllTurnEndBellMutes, isTurnEndBellOff, isTurnEndNotifyEnabled } from './user-prefs.js';
 import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed } from './approval-ui.js';
 import { hideActionBar, isAIProvider, renderApprovalAfterSnapshot } from './approval.js';
@@ -226,6 +227,26 @@ export function sessionLayoutSnapshot(s) {
   ].join('\x1f');
 }
 
+// Hub がターン終了を確認した証拠（turn_end / done_summary）から、未閲覧のセッションに
+// 「作業を終えて止まった」印を付け、必要なら作業終了を通知する。判断は
+// turn-end-notify-store.ts が持ち、ここは表示（タブの枠付き数字・カードの黄色い●）と
+// 通知の呼び出しだけを行う。
+//
+// done_summary / turn_end の枝はこの関数の後で return するため、末尾の render 経路へは
+// 進まない。印を付けたらここで描き直す。付けっぱなしにすると、完了が最後の session_update
+// より後に届いた順序で、stored な印が次の描画まで画面に出ない。
+export function applyTurnEndEvidence(id: number, evidence: TurnEndEvidenceLike): void {
+  const decision = confirmTurnEnd(id, evidence);
+  if (decision.mark && !isSessionCurrentlyViewed(id)) {
+    noteSessionListTurnEnd(id);
+    renderSessionList();
+  }
+  if (decision.notify && shouldNotifyTurnEnd(true, isTurnEndBellOff(id), isSessionCurrentlyViewed(id), isTurnEndNotifyEnabled())) {
+    playNotificationSound();
+    showDesktopTurnEndNotification(id, decision.startedAt);
+  }
+}
+
 export function _connectWs() {
   // HTTPS（Tailscale serve / リモート公開）経由では平文 ws:// が mixed-content で
   // ブロックされ snapshot を受信できずセッションカードが出ない。ページの protocol に
@@ -408,10 +429,41 @@ export function _connectWs() {
     return;
   }
 
+  if (m.type === 'turn_start') {
+    // provider が自分のトランスクリプトに書いたターン開始（Additive Rust-only 通知）。
+    // 端末に直接入力したターンでも届くので、そのターンが無出力のまま進んでいても、
+    // 前のターンの未閲覧印を再表示しない（親レビュー R4）。UI の接続直後は Hub が今
+    // 開いているターンについてこれを送るので、リロード・再接続でも Hub の状態から
+    // 復元できる（親レビュー R5）。turn_id は provider 自身のターン identity で、
+    // 同じターンの再送か別のターンかを turn_end 側で見分ける基準になる。
+    if (Number.isFinite(m.session_id) && noteTurnStarted(m.session_id, { turnId: m.turn_id, startedAt: m.started_at })) {
+      renderSessionList();
+    }
+    return;
+  }
+
+  if (m.type === 'turn_end') {
+    // Hub が確認したターン終了（Additive Rust-only 通知）。Codex の provider が書いた
+    // task_complete の確定点で、Git の差分計測や DONE カードとは無関係に届く。Git 管理外・
+    // 差分 0・直接入力でも本物の終了を取りこぼさないための証拠（親レビュー R3）。
+    // turn_id は provider 自身のターン identity、started_at は同じ turn_id の開始を Hub が
+    // 確認できたときだけ入る（リロードや再接続で Web 側の記録を失っていても長さを測れる）。
+    if (Number.isFinite(m.session_id) && m.ended_at) {
+      applyTurnEndEvidence(m.session_id, { at: m.ended_at, startedAt: m.started_at, turnId: m.turn_id });
+    }
+    return;
+  }
+
   if (m.type === 'user_turn_started') {
     // 確定ユーザー入力が provider へ送達された（input_gate.go のライブ限定 broadcast）。
     // review-view.ts が前ターンの完了カードを自動消去する。ptyBuf リプレイの
     // ターン境界マーカーや State("running") と違い、リロード・再描画で誤発火しない。
+    // 未確認停止の印の判定にも、この出来事をターンの開始として使う（端子出力の running は
+    // 再描画でも立つため開始の根拠にしない。親レビュー R2）。started_at は Hub が記録した
+    // このターンの開始時刻で、前のターンの完了が遅れて届いたときに弾く基準になる（R1）。
+    if (Number.isFinite(m.session_id) && noteTurnStarted(m.session_id, { startedAt: m.started_at })) {
+      renderSessionList();
+    }
     try { window.dispatchEvent(new CustomEvent('many-user-turn-started', { detail: { session_id: m.session_id, approval_source_epoch: m.approval_source_epoch } })); } catch (_) {}
     return;
   }
@@ -546,6 +598,11 @@ export function _connectWs() {
   if (m.type === 'done_summary') {
     if (Number.isFinite(m.session_id) && m.done_summary) {
       setDoneSummary(m.session_id, m.done_summary);
+      // 見ていないセッションが作業を終えたら「新しく止まった」印を付ける（タブの数字と
+      // カードの黄色い●。開くと消える）。合図は Hub が確認した完了記録であって、端子の
+      // 無出力で作られる standby ではない（2026-10-18 修正。無出力を終了とみなした
+      // fallback 記録は confirmTurnEnd 側で落とす）。
+      applyTurnEndEvidence(m.session_id, m.done_summary);
       updateCardLiveInfo(m.session_id);
       if (m.session_id === activeSessionId) syncLiveStatusDomForActive();
     }
@@ -618,9 +675,12 @@ export function _connectWs() {
     if (m.state === 'completed') {
       requestSessionDismiss(m.session_id);
       removeLocalSession(m.session_id);
+      // 終わったセッションの ID が再利用されても、前の作業の長さを引き継がない。
+      forgetTurnEndNotify(m.session_id);
       return;
     }
     const isNew = !sessions.has(m.session_id);
+    if (isNew) forgetTurnEndNotify(m.session_id);
     const cur: any = sessions.get(m.session_id) || { id: m.session_id };
     const beforeLayout = sessionLayoutSnapshot(cur);
     if (m.provider)        cur.provider        = m.provider;
@@ -657,33 +717,9 @@ export function _connectWs() {
 	}
     if (m.shell)           cur.shell           = m.shell;
     if (m.state) {
-      // 子 plan (plan_ux-notify-palette-review_c1_notify.md): running → standby
-      // （作業終了）を検知して通知する。isNew（新規登録）のセッションは直前の状態を
-      // 実測できないため観測に渡さない — cur.state への代入自体はこの下で行うので、
-      // 次回以降の session_update からは正しく遷移を追える。
-      if (!isNew) {
-        const now = Date.now();
-        // 見ていないセッションが作業を終えて止まったら「新しく止まった」印を付ける。タブの数字と
-        // カードの黄色い●になり、そのセッションを開くと消える。ベルや通知設定とは独立で、
-        // 通知より短い作業も拾う（turn-end-notify-store.ts の STOPPED_MARK_MIN_WORK_MS）。
-        if (observeStoppedMarkCandidate(m.session_id, cur.state, m.state, now) &&
-            !isSessionCurrentlyViewed(m.session_id)) {
-          noteSessionListTurnEnd(m.session_id);
-        }
-        const isCandidate = observeTurnEndCandidate(m.session_id, cur.state, m.state, now);
-        if (isCandidate) {
-          const decision = shouldNotifyTurnEnd(
-            isCandidate,
-            isTurnEndBellOff(m.session_id),
-            isSessionCurrentlyViewed(m.session_id),
-            isTurnEndNotifyEnabled(),
-          );
-          if (decision) {
-            playNotificationSound();
-            showDesktopTurnEndNotification(m.session_id, turnEndRunningStartedAt(m.session_id));
-          }
-        }
-      }
+      // セッションが終わったと分かる状態だけを見て、そのセッションの記憶を捨てる。
+      // running はターンの開始の根拠にしない（再描画で新しいターンにしない。親レビュー R2）。
+      noteStoppedMarkSessionState(m.session_id, m.state);
       cur.state = m.state;
     }
 		if (m.activity) {

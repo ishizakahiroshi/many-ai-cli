@@ -301,7 +301,10 @@ fn keep_queued_after_automatic_approval(
                         open.candidate_key == candidate && open.source_epoch == epoch
                     }))
         }
-        UiFrame::GitTurn(_) | UiFrame::SpawnCorrelation(_) => true,
+        UiFrame::GitTurn(_)
+        | UiFrame::SpawnCorrelation(_)
+        | UiFrame::TurnEnd(_)
+        | UiFrame::TurnStart(_) => true,
     }
 }
 #[cfg(test)]

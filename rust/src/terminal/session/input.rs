@@ -401,6 +401,11 @@ impl SessionEngine {
                         .is_none_or(|tree| !tree.nodes.iter().any(|n| n.state == "running"))
                     {
                         s.observer_turn_started_at = now;
+                        // The Hub's own record of this turn's start. The turn-end
+                        // notification reports it and consumes it, so a turn started
+                        // outside the Hub (native terminal input) has no start rather
+                        // than an older turn's start.
+                        s.completion.mark_turn_started(now);
                     }
                     let latest = marker::extract_vt(&s.vt).map(|m| {
                         identity::marker_candidate(
@@ -439,6 +444,12 @@ impl SessionEngine {
                         r#type: "user_turn_started".into(),
                         session_id: binding.session.0,
                         approval_source_epoch: s.approval.epoch().0,
+                        // Existing Message field, meaning for this type: the
+                        // Hub-confirmed start of the turn that just began. Clients
+                        // that mark "finished but not opened yet" need the turn
+                        // boundary, and terminal output cannot provide it (a redraw
+                        // sets running without any user input).
+                        started_at: timestamp(now)?,
                         ..Default::default()
                     }));
                 }

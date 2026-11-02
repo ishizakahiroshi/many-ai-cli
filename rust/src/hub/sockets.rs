@@ -616,9 +616,43 @@ impl EffectDriver {
                     result
                 }
             }
+            CoreEffect::SendUiTurnEnd {
+                binding,
+                event,
+                best_effort,
+            } => {
+                let result = self.sockets.send_ui_value(binding, &event).await;
+                if best_effort {
+                    if let Err(error) = result {
+                        (self.warning)("Turn end UI delivery", &error);
+                        self.sockets.close_ui(binding).await?;
+                    }
+                    Ok(())
+                } else {
+                    result
+                }
+            }
+            CoreEffect::SendUiTurnStart {
+                binding,
+                event,
+                best_effort,
+            } => {
+                let result = self.sockets.send_ui_value(binding, &event).await;
+                if best_effort {
+                    if let Err(error) = result {
+                        (self.warning)("Turn start UI delivery", &error);
+                        self.sockets.close_ui(binding).await?;
+                    }
+                    Ok(())
+                } else {
+                    result
+                }
+            }
             CoreEffect::Broadcast(_)
             | CoreEffect::BroadcastGitTurn(_)
-            | CoreEffect::BroadcastSpawnCorrelation(_) => Err(SessionError::InvalidRequest(
+            | CoreEffect::BroadcastSpawnCorrelation(_)
+            | CoreEffect::BroadcastTurnEnd(_)
+            | CoreEffect::BroadcastTurnStart(_) => Err(SessionError::InvalidRequest(
                 "broadcast must pass through SessionCore UI priming".into(),
             )),
             CoreEffect::Persist(effect) => self.persistence.apply(effect),

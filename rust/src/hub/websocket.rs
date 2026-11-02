@@ -458,6 +458,11 @@ impl WebSocketService {
             }
         }
         self.sockets.send_ui_value(binding, &serde_json::json!({"type":"snapshot","hub_instance":priming.hub_instance,"sessions":priming.sessions})).await?;
+        // The Hub's own "which turns are open right now" answer, sent with the
+        // snapshot so a reconnecting client does not start from stale memory.
+        for turn in &priming.open_turns {
+            self.sockets.send_ui_value(binding, turn).await?;
+        }
         for frame in priming.ordered_frames {
             self.sockets.send_ui(binding, frame).await?;
         }

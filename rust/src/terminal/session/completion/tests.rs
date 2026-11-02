@@ -68,7 +68,7 @@ async fn routine_codex_read_only_completion_has_no_git_gate_and_empty_message_is
         ..Default::default()
     };
     let effects = engine
-        .observe_codex_completion_with_routine(binding, empty.clone(), at, "", true)
+        .observe_codex_completion_with_routine(binding, empty.clone(), at, "", true, "")
         .unwrap();
     assert_eq!(effects.0.len(), 1);
     assert!(
@@ -80,7 +80,7 @@ async fn routine_codex_read_only_completion_has_no_git_gate_and_empty_message_is
         ..empty
     };
     let effects = engine
-        .observe_codex_completion_with_routine(binding, message, at, "", true)
+        .observe_codex_completion_with_routine(binding, message, at, "", true, "")
         .unwrap();
     assert!(
         !effects
@@ -105,6 +105,7 @@ async fn stale_routine_label_cannot_bypass_git_work_predicate() {
             at,
             "different-label",
             true,
+            "",
         )
         .unwrap();
     assert!(
@@ -351,6 +352,253 @@ async fn codex_completion_requires_changed_files_and_prime_is_not_completion() {
         engine.details(binding.session).unwrap().done.unwrap().text,
         "task completed"
     );
+}
+#[tokio::test]
+async fn hub_confirmed_turn_start_travels_with_the_codex_turn_end_once_and_is_consumed() {
+    let (_root, engine, binding, at) = fixture("codex").await;
+    let ui = UiBinding {
+        connection: UiConnectionId(41),
+        auth_epoch: engine.auth_epoch(),
+    };
+    let receipt = engine
+        .submit(
+            binding,
+            InputRequest {
+                bytes: b"do the thing\r".to_vec(),
+                authority: InputAuthority::Ui(ui),
+            },
+            at,
+            &TaskCancellation::default(),
+        )
+        .await;
+    assert!(matches!(
+        receipt.disposition,
+        InputDisposition::TransportWritten { .. }
+    ));
+    let ended = at + Duration::from_secs(30);
+    let summary = proto::DoneSummary {
+        text: "task completed".into(),
+        at: timestamp(ended).unwrap(),
+        ..Default::default()
+    };
+    let effects = engine
+        .observe_codex_completion(binding, summary.clone(), ended)
+        .unwrap();
+    // The provider-reported end travels with the Hub's own start for the turn, and
+    // it sits next to the Git capture in the same batch: the signal does not depend
+    // on the diff measurement succeeding.
+    let ends: Vec<_> = effects
+        .0
+        .iter()
+        .filter_map(|effect| match effect {
+            CoreEffect::Notify(CoreEvent::TurnEnded {
+                turn_id,
+                provider,
+                started_at,
+                ended_at,
+                ..
+            }) => Some((
+                turn_id.clone(),
+                provider.clone(),
+                started_at.clone(),
+                ended_at.clone(),
+            )),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ends.len(), 1, "one provider end must not duplicate its signal");
+    assert_eq!(ends[0].0, "", "no provider identity was reported here");
+    assert_eq!(ends[0].1, "codex");
+    assert_eq!(ends[0].2, timestamp(at).unwrap());
+    assert_eq!(ends[0].3, timestamp(ended).unwrap());
+    assert!(
+        effects
+            .0
+            .iter()
+            .any(|effect| matches!(effect, CoreEffect::Notify(CoreEvent::GitTurnCapture { .. })))
+    );
+    // The start is consumed: a repeat of the same completion cannot re-measure this
+    // turn from an older start, and a turn whose input the Hub never confirmed
+    // (native terminal input) reports its end with no start at all.
+    let resent = engine
+        .observe_codex_completion(binding, summary, ended)
+        .unwrap();
+    assert_eq!(
+        resent.0.iter().find_map(|effect| match effect {
+            CoreEffect::Notify(CoreEvent::TurnEnded { started_at, .. }) => {
+                Some(started_at.clone())
+            }
+            _ => None,
+        }),
+        Some(String::new())
+    );
+}
+#[tokio::test]
+async fn provider_turn_start_pairs_with_its_own_end_and_is_never_attached_to_another() {
+    // parent review R6: the provider's own turn_id decides which start an end may
+    // use. A new turn's start must not be attached to an older turn's end, and it
+    // must not be consumed by it either.
+    let (_root, engine, binding, at) = fixture("codex").await;
+    let first = at;
+    let second = at + Duration::from_secs(10);
+    let ended = at + Duration::from_secs(20);
+    engine
+        .observe_codex_turn_start(binding, "turn-1".into(), first, true)
+        .unwrap();
+    let started = engine
+        .observe_codex_turn_start(binding, "turn-2".into(), second, true)
+        .unwrap();
+    assert!(
+        matches!(
+            &started.0[0],
+            CoreEffect::Notify(CoreEvent::TurnStarted { turn_id, started_at, .. })
+                if turn_id == "turn-2" && started_at == &timestamp(second).unwrap()
+        ),
+        "a new provider turn must be announced to clients"
+    );
+    // turn-1's end arrives after turn-2 started: it has no start of its own, and
+    // turn-2's start stays pending.
+    let old = codex_end(&engine, binding, "turn-1", ended).await;
+    assert_eq!(old.0, String::new());
+    assert_eq!(old.1, "turn-1");
+    let current = codex_end(&engine, binding, "turn-2", ended).await;
+    assert_eq!(current.0, timestamp(second).unwrap());
+    assert_eq!(current.1, "turn-2");
+}
+
+#[tokio::test]
+async fn repeated_hub_turn_numbers_do_not_collapse_two_real_provider_turns() {
+    // parent review R4: the Hub's own counter stayed at the same value for input
+    // typed in the terminal, so a client saw two real turns as one turn's resend.
+    // The provider identity is what travels now, and each end keeps its own start.
+    let (_root, engine, binding, at) = fixture("codex").await;
+    let first_end = at + Duration::from_secs(10);
+    let second_start = first_end;
+    let second_end = at + Duration::from_secs(20);
+    engine
+        .observe_codex_turn_start(binding, "turn-1".into(), at, true)
+        .unwrap();
+    let first = codex_end(&engine, binding, "turn-1", first_end).await;
+    assert_eq!(first.1, "turn-1");
+    assert_eq!(first.0, timestamp(at).unwrap());
+    engine
+        .observe_codex_turn_start(binding, "turn-2".into(), second_start, true)
+        .unwrap();
+    let second = codex_end(&engine, binding, "turn-2", second_end).await;
+    assert_eq!(second.1, "turn-2");
+    assert_eq!(second.0, timestamp(second_start).unwrap());
+}
+
+#[tokio::test]
+async fn a_connecting_ui_learns_the_turn_the_hub_still_has_open() {
+    // parent review R5: a reconnecting client restores the Hub's state instead of
+    // its own memory, so an unseen stop mark stays hidden while the open turn runs.
+    let (_root, engine, binding, at) = fixture("codex").await;
+    engine
+        .observe_codex_turn_start(binding, "turn-9".into(), at, false)
+        .unwrap();
+    let priming = engine
+        .attach_ui(
+            UiBinding {
+                connection: UiConnectionId(42),
+                auth_epoch: engine.auth_epoch(),
+            },
+            None,
+            None,
+        )
+        .unwrap();
+    assert_eq!(priming.open_turns.len(), 1);
+    let open = &priming.open_turns[0];
+    assert_eq!(open.r#type, TurnStartType::TurnStart);
+    assert_eq!(open.session_id, binding.session.0);
+    assert_eq!(open.turn_id, "turn-9");
+    assert_eq!(open.started_at, timestamp(at).unwrap());
+    // The matching end clears it again.
+    engine
+        .close_codex_open_turn(binding, "turn-9")
+        .unwrap();
+    let priming = engine
+        .attach_ui(
+            UiBinding {
+                connection: UiConnectionId(43),
+                auth_epoch: engine.auth_epoch(),
+            },
+            None,
+            None,
+        )
+        .unwrap();
+    assert!(priming.open_turns.is_empty());
+}
+
+/// The `turn_id` and `started_at` of the turn end this observation produced.
+async fn codex_end(
+    engine: &SessionEngine,
+    binding: SessionBinding,
+    turn_id: &str,
+    ended: Timestamp,
+) -> (String, String) {
+    let summary = proto::DoneSummary {
+        text: "task completed".into(),
+        at: timestamp(ended).unwrap(),
+        ..Default::default()
+    };
+    let effects = engine
+        .observe_codex_completion_with_routine(binding, summary, ended, "", false, turn_id)
+        .unwrap();
+    effects
+        .0
+        .iter()
+        .find_map(|effect| match effect {
+            CoreEffect::Notify(CoreEvent::TurnEnded {
+                started_at,
+                turn_id,
+                ..
+            }) => Some((started_at.clone(), turn_id.clone())),
+            _ => None,
+        })
+        .expect("every provider end reports itself")
+}
+
+#[tokio::test]
+async fn silence_fallback_and_done_marker_never_produce_a_turn_end_signal() {
+    let (_root, engine, binding, at) = fixture("claude").await;
+    // The silence fallback candidate is the Git path plus a Completed record; it is
+    // not evidence that a provider confirmed a turn end.
+    let ended = schedule(&engine, binding, at);
+    let fallback = engine.completion_after_git(binding, 1, &ended).unwrap();
+    assert!(
+        fallback.0.iter().any(|effect| matches!(
+            effect,
+            CoreEffect::Notify(CoreEvent::Completed {
+                fallback: true,
+                ..
+            })
+        )),
+        "expected the silence fallback to complete normally"
+    );
+    assert!(!fallback.0.iter().any(|effect| matches!(
+        effect,
+        CoreEffect::Notify(CoreEvent::TurnEnded { .. })
+    )));
+    // The DONE card is another end record, still without a provider turn end.
+    let (_root, engine, binding, at) = fixture("claude").await;
+    let marker = output(
+        &engine,
+        binding,
+        "[MANY-AI-CLI-DONE] fixed [/MANY-AI-CLI-DONE]",
+        at,
+    );
+    assert!(marker.0.iter().any(|effect| matches!(
+        effect,
+        CoreEffect::Notify(CoreEvent::Completed {
+            fallback: false,
+            ..
+        })
+    )));
+    assert!(!marker.0.iter().any(|effect| matches!(
+        effect,
+        CoreEffect::Notify(CoreEvent::TurnEnded { .. })
+    )));
 }
 #[tokio::test]
 async fn transcript_plain_question_waits_for_idle_and_tools_clear_it() {

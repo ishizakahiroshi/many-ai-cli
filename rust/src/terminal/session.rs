@@ -212,6 +212,8 @@ enum UiFrame {
     Message(Box<proto::Message>),
     GitTurn(GitTurnNotification),
     SpawnCorrelation(SpawnCorrelationNotification),
+    TurnEnd(TurnEndNotification),
+    TurnStart(TurnStartNotification),
 }
 struct ConfirmationEntry {
     pending: PendingSpawnConfirmation,
@@ -514,6 +516,46 @@ impl State {
                             ui.queued.push(UiFrame::SpawnCorrelation(event.clone()));
                         } else {
                             out.push(CoreEffect::SendUiSpawnCorrelation {
+                                binding: ui.binding,
+                                event: event.clone(),
+                                best_effort: true,
+                            });
+                        }
+                    }
+                }
+                CoreEffect::BroadcastTurnEnd(event) => {
+                    if self
+                        .sessions
+                        .get(&LiveSessionId(event.session_id))
+                        .is_some_and(|s| s.usage_probe)
+                    {
+                        continue;
+                    }
+                    for ui in self.uis.values_mut() {
+                        if ui.priming {
+                            ui.queued.push(UiFrame::TurnEnd(event.clone()));
+                        } else {
+                            out.push(CoreEffect::SendUiTurnEnd {
+                                binding: ui.binding,
+                                event: event.clone(),
+                                best_effort: true,
+                            });
+                        }
+                    }
+                }
+                CoreEffect::BroadcastTurnStart(event) => {
+                    if self
+                        .sessions
+                        .get(&LiveSessionId(event.session_id))
+                        .is_some_and(|s| s.usage_probe)
+                    {
+                        continue;
+                    }
+                    for ui in self.uis.values_mut() {
+                        if ui.priming {
+                            ui.queued.push(UiFrame::TurnStart(event.clone()));
+                        } else {
+                            out.push(CoreEffect::SendUiTurnStart {
                                 binding: ui.binding,
                                 event: event.clone(),
                                 best_effort: true,
@@ -858,6 +900,12 @@ impl SessionCore for SessionEngine {
     }
     fn broadcast_git_turn(&self, event: GitTurnNotification) -> CoreEffects {
         SessionEngine::broadcast_git_turn(self, event)
+    }
+    fn broadcast_turn_end(&self, event: TurnEndNotification) -> CoreEffects {
+        SessionEngine::broadcast_turn_end(self, event)
+    }
+    fn broadcast_turn_start(&self, event: TurnStartNotification) -> CoreEffects {
+        SessionEngine::broadcast_turn_start(self, event)
     }
     fn authorize_ui_work(&self, ui: UiBinding) -> Result<Box<dyn AcceptedUiWork>, SessionError> {
         SessionEngine::authorize_ui_work(self, ui)

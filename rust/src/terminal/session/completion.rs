@@ -20,6 +20,16 @@ pub(super) struct CompletionState {
     summary: Option<SummaryAwait>,
     initial: Option<(InitialPromptOutcome, Timestamp)>,
     codex: Option<(u64, Timestamp, proto::DoneSummary)>,
+    /// Start of the turn that is currently open, as the Hub confirmed it (a
+    /// confirmed user input). Consumed by the first confirmed turn end, so a
+    /// later turn the Hub never confirmed (native terminal input) does not
+    /// measure itself from an older turn's start.
+    turn_started_at: Option<Timestamp>,
+    /// The provider turn the Hub still has open (`task_started` without its
+    /// `task_complete`). It is the authoritative start of a Codex turn,
+    /// available for input typed in the terminal too, and the state a
+    /// reconnecting client restores from (parent review R4/R5).
+    pub(super) open_provider_turn: Option<OpenProviderTurn>,
     launch_arg: bool,
     thread_checked: Option<Timestamp>,
     text_question: Option<crate::approval::text_question::TextQuestion>,
@@ -36,6 +46,11 @@ struct FallbackCandidate {
     at: Timestamp,
     screen: Vec<String>,
 }
+/// A provider turn that started and has not been reported complete yet.
+pub(super) struct OpenProviderTurn {
+    pub turn_id: String,
+    pub started_at: Timestamp,
+}
 struct SummaryAwait {
     turn: i64,
     deadline: Timestamp,
@@ -51,6 +66,28 @@ impl CompletionState {
         self.fallback = None;
         self.codex = None;
         self.text_question = None;
+        self.turn_started_at = None;
+        // A new confirmed input starts a new turn, so the provider turn the Hub
+        // still had open (an interrupted turn) must not be attached to it.
+        self.open_provider_turn = None;
+    }
+    /// Records the Hub-confirmed start of the turn the confirmed input opened.
+    pub(super) fn mark_turn_started(&mut self, at: Timestamp) {
+        self.turn_started_at = Some(at);
+    }
+    /// The Hub-confirmed start of the open turn, when there is one. Consuming it
+    /// keeps the next unconfirmed turn from inheriting this one's start.
+    fn take_turn_started_at(&mut self) -> Option<Timestamp> {
+        self.turn_started_at.take()
+    }
+    /// The provider turn this end belongs to, when the Hub still has it open.
+    /// A different id is left in place: that start belongs to another turn and
+    /// must not be attached to this end nor consumed (parent review R6).
+    fn take_open_turn(&mut self, turn_id: &str) -> Option<Timestamp> {
+        if self.open_provider_turn.as_ref()?.turn_id != turn_id {
+            return None;
+        }
+        self.open_provider_turn.take().map(|turn| turn.started_at)
     }
 }
 impl SessionEngine {
@@ -483,7 +520,61 @@ impl SessionEngine {
         summary: proto::DoneSummary,
         at: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
-        self.observe_codex_completion_with_routine(binding, summary, at, "", false)
+        self.observe_codex_completion_with_routine(binding, summary, at, "", false, "")
+    }
+    /// The provider said this turn started (`task_started`). Its start is kept
+    /// apart from the Hub's confirmed-input start because it is also the start of
+    /// a turn the user began in the terminal, and because it is the identity the
+    /// matching `task_complete` is resolved against. `notify` is false while the
+    /// transcript is first read: the state is folded, but an old turn must not be
+    /// re-announced to a client that is merely connecting.
+    pub fn observe_codex_turn_start(
+        &self,
+        binding: SessionBinding,
+        turn_id: String,
+        at: Timestamp,
+        notify: bool,
+    ) -> Result<CoreEffects, SessionError> {
+        let mut state = lock(&self.state);
+        let s = state.session(binding)?;
+        if s.snapshot.provider != "codex" {
+            return Ok(CoreEffects::default());
+        }
+        let unchanged = s
+            .completion
+            .open_provider_turn
+            .as_ref()
+            .is_some_and(|turn| turn.turn_id == turn_id && turn.started_at == at);
+        s.completion.open_provider_turn = Some(OpenProviderTurn {
+            turn_id: turn_id.clone(),
+            started_at: at,
+        });
+        if unchanged || !notify {
+            return Ok(CoreEffects::default());
+        }
+        let provider = s.snapshot.provider.clone();
+        Ok(state.route(CoreEffects(vec![CoreEffect::Notify(
+            CoreEvent::TurnStarted {
+                binding,
+                turn_id,
+                provider,
+                started_at: timestamp(at)?,
+            },
+        )])))
+    }
+    /// Drops the open provider turn when this end belongs to it. Used while the
+    /// transcript is first read, where the pairing has to be folded but no turn
+    /// end may be delivered (the client learns the surviving state from the
+    /// snapshot instead).
+    pub fn close_codex_open_turn(
+        &self,
+        binding: SessionBinding,
+        turn_id: &str,
+    ) -> Result<CoreEffects, SessionError> {
+        let mut state = lock(&self.state);
+        let s = state.session(binding)?;
+        s.completion.take_open_turn(turn_id);
+        Ok(CoreEffects::default())
     }
     pub fn observe_codex_completion_with_routine(
         &self,
@@ -492,6 +583,7 @@ impl SessionEngine {
         at: Timestamp,
         expected_label: &str,
         active_routine: bool,
+        turn_id: &str,
     ) -> Result<CoreEffects, SessionError> {
         let mut state = lock(&self.state);
         let s = state.session(binding)?;
@@ -516,14 +608,44 @@ impl SessionEngine {
         }
         summary.kind = classify(&summary.text).into();
         let ended_at = summary.at.clone();
-        s.completion.codex = Some((s.completion.confirmed_turn, at, summary));
-        Ok(state.route(CoreEffects(vec![CoreEffect::Notify(
-            CoreEvent::GitTurnCapture {
+        let turn = s.completion.confirmed_turn;
+        let provider = s.snapshot.provider.clone();
+        // The start of this turn: the provider's own `task_started` for the same
+        // `turn_id` when the Hub still has it open. Without a match the provider
+        // start belongs to another turn and is neither attached nor consumed; a
+        // confirmed user input may still measure this turn, but only when it
+        // cannot be a later turn's start (parent review R6).
+        let provider_start = s.completion.take_open_turn(turn_id);
+        let ui_start = s.completion.turn_started_at.filter(|start| *start <= at);
+        if provider_start.is_some() || ui_start.is_some() {
+            // A start was resolved for this end, so the pending confirmed-input
+            // start is spent. A start that belongs to a later turn (it is newer
+            // than this end) stays, so that turn can still measure itself.
+            s.completion.take_turn_started_at();
+        }
+        let started_at = match provider_start.or(ui_start) {
+            Some(start) => timestamp(start)?,
+            None => String::new(),
+        };
+        s.completion.codex = Some((turn, at, summary));
+        Ok(state.route(CoreEffects(vec![
+            CoreEffect::Notify(CoreEvent::GitTurnCapture {
                 binding,
                 started_at: String::new(),
-                ended_at: Some(ended_at),
-            },
-        )])))
+                ended_at: Some(ended_at.clone()),
+            }),
+            // Independent of the Git measurement above: the provider reported the
+            // end of this turn (`task_complete`). Emitted even when the turn changed
+            // no files, the session is outside Git, or the diff capture fails, so a
+            // real turn end is never lost (parent review R3).
+            CoreEffect::Notify(CoreEvent::TurnEnded {
+                binding,
+                turn_id: turn_id.to_owned(),
+                provider,
+                started_at,
+                ended_at,
+            }),
+        ])))
     }
 }
 impl Session {
@@ -743,6 +865,9 @@ impl Session {
         if summary.at.is_empty() {
             summary.at = timestamp(now)?;
         }
+        // Any confirmed end closes the open turn, so the next turn the Hub never
+        // confirmed does not measure itself from this one's start.
+        self.completion.take_turn_started_at();
         self.done = Some(summary.clone());
         let mut effects = CoreEffects::default();
         if capture_git {

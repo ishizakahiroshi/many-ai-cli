@@ -71,6 +71,10 @@ function fixture(saved?:unknown) {
     t:(key:string)=>key,localStorage:{getItem:()=>storage,setItem:(_key:string,value:string)=>{storage=value;writes++;}},
     setTimeout:(fn:Function)=>{timers.set(++seq,fn);return seq;},clearTimeout:(id:number)=>timers.delete(id),
     requestAnimationFrame:(fn:Function)=>{frames.set(++seq,fn);return seq;},cancelAnimationFrame:(id:number)=>frames.delete(id),
+    // session-list-tabs.ts imports this; the import line is stripped above. No scenario
+    // here has a turn in progress, so the stub keeps the pre-existing behaviour. The real
+    // predicate is covered by turn-end-notify-store.test.ts.
+    isStoppedMarkTurnInProgress:()=>false,
   };
   const source=readFileSync(new URL('../src/app/session-list-tabs.ts',import.meta.url),'utf8').replace(/^import[\s\S]*?;\r?$/gm,'').replace(/^export /gm,'');
   runInNewContext(new Bun.Transpiler({loader:'ts'}).transformSync(source)+'\nglobalThis.ui={initializeSessionListTabs,renderSessionListTabs,visibleSessionListTree,revealSessionListOwner,preserveSessionListSelection,sessionListScrollBeforeRender,sessionListScrollAfterRender,restoreSessionListDrawerScroll,openSessionListMoveDialog,sessionListMoveLabel,sessionListCanMove,sessionListTapSuppressed,restoreSessionListFocus};',ctx);

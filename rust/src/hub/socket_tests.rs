@@ -550,6 +550,118 @@ async fn typed_git_turn_keeps_all_zero_counts_and_avoids_message_fields() {
 }
 
 #[tokio::test]
+async fn typed_turn_end_carries_only_its_own_fields_and_keeps_empty_start() {
+    let registry = registry();
+    let recording = Recording::default();
+    registry
+        .insert_ui(ui(), Box::new(recording.clone()))
+        .unwrap();
+    let dependencies = Arc::new(Dependencies::default());
+    let driver = EffectDriver::new(
+        registry,
+        dependencies.clone(),
+        dependencies.clone(),
+        dependencies,
+    );
+    driver
+        .apply(CoreEffects(vec![CoreEffect::SendUiTurnEnd {
+            binding: ui(),
+            event: TurnEndNotification {
+                r#type: TurnEndType::TurnEnd,
+                session_id: 7,
+                turn_id: "turn-3".into(),
+                provider: "codex".into(),
+                started_at: "2026-01-02T00:00:00Z".into(),
+                ended_at: "2026-01-02T00:01:00Z".into(),
+            },
+            best_effort: true,
+        }]))
+        .await
+        .unwrap();
+    let frames = recording.frames.lock().unwrap();
+    let WireFrame::Text(text) = &frames[0] else {
+        panic!("expected turn end frame")
+    };
+    let event: serde_json::Value = serde_json::from_str(text).unwrap();
+    assert_eq!(
+        event,
+        serde_json::json!({"type":"turn_end","session_id":7,"turn_id":"turn-3","provider":"codex",
+        "started_at":"2026-01-02T00:00:00Z","ended_at":"2026-01-02T00:01:00Z"})
+    );
+    drop(frames);
+    // A turn the Hub never confirmed (native terminal input) still reports its
+    // end, with an empty start so the client keeps the length unknown instead of
+    // inventing one from an older turn.
+    recording.frames.lock().unwrap().clear();
+    driver
+        .apply(CoreEffects(vec![CoreEffect::SendUiTurnEnd {
+            binding: ui(),
+            event: TurnEndNotification {
+                r#type: TurnEndType::TurnEnd,
+                session_id: 7,
+                turn_id: "turn-4".into(),
+                provider: "codex".into(),
+                started_at: String::new(),
+                ended_at: "2026-01-02T00:02:00Z".into(),
+            },
+            best_effort: true,
+        }]))
+        .await
+        .unwrap();
+    let frames = recording.frames.lock().unwrap();
+    let WireFrame::Text(text) = &frames[0] else {
+        panic!("expected turn end frame")
+    };
+    let event: serde_json::Value = serde_json::from_str(text).unwrap();
+    assert_eq!(event["type"], "turn_end");
+    assert_eq!(event["turn_id"], "turn-4");
+    assert_eq!(event["started_at"], "");
+    assert_eq!(event["ended_at"], "2026-01-02T00:02:00Z");
+    assert!(event.get("done_summary").is_none());
+    assert!(event.get("token_statusbar").is_none());
+}
+
+#[tokio::test]
+async fn typed_turn_start_carries_the_provider_identity_and_start() {
+    let registry = registry();
+    let recording = Recording::default();
+    registry
+        .insert_ui(ui(), Box::new(recording.clone()))
+        .unwrap();
+    let dependencies = Arc::new(Dependencies::default());
+    let driver = EffectDriver::new(
+        registry,
+        dependencies.clone(),
+        dependencies.clone(),
+        dependencies,
+    );
+    driver
+        .apply(CoreEffects(vec![CoreEffect::SendUiTurnStart {
+            binding: ui(),
+            event: TurnStartNotification {
+                r#type: TurnStartType::TurnStart,
+                session_id: 7,
+                turn_id: "turn-9".into(),
+                provider: "codex".into(),
+                started_at: "2026-01-02T00:00:00Z".into(),
+            },
+            best_effort: true,
+        }]))
+        .await
+        .unwrap();
+    let frames = recording.frames.lock().unwrap();
+    let WireFrame::Text(text) = &frames[0] else {
+        panic!("expected turn start frame")
+    };
+    let event: serde_json::Value = serde_json::from_str(text).unwrap();
+    assert_eq!(
+        event,
+        serde_json::json!({"type":"turn_start","session_id":7,"turn_id":"turn-9","provider":"codex",
+        "started_at":"2026-01-02T00:00:00Z"})
+    );
+}
+
+#[tokio::test]
 async fn failed_best_effort_resize_preserves_ui_and_history_while_input_stays_strict() {
     let registry = registry();
     let ui_recording = Recording::default();

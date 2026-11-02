@@ -251,20 +251,27 @@ export function clearSessionListStopped(sessions: SessionSnapshot[], unseen: Set
   const key = sessionListIdentity(sessions.find(session => session.id === id));
   return !!key && unseen.delete(key);
 }
-/** A marked session shows the mark only while it is plain standby (not running, not waiting on the user). */
+/** A marked session shows the mark only while it is plain standby (not running, not waiting on
+ * the user, and not in a turn we saw start without seeing it end — see working). */
 export function isSessionListStoppedShown(session: SessionSnapshot | undefined, unseen: Set<string>,
-    pending: (id: number) => boolean = () => false): boolean {
+    pending: (id: number) => boolean = () => false,
+    working: (id: number) => boolean = () => false): boolean {
   const key = sessionListIdentity(session);
-  return !!key && unseen.has(key) && (session!.state || 'standby') === 'standby' && !sessionListWaiting(session!, pending);
+  return !!key && unseen.has(key) && (session!.state || 'standby') === 'standby' && !sessionListWaiting(session!, pending)
+    && !working(session!.id);
 }
 /**
  * One pass per render. A mark ends only when the session is opened (clearSessionListStopped) or its
  * ID is reused. Running again or waiting on the user hides it without ending it: a short redraw
  * must not erase it, and a session nobody opened is still unopened when it stops again.
+ * `working` (a turn the caller saw start and has not seen end) hides it too: the Hub reports
+ * standby on silence alone, so the state value cannot tell a mid-turn pause from a turn end
+ * (2026-10-18 fix, docs/local/bugfix_session-stop-false-positive_2026-10-18.md).
  * Absent sessions keep their mark, like memberships, because startup/reconnect maps can be incomplete.
  */
 export function settleSessionListStopped(state: SessionListTabState, sessions: SessionSnapshot[], unseen: Set<string>,
-    pending: (id: number) => boolean = () => false): { counts: Map<string, number>; changed: boolean } {
+    pending: (id: number) => boolean = () => false,
+    working: (id: number) => boolean = () => false): { counts: Map<string, number>; changed: boolean } {
   const counts = new Map(state.tabs.map(tab => [tab.id, 0]));
   const owners = sessionListOwners(state, sessions);
   const live = new Map(sessions.map(session => [session.id, session]));
@@ -277,7 +284,7 @@ export function settleSessionListStopped(state: SessionListTabState, sessions: S
       changed = true;
       continue;
     }
-    if (!isSessionListStoppedShown(session, unseen, pending)) continue;
+    if (!isSessionListStoppedShown(session, unseen, pending, working)) continue;
     const owner = owners.get(session.id) || state.defaultId;
     counts.set(owner, (counts.get(owner) || 0) + 1);
   }

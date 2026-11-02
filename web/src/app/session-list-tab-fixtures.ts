@@ -160,6 +160,17 @@ test('newly stopped hides while running/waiting, ends on ID reuse, and survives 
   assert.equal(noteStopped([session(1, { started_at: '' })], new Set(), 1), false);
   assert.equal(clearStopped([session(1, { started_at: '' })], unseen, 1), false); assert.equal(unseen.size, 1);
 });
+test('newly stopped stays hidden while a turn the caller saw start has not ended', () => {
+  const s = state(); const live = [session(1, { state: 'standby' })]; const unseen = new Set<string>();
+  noteStopped(live, unseen, 1);
+  // The Hub reports standby on silence alone, so the state value cannot tell a mid-turn pause
+  // from a turn end. A turn the caller saw start and has not seen end hides the mark.
+  const working = (id: number) => id === 1;
+  assert.equal(shown(live[0], unseen, () => false, working), false);
+  assert.equal(settle(s, live, unseen, () => false, working).counts.get('tab-1'), 0);
+  assert.equal(unseen.size, 1); // hidden, not erased: opening the session still clears it
+  assert.equal(shown(live[0], unseen, () => false, () => false), true);
+});
 test('newly stopped marks reload as identities only; storage denial stays usable', () => {
   let saved = ''; const storage = { getItem: (key: string) => { assert.equal(key, SESSION_LIST_STOPPED_KEY); return saved; },
     setItem: (key: string, value: string) => { assert.equal(key, SESSION_LIST_STOPPED_KEY); saved = value; } };

@@ -4,7 +4,7 @@
 use crate::{
     application::event_observer::{EventWarning, GitTurnCompletionCallbacks},
     approval::transcript::{
-        parser::{ParseState, ProviderFormat},
+        parser::{CodexTurnEvent, ParseState, ProviderFormat},
         reader::ReadBudget,
     },
     config::{ConfigStore, RuntimePaths},
@@ -574,9 +574,35 @@ impl SessionWorkers {
                 }))
                 .await?;
             }
-            if !prime {
-                for completion in cursor.parse.take_completions() {
-                    if let Ok(at) = parse_rfc3339(&completion.at) {
+            for event in cursor.parse.take_turn_events() {
+                match event {
+                    // The provider's own turn start. Delivered while the file is
+                    // read live so a client hides a not-yet-seen "stopped" mark
+                    // for a turn that began in the terminal too; folded without
+                    // delivery during priming, where the snapshot is the answer.
+                    CodexTurnEvent::Started(start) => {
+                        let Ok(at) = parse_rfc3339(&start.at) else {
+                            continue;
+                        };
+                        self.apply(core.observe_codex_turn_start(
+                            details.binding,
+                            start.turn_id,
+                            at,
+                            !prime,
+                        )?)
+                        .await?;
+                    }
+                    CodexTurnEvent::Ended(completion) => {
+                        let Ok(at) = parse_rfc3339(&completion.at) else {
+                            continue;
+                        };
+                        if prime {
+                            self.apply(
+                                core.close_codex_open_turn(details.binding, &completion.turn_id)?,
+                            )
+                            .await?;
+                            continue;
+                        }
                         // A confirmed Git work predicate must be established by
                         // completion capture; provider transcript end alone
                         // never turns ordinary conversation into a DONE card.
@@ -599,6 +625,7 @@ impl SessionWorkers {
                             at,
                             &label,
                             active,
+                            &completion.turn_id,
                         )?)
                         .await?;
                     }

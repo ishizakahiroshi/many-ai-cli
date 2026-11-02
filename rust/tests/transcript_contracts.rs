@@ -310,7 +310,7 @@ fn prime_restores_tail_and_never_promotes_partial_line_or_old_completion() {
     let safe = state.last_read.safe_offset;
     assert!(safe < fs::metadata(&path).unwrap().len());
     assert!(state.adopt_prime_cursor());
-    assert!(state.take_completions().is_empty());
+    assert!(state.take_turn_events().is_empty());
     fs::OpenOptions::new()
         .append(true)
         .open(&path)
@@ -378,8 +378,51 @@ fn out_of_range_codex_completion_timestamp_does_not_panic_or_drop_turn_identity(
             r#"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"large","completed_at":1.8446744073709552e22}}"#,
         ],
     );
-    let completions = state.take_completions();
-    assert_eq!(completions.len(), 1);
-    assert_eq!(completions[0].turn_id, "large");
-    assert_eq!(completions[0].at, "");
+    let events = state.take_turn_events();
+    let CodexTurnEvent::Ended(completion) = &events[0] else {
+        panic!("expected a provider turn end")
+    };
+    assert_eq!(events.len(), 1);
+    assert_eq!(completion.turn_id, "large");
+    assert_eq!(completion.at, "");
+}
+
+#[test]
+fn codex_turn_events_keep_provider_order_and_identity() {
+    // parent review R6: a reader needs the start of the same turn, so the records
+    // must stay in file order and keep the provider's own identity.
+    let mut state = parse(
+        ProviderFormat::Codex,
+        &[
+            r#"{"type":"event_msg","timestamp":"2026-01-01T00:00:00Z","payload":{"type":"task_started","turn_id":"turn-1"}}"#,
+            r#"{"type":"event_msg","timestamp":"2026-01-01T00:05:00Z","payload":{"type":"task_complete","turn_id":"turn-1","last_agent_message":"done"}}"#,
+            r#"{"type":"event_msg","timestamp":"2026-01-01T00:06:00Z","payload":{"type":"task_started","turn_id":"turn-2"}}"#,
+        ],
+    );
+    let events = state.take_turn_events();
+    assert_eq!(events.len(), 3);
+    let CodexTurnEvent::Started(first) = &events[0] else {
+        panic!("expected the first provider turn start")
+    };
+    assert_eq!(first.turn_id, "turn-1");
+    assert_eq!(first.at, "2026-01-01T00:00:00Z");
+    let CodexTurnEvent::Ended(end) = &events[1] else {
+        panic!("expected the matching provider turn end")
+    };
+    assert_eq!(end.turn_id, "turn-1");
+    assert_eq!(end.at, "2026-01-01T00:05:00Z");
+    let CodexTurnEvent::Started(second) = &events[2] else {
+        panic!("expected the next provider turn start")
+    };
+    assert_eq!(second.turn_id, "turn-2");
+    // The same turn announced twice is kept once, so a client is not told a turn
+    // restarted when a compacted rollout repeats its head.
+    let mut state = parse(
+        ProviderFormat::Codex,
+        &[
+            r#"{"type":"event_msg","timestamp":"2026-01-01T00:00:00Z","payload":{"type":"task_started","turn_id":"turn-1"}}"#,
+            r#"{"type":"event_msg","timestamp":"2026-01-01T00:00:01Z","payload":{"type":"task_started","turn_id":"turn-1"}}"#,
+        ],
+    );
+    assert_eq!(state.take_turn_events().len(), 1);
 }

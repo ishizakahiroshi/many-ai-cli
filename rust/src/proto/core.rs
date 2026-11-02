@@ -1412,6 +1412,10 @@ pub trait SessionCore:
     fn finish_ui_priming(&self, ui: UiBinding) -> Result<CoreEffects, SessionError>;
     fn broadcast_ui(&self, message: super::Message) -> CoreEffects;
     fn broadcast_git_turn(&self, event: GitTurnNotification) -> CoreEffects;
+    /// Additive Rust-only turn-end signal; no Git measurement is involved.
+    fn broadcast_turn_end(&self, event: TurnEndNotification) -> CoreEffects;
+    /// Additive Rust-only turn-start signal; no Git measurement is involved.
+    fn broadcast_turn_start(&self, event: TurnStartNotification) -> CoreEffects;
     /// Accept work atomically with the same membership check used by revoke.
     /// Accepted operations retain this guard until their I/O is complete.
     fn authorize_ui_work(&self, ui: UiBinding) -> Result<Box<dyn AcceptedUiWork>, SessionError>;
@@ -1485,6 +1489,50 @@ pub struct SpawnCorrelationNotification {
     pub started_at: String,
     pub client_request_id: String,
 }
+/// Additive Rust-only notification; generated Message remains frozen.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub enum TurnEndType {
+    #[default]
+    #[serde(rename = "turn_end")]
+    TurnEnd,
+}
+/// The Hub's own confirmation that a provider/user turn ended. It deliberately
+/// carries no Git measurement and no DONE card: the source completion gates
+/// (`git_turns.go`, the DONE marker) stay as they are, while a client that only
+/// needs "this turn finished" no longer depends on either. `turn_id` is the
+/// provider's own turn identity (`task_complete`), so two real turns are never
+/// collapsed into one by a Hub-side counter. `started_at` is the start the Hub
+/// confirmed for this same `turn_id`; it is empty when the Hub never confirmed
+/// one, and the client must then treat the length as unknown.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct TurnEndNotification {
+    pub r#type: TurnEndType,
+    pub session_id: i64,
+    pub turn_id: String,
+    pub provider: String,
+    pub started_at: String,
+    pub ended_at: String,
+}
+/// Additive Rust-only notification; generated Message remains frozen.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub enum TurnStartType {
+    #[default]
+    #[serde(rename = "turn_start")]
+    TurnStart,
+}
+/// The provider's own record that a turn started (`task_started`). This is the
+/// start a client needs to keep a not-yet-seen "stopped" mark hidden while the
+/// turn runs, including turns started by input typed in the terminal. It is
+/// also sent for the turn that is already open when a UI attaches, so a
+/// reconnecting client restores the Hub's state instead of its own memory.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct TurnStartNotification {
+    pub r#type: TurnStartType,
+    pub session_id: i64,
+    pub turn_id: String,
+    pub provider: String,
+    pub started_at: String,
+}
 /// Correlation is not a credential or an idempotency key. Empty preserves old clients.
 pub fn valid_client_request_id(value: &str) -> bool {
     value.len() <= 128
@@ -1496,6 +1544,10 @@ pub struct UiPriming {
     pub hub_instance: String,
     pub sessions: Vec<SessionSnapshot>,
     pub ordered_frames: Vec<super::Message>,
+    /// Turns the Hub has open right now, one per session. Delivered right after
+    /// the session snapshot so a reconnecting client starts from the Hub's
+    /// state instead of from its own memory (parent review R5).
+    pub open_turns: Vec<TurnStartNotification>,
 }
 
 pub const INPUT_QUEUE_LIMIT: usize = 100;
@@ -1931,6 +1983,26 @@ pub enum CoreEvent {
         started_at: String,
         ended_at: Option<String>,
     },
+    /// A provider/user turn ended and the Hub confirmed it without any Git
+    /// measurement (Codex `task_complete`). Kept apart from `GitTurnCapture` so
+    /// the silence-based fallback candidate (which reuses the Git path) never
+    /// turns into a turn-end signal.
+    TurnEnded {
+        binding: SessionBinding,
+        turn_id: String,
+        provider: String,
+        /// Hub-confirmed start of this same turn; empty when never confirmed.
+        started_at: String,
+        ended_at: String,
+    },
+    /// A provider turn started (Codex `task_started`), independent of any UI
+    /// input and of the terminal output the client may be re-rendering.
+    TurnStarted {
+        binding: SessionBinding,
+        turn_id: String,
+        provider: String,
+        started_at: String,
+    },
     HandoffUpdated {
         session: LiveSessionId,
         record_path: std::path::PathBuf,
@@ -1989,6 +2061,8 @@ pub enum CoreEffect {
     Broadcast(super::Message),
     BroadcastGitTurn(GitTurnNotification),
     BroadcastSpawnCorrelation(SpawnCorrelationNotification),
+    BroadcastTurnEnd(TurnEndNotification),
+    BroadcastTurnStart(TurnStartNotification),
     SendUiSpawnCorrelation {
         binding: UiBinding,
         event: SpawnCorrelationNotification,
@@ -1997,6 +2071,16 @@ pub enum CoreEffect {
     SendUiGitTurn {
         binding: UiBinding,
         event: GitTurnNotification,
+        best_effort: bool,
+    },
+    SendUiTurnEnd {
+        binding: UiBinding,
+        event: TurnEndNotification,
+        best_effort: bool,
+    },
+    SendUiTurnStart {
+        binding: UiBinding,
+        event: TurnStartNotification,
         best_effort: bool,
     },
     Persist(PersistenceEffect),

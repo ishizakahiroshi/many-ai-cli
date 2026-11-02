@@ -95,6 +95,22 @@ pub struct CodexCompletion {
     pub at: String,
     pub last_agent_message: String,
 }
+/// The provider's own record that `turn_id` started (`task_started`). It is the
+/// authoritative start of a provider turn: it exists for input typed in the
+/// terminal too, where the Hub never confirmed a UI input.
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
+pub struct CodexTurnStart {
+    pub turn_id: String,
+    pub at: String,
+}
+/// Provider turn records in file order. Keeping the order lets a reader pair
+/// each `task_complete` with the `task_started` of the same turn instead of
+/// attaching whatever start happens to be pending (parent review R6).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CodexTurnEvent {
+    Started(CodexTurnStart),
+    Ended(CodexCompletion),
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProviderFormat {
     Claude,
@@ -130,7 +146,7 @@ pub struct ParseState {
     max_messages: usize,
     max_bytes: usize,
     pub parsed_messages: u64,
-    completions: Vec<CodexCompletion>,
+    turn_events: Vec<CodexTurnEvent>,
 }
 impl Default for ParseState {
     fn default() -> Self {
@@ -155,12 +171,12 @@ impl ParseState {
             },
             max_bytes: if max_bytes == 0 { BATCH_MAX } else { max_bytes },
             parsed_messages: 0,
-            completions: Vec::new(),
+            turn_events: Vec::new(),
         }
     }
     pub fn begin_batch(&mut self) {
         self.visible.clear();
-        self.completions.clear();
+        self.turn_events.clear();
         self.batch = self.batch.wrapping_add(1).max(1);
         self.collect_unused();
     }
@@ -310,8 +326,10 @@ impl ParseState {
             .filter_map(|id| self.messages.get(id).cloned())
             .collect()
     }
-    pub fn take_completions(&mut self) -> Vec<CodexCompletion> {
-        std::mem::take(&mut self.completions)
+    /// Provider turn records of the batch, in file order. Consumed next to
+    /// {@link output_messages} so both ends of a turn come from one batch.
+    pub fn take_turn_events(&mut self) -> Vec<CodexTurnEvent> {
+        std::mem::take(&mut self.turn_events)
     }
     pub fn pending_count(&self) -> usize {
         self.tools.len()
@@ -432,7 +450,7 @@ impl ParseState {
             return false;
         }
         self.read_state.reset(self.last_read.safe_offset);
-        self.completions.clear();
+        self.turn_events.clear();
         true
     }
 }
@@ -922,6 +940,32 @@ impl ParseState {
                         true,
                     );
                 }
+                "task_started" => {
+                    let turn_id = payload.turn_id.trim().to_owned();
+                    let at = ts.trim().to_owned();
+                    if at.is_empty() && turn_id.is_empty() {
+                        return;
+                    }
+                    // The same provider turn can be announced twice (a compacted
+                    // rollout repeats the head). Keep only the first announcement.
+                    if self
+                        .turn_events
+                        .last()
+                        .is_some_and(|event| match event {
+                            CodexTurnEvent::Started(start) => {
+                                !turn_id.is_empty() && start.turn_id == turn_id
+                            }
+                            CodexTurnEvent::Ended(_) => false,
+                        })
+                    {
+                        return;
+                    }
+                    self.turn_events
+                        .push(CodexTurnEvent::Started(CodexTurnStart { turn_id, at }));
+                    if self.turn_events.len() > 32 {
+                        self.turn_events.remove(0);
+                    }
+                }
                 "task_complete" => {
                     let mut at = ts.trim().to_owned();
                     if at.is_empty() && payload.completed_at > 0.0 {
@@ -949,13 +993,13 @@ impl ParseState {
                         .0
                         .as_ref()
                         .and_then(|v| proto::decode_wire::<String>(v).ok());
-                    self.completions.push(CodexCompletion {
+                    self.turn_events.push(CodexTurnEvent::Ended(CodexCompletion {
                         turn_id,
                         at,
                         last_agent_message: last.as_deref().map(masked).unwrap_or_default(),
-                    });
-                    if self.completions.len() > 16 {
-                        self.completions.remove(0);
+                    }));
+                    if self.turn_events.len() > 32 {
+                        self.turn_events.remove(0);
                     }
                 }
                 _ => {}

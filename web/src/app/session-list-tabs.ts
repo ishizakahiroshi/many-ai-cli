@@ -9,6 +9,7 @@ import { SESSION_LIST_TAB_DRAG, SESSION_LIST_CARD_DRAG, SESSION_LIST_TABS_KEY,
   filterSessionListTree, sessionListWaitingCounts, loadSessionListStopped, saveSessionListStopped,
   noteSessionListStopped, clearSessionListStopped, isSessionListStoppedShown, settleSessionListStopped,
   rememberSessionListActive, sessionListTabSession, type SessionListTabState } from './session-list-tab-state.js';
+import { isStoppedMarkTurnInProgress } from './turn-end-notify-store.js';
 
 interface Callbacks {
   sessions: () => SessionSnapshot[];
@@ -81,7 +82,7 @@ function unseenStopped(): Set<string> {
 function persistStopped(): void {
   try { saveSessionListStopped(localStorage, unseenStopped()); } catch { /* storage denied */ }
 }
-/** Called by ws-client for an observed running→standby turn end the user is not looking at. */
+/** Called by ws-client for a turn end Hub confirmed (a completion record, or a Codex git turn), on a session the user is not looking at. */
 export function noteSessionListTurnEnd(id: number): void {
   if (noteSessionListStopped(all(), unseenStopped(), id)) persistStopped();
 }
@@ -94,7 +95,7 @@ export function noteSessionListOpened(id: number): boolean {
 }
 /** Whether the card draws the yellow "stopped, not opened yet" dot. The tab badge counts the same sessions. */
 export function isSessionListStopped(session: SessionSnapshot | undefined): boolean {
-  return isSessionListStoppedShown(session, unseenStopped(), callbacks?.pending);
+  return isSessionListStoppedShown(session, unseenStopped(), callbacks?.pending, isStoppedMarkTurnInProgress);
 }
 function rememberScroll(): void {
   const element = scrollElement();
@@ -312,7 +313,7 @@ export function renderSessionListTabs(): void {
   if (!parent || !callbacks) return;
   if (reconcileSessionListTabs(state(), all())) persist();
   const counts = sessionListWaitingCounts(state(), all(), callbacks.pending);
-  const settled = settleSessionListStopped(state(), all(), unseenStopped(), callbacks.pending);
+  const settled = settleSessionListStopped(state(), all(), unseenStopped(), callbacks.pending, isStoppedMarkTurnInProgress);
   if (settled.changed) persistStopped();
   const stoppedCounts = settled.counts;
   const signature = JSON.stringify([state().tabs, state().selectedId, [...counts], [...stoppedCounts]]);

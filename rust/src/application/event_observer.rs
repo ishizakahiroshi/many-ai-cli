@@ -576,6 +576,66 @@ impl OrderedEventObserver for ApplicationEventObserver {
                     self.git_turn(*binding, started_at, ended_at.as_deref())
                         .await
                 }
+                // The Hub confirmed a provider/user turn end without any Git
+                // measurement. Broadcasting here keeps the signal independent of
+                // the Git diff gate and of the DONE card, so a turn that ends
+                // with no diff (or outside Git) is still reported.
+                CoreEvent::TurnEnded {
+                    binding,
+                    turn_id,
+                    provider,
+                    started_at,
+                    ended_at,
+                } => {
+                    let owners = self.owners.get().ok_or(SessionError::Shutdown)?;
+                    let core = owners.core.upgrade().ok_or(SessionError::Shutdown)?;
+                    let effects = owners.effects.upgrade().ok_or(SessionError::Shutdown)?;
+                    if !core.is_current(*binding) {
+                        return Ok(());
+                    }
+                    let notification = TurnEndNotification {
+                        r#type: TurnEndType::TurnEnd,
+                        session_id: binding.session.0,
+                        turn_id: turn_id.clone(),
+                        provider: provider.clone(),
+                        started_at: started_at.clone(),
+                        ended_at: ended_at.clone(),
+                    };
+                    if let Err(failure) = effects.apply(core.broadcast_turn_end(notification)).await {
+                        (self.warning)("turn end broadcast", &failure.error);
+                    }
+                    Ok(())
+                }
+                // The provider reported that this turn started. Broadcasting it
+                // keeps a not-yet-seen "stopped" mark hidden while the turn runs,
+                // including turns started by input typed in the terminal, which
+                // never produce a Hub-confirmed UI input (parent review R4).
+                CoreEvent::TurnStarted {
+                    binding,
+                    turn_id,
+                    provider,
+                    started_at,
+                } => {
+                    let owners = self.owners.get().ok_or(SessionError::Shutdown)?;
+                    let core = owners.core.upgrade().ok_or(SessionError::Shutdown)?;
+                    let effects = owners.effects.upgrade().ok_or(SessionError::Shutdown)?;
+                    if !core.is_current(*binding) {
+                        return Ok(());
+                    }
+                    let notification = TurnStartNotification {
+                        r#type: TurnStartType::TurnStart,
+                        session_id: binding.session.0,
+                        turn_id: turn_id.clone(),
+                        provider: provider.clone(),
+                        started_at: started_at.clone(),
+                    };
+                    if let Err(failure) =
+                        effects.apply(core.broadcast_turn_start(notification)).await
+                    {
+                        (self.warning)("turn start broadcast", &failure.error);
+                    }
+                    Ok(())
+                }
                 // These events have no pre-publication Git dependency. Their
                 // lifecycle/transcript/routine consumers belong to the bus.
                 _ => Ok(()),
