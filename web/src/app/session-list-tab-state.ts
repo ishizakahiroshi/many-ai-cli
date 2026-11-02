@@ -219,6 +219,26 @@ export function sessionListTabSession(state: SessionListTabState, sessions: Sess
   if (remembered && owners.get(remembered.id) === tabId) return remembered.id;
   return order.find(id => owners.get(id) === tabId) ?? null;
 }
+/**
+ * The session to open after removedId is deleted: the neighbor inside the viewed tab when the removed
+ * session belongs to it, otherwise (or when the tab has no neighbor) the neighbor in the whole order.
+ */
+export function sessionListNeighborAfterRemoval(state: SessionListTabState, sessions: SessionSnapshot[],
+    ordered: number[], removedId: number): { id: number; sameTab: boolean } | null {
+  const owners = sessionListOwners(state, sessions);
+  const neighborIn = (list: number[]): number | undefined => {
+    const idx = list.indexOf(removedId);
+    if (idx > 0) return list[idx - 1];
+    if (idx === 0 && list.length > 1) return list[1];
+    return undefined;
+  };
+  if (owners.get(removedId) === state.selectedId) {
+    const inTab = neighborIn(ordered.filter(id => owners.get(id) === state.selectedId));
+    if (inTab !== undefined) return { id: inTab, sameTab: true };
+  }
+  const any = neighborIn(ordered);
+  return any === undefined ? null : { id: any, sameTab: false };
+}
 export function filterSessionListTree(tree: SidebarProjectNode[], owners: Map<number, string>, tabId: string): SidebarProjectNode[] {
   return tree.map(project => ({ ...project, children: project.children
     .filter(root => owners.get(root.id) === tabId)
