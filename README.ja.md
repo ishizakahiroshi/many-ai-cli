@@ -1,5 +1,7 @@
 # many-ai-cli
 
+Many Iris向けの[実行契約](docs/manual_iris-execution-contract.md)は、別資格での能力照会と永続要求照会を提供します。既定では無効です。実providerの起動と、停止・成果の確認済み証拠はまだ有効にしていません。
+
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Rust](https://img.shields.io/badge/rust-1.90.0-blue)

@@ -25,6 +25,7 @@ pub struct ServiceRouter {
     routines: Option<Arc<super::routines::RoutineHttp>>,
     confirmations: Option<Arc<super::confirmations::ConfirmationHttp>>,
     children: Option<Arc<super::child_routes::ChildHttp>>,
+    iris_execution: Option<Arc<super::iris_execution::IrisExecutionHttp>>,
     child_controls: Option<Arc<super::child_control::ChildControl>>,
     relay: Option<Arc<super::relay_routes::RelayHttp>>,
     auto_approval: Option<Arc<super::auto_approval::AutoApprovalHttp>>,
@@ -112,6 +113,20 @@ impl ServiceRouter {
         })
     }
     fn preflight_inner(&self, request: &Request, now: i64) -> Result<(), Response> {
+        if request.path == super::iris_execution::PATH {
+            return self
+                .iris_execution
+                .as_ref()
+                .ok_or_else(|| {
+                    Response::error(
+                        503,
+                        "iris_execution_not_configured",
+                        "Execution contract is not configured",
+                    )
+                    .no_store()
+                })?
+                .preflight(request);
+        }
         if let Some(response) = provider_early_response(request) {
             return Err(response);
         }
@@ -206,6 +221,7 @@ impl ServiceRouter {
             routines: None,
             confirmations: None,
             children: None,
+            iris_execution: None,
             child_controls: None,
             relay: None,
             auto_approval: None,
@@ -334,6 +350,13 @@ impl ServiceRouter {
     }
     pub fn with_children(mut self, children: Arc<super::child_routes::ChildHttp>) -> Self {
         self.children = Some(children);
+        self
+    }
+    pub fn with_iris_execution(
+        mut self,
+        owner: Arc<super::iris_execution::IrisExecutionHttp>,
+    ) -> Self {
+        self.iris_execution = Some(owner);
         self
     }
     pub fn with_relay(mut self, relay: Arc<super::relay_routes::RelayHttp>) -> Self {
@@ -499,6 +522,14 @@ impl ServiceRouter {
             .as_secs() as i64;
         if let Err(error) = self.preflight(request, now) {
             return Dispatch::response(error);
+        }
+        if request.path == super::iris_execution::PATH {
+            return Dispatch::response(
+                self.iris_execution
+                    .as_ref()
+                    .expect("preflight checked owner")
+                    .handle_authenticated(request, now),
+            );
         }
         if super::approval_pattern_routes::is_route(&request.path) {
             let Some(owner) = self.patterns.clone() else {
@@ -1068,6 +1099,7 @@ impl ServiceRouter {
             routines: None,
             confirmations: None,
             children: None,
+            iris_execution: None,
             child_controls: None,
             relay: None,
             auto_approval: None,
@@ -1280,6 +1312,17 @@ impl ServiceRouter {
         now: i64,
         at: crate::proto::time::Timestamp,
     ) -> Dispatch {
+        if request.path == super::iris_execution::PATH {
+            if let Err(error) = self.preflight(request, now) {
+                return Dispatch::response(error);
+            }
+            return Dispatch::response(
+                self.iris_execution
+                    .as_ref()
+                    .expect("preflight checked owner")
+                    .handle_authenticated(request, now),
+            );
+        }
         if let Some(response) = provider_early_response(request) {
             return Dispatch::response(response);
         }
@@ -1558,7 +1601,8 @@ fn validate_bound_port(paths: &RuntimePaths, port: u16) -> std::io::Result<()> {
     Ok(())
 }
 pub(crate) fn needs_owned_request(path: &str) -> bool {
-    super::diagnostic_routes::DiagnosticHttp::methods(path).is_some()
+    path == super::iris_execution::PATH
+        || super::diagnostic_routes::DiagnosticHttp::methods(path).is_some()
         || super::agent_history_routes::methods(path).is_some()
         || super::approval_pattern_routes::is_route(path)
         || super::approval_status_routes::methods(path).is_some()

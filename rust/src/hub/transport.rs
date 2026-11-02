@@ -430,6 +430,7 @@ fn body_policy(path: &str) -> (usize, bool) {
         return (crate::application::provider_assets::ICON_LIMIT, false);
     }
     match path {
+        super::iris_execution::PATH => (super::iris_execution_mcp::MAX_BYTES, false),
         "/api/logs/legacy-notice" => (1 << 16, true),
         super::jev_routes::PATH => (8192, false),
         "/api/attach" => (11 * 1024 * 1024, false),
@@ -623,6 +624,33 @@ impl HttpBody for FileBody {
 mod voice_auth_tests;
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn execution_body_reads_all_frames_and_enforces_its_own_limit() {
+        let chunks: Vec<Result<Bytes, std::io::Error>> = vec![
+            Ok(Bytes::from_static(b"{}")),
+            Ok(Bytes::from_static(b" {}")),
+        ];
+        let bytes = super::read_body(
+            Body::from_stream(futures_util::stream::iter(chunks)),
+            super::super::iris_execution::PATH,
+        )
+        .await
+        .unwrap();
+        assert_eq!(bytes, b"{} {}");
+        assert!(super::super::iris_execution_mcp::parse_json(&bytes).is_err());
+        let chunks: Vec<Result<Bytes, std::io::Error>> = vec![
+            Ok(Bytes::from_static(b"{}")),
+            Ok(Bytes::from(vec![b' '; 70_000])),
+        ];
+        let bytes = super::read_body(
+            Body::from_stream(futures_util::stream::iter(chunks)),
+            super::super::iris_execution::PATH,
+        )
+        .await
+        .unwrap();
+        assert_eq!(bytes.len(), super::super::iris_execution_mcp::MAX_BYTES + 1);
+        assert!(super::super::iris_execution_mcp::parse_json(&bytes).is_err());
+    }
     use super::*;
     use crate::{
         config::{Config, ConfigStore, RuntimePaths},

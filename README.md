@@ -1804,6 +1804,11 @@ You will be shown exactly what will be deleted and asked to confirm before anyth
 
 ## License
 
+The optional [Many Iris execution contract](docs/manual_iris-execution-contract.md)
+supports authenticated capability inspection and durable request lookup. It is
+disabled by default. Live provider execution and verified stop/result receipts
+are not enabled by this contract yet.
+
 MIT — see [LICENSE](LICENSE) for details.
 
 Third-party dependency notices are provided in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and the vendored/browser-side license texts are provided in [web/src/vendor/THIRD_PARTY_LICENSES.txt](web/src/vendor/THIRD_PARTY_LICENSES.txt).
