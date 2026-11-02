@@ -10,6 +10,12 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+- Add an opt-in Many Iris MCP execution-contract boundary with separate bearer
+  authentication, a durable request journal, pinned grant revisions and exact
+  session-bound stop requests. Live provider execution stays disabled: existing
+  session termination does not prove process-tree cessation or task success.
+  See [the contract's current limits](docs/manual_iris-execution-contract.md).
+
 ## [1.0.0] - 2026-10-31
 
 This release replaces the Go implementation of many-ai-cli with a Rust one.
