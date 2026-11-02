@@ -121,6 +121,7 @@ function buildJson(memos: readonly Memo[], now: Date): string {
     .map((x) => x.m);
   const out = sorted.map((m) => {
     const item: Record<string, unknown> = { project: m.project, text: m.text, done: m.done };
+    if (m.tab_name) item.tab_name = m.tab_name;
     if (m.done && m.done_at) item.done_at = m.done_at;
     item.created_at = m.created_at;
     item.updated_at = m.updated_at;
@@ -160,6 +161,7 @@ export interface ImportItem {
   text: string;
   project: string;
   done: boolean;
+  tab_name?: string;
 }
 
 export type MemoImportParse =
@@ -192,7 +194,7 @@ export function parseMemoImport(raw: string): MemoImportParse {
       skippedEmpty++;
       continue;
     }
-    const e = entry as { text?: unknown; project?: unknown; done?: unknown };
+    const e = entry as { text?: unknown; project?: unknown; done?: unknown; tab_name?: unknown };
     const text = typeof e.text === 'string' ? e.text.trim() : '';
     if (text === '') {
       skippedEmpty++;
@@ -202,6 +204,7 @@ export function parseMemoImport(raw: string): MemoImportParse {
       text,
       project: typeof e.project === 'string' ? e.project : '',
       done: typeof e.done === 'boolean' ? e.done : false,
+      ...(typeof e.tab_name === 'string' && e.tab_name ? { tab_name: e.tab_name } : {}),
     });
   }
   return { ok: true, items, skippedEmpty };

@@ -10,6 +10,8 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+- Record the current sidebar tab name on newly created work memos and show it with each memo.
+
 - Add an opt-in Many Iris MCP execution-contract boundary with separate bearer
   authentication, a durable request journal, pinned grant revisions and exact
   session-bound stop requests. Live provider execution stays disabled: existing

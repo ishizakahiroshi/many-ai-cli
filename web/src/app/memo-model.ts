@@ -22,6 +22,7 @@ export interface Memo {
   text: string;
   /** git root（C1 が Hub 側で正規化）。空文字 = 「未分類」。 */
   project: string;
+  tab_name?: string;
   done: boolean;
   created_at: string;
   updated_at: string;

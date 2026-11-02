@@ -27,6 +27,8 @@ pub struct Memo {
     pub id: String,
     pub text: String,
     pub project: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub tab_name: String,
     pub done: bool,
     pub created_at: String,
     pub updated_at: String,
@@ -75,6 +77,10 @@ const MEMO_SCHEMAS: &[Schema] = &[
                 kind: "string",
             },
             Field {
+                name: "tab_name",
+                kind: "string",
+            },
+            Field {
                 name: "done",
                 kind: "bool",
             },
@@ -108,6 +114,10 @@ const MEMO_SCHEMAS: &[Schema] = &[
                 kind: "int",
             },
             Field {
+                name: "tab_name",
+                kind: "string",
+            },
+            Field {
                 name: "images",
                 kind: "[]string",
             },
@@ -136,6 +146,7 @@ impl GoWire for MemoFile {
 struct MemoCreate {
     text: String,
     session_id: i64,
+    tab_name: String,
     #[serde(deserialize_with = "null_default")]
     images: Vec<String>,
 }
@@ -322,6 +333,7 @@ impl MemoManager {
                         id: random_hex(16).map_err(|_| operation_error())?,
                         text: text.into(),
                         project: project_for_session(body.session_id),
+                        tab_name: body.tab_name,
                         created_at: stamp.clone(),
                         updated_at: stamp,
                         images: body.images,

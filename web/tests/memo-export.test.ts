@@ -51,6 +51,13 @@ const finished = memo({
 });
 const all = [terms, finished, review, resume];
 
+test('JSON の書き出しと取り込みで作成元タブ名を保つ', () => {
+  const result = buildMemoExport([memo({ text: '作業', tab_name: '🚀' })], 'json', labels, { now: NOW });
+  expect(parseMemoImport(result.content)).toEqual({
+    ok: true, items: [{ text: '作業', project: '', done: false, tab_name: '🚀' }], skippedEmpty: 0,
+  });
+});
+
 test('selectMemosForExport: 選択があればそれだけ（完了済みでも）', () => {
   expect(selectMemosForExport(all, new Set(['d', 'c']), false).map((m) => m.id)).toEqual(['c', 'd']);
   expect(selectMemosForExport(all, new Set(['d']), true).map((m) => m.id)).toEqual(['d']);

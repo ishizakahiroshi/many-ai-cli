@@ -609,6 +609,7 @@ async function runImport(): Promise<void> {
       const { item, sessionId } = plan.create[i];
       try {
         const payload: NewMemoPayload = { text: item.text };
+        if (item.tab_name) payload.tab_name = item.tab_name;
         if (sessionId !== null) payload.session_id = sessionId;
         const { memo } = await request<{ memo: Memo }>('/api/memos', body('POST', payload));
         cache.push(memo);
@@ -809,6 +810,7 @@ function buildMemoRow(memo: Memo, project: string): HTMLElement {
   rowBody.append(textEl);
   // 作成日時と更新日時（本文を直したときだけ更新を足す）。完了済みは完了日時も出す。
   const stamps = [`${t('memo_created')} ${formatMemoTimestamp(memo.created_at)}`];
+  if (memo.tab_name) stamps.push(`${t('memo_tab')} ${memo.tab_name}`);
   if (memoWasEdited(memo)) stamps.push(`${t('memo_updated')} ${formatMemoTimestamp(memo.updated_at)}`);
   if (memo.done && memo.done_at) stamps.push(`${t('memo_completed')} ${formatMemoTimestamp(memo.done_at)}`);
   if (formatMemoTimestamp(memo.created_at)) {
@@ -958,9 +960,18 @@ function updateSubtitle(): void {
   }
 }
 
-type NewMemoPayload = { text: string; session_id?: number; images?: string[] };
+type NewMemoPayload = { text: string; session_id?: number; images?: string[]; tab_name?: string };
 
 // 入力欄からの追加と、パスの右クリックメニューからの保存（saveTextToMemo）の共通部分。
+function currentMemoTabName(): string | undefined {
+  try {
+    const state = JSON.parse(localStorage.getItem('many-ai-cli-session-list-tabs-v1') || 'null');
+    if (!state) return t('session_list_tab_name', { number: 1 });
+    const tab = state?.tabs?.find((item: { id: string }) => item.id === state.selectedId);
+    if (typeof tab?.name === 'string' && tab.name.trim()) return tab.name.trim();
+  } catch { /* Storage may be unavailable. Save the memo without tab information. */ }
+  return undefined;
+}
 async function createMemo(payload: NewMemoPayload): Promise<void> {
   const { memo } = await request<{ memo: Memo }>('/api/memos', body('POST', payload));
   cache.push(memo);
@@ -978,6 +989,7 @@ async function saveTextFromOutside(text: string, sessionId?: number | string | n
   if (!trimmed) throw new Error(t('memo_request_failed'));
   if (findOpenMemoByText(cache, trimmed)) return 'exists';
   const payload: NewMemoPayload = { text: trimmed };
+  payload.tab_name = currentMemoTabName();
   const sid = Number(sessionId);
   if (Number.isInteger(sid) && sid > 0) payload.session_id = sid;
   else if (activeSessionId !== null) payload.session_id = activeSessionId;
@@ -988,6 +1000,7 @@ registerMemoSaver(saveTextFromOutside);
 
 async function submitNewMemo(): Promise<void> {
   if (!inputEl.value.trim() && pendingImages.length === 0 && inflightUploads.size === 0) return;
+  const tabName = currentMemoTabName();
   inputEl.disabled = true;
   try {
     // 貼り付けた直後に Enter されても画像を取りこぼさない。
@@ -996,6 +1009,7 @@ async function submitNewMemo(): Promise<void> {
     const images = pendingImages.slice();
     if (!text && images.length === 0) return;
     const payload: NewMemoPayload = { text };
+    payload.tab_name = tabName;
     if (images.length > 0) payload.images = images;
     if (activeSessionId !== null) payload.session_id = activeSessionId;
     await createMemo(payload);
