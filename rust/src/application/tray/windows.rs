@@ -10,6 +10,11 @@ use windows_sys::Win32::{
         WindowsAndMessaging::*,
     },
 };
+#[cfg(test)]
+#[path = "windows/procedure_tests.rs"]
+mod procedure_tests;
+#[cfg(test)]
+use procedure_tests::{DefWindowProcW, DestroyWindow, GetWindowLongPtrW, PostQuitMessage};
 const CALLBACK: u32 = WM_USER + 1;
 const OPEN_REQUEST: u32 = WM_APP + 1;
 fn wide(value: &str) -> Vec<u16> {

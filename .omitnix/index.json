@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "f0601fbfb8d0550f3fa0b0cb2f65cd1fa126ecd2",
-    "dirty": false,
+    "commit": "7a0c14c198484751e4bc97013a4a9a9c6d6fa4e6",
+    "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
     "adapters": [
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2028,
-    "analyzed": 1569,
+    "discovered": 2033,
+    "analyzed": 1574,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 449,
@@ -22839,6 +22839,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/application/event_observer/tests/relay_assurance.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "P004-C-N01/N02/N03: real core/observer/effect driver/notification manager,"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/application/grid_spawn.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -27372,6 +27401,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/application/tray/windows/procedure_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "CLI-N08 exercises the real procedure and TrayOwner with synthetic window data."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/application/usage_hooks.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -28688,6 +28746,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/bin/many-ai-cli/uninstall_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "The binary's actual uninstall composition with synthetic Hub and platform IO."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/cli.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -29246,6 +29333,35 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/files/mutation/move_audit_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "FG-D05: observe real exclusive renames and their partial rollback result."
         },
         "authentication": {
           "state": "not_configured"
@@ -31699,6 +31815,35 @@
         "summary": {
           "state": "value",
           "value": "Loopback HTTP adapter. Core effects have an explicit driver; file downloads"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/hub/transport/voice_auth_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "HTTP-N07: real transport/router authority, gated uploads and a loopback-only"
         },
         "authentication": {
           "state": "not_configured"

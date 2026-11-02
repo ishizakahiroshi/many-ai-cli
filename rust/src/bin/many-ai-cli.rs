@@ -453,30 +453,16 @@ async fn run() -> Result<(), String> {
                 locations,
                 io: native,
             };
-            let stop_cancel = cancel.clone();
-            owner
-                .uninstall_with_prepare(
-                    flags.boolean("purge"),
-                    &mut std::io::stdin().lock(),
-                    &mut std::io::stdout(),
-                    &cancel,
-                    || async move {
-                        if main_program::running_port(&context).await?.is_some() {
-                            println!("Hub を停止中...");
-                            let _ = many_ai_cli::application::maintenance_entry::stop(
-                                &context,
-                                &stop_cancel,
-                            )
-                            .await;
-                        }
-                        // Release ConfigStore's held Windows root before removing
-                        // data. The immutable actor retains no directory capability.
-                        drop(context);
-                        Ok(())
-                    },
-                )
-                .await
-                .map_err(|e| e.to_string())?;
+            uninstall_entry(
+                &owner,
+                context,
+                flags.boolean("purge"),
+                &mut std::io::stdin().lock(),
+                &mut std::io::stdout(),
+                &cancel,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
         }
         Command::Tray => {
             let options = cli::parse_tray(&command_args[1..])?;
@@ -535,3 +521,56 @@ async fn run() -> Result<(), String> {
     }
     Ok(())
 }
+
+/// Only the native Hub discovery/stop boundary is replaceable in entry tests.
+/// Confirmation, preparation order and deletion stay in the actual CLI path.
+trait UninstallHub {
+    fn running_port(
+        &self,
+    ) -> many_ai_cli::proto::core::CoreFuture<'_, std::io::Result<Option<u16>>>;
+    fn stop<'a>(
+        &'a self,
+        cancel: &'a Cancellation,
+    ) -> many_ai_cli::proto::core::CoreFuture<'a, std::io::Result<()>>;
+}
+impl UninstallHub for main_program::MainContext {
+    fn running_port(
+        &self,
+    ) -> many_ai_cli::proto::core::CoreFuture<'_, std::io::Result<Option<u16>>> {
+        Box::pin(main_program::running_port(self))
+    }
+    fn stop<'a>(
+        &'a self,
+        cancel: &'a Cancellation,
+    ) -> many_ai_cli::proto::core::CoreFuture<'a, std::io::Result<()>> {
+        Box::pin(many_ai_cli::application::maintenance_entry::stop(
+            self, cancel,
+        ))
+    }
+}
+async fn uninstall_entry(
+    owner: &many_ai_cli::application::platform_cli::PlatformCli,
+    context: impl UninstallHub,
+    purge: bool,
+    input: &mut impl std::io::BufRead,
+    out: &mut impl std::io::Write,
+    cancel: &Cancellation,
+) -> std::io::Result<()> {
+    let stop_cancel = cancel.clone();
+    owner
+        .uninstall_with_prepare(purge, input, out, cancel, || async move {
+            if context.running_port().await?.is_some() {
+                println!("Hub を停止中...");
+                // Preserve the native command's best-effort stop contract.
+                let _ = context.stop(&stop_cancel).await;
+            }
+            // Release ConfigStore's held Windows root before removing data.
+            drop(context);
+            Ok(())
+        })
+        .await
+}
+
+#[cfg(test)]
+#[path = "many-ai-cli/uninstall_tests.rs"]
+mod uninstall_tests;

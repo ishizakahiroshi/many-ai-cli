@@ -354,7 +354,9 @@ struct Io {
     specs: Mutex<Vec<WrappedSpawnSpec>>,
     sent: Mutex<Vec<(LiveSessionId, Vec<u8>)>>,
     effects: Mutex<Vec<CoreEffect>>,
+    completion_check: Mutex<Option<Box<CompletionCheck>>>,
 }
+type CompletionCheck = dyn Fn(&CoreEvent) + Send + Sync;
 impl WrapperTransport for Io {
     fn send<'a>(
         &'a self,
@@ -378,6 +380,13 @@ impl CoreEffectSink for Io {
             {
                 self.effect_entered.notify_one();
                 self.effect_release.notified().await;
+            }
+            for effect in &effects.0 {
+                if let CoreEffect::Notify(event) = effect
+                    && let Some(check) = lock(&self.completion_check).as_ref()
+                {
+                    check(event);
+                }
             }
             lock(&self.effects).extend(effects.0);
             Ok(())
@@ -2132,4 +2141,143 @@ async fn resume_rejects_old_launch_identity_even_without_restored_relay_metadata
     assert_eq!(error.code, "relay_children_active");
     assert_eq!(f.io.starts.load(Ordering::SeqCst), 1);
     assert!(f.core.details(old.binding.session).unwrap().connected);
+}
+
+#[tokio::test]
+async fn relay_finish_persists_before_completion_callbacks_even_when_launch_returns_error() {
+    // P004-C-N01, relay-owner boundary only. The real application callbacks and
+    // outbound notification manager are verified separately, not by this sink.
+    for action in ["stop", "failed-start", "failed-resume"] {
+        let f = fixture(6).await;
+        let ui = UiBinding {
+            connection: UiConnectionId(1),
+            auth_epoch: f.core.auth_epoch(),
+        };
+        f.core.attach_ui(ui, None, None).unwrap();
+        assert!(f.core.finish_ui_priming(ui).unwrap().0.is_empty());
+        let id = if action == "stop" {
+            start(&f, action, false, false).await.orchestration_id
+        } else if action == "failed-resume" {
+            let parent = f.core.details(f.parent.session).unwrap().snapshot;
+            let mut file = persisted(&f, action, &parent.started_at, 0, "");
+            file.state = "stopped".into();
+            file.reason = "hub_restart".into();
+            f.program.store.save(&file).unwrap();
+            f.program.restore(Timestamp::now()).await.unwrap();
+            file.orchestration_id
+        } else {
+            String::new()
+        };
+        lock(&f.io.effects).clear();
+        let callbacks = Arc::new(Mutex::new(Vec::new()));
+        let seen = callbacks.clone();
+        let owner = Arc::downgrade(&f.program);
+        *lock(&f.io.completion_check) = Some(Box::new(move |event| {
+            let (step, summary) = match event {
+                CoreEvent::RoutineCompleted { summary, .. } => ("routine", summary),
+                CoreEvent::CompletionRecord { summary, .. } => ("handoff", summary),
+                CoreEvent::Completed { summary, .. } => ("completed", summary),
+                _ => return,
+            };
+            if summary.kind != "relay" {
+                return;
+            }
+            assert!(!summary.fallback);
+            let owner = owner.upgrade().unwrap();
+            let (records, warnings) = owner.store.load().unwrap();
+            assert!(warnings.is_empty());
+            assert_eq!(records.len(), 1);
+            assert_eq!(records[0].state, "stopped");
+            assert!(
+                records[0]
+                    .events
+                    .iter()
+                    .any(|event| event.kind == "stopped")
+            );
+            assert!(
+                std::fs::read_to_string(&records[0].board_path)
+                    .unwrap()
+                    .contains("relay stopped")
+            );
+            lock(&seen).push(step);
+        }));
+        if action == "stop" {
+            f.program
+                .stop_relay(f.parent.session, &id, Timestamp::now())
+                .await
+                .unwrap();
+        } else {
+            f.io.fail.store(true, Ordering::SeqCst);
+            let result = if action == "failed-start" {
+                f.program
+                    .start_relay(
+                        f.parent.session,
+                        request(&f, action, false, false),
+                        Timestamp::now(),
+                        TaskCancellation::default(),
+                    )
+                    .await
+                    .map(|value| value.0)
+            } else {
+                f.program
+                    .resume_relay(
+                        f.parent.session,
+                        &id,
+                        Timestamp::now(),
+                        TaskCancellation::default(),
+                    )
+                    .await
+            };
+            assert!(result.is_err(), "synthetic launch must report its failure");
+        }
+        assert_eq!(*lock(&callbacks), ["routine", "handoff", "completed"]);
+        assert!(lock(&f.io.effects).iter().any(|effect| {
+            matches!(effect, CoreEffect::SendUiBestEffort { message, .. } if message.r#type == "done_summary")
+        }));
+    }
+}
+
+#[tokio::test]
+async fn relay_finish_without_parent_retains_state_but_omits_completion_callbacks() {
+    // P004-C-N02 absent-binding gate. A queued summary is not a callback or
+    // evidence that any external notification was admitted.
+    let f = fixture(4).await;
+    let initial = start(&f, "parent-disappears", false, false).await;
+    let ui = UiBinding {
+        connection: UiConnectionId(1),
+        auth_epoch: f.core.auth_epoch(),
+    };
+    f.core.attach_ui(ui, None, None).unwrap();
+    assert!(f.core.finish_ui_priming(ui).unwrap().0.is_empty());
+    let handle = lock(&f.program.state).runs[&initial.orchestration_id].clone();
+    f.io.apply(f.core.dismiss_bound(f.parent, Timestamp::now()).unwrap())
+        .await
+        .unwrap();
+    lock(&f.io.effects).clear();
+    let mut run = handle.lock().await;
+    f.program
+        .finish(
+            &mut run,
+            "stopped",
+            "timeout",
+            "synthetic timeout",
+            Timestamp::now(),
+        )
+        .await;
+    let (records, warnings) = f.program.store.load().unwrap();
+    assert!(warnings.is_empty());
+    assert_eq!(records[0].state, "stopped");
+    assert_eq!(records[0].reason, "timeout");
+    let effects = lock(&f.io.effects);
+    assert!(!effects.iter().any(|effect| matches!(
+        effect,
+        CoreEffect::Notify(
+            CoreEvent::RoutineCompleted { .. }
+                | CoreEvent::CompletionRecord { .. }
+                | CoreEvent::Completed { .. }
+        )
+    )));
+    assert!(effects.iter().any(|effect| {
+        matches!(effect, CoreEffect::SendUiBestEffort { message, .. } if message.r#type == "done_summary")
+    }));
 }
