@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "091e0a3cc790fae3b9d06bfe6fae12f1addfe016",
+    "commit": "06ec745df7d8a06882592f033d9d02f625912fc0",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2045,
-    "analyzed": 1586,
+    "discovered": 2046,
+    "analyzed": 1587,
     "unresolved": 10,
     "unknown": 0,
     "unclaimed": 449,
@@ -49411,6 +49411,36 @@
     },
     {
       "path": "web/tests/command-palette-store.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/composer-paste-protection.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

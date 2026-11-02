@@ -250,7 +250,6 @@ export function stagePastedText(text, opts: any = {}) {
   if (!cleaned) return false;
   const lines = cleaned.split('\n');
   if (!opts.force && lines.length <= 4 && cleaned.length <= 300) return false;
-  if (pastedTexts.length >= 3) pastedTexts.shift();
   set_pasteCounter(pasteCounter + 1);
   pastedTexts.push({ id: pasteCounter, text: cleaned, lineCount: lines.length });
   noteComposerDraftChanged();
@@ -649,8 +648,8 @@ export async function doSend(sessionId) {
     // 長文ペーストチップを一時 .txt 化して @path 参照で送る（Codex の畳み込みによる確定 \r 吸収を回避）。
     // flushPendingAttach より前に積むことで、画像添付と同一の inject 経路へ合流させる。
     const prepared = prepareComposerSend(draft);
-    detachComposerAttachments(draft);
     const injects = await flushPendingAttach(sessionId, prepared.attachments);
+    if (!injects) return false;
     if (!isComposerOwnerLive(draft)) return false;
     const injectPrefix = injects.join('');
     let rawText = prepared.text;
@@ -698,6 +697,9 @@ export async function doSend(sessionId) {
     // sendText は接続断や send() の例外を false で返すため、失敗時は doSend の
     // 後続状態更新にも入らず、ユーザーが同じ内容を再送できる。
     if (!sendSubmittedText(sessionId, textToSend)) return false;
+    detachComposerAttachments(draft);
+    for (const attachment of draft.pendingAttachFiles) attachment.wrapper?.remove();
+    updateAttachClearBtn();
     consumeComposerDraft(draft);
     // 承認パネルを使わずに入力欄から答えた場合も、描いていた記録は回答済みにしてパネルを閉じる
     // （Hub の記録が閉じるまで同じ承認を描き直さない）。

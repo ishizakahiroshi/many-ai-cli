@@ -10,6 +10,10 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Fixed
+- Keep all long pasted texts before sending, and retain the draft when an
+  attachment upload fails instead of sending an incomplete message.
+
 ### Changed
 - **Conversation text is no longer stored in the SQLite history.** What you type
   and what the AI prints used to be saved (after pattern-based masking, which
