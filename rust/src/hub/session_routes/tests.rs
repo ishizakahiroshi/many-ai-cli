@@ -16,6 +16,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::Value;
 use std::path::Path;
 use std::time::Duration;
+mod remote_process_guards;
 
 struct NoSpawn;
 impl WrappedSessionSpawner for NoSpawn {

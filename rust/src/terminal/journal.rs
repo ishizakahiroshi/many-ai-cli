@@ -18,6 +18,10 @@ use std::{
     },
 };
 
+#[cfg(test)]
+#[path = "journal/failure_tests.rs"]
+mod failure_tests;
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct JournalOptions {
     pub session_enabled: bool,

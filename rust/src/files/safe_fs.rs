@@ -962,6 +962,10 @@ impl Dir {
 }
 
 #[cfg(all(test, windows))]
+#[path = "safe_fs/windows_save_pin_tests.rs"]
+mod windows_save_pin_tests;
+
+#[cfg(all(test, windows))]
 mod windows_path_tests {
     use super::*;
 
