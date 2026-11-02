@@ -72,6 +72,9 @@ foreach ($group in (@($schedule.runs) | Group-Object pair_id)) {
 $summary=[Collections.Generic.List[object]]::new();$lines=[Collections.Generic.List[string]]::new()
 $lines.Add('# PTY replay comparison');$lines.Add('')
 $lines.Add("Stage: $($metadata.stage). Attempt: $($metadata.attempt_id).")
+if ($metadata.PSObject.Properties.Name -contains 'allow_background_load' -and $metadata.allow_background_load) {
+    $lines.Add('Background-load policy: normal-environment comparison; background CPU is recorded without CPU-load exclusions. Timing differences include ordinary background activity.')
+}
 $lines.Add('')
 if ($metadata.stage -eq 'verify') {
     $status=if ($gateOk) { 'unmeasured: correctness only' } else { 'invalid: correctness incomplete/failed' }
@@ -96,7 +99,7 @@ foreach ($condition in @('paced','saturated')) {
     $lines.Add('')
     foreach ($metric in @('average_cores','ws_median_mib','private_median_mib')) {
         $x=@($summary | Where-Object { $_.condition -eq $condition -and $_.metric -eq $metric })[0]
-        $lines.Add("Paired absolute saving (Go minus Rust), $metric: $(Format-Number $x.paired_go_minus_rust_saving_median); Rust change: $(Format-Number $x.paired_percent_change_median)%.")
+        $lines.Add("Paired absolute saving (Go minus Rust), ${metric}: $(Format-Number $x.paired_go_minus_rust_saving_median); Rust change: $(Format-Number $x.paired_percent_change_median)%.")
     }
     $lines.Add('')
 }

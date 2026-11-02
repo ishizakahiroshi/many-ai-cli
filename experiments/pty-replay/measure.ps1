@@ -8,13 +8,14 @@ param(
     [ValidateRange(1,2147483647)][int]$Repetitions = 1,
     [string]$PilotDir,
     [switch]$ConditionsConfirmed,
+    [switch]$AllowBackgroundLoad,
     [ValidateRange(60,86400)][int]$RunTimeoutSeconds = 600
 )
 . "$PSScriptRoot/common.ps1"
 Assert-WindowsHost
 Assert-DefaultRuntimeEnvironment
 if ($Stage -ne 'verify' -and -not $ConditionsConfirmed) {
-    throw 'Confirm AC power, unchanged power mode, and no interactive/background heavy work with -ConditionsConfirmed.'
+    throw 'Confirm AC power and unchanged power mode with -ConditionsConfirmed; normal background apps are permitted only with -AllowBackgroundLoad.'
 }
 $scenarioPath=Join-Path $PSScriptRoot 'scenario.json'
 $s=Get-Content -LiteralPath $scenarioPath -Raw | ConvertFrom-Json
@@ -56,12 +57,14 @@ if ($Stage -eq 'measure') {
     if (-not $pilot.accepted -or $pilot.repetitions -ne $Repetitions) { throw 'Need an accepted full pilot at exactly these fixed repetitions.' }
     foreach ($k in $identity.Keys) { if ($pilot.identity.$k -cne $identity[$k]) { throw "Pilot identity mismatch: $k" } }
     if ($pilot.machine_json -cne $machineJson) { throw 'Pilot machine, OS, architecture or power scheme changed.' }
+    if ([bool]$pilot.allow_background_load -ne [bool]$AllowBackgroundLoad) { throw 'Pilot and main background-load policy must match.' }
 }
 $OutputDir=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDir)
 if (Test-Path -LiteralPath $OutputDir) { throw 'OutputDir must not exist. Keep original attempts and choose a new directory.' }
 New-Item -ItemType Directory -Path $OutputDir | Out-Null
 $attemptId=[guid]::NewGuid().ToString('N')
 $rules=[ordered]@{
+    allow_background_load=[bool]$AllowBackgroundLoad; background_cpu_policy=$(if ($AllowBackgroundLoad) {'record only; normal-environment comparison'} else {'exclude above thresholds'})
     idle_seconds=$s.idle_seconds;idle_cpu_median_below_percent=$s.idle_cpu_percent_max;idle_available_ram_above_percent=$s.idle_available_ram_percent_min
     running_ram_below_percent=$s.run_available_ram_percent_min;other_cpu_above_percent=$s.other_cpu_percent_max;other_cpu_for_seconds=$s.other_cpu_seconds_max
     process_max_gap_ms=1000;machine_max_gap_ms=2500;minimum_machine_samples=3;minimum_process_samples=3
@@ -90,6 +93,7 @@ Copy-Item $manifestPath (Join-Path $OutputDir 'fixture-manifest.json')
 Write-JsonFile (Join-Path $OutputDir 'metadata.json') ([ordered]@{
     schema_version=1;attempt_id=$attemptId;stage=$Stage;started_utc=[DateTime]::UtcNow.ToString('o');identity=$identity;machine=$machine
     powershell=$PSVersionTable.PSVersion.ToString();runtime_environment=Get-SafeEnvironment;conditions_confirmed=[bool]$ConditionsConfirmed
+    allow_background_load=[bool]$AllowBackgroundLoad
     run_timeout_seconds=$RunTimeoutSeconds;source_sha256=$currentHashes;base_sha=$build.base_sha
     schedule_sha256=(Get-FileHash (Join-Path $OutputDir 'schedule.json') -Algorithm SHA256).Hash.ToLowerInvariant()
     cpu_boundary='Process CPU sampled immediately before START and on MEASURED receipt, before CHECK. Includes command dispatch and MEASURED JSON/flush; excludes warmup, oracle, checksum, DONE and EXIT.'
@@ -182,7 +186,7 @@ foreach ($entry in $schedule) {
         Receive-MachineSamples $sampler $entry.run_id $rows
         $base=@($rows | Where-Object { $_.phase -eq 'baseline' -and $_.phase_end -eq 'baseline' })
         if ($base.Count -lt $s.idle_seconds -or @($base | Where-Object missing_reason).Count) { throw 'Baseline counters missing or insufficient.' }
-        if ((Get-Median @($base.machine_cpu_percent)) -ge $s.idle_cpu_percent_max -or ($base.available_ram_percent | Measure-Object -Minimum).Minimum -le $s.idle_available_ram_percent_min) { throw 'Baseline CPU/RAM not idle; attempt retained without automatic rerun.' }
+        if ((-not $AllowBackgroundLoad -and (Get-Median @($base.machine_cpu_percent)) -ge $s.idle_cpu_percent_max) -or ($base.available_ram_percent | Measure-Object -Minimum).Minimum -le $s.idle_available_ram_percent_min) { throw 'Baseline CPU/RAM not idle; attempt retained without automatic rerun.' }
         $state.phase='startup'
         $child=Start-BenchProcess $exe[$entry.language] $entry.condition $FixtureDir $Repetitions (Join-Path $OutputDir $entry.run_id)
         $state.target_pid=$child.process.Id;$r.pid=$child.process.Id
@@ -280,7 +284,7 @@ foreach ($entry in $schedule) {
                 $observerPercent=100*($m.controller_cpu_seconds-$previous.controller_cpu_seconds)/$elapsed/$logicalCpus
                 $other=[math]::Max(0,$m.machine_cpu_percent-$targetPercent-$observerPercent)
                 if ($other -gt $s.other_cpu_percent_max) { $highSeconds+=$elapsed } else { $highSeconds=0 }
-                if ($highSeconds -ge $s.other_cpu_seconds_max) { $reasons.Add('sustained_other_cpu_estimate') }
+                if (-not $AllowBackgroundLoad -and $highSeconds -ge $s.other_cpu_seconds_max) { $reasons.Add('sustained_other_cpu_estimate') }
             } else { $highSeconds=0 }
         }
         $previous=$m
@@ -317,9 +321,9 @@ Write-JsonFile (Join-Path $OutputDir 'pairs.json') $pairs
 if ($Stage -eq 'pilot') {
     $sat=@($allRuns | Where-Object { $_.condition -eq 'saturated' -and $_.correct -and $_.wall_ms -gt 0 })
     $advised=$null
-    if ($sat.Count -eq 4) { $fast=($sat.wall_ms | Measure-Object -Minimum).Minimum;$advised=[math]::Ceiling($Repetitions*[math]::Max(1,1.2*$s.minimum_saturated_seconds*1000/$fast)) }
+    if ($sat.Count -eq 4) { $fast=($sat.wall_ms | Measure-Object -Minimum).Minimum;$advised=[math]::Ceiling($Repetitions*[math]::Max(1.0,1.2*$s.minimum_saturated_seconds*1000/$fast)) }
     $accepted=$allRuns.Count -eq 8 -and @($pairs | Where-Object { -not $_.valid }).Count -eq 0 -and $sat.Count -eq 4
-    Write-JsonFile (Join-Path $OutputDir 'pilot.json') @{accepted=$accepted;repetitions=$Repetitions;advised_repetitions=$advised;identity=$identity;machine_json=$machineJson;note='If not accepted, repeat all 8 pilot runs in a new directory at advised repetitions. Freeze an accepted value before main measurement.'}
+    Write-JsonFile (Join-Path $OutputDir 'pilot.json') @{accepted=$accepted;repetitions=$Repetitions;advised_repetitions=$advised;identity=$identity;machine_json=$machineJson;allow_background_load=[bool]$AllowBackgroundLoad;note='If not accepted, repeat all 8 pilot runs in a new directory at advised repetitions. Freeze an accepted value before main measurement.'}
     Write-Host "Pilot accepted=$accepted; advised repetitions=$advised. Main must use an accepted pilot at exactly the same repetitions."
 }
 Write-Host "Raw attempt saved. Run summarize.ps1 -ResultDir <this directory>."
