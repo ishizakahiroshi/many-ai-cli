@@ -494,7 +494,7 @@ pub struct OrchestrationConfig {
     #[serde(rename = "bounded_allowed_tools")]
     pub bounded_allowed_tools: BTreeMap<String, Vec<String>>,
 }
-#[derive(Clone, Default, PartialEq, Serialize, Deserialize, Debug)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
 #[serde(default)]
 pub struct HubConfig {
     #[serde(rename = "port")]
@@ -523,6 +523,28 @@ pub struct HubConfig {
     pub env_kind: String,
     #[serde(rename = "terminal_color")]
     pub terminal_color: String,
+    #[serde(rename = "ai_launch_shell")]
+    pub ai_launch_shell: String,
+}
+impl Default for HubConfig {
+    fn default() -> Self {
+        Self {
+            port: 0,
+            open_browser: false,
+            auto_shutdown: false,
+            stale_binary_auto_restart: false,
+            log_dir: String::new(),
+            idle_timeout_min: 0,
+            wrapper_reconnect_grace_sec: 0,
+            wrapper_send_write_timeout_sec: 0,
+            allow_loopback_without_token: false,
+            trusted_networks: Vec::new(),
+            allowed_hosts: Vec::new(),
+            env_kind: String::new(),
+            terminal_color: String::new(),
+            ai_launch_shell: "auto".into(),
+        }
+    }
 }
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize, Debug)]
 #[serde(default)]
@@ -2011,6 +2033,13 @@ pub(super) fn schema(kind: &str) -> &'static [Field] {
                 yomit: false,
                 jomit: false,
             },
+            Field {
+                yaml: "ai_launch_shell",
+                json: "AiLaunchShell",
+                kind: "string",
+                yomit: false,
+                jomit: false,
+            },
         ],
         "InputConfig" => &[Field {
             yaml: "deferred_enter_ms",
@@ -2444,6 +2473,9 @@ pub fn normalize_terminal_color(raw: &str) -> &'static str {
         _ => "force",
     }
 }
+pub fn valid_ai_launch_shell(raw: &str) -> bool {
+    matches!(raw, "auto" | "pwsh" | "cmd")
+}
 pub fn normalize_handoff_intent_mode(raw: &str) -> &'static str {
     if raw == "turn-summary" {
         "turn-summary"
@@ -2647,6 +2679,7 @@ impl Config {
         cfg.hub.auto_shutdown = true;
         cfg.hub.stale_binary_auto_restart = true;
         cfg.hub.terminal_color = "force".into();
+        cfg.hub.ai_launch_shell = "auto".into();
         cfg.hub.log_dir = paths
             .resource(Resource::Logs)
             .to_string_lossy()

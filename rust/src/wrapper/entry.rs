@@ -96,7 +96,11 @@ fn effective_port(context: &WrapperContext<'_>) -> io::Result<u16> {
         })
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid wrapper Hub port"))
 }
-fn registration(context: &WrapperContext<'_>, launch: &LaunchPlan) -> io::Result<Message> {
+fn registration(
+    context: &WrapperContext<'_>,
+    launch: &LaunchPlan,
+    session_shell: &str,
+) -> io::Result<Message> {
     let skill_env = |key| {
         if context.paths.is_trial() {
             String::new()
@@ -121,7 +125,7 @@ fn registration(context: &WrapperContext<'_>, launch: &LaunchPlan) -> io::Result
         execution_mode: launch.execution_mode.clone(),
         agent_session_id: launch.agent_session_id.clone(),
         pid: i64::from(std::process::id()),
-        shell: context.shell.into(),
+        shell: session_shell.into(),
         token: context.config.token.clone(),
         home_dir: if context.paths.is_trial() {
             context.paths.root()
@@ -143,6 +147,99 @@ fn registration(context: &WrapperContext<'_>, launch: &LaunchPlan) -> io::Result
         rows: context.terminal_size.rows,
         ..Default::default()
     })
+}
+fn select_launch_shell(
+    context: &WrapperContext<'_>,
+    launch: &LaunchPlan,
+    provider: &str,
+    resolver: &CommandResolver<'_>,
+) -> io::Result<Option<(String, String)>> {
+    if !launch_shell_eligible(
+        provider,
+        launch.headless,
+        launch.login_mode,
+        context.environment,
+    ) {
+        return Ok(None);
+    }
+    match context.config.hub.ai_launch_shell.as_str() {
+        "auto" => Ok(None),
+        mode @ ("pwsh" | "cmd") => resolver
+            .resolve_ai_launch_shell(mode)
+            .map(|path| Some((mode.to_owned(), path))),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "hub.ai_launch_shell must be auto, pwsh, or cmd",
+        )),
+    }
+}
+fn launch_shell_eligible(
+    provider: &str,
+    headless: bool,
+    login_mode: bool,
+    environment: &[String],
+) -> bool {
+    !headless
+        && !login_mode
+        && provider != "shell"
+        && env(environment, "MANY_AI_CLI_USAGE_PROBE") != Some("1")
+        && env(environment, "MANY_AI_CLI_SUBSCRIPTION_LOGIN") != Some("1")
+}
+fn registration_shell(
+    provider: &str,
+    selected_shell: Option<&(String, String)>,
+    command: &crate::process::execpath::ResolvedCommand,
+) -> String {
+    if let Some((_, path)) = selected_shell {
+        path.clone()
+    } else if provider == "shell" || command.shell_shim.is_some() {
+        command.executable.clone()
+    } else {
+        "direct".into()
+    }
+}
+fn install_shell_bootstrap(
+    process: &mut ProcessPlan,
+    context: &WrapperContext<'_>,
+    mode: &str,
+    shell_executable: &str,
+    payload: &super::launch_payload::PreparedLaunchPayload,
+) -> io::Result<()> {
+    let bootstrap = super::launch_payload::build_bootstrap_command(
+        mode,
+        Path::new(shell_executable),
+        context.executable,
+        payload.path(),
+    )?;
+    process.executable = bootstrap.executable.into();
+    process.args = bootstrap.args;
+    process
+        .env
+        .insert(super::launch_payload::RUNNER_ENV.into(), None);
+    process
+        .env
+        .insert(super::launch_payload::PAYLOAD_ENV.into(), None);
+    for (name, value) in bootstrap.environment {
+        process.env.insert(name, Some(value));
+    }
+    Ok(())
+}
+fn clear_inherited_raw_cmd_bootstrap(process: &mut ProcessPlan) {
+    let marker_keys = process
+        .env
+        .keys()
+        .filter(|key| {
+            key.to_string_lossy()
+                .eq_ignore_ascii_case(super::launch_payload::CMD_RAW_BOOTSTRAP_ENV)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    for key in marker_keys {
+        process.env.remove(&key);
+    }
+    process
+        .env
+        .insert(super::launch_payload::CMD_RAW_BOOTSTRAP_ENV.into(), None);
 }
 fn apply_hooks(
     context: &WrapperContext<'_>,
@@ -222,6 +319,7 @@ pub async fn run_cli(
         launch.custom_argv.as_deref(),
         &launch.provider_args,
     )?;
+    let selected_shell = select_launch_shell(&context, &launch, provider, &resolver)?;
     let color = if launch.headless {
         "off"
     } else {
@@ -229,8 +327,8 @@ pub async fn run_cli(
     };
     let child = launch::child_env(context.environment, color, &[]);
     let mut process = ProcessPlan {
-        executable: command.executable.into(),
-        args: command.args.into_iter().map(Into::into).collect(),
+        executable: command.executable.clone().into(),
+        args: command.args.iter().cloned().map(Into::into).collect(),
         cwd: context.cwd.into(),
         env: overrides(context.environment, &child),
         stdin: vec![],
@@ -239,8 +337,31 @@ pub async fn run_cli(
         pipe_drain_timeout: Duration::from_secs(2),
     };
     crate::logging::spawn_probe::mark("wrapper_prepared", Some(std::process::id()), None);
-    let registration = registration(&context, &launch)?;
     super::startup::strip_provider_environment(&mut process);
+    clear_inherited_raw_cmd_bootstrap(&mut process);
+    let internal_launch_env = [
+        super::launch_payload::RUNNER_ENV,
+        super::launch_payload::PAYLOAD_ENV,
+        super::launch_payload::CMD_RAW_BOOTSTRAP_ENV,
+    ];
+    for name in internal_launch_env {
+        process.env.insert(name.into(), None);
+    }
+    let mut prepared_payload = None;
+    if let Some((mode, shell_executable)) = &selected_shell {
+        super::launch_payload::validate_inner_cmd(&command)?;
+        let payload = super::launch_payload::PreparedLaunchPayload::create(
+            context.paths,
+            &command,
+            context.cwd,
+            launch.required_hooks.contains(&LaunchHook::Utf8Console),
+            &child,
+        )?;
+        install_shell_bootstrap(&mut process, &context, mode, shell_executable, &payload)?;
+        prepared_payload = Some(payload);
+    }
+    let session_shell = registration_shell(provider, selected_shell.as_ref(), &command);
+    let registration = registration(&context, &launch, &session_shell)?;
     let proof = env(context.environment, SPAWN_PROOF_ENV).map(str::to_owned);
     if launch.headless {
         return run_headless(
@@ -299,14 +420,28 @@ pub async fn run_cli(
             }
             let command =
                 resolver.resolve_provider(provider, launch.custom_argv.as_deref(), &args)?;
-            process.executable = command.executable.into();
-            process.args = command.args.into_iter().map(Into::into).collect();
+            if let Some((mode, shell_executable)) = &selected_shell {
+                super::launch_payload::validate_inner_cmd(&command)?;
+                let payload = super::launch_payload::PreparedLaunchPayload::create(
+                    context.paths,
+                    &command,
+                    context.cwd,
+                    launch.required_hooks.contains(&LaunchHook::Utf8Console),
+                    &child,
+                )?;
+                install_shell_bootstrap(process, &context, mode, shell_executable, &payload)?;
+                prepared_payload = Some(payload);
+            } else {
+                process.executable = command.executable.into();
+                process.args = command.args.into_iter().map(Into::into).collect();
+            }
             Ok(())
         },
     )
     .await;
     let cleanup = hooks.finish();
     drop(prompt);
+    drop(prepared_payload);
     match result {
         Ok(result) => {
             cleanup?;
@@ -530,4 +665,203 @@ async fn run_headless(
         reconnects: 0,
         output_bytes: total,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        process::execpath::ResolvedCommand,
+        wrapper::launch_payload::{PAYLOAD_ENV, PreparedLaunchPayload},
+    };
+
+    #[test]
+    fn registration_shell_describes_the_actual_launch_path() {
+        let direct = ResolvedCommand {
+            executable: r"C:\synthetic\codex.exe".into(),
+            args: vec![],
+            shell_shim: None,
+        };
+        assert_eq!(registration_shell("codex", None, &direct), "direct");
+        let explicit = ("pwsh".into(), r"C:\PowerShell\pwsh.exe".into());
+        assert_eq!(
+            registration_shell("codex", Some(&explicit), &direct),
+            r"C:\PowerShell\pwsh.exe"
+        );
+        let shim = ResolvedCommand {
+            executable: r"C:\Windows\System32\cmd.exe".into(),
+            args: vec!["/c".into(), r"C:\synthetic\codex.cmd".into()],
+            shell_shim: Some(r"C:\synthetic\codex.cmd".into()),
+        };
+        assert_eq!(
+            registration_shell("codex", None, &shim),
+            r"C:\Windows\System32\cmd.exe"
+        );
+        assert_eq!(
+            registration_shell("shell", None, &direct),
+            r"C:\synthetic\codex.exe"
+        );
+    }
+
+    #[test]
+    fn shell_mode_bypasses_shell_headless_login_usage_and_subscription_auxiliary_flows() {
+        assert!(launch_shell_eligible("codex", false, false, &[]));
+        assert!(!launch_shell_eligible("shell", false, false, &[]));
+        assert!(!launch_shell_eligible("codex", true, false, &[]));
+        assert!(!launch_shell_eligible("codex", false, true, &[]));
+        assert!(!launch_shell_eligible(
+            "codex",
+            false,
+            false,
+            &["MANY_AI_CLI_USAGE_PROBE=1".into()]
+        ));
+        assert!(!launch_shell_eligible(
+            "codex",
+            false,
+            false,
+            &["MANY_AI_CLI_SUBSCRIPTION_LOGIN=1".into()]
+        ));
+    }
+
+    #[test]
+    fn inherited_raw_cmd_marker_is_cleared_before_auto_resolution() {
+        let marker = crate::wrapper::launch_payload::CMD_RAW_BOOTSTRAP_ENV;
+        let mut process = ProcessPlan {
+            executable: "synthetic-provider".into(),
+            args: vec![],
+            cwd: std::path::PathBuf::from("C:/synthetic"),
+            env: BTreeMap::from([(
+                "many_ai_cli_internal_cmd_raw_bootstrap".into(),
+                Some("v1".into()),
+            )]),
+            stdin: vec![],
+            timeout: Duration::ZERO,
+            output_cap: 1024,
+            pipe_drain_timeout: Duration::from_secs(1),
+        };
+        clear_inherited_raw_cmd_bootstrap(&mut process);
+        assert_eq!(process.env.get(std::ffi::OsStr::new(marker)), Some(&None));
+        assert!(process.env.keys().all(|key| {
+            !key.to_string_lossy().eq_ignore_ascii_case(marker)
+                || key == std::ffi::OsStr::new(marker)
+        }));
+    }
+
+    fn shell_test_context<'a>(
+        config: &'a Config,
+        paths: &'a RuntimePaths,
+        cwd: &'a Path,
+        executable: &'a Path,
+    ) -> WrapperContext<'a> {
+        WrapperContext {
+            config,
+            paths,
+            cwd,
+            executable,
+            environment: &[],
+            shell: "synthetic-shell",
+            terminal_size: crate::proto::core::TerminalSize { cols: 80, rows: 24 },
+            home_dir: cwd,
+        }
+    }
+
+    #[test]
+    fn post_hook_payload_replaces_pre_registration_payload_and_failed_setup_cleans_up() {
+        let temp = tempfile::tempdir().unwrap();
+        let runtime = temp.path().join("runtime");
+        std::fs::create_dir(&runtime).unwrap();
+        let installed = temp.path().join("installed");
+        std::fs::create_dir(&installed).unwrap();
+        let paths = RuntimePaths::trial(&runtime, 49440, &installed).unwrap();
+        let config = Config::default();
+        let executable = temp.path().join("synthetic-runner.exe");
+        let context = shell_test_context(&config, &paths, temp.path(), &executable);
+        let command = |args: &[&str]| ResolvedCommand {
+            executable: "synthetic-provider".into(),
+            args: args.iter().map(|arg| (*arg).into()).collect(),
+            shell_shim: None,
+        };
+        let mut process = ProcessPlan {
+            executable: "synthetic-provider".into(),
+            args: vec!["before-hooks".into()],
+            cwd: temp.path().into(),
+            env: BTreeMap::new(),
+            stdin: vec![],
+            timeout: Duration::ZERO,
+            output_cap: 1024,
+            pipe_drain_timeout: Duration::from_secs(1),
+        };
+        let initial = PreparedLaunchPayload::create(
+            &paths,
+            &command(&["before-hooks"]),
+            temp.path(),
+            false,
+            &[],
+        )
+        .unwrap();
+        let initial_path = initial.path().to_owned();
+        install_shell_bootstrap(
+            &mut process,
+            &context,
+            "pwsh",
+            r"C:\synthetic\pwsh.exe",
+            &initial,
+        )
+        .unwrap();
+        let after_hooks = PreparedLaunchPayload::create(
+            &paths,
+            &command(&["after", "hook", "and prompt"]),
+            temp.path(),
+            true,
+            &[],
+        )
+        .unwrap();
+        let after_hooks_path = after_hooks.path().to_owned();
+        install_shell_bootstrap(
+            &mut process,
+            &context,
+            "pwsh",
+            r"C:\synthetic\pwsh.exe",
+            &after_hooks,
+        )
+        .unwrap();
+        drop(initial);
+        assert!(!initial_path.exists());
+        assert!(after_hooks_path.exists());
+        let active_path = process
+            .env
+            .get(std::ffi::OsStr::new(PAYLOAD_ENV))
+            .and_then(Option::as_deref)
+            .unwrap();
+        assert_eq!(active_path, after_hooks_path.as_os_str());
+        drop(after_hooks);
+        assert!(!after_hooks_path.exists());
+
+        let failed_path = {
+            let payload = PreparedLaunchPayload::create(
+                &paths,
+                &command(&["synthetic"]),
+                temp.path(),
+                false,
+                &[],
+            )
+            .unwrap();
+            let path = payload.path().to_owned();
+            let invalid_runner = Path::new(r"C:\synthetic\100%\runner.exe");
+            let failed_context = shell_test_context(&config, &paths, temp.path(), invalid_runner);
+            assert!(
+                install_shell_bootstrap(
+                    &mut process,
+                    &failed_context,
+                    "cmd",
+                    r"C:\Windows\System32\cmd.exe",
+                    &payload,
+                )
+                .is_err()
+            );
+            path
+        };
+        assert!(!failed_path.exists());
+        assert!(process.env.contains_key(std::ffi::OsStr::new(PAYLOAD_ENV)));
+    }
 }

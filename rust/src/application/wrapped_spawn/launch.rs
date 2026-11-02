@@ -8,7 +8,7 @@ use crate::{
     wrapper::launch::launch_prompt_file_owner,
 };
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     ffi::OsString,
     fs::File,
     io,
@@ -372,6 +372,30 @@ fn prepare_resolved(
     }
     add_environment(&mut environment, &resolved.route_environment)?;
     add_environment(&mut environment, &resolved.subscription_environment)?;
+    // The wrapper may explicitly load a PowerShell profile before it starts
+    // the provider. Carry only selected environment names (never their values)
+    // so that route/account keys outside standard vendor namespaces can also
+    // be restored after profile initialization.
+    let protected_names = resolved
+        .route_environment
+        .iter()
+        .chain(&resolved.subscription_environment)
+        .filter_map(|entry| entry.split_once('=').map(|(name, _)| name.to_owned()))
+        .collect::<BTreeSet<_>>();
+    let protected_name_key =
+        environment_key(crate::wrapper::launch_payload::PROTECTED_ENV_NAMES_ENV);
+    environment.remove(&protected_name_key);
+    if !protected_names.is_empty() {
+        let serialized = serde_json::to_string(&protected_names.into_iter().collect::<Vec<_>>())
+            .map_err(|_| invalid("spawn environment policy is invalid"))?;
+        environment.insert(
+            protected_name_key,
+            (
+                crate::wrapper::launch_payload::PROTECTED_ENV_NAMES_ENV.into(),
+                serialized,
+            ),
+        );
+    }
     if let Some(WrappedStartKind::OrdinaryAi { delegation }) = kind {
         add_environment(
             &mut environment,

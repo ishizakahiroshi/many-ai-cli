@@ -236,6 +236,28 @@ fn router() -> (tempfile::TempDir, super::ServiceRouter) {
 fn json_response(response: &Response) -> serde_json::Value {
     serde_json::from_slice(&response.body).unwrap()
 }
+#[derive(Default)]
+struct SyntheticLaunchShellFs(std::collections::BTreeSet<String>);
+impl SyntheticLaunchShellFs {
+    fn put(&mut self, path: &str) {
+        self.0.insert(path.to_ascii_lowercase());
+    }
+}
+impl crate::process::execpath::ExecutableFs for SyntheticLaunchShellFs {
+    fn exists(&self, path: &str) -> bool {
+        self.0.contains(&path.to_ascii_lowercase())
+    }
+    fn is_executable(&self, path: &str, _: crate::process::execpath::Platform) -> bool {
+        self.exists(path)
+    }
+    fn read(&self, path: &str) -> std::io::Result<Vec<u8>> {
+        if self.exists(path) {
+            Ok(Vec::new())
+        } else {
+            Err(std::io::Error::from(std::io::ErrorKind::NotFound))
+        }
+    }
+}
 #[test]
 fn approval_pattern_item_guards_auth_host_and_origin_before_endpoint_methods() {
     let (_root, router) = router();
@@ -284,6 +306,176 @@ fn service_settings_first_value_case_fold_null_unknown_and_reload() {
     r.path = "/api/input-config".into();
     r.body = br#"{"deferred_enter_ms":"bad","deferred_enter_ms":1}"#.to_vec();
     assert_eq!(router.handle(&r, 1000).response.status, 400);
+}
+#[test]
+fn ai_launch_shell_defaults_missing_values_and_roundtrips_explicit_invalid_values() {
+    let (_dir, router) = router();
+    let old = crate::config::Config::from_yaml("hub:\n  terminal_color: inherit\n", &router.paths)
+        .unwrap();
+    assert_eq!(old.hub.ai_launch_shell, "auto");
+    let saved = old.to_private_yaml().unwrap();
+    let reloaded = crate::config::Config::from_yaml(&saved, &router.paths).unwrap();
+    assert_eq!(reloaded.hub.ai_launch_shell, "auto");
+
+    let invalid = crate::config::Config::from_yaml(
+        "hub:\n  ai_launch_shell: imaginary-shell\n",
+        &router.paths,
+    )
+    .unwrap();
+    assert_eq!(invalid.hub.ai_launch_shell, "imaginary-shell");
+    let invalid_saved = invalid.to_private_yaml().unwrap();
+    let invalid_reloaded = crate::config::Config::from_yaml(&invalid_saved, &router.paths).unwrap();
+    assert_eq!(invalid_reloaded.hub.ai_launch_shell, "imaginary-shell");
+}
+#[test]
+fn ai_launch_shell_api_saves_reloads_and_reports_current_availability() {
+    let (_dir, router) = router();
+    let mut initial = router.config.snapshot().unwrap();
+    initial.config.hub.terminal_color = "off".into();
+    initial.config.hub.idle_timeout_min = 23;
+    router
+        .config
+        .persist(initial.revision, initial.config)
+        .unwrap();
+
+    let mut r = request();
+    r.path = "/api/ai-launch-shell".into();
+    r.body = br#"{"ai_launch_shell":"pwsh"}"#.to_vec();
+    let response = router.handle(&r, 1000).response;
+    assert_eq!(response.status, 200);
+    assert_eq!(json_response(&response)["ai_launch_shell"], "pwsh");
+
+    let saved = router.config.snapshot().unwrap();
+    assert_eq!(saved.config.hub.ai_launch_shell, "pwsh");
+    assert_eq!(saved.config.hub.terminal_color, "off");
+    assert_eq!(saved.config.hub.idle_timeout_min, 23);
+    let bytes = std::fs::read(router.paths.resource(crate::config::Resource::Config)).unwrap();
+    let reloaded =
+        crate::config::Config::from_yaml(std::str::from_utf8(&bytes).unwrap(), &router.paths)
+            .unwrap();
+    assert_eq!(reloaded.hub.ai_launch_shell, "pwsh");
+    assert_eq!(reloaded.hub.terminal_color, "off");
+    assert_eq!(reloaded.hub.idle_timeout_min, 23);
+
+    r.method = "GET".into();
+    r.body.clear();
+    let response = router.handle(&r, 1000).response;
+    assert_eq!(response.status, 200);
+    let body = json_response(&response);
+    assert_eq!(body["ai_launch_shell"], "pwsh");
+    for mode in ["auto", "pwsh", "cmd"] {
+        assert!(body["availability"][mode]["available"].is_boolean());
+    }
+    assert!(body["selected_availability"]["available"].is_boolean());
+}
+#[test]
+fn ai_launch_shell_api_auth_and_invalid_value_leave_state_and_file_unchanged() {
+    let (_dir, router) = router();
+    let initial = router.config.snapshot().unwrap();
+    router
+        .config
+        .persist(initial.revision, initial.config)
+        .unwrap();
+    let before = router.config.snapshot().unwrap();
+    let destination = router.paths.resource(crate::config::Resource::Config);
+    let before_bytes = std::fs::read(&destination).unwrap();
+
+    for method in ["GET", "POST"] {
+        let mut unauthenticated = request();
+        unauthenticated.path = "/api/ai-launch-shell".into();
+        unauthenticated.method = method.into();
+        unauthenticated.query.clear();
+        unauthenticated.body = br#"{"ai_launch_shell":"pwsh"}"#.to_vec();
+        assert_eq!(router.handle(&unauthenticated, 1000).response.status, 401);
+    }
+
+    let mut invalid = request();
+    invalid.path = "/api/ai-launch-shell".into();
+    invalid.body = br#"{"ai_launch_shell":"powershell"}"#.to_vec();
+    let response = router.handle(&invalid, 1000).response;
+    assert_eq!(response.status, 400);
+    assert_eq!(json_response(&response)["error"], "invalid_ai_launch_shell");
+    let after = router.config.snapshot().unwrap();
+    assert_eq!(after.revision, before.revision);
+    assert_eq!(
+        after.config.hub.ai_launch_shell,
+        before.config.hub.ai_launch_shell
+    );
+    assert_eq!(std::fs::read(destination).unwrap(), before_bytes);
+}
+#[test]
+fn ai_launch_shell_api_failed_save_does_not_publish_memory_or_change_existing_files() {
+    let (_dir, router) = router();
+    let destination = router.paths.resource(crate::config::Resource::Config);
+    std::fs::create_dir(&destination).unwrap();
+    let retained = destination.join("retained.yaml");
+    let before = router.config.snapshot().unwrap();
+    let before_bytes = before.config.to_private_yaml().unwrap().into_bytes();
+    std::fs::write(&retained, &before_bytes).unwrap();
+
+    let mut r = request();
+    r.path = "/api/ai-launch-shell".into();
+    r.body = br#"{"ai_launch_shell":"pwsh"}"#.to_vec();
+    let response = router.handle(&r, 1000).response;
+    assert_eq!(response.status, 500);
+    assert_eq!(json_response(&response)["error"], "save_failed");
+    let after = router.config.snapshot().unwrap();
+    assert_eq!(after.revision, before.revision);
+    assert_eq!(after.config.hub.ai_launch_shell, "auto");
+    assert_eq!(std::fs::read(&retained).unwrap(), before_bytes);
+    assert_eq!(std::fs::read_dir(&destination).unwrap().count(), 1);
+}
+#[test]
+fn ai_launch_shell_availability_uses_the_fake_filesystem_and_preserves_invalid_mode() {
+    use crate::process::execpath::Platform;
+
+    let env = vec![
+        r"PATH=C:\PowerShell;C:\Windows\System32".into(),
+        r"COMSPEC=C:\Windows\System32\cmd.exe".into(),
+    ];
+    let mut fs = SyntheticLaunchShellFs::default();
+    fs.put(r"C:\PowerShell\pwsh.exe");
+    fs.put(r"C:\Windows\System32\cmd.exe");
+    let status = super::settings::ai_launch_shell_availability(
+        "pwsh",
+        Platform::Windows,
+        &env,
+        std::path::Path::new(r"C:\work"),
+        &fs,
+    );
+    assert_eq!(status["ai_launch_shell"], "pwsh");
+    assert_eq!(status["availability"]["pwsh"]["available"], true);
+    assert_eq!(status["availability"]["cmd"]["available"], true);
+    assert_eq!(
+        status["availability"]["cmd"]["executable"],
+        r"C:\Windows\System32\cmd.exe"
+    );
+    assert_eq!(status["selected_availability"]["available"], true);
+
+    let mut missing = SyntheticLaunchShellFs::default();
+    missing.put(r"C:\Windows\System32\cmd.exe");
+    let status = super::settings::ai_launch_shell_availability(
+        "pwsh",
+        Platform::Windows,
+        &env,
+        std::path::Path::new(r"C:\work"),
+        &missing,
+    );
+    assert_eq!(status["ai_launch_shell"], "pwsh");
+    assert_eq!(status["availability"]["pwsh"]["available"], false);
+    assert!(status["availability"]["pwsh"]["reason"].is_string());
+    assert_eq!(status["selected_availability"]["available"], false);
+
+    let invalid = super::settings::ai_launch_shell_availability(
+        "imaginary-shell",
+        Platform::Windows,
+        &env,
+        std::path::Path::new(r"C:\work"),
+        &fs,
+    );
+    assert_eq!(invalid["ai_launch_shell"], "imaginary-shell");
+    assert_eq!(invalid["selected_availability"]["available"], false);
+    assert!(invalid["selected_availability"]["reason"].is_string());
 }
 #[test]
 fn service_settings_clamps_preserves_owned_flags_and_rejects_invalid_values() {

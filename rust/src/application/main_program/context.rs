@@ -25,6 +25,7 @@ impl MainContext {
     pub fn load(trial: Option<&TrialOptions>) -> io::Result<Self> {
         let application_home = runtime_context::user_home()?;
         let paths = runtime_context::runtime_paths(trial, &application_home)?;
+        crate::wrapper::launch_payload::cleanup_stale_payloads(&paths);
         crate::logging::input_probe::init(&paths.resource(crate::config::Resource::Logs));
         crate::logging::branch_probe::init(&paths.resource(crate::config::Resource::Logs));
         crate::logging::spawn_probe::init(&paths.resource(crate::config::Resource::Logs));

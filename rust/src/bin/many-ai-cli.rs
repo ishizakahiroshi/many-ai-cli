@@ -6,6 +6,10 @@ use many_ai_cli::{
     process::{self, Cancellation},
 };
 fn main() {
+    let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+    if many_ai_cli::wrapper::launch_payload::is_internal_invocation(&args) {
+        std::process::exit(many_ai_cli::wrapper::launch_payload::run_internal_invocation(&args));
+    }
     // Adopt an inherited startup Job before any provider or registration work.
     // Its lifetime remains outside Tokio so runtime cleanup happens first.
     let startup = match many_ai_cli::wrapper::startup::StartupLifetime::adopt_from_environment() {

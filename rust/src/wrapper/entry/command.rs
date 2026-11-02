@@ -126,6 +126,16 @@ impl<'a> CommandResolver<'a> {
         let resolver = Resolver::new(Platform::native(), self.environment, self.cwd, &fs);
         self.check(resolver.resolve_provider(provider, custom, args))
     }
+    pub(super) fn resolve_ai_launch_shell(&self, shell: &str) -> io::Result<String> {
+        let fs = ScopedFs(self.paths);
+        let resolver = Resolver::new(Platform::native(), self.environment, self.cwd, &fs);
+        let command = self.check(ResolvedCommand {
+            executable: resolver.resolve_ai_launch_shell(shell)?,
+            args: vec![],
+            shell_shim: None,
+        })?;
+        Ok(command.executable)
+    }
     pub(super) fn launch_shell_shim(
         &self,
         provider: &str,

@@ -11,4 +11,7 @@ pub mod entry;
 pub mod hooks;
 pub mod output;
 
+#[doc(hidden)]
+pub mod launch_payload;
+
 pub mod startup;
