@@ -10,6 +10,8 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+- Allow editing quick commands by right-clicking their buttons.
+
 - Fix Windows terminal disposal during process startup: terminate the owned Job
   and observe the root exit and an empty Job before closing ConPTY, preventing
   startup-close initialization errors. Ctrl+C input remains a separate operation.

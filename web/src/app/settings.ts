@@ -943,13 +943,84 @@ export function getQuickCommandVisible(slot) {
   return localStorage.getItem(key) !== '0';
 }
 
+function quickCommandTooltip(cmd: string): string {
+  return `${cmd}\n${t('settings_quick_cmd_edit_hint')}`;
+}
+
+export function editQuickCommand(slot: number): void {
+  if (!quickCommandButtonId(slot) || document.getElementById('quick-command-editor')) return;
+  const origin = document.getElementById(quickCommandButtonId(slot));
+  const dialog = document.createElement('dialog');
+  dialog.id = 'quick-command-editor';
+  dialog.className = `${uiModalClass('sm')} quick-command-editor aac-wheel-overlay`;
+  dialog.setAttribute('aria-labelledby', 'quick-command-editor-title');
+  const form = document.createElement('form');
+  form.className = 'quick-command-editor-form';
+  const heading = document.createElement('h2');
+  heading.id = 'quick-command-editor-title';
+  heading.className = 'ui-modal__title quick-command-editor-title';
+  heading.textContent = t('settings_quick_cmd_edit');
+  const label = document.createElement('label');
+  label.className = 'ui-modal__body quick-command-editor-label';
+  label.textContent = t(`settings_quick_cmd_${slot}`);
+  const field = document.createElement('input');
+  field.type = 'text';
+  field.className = 'ui-input quick-command-editor-input';
+  field.maxLength = QUICK_CMD_MAXLEN;
+  field.value = getQuickCommand(slot);
+  field.setAttribute('list', 'quick-cmd-presets');
+  label.append(field);
+  const actions = document.createElement('div');
+  actions.className = 'ui-modal__actions';
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = uiButtonClass('secondary');
+  cancel.textContent = t('template_cancel');
+  cancel.addEventListener('click', () => dialog.close());
+  const submit = document.createElement('button');
+  submit.type = 'submit';
+  submit.className = uiButtonClass('primary');
+  submit.textContent = t('template_save');
+  actions.append(cancel, submit);
+  form.append(heading, label, actions);
+  dialog.append(form);
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    const value = sanitizeQuickCommand(field.value, '');
+    setUserPref(`quick_cmds.cmd${slot}`, value);
+    const settingsInput = document.getElementById(`quick-cmd-${slot}`) as HTMLInputElement | null;
+    if (settingsInput) settingsInput.value = value;
+    refreshQuickCommandButtons();
+    dialog.close();
+  });
+  dialog.addEventListener('keydown', event => {
+    event.stopPropagation();
+    // IME の確定 Enter は保存操作として扱わない。
+    if (event.key === 'Enter' && (event.isComposing || event.keyCode === 229)) event.preventDefault();
+  });
+  dialog.addEventListener('click', event => {
+    if (event.target !== dialog) return;
+    const rect = dialog.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
+  });
+  dialog.addEventListener('close', () => {
+    dialog.remove();
+    if (origin && !origin.hidden) origin.focus();
+    else inputEl?.focus();
+  }, { once: true });
+  document.body.append(dialog);
+  dialog.showModal();
+  field.focus();
+  field.select();
+}
+
 export function refreshQuickCommandButtons() {
   for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
     const btn = document.getElementById(QUICK_CMD_BTN_IDS[slot]);
     if (!btn) continue;
     const cmd = getQuickCommand(slot);
     btn.textContent = quickCommandLabel(cmd);
-    btn.dataset.tooltip = cmd;
+    btn.dataset.tooltip = quickCommandTooltip(cmd);
     // 表示トグル ON かつコマンドが空でないときだけボタンを出す。
     btn.hidden = !(getQuickCommandVisible(slot) && cmd !== '');
   }
@@ -2510,7 +2581,7 @@ initSettingsInformationArchitecture();
       if (!btn) return;
       const v = el.value.trim();
       btn.textContent = quickCommandLabel(v);
-      btn.dataset.tooltip = v;
+      btn.dataset.tooltip = quickCommandTooltip(v);
       btn.hidden = !(getQuickCommandVisible(slot) && v !== '');
     });
     el.addEventListener('change', () => {
@@ -2530,6 +2601,12 @@ initSettingsInformationArchitecture();
   };
 
   for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
+    const button = document.getElementById(quickCommandButtonId(slot));
+    button?.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      editQuickCommand(slot);
+    });
     const cmdEl = document.getElementById(`quick-cmd-${slot}`);
     if (cmdEl) {
       cmdEl.value = getQuickCommand(slot);
