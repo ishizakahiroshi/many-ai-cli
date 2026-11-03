@@ -1,6 +1,8 @@
 // --- ESM imports (generated) ---
 import { inputEl } from '../app.js';
-import { canPageAltBuffer, disableWebglRenderer, enableWebglRenderer, releaseHiddenWebglRenderers, scrollAltBufferPage, termArea } from './terminal.js';
+import { mountStartupView, mountTerminalStartup } from './session-startup-view.js';
+import { sessionStartups, type SessionStartup } from './session-startup.js';
+import { canPageAltBuffer, disableWebglRenderer, enableWebglRenderer, ensureTerminal, releaseHiddenWebglRenderers, scrollAltBufferPage, termArea } from './terminal.js';
 import { ensureAltScrollRail, requestEdge } from './alt-scroll-rail-view.js';
 import { ensureAltDragSelect } from './alt-drag-select-view.js';
 import { openProjectKey } from './state.js';
@@ -316,6 +318,7 @@ export class MultiPaneManager {
     const custom = this._currentCustomLayout();
     this.slots = custom ? custom.slots.map(content => {
       if (!content) return null;
+      if (content.kind === 'startup') return sessionStartups.requests.has(content.requestId) ? { startup: content } : null;
       if (content.kind === 'tab') {
         if (content.sessionId !== null) {
           const owner = byId.get(content.sessionId);
@@ -336,6 +339,7 @@ export class MultiPaneManager {
     for (let i = 0; i < total; i++) {
       const slot = this.slots[i];
       const pane = slot && slot.session ? this._buildPane(i, slot.session)
+        : slot && slot.startup ? this._buildStartupPane(i, slot.startup)
         : slot && slot.tab ? this._buildTabPane(i, slot.tab)
         : this._buildEmptyPane(i);
       this.area.appendChild(pane);
@@ -407,6 +411,20 @@ export class MultiPaneManager {
   }
 
   /** Non-terminal views have one DOM owner. C4 mounts that owner in this host. */
+  _buildStartupPane(idx, content) {
+    const el = document.createElement('div');
+    el.className = 'pane-slot pane-startup-slot'; el.dataset.slotIdx = String(idx);
+    const header = document.createElement('div'); header.className = 'pane-header';
+    const title = document.createElement('span'); title.className = 'ph-dir';
+    title.textContent = sessionStartups.requests.get(content.requestId)?.name || this._t('startup_pending', 'Starting…');
+    header.appendChild(title); this._appendPaneControls(header, idx); el.appendChild(header);
+    const host = document.createElement('div'); host.className = 'pane-startup-area'; el.appendChild(host);
+    mountStartupView(host, content.requestId);
+    // Pending UI is deliberately not a session or an input focus target.
+    this._wireDropTarget(el, idx);
+    return el;
+  }
+
   _buildTabPane(idx, tab) {
     const el = document.createElement('div');
     el.className = 'pane-slot pane-tab-slot' + (idx === this.focusedIdx ? ' focused' : '');
@@ -835,7 +853,7 @@ export class MultiPaneManager {
       const number = document.createElement('strong');
       number.textContent = `${idx + 1}/${layout.slots.length}`;
       const label = document.createElement('span');
-      label.textContent = slot ? (slot.kind === 'session' ? `#${slot.sessionId} Terminal`
+      label.textContent = slot ? (slot.kind === 'startup' ? this._t('startup_pending', 'Starting…') : slot.kind === 'session' ? `#${slot.sessionId} Terminal`
         : `${slot.sessionId == null ? '' : `#${slot.sessionId} `}${slot.tabName}`)
         : `${owner ? `#${owner.sessionId} ` : ''}${payload.kind === 'session' ? 'Terminal' : payload.tabName}`;
       cell.append(number, label);
@@ -931,7 +949,8 @@ export class MultiPaneManager {
   }
 
   _saveCustomLayouts() {
-    try { localStorage.setItem(FLEXIBLE_PANE_STORAGE_KEY, JSON.stringify(this.customLayouts)); }
+    // Startup reservations belong to this page only; reload cannot revive a fake session.
+    try { localStorage.setItem(FLEXIBLE_PANE_STORAGE_KEY, JSON.stringify(this.customLayouts, (_key, value) => value?.kind === 'startup' ? null : value)); }
     catch (_) { /* Private browsing may disallow storage. Current placement still works. */ }
   }
 
@@ -954,6 +973,9 @@ export class MultiPaneManager {
 
   _contentForPayload(payload): PaneContent | null {
     if (!payload || typeof payload !== 'object') return null;
+    if (payload.kind === 'startup' && sessionStartups.requests.has(payload.requestId)) {
+      return { kind: 'startup', requestId: payload.requestId, sessionId: null, startedAt: null };
+    }
     if (payload.kind === 'session') return this._contentForSession(payload.sessionId);
     if (payload.kind === 'tab') return this._contentForTab(payload.tabName, payload.sessionId);
     return null;
@@ -964,7 +986,7 @@ export class MultiPaneManager {
     if (this.customLayouts[key]) return this.customLayouts[key];
     const slots = Array.from({ length: this.cols * this.rows }, (_, i) => {
       const slot = this.slots[i];
-      return slot?.session ? this._contentForSession(slot.session.id) : slot?.tab || null;
+      return slot?.session ? this._contentForSession(slot.session.id) : slot?.startup || slot?.tab || null;
     });
     const layout = { cols: this.cols, rows: this.rows, colFracs: this.colFracs.slice(),
       rowFracs: this.rowFracs.slice(), slots, autoSplit };
@@ -1022,6 +1044,59 @@ export class MultiPaneManager {
     return this._addContent(this._contentForSession(sessionId), preferredIdx);
   }
 
+  addStartup(requestId) {
+    const content = this._contentForPayload({ kind: 'startup', requestId });
+    if (!content) return false;
+    const open = this.area && !this.area.hidden;
+    const previous = this.slots[this.focusedIdx]?.session;
+    if (!open) {
+      this.setWorkspaceSession(null);
+      const existing = (window as any).currentFlexiblePaneView?.();
+      if (existing && this.beginAutoSplit(existing, content)) {
+        this.focusedIdx = 0; this.mobileActiveSlot = 1;
+        return true;
+      }
+      if (!existing) {
+        this.cols = 1; this.rows = 1; this.colFracs = [1]; this.rowFracs = [1];
+        this.customLayouts[this._layoutKey()] = { cols: 1, rows: 1, colFracs: [1], rowFracs: [1], slots: [content], autoSplit: true };
+        this.focusedIdx = this.mobileActiveSlot = 0; this._saveCustomLayouts();
+        return true;
+      }
+    }
+    const added = this._addContent(content, undefined);
+    if (added && previous) {
+      const previousIdx = this.slots.findIndex(slot => slot?.session?.id === previous.id &&
+        String(slot.session.started_at || '') === String(previous.started_at || ''));
+      if (previousIdx >= 0) this.focusSlot(previousIdx);
+    }
+    return added;
+  }
+
+  reconcileStartups(requests: Map<string, SessionStartup>) {
+    let changed = false;
+    let changedCurrent = false;
+    for (const [key, layout] of Object.entries(this.customLayouts as FlexibleLayouts)) {
+      for (let i = 0; i < layout.slots.length; i++) {
+        const slot = layout.slots[i];
+        if (slot?.kind !== 'startup') continue;
+        const request = requests.get(slot.requestId);
+        if (!request) { layout.slots[i] = null; changed = true; changedCurrent ||= key === this._layoutKey(); }
+        else if (request.session) {
+          layout.slots[i] = { kind: 'session', sessionId: request.session.id, startedAt: request.session.startedAt };
+          changed = true; changedCurrent ||= key === this._layoutKey();
+        }
+      }
+    }
+    if (changed) {
+      this._saveCustomLayouts();
+      // Do not switch tabs or focus a late registration over the user's newer selection.
+      if (changedCurrent && this.area && !this.area.hidden) {
+        this.render();
+        this._maybeAutoCollapse(this._currentCustomLayout());
+      }
+    }
+  }
+
   /** Move to an empty slot, or swap two occupied slots. */
   moveSlot(fromIdx, toIdx) {
     const count = this.cols * this.rows;
@@ -1041,7 +1116,9 @@ export class MultiPaneManager {
   removeSlot(idx) {
     if (!Number.isInteger(idx) || idx < 0 || idx >= this.cols * this.rows || !this.slots[idx]) return false;
     const layout = this._materializeCustomLayout();
+    const removed = layout.slots[idx];
     layout.slots[idx] = null;
+    if (removed?.kind === 'startup') sessionStartups.dismiss(removed.requestId);
     if (this.focusedIdx === idx) {
       const next = layout.slots.findIndex(slot => slot !== null);
       this.focusedIdx = next >= 0 ? next : 0;
@@ -1174,6 +1251,9 @@ export class MultiPaneManager {
   }
 
   onSessionEnded(sessionId) {
+    for (const request of sessionStartups.requests.values()) {
+      if (request.session?.id === sessionId) sessionStartups.dismiss(request.requestId);
+    }
     let changed = false;
     for (const [key, layout] of Object.entries(this.customLayouts as FlexibleLayouts)) {
       if (key.startsWith(`session:${sessionId}:`)) {
@@ -1315,6 +1395,8 @@ export class MultiPaneManager {
   attachToSlot(slotEl, session) {
     const termArea = slotEl.querySelector('.pane-terminal-area');
     if (!termArea) return;
+    mountTerminalStartup(termArea, session.id, String(session.started_at || ''));
+    ensureTerminal(session.id);
 
     // terminals Map は app.js スコープ変数。window 経由でアクセスできるよう公開が必要。
     // app.js で window.terminals を公開していない場合は getTerminalEntry を使う。

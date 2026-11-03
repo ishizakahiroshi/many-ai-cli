@@ -10,6 +10,10 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+- Show new in-window CLI launches in their own pane immediately, then hand the
+  pane over to the correlated terminal when its first screen arrives. Other
+  panes remain usable, and saving launch preferences no longer delays display.
+
 - Fix Windows terminal disposal during process startup: terminate the owned Job
   and observe the root exit and an empty Job before closing ConPTY, preventing
   startup-close initialization errors. Ctrl+C input remains a separate operation.

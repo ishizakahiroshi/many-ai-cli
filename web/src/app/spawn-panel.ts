@@ -1,4 +1,5 @@
 import { beginTrackedSpawn, captureSpawnTab, waitForTrackedSpawn } from './session-spawn-tracker.js';
+import { beginSessionStartup, noteSessionStartupOutcome } from './session-startup-view.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { apiFetch, escapeHtml, showToast, token } from './util.js';
@@ -83,6 +84,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
   const spawnProviderNoteHelp = document.getElementById('spawn-provider-note-help');
   const spawnCliMissingNote = document.getElementById('spawn-cli-missing-note');
   let commandMissingProviderIds = new Set<string>();
+  let spawnLaunchSequence = 0;
   const spawnRememberApprovalSettings = document.getElementById('spawn-remember-approval-settings') as HTMLInputElement | null;
   const spawnRememberApprovalLabel = document.getElementById('spawn-remember-approval-label');
   const spawnCodexModelBtn = document.getElementById('spawn-codex-model-btn');
@@ -2772,7 +2774,9 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
 
   async function spawnSession() {
     const spawnTabId = captureSpawnTab();
-    const provider = document.getElementById('spawn-provider').value;
+    const providerSelect = document.getElementById('spawn-provider') as HTMLSelectElement;
+    const provider = providerSelect.value;
+    const providerName = providerSelect.selectedOptions?.[0]?.textContent || provider;
     const cwd = spawnCwdInput.value.trim();
     const blocked = spawnLaunchBlockReason({
       cwd,
@@ -2785,6 +2789,12 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
       return;
     }
     spawnLaunchBtn.disabled = true;
+    const launchSequence = ++spawnLaunchSequence;
+    const openTarget = getSpawnOpenTarget();
+    const gridLayout = getSpawnGridLayout();
+    const detachedPreset = spawnDetachedPreset ? spawnDetachedPreset.value : 'single';
+    let startupRequest = '';
+    let startupPlaced = false;
     try {
       const model = spawnModelInput.value.trim();
       const label = document.getElementById('spawn-label').value.trim();
@@ -2934,6 +2944,21 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
         if (count > 0) bodyObj.orchestration_roles = roles;
       }
       const spawnRequest = beginTrackedSpawn(1, spawnTabId);
+      const submittedBooleans = { isolate_worktree: !!spawnIsolateWorktree?.checked, delegation: !!spawnDelegation?.checked };
+      const rememberApprovalSettings = spawnRememberApprovalSettings?.checked ?? true;
+      const subscriptionWasVisible = !!spawnSubscriptionRow && !spawnSubscriptionRow.hidden;
+      const submittedCodexSelection = codexModelSelection;
+      const submittedClaudeSelection = claudeModelSelection;
+      startupRequest = spawnRequest;
+      if (openTarget !== 'detached') {
+        startupPlaced = beginSessionStartup(spawnRequest, provider, providerName, spawnTabId, () => {
+          // Reveal the retained form directly; opening it afresh reloads defaults
+          // and would discard the rejected launch's inputs/initial prompt.
+          newSessionPanel.hidden = false; updateSpawnLaunchButton(); spawnCwdInput.focus();
+        });
+        if (startupPlaced) newSessionPanel.hidden = true;
+        else showToast(t('startup_no_space'));
+      }
       const res = await apiFetch('/api/spawn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2947,9 +2972,6 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
         // そのセッション内で /model が blocked になる罠を踏むため。
         // Claude/Codex の純正モデル選択は引き続き sticky に残す。
         const persistedModel = (route === 'ollama' || route === 'lm-studio') ? '' : model;
-        const openTarget = getSpawnOpenTarget();
-        const gridLayout = getSpawnGridLayout();
-        const detachedPreset = spawnDetachedPreset ? spawnDetachedPreset.value : 'single';
         // C2 (plan_spawn-form-per-provider-memory.md): 既存の記憶（readSpawnDefaults()）を
         // 土台にして今回の値だけ上書きする。まっさらなオブジェクトを作ると、ここに列挙して
         // いない provider 別キー（他 provider の許可設定・worktree・委譲・サブスクリプション）
@@ -2966,28 +2988,35 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
         // サブスクリプション選択は provider ごとに記憶する。行が隠れている
         // （profile が 0〜1 件 / shell）ときは「選ばなかった」だけなので、既存の
         // 記憶を空で上書きしない。
-        if (spawnSubscriptionRow && !spawnSubscriptionRow.hidden) {
+        if (subscriptionWasVisible) {
           baseDefaults[SUBSCRIPTION_PREF_PREFIX + provider] = subscriptionID;
         }
-        const withProviderBooleans = mergeProviderBooleanSetting(baseDefaults, provider, {
-          isolate_worktree: !!spawnIsolateWorktree?.checked,
-          delegation: !!spawnDelegation?.checked,
-        });
-        const rememberApprovalSettings = spawnRememberApprovalSettings?.checked ?? true;
+        const withProviderBooleans = mergeProviderBooleanSetting(baseDefaults, provider, submittedBooleans);
         const persistedDefaults = mergeApprovalSettings(
           withProviderBooleans,
           provider,
           { ...bodyObj, opencode_permission_mode: bodyObj.permission_mode },
           rememberApprovalSettings,
         );
-        await saveSpawnSettings(persistedDefaults);
-        document.getElementById('spawn-label').value = '';
-        // 一度届けたら消す。label と同じく「次回また送られる」を避ける一回性の欄。
-        if (spawnInitialPrompt) spawnInitialPrompt.value = '';
-        codexModelSelection  = null;
-        claudeModelSelection = null;
-        newSessionPanel.hidden = true;
-        setSpawnOrchestrationMode(false);
+        // Local preference memory is updated synchronously; its network flush must
+        // not hold the startup display or the already accepted terminal hostage.
+        if (launchSequence === spawnLaunchSequence) {
+          void saveSpawnSettings(persistedDefaults).catch(() => showToast(t('startup_preferences_failed')));
+        }
+        const sameForm = launchSequence === spawnLaunchSequence &&
+          document.getElementById('spawn-provider').value === provider && spawnCwdInput.value.trim() === cwd &&
+          document.getElementById('spawn-label').value.trim() === label && spawnModelInput.value.trim() === model &&
+          (spawnInitialPrompt?.value.trim() || '') === initialPrompt &&
+          codexModelSelection === submittedCodexSelection && claudeModelSelection === submittedClaudeSelection;
+        if (sameForm && (!startupPlaced || newSessionPanel.hidden)) {
+          document.getElementById('spawn-label').value = '';
+          // 一度届けたら消す。label と同じく「次回また送られる」を避ける一回性の欄。
+          if (spawnInitialPrompt) spawnInitialPrompt.value = '';
+          codexModelSelection  = null;
+          claudeModelSelection = null;
+          newSessionPanel.hidden = true;
+          setSpawnOrchestrationMode(false);
+        }
 
         // C2 / C5: Detached window 選択時 — preset に応じた起動フローを実行する
         if (openTarget === 'detached') {
@@ -3043,17 +3072,20 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
             _waitForNewSessionAndOpenGrid(gridLayout, spawnRequest);
           }
 
-        } else {
+        } else if (!startupPlaced) {
           void waitForTrackedSpawn(spawnRequest).then(ids => {
             if (ids.length) activateSession(ids[0]);
             else showToast(t('spawn_correlation_unavailable'));
           });
         }
       } else {
-        alert(t('spawn_failed') + await spawnErrorMessage(res));
+        const detail = await spawnErrorMessage(res);
+        if (startupPlaced) noteSessionStartupOutcome(spawnRequest, res.status >= 400 && res.status < 500, detail);
+        else alert(t('spawn_failed') + detail);
       }
     } catch (e) {
-      alert(t('spawn_failed') + e.message);
+      if (startupPlaced) noteSessionStartupOutcome(startupRequest, false);
+      else alert(t('spawn_failed') + e.message);
     } finally {
       updateSpawnLaunchButton();
     }

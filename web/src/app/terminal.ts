@@ -1,5 +1,7 @@
 // --- ESM imports (generated) ---
 import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
+import { sessionStartups, terminalHasVisibleContent } from './session-startup.js';
+import { mountTerminalStartup } from './session-startup-view.js';
 import { detachedTabName, isDetachedTabView } from './detached-view-mode.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
@@ -545,6 +547,7 @@ export function attachTerminal(id) {
       // becomes visible again.
       area.innerHTML = '';
       area.appendChild(t.container);
+      mountTerminalStartup(t.container, id, String(sessions.get(id)?.started_at || ''));
       whenLayoutReady(id, t.container, 0, t.layoutGeneration);
       return;
     }
@@ -558,6 +561,7 @@ export function attachTerminal(id) {
     flushPending(id, () => {
       if (!terminals.has(id) || activeSessionId !== id) return;
       area.appendChild(t.container);
+      mountTerminalStartup(t.container, id, String(sessions.get(id)?.started_at || ''));
       releaseHiddenWebglRenderers();
       ensureAltScrollRail(id, t);
       t.term.scrollToBottom();
@@ -582,6 +586,7 @@ export function attachTerminal(id) {
   t.layoutGeneration = (t.layoutGeneration || 0) + 1;
   area.innerHTML = '';
   area.appendChild(container);
+  mountTerminalStartup(container, id, String(sessions.get(id)?.started_at || ''));
   releaseHiddenWebglRenderers();
   whenLayoutReady(id, container);
 }
@@ -2212,12 +2217,19 @@ export function filterBareCarriageReturnForDisplay(id, bytes) {
 
 export function writePTYChunk(id, term, bytes, onFlush) {
   const t = terminals.get(id);
+  const startupStartedAt = String(sessions.get(id)?.started_at || '');
   if (t) t.mouseMode = scanMouseModePure(bytes, t.mouseMode || initialMouseModeTrackerState());
   const hasScreenClearSeq = detectScreenClearSeqForAutoScroll(id, bytes);
   // Codex 等の同期描画（CSI ? 2026 h/l）は xterm.js が完成画面まで保留する。
   // ここで除去すると途中フレームが露出し、再描画が上から下へ流れて見えるため通す。
   const displayBytes = filterBareCarriageReturnForDisplay(id, filterCursorHideShowBlocksForDisplay(id, filterEraseScrollbackForDisplay(id, filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes)))));
   const wrappedFlush = () => {
+    // Only displayed cells end startup feedback. Empty/control-only writes do not.
+    if (t && terminals.get(id) === t && String(sessions.get(id)?.started_at || '') === startupStartedAt &&
+        !t.startupOutputPainted && startupStartedAt && terminalHasVisibleContent(term)) {
+      t.startupOutputPainted = true;
+      sessionStartups.outputPainted({ id, startedAt: startupStartedAt });
+    }
     if (hasScreenClearSeq) snapToBottomAfterScreenClear(id);
     primeScrollbarVisibility(term.element);
     // 入力送信時点では疑似位置を動かさない。xterm が PTY 応答を描画し終え、可視本文が

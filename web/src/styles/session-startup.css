@@ -1,0 +1,13 @@
+/* Local startup feedback. It never covers another pane or captures terminal input. */
+.session-startup-host, .pane-startup-area { position: relative; }
+.session-startup { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; padding: var(--space-4); background: var(--bg); color: var(--text); overflow: auto; }
+.pane-startup-area { flex: 1; min-height: 0; }
+.session-startup-content { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); max-width: 100%; text-align: center; overflow-wrap: anywhere; }
+.session-startup-content strong { font-size: var(--fs-md); }
+.session-startup-content p, .session-startup-content details { margin: 0; font-size: var(--fs-sm); color: var(--text-dim); }
+.session-startup-content details { max-width: 100%; white-space: pre-wrap; }
+.session-startup-icon { display: inline-flex; }
+.session-startup-spinner { width: 20px; height: 20px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: session-startup-spin 1s linear infinite; }
+.session-startup[data-phase="failed"] strong { color: var(--danger); }
+@keyframes session-startup-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .session-startup-spinner { animation: none; } }

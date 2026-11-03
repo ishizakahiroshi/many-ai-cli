@@ -1,5 +1,6 @@
 import { t } from '../i18n.js';
 import { showToast } from './util.js';
+import { sessionStartups } from './session-startup.js';
 import type { SessionSnapshot } from '../types/proto.js';
 import { assignCorrelatedSessionListSpawn, captureSessionListTab } from './session-list-tabs.js';
 import { beginSpawnPending, liveSpawnMatches, matchSpawnCorrelation, normalizeSpawnPending, pruneSpawnPending,
@@ -32,7 +33,7 @@ export function beginTrackedSpawn(expected = 1, tabId = captureSpawnTab()): stri
   if (!beginSpawnPending(pendingState(), id, tabId, expected, Date.now(), connected)) throw new Error(t('spawn_correlation_capacity'));
   save(); return id;
 }
-export function noteSpawnDisconnected(): void { connected = false; live = []; candidates.clear(); }
+export function noteSpawnDisconnected(): void { connected = false; live = []; candidates.clear(); sessionStartups.disconnected(); }
 export function noteSpawnSnapshot(instance: string, sessions: SessionSnapshot[]): void {
   const old = pendingState().hubInstance;
   setSpawnHubInstance(pendingState(), instance);
@@ -41,6 +42,7 @@ export function noteSpawnSnapshot(instance: string, sessions: SessionSnapshot[])
   save();
   // The caller has populated the entire map before this function resolves families.
   live = sessions;
+  sessionStartups.snapshot(instance, sessions);
   for (const session of sessions) {
     if (typeof session.client_request_id === 'string' && session.client_request_id) {
       addCandidate({ client_request_id: session.client_request_id, session_id: session.id, started_at: String(session.started_at || ''), hub_instance: instance });
@@ -67,6 +69,7 @@ function reconcile(): void {
     const pending = matchSpawnCorrelation(current, event, live, Date.now());
     if (pending && assignCorrelatedSessionListSpawn(event.session_id, event.started_at, pending.tabId, live)) {
       recordSpawnMatch(pending, { id: event.session_id, startedAt: event.started_at });
+      sessionStartups.bind(event.client_request_id, { id: event.session_id, startedAt: event.started_at });
       candidates.delete(key); changed = true;
     } else if (!current.pending.some(item => item.requestId === event.client_request_id) ||
         current.pending.some(item => item.requestId === event.client_request_id && item.matched.some(match => match.id === event.session_id && match.startedAt === event.started_at))) candidates.delete(key);

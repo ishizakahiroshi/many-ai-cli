@@ -6,6 +6,7 @@ export const FLEXIBLE_PANE_STORAGE_KEY = 'flexiblePaneLayoutsV1';
 export const PANE_DRAG_MIME = 'application/x-many-ai-cli-pane';
 
 export type PaneContent =
+  | { kind: 'startup'; requestId: string; sessionId: null; startedAt: null }
   | { kind: 'session'; sessionId: number; startedAt: string }
   | { kind: 'tab'; tabName: string; sessionId: number | null; startedAt: string | null };
 
@@ -83,6 +84,7 @@ export function sessionPaneLayoutKey(sessionId: number, startedAt: string): stri
 }
 
 export function paneContentKey(content: PaneContent): string {
+  if (content.kind === 'startup') return `startup:${content.requestId}`;
   return content.kind === 'session'
     ? `session:${content.sessionId}:${content.startedAt}`
     : ['chat', 'approval', 'history', 'orchestration'].includes(content.tabName)

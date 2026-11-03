@@ -1,6 +1,7 @@
 @import url("/styles/ui-components.css");
 @import url("/styles/settings.css");
 @import url("/styles/terminal.css");
+@import url("/styles/session-startup.css");
 @import url("/styles/approval.css");
 @import url("/styles/spawn.css");
 @import url("/styles/spawn-confirm.css");

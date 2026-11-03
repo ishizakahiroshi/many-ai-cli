@@ -5,6 +5,7 @@ import { runInNewContext } from 'node:vm';
 import * as tracking from '../src/app/session-spawn-state.js';
 import * as tabs from '../src/app/session-list-tab-state.js';
 import { buildDeriveBody } from '../src/app/derive-dialog-store.js';
+import { SessionStartupStore } from '../src/app/session-startup.js';
 const source=(name:string)=>readFileSync(new URL('../src/app/'+name,import.meta.url),'utf8');
 const compile=(text:string)=>new Bun.Transpiler({loader:'ts'}).transformSync(text.replace(/^import[\s\S]*?;\r?$/gm,'').replace(/^export /gm,''));
 const tick=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
@@ -15,7 +16,7 @@ function fixture(saved:string|null=null, deniedStorage=false) {
  const assignment:any={...tabs,state:()=>tabState,persist:()=>{}};
  const text=source('session-list-tabs.ts');const a=text.indexOf('export function assignCorrelatedSessionListSpawn'),b=text.indexOf('export function isSessionInSelectedListTab',a);
  runInNewContext(compile(text.slice(a,b))+'\nglobalThis.assign=assignCorrelatedSessionListSpawn;',assignment);
- const context:any={...tracking,t:(key:string)=>key,showToast:()=>{},assignCorrelatedSessionListSpawn:assignment.assign,captureSessionListTab:()=>tabState.selectedId,
+ const context:any={...tracking,sessionStartups:new SessionStartupStore(),t:(key:string)=>key,showToast:()=>{},assignCorrelatedSessionListSpawn:assignment.assign,captureSessionListTab:()=>tabState.selectedId,
   sessionStorage:{getItem:()=>{if(deniedStorage)throw Error("denied");return storage;},setItem:(_key:string,value:string)=>{if(deniedStorage)throw Error("quota");storage=value;}},crypto:{getRandomValues:(v:Uint32Array)=>v.fill(++counter)},
   Date:{now:()=>clock},setTimeout,clearTimeout};
  runInNewContext(compile(source('session-spawn-tracker.ts'))+'\nglobalThis.ui={beginTrackedSpawn,noteSpawnDisconnected,noteSpawnSnapshot,noteSpawnSessions,noteSpawnCorrelation,waitForTrackedSpawn};',context);
@@ -109,7 +110,7 @@ test('actual spawn click keeps its tab through risk wait, preference save, and n
  const text=source('spawn-panel.ts'),start=text.indexOf('  async function spawnSession()'),end=text.indexOf('\n  }',start)+4;
  let tab='click-tab';let requestBody:any,defaults:any,nested:any;const no=()=>{};
  const inputs:any={'spawn-provider':{value:'claude'},'spawn-label':{value:'Synthetic'},'spawn-permission-mode':{value:'default'}};
- const ctx:any={captureSpawnTab:()=>tab,document:{getElementById:(id:string)=>inputs[id]||{value:''}},spawnCwdInput:{value:'/repos/example'},
+ const ctx:any={spawnLaunchSequence:0,captureSpawnTab:()=>tab,document:{getElementById:(id:string)=>inputs[id]||{value:''}},spawnCwdInput:{value:'/repos/example'},
   spawnLaunchBlockReason:()=>'',isPathMissing:()=>false,commandMissingProviderIds:new Set(),spawnLaunchBtn:{disabled:false},spawnModelInput:{value:''},
   updateSpawnLaunchButton:no,getCachedSpawnModelGroups:()=>[],isModelCompatibleWithProvider:()=>true,resolveRoute:()=>'',isCustomProviderValue:()=>false,
   readSpawnDefaults:()=>({provider_claude:'existing'}),hasProviderBooleanSetting:()=>false,spawnInitialPrompt:{value:''},selectedSubscriptionID:()=>'',

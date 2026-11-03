@@ -164,6 +164,7 @@ export function initFlexiblePaneViews(): void {
   window.addEventListener('flexible-pane-auto-collapse', event => {
     const remaining = (event as CustomEvent).detail?.remaining as PaneContent | undefined;
     if (!remaining) return;
+    if (remaining.kind === 'startup') return;
     const multiView = document.getElementById('multi-view');
     if (!multiView || multiView.hidden) return;
     const mgr = hostWindow.multiPaneManager;
