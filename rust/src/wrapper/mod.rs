@@ -15,5 +15,5 @@ mod raw_log;
 #[doc(hidden)]
 pub mod launch_payload;
 
-pub mod startup;
 pub mod iris_owner;
+pub mod startup;

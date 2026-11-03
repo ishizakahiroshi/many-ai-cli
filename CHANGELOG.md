@@ -10,9 +10,15 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+- Allow editing quick commands by right-clicking their buttons.
+
 - Show new in-window CLI launches in their own pane immediately, then hand the
   pane over to the correlated terminal when its first screen arrives. Other
   panes remain usable, and saving launch preferences no longer delays display.
+
+- Add a trusted internal Iris dispatch coordinator with one-use durable claims,
+  bounded startup queues and exact-session cancellation. Wrapper registration
+  and native root startup stay separate; live HTTP execution remains disabled.
 
 - Fix Windows terminal disposal during process startup: terminate the owned Job
   and observe the root exit and an empty Job before closing ConPTY, preventing

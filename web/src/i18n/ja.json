@@ -546,6 +546,8 @@
   "push_notification_enable_failed": "プッシュ通知の設定に失敗しました",
   "mobile_keyboard_toggle_tooltip": "補助キー",
   "settings_quick_cmd_title": "クイックコマンド",
+  "settings_quick_cmd_edit": "クイックコマンドを編集",
+  "settings_quick_cmd_edit_hint": "右クリックで編集",
   "settings_quick_cmd_1": "コマンド 1",
   "settings_quick_cmd_2": "コマンド 2",
   "settings_quick_cmd_3": "コマンド 3",

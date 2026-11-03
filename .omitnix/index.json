@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "1e4a4a1bcb639060b761f425b5311c2f9f24b310",
+    "commit": "dad22b4e60810d2459b73c6d517c6b6b27bfa7cc",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,9 +138,9 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2060,
-    "analyzed": 1599,
-    "unresolved": 11,
+    "discovered": 2063,
+    "analyzed": 1601,
+    "unresolved": 12,
     "unknown": 0,
     "unclaimed": 450,
     "skipped_by_config": 0
@@ -23269,6 +23269,64 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/application/iris_execution_dispatcher.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Opt-in trusted coordinator; never wired to HTTP or production capabilities."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/application/iris_execution_launch.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Trusted launch seam for an admitted Iris coordinator. No HTTP capability or"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/application/issue_cli.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -30715,7 +30773,7 @@
     {
       "path": "rust/src/hub/iris_execution_journal.rs",
       "adapter": "rust",
-      "status": "analyzed",
+      "status": "unresolved",
       "fields": {
         "summary": {
           "state": "value",
@@ -30731,11 +30789,14 @@
           "state": "value",
           "value": [
             "attempts",
+            "audit",
+            "dispatch_claims",
             "events",
             "fences",
             "grants",
             "meta",
-            "requests"
+            "requests",
+            "sqlite_master"
           ]
         },
         "writes": {
@@ -30743,6 +30804,7 @@
           "value": [
             "attempts",
             "audit",
+            "dispatch_claims",
             "events",
             "fences",
             "grants",
@@ -30754,7 +30816,24 @@
           "state": "out_of_scope"
         }
       },
-      "unresolved": []
+      "unresolved": [
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: SELECT document FROM (SELECT id,document FROM audit INDEXED BY dispatc..."
+        },
+        {
+          "code": "dynamic_sql",
+          "detail": "assembled at run time: UPDATE dispatch_claims SET binding=' omitnix_placeholder '"
+        },
+        {
+          "code": "dynamic_sql",
+          "detail": "assembled at run time: UPDATE audit SET document=' omitnix_placeholder ' WHERE kind='dispatch..."
+        },
+        {
+          "code": "dynamic_sql",
+          "detail": "assembled at run time: UPDATE requests SET receipt=' omitnix_placeholder ' WHERE operation='s..."
+        }
+      ]
     },
     {
       "path": "rust/src/hub/iris_execution_mcp.rs",
@@ -40308,6 +40387,38 @@
         "reads": {
           "state": "none_observed",
           "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/tests/iris_owned_dispatch.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Independent synthetic coordinator acceptance. No native process, Hub, or"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "value",
+          "value": [
+            "audit",
+            "requests"
+          ]
         },
         "writes": {
           "state": "none_observed",
@@ -50881,16 +50992,36 @@
         "rust/src/hub/iris_execution_journal.rs"
       ],
       "in_schema_snapshot": false,
-      "unresolved_in": []
+      "unresolved_in": [
+        "rust/src/hub/iris_execution_journal.rs"
+      ]
     },
     {
       "name": "audit",
-      "read_by": [],
+      "read_by": [
+        "rust/src/hub/iris_execution_journal.rs",
+        "rust/tests/iris_owned_dispatch.rs"
+      ],
       "written_by": [
         "rust/src/hub/iris_execution_journal.rs"
       ],
       "in_schema_snapshot": false,
-      "unresolved_in": []
+      "unresolved_in": [
+        "rust/src/hub/iris_execution_journal.rs"
+      ]
+    },
+    {
+      "name": "dispatch_claims",
+      "read_by": [
+        "rust/src/hub/iris_execution_journal.rs"
+      ],
+      "written_by": [
+        "rust/src/hub/iris_execution_journal.rs"
+      ],
+      "in_schema_snapshot": false,
+      "unresolved_in": [
+        "rust/src/hub/iris_execution_journal.rs"
+      ]
     },
     {
       "name": "events",
@@ -50915,6 +51046,7 @@
       "in_schema_snapshot": false,
       "unresolved_in": [
         "go/internal/sessionstore/store.go",
+        "rust/src/hub/iris_execution_journal.rs",
         "rust/src/storage/repository.rs",
         "rust/tests/storage_contracts.rs"
       ]
@@ -50928,7 +51060,9 @@
         "rust/src/hub/iris_execution_journal.rs"
       ],
       "in_schema_snapshot": false,
-      "unresolved_in": []
+      "unresolved_in": [
+        "rust/src/hub/iris_execution_journal.rs"
+      ]
     },
     {
       "name": "grants",
@@ -50939,7 +51073,9 @@
         "rust/src/hub/iris_execution_journal.rs"
       ],
       "in_schema_snapshot": false,
-      "unresolved_in": []
+      "unresolved_in": [
+        "rust/src/hub/iris_execution_journal.rs"
+      ]
     },
     {
       "name": "manifests",
@@ -51011,7 +51147,9 @@
         "rust/src/hub/iris_execution_journal.rs"
       ],
       "in_schema_snapshot": false,
-      "unresolved_in": []
+      "unresolved_in": [
+        "rust/src/hub/iris_execution_journal.rs"
+      ]
     },
     {
       "name": "owners",
@@ -51053,13 +51191,16 @@
     {
       "name": "requests",
       "read_by": [
-        "rust/src/hub/iris_execution_journal.rs"
+        "rust/src/hub/iris_execution_journal.rs",
+        "rust/tests/iris_owned_dispatch.rs"
       ],
       "written_by": [
         "rust/src/hub/iris_execution_journal.rs"
       ],
       "in_schema_snapshot": false,
-      "unresolved_in": []
+      "unresolved_in": [
+        "rust/src/hub/iris_execution_journal.rs"
+      ]
     },
     {
       "name": "sessions",
@@ -51087,18 +51228,30 @@
         "rust/src/storage/history.rs",
         "rust/src/storage/repository.rs"
       ]
+    },
+    {
+      "name": "sqlite_master",
+      "read_by": [
+        "rust/src/hub/iris_execution_journal.rs"
+      ],
+      "written_by": [],
+      "in_schema_snapshot": false,
+      "unresolved_in": [
+        "rust/src/hub/iris_execution_journal.rs"
+      ]
     }
   ],
   "table_gaps": {
     "files": [
       "go/internal/sessionstore/store.go",
+      "rust/src/hub/iris_execution_journal.rs",
       "rust/src/hub/iris_execution_owner.rs",
       "rust/src/storage/history.rs",
       "rust/src/storage/repository.rs",
       "rust/tests/dependency_contracts.rs",
       "rust/tests/storage_contracts.rs"
     ],
-    "unresolved_count": 31,
-    "note": "31 statements in 6 files could not be read, so the table list may be incomplete: a table mentioned only there is missing from it entirely, and a table that is listed may be touched in more places than it names."
+    "unresolved_count": 35,
+    "note": "35 statements in 7 files could not be read, so the table list may be incomplete: a table mentioned only there is missing from it entirely, and a table that is listed may be touched in more places than it names."
   }
 }

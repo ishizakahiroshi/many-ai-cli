@@ -546,6 +546,8 @@
   "push_notification_enable_failed": "Thiết lập thông báo đẩy thất bại",
   "mobile_keyboard_toggle_tooltip": "Phím hỗ trợ",
   "settings_quick_cmd_title": "Lệnh nhanh",
+  "settings_quick_cmd_edit": "Chỉnh sửa lệnh nhanh",
+  "settings_quick_cmd_edit_hint": "Nhấp chuột phải để chỉnh sửa",
   "settings_quick_cmd_1": "Lệnh 1",
   "settings_quick_cmd_2": "Lệnh 2",
   "settings_quick_cmd_3": "Lệnh 3",

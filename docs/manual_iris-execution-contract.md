@@ -122,6 +122,46 @@ saved as a report with `verification_scope: "artifact-integrity-only"`.
 `verified_task_outcome` remains `unknown`: a provider's success statement and
 the hash of that statement are not independent business acceptance.
 
+## Trusted internal dispatch lane
+
+The internal `OwnedDispatcher` composes the existing journal, fixed operator
+grant loader, owner store and `CoreLaunchPort`. It is not installed as the HTTP
+backend. The production endpoint remains inspection-only, and no live execution
+or automatic handoff capability is enabled by these components.
+
+New journals use internal SQLite schema 2 with a separate `dispatch_claims`
+ledger and indexed audit lookups. A claim consumes one dispatch opportunity in
+the same transaction that rechecks current approval, boot, attempt and the
+original start receipt. Read queries cannot recreate the private, non-cloneable
+queue token. A crash after acceptance or claim does not authorize a second
+enqueue. Existing schema 1 journals keep their previous query/start/stop
+semantics; the new claim API rejects them. The coordinator rejects schema 1
+before creating a new start intent, and rejects restored/held journals as well.
+Normal startup does not migrate an
+existing journal. Older binaries reject schema 2, and the HTTP wire contract
+remains `iris-execution/1`.
+
+The bounded queue returns original receipts on replay even when full. Start
+and stop receipt replays never call the launch/effect port again. The
+worker rechecks the fixed grant and instruction bytes, then calls the existing
+Core spawn path with no preissued proof, elevated grants or automatic risk
+confirmation. A registration ACK does not mean the provider root has started.
+The journal stays accepted until the exact owner ticket, session, root and
+current Core binding are observed. A saved stop intent wins over publishing
+running. Stops use the owner-bound SessionBridge and never PID/label lookup.
+
+Worker failure, cancellation and shutdown preserve ambiguous queued or active
+work as unknown when storage is available; claims are never released for retry.
+Shutdown checks the current cancellation value as well as notifications and
+uses a bounded join with an explicit failure fallback. Unknown-state cleanup
+uses a bounded, separate blocking lane so mutex or SQLite contention cannot
+block its Tokio cleanup deadline. Pending or failed cleanup returns an error;
+the durable claim remains consumed and journal restart still reconciles unknown
+work. This does not impose a real-time guarantee on the ordinary synchronous
+submit/query/grant operations. Stop API receipts remain
+durable intent when delivery fails or times out. They are not local cessation,
+remote-job, task-outcome or effects verification.
+
 ## Stop and result limits
 
 The exact-session bridge can request cancellation only for a previously proven

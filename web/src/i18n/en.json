@@ -546,6 +546,8 @@
   "push_notification_enable_failed": "Push notification setup failed",
   "mobile_keyboard_toggle_tooltip": "Assist keys",
   "settings_quick_cmd_title": "Quick Commands",
+  "settings_quick_cmd_edit": "Edit quick command",
+  "settings_quick_cmd_edit_hint": "Right-click to edit",
   "settings_quick_cmd_1": "Command 1",
   "settings_quick_cmd_2": "Command 2",
   "settings_quick_cmd_3": "Command 3",
