@@ -1,5 +1,6 @@
 import { noteSpawnSessions } from './app/session-spawn-tracker.js';
-import { restoreSessionListDrawerScroll } from './app/session-list-tabs.js';
+import { restoreSessionListDrawerScroll, isSessionInSelectedListTab, preserveSessionListSelection } from './app/session-list-tabs.js';
+import { sessionListCloseNeighbor } from './app/session-list-tab-state.js';
 import { probeSpan } from './debug/probe.js';
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
@@ -1853,11 +1854,8 @@ export function removeLocalSession(id) {
       const all = Array.from(sessions.values());
       const closing = sessions.get(id);
       const key = closing ? projectKeyForSession(closing, all) : null;
-      const pool = key === null ? ordered : ordered.filter(s => projectKeyForSession(s, all) === key);
-      const candidates = pool.length > 1 ? pool : ordered;
-      const idx = candidates.findIndex(s => s.id === id);
-      if (idx > 0) neighborId = candidates[idx - 1].id;
-      else if (idx === 0 && candidates.length > 1) neighborId = candidates[1].id;
+      neighborId = sessionListCloseNeighbor(ordered, id, s => isSessionInSelectedListTab(s.id),
+        s => key !== null && projectKeyForSession(s, all) === key);
     } catch (_) {}
   }
   cleanupRemovedSessionState(id);
@@ -1899,7 +1897,8 @@ export function removeLocalSession(id) {
       const next = (neighborId !== null && sessions.has(neighborId))
         ? neighborId
         : sessions.keys().next().value;
-      activateSession(next);
+      if (isSessionInSelectedListTab(next)) activateSession(next);
+      else preserveSessionListSelection(() => activateSession(next));
       return;
     }
   }
