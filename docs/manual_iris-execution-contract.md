@@ -122,7 +122,123 @@ saved as a report with `verification_scope: "artifact-integrity-only"`.
 `verified_task_outcome` remains `unknown`: a provider's success statement and
 the hash of that statement are not independent business acceptance.
 
-## Stop and result limits
+## Trusted internal dispatch lane
+
+The internal `OwnedDispatcher` composes the existing journal, fixed operator
+grant loader, owner store and `CoreLaunchPort`. It is not installed as the HTTP
+backend. The production endpoint remains inspection-only, and no live execution
+or automatic handoff capability is enabled by these components.
+
+New journals use internal SQLite schema 2 with a separate `dispatch_claims`
+ledger and indexed audit lookups. A claim consumes one dispatch opportunity in
+the same transaction that rechecks current approval, boot, attempt and the
+original start receipt. Read queries cannot recreate the private, non-cloneable
+queue token. A crash after acceptance or claim does not authorize a second
+enqueue. Existing schema 1 journals keep their previous query/start/stop
+semantics; the new claim API rejects them. The coordinator rejects schema 1
+before creating a new start intent, and rejects restored/held journals as well.
+Normal startup does not migrate an
+existing journal. Older binaries reject schema 2, and the HTTP wire contract
+remains `iris-execution/1`.
+
+The bounded queue returns original receipts on replay even when full. Start
+and stop receipt replays never call the launch/effect port again. The
+worker rechecks the fixed grant and instruction bytes, then calls the existing
+Core spawn path with no preissued proof, elevated grants or automatic risk
+confirmation. A registration ACK does not mean the provider root has started.
+The journal stays accepted until the exact owner ticket, session, root and
+current Core binding are observed. A saved stop intent wins over publishing
+running. Stops use the owner-bound SessionBridge and never PID/label lookup.
+
+Worker failure, cancellation and shutdown preserve ambiguous queued or active
+work as unknown when storage is available; claims are never released for retry.
+Shutdown checks the current cancellation value as well as notifications and
+uses a bounded join with an explicit failure fallback. Unknown-state cleanup
+uses a bounded, separate blocking lane so mutex or SQLite contention cannot
+block its Tokio cleanup deadline. Pending or failed cleanup returns an error;
+the durable claim remains consumed and journal restart still reconciles unknown
+work. This does not impose a real-time guarantee on the ordinary synchronous
+submit/query/grant operations. Stop API receipts remain
+durable intent when delivery fails or times out. They are not local cessation,
+remote-job, task-outcome or effects verification.
+
+## Independent fixed-payload records
+
+The trusted Rust `VerificationStore` is a separate, opt-in local library. It is
+not wired into HTTP, the scheduler or the operator grant manifest. It does not
+grant execution permission. Its schema-1 SQLite database stores immutable
+policies and original comparison receipts with FULL transactions. The owner
+database writer lock spans each new policy commit, so another connection cannot
+begin the attempt between the absence check and the durable pin.
+
+An operator-owned policy uses schema_version 1, a policy_id and positive
+policy_revision, verifier `strict-json-payload-equality/1`, the complete binding,
+expires_at_ms and expected_payload. Policies are at most 64 KiB, reject duplicate
+keys and unknown envelope fields, and use the shared depth limit. The raw policy
+SHA256 identifies the exact specification. The policy is immutable per complete
+binding; a different policy requires a separately authorized binding. There is
+no command, URL or expression evaluator. Payload strings remain data.
+
+Result artifacts may include an optional `payload` beside the existing envelope.
+The owner receipt still verifies integrity only. The independent comparison
+requires that owner's exact ticket, observed root and integrity receipt, then
+reads the approved artifact with the permit and hashes the same bytes it parses.
+Only equality to the pre-pinned expected_payload determines pass or fail.
+Provider outcome/effects fields do not determine that verdict. Malformed,
+missing, changed, expired or mismatched input returns a fixed error, representing
+an unavailable comparison; it does not create a success receipt.
+
+Receipts include the complete binding, owner ID/epoch, input SHA256, verifier and
+policy identity, spec hash, original observation time and fixed-payload-only
+scope. Neither expected nor actual payload is included. task_outcome_verified,
+effects_verified and remote_jobs_stopped stay false for pass and fail alike.
+The owner's verified_task_outcome remains unknown. In particular, fail does not
+authorize retry/handoff, and pass does not satisfy global task acceptance.
+
+Exact pin/verification replays return the original historical receipt, including
+after expiry or artifact removal. They do not certify that the file or approval
+is currently valid. Changed input or ticket conflicts. Explicit restored mode
+persists a write hold: pin and verify, including replays, are refused while query
+can inspect old receipts. Startup and queries validate hashes, binding and
+receipt semantics, including the original observation's policy time window.
+These are corruption checks, not authenticity against rewriting the entire
+database or undetectable filesystem rollback. New policy/HTTP composition and
+independent effects acceptance remain subsequent work.
+
+## Explicit owned HTTP acceptance profile
+
+Trusted local composition can inject `OwnedProfile` on the same HTTP endpoint.
+It must share the exact journal and owner `Arc` objects with the HTTP owner;
+another journal/owner instance is rejected. Production `from_local` remains
+inspection-only and does not inject a provider launch port.
+
+The separate profile is `iris-owned-dispatch/1`. Its tools are `owned_start`,
+`owned_poll`, `owned_stop`, `owned_request` and `owned_evidence`; every call must
+include the exact `profile`. Start/stop require full binding and request ID;
+poll/evidence require full binding; request lookup requires the original request
+ID and derives binding from the authenticated principal/workspace record. Caller
+arguments cannot select cwd, prompt, verification policy or expected payload.
+The legacy synthetic `execution_ready` and proof gates retain their meaning.
+
+The fixed runtime-root source is `iris-execution/owned-policies.json`: strict
+schema-1 JSON with `profile`, boolean `enabled` and `policies` containing existing
+fixed-payload policy documents. It rejects aliases, duplicate/unknown fields,
+oversize input and duplicate bindings. First acceptance supports only synthetic
+provider/profile. Admission pins the exact policy before dispatcher submission;
+queued launch rechecks enablement, expiry, binding, pinned spec hash and the
+verification-store restore hold on a bounded blocking lane. Historical pin and
+verification reads never renew launch authority.
+
+The HTTP owner delegates start once to the dispatcher. Exact historical request
+replay precedes fresh policy/instance/queue checks; uncertainty uses lookup.
+Stop awaits after releasing journal/owner locks. Capabilities and synchronous
+store inspection run off the async timer lane. `owned_request` returns separate
+`profile`, `binding`, original `request`, native `execution` and historical
+`verification` fields. A missing verification is null; other storage errors fail
+closed. These observations never claim task success, global effects or remote
+job cessation. Restored stores permit history inspection but refuse new work.
+
+## Native stop and result limits
 
 The exact-session bridge can request cancellation only for a previously proven
 SessionBinding, fenced attempt and executor instance. Its receipts are local to

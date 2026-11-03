@@ -10,6 +10,20 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+- Add the separately selected `iris-owned-dispatch/1` HTTP profile for isolated
+  synthetic launch-port acceptance. Admission pins fixed operator policy before
+  the one-use dispatcher; lost responses retain the original request identity.
+  Native observations do not enable task success, effects proof or handoff, and
+  the normal Hub keeps live provider dispatch disabled.
+
+- Add trusted local, immutable fixed-payload verification records, pinned before
+  owner startup and bound to the exact artifact and execution. Comparisons stay
+  separate from task success, effects and live HTTP execution capabilities.
+
+- Add a trusted internal Iris dispatch coordinator with one-use durable claims,
+  bounded startup queues and exact-session cancellation. Wrapper registration
+  and native root startup stay separate; live HTTP execution remains disabled.
+
 - Fix Windows terminal disposal during process startup: terminate the owned Job
   and observe the root exit and an empty Job before closing ConPTY, preventing
   startup-close initialization errors. Ctrl+C input remains a separate operation.

@@ -72,4 +72,7 @@ pub mod iris_execution_grants;
 pub mod iris_execution_journal;
 pub mod iris_execution_mcp;
 pub mod iris_execution_owner;
+pub mod iris_execution_owned;
 pub mod iris_execution_runtime;
+pub mod iris_execution_verification_store;
+pub(crate) mod iris_execution_verifier;

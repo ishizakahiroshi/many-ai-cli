@@ -58,6 +58,252 @@ pub enum Acceptance {
     New(Value),
     Replay(Value),
 }
+
+/// One-use in-memory enqueue authority minted only after a durable local claim.
+/// Read APIs never recreate this type; neither identity nor a receipt is a grant.
+#[derive(Debug)]
+pub struct DispatchClaim {
+    binding: Binding,
+    claim_id: String,
+    start_request_id: String,
+    epoch: u64,
+    claimed_at: i64,
+    boot: String,
+}
+impl DispatchClaim {
+    pub fn binding(&self) -> &Binding {
+        &self.binding
+    }
+    pub fn claim_id(&self) -> &str {
+        &self.claim_id
+    }
+    pub fn start_request_id(&self) -> &str {
+        &self.start_request_id
+    }
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+    pub fn claimed_at(&self) -> i64 {
+        self.claimed_at
+    }
+    pub fn boot(&self) -> &str {
+        &self.boot
+    }
+    fn document(&self) -> Value {
+        json!({"binding":self.binding,"claim_id":self.claim_id,"start_request_id":self.start_request_id,"epoch":self.epoch,"claimed_at":self.claimed_at,"boot":self.boot})
+    }
+}
+
+fn authorize_in(db: &Connection, host: &str, b: &Binding, now: i64) -> Result<()> {
+    if now < 0 {
+        return Err(error("INVALID"));
+    }
+    if b.execution_host_id != host {
+        return Err(error("HOST_MISMATCH"));
+    }
+    let latest: i64 = sql(db.query_row("SELECT COALESCE(MAX(revision),0) FROM grants WHERE principal=? AND workspace=? AND approval=? AND plan=? AND task=?",params![b.principal_id,b.workspace_id,b.approval_id,b.plan_id,b.task_id],|r|r.get(0)))?;
+    if latest == 0 {
+        return Err(error("NO_GRANT"));
+    }
+    if latest != b.approval_revision as i64 {
+        return Err(error("STALE_GRANT"));
+    }
+    let row:Option<(String,i64,bool)>=sql(db.query_row("SELECT scope,expires,revoked FROM grants WHERE principal=? AND workspace=? AND approval=? AND revision=? AND plan=? AND task=?",params![b.principal_id,b.workspace_id,b.approval_id,b.approval_revision as i64,b.plan_id,b.task_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional())?;
+    let Some((pinned, expires, revoked)) = row else {
+        return Err(error("NO_GRANT"));
+    };
+    if revoked || expires <= now || decode(&pinned)? != scope(b) {
+        return Err(error("STALE_GRANT"));
+    }
+    Ok(())
+}
+
+/// Validate both directions: every row needs its immutable audit, and a deleted
+/// row must not hide an already consumed claim whose audit still survives.
+fn validate_dispatch_claims(db: &Connection) -> Result<()> {
+    validate_dispatch_claims_scope(db, None)
+}
+
+// Startup validates the whole ledger; hot-path calls validate just one attempt.
+// Two indexed branches include row IDs so duplicate audit documents remain
+// detectable while the same audit row matching both keys is inspected once.
+fn validate_dispatch_claims_scope(db: &Connection, only: Option<&Binding>) -> Result<()> {
+    let (host, boot, epoch): (String, String, i64) = sql(db.query_row(
+        "SELECT host,boot,epoch FROM meta WHERE id=1",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    ))?;
+    if !valid_id(&host) || !valid_id(&boot) || epoch <= 0 {
+        return Err(error("STORAGE"));
+    }
+    let select_claims = if only.is_some() {
+        "SELECT principal,workspace,attempt,claim_id,start_request_id,binding,boot,epoch,claimed_at,digest FROM dispatch_claims WHERE principal=? AND workspace=? AND attempt=?"
+    } else {
+        "SELECT principal,workspace,attempt,claim_id,start_request_id,binding,boot,epoch,claimed_at,digest FROM dispatch_claims"
+    };
+    let filters: Vec<&dyn rusqlite::ToSql> = only
+        .map(|b| {
+            vec![
+                &b.principal_id as &dyn rusqlite::ToSql,
+                &b.workspace_id,
+                &b.attempt_id,
+            ]
+        })
+        .unwrap_or_default();
+    let mut statement = sql(db.prepare(select_claims))?;
+    let rows = sql(statement.query_map(filters.as_slice(), |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, String>(3)?,
+            r.get::<_, String>(4)?,
+            r.get::<_, String>(5)?,
+            r.get::<_, String>(6)?,
+            r.get::<_, i64>(7)?,
+            r.get::<_, i64>(8)?,
+            r.get::<_, String>(9)?,
+        ))
+    }))?;
+    let mut documents = std::collections::BTreeMap::new();
+    for row in rows {
+        let (
+            principal,
+            workspace,
+            attempt,
+            claim_id,
+            start_request_id,
+            raw_binding,
+            claim_boot,
+            claim_epoch,
+            claimed_at,
+            stored_digest,
+        ) = sql(row)?;
+        let b: Binding = serde_json::from_value(
+            super::iris_execution_mcp::parse_json(raw_binding.as_bytes())
+                .map_err(|_| error("STORAGE"))?,
+        )
+        .map_err(|_| error("STORAGE"))?;
+        validate_binding(&b).map_err(|_| error("STORAGE"))?;
+        if principal != b.principal_id
+            || workspace != b.workspace_id
+            || attempt != b.attempt_id
+            || only.is_some_and(|expected| expected != &b)
+            || b.execution_host_id != host
+            || !valid_id(&claim_id)
+            || !claim_id.starts_with("dispatch-")
+            || !valid_id(&start_request_id)
+            || !valid_id(&claim_boot)
+            || claim_epoch <= 0
+            || claim_epoch > epoch
+            || (claim_epoch == epoch && claim_boot != boot)
+            || claimed_at < 0
+        {
+            return Err(error("STORAGE"));
+        }
+        let raw_record: String = sql(db.query_row(
+            "SELECT document FROM attempts WHERE principal=? AND workspace=? AND attempt=?",
+            params![principal, workspace, attempt],
+            |r| r.get(0),
+        ))?;
+        let record = decode(&raw_record)?;
+        validate_record(&record)?;
+        if stored_binding(&record)? != b
+            || record["accepted_boot"] != claim_boot
+            || timestamp(&record, "accepted_at")? > claimed_at
+        {
+            return Err(error("STORAGE"));
+        }
+        validate_start_request(db, &b, &record, &start_request_id)?;
+        let claim = DispatchClaim {
+            binding: b,
+            claim_id: claim_id.clone(),
+            start_request_id,
+            epoch: claim_epoch as u64,
+            claimed_at,
+            boot: claim_boot,
+        };
+        let document = claim.document();
+        if digest(&document.to_string()) != stored_digest {
+            return Err(error("STORAGE"));
+        }
+        if documents.insert(claim_id, document).is_some() {
+            return Err(error("STORAGE"));
+        }
+    }
+    let target_request = if let Some(b) = only {
+        let raw: Option<String> = sql(db
+            .query_row(
+                "SELECT document FROM attempts WHERE principal=? AND workspace=? AND attempt=?",
+                params![b.principal_id, b.workspace_id, b.attempt_id],
+                |r| r.get(0),
+            )
+            .optional())?;
+        match raw {
+            Some(raw) => decode(&raw)?["start_receipt"]["request_id"]
+                .as_str()
+                .ok_or_else(|| error("STORAGE"))?
+                .to_string(),
+            None => String::new(),
+        }
+    } else {
+        String::new()
+    };
+    let select_audit = if only.is_some() {
+        "SELECT document FROM (SELECT id,document FROM audit INDEXED BY dispatch_audit_attempt WHERE kind='dispatch_claim' AND json_extract(document,'$.binding.principal_id')=?1 AND json_extract(document,'$.binding.workspace_id')=?2 AND json_extract(document,'$.binding.attempt_id')=?3 UNION SELECT id,document FROM audit INDEXED BY dispatch_audit_request WHERE kind='dispatch_claim' AND json_extract(document,'$.binding.principal_id')=?1 AND json_extract(document,'$.binding.workspace_id')=?2 AND json_extract(document,'$.start_request_id')=?4)"
+    } else {
+        "SELECT document FROM audit WHERE kind='dispatch_claim'"
+    };
+    let mut audit_filters = filters;
+    if only.is_some() {
+        audit_filters.push(&target_request);
+    }
+    let mut statement = sql(db.prepare(select_audit))?;
+    let rows = sql(statement.query_map(audit_filters.as_slice(), |r| r.get::<_, String>(0)))?;
+    for row in rows {
+        let raw = sql(row)?;
+        let document =
+            super::iris_execution_mcp::parse_json(raw.as_bytes()).map_err(|_| error("STORAGE"))?;
+        let id = document["claim_id"]
+            .as_str()
+            .ok_or_else(|| error("STORAGE"))?;
+        if documents.remove(id).as_ref() != Some(&document) {
+            return Err(error("STORAGE"));
+        }
+    }
+    if !documents.is_empty() {
+        return Err(error("STORAGE"));
+    }
+    Ok(())
+}
+
+fn validate_start_request(
+    db: &Connection,
+    b: &Binding,
+    record: &Value,
+    request_id: &str,
+) -> Result<()> {
+    let (operation,payload,raw_receipt):(String,String,String) = sql(db.query_row("SELECT operation,payload,receipt FROM requests WHERE principal=? AND workspace=? AND request=?",params![b.principal_id,b.workspace_id,request_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))))?;
+    let receipt = decode(&raw_receipt)?;
+    if operation != "start"
+        || decode(&payload)? != json!(b)
+        || receipt != record["start_receipt"]
+        || receipt["ok"] != true
+        || receipt["contract_version"] != CONTRACT
+        || receipt["operation"] != "start"
+        || receipt["request_id"] != request_id
+        || receipt["receipt_id"] != format!("start-{}-{}", b.attempt_id, request_id)
+        || receipt["binding"] != json!(b)
+        || receipt["attempt_id"] != b.attempt_id
+        || receipt["fence"] != b.fence
+        || receipt["execution_state"] != "accepted"
+        || receipt["outcome"] != "pending"
+        || receipt["event_seq"] != 0
+    {
+        return Err(error("STORAGE"));
+    }
+    Ok(())
+}
 fn error(code: &str) -> JournalError {
     JournalError {
         code: code.into(),
@@ -175,7 +421,7 @@ impl Journal {
         sql(db.execute_batch("PRAGMA query_only=ON"))?;
         let tx = sql(db.unchecked_transaction())?;
         let version: i64 = sql(tx.query_row("PRAGMA user_version", [], |r| r.get(0)))?;
-        if version != 1 || now < 0 {
+        if !matches!(version, 1 | 2) || now < 0 {
             return Err(error("SCHEMA"));
         }
         let (host, boot, hold): (String, String, bool) = sql(tx.query_row(
@@ -255,7 +501,7 @@ impl Journal {
             return Err(error("STORAGE"));
         }
         let version = sql(db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0)))?;
-        if (existed && version != 1) || (!existed && version != 0) {
+        if (existed && !matches!(version, 1 | 2)) || (!existed && version != 0) {
             return Err(error("SCHEMA"));
         }
         sql(db.execute_batch(
@@ -264,11 +510,35 @@ impl Journal {
         if !existed {
             let tx = sql(db.transaction())?;
             sql(tx.execute_batch("CREATE TABLE meta(id INTEGER PRIMARY KEY CHECK(id=1),host TEXT NOT NULL,boot TEXT NOT NULL,epoch INTEGER NOT NULL,restore_hold INTEGER NOT NULL CHECK(restore_hold IN(0,1))); CREATE TABLE grants(principal TEXT NOT NULL,workspace TEXT NOT NULL,approval TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),plan TEXT NOT NULL,task TEXT NOT NULL,scope TEXT NOT NULL,expires INTEGER NOT NULL,revoked INTEGER NOT NULL CHECK(revoked IN(0,1)),PRIMARY KEY(principal,workspace,approval,revision,plan,task)); CREATE TABLE attempts(principal TEXT NOT NULL,workspace TEXT NOT NULL,attempt TEXT NOT NULL,document TEXT NOT NULL,PRIMARY KEY(principal,workspace,attempt)); CREATE TABLE requests(principal TEXT NOT NULL,workspace TEXT NOT NULL,request TEXT NOT NULL,operation TEXT NOT NULL,payload TEXT NOT NULL,receipt TEXT NOT NULL,PRIMARY KEY(principal,workspace,request)); CREATE TABLE fences(principal TEXT NOT NULL,workspace TEXT NOT NULL,plan TEXT NOT NULL,task TEXT NOT NULL,fence INTEGER NOT NULL CHECK(fence>0),attempt TEXT NOT NULL,PRIMARY KEY(principal,workspace,plan,task),FOREIGN KEY(principal,workspace,attempt) REFERENCES attempts(principal,workspace,attempt)); CREATE TABLE events(principal TEXT NOT NULL,workspace TEXT NOT NULL,attempt TEXT NOT NULL,sequence INTEGER NOT NULL CHECK(sequence>0),payload TEXT NOT NULL,receipt TEXT NOT NULL,PRIMARY KEY(principal,workspace,attempt,sequence),FOREIGN KEY(principal,workspace,attempt) REFERENCES attempts(principal,workspace,attempt)); CREATE TABLE audit(id INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,document TEXT NOT NULL); PRAGMA user_version=1;"))?;
+            // New dispatch semantics must be visible to older binaries. Existing
+            // v1 journals are never silently migrated by a normal service start.
+            sql(tx.execute_batch("CREATE TABLE dispatch_claims(principal TEXT NOT NULL,workspace TEXT NOT NULL,attempt TEXT NOT NULL,claim_id TEXT NOT NULL UNIQUE,start_request_id TEXT NOT NULL,binding TEXT NOT NULL,boot TEXT NOT NULL,epoch INTEGER NOT NULL CHECK(epoch>0),claimed_at INTEGER NOT NULL CHECK(claimed_at>=0),digest TEXT NOT NULL,PRIMARY KEY(principal,workspace,attempt),FOREIGN KEY(principal,workspace,attempt) REFERENCES attempts(principal,workspace,attempt),FOREIGN KEY(principal,workspace,start_request_id) REFERENCES requests(principal,workspace,request)); PRAGMA user_version=2;"))?;
+            sql(tx.execute_batch("CREATE INDEX dispatch_audit_attempt ON audit(json_extract(document,'$.binding.principal_id'),json_extract(document,'$.binding.workspace_id'),json_extract(document,'$.binding.attempt_id')) WHERE kind='dispatch_claim'; CREATE INDEX dispatch_audit_request ON audit(json_extract(document,'$.binding.principal_id'),json_extract(document,'$.binding.workspace_id'),json_extract(document,'$.start_request_id')) WHERE kind='dispatch_claim';"))?;
             sql(tx.execute(
                 "INSERT INTO meta VALUES(1,?,?,1,?)",
                 params![host_id, boot_id, restored],
             ))?;
             sql(tx.commit())?;
+        }
+        let schema = if existed { version } else { 2 };
+        let has_claims: bool = sql(db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='dispatch_claims')",
+            [], |r| r.get(0),
+        ))?;
+        if has_claims != (schema == 2) {
+            return Err(error("SCHEMA"));
+        }
+        if schema == 1
+            && sql(db.query_row(
+                "SELECT EXISTS(SELECT 1 FROM audit WHERE kind='dispatch_claim')",
+                [],
+                |r| r.get::<_, bool>(0),
+            ))?
+        {
+            return Err(error("SCHEMA"));
+        }
+        if schema == 2 {
+            validate_dispatch_claims(&db)?;
         }
         let (host, _old_boot, epoch, old_hold): (String, String, i64, bool) = sql(db.query_row(
             "SELECT host,boot,epoch,restore_hold FROM meta WHERE id=1",
@@ -377,27 +647,7 @@ impl Journal {
         sql(self.db.query_row("SELECT COALESCE(MAX(revision),0) FROM grants WHERE principal=? AND workspace=? AND approval=? AND plan=? AND task=?",params![b.principal_id,b.workspace_id,b.approval_id,b.plan_id,b.task_id],|r|r.get(0)))
     }
     fn authorize(&self, b: &Binding, now: i64) -> Result<()> {
-        if now < 0 {
-            return Err(error("INVALID"));
-        }
-        if b.execution_host_id != self.host {
-            return Err(error("HOST_MISMATCH"));
-        }
-        let latest = self.latest_revision(b)?;
-        if latest == 0 {
-            return Err(error("NO_GRANT"));
-        }
-        if latest != b.approval_revision as i64 {
-            return Err(error("STALE_GRANT"));
-        }
-        let row:Option<(String,i64,bool)>=sql(self.db.query_row("SELECT scope,expires,revoked FROM grants WHERE principal=? AND workspace=? AND approval=? AND revision=? AND plan=? AND task=?",params![b.principal_id,b.workspace_id,b.approval_id,b.approval_revision as i64,b.plan_id,b.task_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional())?;
-        let Some((pinned, expires, revoked)) = row else {
-            return Err(error("NO_GRANT"));
-        };
-        if revoked || expires <= now || decode(&pinned)? != scope(b) {
-            return Err(error("STALE_GRANT"));
-        }
-        Ok(())
+        authorize_in(&self.db, &self.host, b, now)
     }
     fn prior(&self, request: &str, b: &Binding, operation: &str) -> Result<Option<Value>> {
         let row:Option<(String,String,String)>=sql(self.db.query_row("SELECT operation,payload,receipt FROM requests WHERE principal=? AND workspace=? AND request=?",params![b.principal_id,b.workspace_id,request],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional())?;
@@ -472,6 +722,145 @@ impl Journal {
             return Err(error("STATE"));
         }
         self.authorize(b, now)
+    }
+
+    /// Composition preflight: v1 and restored journals remain readable but
+    /// cannot admit owned work.
+    /// Checking this before start avoids creating a misleading new intent when
+    /// the coordinator cannot consume a dispatch claim in this journal.
+    pub fn supports_owned_dispatch(&self) -> Result<bool> {
+        let version: i64 = sql(self.db.query_row("PRAGMA user_version", [], |r| r.get(0)))?;
+        match version {
+            1 => Ok(false),
+            2 => Ok(!self.restore_hold
+                && !sql(self
+                    .db
+                    .query_row("SELECT restore_hold FROM meta WHERE id=1", [], |r| {
+                        r.get::<_, bool>(0)
+                    }))?),
+            _ => Err(error("SCHEMA")),
+        }
+    }
+
+    /// Trusted composition only: consume one enqueue opportunity, not wrapper
+    /// spawn authority. A committed claim is never returned again, even if the
+    /// queue/worker disappears before it can observe the in-memory token.
+    pub fn claim_dispatch(&mut self, b: &Binding, now: i64) -> Result<DispatchClaim> {
+        validate_binding(b)?;
+        let schema: i64 = sql(self.db.query_row("PRAGMA user_version", [], |r| r.get(0)))?;
+        if schema == 1 {
+            return Err(error("DISPATCH_SCHEMA_REQUIRED"));
+        }
+        if schema != 2 {
+            return Err(error("SCHEMA"));
+        }
+        if self.restore_hold {
+            return Err(error("RESTORE_HOLD"));
+        }
+        let tx = sql(self
+            .db
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate))?;
+        validate_dispatch_claims_scope(&tx, Some(b))?;
+        let raw: String = sql(tx
+            .query_row(
+                "SELECT document FROM attempts WHERE principal=? AND workspace=? AND attempt=?",
+                params![b.principal_id, b.workspace_id, b.attempt_id],
+                |r| r.get(0),
+            )
+            .optional())?
+        .ok_or_else(|| error("NOT_FOUND"))?;
+        let record = decode(&raw)?;
+        validate_record(&record)?;
+        if stored_binding(&record)? != *b {
+            return Err(error("STALE_BINDING"));
+        }
+        let exists: bool = sql(tx.query_row("SELECT EXISTS(SELECT 1 FROM dispatch_claims WHERE principal=? AND workspace=? AND attempt=?)",params![b.principal_id,b.workspace_id,b.attempt_id],|r|r.get(0)))?;
+        if exists {
+            return Err(error("DISPATCH_ALREADY_CLAIMED"));
+        }
+        let (host, boot, epoch, hold): (String, String, i64, bool) = sql(tx.query_row(
+            "SELECT host,boot,epoch,restore_hold FROM meta WHERE id=1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        ))?;
+        if hold {
+            return Err(error("RESTORE_HOLD"));
+        }
+        if host != self.host
+            || boot != self.boot
+            || epoch <= 0
+            || record["accepted_boot"] != boot
+            || record["execution_state"] != "accepted"
+            || !record["stop_request_id"].is_null()
+            || now < timestamp(&record, "accepted_at")?
+        {
+            return Err(error("STATE"));
+        }
+        authorize_in(&tx, &host, b, now)?;
+        let start_request_id = record["start_receipt"]["request_id"]
+            .as_str()
+            .filter(|v| valid_id(v))
+            .ok_or_else(|| error("STORAGE"))?
+            .to_string();
+        validate_start_request(&tx, b, &record, &start_request_id)?;
+        let mut nonce = [0u8; 32];
+        getrandom::fill(&mut nonce).map_err(|_| error("STORAGE"))?;
+        let claim_id = format!(
+            "dispatch-{}",
+            nonce.iter().map(|v| format!("{v:02x}")).collect::<String>()
+        );
+        let claim = DispatchClaim {
+            binding: b.clone(),
+            claim_id,
+            start_request_id,
+            epoch: epoch as u64,
+            claimed_at: now,
+            boot,
+        };
+        let document = claim.document();
+        sql(tx.execute(
+            "INSERT INTO dispatch_claims VALUES(?,?,?,?,?,?,?,?,?,?)",
+            params![
+                b.principal_id,
+                b.workspace_id,
+                b.attempt_id,
+                claim.claim_id,
+                claim.start_request_id,
+                json!(b).to_string(),
+                claim.boot,
+                epoch,
+                now,
+                digest(&document.to_string())
+            ],
+        ))?;
+        sql(tx.execute(
+            "INSERT INTO audit(kind,document) VALUES('dispatch_claim',?)",
+            [document.to_string()],
+        ))?;
+        sql(tx.commit())?;
+        Ok(claim)
+    }
+
+    /// Read-only evidence of consumption, never a reissued DispatchClaim.
+    pub fn query_dispatch(&self, b: &Binding) -> Result<Value> {
+        validate_binding(b)?;
+        self.bound(b)?;
+        let schema: i64 = sql(self.db.query_row("PRAGMA user_version", [], |r| r.get(0)))?;
+        if schema == 1 {
+            return Err(error("DISPATCH_SCHEMA_REQUIRED"));
+        }
+        if schema != 2 {
+            return Err(error("SCHEMA"));
+        }
+        let tx = sql(self.db.unchecked_transaction())?;
+        validate_dispatch_claims_scope(&tx, Some(b))?;
+        let row:Option<(String,String,String,i64,i64)>=sql(tx.query_row("SELECT claim_id,start_request_id,boot,epoch,claimed_at FROM dispatch_claims WHERE principal=? AND workspace=? AND attempt=?",params![b.principal_id,b.workspace_id,b.attempt_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).optional())?;
+        let Some((claim_id, start_request_id, boot, epoch, claimed_at)) = row else {
+            return Err(error("NOT_FOUND"));
+        };
+        Ok(
+            json!({"ok":true,"binding":b,"claim_id":claim_id,"start_request_id":start_request_id,"boot":boot,"epoch":epoch,"claimed_at":claimed_at,"enqueue_authority":false,"dispatch_consumed":true}),
+        )
     }
     pub fn query(&self, b: &Binding) -> Result<Value> {
         validate_binding(b)?;
@@ -879,6 +1268,264 @@ fn single_link(_path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dispatch_claim_is_consumed_once_without_mutating_start_or_event_sequence() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("db");
+        let b = binding();
+        let mut j = Journal::open(&path, "host", "boot").unwrap();
+        grant(&mut j, &b);
+        let accepted = j.start("start", &b, 100).unwrap();
+        let before = j.query(&b).unwrap();
+        let claim = j.claim_dispatch(&b, 101).unwrap();
+        assert_eq!(claim.binding(), &b);
+        assert_eq!(claim.start_request_id(), "start");
+        assert_eq!(claim.boot(), "boot");
+        assert_eq!(claim.claimed_at(), 101);
+        assert!(claim.epoch() > 0);
+        assert!(valid_id(claim.claim_id()));
+        assert_eq!(j.query(&b).unwrap(), before);
+        let Acceptance::New(original_receipt) = accepted else {
+            panic!("new intent expected");
+        };
+        assert_eq!(
+            j.start("start", &b, 102).unwrap(),
+            Acceptance::Replay(original_receipt)
+        );
+        assert_eq!(
+            j.claim_dispatch(&b, 102).unwrap_err().code,
+            "DISPATCH_ALREADY_CLAIMED"
+        );
+        assert_eq!(j.query_dispatch(&b).unwrap()["enqueue_authority"], false);
+        drop(j);
+        // Even accidentally reusing the same boot name cannot mint another token.
+        let mut j = Journal::open(&path, "host", "boot").unwrap();
+        assert_eq!(j.query(&b).unwrap()["execution_state"], "unknown");
+        assert_eq!(j.query_dispatch(&b).unwrap()["claim_id"], claim.claim_id());
+        assert_eq!(
+            j.claim_dispatch(&b, 103).unwrap_err().code,
+            "DISPATCH_ALREADY_CLAIMED"
+        );
+    }
+
+    #[test]
+    fn dispatch_claim_fresh_grant_stop_and_restart_guards() {
+        for case in 0..6 {
+            let d = tempfile::tempdir().unwrap();
+            let path = d.path().join("db");
+            let b = binding();
+            let mut j = Journal::open(&path, "host", "boot").unwrap();
+            grant(&mut j, &b);
+            j.start("start", &b, 100).unwrap();
+            match case {
+                0 => {
+                    j.register_grant(Grant {
+                        binding: b.clone(),
+                        expires_at: 1000,
+                        revoked: true,
+                    })
+                    .unwrap();
+                }
+                1 => {
+                    let mut newer = b.clone();
+                    newer.approval_revision = 2;
+                    grant(&mut j, &newer);
+                }
+                2 => {
+                    j.stop("stop", &b, 100).unwrap();
+                }
+                3 => {
+                    j.observe(&b, event(&b, "running", 1)).unwrap();
+                }
+                4 => {
+                    drop(j);
+                    j = Journal::open(&path, "host", "other").unwrap();
+                }
+                _ => {}
+            }
+            let now = if case == 5 { 1000 } else { 101 };
+            assert!(j.claim_dispatch(&b, now).is_err(), "case {case}");
+            let count: i64 =
+                j.db.query_row("SELECT count(*) FROM dispatch_claims", [], |r| r.get(0))
+                    .unwrap();
+            assert_eq!(count, 0);
+        }
+    }
+
+    #[test]
+    fn dispatch_claim_audit_failure_rolls_back_consumption() {
+        let d = tempfile::tempdir().unwrap();
+        let b = binding();
+        let mut j = Journal::open(&d.path().join("db"), "host", "boot").unwrap();
+        grant(&mut j, &b);
+        j.start("start", &b, 100).unwrap();
+        j.db.execute_batch("CREATE TRIGGER synthetic_fail_claim BEFORE INSERT ON audit WHEN NEW.kind='dispatch_claim' BEGIN SELECT RAISE(ABORT,'synthetic failure'); END;").unwrap();
+        assert_eq!(j.claim_dispatch(&b, 101).unwrap_err().code, "STORAGE");
+        let count: i64 =
+            j.db.query_row("SELECT count(*) FROM dispatch_claims", [], |r| r.get(0))
+                .unwrap();
+        assert_eq!(count, 0);
+        j.db.execute_batch("DROP TRIGGER synthetic_fail_claim")
+            .unwrap();
+        assert!(j.claim_dispatch(&b, 102).is_ok());
+    }
+
+    #[test]
+    fn concurrent_dispatch_claim_consumers_receive_only_one_token() {
+        let d = tempfile::tempdir().unwrap();
+        let b = binding();
+        let mut j = Journal::open(&d.path().join("db"), "host", "boot").unwrap();
+        grant(&mut j, &b);
+        j.start("start", &b, 100).unwrap();
+        let shared = std::sync::Arc::new(std::sync::Mutex::new(j));
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let threads: Vec<_> = (0..2)
+            .map(|_| {
+                let journal = shared.clone();
+                let barrier = barrier.clone();
+                let b = b.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    journal
+                        .lock()
+                        .unwrap()
+                        .claim_dispatch(&b, 101)
+                        .map(|_| ())
+                        .map_err(|e| e.code)
+                })
+            })
+            .collect();
+        let results: Vec<_> = threads.into_iter().map(|t| t.join().unwrap()).collect();
+        assert_eq!(results.iter().filter(|v| v.is_ok()).count(), 1);
+        assert_eq!(
+            results
+                .iter()
+                .filter(|v| v.as_ref().is_err_and(|e| e == "DISPATCH_ALREADY_CLAIMED"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn hot_path_validates_only_selected_claim_and_detects_its_orphan_audit() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("db");
+        let b = binding();
+        let mut j = Journal::open(&path, "host", "boot").unwrap();
+        grant(&mut j, &b);
+        j.start("first", &b, 100).unwrap();
+        j.claim_dispatch(&b, 101).unwrap();
+        let mut other = b.clone();
+        other.task_id = "other-task".into();
+        other.attempt_id = "other-attempt".into();
+        grant(&mut j, &other);
+        j.start("second", &other, 100).unwrap();
+        j.claim_dispatch(&other, 101).unwrap();
+        j.db.execute(
+            "UPDATE dispatch_claims SET digest='broken' WHERE attempt=?",
+            [&other.attempt_id],
+        )
+        .unwrap();
+        assert!(j.query_dispatch(&b).is_ok());
+        assert!(j.query_dispatch(&other).is_err());
+        j.db.execute(
+            "DELETE FROM dispatch_claims WHERE attempt=?",
+            [&b.attempt_id],
+        )
+        .unwrap();
+        assert_eq!(j.claim_dispatch(&b, 102).unwrap_err().code, "STORAGE");
+        drop(j);
+        assert!(Journal::open(&path, "host", "other").is_err());
+    }
+
+    #[test]
+    fn dispatch_claim_partial_tampering_fails_on_reopen() {
+        for mutation in [
+            "UPDATE dispatch_claims SET digest='broken'",
+            "UPDATE dispatch_claims SET claimed_at=99",
+            "UPDATE dispatch_claims SET boot='other'",
+            "UPDATE dispatch_claims SET epoch=999",
+            "UPDATE dispatch_claims SET start_request_id='missing'",
+            "UPDATE dispatch_claims SET binding='{}'",
+            "DELETE FROM dispatch_claims",
+            "DELETE FROM audit WHERE kind='dispatch_claim'",
+            "UPDATE audit SET document='{}' WHERE kind='dispatch_claim'",
+            "UPDATE requests SET receipt='{}' WHERE operation='start'",
+        ] {
+            let d = tempfile::tempdir().unwrap();
+            let path = d.path().join("db");
+            let b = binding();
+            let mut j = Journal::open(&path, "host", "boot").unwrap();
+            grant(&mut j, &b);
+            j.start("start", &b, 100).unwrap();
+            j.claim_dispatch(&b, 101).unwrap();
+            drop(j);
+            let db = Connection::open(&path).unwrap();
+            // Deliberately model damaged on-disk state, independently of SQLite's
+            // write-time foreign-key guard, which normal journal writes retain.
+            db.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
+            db.execute_batch(mutation).unwrap();
+            drop(db);
+            assert!(Journal::open(&path, "host", "other").is_err(), "{mutation}");
+        }
+    }
+
+    #[test]
+    fn legacy_schema_keeps_existing_calls_but_never_mints_dispatch_claim() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("db");
+        drop(Journal::open(&path, "host", "boot").unwrap());
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch("DROP TABLE dispatch_claims; PRAGMA user_version=1;")
+            .unwrap();
+        drop(db);
+        let mut j = Journal::open(&path, "host", "other").unwrap();
+        let b = binding();
+        grant(&mut j, &b);
+        assert!(matches!(
+            j.start("start", &b, 100).unwrap(),
+            Acceptance::New(_)
+        ));
+        assert_eq!(j.query(&b).unwrap()["execution_state"], "accepted");
+        assert_eq!(
+            j.claim_dispatch(&b, 101).unwrap_err().code,
+            "DISPATCH_SCHEMA_REQUIRED"
+        );
+        assert_eq!(
+            j.query_dispatch(&b).unwrap_err().code,
+            "DISPATCH_SCHEMA_REQUIRED"
+        );
+    }
+
+    #[test]
+    fn schema_downgrade_with_claim_table_is_rejected() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("db");
+        drop(Journal::open(&path, "host", "boot").unwrap());
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch("PRAGMA user_version=1;").unwrap();
+        drop(db);
+        assert_eq!(
+            Journal::open(&path, "host", "other").err().unwrap().code,
+            "SCHEMA"
+        );
+    }
+
+    #[test]
+    fn restored_dispatch_claim_is_readable_but_cannot_be_reissued() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("db");
+        let b = binding();
+        let mut j = Journal::open(&path, "host", "boot").unwrap();
+        grant(&mut j, &b);
+        j.start("start", &b, 100).unwrap();
+        j.claim_dispatch(&b, 101).unwrap();
+        drop(j);
+        let mut j = Journal::open_restored(&path, "host", "restored").unwrap();
+        assert_eq!(j.query_dispatch(&b).unwrap()["dispatch_consumed"], true);
+        assert_eq!(j.claim_dispatch(&b, 102).unwrap_err().code, "RESTORE_HOLD");
+    }
+
     fn binding() -> Binding {
         Binding {
             principal_id: "iris".into(),

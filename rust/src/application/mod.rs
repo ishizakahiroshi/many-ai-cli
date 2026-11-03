@@ -6,6 +6,8 @@ pub mod diagnostics;
 pub mod hub_runtime;
 pub mod hub_status;
 pub mod issue_cli;
+pub mod iris_execution_dispatcher;
+pub mod iris_execution_launch;
 pub mod mobile_connect;
 pub mod nvidia_nim;
 pub mod orchestrate_cli;
