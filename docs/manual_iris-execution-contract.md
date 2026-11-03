@@ -202,8 +202,8 @@ persists a write hold: pin and verify, including replays, are refused while quer
 can inspect old receipts. Startup and queries validate hashes, binding and
 receipt semantics, including the original observation's policy time window.
 These are corruption checks, not authenticity against rewriting the entire
-database or undetectable filesystem rollback. New policy/HTTP composition and
-independent effects acceptance remain subsequent work.
+database or undetectable filesystem rollback. Independent effects acceptance
+remains subsequent work; the following profile adds isolated HTTP composition.
 
 ## Explicit owned HTTP acceptance profile
 
