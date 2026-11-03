@@ -10,6 +10,10 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+- Fix Windows terminal disposal during process startup: terminate the owned Job
+  and observe the root exit and an empty Job before closing ConPTY, preventing
+  startup-close initialization errors. Ctrl+C input remains a separate operation.
+
 - Persist Windows PTY-owner local-tree cessation observations and independently
   hashed, bound artifact reports across Hub disconnects. Add one-use durable
   spawn claims, fixed operator grant manifests with revision checks, and

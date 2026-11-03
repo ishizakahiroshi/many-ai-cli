@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "8195f79368887fb96eeb490185fc2bc7f605c37d",
+    "commit": "3925500e1214e956649d21c0c8a9b507431b6749",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2055,
-    "analyzed": 1594,
+    "discovered": 2056,
+    "analyzed": 1595,
     "unresolved": 11,
     "unknown": 0,
     "unclaimed": 450,
@@ -40474,6 +40474,35 @@
         "summary": {
           "state": "value",
           "value": "Real Git and the built, normal-mode Hub communicate over authenticated"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/tests/native_pty_close.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"

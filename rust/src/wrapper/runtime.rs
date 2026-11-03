@@ -112,7 +112,8 @@ impl Drop for Tasks {
 }
 /// Owner execution requests hard termination before closing ConPTY. Sending
 /// CTRL_CLOSE_EVENT to a client still inside DLL initialization can itself
-/// produce STATUS_DLL_INIT_FAILED. Ordinary sessions retain graceful close.
+/// produce STATUS_DLL_INIT_FAILED. Native terminal disposal also waits for the
+/// owned tree to cease before releasing ConPTY; Ctrl+C remains input.
 /// This only requests termination; final native observation is still required.
 fn close_session(pty: &dyn PtySession, strict_owner: bool) {
     if strict_owner && pty.close_owned().is_ok() {

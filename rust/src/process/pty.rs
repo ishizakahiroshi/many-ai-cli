@@ -88,10 +88,13 @@ pub trait PtySession: Send + Sync {
     fn read<'a>(&'a self, target: &'a mut [u8]) -> CoreFuture<'a, io::Result<usize>>;
     fn write<'a>(&'a self, bytes: &'a [u8]) -> CoreFuture<'a, io::Result<usize>>;
     fn resize(&self, size: PtySize) -> io::Result<()>;
+    /// Dispose of this terminal and terminate its contained processes. This is
+    /// distinct from sending Ctrl+C as input. Native Windows teardown waits for
+    /// the owned Job to empty before closing ConPTY, including during startup.
     fn close(&self);
     /// Optional owner-only hard-stop request. Success means the native request
-    /// succeeded, not that cessation has been observed. Ordinary close is
-    /// deliberately separate; unsupported platforms must fail explicitly.
+    /// succeeded, not that cessation has been observed. Unlike ordinary close,
+    /// this request reports native errors; unsupported platforms fail explicitly.
     fn close_owned(&self) -> io::Result<()> {
         Err(io::Error::new(
             io::ErrorKind::Unsupported,

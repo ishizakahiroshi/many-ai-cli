@@ -415,8 +415,16 @@ struct OwnedChild {
     // Synchronize successful explicit stop requests with exit observation.
     // This records a request while root was running, not a causal exit claim.
     hard_stop_requested: Mutex<bool>,
+    close_requested_at: Mutex<Option<tokio::time::Instant>>,
 }
 impl OwnedChild {
+    fn request_close_at(&self) -> tokio::time::Instant {
+        let mut at = self
+            .close_requested_at
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        *at.get_or_insert_with(tokio::time::Instant::now)
+    }
     fn stop_owned(&self) -> io::Result<()> {
         let mut requested = self
             .hard_stop_requested
@@ -444,6 +452,12 @@ fn record_hard_stop(
         *requested = true;
     }
     Ok(())
+}
+/// Root termination alone is insufficient: an initializing descendant may
+/// still be attached to ConPTY. A failed query is never interpreted as zero.
+fn console_closure_ready(root_waited: bool, active: io::Result<u32>) -> io::Result<bool> {
+    let active = active?;
+    Ok(root_waited && active == 0)
 }
 impl Drop for OwnedChild {
     fn drop(&mut self) {
@@ -530,6 +544,7 @@ fn spawn_with_job(
         process,
         job,
         hard_stop_requested: Mutex::new(false),
+        close_requested_at: Mutex::new(None),
     });
     drop(input_read);
     drop(output_write);
@@ -563,9 +578,17 @@ fn spawn_with_job(
         let owner = owner;
         let mut close_task = None;
         let mut close_at = None;
+        let mut termination_requested = false;
         let mut exit = None;
         loop {
             let waited = unsafe { WaitForSingleObject(owner.process.as_raw_handle(), 0) };
+            if waited == WAIT_FAILED {
+                exit = Some(Err(Failure(
+                    io::ErrorKind::Other,
+                    "cannot observe PTY root termination".into(),
+                )));
+                break;
+            }
             if waited == WAIT_OBJECT_0 && exit.is_none() {
                 let mut code = 0;
                 exit = Some(
@@ -589,22 +612,48 @@ fn spawn_with_job(
                         ))
                     },
                 );
-                owner.job.terminate(); // includes detached descendants in this Job
             }
             if (closed.is_cancelled() || exit.is_some()) && close_at.is_none() {
-                close_at = Some(tokio::time::Instant::now());
-                let pc = owned_console
-                    .lock()
-                    .ok()
-                    .and_then(|mut console| console.take());
-                close_task = Some(tokio::task::spawn_blocking(move || drop(pc)));
+                close_at = Some(owner.request_close_at());
+            }
+            if close_at.is_some_and(|at| at.elapsed() >= CLOSE_GRACE + REAP_GRACE) {
+                exit = Some(Err(Failure(
+                    io::ErrorKind::TimedOut,
+                    "native ConPTY teardown did not complete within its request deadline".into(),
+                )));
+                break;
+            }
+            if close_at.is_some() && !termination_requested {
+                if let Err(error) = owner.stop_owned() {
+                    exit = Some(Err(Failure(
+                        error.kind(),
+                        format!("cannot terminate owned PTY Job: {error}"),
+                    )));
+                    break;
+                }
+                termination_requested = true;
+            }
+            if termination_requested && close_task.is_none() {
+                match console_closure_ready(waited == WAIT_OBJECT_0, owner.job.active_processes()) {
+                    Ok(true) => {
+                        let pc = owned_console
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .take();
+                        close_task = Some(tokio::task::spawn_blocking(move || drop(pc)));
+                    }
+                    Ok(false) => {}
+                    Err(error) => {
+                        exit = Some(Err(Failure(
+                            error.kind(),
+                            format!("cannot observe owned PTY Job termination: {error}"),
+                        )));
+                        break;
+                    }
+                }
             }
             if close_at.is_some_and(|at| at.elapsed() >= CLOSE_GRACE) {
-                owner.job.terminate();
                 pipes.cancel();
-                if let Some(Ok(exit)) = &mut exit {
-                    exit.forced = true;
-                }
             }
             let console_done = close_task.as_ref().is_some_and(|task| task.is_finished());
             if console_done {
@@ -624,16 +673,24 @@ fn spawn_with_job(
                     break;
                 }
             }
-            if close_at.is_some_and(|at| at.elapsed() >= CLOSE_GRACE + REAP_GRACE) {
-                owner.job.terminate();
-                pipes.cancel();
-                exit = Some(Err(Failure(
-                    io::ErrorKind::TimedOut,
-                    "native ConPTY teardown did not complete within its deadline".into(),
-                )));
-                break;
-            }
             tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        if close_task.is_none() {
+            // A failed native stop/query must not fall through RAII into an
+            // unverified ClosePseudoConsole. Quarantine only this failed HPCON;
+            // leaking its handle is preferable to signaling an initializing
+            // client after reporting an honest bounded teardown failure.
+            if let Some(console) = owned_console
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .take()
+            {
+                mem::forget(console);
+            }
+            pipes.cancel();
+            if let Some(Err(Failure(_, message))) = &mut exit {
+                message.push_str("; pseudoconsole handle quarantined before unverified close");
+            }
         }
         // A timeout is reported as a failure, never native cleanup acceptance.
         tx.send_replace(Some(exit.unwrap_or_else(|| {
@@ -719,11 +776,13 @@ impl PtySession for NativePty {
         }
     }
     fn close(&self) {
+        self.owner.request_close_at();
         self.closing.cancel();
     }
     fn close_owned(&self) -> io::Result<()> {
         // Kill the exact owned Job before ClosePseudoConsole can begin. Closing
         // ConPTY first can interrupt the root's Windows loader initialization.
+        self.owner.request_close_at();
         self.owner.stop_owned()?;
         self.closing.cancel();
         Ok(())
@@ -810,6 +869,35 @@ async fn wait_for_cessation(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn console_close_requires_root_wait_and_empty_job_after_successful_stop() {
+        assert!(!console_closure_ready(false, Ok(0)).unwrap());
+        assert!(!console_closure_ready(true, Ok(1)).unwrap());
+        assert!(console_closure_ready(true, Ok(0)).unwrap());
+        assert!(
+            console_closure_ready(true, Err(io::Error::other("synthetic query failure"))).is_err()
+        );
+        assert!(
+            console_closure_ready(
+                false,
+                Err(io::Error::other(
+                    "synthetic query failure while root running"
+                ))
+            )
+            .is_err()
+        );
+        let mut forced = false;
+        let mut observed = false;
+        let stopped = record_hard_stop(true, &mut forced, || {
+            Err(io::Error::other("synthetic stop failure"))
+        });
+        if stopped.is_ok() {
+            observed = console_closure_ready(true, Ok(0)).unwrap();
+        }
+        assert!(!observed);
+        assert!(!forced);
+    }
 
     #[tokio::test]
     async fn checked_cessation_rejects_failed_queries_and_incomplete_observations() {
