@@ -108,7 +108,7 @@ Mặc định session con chạy worktree git riêng dưới `.many-ai-cli/workt
 Giới hạn đã biết: cơ chế cố ý nhẹ. Board poll 2 giây + inject Enter ngay có thể ngắt lượt conductor đang chạy. Hoàn tất phụ thuộc con ghi `## DONE ...`; không có job DAG, hàng đợi retry, hay merge tự động.
 
 - **Launcher thống nhất (Windows / Linux / macOS)** — `many-ai-cli-launcher` nối Hub theo profile đã lưu và mở trình duyệt: profile SSH `serve` / `tunnel` mọi OS; profile WSL khởi Hub trong WSL trên Windows
-- **Remote server qua SSH** — binary Linux và kết nối SSH vẫn thuộc phạm vi v1.0.0; image Docker chính thức, build container và tự động cập nhật không được hỗ trợ trong v1.0.0
+- **Remote server qua SSH** — binary Linux và kết nối SSH vẫn thuộc phạm vi v0.10.0; image Docker chính thức, build container và tự động cập nhật không được hỗ trợ trong v0.10.0
 - **Transcript sạch** — sinh `.txt` tự động hoặc `log-clean`
 - **Đổi ngôn ngữ UI** (English / 日本語 / **Tiếng Việt**) — Settings → Language; file locale `web/src/i18n/{en,ja,vi}.json`
 - **UI local-first** — HTTP/WebSocket Hub chỉ bind `127.0.0.1`; bản thân `many-ai-cli` không telemetry
@@ -144,7 +144,7 @@ xem [quy trình phát hành Rust](rust/packaging/README.md#formal-rust-release-o
 
 ### Mức xác minh nền tảng
 
-Các kết quả dưới đây là lịch sử xác minh của các phiên bản cũ, không chứng minh Rust v1.0.0 đã được nghiệm thu trong môi trường thực tế.
+Các kết quả dưới đây là lịch sử xác minh của các phiên bản cũ, không chứng minh Rust v0.10.0 đã được nghiệm thu trong môi trường thực tế.
 
 - Đã xác minh thực tế: Hub local Windows và launcher thống nhất Windows (profile `wsl` / SSH tunnel)
 - Chưa xác minh đầy đủ thực tế: native Linux, native macOS
@@ -665,10 +665,10 @@ Dừng sạch: `⏻` UI hoặc `many-ai-cli stop`.
 
 ## Remote / Docker
 
-> **Phạm vi v1.0.0:** Không hỗ trợ image Docker chính thức, build container hoặc tự động cập nhật. Quá trình build container hiện có lỗi đã biết; việc tự động phát hành image đã dừng. Image và công thức cũ được giữ làm tài liệu lịch sử, không bảo đảm có bản cập nhật. Binary Linux và vận hành từ xa qua SSH vẫn thuộc phạm vi v1.0.0. Xem [chính sách Docker](deploy/docker/README.md).
+> **Phạm vi v0.10.0:** Không hỗ trợ image Docker chính thức, build container hoặc tự động cập nhật. Quá trình build container hiện có lỗi đã biết; việc tự động phát hành image đã dừng. Image và công thức cũ được giữ làm tài liệu lịch sử, không bảo đảm có bản cập nhật. Binary Linux và vận hành từ xa qua SSH vẫn thuộc phạm vi v0.10.0. Xem [chính sách Docker](deploy/docker/README.md).
 
 - Mục lục vai trò A/B/C và chọn quy trình: [docs/vi/manual_remote-server-overview.vi.md](docs/vi/manual_remote-server-overview.vi.md)  
-- Agent server đơn / Docker (tài liệu cũ trước v1.0.0, không xác nhận hỗ trợ Docker): file gốc `docs/manual_remote-server-agent-*.md`
+- Agent server đơn / Docker (tài liệu cũ trước v0.10.0, không xác nhận hỗ trợ Docker): file gốc `docs/manual_remote-server-agent-*.md`
 - SSH tunnel chi tiết: `docs/manual_remote-server-ssh-tunnel.md`  
 
 ---

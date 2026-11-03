@@ -80,7 +80,7 @@ A trial requires an explicit disjoint root and non-default loopback port. The
 Rust Hub, wrapper and launcher are wired into the binary entry points on
 `develop`. Source integration does not establish formal release, copied-data
 rollback or operator acceptance. Official Docker distribution is outside the
-v1.0.0 support scope.
+v0.10.0 support scope.
 
 
 ## Recovery validation boundaries

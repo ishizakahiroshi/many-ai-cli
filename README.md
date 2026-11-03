@@ -32,7 +32,7 @@ Music: [Happy Beats & Business Moves Vol. 1](https://ende.app/en/song/12866-happ
 
 When you run several AI coding CLIs in parallel across multiple terminals, it's easy to lose track of which session has stopped — so you end up checking the terminals over and over. `many-ai-cli` wraps each CLI in a PTY and notifies your desktop or phone the moment it detects an approval prompt, a finished task, or an error. It also lets you handle approvals and monitor progress from a single browser-based Hub UI. The CLI itself works exactly as before; `many-ai-cli` only adds notifications and an approval GUI on top.
 
-> **Updating from v0.9.0?** v1.0.0 replaces the program inside the release: the executables are now built from Rust (`rust/`) instead of Go. The command names, the settings file (`~/.many-ai-cli/config.yaml`) and the data folder (`~/.many-ai-cli/`) are unchanged. See [Upgrading to 1.0 (Rust)](#upgrading-to-10-rust).
+> **Updating from v0.9.0?** v0.10.0 replaces the program inside the release: the executables are now built from Rust (`rust/`) instead of Go. The command names, the settings file (`~/.many-ai-cli/config.yaml`) and the data folder (`~/.many-ai-cli/`) are unchanged. See [Upgrading to 0.10 (Rust)](#upgrading-to-010-rust).
 
 **This role survives the shift toward automatic approvals.** As permission models like Claude Code's auto mode — which only stops for irreversible or destructive actions — become the norm, approval prompts get rarer. They do not disappear: sessions run silently for much longer and then stop just once. When you are running several in parallel, that occasional stop is the easier one to miss. Approval models also differ per CLI and are not being automated in lockstep, so running multiple vendors side by side still needs one place that collects their state. `many-ai-cli` is not a tool for pressing approval buttons on your behalf; it is a tool for **detecting that something has stopped and telling you**.
 
@@ -171,7 +171,7 @@ Relay roles can run headless too, and there the shape is one process per instruc
 
 A relay stops for a round limit, timeout, missing verdict or review file, blocked verdict, child exit, or the Stop button. Its `relay.json` state is restored after a Hub restart and can be resumed when the stop reason is resumable. Completion and stopping produce a relay notification. The working files live under `~/.many-ai-cli/orchestration/<orchestration_id>/` (`board.md`, `child-<id>.md`, `review-c<k>-r<r>.md`, and `relay.json`). This remains a lightweight sequential runner, not a general job DAG: one plan's C entries are processed in order.
 - **Unified launcher (Windows / Linux / macOS)** — `many-ai-cli-launcher` connects to a Hub via saved profiles and opens your default browser: SSH `serve` / `tunnel` profiles work on every OS, and WSL profiles start a Hub inside WSL on Windows
-- **Remote server over SSH** — Linux binaries and SSH remote operation remain in the v1.0.0 release scope; official Docker images, container builds and automatic updates are unsupported for v1.0.0
+- **Remote server over SSH** — Linux binaries and SSH remote operation remain in the v0.10.0 release scope; official Docker images, container builds and automatic updates are unsupported for v0.10.0
 - **Clean transcript generation** — write readable `.txt` transcripts automatically, or regenerate them with `log-clean`
 - **Language switching** (English / Japanese / Vietnamese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `many-ai-cli` itself
@@ -298,7 +298,7 @@ Rust and Bun below are only needed to build from source, and Go only for a few h
 
 ### Platform verification
 
-The results below describe earlier versions and do not establish real-environment acceptance of Rust v1.0.0.
+The results below describe earlier versions and do not establish real-environment acceptance of Rust v0.10.0.
 
 - Verified in real environments: Windows local Hub and the Windows unified launcher (`wsl` / SSH tunnel profiles)
 - Not yet fully verified in real environments: native Linux, native macOS
@@ -451,15 +451,15 @@ sha256sum -c SHA256SUMS.txt
 
 ---
 
-## Upgrading to 1.0 (Rust)
+## Upgrading to 0.10 (Rust)
 
-v1.0.0 replaces the program inside the release: the executables (`many-ai-cli` and `many-ai-cli-launcher`) are now built from Rust (`rust/`) instead of Go. The command names, the settings file (`~/.many-ai-cli/config.yaml`) and the data folder (`~/.many-ai-cli/`) are the same, so updating keeps your existing settings and your session list (sessions older than the retention period are removed at each start, as in v0.9.0). The text of past conversations is not carried over: v1.0.0 no longer stores conversation text in the history database, and the first start after the update deletes what v0.9.0 saved (see the CHANGELOG). The current public release before it is v0.9.0 (the Go version).
+v0.10.0 replaces the program inside the release: the executables (`many-ai-cli` and `many-ai-cli-launcher`) are now built from Rust (`rust/`) instead of Go. The command names, the settings file (`~/.many-ai-cli/config.yaml`) and the data folder (`~/.many-ai-cli/`) are the same, so updating keeps your existing settings and your session list (sessions older than the retention period are removed at each start, as in v0.9.0). The text of past conversations is not carried over: v0.10.0 no longer stores conversation text in the history database, and the first start after the update deletes what v0.9.0 saved (see the CHANGELOG). The current public release before it is v0.9.0 (the Go version).
 
 **Update**
 
 1. Choose a moment when no AI work is in progress, then stop the running Hub with `many-ai-cli stop` (or the `⏻` button in Settings → Hub, or the tray's **"Hub を停止"**). See [Shutdown, zombie protection & Hub crash resilience](#shutdown-zombie-protection--hub-crash-resilience) for what stopping does to running sessions.
 2. Copy your data first (see **Back up before updating** below).
-3. Install v1.0.0 the same way you installed before; the commands are in [Quick Download](#quick-download). For an npm install, that is `pnpm add -g many-ai-cli@<version>`, as described in [Getting started](#getting-started-right-after-install).
+3. Install v0.10.0 the same way you installed before; the commands are in [Quick Download](#quick-download). For an npm install, that is `pnpm add -g many-ai-cli@<version>`, as described in [Getting started](#getting-started-right-after-install).
 4. On Windows, run `many-ai-cli setup` again from the new version so the shortcuts point at the new executable ([Getting started](#getting-started-right-after-install)).
 5. Start the Hub again (the desktop shortcut, or `many-ai-cli serve --open`). A Hub that was left running keeps the old version even after the files are replaced; in that case the dashboard shows a banner saying the Hub is running an OLD build. Run `many-ai-cli stop`, then start it again.
 
@@ -1678,9 +1678,9 @@ Rust mainline; see the [release procedure](docs/manual_release.md).
 
 ## Remote server / Docker deployment
 
-> **v1.0.0 support scope:** Official Docker images, container builds and automatic updates are unsupported. The current container build has a known failure. Automatic image publishing has stopped, and the former GHCR images were deleted on 2026-10-25 because they bundled a Node.js release affected by CVE-2026-111497; the recipes are retained as historical references, with no active publishing or update guarantee. Linux binaries and SSH remote operation remain in the v1.0.0 release scope. See the [Docker support policy](deploy/docker/README.md).
+> **v0.10.0 support scope:** Official Docker images, container builds and automatic updates are unsupported. The current container build has a known failure. Automatic image publishing has stopped, and the former GHCR images were deleted on 2026-10-25 because they bundled a Node.js release affected by CVE-2026-111497; the recipes are retained as historical references, with no active publishing or update guarantee. Linux binaries and SSH remote operation remain in the v0.10.0 release scope. See the [Docker support policy](deploy/docker/README.md).
 
-Docker is not required for remote-server use. For a small team, normal SSH plus `tmux`, `screen`, or `systemd` can work as long as each person signs in with their own AI CLI account and has a separate OS user, home directory, working directory, and Hub port. For v1.0.0 remote setups, run the Linux binary directly.
+Docker is not required for remote-server use. For a small team, normal SSH plus `tmux`, `screen`, or `systemd` can work as long as each person signs in with their own AI CLI account and has a separate OS user, home directory, working directory, and Hub port. For v0.10.0 remote setups, run the Linux binary directly.
 
 If you do not use Docker, pay attention to these points:
 
@@ -1690,9 +1690,9 @@ If you do not use Docker, pay attention to these points:
 - **Do not share one AI CLI account across users.** Each person must sign in with their own account; see "Do not share one account among multiple users" above.
 
 <details>
-<summary>Legacy / pre-v1 Docker recipes (unsupported for v1.0.0)</summary>
+<summary>Legacy / pre-v0.10 Docker recipes (unsupported for v0.10.0)</summary>
 
-The following build, compose and cron examples describe the former Docker setup. They are retained for historical reference and are not supported v1.0.0 setup or update instructions.
+The following build, compose and cron examples describe the former Docker setup. They are retained for historical reference and are not supported v0.10.0 setup or update instructions.
 
 Container assets remain under [`deploy/docker/`](deploy/docker/) (one user = one container; the Hub is published on `127.0.0.1` only and is meant to be reached through an SSH tunnel or similar). The former setup started from [`deploy/docker/users/example.yaml`](deploy/docker/users/example.yaml), copied it to `users/<user>.yaml`, and replaced the example user name and port before adding it to `compose.yaml`.
 
@@ -1761,7 +1761,7 @@ docker compose up -d && rm HOLD
 
 For a local Docker build, start from a clean checkout rather than a working home directory. The per-Dockerfile ignore file excludes credentials, AI-agent state, worktree metadata, logs, transcripts, and other local artifacts before the build context is sent to Docker. The Dockerfile pins official base images by manifest digest, verifies the Whisper source commit and Cursor archive SHA-256 before extraction, and installs the provider CLIs from the tracked exact-version npm lockfile. These checks protect the build input boundary; they do not claim bit-for-bit reproducibility because Ubuntu apt updates remain live and the Cursor archive hash is a literal HTTPS TOFU pin.
 
-The retained input-pin checks are static protection; passing them does not establish a successful container build, runtime compatibility or v1.0.0 Docker support.
+The retained input-pin checks are static protection; passing them does not establish a successful container build, runtime compatibility or v0.10.0 Docker support.
 
 </details>
 

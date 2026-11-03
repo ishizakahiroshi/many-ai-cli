@@ -23,7 +23,7 @@ If the command is not found after installation, open a terminal with your packag
 manager's global bin directory on `PATH` before running `setup`.
 
 The npm wrapper launches that executable; it is independent of whether the
-installed release was built from Go or Rust. From v1.0.0 the executable is the
+installed release was built from Go or Rust. From v0.10.0 the executable is the
 Rust build, and the package names and paths are unchanged from v0.9.0 (Go).
 Check the selected release's notes and version before switching from a
 personal executable.
@@ -36,7 +36,7 @@ signing or a way to disable those policies.
 
 ## Windows desktop use
 
-For the Rust v1.0.0 startup flow, run `many-ai-cli setup` once after installation,
+For the Rust v0.10.0 startup flow, run `many-ai-cli setup` once after installation,
 then double-click the desktop shortcut to start the Hub and open its browser UI.
 If the Hub is already running, the shortcut opens that Hub. The shortcut points
 directly to the native executable, so daily icon use does not need a terminal

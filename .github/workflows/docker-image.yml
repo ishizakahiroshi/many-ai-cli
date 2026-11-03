@@ -1,4 +1,4 @@
-# v1.0.0 excludes official Docker images, container builds and automatic updates.
+# v0.10.0 excludes official Docker images, container builds and automatic updates.
 # Keep the workflow disabled. This notice-only replacement must reach the default
 # branch before any later re-enable. Restoring publishing requires separate
 # approval after Docker support is repaired and verified.
@@ -14,11 +14,11 @@ jobs:
   support-notice:
     runs-on: ubuntu-22.04
     steps:
-      - name: Explain v1.0.0 Docker support scope
+      - name: Explain v0.10.0 Docker support scope
         run: |
           printf '%s\n' \
-            'Official Docker images, container builds and automatic updates are unsupported for v1.0.0.' \
+            'Official Docker images, container builds and automatic updates are unsupported for v0.10.0.' \
             'The current container build has a known failure. Automatic image publishing is stopped.' \
-            'Linux binaries and SSH remote operation remain in the v1.0.0 release scope.' \
+            'Linux binaries and SSH remote operation remain in the v0.10.0 release scope.' \
             'Historical Docker assets and images are retained without an update guarantee.' \
             'Do not re-enable publishing without separately approved, restored and verified Docker support.'

@@ -19,7 +19,7 @@ GoReleaser と `GOOS` による旧アプリのビルドは現在の手順では�
 
 候補の receipt は `release_ready: false` を保持します。候補の bytes 検収と正式配布完了を
 同じ状態にしません。全手順と資材の境界は [Rust 梱包手順](../rust/packaging/README.md#formal-rust-release-orchestration)
-にも記載しています。公式 Docker image・container build・自動更新は v1.0.0 の対象外です。
+にも記載しています。公式 Docker image・container build・自動更新は v0.10.0 の対象外です。
 既知の container build 失敗は未修正で、Linux native / SSH 運用は対象に残ります。
 
 ### 正式ビルド前の gate
