@@ -10,17 +10,22 @@ Release artifacts are published at
 
 ## [Unreleased]
 
-- Record the current sidebar tab name on newly created work memos and show it with each memo.
+- Persist Windows PTY-owner local-tree cessation observations and independently
+  hashed, bound artifact reports across Hub disconnects. Add one-use durable
+  spawn claims, fixed operator grant manifests with revision checks, and
+  authenticated read-only owner evidence inspection. These records keep remote
+  effects and business outcome acceptance unverified; live dispatch stays off.
 
+## [0.10.0] - Unreleased
+
+This release replaces the Go implementation of many-ai-cli with a Rust one.
+
+- Record the current sidebar tab name on newly created work memos and show it with each memo.
 - Add an opt-in Many Iris MCP execution-contract boundary with separate bearer
   authentication, a durable request journal, pinned grant revisions and exact
   session-bound stop requests. Live provider execution stays disabled: existing
   session termination does not prove process-tree cessation or task success.
   See [the contract's current limits](docs/manual_iris-execution-contract.md).
-
-## [1.0.0] - 2026-10-31
-
-This release replaces the Go implementation of many-ai-cli with a Rust one.
 
 - **Same commands, same places for your data.** The command names, settings and
   data locations are unchanged: the configuration stays in
@@ -31,9 +36,9 @@ This release replaces the Go implementation of many-ai-cli with a Rust one.
   first start after the update deletes what v0.9.0 saved (see "Changed").
 - **Going back.** Before updating, copy `~/.many-ai-cli/`. To return to the Go
   version, reinstall v0.9.0 and write the copy back. Steps:
-  [Upgrading to 1.0 (Rust)](https://github.com/ishizakahiroshi/many-ai-cli#upgrading-to-10-rust).
+  [Upgrading to 0.10 (Rust)](https://github.com/ishizakahiroshi/many-ai-cli#upgrading-to-010-rust).
 - **No official Docker image.** Official Docker images, container builds and
-  automatic updates are not part of v1.0.0, and automatic image publishing is
+  automatic updates are not part of v0.10.0, and automatic image publishing is
   stopped (see `deploy/docker/README.md`). Use the Linux binary instead.
 - **Known limitations.** Starting an AI CLI session usually shows its first
   output in well under a second, but now and then it takes two to four seconds
@@ -92,7 +97,7 @@ This release replaces the Go implementation of many-ai-cli with a Rust one.
   a worktree or profile folder that is a junction or symlink, or a `CLAUDE.md`
   symlinked from your dotfiles. As in v0.9.0, the rules are written to the file
   the link points to, and two profiles linking one file keep the rules until
-  the last of their sessions ends. Earlier 1.0 builds silently gave these
+  the last of their sessions ends. Earlier Rust candidate builds silently gave these
   sessions no rules, so their AI could not offer choices as dashboard buttons. Trial runs
   still refuse links. `many-ai-cli doctor` (and Settings → doctor) now names
   live sessions whose instruction file is missing the rules.
@@ -397,14 +402,14 @@ This release replaces the Go implementation of many-ai-cli with a Rust one.
   retention sweep removes them, and `log-clean` still reads them.
 
 - Official Docker images, container builds and automatic updates are excluded
-  from v1.0.0 support and its release gate. Automatic image publishing is stopped
+  from v0.10.0 support and its release gate. Automatic image publishing is stopped
   while the current container build has a known failure. Existing images and
   recipes are retained as historical references without an update guarantee.
-  Linux binaries and SSH remote operation remain in the v1.0.0 release scope.
+  Linux binaries and SSH remote operation remain in the v0.10.0 release scope.
 - **Development moved to the Rust version.** The `develop` branch now carries the
   Rust implementation as the main line. The Go sources moved to `go/` unchanged
   and are no longer built or tested; `make build` builds the Rust binaries.
-  Releases up to v0.9.0 were built from the Go version; v1.0.0 is the first
+  Releases up to v0.9.0 were built from the Go version; v0.10.0 is the first
   release built from the Rust version.
 - The first screen shown while no session is open (both the getting-started
   guide and the guide shown when no AI CLI is found) now has the app icon above
@@ -4003,8 +4008,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...v1.0.0
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...HEAD
+[0.10.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.6.0...v0.7.0

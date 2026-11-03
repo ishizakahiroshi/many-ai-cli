@@ -555,7 +555,13 @@ pub fn child_env(base: &[String], terminal_color: &str, extra: &[String]) -> Vec
         result.extend(strings(&["NO_COLOR=1", "FORCE_COLOR=0"]));
     }
     result.extend_from_slice(extra);
-    env_without(&result, &[crate::proto::core::SPAWN_PROOF_ENV])
+    env_without(
+        &result,
+        &[
+            crate::proto::core::SPAWN_PROOF_ENV,
+            crate::wrapper::iris_owner::OWNER_ENV,
+        ],
+    )
 }
 pub fn env_without(env: &[String], names: &[&str]) -> Vec<String> {
     env.iter()
@@ -583,10 +589,24 @@ pub fn delegation_prompt_enabled(config_default: bool, env: &[String]) -> bool {
 pub struct PreparedLaunchPrompt {
     pub arg: String,
     pub pointer: bool,
+    source_sha256: String,
     pub path: Option<PathBuf>,
     cleanup: Option<(Dir, String)>,
 }
 impl PreparedLaunchPrompt {
+    /// Selected content after template expansion, before deterministic delivery.
+    pub fn source_sha256(&self) -> &str {
+        &self.source_sha256
+    }
+    pub fn verify_source(&self, expected: &str) -> io::Result<()> {
+        if self.source_sha256 == expected {
+            Ok(())
+        } else {
+            Err(io::Error::other(
+                "launch instruction differs from approved content",
+            ))
+        }
+    }
     pub fn cleanup(&mut self) -> io::Result<()> {
         let Some((dir, name)) = self.cleanup.as_ref() else {
             return Ok(());
@@ -694,9 +714,15 @@ pub fn prepare_launch_prompt(
     pid: u32,
 ) -> io::Result<PreparedLaunchPrompt> {
     let prompt = expand_prompt(&take_prompt_file(paths, prompt_path)?, session_id);
+    use sha2::{Digest, Sha256};
+    let source_sha256: String = Sha256::digest(prompt.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     let empty = || PreparedLaunchPrompt {
         arg: String::new(),
         pointer: false,
+        source_sha256: source_sha256.clone(),
         path: None,
         cleanup: None,
     };
@@ -707,6 +733,7 @@ pub fn prepare_launch_prompt(
         return Ok(PreparedLaunchPrompt {
             arg: launch_prompt_arg(&prompt),
             pointer: false,
+            source_sha256,
             path: None,
             cleanup: None,
         });
@@ -733,6 +760,7 @@ pub fn prepare_launch_prompt(
     Ok(PreparedLaunchPrompt {
         arg,
         pointer: true,
+        source_sha256,
         path: Some(path),
         cleanup: Some((dir, name)),
     })
@@ -1066,6 +1094,11 @@ mod tests {
             "CLICOLOR=0".into(),
             format!("{proof}=synthetic"),
             format!("{}=synthetic", proof.to_ascii_lowercase()),
+            format!("{}=synthetic-owner", crate::wrapper::iris_owner::OWNER_ENV),
+            format!(
+                "{}=synthetic-owner",
+                crate::wrapper::iris_owner::OWNER_ENV.to_ascii_lowercase()
+            ),
         ];
         let extra = vec![
             format!("{proof}=must-not-survive"),
@@ -1079,6 +1112,7 @@ mod tests {
         };
         for mode in ["force", "inherit", "off", "invalid"] {
             let env = child_env(&base, mode, &extra);
+            assert!(!has(&env, crate::wrapper::iris_owner::OWNER_ENV));
             assert!(
                 !env.iter()
                     .any(|v| v.to_ascii_uppercase().starts_with(&format!("{proof}=")))
@@ -1128,6 +1162,19 @@ mod tests {
         assert!(!source.exists());
         assert!(!p.pointer);
         assert_eq!(p.arg, "report 42\nsecond line");
+        use sha2::{Digest, Sha256};
+        let digest = |s: &str| {
+            Sha256::digest(s.as_bytes())
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        };
+        p.verify_source(&digest("report 42\nsecond line")).unwrap();
+        assert!(
+            p.verify_source(&digest("report {{many-ai-cli:session-id}}\nsecond line"))
+                .is_err()
+        );
+        assert!(p.verify_source(&digest("another instruction")).is_err());
         assert_eq!(
             with_launch_prompt(
                 &argv(&["--allowedTools", "Read", "--settings", "p"]),
@@ -1141,6 +1188,7 @@ mod tests {
         let path = p.path.clone().unwrap();
         assert!(p.pointer);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), body);
+        p.verify_source(&digest(&body)).unwrap();
         assert_eq!(
             launch_prompt_file_owner(path.file_name().unwrap().to_str().unwrap()),
             Some(77)

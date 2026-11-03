@@ -405,8 +405,35 @@ fn prepare_resolved(
     // Internal proof/Job cannot be inherited from another wrapper or replaced by
     // a profile/route. Bootstrap receives only the proof which core just issued.
     environment.retain(|_, (key, _)| {
-        !key.eq_ignore_ascii_case(SPAWN_PROOF_ENV) && !key.eq_ignore_ascii_case(STARTUP_JOB_ENV)
+        !key.eq_ignore_ascii_case(SPAWN_PROOF_ENV)
+            && !key.eq_ignore_ascii_case(STARTUP_JOB_ENV)
+            && !key.eq_ignore_ascii_case(crate::wrapper::iris_owner::OWNER_ENV)
     });
+    if !spec.registration_metadata.iris_owner_context.is_empty() {
+        let value = crate::hub::iris_execution_mcp::parse_json(
+            spec.registration_metadata.iris_owner_context.as_bytes(),
+        )
+        .map_err(|_| invalid("invalid Iris owner bootstrap"))?;
+        let ticket: crate::hub::iris_execution_owner::OwnerTicket =
+            serde_json::from_value(value).map_err(|_| invalid("invalid Iris owner bootstrap"))?;
+        if ticket.binding.provider != spec.provider
+            || ticket.binding.profile_id
+                != if spec.subscription_profile_id.is_empty() {
+                    "default"
+                } else {
+                    &spec.subscription_profile_id
+                }
+        {
+            return Err(invalid("Iris owner provider/profile mismatch"));
+        }
+        environment.insert(
+            environment_key(crate::wrapper::iris_owner::OWNER_ENV),
+            (
+                crate::wrapper::iris_owner::OWNER_ENV.into(),
+                spec.registration_metadata.iris_owner_context.clone(),
+            ),
+        );
+    }
     let proof = spec
         .registration_proof
         .as_ref()

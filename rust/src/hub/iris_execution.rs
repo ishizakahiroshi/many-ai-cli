@@ -37,6 +37,8 @@ pub struct IrisExecutionHttp {
     port: u16,
     journal: Mutex<Journal>,
     backend: Option<Arc<dyn ExecutionBackend>>,
+    owner_store: Option<Mutex<super::iris_execution_owner::OwnerStore>>,
+    operator_grants_loaded: bool,
 }
 
 #[derive(Deserialize)]
@@ -67,13 +69,24 @@ impl IrisExecutionHttp {
         let mut nonce = [0u8; 32];
         getrandom::fill(&mut nonce).map_err(|_| "Execution identity random source unavailable")?;
         let instance: String = nonce.iter().map(|b| format!("{b:02x}")).collect();
-        let journal = Journal::open(
+        let mut journal = Journal::open(
             &dir.join("journal.sqlite3"),
             &identity.execution_host_id,
             &instance,
         )
         .map_err(|e| e.code)?;
-        Self::new(
+        let mut operator_grants_loaded = false;
+        if root.join("iris-execution-approved-grants.json").exists() {
+            let mut loader =
+                super::iris_execution_grants::GrantLoader::open(root).map_err(|e| e.code)?;
+            for approved in loader.load_approved().map_err(|e| e.code)? {
+                journal.register_grant(approved.grant).map_err(|e| e.code)?;
+            }
+            operator_grants_loaded = true;
+        }
+        let owner_store = super::iris_execution_owner::OwnerStore::open(&dir.join("owner.sqlite3"))
+            .map_err(|e| e.code)?;
+        let mut owner = Self::new(
             token,
             identity.principal_id,
             identity.workspace_id,
@@ -82,8 +95,10 @@ impl IrisExecutionHttp {
             port,
             journal,
             None,
-        )
-        .map(Some)
+        )?;
+        owner.owner_store = Some(Mutex::new(owner_store));
+        owner.operator_grants_loaded = operator_grants_loaded;
+        Ok(Some(owner))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -115,6 +130,8 @@ impl IrisExecutionHttp {
             port,
             journal: Mutex::new(journal),
             backend,
+            owner_store: None,
+            operator_grants_loaded: false,
         })
     }
 
@@ -217,7 +234,13 @@ impl IrisExecutionHttp {
             "fenced_stop_proof":synthetic && backend["fenced_stop_proof"]==true,
             "result_sha256":synthetic && backend["result_sha256"]==true,
             "execution_ready":ready,
-            "live_provider_execution":false, "automatic_handoff":false})
+            "live_provider_execution":false, "automatic_handoff":false,
+            "owner_receipt_query":self.owner_store.is_some(),"operator_grants_loaded":self.operator_grants_loaded})
+    }
+
+    pub fn with_owner_store(mut self, store: super::iris_execution_owner::OwnerStore) -> Self {
+        self.owner_store = Some(Mutex::new(store));
+        self
     }
 
     fn call(&self, tool: &str, args: &Value, now: i64) -> ToolResult {
@@ -248,6 +271,16 @@ impl IrisExecutionHttp {
             || binding.execution_host_id != self.host
         {
             return Err(error("PRINCIPAL_MISMATCH"));
+        }
+        if tool == "executor_evidence" {
+            return self
+                .owner_store
+                .as_ref()
+                .ok_or_else(|| error("OWNER_EVIDENCE_UNAVAILABLE"))?
+                .lock()
+                .map_err(|_| error("EXECUTOR_STORAGE"))?
+                .query(&binding)
+                .map_err(|e| (e.code, e.detail));
         }
         let mut journal = self.journal.lock().map_err(|_| error("EXECUTOR_STORAGE"))?;
         if tool == "executor_poll" {
@@ -340,10 +373,15 @@ fn tools() -> Vec<Value> {
             &["request_id"],
         ),
     ];
-    for name in ["executor_start", "executor_poll", "executor_stop"] {
+    for name in [
+        "executor_start",
+        "executor_poll",
+        "executor_stop",
+        "executor_evidence",
+    ] {
         let mut props = json!({"binding":{"type":"object"}});
         let mut required = vec!["binding"];
-        if name != "executor_poll" {
+        if !["executor_poll", "executor_evidence"].contains(&name) {
             props["request_id"] = s();
             required.push("request_id");
         }

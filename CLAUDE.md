@@ -1,5 +1,7 @@
 # many-ai-cli 開発ガイド
 
+> 最終更新: 2026-11-03(火) 09:16:20 — 次のRust版をv0.10.0へ変更
+
 > 最終更新: 2026-10-23(金) 01:37:30 — v1.0.0で対象外にした公式Docker提供範囲の参照を追加
 > 2026-10-21(水) 09:03:00 — 「ビルドコマンドは make build が基本」の 1 行を削除（Go 版との言葉の整理が要らなくなり、Makefile の冒頭・手順書と食い違っていたため。手順は reference_rust-local-build.md）
 > 2026-10-19(月) 23:28:55 — 本線を Rust 版へ移し（develop）、Go 版を go/ に凍結したことに合わせて概要・構成・作業ルールを書き換えた
@@ -22,7 +24,7 @@
 
 ## プロジェクト概要
 
-**開発方針（2026-10-09 利用者指定、2026-10-19 に本線を移行）:** 本線は Rust 版で、`develop` で開発し v1.0.0 でリリースする予定。全ての修正は普段のビルド元への反映まで行う（`CLAUDE/development.md`）。Go 版のソースは `go/` に凍結してあり、ビルド・改修・追加調査・回帰確認は行わない（Rust のテストが固定基準として読むだけ）。
+**開発方針（2026-10-09 利用者指定、2026-10-19 に本線を移行）:** 本線は Rust 版で、`develop` で開発し、次のRust版は v0.10.0 でリリースする予定。全ての修正は普段のビルド元への反映まで行う（`CLAUDE/development.md`）。Go 版のソースは `go/` に凍結してあり、ビルド・改修・追加調査・回帰確認は行わない（Rust のテストが固定基準として読むだけ）。
 
 **many-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI など。対応一覧は下の用語表の Provider 行）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。Rust の実行ファイル 2 本（Hub 常駐 + ラッパー機能の `many-ai-cli`、ランチャーの `many-ai-cli-launcher`）+ ブラウザ UI（xterm.js / TypeScript）。
 
@@ -134,7 +136,7 @@ docs/local/        設計書・plan 等（非公開）
 | 実装・コーディング（Rust / TypeScript）、共通UI部品・確認文言 | `CLAUDE/coding.md` / [docs/ui-components.md](docs/ui-components.md) / `scripts/check-ui-components.mjs`（Validate CI） |
 | Rust版のローカルビルド・起動・停止（手元の手順） | [reference_rust-local-build.md](docs/local/reference/reference_rust-local-build.md)（ローカルに存在する場合） |
 | ビルド・配布・クロスコンパイル | `CLAUDE/deployment.md` |
-| v1.0.0の公式Docker提供範囲（対象外） | [deploy/docker/README.md](deploy/docker/README.md) |
+| v0.10.0の公式Docker提供範囲（対象外） | [deploy/docker/README.md](deploy/docker/README.md) |
 | 全修正のビルド元への反映・context分割・docs命名・AI作業モデル・plan自走/停止条件 | `CLAUDE/development.md` |
 | Git・コミット・出力ルール | `CLAUDE/operations.md` |
 | Windows 開発環境固有設定 | `CLAUDE/windows_setup.md` |

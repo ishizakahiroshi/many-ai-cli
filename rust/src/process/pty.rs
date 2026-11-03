@@ -43,6 +43,44 @@ impl PtyExit {
         }
     }
 }
+/// Native observations cover only this process containment boundary. They do
+/// not establish external effects, remote job cessation, or work success.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocalCessation {
+    scope: &'static str,
+    root_pid: u32,
+    root_waited: bool,
+    active_processes: u32,
+    checked_at_unix_ms: u64,
+}
+impl LocalCessation {
+    pub fn scope(&self) -> &'static str {
+        self.scope
+    }
+    pub fn root_pid(&self) -> u32 {
+        self.root_pid
+    }
+    pub fn root_waited(&self) -> bool {
+        self.root_waited
+    }
+    pub fn active_processes(&self) -> u32 {
+        self.active_processes
+    }
+    pub fn checked_at_unix_ms(&self) -> u64 {
+        self.checked_at_unix_ms
+    }
+    #[cfg(windows)]
+    pub(super) fn windows_job(root_pid: u32, checked_at_unix_ms: u64) -> Self {
+        Self {
+            scope: "windows-owned-job",
+            root_pid,
+            root_waited: true,
+            active_processes: 0,
+            checked_at_unix_ms,
+        }
+    }
+}
+
 /// A single owner controls close and wait. Shared IO references cannot orphan
 /// the child: dropping the last owner must still terminate and reap it.
 pub trait PtySession: Send + Sync {
@@ -51,7 +89,27 @@ pub trait PtySession: Send + Sync {
     fn write<'a>(&'a self, bytes: &'a [u8]) -> CoreFuture<'a, io::Result<usize>>;
     fn resize(&self, size: PtySize) -> io::Result<()>;
     fn close(&self);
+    /// Optional owner-only hard-stop request. Success means the native request
+    /// succeeded, not that cessation has been observed. Ordinary close is
+    /// deliberately separate; unsupported platforms must fail explicitly.
+    fn close_owned(&self) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "owned native stop unavailable",
+        ))
+    }
     fn wait(&self) -> CoreFuture<'_, io::Result<PtyExit>>;
+    /// Optional checked termination of the exact owned containment boundary.
+    /// An exit code or a Unix process group alone cannot prove all descendants
+    /// ceased. Existing implementations therefore default to Unsupported.
+    fn terminate_checked(&self, _timeout: Duration) -> CoreFuture<'_, io::Result<LocalCessation>> {
+        Box::pin(async {
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "checked local containment cessation unavailable",
+            ))
+        })
+    }
 }
 pub trait PtyFactory: Send + Sync {
     fn spawn(&self, plan: &ProcessPlan, size: PtySize) -> io::Result<Arc<dyn PtySession>>;

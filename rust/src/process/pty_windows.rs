@@ -7,7 +7,7 @@
 //! https://learn.microsoft.com/windows/console/closepseudoconsole
 use super::{
     Cancellation, ProcessPlan,
-    pty::{CLOSE_GRACE, PtyExit, PtySession, PtySize, REAP_GRACE},
+    pty::{CLOSE_GRACE, LocalCessation, PtyExit, PtySession, PtySize, REAP_GRACE},
     windows_job::OwnedJob,
 };
 use crate::proto::core::{CoreFuture, SPAWN_PROOF_ENV};
@@ -337,6 +337,7 @@ impl Drop for PipeThreads {
     }
 }
 struct NativePty {
+    owner: Arc<OwnedChild>,
     pid: u32,
     console: Arc<Mutex<Option<Console>>>,
     reads: tokio::sync::Mutex<ReadState>,
@@ -411,6 +412,38 @@ fn start_writer(
 struct OwnedChild {
     process: OwnedHandle,
     job: OwnedJob,
+    // Synchronize successful explicit stop requests with exit observation.
+    // This records a request while root was running, not a causal exit claim.
+    hard_stop_requested: Mutex<bool>,
+}
+impl OwnedChild {
+    fn stop_owned(&self) -> io::Result<()> {
+        let mut requested = self
+            .hard_stop_requested
+            .lock()
+            .map_err(|_| io::Error::other("PTY stop lock poisoned"))?;
+        let waited = unsafe { WaitForSingleObject(self.process.as_raw_handle(), 0) };
+        if waited == WAIT_FAILED {
+            return Err(io::Error::last_os_error());
+        }
+        if waited != WAIT_OBJECT_0 && waited != WAIT_TIMEOUT {
+            return Err(io::Error::other("unexpected PTY root wait state"));
+        }
+        record_hard_stop(waited == WAIT_TIMEOUT, &mut requested, || {
+            self.job.terminate_checked()
+        })
+    }
+}
+fn record_hard_stop(
+    root_running: bool,
+    requested: &mut bool,
+    terminate: impl FnOnce() -> io::Result<()>,
+) -> io::Result<()> {
+    terminate()?;
+    if root_running {
+        *requested = true;
+    }
+    Ok(())
 }
 impl Drop for OwnedChild {
     fn drop(&mut self) {
@@ -493,7 +526,11 @@ fn spawn_with_job(
             return Err(error);
         }
     };
-    let owner = OwnedChild { process, job };
+    let owner = Arc::new(OwnedChild {
+        process,
+        job,
+        hard_stop_requested: Mutex::new(false),
+    });
     drop(input_read);
     drop(output_write);
     // Start both IO channels while the child is still suspended. Any thread
@@ -521,6 +558,7 @@ fn spawn_with_job(
     let closed = closing.clone();
     let owned_console = console.clone();
     let (tx, result) = watch::channel(None);
+    let session_owner = owner.clone();
     tokio::spawn(async move {
         let owner = owner;
         let mut close_task = None;
@@ -533,11 +571,17 @@ fn spawn_with_job(
                 exit = Some(
                     if unsafe { GetExitCodeProcess(owner.process.as_raw_handle(), &mut code) } != 0
                     {
-                        Ok(PtyExit {
-                            code: i64::from(code),
-                            signal: String::new(),
-                            forced: false,
-                        })
+                        owner
+                            .hard_stop_requested
+                            .lock()
+                            .map(|requested| PtyExit {
+                                code: i64::from(code),
+                                signal: String::new(),
+                                forced: *requested,
+                            })
+                            .map_err(|_| {
+                                Failure(io::ErrorKind::Other, "PTY stop lock poisoned".into())
+                            })
                     } else {
                         Err(Failure(
                             io::ErrorKind::Other,
@@ -600,6 +644,7 @@ fn spawn_with_job(
         })));
     });
     Ok(Arc::new(NativePty {
+        owner: session_owner,
         pid: info.dwProcessId,
         console,
         reads: tokio::sync::Mutex::new(ReadState {
@@ -676,6 +721,32 @@ impl PtySession for NativePty {
     fn close(&self) {
         self.closing.cancel();
     }
+    fn close_owned(&self) -> io::Result<()> {
+        // Kill the exact owned Job before ClosePseudoConsole can begin. Closing
+        // ConPTY first can interrupt the root's Windows loader initialization.
+        self.owner.stop_owned()?;
+        self.closing.cancel();
+        Ok(())
+    }
+    fn terminate_checked(&self, timeout: Duration) -> CoreFuture<'_, io::Result<LocalCessation>> {
+        Box::pin(async move {
+            if timeout.is_zero() || timeout > Duration::from_secs(30) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "cessation deadline must be positive and at most 30 seconds",
+                ));
+            }
+            self.close_owned()?;
+            wait_for_cessation(self.pid, timeout, || {
+                let waited = unsafe { WaitForSingleObject(self.owner.process.as_raw_handle(), 0) };
+                if waited == WAIT_FAILED {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok((waited == WAIT_OBJECT_0, self.owner.job.active_processes()?))
+            })
+            .await
+        })
+    }
     fn wait(&self) -> CoreFuture<'_, io::Result<PtyExit>> {
         Box::pin(async move {
             let mut rx = self.result.clone();
@@ -696,10 +767,203 @@ impl Drop for NativePty {
     }
 }
 
+/// Zero active Job members plus a signaled retained root handle is the only
+/// acceptance condition. A query error or deadline never becomes evidence.
+async fn wait_for_cessation(
+    root_pid: u32,
+    timeout: Duration,
+    mut observe: impl FnMut() -> io::Result<(bool, u32)>,
+) -> io::Result<LocalCessation> {
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        // Check before observing so an observation after expiry cannot pass.
+        if tokio::time::Instant::now() >= deadline {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "owned Job cessation not confirmed before deadline",
+            ));
+        }
+        let (root_waited, active_processes) = observe()?;
+        if tokio::time::Instant::now() >= deadline {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "owned Job observation exceeded deadline",
+            ));
+        }
+        if root_waited && active_processes == 0 {
+            let checked_at_unix_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| io::Error::other("clock precedes Unix epoch"))?
+                .as_millis()
+                .try_into()
+                .map_err(|_| io::Error::other("clock out of range"))?;
+            return Ok(LocalCessation::windows_job(root_pid, checked_at_unix_ms));
+        }
+        tokio::time::sleep_until(
+            deadline.min(tokio::time::Instant::now() + Duration::from_millis(10)),
+        )
+        .await;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[tokio::test]
+    async fn checked_cessation_rejects_failed_queries_and_incomplete_observations() {
+        let denied = wait_for_cessation(1, Duration::from_millis(30), || {
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "synthetic query denial",
+            ))
+        })
+        .await
+        .unwrap_err();
+        assert_eq!(denied.kind(), io::ErrorKind::PermissionDenied);
+        for observed in [(false, 0), (true, 1)] {
+            let failure = wait_for_cessation(1, Duration::from_millis(20), || Ok(observed))
+                .await
+                .unwrap_err();
+            assert_eq!(failure.kind(), io::ErrorKind::TimedOut);
+        }
+        let expired = wait_for_cessation(1, Duration::ZERO, || Ok((true, 0)))
+            .await
+            .unwrap_err();
+        assert_eq!(expired.kind(), io::ErrorKind::TimedOut);
+    }
+
+    #[test]
+    fn checked_cessation_native_child_helper() {
+        let Some(marker) = std::env::var_os("MANY_AI_SYNTHETIC_CESSATION_MARKER") else {
+            return;
+        };
+        let marker = PathBuf::from(marker);
+        if std::env::var_os("MANY_AI_SYNTHETIC_CESSATION_DESCENDANT").is_none() {
+            let _owned_descendant = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "process::pty_windows::tests::checked_cessation_native_child_helper",
+                    "--nocapture",
+                ])
+                .env("MANY_AI_SYNTHETIC_CESSATION_DESCENDANT", "1")
+                .spawn()
+                .unwrap();
+        } else {
+            std::fs::write(&marker, b"owned descendant running").unwrap();
+        }
+        std::thread::sleep(Duration::from_secs(60));
+    }
+
+    #[tokio::test]
+    async fn checked_cessation_contains_native_descendant_and_preserves_unrelated_child() {
+        let root = tempfile::tempdir().unwrap();
+        let marker = root.path().join("descendant-ready");
+        let helper = "process::pty_windows::tests::checked_cessation_native_child_helper";
+        let mut unrelated = tokio::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", helper, "--nocapture"])
+            .env(
+                "MANY_AI_SYNTHETIC_CESSATION_MARKER",
+                root.path().join("unrelated-ready"),
+            )
+            .env("MANY_AI_SYNTHETIC_CESSATION_DESCENDANT", "1")
+            .kill_on_drop(true)
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut fixture = plan(
+            std::env::current_exe().unwrap(),
+            vec!["--exact".into(), helper.into(), "--nocapture".into()],
+            None,
+        );
+        fixture.env.insert(
+            "MANY_AI_SYNTHETIC_CESSATION_MARKER".into(),
+            Some(marker.as_os_str().to_owned()),
+        );
+        fixture
+            .env
+            .insert("MANY_AI_SYNTHETIC_CESSATION_DESCENDANT".into(), None);
+        let session = spawn(&fixture, PtySize::default()).unwrap();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !marker.exists() || !root.path().join("unrelated-ready").exists() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("owned descendant did not start");
+        session.close_owned().unwrap();
+        let proof = session
+            .terminate_checked(Duration::from_secs(3))
+            .await
+            .unwrap();
+        assert_eq!(proof.scope(), "windows-owned-job");
+        assert_eq!(proof.root_pid(), session.pid());
+        assert!(proof.root_waited());
+        assert_eq!(proof.active_processes(), 0);
+        assert!(proof.checked_at_unix_ms() > 0);
+        assert!(
+            unrelated.try_wait().unwrap().is_none(),
+            "unrelated child was terminated"
+        );
+        unrelated.kill().await.unwrap();
+        let exit = tokio::time::timeout(Duration::from_secs(6), session.wait())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(exit.code, 1);
+        assert!(exit.forced);
+        assert_ne!(exit.code, 0xc0000142);
+    }
+
+    #[test]
+    fn failed_owned_kill_and_natural_root_do_not_set_forced_flag() {
+        let mut requested = false;
+        let denied = record_hard_stop(true, &mut requested, || {
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "synthetic native kill denied",
+            ))
+        });
+        assert!(denied.is_err());
+        assert!(!requested);
+        record_hard_stop(false, &mut requested, || Ok(())).unwrap();
+        assert!(!requested);
+        record_hard_stop(true, &mut requested, || Ok(())).unwrap();
+        assert!(requested);
+    }
+
+    #[tokio::test]
+    async fn natural_exit_then_cessation_proof_preserves_unforced_exit() {
+        let root = tempfile::tempdir().unwrap();
+        let marker = root.path().join("natural-ready");
+        let mut fixture = plan(
+            std::env::current_exe().unwrap(),
+            vec![
+                "--exact".into(),
+                "process::pty_windows::tests::suspended_child_test_helper".into(),
+                "--nocapture".into(),
+            ],
+            None,
+        );
+        fixture.env.insert(
+            "MANY_AI_SYNTHETIC_PTY_MARKER".into(),
+            Some(marker.as_os_str().to_owned()),
+        );
+        let session = spawn(&fixture, PtySize::default()).unwrap();
+        let exit = tokio::time::timeout(Duration::from_secs(6), session.wait())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(marker.exists(), "natural helper must have entered");
+        assert_eq!(exit.code, 0);
+        assert!(!exit.forced);
+        session
+            .terminate_checked(Duration::from_secs(3))
+            .await
+            .unwrap();
+        assert!(!session.wait().await.unwrap().forced);
+    }
 
     fn plan(executable: PathBuf, args: Vec<OsString>, marker: Option<&str>) -> ProcessPlan {
         let mut env = BTreeMap::new();

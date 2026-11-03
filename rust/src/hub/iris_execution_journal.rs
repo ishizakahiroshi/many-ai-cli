@@ -161,6 +161,58 @@ pub struct Journal {
     restore_hold: bool,
 }
 impl Journal {
+    /// Child-side read-only admission inspection. Opening another Journal would
+    /// claim Hub ownership and recover rows, so a wrapper must never do that.
+    /// This snapshot is only a prerequisite: OwnerStore's one-use spawn claim
+    /// still has to commit immediately before native creation.
+    pub fn inspect_dispatch(path: &Path, b: &Binding, now: i64) -> Result<Value> {
+        validate_binding(b)?;
+        let db = sql(Connection::open_with_flags(
+            path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        ))?;
+        sql(db.busy_timeout(Duration::from_secs(1)))?;
+        sql(db.execute_batch("PRAGMA query_only=ON"))?;
+        let tx = sql(db.unchecked_transaction())?;
+        let version: i64 = sql(tx.query_row("PRAGMA user_version", [], |r| r.get(0)))?;
+        if version != 1 || now < 0 {
+            return Err(error("SCHEMA"));
+        }
+        let (host, boot, hold): (String, String, bool) = sql(tx.query_row(
+            "SELECT host,boot,restore_hold FROM meta WHERE id=1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        ))?;
+        if hold {
+            return Err(error("RESTORE_HOLD"));
+        }
+        if host != b.execution_host_id {
+            return Err(error("HOST_MISMATCH"));
+        }
+        let raw: String = sql(tx.query_row(
+            "SELECT document FROM attempts WHERE principal=? AND workspace=? AND attempt=?",
+            params![b.principal_id, b.workspace_id, b.attempt_id],
+            |r| r.get(0),
+        ))?;
+        let record =
+            super::iris_execution_mcp::parse_json(raw.as_bytes()).map_err(|_| error("STORAGE"))?;
+        validate_record(&record)?;
+        if stored_binding(&record)? != *b
+            || record["execution_state"] != "accepted"
+            || record["accepted_boot"] != boot
+        {
+            return Err(error("STATE"));
+        }
+        let latest:i64=sql(tx.query_row("SELECT COALESCE(MAX(revision),0) FROM grants WHERE principal=? AND workspace=? AND approval=? AND plan=? AND task=?",params![b.principal_id,b.workspace_id,b.approval_id,b.plan_id,b.task_id],|r|r.get(0)))?;
+        if latest != b.approval_revision as i64 {
+            return Err(error("STALE_GRANT"));
+        }
+        let (pinned, expires, revoked):(String,i64,bool)=sql(tx.query_row("SELECT scope,expires,revoked FROM grants WHERE principal=? AND workspace=? AND approval=? AND revision=? AND plan=? AND task=?",params![b.principal_id,b.workspace_id,b.approval_id,b.approval_revision as i64,b.plan_id,b.task_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))))?;
+        if revoked || expires <= now || decode(&pinned)? != scope(b) {
+            return Err(error("STALE_GRANT"));
+        }
+        Ok(record)
+    }
     pub fn open(path: &Path, host_id: &str, boot_id: &str) -> Result<Self> {
         Self::open_inner(path, host_id, boot_id, false)
     }

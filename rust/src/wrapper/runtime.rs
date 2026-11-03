@@ -7,7 +7,7 @@ use super::{
 use crate::{
     process::{
         Cancellation, ProcessPlan,
-        pty::{PtyExit, PtyFactory, PtySession, PtySize},
+        pty::{LocalCessation, PtyExit, PtyFactory, PtySession, PtySize},
     },
     proto::{Message, core::SPAWN_PROOF_ENV},
     terminal::replay::ReplayBuffer,
@@ -30,6 +30,18 @@ pub struct RawLogPolicy {
     pub paths: crate::config::RuntimePaths,
     pub max_bytes: i64,
 }
+/// Optional trusted application observer. It persists admission before native
+/// exec and observes native ownership independently of the Hub socket. A local
+/// process-tree receipt never establishes task success or remote-job cessation.
+pub trait ExecutionOwnerObserver: Send + Sync {
+    fn before_spawn(&self, session_id: i64, process: &ProcessPlan) -> io::Result<()>;
+    fn root_started(&self, pid: u32) -> io::Result<()>;
+    fn finished(
+        &self,
+        exit: Option<&PtyExit>,
+        cessation: Option<&LocalCessation>,
+    ) -> io::Result<()>;
+}
 pub struct WrapperOptions {
     pub registration: Message,
     pub raw_log: Option<RawLogPolicy>,
@@ -43,6 +55,7 @@ pub struct WrapperOptions {
     pub output_capacity: usize,
     pub input_capacity: usize,
     pub drain_timeout: Duration,
+    pub execution_owner: Option<Arc<dyn ExecutionOwnerObserver>>,
 }
 impl WrapperOptions {
     pub fn new(registration: Message, process: ProcessPlan) -> Self {
@@ -59,6 +72,7 @@ impl WrapperOptions {
             output_capacity: 1024,
             input_capacity: 64,
             drain_timeout: Duration::from_secs(2),
+            execution_owner: None,
         }
     }
 }
@@ -85,15 +99,26 @@ enum InputResult {
 }
 struct Tasks {
     pty: Arc<dyn PtySession>,
+    strict_owner: bool,
     reader: JoinHandle<()>,
     input: JoinHandle<()>,
 }
 impl Drop for Tasks {
     fn drop(&mut self) {
-        self.pty.close();
+        close_session(self.pty.as_ref(), self.strict_owner);
         self.reader.abort();
         self.input.abort();
     }
+}
+/// Owner execution requests hard termination before closing ConPTY. Sending
+/// CTRL_CLOSE_EVENT to a client still inside DLL initialization can itself
+/// produce STATUS_DLL_INIT_FAILED. Ordinary sessions retain graceful close.
+/// This only requests termination; final native observation is still required.
+fn close_session(pty: &dyn PtySession, strict_owner: bool) {
+    if strict_owner && pty.close_owned().is_ok() {
+        return;
+    }
+    pty.close();
 }
 fn poison() -> io::Error {
     io::Error::other("wrapper state lock poisoned")
@@ -115,6 +140,7 @@ pub async fn run<F>(
 where
     F: FnOnce(&Message, &mut ProcessPlan) -> io::Result<()>,
 {
+    let strict_owner = options.execution_owner.is_some();
     if options.write_timeout.is_zero()
         || options.reconnect_interval.is_zero()
         || options.drain_timeout.is_zero()
@@ -225,6 +251,11 @@ where
         Some(options.registration.token.clone().into()),
     );
     let size = PtySize::from_wire(registered.cols, registered.rows).unwrap_or_default();
+    if let Some(owner) = &options.execution_owner {
+        owner
+            .before_spawn(registered.session_id, &options.process)
+            .map_err(|_| io::Error::other("durable execution owner admission rejected"))?;
+    }
     let pty = match factory.spawn(&options.process, size) {
         Ok(pty) => pty,
         Err(error) => {
@@ -245,6 +276,22 @@ where
             return Err(error);
         }
     };
+    if let Some(owner) = &options.execution_owner {
+        if owner.root_started(pty.pid()).is_err() {
+            // A committed intent cannot be forgotten when PID binding fails.
+            // Stop only the exact owned PTY and never spawn a replacement.
+            let proof = pty.terminate_checked(Duration::from_secs(3)).await.ok();
+            close_session(pty.as_ref(), strict_owner);
+            let exit = tokio::time::timeout(Duration::from_secs(3), pty.wait())
+                .await
+                .ok()
+                .and_then(Result::ok);
+            let _ = owner.finished(exit.as_ref(), proof.as_ref());
+            return Err(io::Error::other(
+                "execution owner root binding failed; no replay",
+            ));
+        }
+    }
     let replay = Arc::new(Mutex::new(ReplayBuffer::default()));
     let marks: SharedWatermarks = Arc::new(Mutex::new(InputWatermarks::default()));
     let (output_tx, mut output) = broadcast::channel::<OutputChunk>(options.output_capacity.max(1));
@@ -278,7 +325,7 @@ where
                 Ok(n) => n,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
                 Err(_) => {
-                    reader_pty.close();
+                    close_session(reader_pty.as_ref(), strict_owner);
                     break;
                 }
             };
@@ -287,7 +334,7 @@ where
                 let pty = reader_pty.clone();
                 tokio::spawn(async move {
                     tokio::time::sleep(crate::process::pty::CLOSE_GRACE).await;
-                    pty.close();
+                    close_session(pty.as_ref(), strict_owner);
                 });
             }
             emit(bytes);
@@ -335,6 +382,7 @@ where
     });
     let _tasks = Tasks {
         pty: pty.clone(),
+        strict_owner: options.execution_owner.is_some(),
         reader,
         input,
     };
@@ -347,245 +395,258 @@ where
     let mut output_open = true;
     let mut intentional = false;
     let mut transport_fault = false;
-    let exit;
-    loop {
-        if cancel.is_cancelled() {
-            pty.close();
-            exit = pty.wait().await?;
-            break;
-        }
-        if socket.is_none() {
-            let recent = last_reattach.is_some_and(|at| at.elapsed() < Duration::from_secs(10));
-            if (!intentional
-                && !transport_fault
-                && !recent
-                && (connector.probe().await || options.auto_shutdown))
-                || options.reconnect_grace.is_zero()
-            {
-                pty.close();
+    let execution_result: io::Result<PtyExit> = async {
+        let exit;
+        loop {
+            if cancel.is_cancelled() {
+                close_session(pty.as_ref(), strict_owner);
                 exit = pty.wait().await?;
                 break;
             }
-            let until = tokio::time::Instant::now() + options.reconnect_grace;
-            let reattached = loop {
-                tokio::select! {
-                    _ = cancel.cancelled() => { pty.close(); break None; },
-                    _ = pty.wait() => break None,
-                    _ = tokio::time::sleep_until(until) => { pty.close(); break None; },
-                    _ = tokio::time::sleep(options.reconnect_interval) => {},
+            if socket.is_none() {
+                let recent = last_reattach.is_some_and(|at| at.elapsed() < Duration::from_secs(10));
+                if (!intentional
+                    && !transport_fault
+                    && !recent
+                    && (connector.probe().await || options.auto_shutdown))
+                    || options.reconnect_grace.is_zero()
+                {
+                    close_session(pty.as_ref(), strict_owner);
+                    exit = pty.wait().await?;
+                    break;
                 }
-                let (bytes, total) = replay.lock().map_err(|_| poison())?.snapshot();
-                let watermark = marks.lock().map_err(|_| poison())?.high_watermark();
-                let mut frame = options.registration.clone();
-                frame.r#type = "reattach".into();
-                frame.session_id = session_id;
-                frame.started_at = registered.started_at.clone();
-                frame.log_path = registered.log_path.clone();
-                frame.jsonl_path = registered.jsonl_path.clone();
-                frame.replay_b64 = STANDARD.encode(bytes);
-                frame.pty_bytes = total;
-                frame.input_seq_high_watermark = watermark;
-                let attempt = async {
-                    let mut next = connector.connect(None).await?;
-                    send(next.as_mut(), &frame, options.write_timeout).await?;
-                    let mut pending = VecDeque::new();
-                    loop {
-                        let response = next.receive().await?;
-                        match response.r#type.as_str() {
-                            "reattach_reject" => return Ok(None),
-                            "reattach_ack" if response.session_id > 0 => {
-                                return Ok(Some((next, response.session_id, pending)));
+                let until = tokio::time::Instant::now() + options.reconnect_grace;
+                let reattached = loop {
+                    tokio::select! {
+                        _ = cancel.cancelled() => { close_session(pty.as_ref(), strict_owner); break None; },
+                        _ = pty.wait() => break None,
+                        _ = tokio::time::sleep_until(until) => { close_session(pty.as_ref(), strict_owner); break None; },
+                        _ = tokio::time::sleep(options.reconnect_interval) => {},
+                    }
+                    let (bytes, total) = replay.lock().map_err(|_| poison())?.snapshot();
+                    let watermark = marks.lock().map_err(|_| poison())?.high_watermark();
+                    let mut frame = options.registration.clone();
+                    frame.r#type = "reattach".into();
+                    frame.session_id = session_id;
+                    frame.started_at = registered.started_at.clone();
+                    frame.log_path = registered.log_path.clone();
+                    frame.jsonl_path = registered.jsonl_path.clone();
+                    frame.replay_b64 = STANDARD.encode(bytes);
+                    frame.pty_bytes = total;
+                    frame.input_seq_high_watermark = watermark;
+                    let attempt = async {
+                        let mut next = connector.connect(None).await?;
+                        send(next.as_mut(), &frame, options.write_timeout).await?;
+                        let mut pending = VecDeque::new();
+                        loop {
+                            let response = next.receive().await?;
+                            match response.r#type.as_str() {
+                                "reattach_reject" => return Ok(None),
+                                "reattach_ack" if response.session_id > 0 => {
+                                    return Ok(Some((next, response.session_id, pending)));
+                                }
+                                "reattach_ack" => {
+                                    return Err(io::Error::new(
+                                        io::ErrorKind::InvalidData,
+                                        "invalid reattach session ID",
+                                    ));
+                                }
+                                _ if pending.len() < 256 => pending.push_back(response),
+                                _ => {
+                                    return Err(io::Error::new(
+                                        io::ErrorKind::InvalidData,
+                                        "reattach pending frame limit exceeded",
+                                    ));
+                                }
                             }
-                            "reattach_ack" => {
-                                return Err(io::Error::new(
-                                    io::ErrorKind::InvalidData,
-                                    "invalid reattach session ID",
-                                ));
-                            }
-                            _ if pending.len() < 256 => pending.push_back(response),
-                            _ => {
-                                return Err(io::Error::new(
-                                    io::ErrorKind::InvalidData,
-                                    "reattach pending frame limit exceeded",
-                                ));
-                            }
+                        }
+                    };
+                    let attempt_until =
+                        (tokio::time::Instant::now() + options.write_timeout).min(until);
+                    let result = tokio::select! {
+                        _ = cancel.cancelled() => { close_session(pty.as_ref(), strict_owner); break None; },
+                        _ = pty.wait() => break None,
+                        result = tokio::time::timeout_at(attempt_until, attempt) => result,
+                    };
+                    match result {
+                        Ok(Ok(Some((next, sid, pending)))) => {
+                            sent_offset = total;
+                            break Some((next, sid, pending));
+                        }
+                        Ok(Ok(None)) => {
+                            close_session(pty.as_ref(), strict_owner);
+                            break None;
+                        }
+                        Ok(Err(_)) | Err(_) if tokio::time::Instant::now() < until => continue,
+                        _ => {
+                            close_session(pty.as_ref(), strict_owner);
+                            break None;
                         }
                     }
                 };
-                let attempt_until =
-                    (tokio::time::Instant::now() + options.write_timeout).min(until);
-                let result = tokio::select! {
-                    _ = cancel.cancelled() => { pty.close(); break None; },
-                    _ = pty.wait() => break None,
-                    result = tokio::time::timeout_at(attempt_until, attempt) => result,
+                let Some((next, sid, pending)) = reattached else {
+                    exit = pty.wait().await?;
+                    break;
                 };
-                match result {
-                    Ok(Ok(Some((next, sid, pending)))) => {
-                        sent_offset = total;
-                        break Some((next, sid, pending));
-                    }
-                    Ok(Ok(None)) => {
-                        pty.close();
-                        break None;
-                    }
-                    Ok(Err(_)) | Err(_) if tokio::time::Instant::now() < until => continue,
-                    _ => {
-                        pty.close();
-                        break None;
-                    }
+                socket = Some(next);
+                session_id = sid;
+                queued = pending;
+                last_reattach = Some(tokio::time::Instant::now());
+                reconnects += 1;
+                intentional = false;
+                transport_fault = false;
+            }
+            let current = socket.as_mut().expect("connected wrapper");
+            enum Event {
+                Frame(io::Result<Box<Message>>),
+                Output(Result<OutputChunk, broadcast::error::RecvError>),
+                Ack(Option<InputResult>),
+                Exit(io::Result<PtyExit>),
+                Cancel,
+            }
+            let event = if let Some(frame) = queued.pop_front() {
+                Event::Frame(Ok(Box::new(frame)))
+            } else {
+                tokio::select! {
+                    biased;
+                    _ = cancel.cancelled() => Event::Cancel,
+                    result = pty.wait() => Event::Exit(result),
+                    result = acks.recv() => Event::Ack(result),
+                    result = current.receive() => Event::Frame(result.map(Box::new)),
+                    result = output.recv(), if output_open => Event::Output(result),
                 }
             };
-            let Some((next, sid, pending)) = reattached else {
-                exit = pty.wait().await?;
-                break;
-            };
-            socket = Some(next);
-            session_id = sid;
-            queued = pending;
-            last_reattach = Some(tokio::time::Instant::now());
-            reconnects += 1;
-            intentional = false;
-            transport_fault = false;
-        }
-        let current = socket.as_mut().expect("connected wrapper");
-        enum Event {
-            Frame(io::Result<Box<Message>>),
-            Output(Result<OutputChunk, broadcast::error::RecvError>),
-            Ack(Option<InputResult>),
-            Exit(io::Result<PtyExit>),
-            Cancel,
-        }
-        let event = if let Some(frame) = queued.pop_front() {
-            Event::Frame(Ok(Box::new(frame)))
-        } else {
-            tokio::select! {
-                biased;
-                _ = cancel.cancelled() => Event::Cancel,
-                result = pty.wait() => Event::Exit(result),
-                result = acks.recv() => Event::Ack(result),
-                result = current.receive() => Event::Frame(result.map(Box::new)),
-                result = output.recv(), if output_open => Event::Output(result),
-            }
-        };
-        match event {
-            Event::Cancel => {
-                pty.close();
-                exit = pty.wait().await?;
-                break;
-            }
-            Event::Exit(result) => {
-                exit = result?;
-                break;
-            }
-            Event::Ack(Some(InputResult::Failed)) => {
-                eprintln!("wrapper: PTY input write failed");
-            }
-            Event::Ack(Some(InputResult::Ack(seq))) => {
-                let frame = Message {
-                    r#type: "pty_input_ack".into(),
-                    session_id,
-                    input_seq: seq,
-                    ..Default::default()
-                };
-                if send(current.as_mut(), &frame, options.write_timeout)
-                    .await
-                    .is_err()
-                {
-                    transport_fault = true;
-                    socket.take();
+            match event {
+                Event::Cancel => {
+                    close_session(pty.as_ref(), strict_owner);
+                    exit = pty.wait().await?;
+                    break;
                 }
-            }
-            Event::Ack(None) => {
-                pty.close();
-                exit = pty.wait().await?;
-                break;
-            }
-            Event::Frame(Err(_)) => {
-                socket.take();
-            }
-            Event::Frame(Ok(frame)) => match frame.r#type.as_str() {
-                "pty_input" if !frame.data.is_empty() => {
-                    marks
-                        .lock()
-                        .map_err(|_| poison())?
-                        .received(frame.input_seq);
-                    if input_tx
-                        .try_send(InputFrame {
-                            seq: frame.input_seq,
-                            data: frame.data,
-                            attach: false,
-                        })
+                Event::Exit(result) => {
+                    exit = result?;
+                    break;
+                }
+                Event::Ack(Some(InputResult::Failed)) => {
+                    eprintln!("wrapper: PTY input write failed");
+                }
+                Event::Ack(Some(InputResult::Ack(seq))) => {
+                    let frame = Message {
+                        r#type: "pty_input_ack".into(),
+                        session_id,
+                        input_seq: seq,
+                        ..Default::default()
+                    };
+                    if send(current.as_mut(), &frame, options.write_timeout)
+                        .await
                         .is_err()
                     {
-                        // Retry remains possible: watermark was received, never processed.
                         transport_fault = true;
                         socket.take();
                     }
                 }
-                "attach_file" if !frame.inject.is_empty() => {
-                    if input_tx
-                        .try_send(InputFrame {
-                            seq: 0,
-                            data: frame.inject.into_bytes(),
-                            attach: true,
-                        })
-                        .is_err()
-                    {
-                        // Unsequenced attachment cannot safely be replayed.
-                        pty.close();
-                        exit = pty.wait().await?;
-                        break;
-                    }
-                }
-                "pty_resize" => {
-                    if let Some(size) = PtySize::from_wire(frame.cols, frame.rows) {
-                        // Source treats native resize as best effort, including
-                        // races with provider exit. Keep unrelated input live.
-                        let _ = pty.resize(size);
-                    }
-                }
-                "hub_shutdown" => {
-                    intentional = true;
-                    socket.take();
-                }
-                "session_dismissed" => {
-                    pty.close();
+                Event::Ack(None) => {
+                    close_session(pty.as_ref(), strict_owner);
                     exit = pty.wait().await?;
                     break;
                 }
-                _ => {}
-            },
-            Event::Output(Ok(chunk)) => {
-                if chunk.end <= sent_offset {
-                    continue;
+                Event::Frame(Err(_)) => {
+                    socket.take();
                 }
-                let start = chunk.end - chunk.bytes.len() as i64;
-                let skip = sent_offset.saturating_sub(start).max(0) as usize;
-                let frame = Message {
-                    r#type: "pty_data".into(),
-                    session_id,
-                    data: chunk.bytes[skip..].to_vec(),
-                    ..Default::default()
-                };
-                if send(current.as_mut(), &frame, options.write_timeout)
-                    .await
-                    .is_err()
-                {
+                Event::Frame(Ok(frame)) => match frame.r#type.as_str() {
+                    "pty_input" if !frame.data.is_empty() => {
+                        marks
+                            .lock()
+                            .map_err(|_| poison())?
+                            .received(frame.input_seq);
+                        if input_tx
+                            .try_send(InputFrame {
+                                seq: frame.input_seq,
+                                data: frame.data,
+                                attach: false,
+                            })
+                            .is_err()
+                        {
+                            // Retry remains possible: watermark was received, never processed.
+                            transport_fault = true;
+                            socket.take();
+                        }
+                    }
+                    "attach_file" if !frame.inject.is_empty() => {
+                        if input_tx
+                            .try_send(InputFrame {
+                                seq: 0,
+                                data: frame.inject.into_bytes(),
+                                attach: true,
+                            })
+                            .is_err()
+                        {
+                            // Unsequenced attachment cannot safely be replayed.
+                            close_session(pty.as_ref(), strict_owner);
+                            exit = pty.wait().await?;
+                            break;
+                        }
+                    }
+                    "pty_resize" => {
+                        if let Some(size) = PtySize::from_wire(frame.cols, frame.rows) {
+                            // Source treats native resize as best effort, including
+                            // races with provider exit. Keep unrelated input live.
+                            let _ = pty.resize(size);
+                        }
+                    }
+                    "hub_shutdown" => {
+                        intentional = true;
+                        socket.take();
+                    }
+                    "session_dismissed" => {
+                        close_session(pty.as_ref(), strict_owner);
+                        exit = pty.wait().await?;
+                        break;
+                    }
+                    _ => {}
+                },
+                Event::Output(Ok(chunk)) => {
+                    if chunk.end <= sent_offset {
+                        continue;
+                    }
+                    let start = chunk.end - chunk.bytes.len() as i64;
+                    let skip = sent_offset.saturating_sub(start).max(0) as usize;
+                    let frame = Message {
+                        r#type: "pty_data".into(),
+                        session_id,
+                        data: chunk.bytes[skip..].to_vec(),
+                        ..Default::default()
+                    };
+                    if send(current.as_mut(), &frame, options.write_timeout)
+                        .await
+                        .is_err()
+                    {
+                        transport_fault = true;
+                        socket.take();
+                    } else {
+                        sent_offset = chunk.end;
+                    }
+                }
+                Event::Output(Err(broadcast::error::RecvError::Lagged(_))) => {
                     transport_fault = true;
                     socket.take();
-                } else {
-                    sent_offset = chunk.end;
+                }
+                Event::Output(Err(broadcast::error::RecvError::Closed)) => {
+                    output_open = false;
                 }
             }
-            Event::Output(Err(broadcast::error::RecvError::Lagged(_))) => {
-                transport_fault = true;
-                socket.take();
-            }
-            Event::Output(Err(broadcast::error::RecvError::Closed)) => {
-                output_open = false;
-            }
         }
+        Ok(exit)
     }
+    .await;
+    if let Some(owner) = &options.execution_owner {
+        // Run while retained native handles are valid, including all loop error
+        // paths and Hub disconnects. Persist before any session_end delivery.
+        let proof = pty.terminate_checked(Duration::from_secs(3)).await.ok();
+        owner
+            .finished(execution_result.as_ref().ok(), proof.as_ref())
+            .map_err(|_| io::Error::other("execution owner receipt could not be persisted"))?;
+    }
+    let exit = execution_result?;
     // Finish readers before final output/session_end; descendants holding PTY
     // fds never make wrapper completion unbounded.
     let _ = tokio::time::timeout(options.drain_timeout, async {

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "906992cc08af33682fa7721e737e67e7f43a8491",
+    "commit": "8195f79368887fb96eeb490185fc2bc7f605c37d",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,9 +138,9 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2049,
-    "analyzed": 1589,
-    "unresolved": 10,
+    "discovered": 2055,
+    "analyzed": 1594,
+    "unresolved": 11,
     "unknown": 0,
     "unclaimed": 450,
     "skipped_by_config": 0
@@ -30678,6 +30678,41 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/hub/iris_execution_grants.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Fixed operator manifest. Local registration only; never an MCP grant endpoint."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "value",
+          "value": [
+            "manifests",
+            "pins"
+          ]
+        },
+        "writes": {
+          "state": "value",
+          "value": [
+            "manifests",
+            "pins"
+          ]
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/hub/iris_execution_journal.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -30749,6 +30784,46 @@
         }
       },
       "unresolved": []
+    },
+    {
+      "path": "rust/src/hub/iris_execution_owner.rs",
+      "adapter": "rust",
+      "status": "unresolved",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Trusted local owner evidence. This is a library API, never an HTTP/MCP writer."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "value",
+          "value": [
+            "owners",
+            "receipts"
+          ]
+        },
+        "writes": {
+          "state": "value",
+          "value": [
+            "owners",
+            "receipts"
+          ]
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": [
+        {
+          "code": "dynamic_sql",
+          "detail": "assembled at run time: UPDATE owners SET document=' omitnix_placeholder '"
+        }
+      ]
     },
     {
       "path": "rust/src/hub/iris_execution_runtime.rs",
@@ -37065,6 +37140,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/wrapper/iris_owner.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Trusted wrapper owner observer. Bootstrap is server-owned metadata, stripped"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/wrapper/launch.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -40165,6 +40269,93 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/tests/iris_durable_wrapper.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Actual durable owner, concurrent Hub journal, native synthetic wrapper only."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/tests/iris_owner_acceptance.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Independent owner acceptance: native local fixtures, no Hub or provider."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/tests/iris_wrapper_owner.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Independent owner-seam acceptance with synthetic transports and owned PTYs."
         },
         "authentication": {
           "state": "not_configured"
@@ -50606,6 +50797,17 @@
       "unresolved_in": []
     },
     {
+      "name": "manifests",
+      "read_by": [
+        "rust/src/hub/iris_execution_grants.rs"
+      ],
+      "written_by": [
+        "rust/src/hub/iris_execution_grants.rs"
+      ],
+      "in_schema_snapshot": false,
+      "unresolved_in": []
+    },
+    {
       "name": "messages",
       "read_by": [
         "go/internal/sessionstore/audit_store_test.go",
@@ -50667,6 +50869,43 @@
       "unresolved_in": []
     },
     {
+      "name": "owners",
+      "read_by": [
+        "rust/src/hub/iris_execution_owner.rs"
+      ],
+      "written_by": [
+        "rust/src/hub/iris_execution_owner.rs"
+      ],
+      "in_schema_snapshot": false,
+      "unresolved_in": [
+        "rust/src/hub/iris_execution_owner.rs"
+      ]
+    },
+    {
+      "name": "pins",
+      "read_by": [
+        "rust/src/hub/iris_execution_grants.rs"
+      ],
+      "written_by": [
+        "rust/src/hub/iris_execution_grants.rs"
+      ],
+      "in_schema_snapshot": false,
+      "unresolved_in": []
+    },
+    {
+      "name": "receipts",
+      "read_by": [
+        "rust/src/hub/iris_execution_owner.rs"
+      ],
+      "written_by": [
+        "rust/src/hub/iris_execution_owner.rs"
+      ],
+      "in_schema_snapshot": false,
+      "unresolved_in": [
+        "rust/src/hub/iris_execution_owner.rs"
+      ]
+    },
+    {
       "name": "requests",
       "read_by": [
         "rust/src/hub/iris_execution_journal.rs"
@@ -50708,12 +50947,13 @@
   "table_gaps": {
     "files": [
       "go/internal/sessionstore/store.go",
+      "rust/src/hub/iris_execution_owner.rs",
       "rust/src/storage/history.rs",
       "rust/src/storage/repository.rs",
       "rust/tests/dependency_contracts.rs",
       "rust/tests/storage_contracts.rs"
     ],
-    "unresolved_count": 30,
-    "note": "30 statements in 5 files could not be read, so the table list may be incomplete: a table mentioned only there is missing from it entirely, and a table that is listed may be touched in more places than it names."
+    "unresolved_count": 31,
+    "note": "31 statements in 6 files could not be read, so the table list may be incomplete: a table mentioned only there is missing from it entirely, and a table that is listed may be touched in more places than it names."
   }
 }

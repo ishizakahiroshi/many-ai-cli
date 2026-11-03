@@ -55,7 +55,7 @@ Without `--release-tag`, these helpers accept only
 publish, or change the running Hub. The explicit formal mode and its publication
 boundary are described below. Native runtime, installation, update/rollback and
 device acceptance remain separate release work. Official Docker images,
-container builds and automatic updates are outside v1.0.0 support; see
+container builds and automatic updates are outside v0.10.0 support; see
 [`deploy/docker/README.md`](../../deploy/docker/README.md).
 Input-collection success is source evidence, not license clearance or native
 application/device acceptance. Candidate packaging remains unaccepted preparation.
