@@ -13,15 +13,25 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  MULTI_PINNED_MAX,
   MULTI_SCOPE_ALL,
   MULTI_SCOPE_BOX,
+  MULTI_SCOPE_DEFAULT_ASK,
+  autoGrowGrid,
   computeRenderPlan,
   effectiveScope,
+  normalizePinnedList,
   normalizeScope,
+  normalizeScopeDefault,
   orderIndexForSlot,
   overflowCount,
+  pinKey,
+  prioritizePinned,
   rebuildOrder,
   reorderForScope,
+  repoChipsFor,
+  scopeOnOpen,
+  swapIntoSlot,
   visibleIdsFor,
 } from './multi-scope.js';
 
@@ -219,4 +229,128 @@ test('掴んだスロットが空なら何もしない', () => {
   const order = [1, 2, 3];
   assert.deepEqual(reorderForScope(order, [1, 3], 5, 0), [1, 2, 3]);
   assert.deepEqual(reorderForScope(order, [1, 3], 0, 0), [1, 2, 3]);
+});
+
+// ---- 開いたときの範囲（plan_multi-repo-scope.md）------------------------------
+
+test('開いたときの既定は、知らない値・未設定なら「毎回聞く」', () => {
+  assert.equal(normalizeScopeDefault(null), MULTI_SCOPE_DEFAULT_ASK);
+  assert.equal(normalizeScopeDefault(''), MULTI_SCOPE_DEFAULT_ASK);
+  assert.equal(normalizeScopeDefault('BOX'), MULTI_SCOPE_DEFAULT_ASK);
+  assert.equal(normalizeScopeDefault('box'), MULTI_SCOPE_BOX);
+  assert.equal(normalizeScopeDefault('all'), MULTI_SCOPE_ALL);
+});
+
+test('既定が決まっていれば、前回の切り替えを持ち越さずにそれで開く', () => {
+  assert.deepEqual(scopeOnOpen('box', 'all', true), { scope: MULTI_SCOPE_BOX, ask: false });
+  assert.deepEqual(scopeOnOpen('all', 'box', true), { scope: MULTI_SCOPE_ALL, ask: false });
+});
+
+test('「毎回聞く」は今の範囲のまま聞く。リポが無ければ聞かない', () => {
+  assert.deepEqual(scopeOnOpen(null, 'box', true), { scope: MULTI_SCOPE_BOX, ask: true });
+  assert.deepEqual(scopeOnOpen('ask', 'all', false), { scope: MULTI_SCOPE_ALL, ask: false });
+});
+
+// ---- ピン留め ---------------------------------------------------------------
+
+test('ピンの鍵は ID と起動時刻の組（ID が振り直されても別セッションに付かない）', () => {
+  assert.equal(pinKey(6, '2026-01-01T00:00:00Z'), '6:2026-01-01T00:00:00Z');
+  assert.notEqual(pinKey(6, 'a'), pinKey(6, 'b'));
+});
+
+test('ピンの保存値は文字列だけ・重複なし・新しいほうから上限件数', () => {
+  assert.deepEqual(normalizePinnedList(['a', 'a', 3, null, 'b']), ['a', 'b']);
+  assert.deepEqual(normalizePinnedList('a'), []);
+  const many = Array.from({ length: MULTI_PINNED_MAX + 5 }, (_, i) => `k${i}`);
+  const kept = normalizePinnedList(many);
+  assert.equal(kept.length, MULTI_PINNED_MAX);
+  assert.equal(kept[kept.length - 1], `k${MULTI_PINNED_MAX + 4}`, '新しいものが残る');
+});
+
+test('ピン留めが先、各群の中は並び順のまま', () => {
+  const pinned = new Set([5, 2]);
+  assert.deepEqual(prioritizePinned([1, 2, 3, 4, 5], id => pinned.has(id)), [2, 5, 1, 3, 4]);
+  assert.deepEqual(prioritizePinned([1, 2, 3]), [1, 2, 3], 'ピン関数が無ければそのまま');
+});
+
+test('ピン留めは表示の列だけを変え、保存する並び順は変えない', () => {
+  const pinned = new Set([5]);
+  const plan = computeRenderPlan({
+    prevOrder: [1, 2, 3, 4, 5, 6],
+    liveSortedIds: [1, 2, 3, 4, 5, 6],
+    scope: 'box',
+    openProjectKey: BOX_A,
+    projectKeyOf: keyOf,
+    capacity: 2,
+    isPinned: id => pinned.has(id),
+  });
+  assert.deepEqual(plan.order, [1, 2, 3, 4, 5, 6], 'order は全件・元の順');
+  assert.deepEqual(plan.visibleIds, [5, 1, 3]);
+  assert.deepEqual(plan.slotIds, [5, 1]);
+  assert.deepEqual(plan.overflowIds, [3]);
+  assert.equal(plan.overflow, 1);
+});
+
+// ---- あふれたセッションの入れ替え ----------------------------------------------
+
+test('入りきらないセッションを押すと、フォーカス中のペインと入れ替わる', () => {
+  const order = [1, 2, 3, 4, 5, 6];
+  const visible = [1, 3, 5]; // 箱 A・枠 2
+  const result = swapIntoSlot(order, visible, 2, 0, 5);
+  assert.equal(result.reason, '');
+  assert.equal(result.slot, 0);
+  assert.deepEqual(result.order, [5, 2, 3, 4, 1, 6]);
+  assert.deepEqual(visibleIdsFor(result.order, 'box', BOX_A, keyOf).slice(0, 2), [5, 3], '#5 がペイン 0 に入る');
+  assert.deepEqual(result.order.filter(id => keyOf(id) === BOX_B), [2, 4, 6], '他の箱は動かない');
+});
+
+test('フォーカス中のペインがピン留めなら、ピンの無い最後のペインと入れ替える', () => {
+  const pinned = new Set([1]);
+  const isPinned = (id: number) => pinned.has(id);
+  const order = [1, 3, 5, 7];
+  const visible = prioritizePinned(order, isPinned); // [1, 3, 5, 7]
+  const result = swapIntoSlot(order, visible, 2, 0, 5, isPinned);
+  assert.equal(result.slot, 1);
+  assert.deepEqual(result.order, [1, 5, 3, 7]);
+  assert.deepEqual(prioritizePinned(result.order, isPinned).slice(0, 2), [1, 5], 'ピン留めの #1 は残る');
+});
+
+test('どのペインもピン留めなら入れ替えない', () => {
+  const pinned = new Set([1, 3]);
+  const result = swapIntoSlot([1, 3, 5], [1, 3, 5], 2, 0, 5, id => pinned.has(id));
+  assert.equal(result.reason, 'all-pinned');
+  assert.deepEqual(result.order, [1, 3, 5]);
+});
+
+test('枠に入っているセッションを渡しても何もしない', () => {
+  const result = swapIntoSlot([1, 3, 5], [1, 3, 5], 2, 0, 3);
+  assert.equal(result.reason, 'not-overflow');
+  assert.deepEqual(result.order, [1, 3, 5]);
+});
+
+// ---- 自動で枠を広げる -------------------------------------------------------
+
+test('入りきるなら寸法は変えない', () => {
+  assert.deepEqual(autoGrowGrid(2, 2, 4), { cols: 2, rows: 2 });
+  assert.deepEqual(autoGrowGrid(2, 2, 0), { cols: 2, rows: 2 });
+});
+
+test('列 → 行の順に 1 つずつ広げる', () => {
+  assert.deepEqual(autoGrowGrid(2, 2, 5), { cols: 3, rows: 2 });
+  assert.deepEqual(autoGrowGrid(2, 2, 7), { cols: 3, rows: 3 });
+  assert.deepEqual(autoGrowGrid(1, 1, 2), { cols: 2, rows: 1 });
+});
+
+test('広げるのは 6×3 まで', () => {
+  assert.deepEqual(autoGrowGrid(2, 2, 100), { cols: 6, rows: 3 });
+  assert.deepEqual(autoGrowGrid(6, 1, 9), { cols: 6, rows: 2 });
+});
+
+// ---- 上の段のリポ名 ---------------------------------------------------------
+
+test('リポは最初に出た順に並び、件数を数える。キーが空のものは数えない', () => {
+  const chips = repoChipsFor([
+    { key: BOX_A }, { key: BOX_B }, { key: BOX_A }, { key: '' }, { key: null }, { key: BOX_A },
+  ]);
+  assert.deepEqual(chips, [{ key: BOX_A, count: 3 }, { key: BOX_B, count: 1 }]);
 });

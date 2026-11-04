@@ -434,6 +434,26 @@
             <input id="orchestration-child-timeout" type="number" min="60" max="86400" class="ui-input settings-input-number" value="900">
             <label><input id="orchestration-timeout-respawn" type="checkbox"> Retry once</label>
           </div>
+          <!-- マルチの表示（plan_multi-repo-scope.md）。この端末だけの設定。マルチのレイアウト選択の欄と値を共有する。 -->
+          <div class="settings-row">
+            <label class="settings-label" for="multi-scope-default" data-i18n="multi_scope_default_label">マルチを開いたときの表示</label>
+            <select id="multi-scope-default" class="ui-input settings-select">
+              <option value="ask" data-i18n="multi_scope_default_ask">毎回聞く</option>
+              <option value="box" data-i18n="multi_scope_default_box">このプロジェクトだけ</option>
+              <option value="all" data-i18n="multi_scope_default_all">全部</option>
+            </select>
+          </div>
+          <div class="settings-note" data-i18n="multi_scope_default_desc">「このプロジェクトだけ」は、サイドバーで開いているリポ（まだ開いていなければ選んでいるセッションのリポ）のセッションだけを並べます。マルチの上の段でいつでも切り替えられます。</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="multi_auto_grow_label">入りきらないとき枠を自動で増やす</span>
+            <div class="settings-row-actions">
+              <label class="approval-toggle">
+                <input type="checkbox" id="multi-auto-grow">
+                <span class="approval-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="settings-note" data-i18n="multi_auto_grow_desc">オフのときは、ピン留めしたセッションを先に、残りを並び順で枠に入れ、入りきらない分を上の段に番号で出します。オンにすると最大 6×3 まで枠を広げます（手で配置したレイアウトでは広げません）。</div>
         </div>
       </details>
       <!-- 🖥 内蔵リモート接続（SSH / WSL）。旧ヘッダー Server ボタンから移設（利用頻度が低いため設定内へ）。 -->
@@ -1774,6 +1794,15 @@
       <div class="picker-presets">
         <!-- JS で 2/4/6/9/12/18 プリセットボタン生成 -->
       </div>
+      <!-- マルチを開いたときの表示と、入りきらないときの自動拡大（plan_multi-repo-scope.md）。
+           設定画面の同じ 2 項目と値を共有する（どちらで変えても揃う）。 -->
+      <fieldset class="picker-scope-default" id="picker-scope-default">
+        <legend class="picker-title" data-i18n="multi_scope_default_label">マルチを開いたときの表示</legend>
+        <label class="picker-option"><input type="radio" name="picker-scope-default" value="ask"> <span data-i18n="multi_scope_default_ask">毎回聞く</span></label>
+        <label class="picker-option"><input type="radio" name="picker-scope-default" value="box"> <span data-i18n="multi_scope_default_box">このプロジェクトだけ</span></label>
+        <label class="picker-option"><input type="radio" name="picker-scope-default" value="all"> <span data-i18n="multi_scope_default_all">全部</span></label>
+      </fieldset>
+      <label class="picker-option"><input type="checkbox" id="picker-auto-grow"> <span data-i18n="multi_auto_grow_label">入りきらないとき枠を自動で増やす</span></label>
     </div>
     <!-- セッション帯（いま開いている箱のセッションを 1 段に並べる）。
          #display-stack の中には入れない。あちらは #action-bar を absolute で重ねる

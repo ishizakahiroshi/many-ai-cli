@@ -10,6 +10,18 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+- Let the multi grid show one project at a time. The strip above the grid now
+  lists each project with its session count (plus "All"); clicking one lays out
+  only that project's sessions and opens the same project in the sidebar. When
+  you open multi from its tab it asks whether to show this project or everything,
+  with an option to remember the answer; the default (ask every time / this
+  project only / all) can also be changed from the multi button's layout popup
+  and in Settings. Pin a pane to keep it in the grid first; sessions that do not
+  fit are listed by number in the strip and swap into the focused pane when
+  clicked. An optional setting grows the grid (up to 6×3) instead. Before any
+  project has been opened, "this project only" uses the selected session's
+  project.
+
 - Allow editing quick commands by right-clicking their buttons.
 
 - Show a "starting" state for new in-window CLI launches until the correlated

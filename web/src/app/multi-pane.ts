@@ -5,9 +5,12 @@ import { sessionStartups, type SessionStartup } from './session-startup.js';
 import { canPageAltBuffer, disableWebglRenderer, enableWebglRenderer, ensureTerminal, releaseHiddenWebglRenderers, scrollAltBufferPage, termArea } from './terminal.js';
 import { ensureAltScrollRail, requestEdge } from './alt-scroll-rail-view.js';
 import { ensureAltDragSelect } from './alt-drag-select-view.js';
-import { openProjectKey } from './state.js';
-import { projectKeyForSession } from './sidebar-tree.js';
+import { activeSessionId, openProjectKey, set_openProjectKey } from './state.js';
+import { NO_PROJECT_KEY, deriveProjectKeyFromCwd, projectKeyForSession } from './sidebar-tree.js';
 import { isValidTabName } from './project-view-memory.js';
+import { saveOpenProjectKey } from './project-view-store.js';
+import { escapeHtml, showToast } from './util.js';
+import { uiButtonClass, uiModalClass } from './ui-components.js';
 import {
   FLEXIBLE_PANE_STORAGE_KEY,
   PANE_DRAG_MIME,
@@ -25,12 +28,22 @@ import {
 import {
   MULTI_SCOPE_ALL,
   MULTI_SCOPE_BOX,
+  STORAGE_MULTI_AUTO_GROW_KEY,
+  STORAGE_MULTI_PINNED_KEY,
+  STORAGE_MULTI_SCOPE_DEFAULT_KEY,
   STORAGE_MULTI_SCOPE_KEY,
+  autoGrowGrid,
   computeRenderPlan,
   effectiveScope,
+  normalizePinnedList,
   normalizeScope,
+  normalizeScopeDefault,
   overflowCount,
+  pinKey,
   reorderForScope,
+  repoChipsFor,
+  scopeOnOpen,
+  swapIntoSlot,
 } from './multi-scope.js';
 
 // multi-pane.js — MultiPaneManager + GridPicker (C3: xterm マルチインスタンス + WS ルーティング)
@@ -96,8 +109,36 @@ export class GridPicker {
       });
     }
 
+    // マルチを開いたときの表示・自動拡大（plan_multi-repo-scope.md）。設定画面と値を共有し、
+    // どちらで変えても multi-pane-prefs-changed で揃える。
+    this._wirePrefs();
+
     // 初期状態でハイライト
     this._highlightCurrent();
+  }
+
+  _wirePrefs() {
+    if (!this.popup || this._prefsWired) return;
+    this._prefsWired = true;
+    this.popup.querySelectorAll('input[name="picker-scope-default"]').forEach((input: HTMLInputElement) => {
+      input.addEventListener('change', () => {
+        if (input.checked) this.manager.setScopeDefault(input.value);
+      });
+    });
+    const grow = this.popup.querySelector('#picker-auto-grow') as HTMLInputElement | null;
+    grow?.addEventListener('change', () => this.manager.setAutoGrow(grow.checked));
+    window.addEventListener('multi-pane-prefs-changed', () => this._syncPrefs());
+    this._syncPrefs();
+  }
+
+  _syncPrefs() {
+    if (!this.popup) return;
+    const def = typeof this.manager.getScopeDefault === 'function' ? this.manager.getScopeDefault() : 'ask';
+    this.popup.querySelectorAll('input[name="picker-scope-default"]').forEach((input: HTMLInputElement) => {
+      input.checked = input.value === def;
+    });
+    const grow = this.popup.querySelector('#picker-auto-grow') as HTMLInputElement | null;
+    if (grow) grow.checked = typeof this.manager.getAutoGrow === 'function' ? this.manager.getAutoGrow() : false;
   }
 
   /** セル (c, r) にホバーしたとき左上矩形をハイライト */
@@ -210,6 +251,17 @@ export class MultiPaneManager {
     this.scope = this._loadScope();
     // C3: いま表示している ID の列。render() が作り直す。**保存しない。**
     this.visibleIds = [];
+    // plan_multi-repo-scope.md: 開いたときの範囲（'ask' / 'box' / 'all'）・ピン留め・自動拡大。
+    // どれも端末ごとの設定（localStorage）。
+    this.scopeDefault = this._loadScopeDefault();
+    this.pinned = new Set(this._loadPinned());
+    this.autoGrow = this._loadAutoGrow();
+    // 開いたときに範囲を聞いている最中か。聞くカードは render() が描く。
+    this.askPending = false;
+    // 自動で枠を広げる前の寸法。広げていないときは null。**保存しない。**
+    this._grownBase = null;
+    // 直近の render() で枠に入りきらなかったセッション（上の段に番号で並べる）。
+    this.overflowIds = [];
     // A: 列／行ごとのサイズ比率（fr 値の配列）。境界ドラッグで更新する。
     this.colFracs = this._loadFracs('Cols', this.cols);
     this.rowFracs = this._loadFracs('Rows', this.rows);
@@ -247,6 +299,8 @@ export class MultiPaneManager {
 
   /** レイアウトを変更してDOM再構築 */
   setLayout(cols, rows) {
+    // 利用者が寸法を選び直した＝自動で広げた寸法は捨てる（選んだ値を新しい基準にする）。
+    this._grownBase = null;
     this._selectLayoutForCurrentScope();
     this.cols = Math.max(1, Math.min(6, cols));
     this.rows = Math.max(1, Math.min(3, rows));
@@ -285,7 +339,10 @@ export class MultiPaneManager {
       }
     }
     const sorted = allSorted.filter(s => !this.dismissPendingSessionIds.has(s.id));
-    const total  = this.cols * this.rows;
+    // 手で配置したレイアウト（D&D）と、セッション専用の作業面では、ピン留めと自動拡大を
+    // 効かせない（利用者が置いた場所を動かさない）。並び順で自動に埋めるときだけ効く。
+    const autoMode = !this._currentCustomLayout() && !this.workspaceSession;
+    if (this._grownBase && !(autoMode && this.autoGrow)) this._restoreGrownBase();
 
     // 既存スロットを detach してから DOM を再構築
     this.area.querySelectorAll('.pane-slot').forEach(el => this.detachSlot(el));
@@ -301,21 +358,49 @@ export class MultiPaneManager {
     const byId = new Map(sorted.filter(s => !this.workspaceSession ||
       (s.id === this.workspaceSession.sessionId && String(s.started_at || '') === this.workspaceSession.startedAt))
       .map(s => [s.id, s]));
-    const plan = computeRenderPlan({
+    const planInput = {
       prevOrder: this.order,
       liveSortedIds: sorted.map(s => s.id),
       scope: this.scope,
-      openProjectKey,
+      // 箱が開いていなくても、選んでいるセッションのリポで絞れるようにする（B2）。
+      openProjectKey: this._scopeProjectKey(allSorted),
       projectKeyOf: this._projectKeyResolver(allSorted),
-      capacity: total,
-    });
+      capacity: this.cols * this.rows,
+      isPinned: autoMode ? this._pinPredicate(sorted) : undefined,
+    };
+    let plan = computeRenderPlan(planInput);
+    // 入りきらないとき枠を自動で広げる（設定がオンで、並び順で自動に埋めるときだけ）。
+    // 広げた寸法は保存しない。件数が戻ったら元の寸法へ戻す。
+    if (autoMode && this.autoGrow) {
+      const base = this._grownBase || { cols: this.cols, rows: this.rows };
+      const grid = autoGrowGrid(base.cols, base.rows, plan.visibleIds.length);
+      if (grid.cols === base.cols && grid.rows === base.rows) {
+        if (this._grownBase) this._restoreGrownBase();
+      } else if (grid.cols !== this.cols || grid.rows !== this.rows) {
+        this._applyGrownGrid(grid);
+      }
+      if (this.cols * this.rows !== planInput.capacity) {
+        plan = computeRenderPlan({ ...planInput, prevOrder: plan.order, capacity: this.cols * this.rows });
+      }
+    }
+    const total  = this.cols * this.rows;
     this.order = plan.order;
     this._saveOrder();
     this.visibleIds = plan.visibleIds;   // 保存しない（表示のためだけの列）
-    this.scopeOverflow = plan.overflow;
 
     // slots 配列を更新（visibleIds の先頭 total 件を表示）
     const custom = this._currentCustomLayout();
+    // 枠に入りきらなかったセッション（上の段に番号で並べる）。手で配置したレイアウトでは
+    // 「配置されていないもの」、セッション専用の作業面では出さない。
+    if (this.workspaceSession) {
+      this.overflowIds = [];
+    } else if (custom) {
+      const placed = new Set(custom.slots.filter(c => c && c.kind === 'session').map(c => c.sessionId));
+      this.overflowIds = plan.visibleIds.filter(id => !placed.has(id));
+    } else {
+      this.overflowIds = plan.overflowIds;
+    }
+    this.scopeOverflow = this.overflowIds.length;
     this.slots = custom ? custom.slots.map(content => {
       if (!content) return null;
       if (content.kind === 'startup') return sessionStartups.requests.has(content.requestId) ? { startup: content } : null;
@@ -357,6 +442,9 @@ export class MultiPaneManager {
       if (slot && slot.session) this.attachToSlot(slotEl, slot.session);
       else if (slot && slot.tab) this._mountTabSlot(slotEl, slot.tab, i);
     });
+    // 開いたときに範囲を聞く（既定が「毎回聞く」のとき）。グリッドの上に重ねるだけで、
+    // スロットの並びには入らない（position: absolute）。
+    if (this.askPending && !this.workspaceSession) this.area.appendChild(this._buildAskCard(planInput.openProjectKey));
     this._applyMobileActiveSlot();
     this._notifyLayoutChanged();
 
@@ -502,6 +590,12 @@ export class MultiPaneManager {
                       : session.state === 'running' ? '●'
                       : '—';
     header.appendChild(badge);
+
+    // ピン留め（plan_multi-repo-scope.md B1）。並び順で自動に埋めるときだけ効くので、
+    // 手で配置したレイアウトと作業面では出さない（押しても何も変わらないボタンを置かない）。
+    if (!this._currentCustomLayout() && !this.workspaceSession) {
+      header.appendChild(this._buildPinButton(session));
+    }
 
     this._appendPaneControls(header, idx);
     return header;
@@ -774,7 +868,8 @@ export class MultiPaneManager {
 
   _layoutKey() {
     if (this.workspaceSession) return sessionPaneLayoutKey(this.workspaceSession.sessionId, this.workspaceSession.startedAt);
-    return paneLayoutKey(effectiveScope(this.scope, openProjectKey), openProjectKey);
+    const key = this._scopeProjectKey();
+    return paneLayoutKey(effectiveScope(this.scope, key), key);
   }
 
   _clearDropPreview() {
@@ -812,7 +907,8 @@ export class MultiPaneManager {
         slots: this.slots.map(slot => slot?.session ? this._contentForSession(slot.session.id) : slot?.tab || null),
       };
     } else {
-      const overviewKey = paneLayoutKey(effectiveScope(this.scope, openProjectKey), openProjectKey);
+      const scopeKey = this._scopeProjectKey();
+      const overviewKey = paneLayoutKey(effectiveScope(this.scope, scopeKey), scopeKey);
       base = this.customLayouts[overviewKey];
       if (!base) {
         const current = (window as any).currentFlexiblePaneView?.();
@@ -918,6 +1014,9 @@ export class MultiPaneManager {
     const key = this._layoutKey();
     if (key === this.activeLayoutKey) return;
     this.activeLayoutKey = key;
+    // 別のリポ・範囲へ移った。自動で広げた寸法は前のレイアウトのものなので捨てる
+    // （下で新しいレイアウトの寸法を読み直す）。
+    this._grownBase = null;
     const layout = this.customLayouts[key];
     if (layout) {
       this.cols = layout.cols;
@@ -1221,6 +1320,17 @@ export class MultiPaneManager {
     }
     const visible = Array.isArray(this.visibleIds) ? this.visibleIds : this.order;
     if (from < 0 || from >= visible.length) return;
+    // ピン留めは表示の列で常に先に来る。ピンのあるペインと無いペインを入れ替えたときは
+    // ピンも位置と一緒に入れ替える（そうしないと並び順だけ動いて画面は変わらない）。
+    const fromId = visible[from];
+    const toId = to >= 0 && to < visible.length ? visible[to] : null;
+    if (toId != null && this._isPinnedId(fromId) !== this._isPinnedId(toId)) {
+      const pinnedId = this._isPinnedId(fromId) ? fromId : toId;
+      const otherId = pinnedId === fromId ? toId : fromId;
+      this._setPinnedId(pinnedId, false, false);
+      this._setPinnedId(otherId, true, false);
+      this._savePinned();
+    }
     this.order = reorderForScope(this.order, visible, from, to);
     this._saveOrder();
     // フォーカスはドロップ先スロットへ移す
@@ -1649,9 +1759,11 @@ export class MultiPaneManager {
       this._saveCustomLayouts();
       return;
     }
+    // 自動で広げている間は、広げる前の寸法を保存する（広げた寸法は一時的なもの）。
+    const dims = this._grownBase || this;
     try {
-      localStorage.setItem('multiPaneCols', this.cols);
-      localStorage.setItem('multiPaneRows', this.rows);
+      localStorage.setItem('multiPaneCols', dims.cols);
+      localStorage.setItem('multiPaneRows', dims.rows);
     } catch (_) {}
   }
 
@@ -1733,15 +1845,23 @@ export class MultiPaneManager {
   getScopeStatus() {
     const capacity = this.cols * this.rows;
     const visibleCount = Array.isArray(this.visibleIds) ? this.visibleIds.length : 0;
+    const all = window.getSortedSessions ? window.getSortedSessions() : [];
+    const projectKey = this._scopeProjectKey(all);
     return {
       scope: normalizeScope(this.scope),
-      effective: effectiveScope(this.scope, openProjectKey),
-      projectKey: openProjectKey,
+      effective: effectiveScope(this.scope, projectKey),
+      projectKey,
       visibleCount,
       capacity,
       overflow: Number.isFinite(this.scopeOverflow)
         ? this.scopeOverflow
         : overflowCount(visibleCount, capacity),
+      // plan_multi-repo-scope.md: 上の段に並べるリポ・あふれた番号・聞いている最中か。
+      repos: repoChipsFor(all.filter(Boolean).map(s => ({ key: projectKeyForSession(s, all) }))),
+      totalCount: all.filter(Boolean).length,
+      overflowIds: Array.isArray(this.overflowIds) ? this.overflowIds.slice() : [],
+      askPending: !!this.askPending,
+      workspace: !!this.workspaceSession,
     };
   }
 
@@ -1750,6 +1870,279 @@ export class MultiPaneManager {
   }
   _loadScope() {
     try { return normalizeScope(localStorage.getItem(STORAGE_MULTI_SCOPE_KEY)); } catch (_) { return MULTI_SCOPE_ALL; }
+  }
+
+  // ─── plan_multi-repo-scope.md: リポの解決・開いたときの範囲・ピン・あふれ・自動拡大 ──
+
+  /**
+   * multi が絞り込みに使うリポ。サイドバーで開いている箱が正。まだどの箱も開いていない
+   * （起動直後）ときは、選んでいるセッションのリポを使い、決めたら箱が開くまで持ち続ける
+   * （フォーカスを移すたびにリポが変わらないように）。
+   */
+  _scopeProjectKey(allSorted = null) {
+    if (openProjectKey) {
+      this._fallbackProjectKey = null;
+      return openProjectKey;
+    }
+    if (this._fallbackProjectKey) return this._fallbackProjectKey;
+    const list = Array.isArray(allSorted) ? allSorted : (window.getSortedSessions ? window.getSortedSessions() : []);
+    const live = list.filter(Boolean);
+    const current = live.find(s => s.id === activeSessionId) || live[0];
+    if (!current) return null;
+    this._fallbackProjectKey = projectKeyForSession(current, live);
+    return this._fallbackProjectKey;
+  }
+
+  /** 上の段のリポ名に出す名前（サイドバーの見出しと同じ規則）。 */
+  projectDisplayName(key) {
+    if (!key || key === NO_PROJECT_KEY) return this._t('no_project', 'No project');
+    return deriveProjectKeyFromCwd(key) || key;
+  }
+
+  /**
+   * 上の段のリポ名を押したとき。範囲を「このプロジェクトだけ」にし、サイドバーで開いて
+   * いる箱も同じリポに揃える。openProjectBox は呼ばない（箱の記憶の復元が別のタブへ
+   * 切り替えることがあり、multi から外れてしまう）。
+   */
+  setRepo(key) {
+    if (!key) return;
+    this.askPending = false;
+    if (openProjectKey !== key) {
+      set_openProjectKey(key);
+      saveOpenProjectKey(key);
+      this._fallbackProjectKey = null;
+    }
+    this.scope = MULTI_SCOPE_BOX;
+    this._saveScope();
+    // サイドバーの「開いている」印を描き直す（render() の最後でも呼ぶが、範囲が同じで
+    // render が短絡しないよう、ここでは常に描く）。
+    this.render();
+  }
+
+  /**
+   * multi タブを新しく開いたとき（settings.ts の setActiveTab('multi') から、ビューが
+   * 隠れていたときだけ呼ばれる）。既定が決まっていればそれを範囲にし、「毎回聞く」なら
+   * 聞くカードを出す。戻り値は聞いているか（聞いている間はレイアウト選択を開かない）。
+   */
+  onMultiOpened() {
+    const all = window.getSortedSessions ? window.getSortedSessions() : [];
+    const hasRepo = !!this._scopeProjectKey(all);
+    const next = scopeOnOpen(this.scopeDefault, this.scope, hasRepo);
+    if (next.scope !== normalizeScope(this.scope)) {
+      this.scope = next.scope;
+      this._saveScope();
+    }
+    this.askPending = next.ask;
+    return this.askPending;
+  }
+
+  /** 聞くカードで選ばれたとき。remember なら次から聞かずにこれで開く。 */
+  answerScopeQuestion(value, remember) {
+    const scope = normalizeScope(value);
+    this.askPending = false;
+    if (remember) this.setScopeDefault(scope);
+    this.scope = scope;
+    this._saveScope();
+    this.render();
+    this.focusSlot(Math.min(this.focusedIdx || 0, Math.max(0, this.cols * this.rows - 1)));
+  }
+
+  /** 聞くカードを選ばずに閉じたとき（Esc）。範囲は今のまま。 */
+  dismissScopeQuestion() {
+    if (!this.askPending) return;
+    this.askPending = false;
+    this.render();
+  }
+
+  _buildAskCard(projectKey) {
+    const card = document.createElement('div');
+    card.className = `${uiModalClass('sm')} multi-scope-ask`;
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-modal', 'false');
+    card.setAttribute('aria-labelledby', 'multi-scope-ask-title');
+    // 端末に重なる局所的な枠。ホイールは枠自身で受ける（背後の端末へ送らない）。
+    card.setAttribute('data-wheel-native', '');
+    const name = this.projectDisplayName(projectKey);
+    card.innerHTML =
+      `<div class="ui-modal__title" id="multi-scope-ask-title">${escapeHtml(this._t('multi_scope_ask_title', 'What should multi show?'))}</div>`
+      + `<div class="ui-modal__body"><p>${escapeHtml(this._t('multi_scope_ask_body', 'Choose which sessions to lay out. You can switch any time from the strip above.'))}</p>`
+      + `<label class="multi-scope-ask-remember"><input type="checkbox" data-ask-remember> `
+      + `<span>${escapeHtml(this._t('multi_scope_ask_remember', 'Use this from now on (do not ask again)'))}</span></label>`
+      + `<p class="settings-note">${escapeHtml(this._t('multi_scope_ask_note', 'You can change this later from the multi button or in Settings.'))}</p></div>`
+      + `<div class="ui-modal__actions">`
+      + `<button type="button" class="${uiButtonClass('secondary', 'regular')}" data-ask-scope="all">${escapeHtml(this._t('multi_scope_all', 'All'))}</button>`
+      + `<button type="button" class="${uiButtonClass('primary', 'regular')}" data-ask-scope="box">`
+      + `${escapeHtml(this._t('multi_scope_box', 'This project only'))} · ${escapeHtml(name)}</button>`
+      + `</div>`;
+    // スロットの mousedown（フォーカス移動）やドラッグへ流さない。
+    card.addEventListener('mousedown', (e) => e.stopPropagation());
+    card.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement | null)?.closest('[data-ask-scope]') as HTMLElement | null;
+      if (!btn) return;
+      const remember = !!(card.querySelector('[data-ask-remember]') as HTMLInputElement | null)?.checked;
+      this.answerScopeQuestion(btn.dataset.askScope, remember);
+    });
+    card.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.dismissScopeQuestion();
+    });
+    requestAnimationFrame(() => {
+      const primary = card.querySelector('[data-ask-scope="box"]') as HTMLElement | null;
+      if (primary && card.isConnected) primary.focus();
+    });
+    return card;
+  }
+
+  // 開いたときの範囲の既定（'ask' / 'box' / 'all'）。設定画面とレイアウト選択の欄が読み書きする。
+  getScopeDefault() { return normalizeScopeDefault(this.scopeDefault); }
+  setScopeDefault(value) {
+    this.scopeDefault = normalizeScopeDefault(value);
+    try { localStorage.setItem(STORAGE_MULTI_SCOPE_DEFAULT_KEY, this.scopeDefault); } catch (_) {}
+    this._notifyPrefsChanged();
+  }
+  _loadScopeDefault() {
+    try { return normalizeScopeDefault(localStorage.getItem(STORAGE_MULTI_SCOPE_DEFAULT_KEY)); } catch (_) { return normalizeScopeDefault(null); }
+  }
+
+  // 入りきらないとき枠を自動で増やすか。
+  getAutoGrow() { return !!this.autoGrow; }
+  setAutoGrow(value) {
+    this.autoGrow = !!value;
+    try { localStorage.setItem(STORAGE_MULTI_AUTO_GROW_KEY, this.autoGrow ? '1' : '0'); } catch (_) {}
+    this._notifyPrefsChanged();
+    if (this.area && !this.area.hidden) this.render();
+  }
+  _loadAutoGrow() {
+    try { return localStorage.getItem(STORAGE_MULTI_AUTO_GROW_KEY) === '1'; } catch (_) { return false; }
+  }
+
+  /** 設定画面とレイアウト選択の欄を、どちらで変えても揃えるための合図。 */
+  _notifyPrefsChanged() {
+    window.dispatchEvent(new CustomEvent('multi-pane-prefs-changed', {
+      detail: { scopeDefault: this.getScopeDefault(), autoGrow: this.getAutoGrow() },
+    }));
+  }
+
+  // ピン留め。鍵は `id:started_at`（Hub 再起動で ID が振り直されても別セッションに付かない）。
+  _loadPinned() {
+    try { return normalizePinnedList(JSON.parse(localStorage.getItem(STORAGE_MULTI_PINNED_KEY) || '[]')); } catch (_) { return []; }
+  }
+  _savePinned() {
+    try { localStorage.setItem(STORAGE_MULTI_PINNED_KEY, JSON.stringify(normalizePinnedList(Array.from(this.pinned)))); } catch (_) {}
+  }
+  _sessionById(id) {
+    const list = window.getSortedSessions ? window.getSortedSessions() : [];
+    return list.find(s => s && s.id === id) || null;
+  }
+  _isPinnedId(id) {
+    const s = this._sessionById(id);
+    return !!s && this.pinned.has(pinKey(s.id, s.started_at || ''));
+  }
+  _setPinnedId(id, on, save = true) {
+    const s = this._sessionById(id);
+    if (!s) return;
+    const key = pinKey(s.id, s.started_at || '');
+    if (on) {
+      // 新しいものを末尾へ（上限で古いものから捨てる）。
+      this.pinned.delete(key);
+      this.pinned.add(key);
+    } else {
+      this.pinned.delete(key);
+    }
+    if (save) this._savePinned();
+  }
+  _pinPredicate(liveSessions) {
+    const byId = new Map<number, any>(liveSessions.filter(Boolean).map(s => [s.id, s]));
+    return (id) => {
+      const s = byId.get(id);
+      return !!s && this.pinned.has(pinKey(s.id, s.started_at || ''));
+    };
+  }
+  togglePin(sessionId) {
+    this._setPinnedId(sessionId, !this._isPinnedId(sessionId));
+    this.render();
+  }
+
+  _buildPinButton(session) {
+    const pinned = this.pinned.has(pinKey(session.id, session.started_at || ''));
+    const btn = document.createElement('button');
+    btn.className = `${uiButtonClass('quiet', 'compact', { icon: true })} ph-pin`;
+    btn.type = 'button';
+    btn.textContent = '📌';
+    btn.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+    btn.title = pinned
+      ? this._t('pane_unpin', 'Pinned: always shown first in this grid (click to unpin)')
+      : this._t('pane_pin', 'Pin: always show this session first in the grid');
+    btn.setAttribute('aria-label', btn.title);
+    btn.addEventListener('mousedown', (e) => e.stopPropagation());
+    btn.addEventListener('mouseup', (e) => e.stopPropagation());
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.togglePin(session.id);
+    });
+    return btn;
+  }
+
+  /**
+   * 上の段のあふれた番号を押したとき。フォーカス中のペイン（ピン留めなら、ピンの無い
+   * 最後のペイン）と入れ替える。手で配置したレイアウトでは、フォーカス中のペインへ置く。
+   */
+  bringIntoView(sessionId) {
+    const id = Number(sessionId);
+    if (!Number.isFinite(id)) return;
+    const custom = this._currentCustomLayout();
+    if (this.workspaceSession) return;
+    if (custom) {
+      const content = this._contentForSession(id);
+      if (!content) return;
+      const existing = custom.slots.findIndex(slot => slot && paneContentKey(slot) === paneContentKey(content));
+      if (existing >= 0) { this.focusSlot(existing); return; }
+      const idx = Math.max(0, Math.min(this.focusedIdx || 0, custom.slots.length - 1));
+      custom.slots[idx] = content;
+      this._saveCustomLayouts();
+      this.render();
+      this.focusSlot(idx);
+      return;
+    }
+    const all = window.getSortedSessions ? window.getSortedSessions() : [];
+    const result = swapIntoSlot(this.order, this.visibleIds, this.cols * this.rows, this.focusedIdx, id, this._pinPredicate(all));
+    if (result.reason === 'all-pinned') {
+      showToast(this._t('multi_overflow_all_pinned', 'Every pane is pinned. Unpin one or make the grid larger.'));
+      return;
+    }
+    if (result.reason) return;
+    this.order = result.order;
+    this._saveOrder();
+    this.render();
+    this.focusSlot(result.slot);
+  }
+
+  _applyGrownGrid(grid) {
+    if (!this._grownBase) {
+      this._grownBase = { cols: this.cols, rows: this.rows, colFracs: this.colFracs.slice(), rowFracs: this.rowFracs.slice() };
+    }
+    this.cols = grid.cols;
+    this.rows = grid.rows;
+    this.colFracs = this._equalFracs(this.cols);
+    this.rowFracs = this._equalFracs(this.rows);
+    this.area?.style.setProperty('--pane-cols', String(this.cols));
+    this.area?.style.setProperty('--pane-rows', String(this.rows));
+    this.picker?.syncBadge();
+  }
+
+  _restoreGrownBase() {
+    const base = this._grownBase;
+    this._grownBase = null;
+    if (!base) return;
+    this.cols = base.cols;
+    this.rows = base.rows;
+    this.colFracs = base.colFracs.length === this.cols ? base.colFracs.slice() : this._equalFracs(this.cols);
+    this.rowFracs = base.rowFracs.length === this.rows ? base.rowFracs.slice() : this._equalFracs(this.rows);
+    this.area?.style.setProperty('--pane-cols', String(this.cols));
+    this.area?.style.setProperty('--pane-rows', String(this.rows));
+    this.picker?.syncBadge();
   }
 
   // ─── A: サイズ比率の永続化 ──────────────────────────────────
@@ -1761,6 +2154,8 @@ export class MultiPaneManager {
       this._saveCustomLayouts();
       return;
     }
+    // 自動で広げている間の比率は一時的なもの。保存すると元の寸法と長さが合わなくなる。
+    if (this._grownBase) return;
     try {
       localStorage.setItem('multiPaneColFracs', JSON.stringify(this.colFracs));
       localStorage.setItem('multiPaneRowFracs', JSON.stringify(this.rowFracs));

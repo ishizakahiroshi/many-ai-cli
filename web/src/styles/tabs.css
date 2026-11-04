@@ -178,6 +178,38 @@ body.pane-resizing .xterm { pointer-events: none; }
   display: flex; flex-wrap: wrap; gap: var(--space-1);
 }
 
+/* マルチを開いたときの表示・自動拡大（plan_multi-repo-scope.md）。配置だけを持つ。 */
+.picker-scope-default {
+  display: flex; flex-direction: column; gap: 2px;
+  margin: 0; padding: 0; min-width: 0;
+}
+.picker-scope-default legend { padding: 0; margin-bottom: 2px; }
+.picker-option {
+  display: flex; align-items: center; gap: 6px;
+  min-height: 24px; cursor: pointer; white-space: nowrap;
+}
+
+/* マルチを開いたときに範囲を聞くカード。グリッドの上に重ねるだけで、スロットの並びには
+   入らない（#multi-view は grid かつ position: relative。絶対配置の子はセルを取らない）。 */
+.multi-scope-ask {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 30;
+  width: min(420px, calc(100% - 32px));
+}
+.multi-scope-ask-remember {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+}
+
+/* ピン留めボタン。外れているときは薄く、留めているときははっきり出す（状態は aria-pressed）。 */
+.pane-slot .ph-pin { flex: 0 0 auto; margin-left: auto; }
+.pane-slot .ph-pin + .ph-move { margin-left: 0; }
+.pane-slot .ph-pin[aria-pressed="false"] { opacity: 0.35; }
+.pane-slot .ph-pin[aria-pressed="false"]:hover,
+.pane-slot .ph-pin[aria-pressed="false"]:focus-visible { opacity: 0.8; }
+
 /* タブバーに position:relative を付与 */
 #unified-tab-bar { position: relative; }
 

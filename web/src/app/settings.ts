@@ -237,6 +237,29 @@ export function attachTurnEndNotifyToggle(): void {
   });
 }
 
+// ---- マルチの表示（開いたときの範囲・自動拡大）----
+// この端末だけの設定（localStorage）。正本は MultiPaneManager で、マルチのレイアウト選択の
+// 欄と値を共有する。どちらで変えても multi-pane-prefs-changed で揃える。
+// plan_multi-repo-scope.md
+
+let _multiPanePrefsAttached = false;
+export function attachMultiPanePrefsControls(): void {
+  if (_multiPanePrefsAttached) return;
+  const select = document.getElementById('multi-scope-default') as HTMLSelectElement | null;
+  const grow = document.getElementById('multi-auto-grow') as HTMLInputElement | null;
+  const mgr = (window as any).multiPaneManager;
+  if (!select || !grow || !mgr) return;
+  _multiPanePrefsAttached = true;
+  const sync = () => {
+    if (typeof mgr.getScopeDefault === 'function') select.value = mgr.getScopeDefault();
+    if (typeof mgr.getAutoGrow === 'function') grow.checked = mgr.getAutoGrow();
+  };
+  sync();
+  select.addEventListener('change', () => mgr.setScopeDefault?.(select.value));
+  grow.addEventListener('change', () => mgr.setAutoGrow?.(grow.checked));
+  window.addEventListener('multi-pane-prefs-changed', sync);
+}
+
 // ---- タスク完了サマリー通知トグル ----
 
 export function updateDoneSummaryNotifyToggle(enabled: boolean): void {
@@ -3405,6 +3428,9 @@ export function rememberTabForOpenProject(name: string): void {
 
 // C2 公開 API: タブを切り替える
 export let _setActiveTabRecursion = false;
+// マルチのタブが利用者のクリックで押されている最中か（wireUnifiedTabBar が立てて戻す）。
+// plan_multi-repo-scope.md
+let _multiOpenFromTabClick = false;
 export function setActiveTab(sid, name) {
   // 別窓タブモードは開いたタブ 1 枚に固定する。承認の自動移動などで別のタブへ切り替わらないよう、
   // どの経路から呼ばれても固定したタブへ置き換える。作業メモとファイルの別窓は display-area を使わない。
@@ -3433,8 +3459,13 @@ export function setActiveTab(sid, name) {
     if (!area) return;
     const multiView = document.getElementById('multi-view');
     const mgr = window.multiPaneManager;
+    // 利用者がタブを押して新しく開いた（または作業面から全体表示へ切り替えた）ときだけ、
+    // 開いたときの範囲を決める。既に multi を表示中に押し直したとき（レイアウト選択の開閉）と、
+    // D&D の分割など利用者のクリック以外から開いたときは聞かない。plan_multi-repo-scope.md
+    const freshOpen = _multiOpenFromTabClick && (!multiView || multiView.hidden || !!mgr?.workspaceSession);
     if (multiView && !multiView.hidden && mgr?.workspaceSession) mgr.teardown();
     mgr?.setWorkspaceSession?.(null);
+    const asking = freshOpen && typeof mgr?.onMultiOpened === 'function' ? !!mgr.onMultiOpened() : false;
     area.hidden = true;
     if (multiView) {
       multiView.hidden = false;
@@ -3451,7 +3482,8 @@ export function setActiveTab(sid, name) {
     document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === 'multi');
     });
-    if (mgr && mgr.picker) mgr.picker.toggle();
+    // 範囲を聞いている間はレイアウト選択を重ねて開かない（どちらに答えればよいか迷わせない）。
+    if (mgr && mgr.picker && !asking) mgr.picker.toggle();
     // C4: 最後にフォーカスしていたスロットを復元 → activeSessionId を同期
     if (mgr) {
       const restoreIdx = (mgr.focusedIdx >= 0 && mgr.focusedIdx < mgr.slots.length)
@@ -3690,7 +3722,15 @@ export function switchToTerminalView() {
       const name = btn.dataset.tab;
       if (!VALID_TAB_NAMES.has(name)) return;
       saveViewPreference(viewStorage(), viewDevice(), name);
-      setActiveTab(activeSessionId, name);
+      // 利用者がマルチのタブを押して開いたときだけ、開いたときの範囲（既定・聞くカード）を
+      // 効かせる。D&D の分割や作業面からの切り替えは setActiveTab を直接呼ぶので対象外
+      // （分割の途中で範囲が変わると、用意した 2 枚のレイアウトが外れる）。
+      _multiOpenFromTabClick = name === 'multi';
+      try {
+        setActiveTab(activeSessionId, name);
+      } finally {
+        _multiOpenFromTabClick = false;
+      }
       // 箱ごとの記憶（C4）。**保存は利用者の操作からだけ**なので setActiveTab の中では
       // なくここで呼ぶ。setActiveTab は復元・承認の自動移動・幅の変化からも呼ばれる。
       // Reading mode is device-local. Other project tabs keep their existing shared memory.

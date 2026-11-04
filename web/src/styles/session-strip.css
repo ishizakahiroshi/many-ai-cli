@@ -110,14 +110,19 @@
   display: flex;
   align-items: stretch;
   gap: 6px;
-  overflow: hidden;
+  /* リポ名が多いときは段の中で横にスクロールする（段の高さは変えない）。
+     plan_multi-repo-scope.md */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 .session-strip-scope[hidden] { display: none !important; }
 /* multi タブではセッション一覧を隠す。display: flex を持つので [hidden] を明示する。 */
 .session-strip-items[hidden] { display: none !important; }
 
 .session-strip-scope-btn {
-  flex-shrink: 1;
+  /* 縮めて名前を潰すより、段ごと横にスクロールさせる（上の .session-strip-scope）。 */
+  flex-shrink: 0;
   min-width: 0;
   display: inline-flex;
   align-items: center;
@@ -169,6 +174,8 @@
   font-weight: 400;
 }
 
+/* 入りきらない番号の見出し。リポ名の並びとの間を空ける。 */
+.session-strip-scope-btn + .session-strip-scope-more { margin-left: 6px; }
 .session-strip-scope-more {
   flex-shrink: 0;
   display: inline-flex;

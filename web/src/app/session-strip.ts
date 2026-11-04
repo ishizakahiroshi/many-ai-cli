@@ -272,6 +272,11 @@ interface ScopeStatus {
   visibleCount: number;
   capacity: number;
   overflow: number;
+  /** リポ名と件数（サイドバーと同じ順）。plan_multi-repo-scope.md A2。 */
+  repos: { key: string; count: number }[];
+  totalCount: number;
+  /** 枠に入りきらなかったセッション。押すとフォーカス中のペインと入れ替える（B1）。 */
+  overflowIds: number[];
 }
 
 function readScopeStatus(): ScopeStatus {
@@ -286,11 +291,19 @@ function readScopeStatus(): ScopeStatus {
         visibleCount: Number(s?.visibleCount) || 0,
         capacity: Number(s?.capacity) || 0,
         overflow: Number(s?.overflow) || 0,
+        repos: Array.isArray(s?.repos)
+          ? s.repos.filter((r: any) => r && typeof r.key === 'string' && r.key).map((r: any) => ({ key: r.key, count: Number(r.count) || 0 }))
+          : [],
+        totalCount: Number(s?.totalCount) || 0,
+        overflowIds: Array.isArray(s?.overflowIds) ? s.overflowIds.filter((id: any) => Number.isFinite(id)) : [],
       };
     } catch (_) { /* 下のフォールバックへ */ }
   }
   // MultiPaneManager がまだ居ない（起動直後など）。既定の「全部」として描く。
-  return { scope: 'all', effective: 'all', projectKey: openProjectKey, visibleCount: 0, capacity: 0, overflow: 0 };
+  return {
+    scope: 'all', effective: 'all', projectKey: openProjectKey, visibleCount: 0, capacity: 0, overflow: 0,
+    repos: [], totalCount: 0, overflowIds: [],
+  };
 }
 
 function scopeButtonHtml(
@@ -309,35 +322,48 @@ function scopeButtonHtml(
     + `</button>`;
 }
 
+/**
+ * multi タブの段。リポ名と件数を横に並べ（押すとそのリポだけを並べる）、最後に「全部」。
+ * 枠に入りきらなかったセッションは番号で並べ、押すとフォーカス中のペインと入れ替える。
+ * 由来: docs/local/plan_multi-repo-scope.md（A2・B1）
+ */
 function scopeToggleHtml(status: ScopeStatus): string {
-  const key = status.projectKey;
-  const boxLabel = ti18n('multi_scope_box', 'This project only');
-  const allLabel = ti18n('multi_scope_all', 'All');
-  const boxOpen = !!key;
-  // 押されている側は「実際に効いている範囲」で描く。保存値が 'box' でも箱が開いて
-  // いなければ全部が並ぶので、そのときは「全部」を押された側にする（画面と中身を合わせる）。
   const boxPressed = status.effective === 'box';
-  const boxTip = boxOpen
-    ? `${boxLabel} · ${projectDisplayNameFor(key as string)}`
-    : ti18n('multi_scope_box_disabled', 'Open a project in the sidebar to use this');
-  const nameHtml = boxOpen
-    ? `<span class="session-strip-scope-name">${escapeHtml(projectDisplayNameFor(key as string))}</span>`
-    : '';
-  const moreHtml = status.overflow > 0
-    ? `<span class="session-strip-scope-more" title="${escapeHtml(ti18n('multi_scope_more_tooltip', '{count} sessions do not fit in the current grid', { count: status.overflow }))}"`
-      + ` data-tooltip="${escapeHtml(ti18n('multi_scope_more_tooltip', '{count} sessions do not fit in the current grid', { count: status.overflow }))}">`
-      + escapeHtml(ti18n('multi_scope_more', '{count} more', { count: status.overflow }))
+  const repoTipBase = ti18n('multi_scope_repo_tooltip', 'Show only this project\'s sessions');
+  const reposHtml = status.repos.map(repo => {
+    const name = projectDisplayNameFor(repo.key);
+    const pressed = boxPressed && repo.key === status.projectKey;
+    const tip = `${name} · ${repoTipBase}`;
+    return `<button type="button" class="session-strip-scope-btn" data-repo="${escapeHtml(repo.key)}"`
+      + ` aria-pressed="${pressed ? 'true' : 'false'}"`
+      + ` title="${escapeHtml(tip)}" data-tooltip="${escapeHtml(tip)}">`
+      + `<span class="session-strip-scope-label">${escapeHtml(name)}</span>`
+      + `<span class="session-strip-scope-name">${escapeHtml(String(repo.count))}</span>`
+      + `</button>`;
+  }).join('');
+  const allLabel = ti18n('multi_scope_all', 'All');
+  const allHtml = scopeButtonHtml(
+    'all', allLabel, !boxPressed,
+    ti18n('multi_scope_all_tooltip', 'Show every session in the grid'),
+    `<span class="session-strip-scope-name">${escapeHtml(String(status.totalCount))}</span>`,
+    false,
+  );
+  let overflowHtml = '';
+  if (status.overflowIds.length > 0) {
+    const headTip = ti18n('multi_scope_more_tooltip', '{count} sessions do not fit in the current grid', { count: status.overflowIds.length });
+    const swapTip = ti18n('multi_overflow_swap_tooltip', 'Swap into the focused pane');
+    overflowHtml = `<span class="session-strip-scope-more" title="${escapeHtml(headTip)}" data-tooltip="${escapeHtml(headTip)}">`
+      + escapeHtml(ti18n('multi_overflow_label', 'Not shown:'))
       + `</span>`
-    : '';
-  const boxBtn = scopeButtonHtml('box', boxLabel, boxPressed, boxTip, nameHtml, !boxOpen);
-  // 押せないボタンはマウスイベントを出さない（title も data-tooltip も拾われない）ので、
-  // 押せないときだけ包みに理由を持たせる。そうしないと「なぜ押せないか」が読めない。
-  const boxHtml = boxOpen
-    ? boxBtn
-    : `<span class="session-strip-scope-hint" title="${escapeHtml(boxTip)}" data-tooltip="${escapeHtml(boxTip)}">${boxBtn}</span>`;
-  return boxHtml
-    + scopeButtonHtml('all', allLabel, !boxPressed, ti18n('multi_scope_all_tooltip', 'Show every session in the grid'), '', false)
-    + moreHtml;
+      + status.overflowIds.map(id => {
+        const tip = `#${id} · ${swapTip}`;
+        return `<button type="button" class="session-strip-scope-btn" data-overflow-sid="${escapeHtml(String(id))}"`
+          + ` title="${escapeHtml(tip)}" data-tooltip="${escapeHtml(tip)}" aria-label="${escapeHtml(tip)}">`
+          + `<span class="session-strip-scope-label">#${escapeHtml(String(id))}</span>`
+          + `</button>`;
+      }).join('');
+  }
+  return reposHtml + allHtml + overflowHtml;
 }
 
 function renderScopeToggle(
@@ -501,13 +527,26 @@ export function initSessionStrip(): void {
       const btn = (e.target as HTMLElement | null)?.closest('.session-strip-scope-btn') as HTMLButtonElement | null;
       if (!btn || btn.disabled) return;
       const mgr = (window as any).multiPaneManager;
-      if (!mgr || typeof mgr.setScope !== 'function') return;
-      // 範囲の正本は MultiPaneManager。ここは押されたことを渡すだけで、
-      // 行列数・比率・並び順のいずれも保存し直さない（setScope が render するだけ）。
-      mgr.setScope(btn.dataset.scope || '');
+      if (!mgr) return;
+      // 範囲・リポ・並び順の正本は MultiPaneManager。ここは押されたことを渡すだけ。
+      if (btn.dataset.repo && typeof mgr.setRepo === 'function') {
+        mgr.setRepo(btn.dataset.repo);
+      } else if (btn.dataset.overflowSid && typeof mgr.bringIntoView === 'function') {
+        mgr.bringIntoView(Number(btn.dataset.overflowSid));
+      } else if (typeof mgr.setScope === 'function') {
+        // 行列数・比率・並び順のいずれも保存し直さない（setScope が render するだけ）。
+        // 「毎回聞く」のカードが出ていれば、段で選んだことを答えとして閉じる。
+        if (mgr.askPending && typeof mgr.answerScopeQuestion === 'function') mgr.answerScopeQuestion(btn.dataset.scope || '', false);
+        else mgr.setScope(btn.dataset.scope || '');
+      }
       renderSessionStrip();
     });
   }
+  // multi の描き直し（ピン・入れ替え・セッションの増減）で、あふれた番号と件数を追従させる。
+  // 中身が同じなら renderScopeToggle のシグネチャで DOM に触らない。
+  window.addEventListener('flexible-pane-layout-changed', () => {
+    if (currentTabName === SCOPE_TAB) renderSessionStrip();
+  });
 
   const grip = document.getElementById('session-strip-grip');
   if (grip) wireGrip(grip as HTMLElement);
