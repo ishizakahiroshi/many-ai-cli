@@ -832,6 +832,73 @@ async fn real_project_wrapper_never_reattaches_and_stops_the_provider() {
     }
 }
 
+/// Records what the provider would receive as the Hub token.
+struct TokenFactory(Arc<FakePty>, Arc<Mutex<Vec<Option<std::ffi::OsString>>>>);
+impl PtyFactory for TokenFactory {
+    fn spawn(&self, plan: &ProcessPlan, _: PtySize) -> io::Result<Arc<dyn PtySession>> {
+        let token = plan
+            .env
+            .get(std::ffi::OsStr::new("MANY_AI_CLI_HUB_TOKEN"))
+            .cloned()
+            .expect("the token name is always planned");
+        self.1.lock().unwrap().push(token);
+        Ok(self.0.clone())
+    }
+}
+/// C4 re-check: an Iris real project provider never receives the Hub token
+/// (planned as removed); every other provider still gets it.
+#[tokio::test]
+async fn a_withheld_hub_token_is_planned_as_removed() {
+    for withhold in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let pty = Arc::new(FakePty::new(vec![], false));
+        let seen = Arc::new(Mutex::new(vec![]));
+        let (socket, tx, mut rx) = socket_pair();
+        let connector = ScriptConnector {
+            sockets: Mutex::new(VecDeque::from([socket])),
+            proofs: Arc::new(Mutex::new(vec![])),
+            alive: false,
+        };
+        let mut options = WrapperOptions::new(
+            Message {
+                provider: "synthetic".into(),
+                token: "synthetic-token".into(),
+                ..Default::default()
+            },
+            plan(root.path()),
+        );
+        options.no_reattach = true;
+        options.withhold_hub_token = withhold;
+        let factory = TokenFactory(pty, seen.clone());
+        let run = tokio::spawn(async move {
+            runtime::run(
+                options,
+                &connector,
+                &factory,
+                &Cancellation::default(),
+                |_, _| Ok(()),
+            )
+            .await
+        });
+        receive_type(&mut rx, "register").await;
+        tx.send(Message {
+            r#type: "registered".into(),
+            session_id: 1,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        drop(tx);
+        tokio::time::timeout(Duration::from_secs(10), run)
+            .await
+            .expect("the wrapper must end")
+            .unwrap()
+            .unwrap();
+        let expected = (!withhold).then(|| std::ffi::OsString::from("synthetic-token"));
+        assert_eq!(*seen.lock().unwrap(), vec![expected], "withhold={withhold}");
+    }
+}
+
 struct NeverFactory;
 impl PtyFactory for NeverFactory {
     fn spawn(&self, _: &ProcessPlan, _: PtySize) -> io::Result<Arc<dyn PtySession>> {

@@ -54,8 +54,8 @@ fn failure() -> io::Error {
     io::Error::other("trusted execution owner conditions were not satisfied")
 }
 
-/// Files named by a checked real project argv (the appended instruction and
-/// the wrapper's settings file), each still open through the handle its
+/// Files named by a checked real project argv (the appended instruction),
+/// each still open through the handle its
 /// bytes were checked from. On Windows that handle shares reading only, so
 /// nobody can write, replace, rename or delete the file while it is held;
 /// the provider can still read it. Dropping the value releases the files.
@@ -121,57 +121,6 @@ fn open_held(path: &str) -> Result<(std::fs::File, Vec<u8>), &'static str> {
     Ok((file, bytes))
 }
 
-/// The wrapper's own status line command (`hooks::claude_settings`): the Hub
-/// token, the many-ai-cli executable, `usage-relay` for claude to the local
-/// Hub, and the session number. Nothing else may run as the status line.
-fn own_status_line_command(command: &str) -> bool {
-    let Some(rest) = command.strip_prefix("MANY_AI_CLI_HUB_TOKEN='") else {
-        return false;
-    };
-    let Some((_, rest)) = rest.split_once("' '") else {
-        return false;
-    };
-    let Some((_, rest)) =
-        rest.split_once("' usage-relay --provider claude --hub http://127.0.0.1:")
-    else {
-        return false;
-    };
-    let Some((port, session)) = rest.split_once(" --session ") else {
-        return false;
-    };
-    !command.contains(['\n', '\r', ';', '&', '|', '`', '$', '<', '>'])
-        && !port.is_empty()
-        && port.bytes().all(|b| b.is_ascii_digit())
-        && !session.is_empty()
-        && session.bytes().all(|b| b.is_ascii_digit())
-}
-
-/// A real project `--settings` file holds only the wrapper's status line:
-/// `{"statusLine":{"type":"command","command":<own>,"padding":0}}`.
-fn check_real_project_settings(bytes: &[u8]) -> Result<(), &'static str> {
-    let value = parse_json(bytes).map_err(|_| "ARGV_SETTINGS")?;
-    let object = value.as_object().ok_or("ARGV_SETTINGS")?;
-    if object.len() != 1 {
-        return Err("ARGV_SETTINGS");
-    }
-    let line = object
-        .get("statusLine")
-        .and_then(Value::as_object)
-        .ok_or("ARGV_SETTINGS")?;
-    let mut keys: Vec<&str> = line.keys().map(String::as_str).collect();
-    keys.sort_unstable();
-    if keys != ["command", "padding", "type"]
-        || line["type"] != "command"
-        || line["padding"] != 0
-        || !line["command"]
-            .as_str()
-            .is_some_and(own_status_line_command)
-    {
-        return Err("ARGV_SETTINGS");
-    }
-    Ok(())
-}
-
 fn uuid_shape(value: &str) -> bool {
     let parts: Vec<&str> = value.split('-').collect();
     parts.iter().map(|p| p.len()).eq([8, 4, 4, 4, 12])
@@ -205,8 +154,9 @@ fn flag_value<'a>(argv: &'a [String], index: &mut usize) -> Result<&'a str, &'st
 /// `--model`, `--effort`, `--permission-mode acceptEdits`,
 /// `--allowedTools`/`--allowed-tools` (exactly the policy's tools),
 /// `--setting-sources project,local`, `--strict-mcp-config`, `--no-chrome`,
-/// `--session-id`, `--settings` (the wrapper's status line only) and
-/// `--append-system-prompt-file` (exactly the approved instruction bytes).
+/// `--session-id` and `--append-system-prompt-file` (exactly the approved
+/// instruction bytes). `--settings` refuses: the wrapper's status line would
+/// carry the Hub token.
 /// Every other element, `--` included, refuses. Returns the files it read,
 /// still held, or only a fixed code.
 pub fn check_real_project_argv(
@@ -273,11 +223,6 @@ pub fn check_real_project_argv(
                 if tools.is_empty() || argv[start..index] != *tools {
                     return Err("ARGV_ALLOWED_TOOLS");
                 }
-            }
-            "--settings" => {
-                let (file, bytes) = open_held(flag_value(argv, &mut index)?)?;
-                check_real_project_settings(&bytes)?;
-                held.0.push(file);
             }
             "--append-system-prompt-file" => {
                 let (file, bytes) = open_held(flag_value(argv, &mut index)?)?;
@@ -388,7 +333,7 @@ pub struct DurableExecutionOwner {
     /// hook and the instruction), recorded by the wrapper right before the
     /// exec boundary. A real project launch refuses without it.
     provider_argv: Mutex<Option<Vec<String>>>,
-    /// The instruction and settings files the real project argv check read,
+    /// The instruction file the real project argv check read,
     /// held (no shared write or delete on Windows) from that check until the
     /// provider run has finished.
     held_argv_files: Mutex<Option<HeldArgvFiles>>,
@@ -936,8 +881,7 @@ impl ExecutionOwnerObserver for DurableExecutionOwner {
                 return Err(failure());
             }
             // The final argv, an allow list: no user settings, no MCP server,
-            // no Chrome, a settings file with only the wrapper's status line,
-            // no other system prompt. The files it read stay held.
+            // no Chrome, no settings file, no other system prompt. The files it read stay held.
             let argv = self
                 .provider_argv
                 .lock()
@@ -1060,7 +1004,7 @@ impl ExecutionOwnerObserver for DurableExecutionOwner {
         store
             .claim_spawn(&ticket, session_id, at)
             .map_err(|_| failure())?;
-        // Keep the checked instruction and settings files held through the
+        // Keep the checked instruction file held through the
         // provider run; a refusal above has already released them.
         if let Some(files) = held_files {
             *self.held_argv_files.lock().map_err(|_| failure())? = Some(files);
@@ -1333,55 +1277,18 @@ mod real_project_argv_tests {
         );
     }
 
-    fn statusline(command: &str) -> serde_json::Value {
-        json!({"statusLine":{"type":"command","command":command,"padding":0}})
-    }
-    const RELAY: &str = "MANY_AI_CLI_HUB_TOKEN='synthetic' 'C:/synthetic/many-ai-cli.exe' usage-relay --provider claude --hub http://127.0.0.1:47951 --session 12";
-
-    /// C4 re-review L2: the wrapper's settings file holds only its own status
-    /// line command; no other key, no other status line.
+    /// C4 re-check: a real project argv never names a settings file (the
+    /// wrapper's status line would carry the Hub token), whatever it holds.
     #[test]
-    fn the_real_project_settings_file_holds_only_the_status_line() {
+    fn a_real_project_argv_never_names_a_settings_file() {
         let dir = tempfile::tempdir().unwrap();
-        let mut ok = 0;
-        for (label, document, accepted) in [
-            ("status line", statusline(RELAY), true),
-            (
-                "cross session",
-                json!({"statusLine":statusline(RELAY)["statusLine"],"crossSessionInbound":"accept"}),
-                false,
-            ),
-            (
-                "permissions",
-                json!({"permissions":{"allow":["Bash"]}}),
-                false,
-            ),
-            ("hooks", json!({"hooks":{}}), false),
-            ("empty", json!({}), false),
-            ("other command", statusline("synthetic-command"), false),
-            (
-                "relay with suffix",
-                statusline(&format!("{RELAY}; synthetic-command")),
-                false,
-            ),
-            (
-                "extra status line key",
-                json!({"statusLine":{"type":"command","command":RELAY,"padding":0,"x":1}}),
-                false,
-            ),
-            (
-                "other padding",
-                json!({"statusLine":{"type":"command","command":RELAY,"padding":3}}),
-                false,
-            ),
-        ] {
-            let path = dir.path().join(format!("settings-{ok}.json"));
-            ok += 1;
-            std::fs::write(&path, serde_json::to_vec(&document).unwrap()).unwrap();
-            let argv = with(&["--settings", path.to_str().unwrap()]);
-            let result = check_real_project_argv(&argv, "x", &[]);
-            assert_eq!(result.is_ok(), accepted, "{label}");
-        }
+        let path = dir.path().join("settings.json");
+        std::fs::write(&path, b"{}").unwrap();
+        let argv = with(&["--settings", path.to_str().unwrap()]);
+        assert_eq!(
+            check_real_project_argv(&argv, "x", &[]).err(),
+            Some("ARGV_REFUSED_FLAG")
+        );
     }
 
     /// C4 re-review M2 (exec boundary): an inherited removed name must be
@@ -1405,7 +1312,7 @@ mod real_project_argv_tests {
             ("CLAUDE_CONFIG_DIR", Some("C:\\synthetic")),
             ("CLAUDE_PID", None),
             ("MANY_AI_CLI_SESSION_ID", Some("1")),
-            ("MANY_AI_CLI_HUB_TOKEN", Some("synthetic")),
+            ("MANY_AI_CLI_HUB_TOKEN", None),
         ]);
         let inherited = strings(&["CLAUDE_PID=1", "PATH", "MANY_AI_CLI_SESSION_ID"]);
         assert_eq!(check_real_project_environment(&good, &inherited), Ok(()));
@@ -1415,6 +1322,15 @@ mod real_project_argv_tests {
             check_real_project_environment(&good, &more),
             Err("ENV_INHERITED_NAME")
         );
+        // The Hub token is never planned for a real project provider.
+        let token = plan(&[
+            ("CLAUDE_CONFIG_DIR", Some(r"C:\synthetic")),
+            ("MANY_AI_CLI_HUB_TOKEN", Some("synthetic")),
+        ]);
+        assert_eq!(
+            check_real_project_environment(&token, &[]),
+            Err("ENV_REMOVED_NAME")
+        );
         let missing = plan(&[("CLAUDE_PID", None)]);
         assert_eq!(
             check_real_project_environment(&missing, &[]),
@@ -1422,7 +1338,7 @@ mod real_project_argv_tests {
         );
     }
 
-    /// C4 re-review L1: the instruction file and the settings file are read
+    /// C4 re-review L1: the instruction file is read
     /// through a handle that shares neither writing nor deletion, and that
     /// handle stays open until it is released.
     #[cfg(windows)]
@@ -1431,17 +1347,10 @@ mod real_project_argv_tests {
         let dir = tempfile::tempdir().unwrap();
         let instruction = dir.path().join("instruction.md");
         std::fs::write(&instruction, b"synthetic approved instruction").unwrap();
-        let settings = dir.path().join("settings.json");
-        std::fs::write(&settings, serde_json::to_vec(&statusline(RELAY)).unwrap()).unwrap();
-        let argv = with(&[
-            "--settings",
-            settings.to_str().unwrap(),
-            "--append-system-prompt-file",
-            instruction.to_str().unwrap(),
-        ]);
+        let argv = with(&["--append-system-prompt-file", instruction.to_str().unwrap()]);
         let held =
             check_real_project_argv(&argv, &sha(b"synthetic approved instruction"), &[]).unwrap();
-        for path in [&instruction, &settings] {
+        for path in [&instruction] {
             assert!(std::fs::read(path).is_ok(), "still readable");
             assert!(std::fs::write(path, b"replaced").is_err(), "no write");
             assert!(std::fs::remove_file(path).is_err(), "no delete");
@@ -1452,7 +1361,6 @@ mod real_project_argv_tests {
         }
         drop(held);
         std::fs::remove_file(&instruction).unwrap();
-        std::fs::remove_file(&settings).unwrap();
         // A wrong instruction digest is refused.
         std::fs::write(&instruction, b"other bytes").unwrap();
         let argv = with(&["--append-system-prompt-file", instruction.to_str().unwrap()]);

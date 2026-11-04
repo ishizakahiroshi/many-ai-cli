@@ -571,13 +571,10 @@ pub const REAL_PROJECT_ENV_REMOVED_PREFIXES: [&str; 3] = ["CLAUDE_", "ANTHROPIC_
 pub const REAL_PROJECT_ENV_REMOVED_NAMES: [&str; 1] = ["CLAUDECODE"];
 /// The only names under those prefixes a real project provider keeps: the
 /// subscription's Claude configuration folder (put back from the wrapper's
-/// own environment) and the two values the wrapper runtime itself sets for
-/// its provider after preparation (session ID and Hub token).
-pub const REAL_PROJECT_ENV_KEPT: [&str; 3] = [
-    "CLAUDE_CONFIG_DIR",
-    "MANY_AI_CLI_SESSION_ID",
-    "MANY_AI_CLI_HUB_TOKEN",
-];
+/// own environment) and the session number the wrapper runtime itself sets
+/// for its provider after preparation. The Hub token is never kept: with it,
+/// claude or any command it runs could call the Hub API.
+pub const REAL_PROJECT_ENV_KEPT: [&str; 2] = ["CLAUDE_CONFIG_DIR", "MANY_AI_CLI_SESSION_ID"];
 
 /// Whether a real project provider must not receive `name`.
 pub fn real_project_env_removed(name: &str) -> bool {
@@ -1351,13 +1348,11 @@ mod tests {
         assert_eq!(REAL_PROJECT_ENV_REMOVED_NAMES, ["CLAUDECODE"]);
         assert_eq!(
             REAL_PROJECT_ENV_KEPT,
-            [
-                "CLAUDE_CONFIG_DIR",
-                "MANY_AI_CLI_SESSION_ID",
-                "MANY_AI_CLI_HUB_TOKEN"
-            ]
+            ["CLAUDE_CONFIG_DIR", "MANY_AI_CLI_SESSION_ID"]
         );
         let removed = [
+            "MANY_AI_CLI_HUB_TOKEN",
+            "many_ai_cli_hub_token",
             "CLAUDECODE",
             "claudecode",
             "CLAUDE_CODE_ENTRYPOINT",
@@ -1385,7 +1380,6 @@ mod tests {
         let kept = [
             "CLAUDE_CONFIG_DIR",
             "MANY_AI_CLI_SESSION_ID",
-            "MANY_AI_CLI_HUB_TOKEN",
             "MANY_AI_CLI",
             "PATH",
             "USERPROFILE",

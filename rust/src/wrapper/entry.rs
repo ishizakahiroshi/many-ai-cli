@@ -267,15 +267,18 @@ fn apply_hooks(
 ) -> io::Result<()> {
     for hook in &launch.required_hooks {
         match hook {
-            // An Iris real project settings file holds the status line only:
-            // never the cross-session switch (the owner refuses any other key).
+            // An Iris real project launch gets no settings file at all: its
+            // status line command would carry the Hub token, readable by
+            // claude and by every command it runs (the owner refuses
+            // `--settings` for a real project argv).
+            LaunchHook::ClaudeRegistrationSettings if real_project => {}
             LaunchHook::ClaudeRegistrationSettings => match hooks.claude_settings(
                 context.paths,
                 registered,
                 context.executable,
                 port,
                 &context.config.token,
-                cfg!(windows) || real_project,
+                cfg!(windows),
             ) {
                 Ok(extra) => args.extend(extra),
                 Err(_) => eprintln!("wrapper: Claude session settings setup failed"),
@@ -469,6 +472,9 @@ pub async fn run_cli(
     // An Iris real project wrapper never reattaches: a lost Hub connection
     // (write timeout, output lag, Hub stop) stops claude's process tree.
     options.no_reattach = real_project;
+    // Nor does it hand claude the Hub token (claude and every command it
+    // runs could otherwise call the Hub API, start sessions included).
+    options.withhold_hub_token = real_project;
     options.login_mode = launch.login_mode;
     if context.config.log.session_enabled {
         options.raw_log = Some(RawLogPolicy {

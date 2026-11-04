@@ -1326,6 +1326,8 @@ mod native {
             f.process(&plan),
         );
         options.execution_owner = Some(owner);
+        // As the wrapper entry sets it for a real project launch.
+        options.withhold_hub_token = true;
         options.reconnect_grace = Duration::ZERO;
         options.drain_timeout = Duration::from_millis(100);
         tokio::time::timeout(
@@ -1825,8 +1827,9 @@ mod native {
             std::fs::write(&path, body).unwrap();
             path.to_string_lossy().into_owned()
         };
-        // The wrapper's own status line (`hooks::claude_settings`), synthetic
-        // token and paths.
+        // The status line an ordinary Claude launch gets
+        // (`hooks::claude_settings`), synthetic token and paths: a real
+        // project argv refuses any settings file, this one included.
         let status_only = file(
             "status.json",
             br#"{"statusLine":{"type":"command","command":"MANY_AI_CLI_HUB_TOKEN='synthetic' 'C:/synthetic/many-ai-cli.exe' usage-relay --provider claude --hub http://127.0.0.1:47951 --session 7","padding":0}}"#,
@@ -1887,6 +1890,10 @@ mod native {
                 "settings with another status line",
                 f.claude_argv(&["--settings", &other_status]),
             ),
+            (
+                "settings with only the status line",
+                f.claude_argv(&["--settings", &status_only]),
+            ),
             ("no --no-chrome", without("--no-chrome")),
             ("end of options", f.claude_argv(&["--"])),
             ("resume", f.claude_argv(&["-r", "x"])),
@@ -1914,19 +1921,14 @@ mod native {
             );
             count += 1;
         }
-        // The status line settings and the approved instruction file pass.
+        // The approved instruction file passes.
         let owner = f.owner();
-        owner.observe_provider_argv(&f.claude_argv(&[
-            "--settings",
-            &status_only,
-            "--append-system-prompt-file",
-            &approved,
-        ]));
+        owner.observe_provider_argv(&f.claude_argv(&["--append-system-prompt-file", &approved]));
         let kept = owner.clone();
         run_owner(&f, owner, json!([]), &factory).await.unwrap();
         assert_eq!(factory.0.load(Ordering::SeqCst), 1);
-        // C4 re-review L1: the checked files were held through the run and
-        // released when it finished, so the wrapper can remove them.
+        // C4 re-review L1: the checked file was held through the run and
+        // released when it finished, so the wrapper can remove it.
         assert_eq!(kept.held_argv_file_count(), 0);
         std::fs::remove_file(&status_only).unwrap();
         std::fs::remove_file(&approved).unwrap();
@@ -1951,6 +1953,8 @@ mod native {
             process,
         );
         options.execution_owner = Some(owner);
+        // As the wrapper entry sets it for a real project launch.
+        options.withhold_hub_token = true;
         options.reconnect_grace = Duration::ZERO;
         options.drain_timeout = Duration::from_millis(100);
         tokio::time::timeout(
@@ -2016,6 +2020,15 @@ mod native {
                 Box::new(|p| {
                     p.env
                         .insert("MANY_AI_CLI_DELEGATION".into(), Some("1".into()));
+                }),
+            ),
+            (
+                // C4 re-check: the Hub token under any spelling (the
+                // runtime itself plans the canonical name as removed).
+                "planned Hub token",
+                Box::new(|p| {
+                    p.env
+                        .insert("many_ai_cli_hub_token".into(), Some("x".into()));
                 }),
             ),
             (

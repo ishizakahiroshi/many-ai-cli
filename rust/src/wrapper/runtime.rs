@@ -60,6 +60,9 @@ pub struct WrapperOptions {
     /// timeout, output lag, read failure, `hub_shutdown`), stop the provider
     /// process tree and finish. Set only for an Iris real project launch.
     pub no_reattach: bool,
+    /// Never put the Hub token in the provider's environment (it is planned
+    /// as removed instead). Set only for an Iris real project launch.
+    pub withhold_hub_token: bool,
 }
 impl WrapperOptions {
     pub fn new(registration: Message, process: ProcessPlan) -> Self {
@@ -78,6 +81,7 @@ impl WrapperOptions {
             drain_timeout: Duration::from_secs(2),
             execution_owner: None,
             no_reattach: false,
+            withhold_hub_token: false,
         }
     }
 }
@@ -254,7 +258,7 @@ where
     );
     options.process.env.insert(
         "MANY_AI_CLI_HUB_TOKEN".into(),
-        Some(options.registration.token.clone().into()),
+        (!options.withhold_hub_token).then(|| options.registration.token.clone().into()),
     );
     let size = PtySize::from_wire(registered.cols, registered.rows).unwrap_or_default();
     if let Some(owner) = &options.execution_owner {
