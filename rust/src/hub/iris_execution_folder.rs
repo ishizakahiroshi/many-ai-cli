@@ -1,5 +1,6 @@
 //! Bounded approved-cwd snapshot for the real bounded profile. It records only
-//! relative names, entry types, sizes, link counts and SHA256 inside one folder.
+//! relative names, entry types, sizes, link counts, native attributes and
+//! SHA256 inside one folder, including each named (alternate) data stream.
 //! Links and junctions are recorded, never followed. A comparison is a separate
 //! local record: it is not effects verification, and writes outside the folder,
 //! network use and provider-side remote jobs stay unverified.
@@ -27,6 +28,137 @@ pub struct FolderEntry {
     pub size: u64,
     pub links: u64,
     pub sha256: Option<String>,
+    /// Native file attributes (Windows: hidden, read-only, ...; Unix: mode).
+    /// Older records without it compare as changed, never as equal.
+    #[serde(default)]
+    pub attributes: u32,
+}
+
+#[cfg(windows)]
+fn attributes(meta: &std::fs::Metadata) -> u32 {
+    use std::os::windows::fs::MetadataExt;
+    meta.file_attributes()
+}
+
+#[cfg(unix)]
+fn attributes(meta: &std::fs::Metadata) -> u32 {
+    use std::os::unix::fs::PermissionsExt;
+    meta.permissions().mode()
+}
+
+#[cfg(not(any(windows, unix)))]
+fn attributes(_meta: &std::fs::Metadata) -> u32 {
+    0
+}
+
+/// Named data streams of a plain file or directory, excluding the unnamed
+/// `::$DATA` stream. Each name keeps its `:name:$type` suffix. Any enumeration
+/// failure is an error so the caller fails closed.
+#[cfg(windows)]
+fn streams(path: &Path) -> Result<Vec<(String, u64)>> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::{
+        Foundation::{ERROR_HANDLE_EOF, GetLastError, HANDLE, INVALID_HANDLE_VALUE},
+        Storage::FileSystem::{
+            FindClose, FindFirstStreamW, FindNextStreamW, FindStreamInfoStandard,
+            WIN32_FIND_STREAM_DATA,
+        },
+    };
+    struct Find(HANDLE);
+    impl Drop for Find {
+        fn drop(&mut self) {
+            unsafe { FindClose(self.0) };
+        }
+    }
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    // Native struct is integer-only; zero is a valid initial value.
+    let mut data: WIN32_FIND_STREAM_DATA = unsafe { std::mem::zeroed() };
+    let handle = unsafe {
+        FindFirstStreamW(
+            wide.as_ptr(),
+            FindStreamInfoStandard,
+            (&mut data as *mut WIN32_FIND_STREAM_DATA).cast(),
+            0,
+        )
+    };
+    if handle == INVALID_HANDLE_VALUE {
+        // A directory without named streams reports end-of-list at once.
+        return if unsafe { GetLastError() } == ERROR_HANDLE_EOF {
+            Ok(Vec::new())
+        } else {
+            Err(fail("FOLDER_STREAMS"))
+        };
+    }
+    let find = Find(handle);
+    let mut out = Vec::new();
+    loop {
+        let length = data
+            .cStreamName
+            .iter()
+            .position(|c| *c == 0)
+            .ok_or_else(|| fail("FOLDER_STREAMS"))?;
+        let name =
+            String::from_utf16(&data.cStreamName[..length]).map_err(|_| fail("FOLDER_NAME"))?;
+        let size = u64::try_from(data.StreamSize).map_err(|_| fail("FOLDER_STREAMS"))?;
+        if !name.starts_with(':') || name.len() < 2 {
+            return Err(fail("FOLDER_STREAMS"));
+        }
+        if name != "::$DATA" {
+            out.push((name, size));
+            if out.len() > MAX_ENTRIES {
+                return Err(fail("FOLDER_LIMIT"));
+            }
+        }
+        if unsafe { FindNextStreamW(find.0, (&mut data as *mut WIN32_FIND_STREAM_DATA).cast()) }
+            == 0
+        {
+            if unsafe { GetLastError() } == ERROR_HANDLE_EOF {
+                break;
+            }
+            return Err(fail("FOLDER_STREAMS"));
+        }
+    }
+    Ok(out)
+}
+
+#[cfg(not(windows))]
+fn streams(_path: &Path) -> Result<Vec<(String, u64)>> {
+    Ok(Vec::new())
+}
+
+/// Reads one named stream completely; its length must equal the enumerated
+/// size, otherwise the folder is treated as changed while observed.
+#[cfg(windows)]
+fn read_stream(path: &Path, name: &str, size: u64, budget: u64) -> Result<Vec<u8>> {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::{FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ};
+    if size > budget {
+        return Err(fail("FOLDER_LIMIT"));
+    }
+    let mut target = path.as_os_str().to_owned();
+    target.push(name);
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(Path::new(&target))
+        .map_err(|_| fail("FOLDER_STREAMS"))?;
+    let mut bytes = Vec::new();
+    file.take(budget + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| fail("FOLDER_STREAMS"))?;
+    if bytes.len() as u64 > budget {
+        return Err(fail("FOLDER_LIMIT"));
+    }
+    if bytes.len() as u64 != size {
+        return Err(fail("FOLDER_CHANGED"));
+    }
+    Ok(bytes)
+}
+
+#[cfg(not(windows))]
+fn read_stream(_path: &Path, _name: &str, _size: u64, _budget: u64) -> Result<Vec<u8>> {
+    Err(fail("FOLDER_STREAMS"))
 }
 
 fn is_link(meta: &std::fs::Metadata) -> bool {
@@ -108,6 +240,30 @@ fn read_file(path: &Path, budget: u64) -> Result<(Vec<u8>, u64)> {
     Ok((bytes, links))
 }
 
+fn push_streams(
+    path: &Path,
+    relative: &str,
+    entries: &mut Vec<FolderEntry>,
+    total: &mut u64,
+) -> Result<()> {
+    for (name, size) in streams(path)? {
+        if entries.len() >= MAX_ENTRIES {
+            return Err(fail("FOLDER_LIMIT"));
+        }
+        let bytes = read_stream(path, &name, size, MAX_TOTAL_BYTES - *total)?;
+        *total += size;
+        entries.push(FolderEntry {
+            path: format!("{relative}{name}"),
+            kind: "stream".into(),
+            size,
+            links: 0,
+            sha256: Some(sha(&bytes)),
+            attributes: 0,
+        });
+    }
+    Ok(())
+}
+
 /// Full listing of `root`, sorted by relative path. Any entry beyond
 /// MAX_ENTRIES, or file content beyond MAX_TOTAL_BYTES in total, is an error.
 pub fn snapshot(root: &Path) -> Result<Vec<FolderEntry>> {
@@ -117,6 +273,8 @@ pub fn snapshot(root: &Path) -> Result<Vec<FolderEntry>> {
     }
     let mut entries = Vec::new();
     let mut total = 0u64;
+    // Named streams of the folder itself are keyed ":name:$DATA".
+    push_streams(root, "", &mut entries, &mut total)?;
     let mut pending = vec![(root.to_path_buf(), String::new())];
     while let Some((dir, prefix)) = pending.pop() {
         let mut names = Vec::new();
@@ -143,10 +301,11 @@ pub fn snapshot(root: &Path) -> Result<Vec<FolderEntry>> {
                 format!("{prefix}/{name}")
             };
             let meta = std::fs::symlink_metadata(&path).map_err(|_| fail("FOLDER_READ"))?;
+            let plain = !is_link(&meta) && (meta.is_dir() || meta.is_file());
             let (kind, size, links, digest) = if is_link(&meta) {
                 ("link", 0, 0, None)
             } else if meta.is_dir() {
-                pending.push((path, relative.clone()));
+                pending.push((path.clone(), relative.clone()));
                 ("dir", 0, 0, None)
             } else if meta.is_file() {
                 let (bytes, links) = read_file(&path, MAX_TOTAL_BYTES - total)?;
@@ -156,12 +315,18 @@ pub fn snapshot(root: &Path) -> Result<Vec<FolderEntry>> {
                 ("other", 0, 0, None)
             };
             entries.push(FolderEntry {
-                path: relative,
+                path: relative.clone(),
                 kind: kind.into(),
                 size,
                 links,
                 sha256: digest,
+                attributes: attributes(&meta),
             });
+            if plain {
+                // Alternate data streams leave names, main-stream size and
+                // hash unchanged; each one is its own compared entry.
+                push_streams(&path, &relative, &mut entries, &mut total)?;
+            }
         }
     }
     entries.sort_by(|a, b| a.path.cmp(&b.path));
@@ -193,11 +358,26 @@ pub fn snapshot_document(
 pub fn require_plain(entries: &[FolderEntry]) -> Result<()> {
     if entries
         .iter()
-        .any(|e| !(e.kind == "dir" || (e.kind == "file" && e.links == 1)))
+        .any(|e| !(e.kind == "dir" || e.kind == "stream" || (e.kind == "file" && e.links == 1)))
     {
         return Err(fail("FOLDER_ALIAS"));
     }
     Ok(())
+}
+
+/// True only when the after snapshot holds the payload as a plain file whose
+/// SHA256 equals the bytes the collector later read for the envelope. A
+/// missing or failed snapshot, or any other digest, means the payload changed.
+pub fn payload_matches(
+    after: &std::result::Result<Vec<FolderEntry>, OwnerError>,
+    payload: &str,
+    sha256: &str,
+) -> bool {
+    after.as_ref().is_ok_and(|entries| {
+        entries
+            .iter()
+            .any(|e| e.path == payload && e.kind == "file" && e.sha256.as_deref() == Some(sha256))
+    })
 }
 
 /// Relative key of an operator-approved payload path, using `/` separators.
@@ -281,6 +461,91 @@ mod tests {
             relative_key(Path::new("answer.json")).as_deref(),
             Some("answer.json")
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn alternate_streams_and_attributes_are_compared() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().canonicalize().unwrap();
+        std::fs::create_dir(root.join("sub")).unwrap();
+        std::fs::write(root.join("seed.txt"), b"synthetic seed").unwrap();
+        let before = snapshot(&root).unwrap();
+        require_plain(&before).unwrap();
+        assert!(before.iter().all(|e| e.kind != "stream"));
+        for (name, stream) in [
+            ("file", "seed.txt:hidden"),
+            ("dir", "sub:dirstream"),
+            ("root", ":rootstream"),
+        ] {
+            let d = tempfile::tempdir().unwrap();
+            let root = d.path().canonicalize().unwrap();
+            std::fs::create_dir(root.join("sub")).unwrap();
+            std::fs::write(root.join("seed.txt"), b"synthetic seed").unwrap();
+            let before = snapshot(&root).unwrap();
+            std::fs::write(root.join("answer.json"), b"{}").unwrap();
+            let mut target = root.as_os_str().to_owned();
+            target.push(if name == "root" { "" } else { "\\" });
+            target.push(stream);
+            std::fs::write(Path::new(&target), b"synthetic stream").unwrap();
+            let after = snapshot(&root).unwrap();
+            let added: Vec<_> = after.iter().filter(|e| e.kind == "stream").collect();
+            assert_eq!(added.len(), 1, "{name}");
+            assert_eq!(added[0].size, 16, "{name}");
+            // A pre-existing stream is a plain, comparable baseline entry.
+            require_plain(&after).unwrap();
+            let (effects, changes) = compare(&before, &after, "answer.json");
+            assert_eq!(effects, UNEXPECTED_CHANGE, "{name}");
+            assert!(
+                changes.contains(
+                    &json!({"path":format!("{stream}:$DATA"),"change":"added","kind":"stream"})
+                ),
+                "{name}: {changes:?}"
+            );
+            // NTFS also flips the directory's own attributes when a stream is
+            // added to it; that is recorded as a modification of "sub".
+            let expected = if name == "dir" { 3 } else { 2 };
+            assert_eq!(changes.len(), expected, "{name}: {changes:?}");
+        }
+        // Rewriting a stream with the same size is still a modification.
+        let mut seed = root.as_os_str().to_owned();
+        seed.push("\\seed.txt:hidden");
+        std::fs::write(Path::new(&seed), b"one").unwrap();
+        let one = snapshot(&root).unwrap();
+        std::fs::write(Path::new(&seed), b"two").unwrap();
+        let two = snapshot(&root).unwrap();
+        assert_eq!(compare(&one, &two, "answer.json").1.len(), 1);
+        // Attributes alone (hidden / read-only) are a modification.
+        let status = std::process::Command::new("attrib")
+            .arg("+H")
+            .arg(root.join("seed.txt"))
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let hidden = snapshot(&root).unwrap();
+        let (effects, changes) = compare(&two, &hidden, "answer.json");
+        assert_eq!(effects, UNEXPECTED_CHANGE);
+        assert_eq!(
+            changes,
+            vec![json!({"path":"seed.txt","change":"modified","kind":"file"})]
+        );
+    }
+
+    #[test]
+    fn payload_digest_must_match_the_after_snapshot() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().canonicalize().unwrap();
+        std::fs::write(root.join("answer.json"), b"{\"a\":1}").unwrap();
+        let after = snapshot(&root);
+        let digest = sha(b"{\"a\":1}");
+        assert!(payload_matches(&after, "answer.json", &digest));
+        assert!(!payload_matches(&after, "answer.json", &sha(b"{\"a\":2}")));
+        assert!(!payload_matches(&after, "other.json", &digest));
+        assert!(!payload_matches(
+            &Err(fail("FOLDER_READ")),
+            "answer.json",
+            &digest
+        ));
     }
 
     #[test]

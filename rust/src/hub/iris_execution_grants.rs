@@ -175,9 +175,11 @@ impl GrantLoader {
             }
             let launch_mode = launch_mode(e)?;
             // A collector grant is real-pair only, and automatic edits are
-            // only allowed when the trusted folder comparison will run.
+            // only allowed when the trusted folder comparison will run. The
+            // real pair is collector-only: it never reaches the path that
+            // adopts a provider-written result file as an outcome.
             let collected = e.payload_path.is_some();
-            if (collected && !real_bounded_binding(&e.binding))
+            if collected != real_bounded_binding(&e.binding)
                 || (launch_mode == LaunchMode::BoundedEdit && !collected)
             {
                 return Err(fail("MANIFEST_POLICY"));
@@ -217,12 +219,13 @@ impl GrantLoader {
                 return Err(fail("APPROVED_CWD"));
             }
             let payload = match &e.payload_path {
-                // The compared folder must not hold trusted state: not the
-                // runtime root or an ancestor, artifacts, or owner databases.
+                // The compared folder must not hold or sit inside trusted
+                // state: nothing at or below the runtime root (artifacts,
+                // owner databases, grant manifests), and not an ancestor.
                 Some(path) => {
                     if self.root.starts_with(&cwd)
+                        || cwd.starts_with(&self.root)
                         || cwd.starts_with(&artifacts)
-                        || cwd.starts_with(self.root.join("iris-execution"))
                     {
                         return Err(fail("APPROVED_CWD"));
                     }
@@ -486,13 +489,18 @@ mod tests {
         write(d.path(), &v);
         let mut l = GrantLoader::open(d.path()).unwrap();
         assert_eq!(l.load_approved().err().unwrap().code, "MANIFEST_POLICY");
-        collected(&mut v);
+        let outside = tempfile::tempdir().unwrap();
+        collected(&mut v, outside.path());
         write(d.path(), &v);
         let grant = l.load_approved().unwrap().pop().unwrap();
         assert_eq!(grant.launch_mode, LaunchMode::BoundedEdit);
         assert!(grant.payload.is_some());
     }
-    fn collected(v: &mut Value) {
+    /// Collector grants compare a folder outside the runtime root.
+    fn collected(v: &mut Value, outside: &Path) {
+        let work = outside.join("workspace");
+        std::fs::create_dir_all(&work).unwrap();
+        v["grants"][0]["approved_cwd"] = json!(work.canonicalize().unwrap());
         v["grants"][0]["payload_path"] = json!("answer.json");
         v["grants"][0]["effect_scope"] = json!([
             super::super::iris_execution_folder::PAYLOAD_ONLY,
@@ -500,11 +508,25 @@ mod tests {
         ]);
     }
     #[test]
-    fn payload_grants_are_real_pair_only_with_exact_collected_scope() {
+    fn real_pair_without_collector_is_refused() {
+        // The real pair never reaches the provider-written result path.
         let d = tempfile::tempdir().unwrap();
         let mut v = manifest(d.path(), 1, 1);
         real(&mut v);
-        collected(&mut v);
+        write(d.path(), &v);
+        let mut l = GrantLoader::open(d.path()).unwrap();
+        assert_eq!(
+            l.load_approved().err().map(|e| e.code).as_deref(),
+            Some("MANIFEST_POLICY")
+        );
+    }
+    #[test]
+    fn payload_grants_are_real_pair_only_with_exact_collected_scope() {
+        let d = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let mut v = manifest(d.path(), 1, 1);
+        real(&mut v);
+        collected(&mut v, outside.path());
         write(d.path(), &v);
         let mut l = GrantLoader::open(d.path()).unwrap();
         let grant = l.load_approved().unwrap().pop().unwrap();
@@ -538,26 +560,28 @@ mod tests {
         let mut artifacts_cwd = v.clone();
         artifacts_cwd["grants"][0]["approved_cwd"] = json!("iris-execution-artifacts");
         cases.push((artifacts_cwd, "APPROVED_CWD"));
+        // "<root>" is re-anchored at each case's fresh runtime root.
         let mut root_cwd = v.clone();
-        root_cwd["grants"][0]["approved_cwd"] = json!(d.path().canonicalize().unwrap());
+        root_cwd["grants"][0]["approved_cwd"] = json!("<root>");
         cases.push((root_cwd, "APPROVED_CWD"));
-        std::fs::create_dir_all(d.path().join("iris-execution/inner")).unwrap();
-        let mut store_cwd = v.clone();
-        store_cwd["grants"][0]["approved_cwd"] = json!("iris-execution/inner");
-        cases.push((store_cwd, "APPROVED_CWD"));
+        // Anywhere at or below the runtime root is refused (C4-D), including
+        // owner databases and plain subfolders such as the old "workspace".
+        for inside in ["iris-execution/inner", "workspace", "inside/nested"] {
+            let mut inside_cwd = v.clone();
+            inside_cwd["grants"][0]["approved_cwd"] = json!(inside);
+            cases.push((inside_cwd, "APPROVED_CWD"));
+        }
         for (index, (value, code)) in cases.into_iter().enumerate() {
             let d = tempfile::tempdir().unwrap();
             let fresh = manifest(d.path(), 1, 1);
             let mut value = value;
-            // Re-anchor absolute cwd cases at this fresh root.
-            if value["grants"][0]["approved_cwd"]
-                .as_str()
-                .is_some_and(|s| Path::new(s).is_absolute())
-            {
+            if value["grants"][0]["approved_cwd"] == "<root>" {
                 value["grants"][0]["approved_cwd"] = json!(d.path().canonicalize().unwrap());
-            }
-            if value["grants"][0]["approved_cwd"] == "iris-execution/inner" {
-                std::fs::create_dir_all(d.path().join("iris-execution/inner")).unwrap();
+            } else if let Some(relative) = value["grants"][0]["approved_cwd"]
+                .as_str()
+                .filter(|s| !Path::new(s).is_absolute())
+            {
+                std::fs::create_dir_all(d.path().join(relative)).unwrap();
             }
             value["grants"][0]["binding"]["instruction_hash"] =
                 fresh["grants"][0]["binding"]["instruction_hash"].clone();

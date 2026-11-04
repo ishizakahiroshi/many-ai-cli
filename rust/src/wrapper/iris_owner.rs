@@ -109,6 +109,18 @@ impl DurableExecutionOwner {
                 }
                 Ok(artifact) => {
                     payload_sha256 = json!(artifact.sha256());
+                    // The bytes put in the envelope must be the ones the
+                    // after snapshot compared; a later rewrite is a change.
+                    // A failed after snapshot is already unexpected and keeps
+                    // its own comparison_error code.
+                    if after.is_ok()
+                        && key.as_deref().is_none_or(|key| {
+                            !folder::payload_matches(&after, key, artifact.sha256())
+                        })
+                    {
+                        effects = folder::UNEXPECTED_CHANGE;
+                        reason = json!("PAYLOAD_CHANGED");
+                    }
                     match parse_json(artifact.bytes()) {
                         Err(_) => reason = json!("PAYLOAD_JSON"),
                         Ok(answer) => {

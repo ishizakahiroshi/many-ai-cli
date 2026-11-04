@@ -56,6 +56,8 @@ fn now_ms() -> u64 {
 
 struct Fixture {
     root: tempfile::TempDir,
+    /// The approved folder lives outside the runtime root (C4-D).
+    work: tempfile::TempDir,
     binding: Binding,
     ticket: OwnerTicket,
     manifest: Value,
@@ -67,8 +69,10 @@ impl Fixture {
     }
     fn with_grant(edit: impl FnOnce(&mut Value, &Path)) -> Self {
         let root = tempfile::tempdir().unwrap();
+        let work = tempfile::tempdir().unwrap();
         let path = root.path();
-        std::fs::create_dir(path.join("workspace")).unwrap();
+        std::fs::create_dir(work.path().join("workspace")).unwrap();
+        let workspace = work.path().join("workspace").canonicalize().unwrap();
         std::fs::create_dir(path.join("iris-execution-artifacts")).unwrap();
         std::fs::write(
             path.join("iris-execution-artifacts/instruction.txt"),
@@ -100,7 +104,7 @@ impl Fixture {
         };
         let expires = (now_ms() / 1000) as i64 + 600;
         let mut grant = json!({"binding":binding,"expires_at":expires,"revoked":false,
-            "approved_cwd":"workspace","instruction_path":"instruction.txt",
+            "approved_cwd":workspace,"instruction_path":"instruction.txt",
             "result_path":"result.json","max_artifact_bytes":4096,
             "effect_scope":[PAYLOAD_ONLY,UNEXPECTED_CHANGE],"allow_remote_jobs":false,
             "launch_mode":"bounded-edit","payload_path":"answer.json"});
@@ -126,6 +130,7 @@ impl Fixture {
             .unwrap();
         Self {
             root,
+            work,
             binding,
             ticket,
             manifest,
@@ -133,7 +138,7 @@ impl Fixture {
         }
     }
     fn workspace(&self) -> PathBuf {
-        self.root.path().join("workspace")
+        self.work.path().join("workspace")
     }
     fn result_path(&self) -> PathBuf {
         self.root
@@ -565,4 +570,196 @@ fn payload_grants_require_real_binding_collected_scope_and_separate_folder() {
     let grant = loader.load_approved().unwrap().pop().unwrap();
     assert!(grant.payload.is_some());
     assert_eq!(f.manifest["grants"][0]["payload_path"], "answer.json");
+}
+
+// ---- C4 adversarial additions (synthetic data only) ----
+
+/// C4-D: a collector folder anywhere inside the runtime root is refused, not
+/// only the root itself, its ancestors, artifacts or owner databases.
+#[test]
+fn c4_collector_folder_inside_runtime_root_is_refused() {
+    for nested in ["inside", "inside/deeper"] {
+        let f = Fixture::with_grant(|g, root| {
+            std::fs::create_dir_all(root.join(nested)).unwrap();
+            g["approved_cwd"] = json!(nested);
+        });
+        let mut loader = GrantLoader::open(f.root.path()).unwrap();
+        assert_eq!(
+            loader.load_approved().map(|g| g.len()).unwrap_err().code,
+            "APPROVED_CWD",
+            "{nested}"
+        );
+    }
+}
+
+/// C4-A: NTFS alternate data streams are invisible to the folder snapshot.
+/// Writes into a stream of an existing file, of the new payload, or of a
+/// directory leave read_dir names, main-stream size and SHA256 unchanged.
+/// Expected by contract: any write other than the payload creation is
+/// `folder-unexpected-change`.
+#[tokio::test]
+async fn c4_alternate_data_stream_writes_are_unexpected_change() {
+    let cases = [
+        (
+            "existing-file-stream",
+            write("seed.txt:hidden", "synthetic hidden"),
+        ),
+        (
+            "payload-stream",
+            write("answer.json:extra", "synthetic extra"),
+        ),
+        (
+            "directory-stream",
+            write("sub:dirstream", "synthetic dir stream"),
+        ),
+    ];
+    let mut observed = Vec::new();
+    for (name, extra) in cases {
+        let f = Fixture::new();
+        std::fs::write(f.workspace().join("seed.txt"), b"synthetic seed").unwrap();
+        std::fs::create_dir(f.workspace().join("sub")).unwrap();
+        run(
+            &f,
+            json!([write("answer.json", ANSWER), extra]),
+            &CountFactory::default(),
+        )
+        .await
+        .unwrap();
+        let (owner, folder) = f.record();
+        assert_never_promoted(&owner, &folder);
+        observed.push((name, folder["collection"]["effects"].clone()));
+    }
+    for (name, effects) in &observed {
+        assert_eq!(effects, UNEXPECTED_CHANGE, "{name}: observed {observed:?}");
+    }
+}
+
+/// C4 control: provider-side oversize folder, entry flood, created junction or
+/// hard link next to a correct payload never yields folder-payload-only, and
+/// never sets any verified flag.
+#[tokio::test]
+async fn c4_after_side_limits_and_aliases_fail_closed() {
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(outside.path().join("outside.txt"), b"synthetic outside").unwrap();
+    let mut flood = vec![write("answer.json", ANSWER)];
+    for i in 0..1001 {
+        flood.push(write(&format!("f{i:04}"), ""));
+    }
+    let cases = vec![
+        (
+            "oversize",
+            json!([write("answer.json", ANSWER),
+                {"op":"large","path":"big.bin","bytes":16 * 1024 * 1024 + 1}]),
+        ),
+        ("flood", json!(flood)),
+        (
+            "junction",
+            json!([write("answer.json", ANSWER),
+                {"op":"junction","path":"linked","target":outside.path()}]),
+        ),
+        (
+            "hardlink",
+            json!([write("answer.json", ANSWER),
+                {"op":"hardlink","path":"alias.txt","target":outside.path().join("outside.txt")}]),
+        ),
+    ];
+    for (name, plan) in cases {
+        let f = Fixture::new();
+        f.pin();
+        run(&f, plan, &CountFactory::default()).await.unwrap();
+        let (owner, folder) = f.record();
+        assert_never_promoted(&owner, &folder);
+        assert_eq!(folder["collection"]["effects"], UNEXPECTED_CHANGE, "{name}");
+        assert_ne!(
+            owner["outcome_receipt"]["reported_effects"], PAYLOAD_ONLY,
+            "{name}"
+        );
+    }
+}
+
+/// C4-B: a real-pair grant without `payload_path` is still approved, and the
+/// existing non-collector path then adopts a provider-written result.json
+/// with self-reported outcome/effects. Expected by the C2 design (change A):
+/// the real pair never reaches the provider-written envelope path.
+#[test]
+fn c4_real_pair_without_payload_path_is_refused_by_the_loader() {
+    let f = Fixture::with_grant(|g, _| {
+        let g = g.as_object_mut().unwrap();
+        g.remove("payload_path");
+        g.remove("launch_mode");
+        g.insert("effect_scope".into(), json!(["none"]));
+    });
+    let mut loader = GrantLoader::open(f.root.path()).unwrap();
+    let loaded = loader.load_approved();
+    assert!(
+        loaded.is_err(),
+        "real pair without collector loaded: payload={:?}",
+        loaded.as_ref().ok().map(|g| g[0].payload.is_some())
+    );
+}
+
+#[tokio::test]
+async fn c4_real_pair_without_payload_never_adopts_a_provider_written_result() {
+    let f = Fixture::with_grant(|g, _| {
+        let g = g.as_object_mut().unwrap();
+        g.remove("payload_path");
+        g.remove("launch_mode");
+        g.insert("effect_scope".into(), json!(["none"]));
+    });
+    f.pin();
+    let planted = json!({"binding":f.binding,"owner_id":f.ticket.owner_id,
+        "owner_epoch":f.ticket.owner_epoch,"instruction_hash":f.binding.instruction_hash,
+        "outcome":"succeeded","effects":"none","synthetic":false,
+        "payload":serde_json::from_str::<Value>(ANSWER).unwrap()})
+    .to_string();
+    // After the fix the wrapper refuses to adopt the grant at all: no owner
+    // state, no spawn, and so no provider-written result can be adopted.
+    let adopted = DurableExecutionOwner::adopt(
+        f.root.path(),
+        &serde_json::to_string(&f.ticket).unwrap(),
+        REAL_BOUNDED_PROVIDER,
+        REAL_BOUNDED_PROFILE_ID,
+    );
+    if adopted.is_err() {
+        assert_eq!(f.owners().query(&f.binding).unwrap_err().code, "NOT_FOUND");
+        return;
+    }
+    drop(adopted);
+    let factory = CountFactory::default();
+    // The approved folder is outside the runtime root, so plant by absolute path.
+    let result = run(
+        &f,
+        json!([write(f.result_path().to_str().unwrap(), &planted)]),
+        &factory,
+    )
+    .await;
+    let (owner, folder) = f.record();
+    let receipt = owner["outcome_receipt"].clone();
+    let verdict = if receipt.is_null() {
+        Value::Null
+    } else {
+        let mut loader = GrantLoader::open(f.root.path()).unwrap();
+        let grant = loader.load_approved().unwrap().into_iter().next().unwrap();
+        let owners = f.owners();
+        f.verifications()
+            .verify(
+                &owners,
+                &grant.result,
+                &f.ticket,
+                &sha(planted.as_bytes()),
+                now_ms(),
+            )
+            .map(|v| v["verdict"].clone())
+            .unwrap_or(Value::Null)
+    };
+    assert!(
+        receipt.is_null(),
+        "spawned={} run_ok={} folder={} reported_outcome={} reported_effects={} verdict={}",
+        factory.0.load(Ordering::SeqCst),
+        result.is_ok(),
+        folder,
+        receipt["reported_outcome"],
+        receipt["reported_effects"],
+        verdict
+    );
 }

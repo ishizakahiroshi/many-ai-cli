@@ -200,7 +200,9 @@ pub fn prepare_spec(
         }
         LaunchMode::BoundedEdit => return Err(PrepareError::UnsupportedPolicy),
     };
-    if grant.payload.is_some() && !real_bounded_binding(b) {
+    // A payload rides only on the real pair, and the real pair always has one:
+    // it is never launched on the path that adopts a provider-written result.
+    if grant.payload.is_some() != real_bounded_binding(b) {
         return Err(PrepareError::UnsupportedPolicy);
     }
     let cwd = grant
@@ -390,23 +392,51 @@ mod tests {
             Err(PrepareError::InvalidInstruction)
         ));
     }
+    fn collected(root: &std::path::Path, ticket: &OwnerTicket) -> ArtifactPermit {
+        ArtifactPermit::collected(
+            root,
+            "answer.json",
+            &ticket.binding,
+            4096,
+            vec![
+                crate::hub::iris_execution_folder::PAYLOAD_ONLY.into(),
+                crate::hub::iris_execution_folder::UNEXPECTED_CHANGE.into(),
+            ],
+        )
+        .unwrap()
+    }
     #[test]
     fn bounded_edit_accepts_edits_only_for_the_real_pair_without_other_authority() {
         use crate::hub::iris_execution_owned::{REAL_BOUNDED_PROFILE_ID, REAL_BOUNDED_PROVIDER};
-        let (_root, grant, ticket) = fixture_for(
+        // The real pair is collector-only: without a payload it never launches.
+        for mode in [LaunchMode::Default, LaunchMode::BoundedEdit] {
+            let (_root, mut grant, ticket) = fixture_for(
+                b"synthetic instruction",
+                REAL_BOUNDED_PROVIDER,
+                REAL_BOUNDED_PROFILE_ID,
+            );
+            grant.launch_mode = mode;
+            assert!(matches!(
+                prepare_spec(&grant, &ticket),
+                Err(PrepareError::UnsupportedPolicy)
+            ));
+        }
+        let (root, mut grant, ticket) = fixture_for(
             b"synthetic instruction",
             REAL_BOUNDED_PROVIDER,
             REAL_BOUNDED_PROFILE_ID,
         );
+        grant.payload = Some(collected(root.path(), &ticket));
         assert_eq!(
             prepare_spec(&grant, &ticket).unwrap().permission_mode,
             "default"
         );
-        let (_root, mut grant, ticket) = fixture_for(
+        let (root, mut grant, ticket) = fixture_for(
             b"synthetic instruction",
             REAL_BOUNDED_PROVIDER,
             REAL_BOUNDED_PROFILE_ID,
         );
+        grant.payload = Some(collected(root.path(), &ticket));
         grant.launch_mode = LaunchMode::BoundedEdit;
         let spec = prepare_spec(&grant, &ticket).unwrap();
         assert_eq!(spec.permission_mode, "acceptEdits");
