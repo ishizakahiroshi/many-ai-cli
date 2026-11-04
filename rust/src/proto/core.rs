@@ -1247,6 +1247,11 @@ pub struct SessionEnd {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StopReason {
     User,
+    /// One exact Iris attempt stopped through its owner-bound SessionBridge
+    /// after the durable owner stop intent was saved. Never kill-all, never a
+    /// PID/label lookup; it is a source-specific reason the socket layer can
+    /// deliver, unlike the generic `User`.
+    IrisOwnerStop,
     KillAll,
     IdleTimeout,
     Dismissed,

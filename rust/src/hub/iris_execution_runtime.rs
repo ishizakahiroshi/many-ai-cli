@@ -476,9 +476,12 @@ impl SessionBridge {
             if !self.core.is_current(owner.binding) {
                 return Err(BridgeError::StaleBinding);
             }
+            // A source-specific reason: the Hub socket layer refuses the
+            // generic User reason before writing, which silently kept the
+            // wrapper from ever seeing this stop (C9 F1, attempt c5-a1).
             let effects = self
                 .core
-                .stop_bound(owner.binding, StopReason::User, Timestamp::now())
+                .stop_bound(owner.binding, StopReason::IrisOwnerStop, Timestamp::now())
                 .map_err(core_error)?;
             if state.stops.len() >= MAX_STOP_REQUESTS {
                 return Err(BridgeError::Capacity);
@@ -627,7 +630,12 @@ mod tests {
                     let CoreEffect::CancelSession { binding, reason } = effect else {
                         panic!("bridge dispatched an unrelated effect")
                     };
-                    assert_eq!(reason, StopReason::User);
+                    assert_eq!(reason, StopReason::IrisOwnerStop);
+                    // The same reason must pass the production socket mapping.
+                    assert_eq!(
+                        crate::hub::sockets::stop_reason(reason),
+                        Ok("iris_owner_stop")
+                    );
                     self.cancelled.lock().unwrap().push(binding);
                 }
                 self.entered.notify_one();

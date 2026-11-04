@@ -493,7 +493,9 @@ fn encode<T: Serialize>(value: &T) -> Result<WireFrame, SessionError> {
         .map(WireFrame::Text)
         .map_err(|error| SessionError::Transport(error.to_string()))
 }
-fn stop_reason(reason: StopReason) -> Result<&'static str, SessionError> {
+/// Wire reason of a session dismissal. Generic User and HubShutdown are
+/// refused before any frame is written; callers need a source-specific reason.
+pub(crate) fn stop_reason(reason: StopReason) -> Result<&'static str, SessionError> {
     match reason {
         StopReason::KillAll => Ok("kill_all"),
         StopReason::IdleTimeout => Ok("idle_timeout"),
@@ -501,6 +503,7 @@ fn stop_reason(reason: StopReason) -> Result<&'static str, SessionError> {
         StopReason::ParentEnded => Ok("parent_ended"),
         StopReason::StartupFailed => Ok("startup_failed"),
         StopReason::Timeout => Ok("timeout"),
+        StopReason::IrisOwnerStop => Ok("iris_owner_stop"),
         StopReason::User => Err(SessionError::InvalidRequest(
             "user stop needs a source-specific reason".into(),
         )),

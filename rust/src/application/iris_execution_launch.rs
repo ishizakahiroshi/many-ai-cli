@@ -504,4 +504,211 @@ mod tests {
             ("default", "read-only", "on-request")
         );
     }
+
+    // C9 F1 (real provider attempt c5-a1): the owner-bound stop was saved in
+    // the owner store, but the production socket layer refused the effect's
+    // stop reason before writing anything, so the wrapper never saw a stop.
+    // The synthetic effect sinks used elsewhere accepted any reason. This
+    // drives the real CoreLaunchPort with the production EffectDriver and
+    // SocketRegistry; only the wrapper's socket writer is synthetic.
+    mod owner_stop_delivery {
+        use super::super::*;
+        use crate::{
+            config::RuntimePaths,
+            hub::sockets::{
+                EffectDriver, FrameWriter, OrderedEventObserver, SocketRegistry, WireFrame,
+            },
+            proto::{self, core::*},
+            terminal::{
+                events::CoreEventBus,
+                journal::{JournalOptions, SessionJournal},
+                session::EngineOptions,
+            },
+        };
+
+        struct NoNative;
+        impl WrapperTransport for NoNative {
+            fn send<'a>(
+                &'a self,
+                _: SessionBinding,
+                _: proto::Message,
+            ) -> CoreFuture<'a, Result<(), SessionError>> {
+                Box::pin(async { Ok(()) })
+            }
+        }
+        impl WrappedSessionSpawner for NoNative {
+            fn spawn_and_wait<'a>(
+                &'a self,
+                _: WrappedSpawnSpec,
+                _: Duration,
+                _: &'a HttpWaitCancellation,
+            ) -> CoreFuture<'a, SpawnWaitOutcome> {
+                Box::pin(async { panic!("the stop test never spawns a provider") })
+            }
+        }
+        /// Core's own effects (registration UI/persistence) are not under test.
+        struct Accept;
+        impl CoreEffectSink for Accept {
+            fn apply<'a>(
+                &'a self,
+                _: CoreEffects,
+            ) -> CoreFuture<'a, Result<(), CoreEffectFailure>> {
+                Box::pin(async { Ok(()) })
+            }
+        }
+        /// A cancel effect must reach only the socket registry.
+        struct NoSideEffects;
+        impl PersistenceEffectSink for NoSideEffects {
+            fn apply(&self, _: PersistenceEffect) -> Result<(), SessionError> {
+                panic!("owner stop must not persist through the effect driver")
+            }
+        }
+        impl CoreEventPublisher for NoSideEffects {
+            fn publish(&self, _: CoreEvent) -> Result<EventSequence, SessionError> {
+                panic!("owner stop must not publish through the effect driver")
+            }
+        }
+        impl OrderedEventObserver for NoSideEffects {
+            fn observe<'a>(&'a self, _: &'a CoreEvent) -> CoreFuture<'a, Result<(), SessionError>> {
+                panic!("owner stop must not notify through the effect driver")
+            }
+        }
+        #[derive(Clone, Default)]
+        struct Recording(Arc<Mutex<Vec<WireFrame>>>);
+        impl FrameWriter for Recording {
+            fn write<'a>(
+                &'a mut self,
+                frame: WireFrame,
+            ) -> CoreFuture<'a, Result<(), SessionError>> {
+                Box::pin(async move {
+                    self.0.lock().unwrap().push(frame);
+                    Ok(())
+                })
+            }
+        }
+        fn frames(recording: &Recording) -> Vec<Value> {
+            recording
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|frame| match frame {
+                    WireFrame::Text(text) => serde_json::from_str(text).unwrap(),
+                    WireFrame::Close => json!("CLOSE"),
+                })
+                .collect()
+        }
+
+        #[tokio::test]
+        async fn core_launch_port_owner_stop_reaches_the_exact_wrapper_socket() {
+            let root = tempfile::tempdir().unwrap();
+            let runtime = root.path().join("runtime");
+            std::fs::create_dir(&runtime).unwrap();
+            let paths =
+                RuntimePaths::trial(&runtime, 49468, &root.path().join("installed")).unwrap();
+            let core = Arc::new(SessionEngine::new(
+                EngineOptions::default(),
+                Arc::new(SessionJournal::new(paths, None, JournalOptions::default())),
+                Arc::new(NoNative),
+                Arc::new(Accept),
+                Arc::new(NoNative),
+                CoreEventBus::new(64).unwrap(),
+            ));
+            let session = core
+                .register(
+                    RegisterRequest {
+                        message: proto::Message {
+                            provider: "synthetic-provider".into(),
+                            cwd: root.path().to_string_lossy().into_owned(),
+                            pid: 3001,
+                            usage_probe: true,
+                            cols: 120,
+                            rows: 30,
+                            ..Default::default()
+                        },
+                        spawn_proof: None,
+                    },
+                    WrapperConnectionId(1),
+                    crate::proto::time::Timestamp::now(),
+                )
+                .await
+                .unwrap()
+                .binding;
+            // The wrapper's live socket, as the Hub holds it after registration.
+            let sockets = Arc::new(SocketRegistry::default());
+            let weak: std::sync::Weak<dyn SessionCore> = Arc::downgrade(&core) as _;
+            sockets.bind_core(weak).unwrap();
+            let wrapper = Recording::default();
+            sockets
+                .insert_wrapper(session, Box::new(wrapper.clone()))
+                .unwrap();
+            sockets
+                .acknowledge_wrapper(
+                    session,
+                    proto::Message {
+                        r#type: "registered".into(),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap();
+            let effects: Arc<dyn CoreEffectSink> = Arc::new(EffectDriver::new(
+                sockets,
+                Arc::new(NoSideEffects),
+                Arc::new(NoSideEffects),
+                Arc::new(NoSideEffects),
+            ));
+            // The owner has bound the provider root before any stop arrives.
+            let path = root.path().join("owner.sqlite3");
+            let mut store = OwnerStore::open(&path).unwrap();
+            let b = crate::hub::iris_execution_journal::Binding {
+                principal_id: "iris".into(),
+                workspace_id: "workspace".into(),
+                plan_id: "plan".into(),
+                plan_revision: 1,
+                task_id: "task".into(),
+                instruction_revision: 1,
+                instruction_hash: "a".repeat(64),
+                approval_id: "approval".into(),
+                approval_revision: 1,
+                scope_hash: "b".repeat(64),
+                execution_host_id: "host".into(),
+                executor_instance_id: "instance".into(),
+                attempt_id: "attempt".into(),
+                fence: 1,
+                provider: "synthetic-provider".into(),
+                profile_id: "default".into(),
+            };
+            let ticket = store.begin_owner(&b, "owner", 1, 100).unwrap();
+            store.claim_spawn(&ticket, session.session.0, 100).unwrap();
+            store.bind_root(&ticket, 9001, 100).unwrap();
+            let owners = Arc::new(Mutex::new(store));
+            let port = CoreLaunchPort::new(core.clone(), effects, owners.clone());
+
+            port.bind_owner(&ticket, session).unwrap();
+            let receipt = port.stop_owner(&ticket, "stop-a").await.unwrap();
+
+            // Durable owner intent first, then exactly one dismissal frame to
+            // this wrapper connection and the close of that same connection.
+            assert_eq!(receipt["owner_stop_request_durable"], true);
+            assert_eq!(receipt["owned_execution_ceased"], false);
+            assert_eq!(
+                owners.lock().unwrap().query(&b).unwrap()["stop_request_id"],
+                "stop-a"
+            );
+            let sent = frames(&wrapper);
+            let kinds: Vec<_> = sent
+                .iter()
+                .map(|f| f["type"].as_str().unwrap_or("CLOSE"))
+                .collect();
+            assert_eq!(kinds, ["registered", "session_dismissed", "CLOSE"]);
+            assert_eq!(sent[1]["session_id"], session.session.0);
+            assert_eq!(sent[1]["reason"], "iris_owner_stop");
+            // Still no cessation claim: only the wrapper's owner can prove it.
+            assert_eq!(
+                owners.lock().unwrap().query(&b).unwrap()["local_tree_ceased"],
+                false
+            );
+        }
+    }
 }

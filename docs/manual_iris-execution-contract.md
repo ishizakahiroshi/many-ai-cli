@@ -292,6 +292,20 @@ that process and remain `stop_unconfirmed`, with `owned_execution_ceased: false`
 It never uses kill-all. Socket closure, missing session, wrapper exit, Done text
 and exit code zero do not become process-tree stop or successful-task evidence.
 
+The bridge saves the owner stop intent first, then sends one session dismissal
+with the reason `iris_owner_stop` to that exact wrapper connection and closes
+it. The generic user reason is refused by the Hub socket layer before anything
+is written, so it is not used here. The wrapper's owner then terminates its Job
+and records `local_tree_ceased` against the saved stop request; only that
+record proves the local stop.
+
+Stopping the Hub does not stop an Iris-owned provider. A Hub shutdown notifies
+wrappers without a dismissal, and each wrapper keeps its provider for the
+reconnect grace (`hub.wrapper_reconnect_grace_sec`, default 3600 s) so that
+ordinary sessions survive a Hub restart. A restarted Hub has no bridge binding
+for the old attempt and cannot deliver its stop. Stop an attempt with the
+owned/executor stop and wait for `local_tree_ceased` before stopping the Hub.
+
 Isolated tests inject an explicitly synthetic backend and synthetic hash proofs.
 Those proofs are accepted only for the synthetic provider/profile and cannot
 complete a real provider attempt. The native owner path now persists Windows

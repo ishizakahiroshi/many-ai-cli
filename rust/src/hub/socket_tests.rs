@@ -223,6 +223,10 @@ fn no_authority_is_fail_closed_and_connection_ids_are_unique() {
     assert_eq!(registry.next_ui().unwrap().0, 1);
     assert_eq!(registry.next_wrapper().unwrap().0, 2);
     assert!(stop_reason(StopReason::User).is_err());
+    assert_eq!(
+        stop_reason(StopReason::IrisOwnerStop),
+        Ok("iris_owner_stop")
+    );
 }
 #[derive(Default)]
 struct Dependencies {
