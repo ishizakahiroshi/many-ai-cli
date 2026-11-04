@@ -278,13 +278,9 @@ export function removeApprovalAutoSwitchTarget(sessionId: number): void {
   for (let i = approvalAutoSwitchQueue.length - 1; i >= 0; i--) {
     if (approvalAutoSwitchQueue[i] === sessionId) approvalAutoSwitchQueue.splice(i, 1);
   }
-  // C4: 承認解決時にマルチペインバッジをセッション state に合わせて更新
+  // C4: 承認解決時にペイン見出しの状態記号をセッションの今の状態に合わせて更新
   const mgr = window.multiPaneManager;
-  if (mgr && typeof mgr.updateSlotBadge === 'function') {
-    const s = sessions.get(sessionId);
-    const badgeStatus = (s && s.state === 'running') ? 'running' : 'standby';
-    mgr.updateSlotBadge(sessionId, badgeStatus);
-  }
+  if (mgr && typeof mgr.refreshSlotBadge === 'function') mgr.refreshSlotBadge(sessionId);
 }
 
 export function maybeAutoSwitchToNextApproval() {
@@ -323,11 +319,9 @@ export function enqueueApprovalAutoSwitch(sessionId: number): void {
   if (!approvalAutoSwitchQueue.includes(sessionId)) {
     approvalAutoSwitchQueue.push(sessionId);
   }
-  // C4: 承認待ちになったときマルチペインバッジを 'waiting' に更新
+  // C4: 承認待ちになったとき、ペイン見出しの状態記号をセッションの今の状態に合わせて更新
   const mgr = window.multiPaneManager;
-  if (mgr && typeof mgr.updateSlotBadge === 'function') {
-    mgr.updateSlotBadge(sessionId, 'waiting');
-  }
+  if (mgr && typeof mgr.refreshSlotBadge === 'function') mgr.refreshSlotBadge(sessionId);
   maybeAutoSwitchToNextApproval();
 }
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "6cd0dee884ff2986e185fd2421b60e2f1a6ab511",
+    "commit": "e906b97a1bcfec1d2c42bc470def151ec85fe524",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2067,
-    "analyzed": 1603,
+    "discovered": 2069,
+    "analyzed": 1605,
     "unresolved": 14,
     "unknown": 0,
     "unclaimed": 450,
@@ -45818,6 +45818,36 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/pane-state-badge.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "pane-state-badge.ts — ペイン見出しの状態記号（通常のマルチ・別窓 Grid 共通）。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/path-detect-fixtures.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -50274,6 +50304,36 @@
     },
     {
       "path": "web/tests/memo-model.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/pane-state-badge.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

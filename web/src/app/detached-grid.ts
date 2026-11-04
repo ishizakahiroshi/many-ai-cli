@@ -10,11 +10,13 @@ import {
   canPageAltBuffer,
   disableWebglRenderer,
   enableWebglRenderer,
+  installTerminalContextMenu,
   releaseHiddenWebglRenderers,
   scrollAltBufferPage,
 } from './terminal.js';
 import { ensureAltScrollRail, requestEdge } from './alt-scroll-rail-view.js';
 import { ensureAltDragSelect } from './alt-drag-select-view.js';
+import { applyPaneStateBadge } from './pane-state-badge.js';
 import { sessions } from './state.js';
 import type { SessionSnapshot } from '../types/proto.js';
 
@@ -137,19 +139,19 @@ export class DetachedGridManager {
     });
   }
 
-  /** 指定 session のスロットバッジを更新する（ws-client から呼ばれる）。 */
-  updateSlotBadge(sessionId: number, status: string): void {
+  /**
+   * 指定 session の状態記号を更新する（ws-client / session-list から呼ばれる）。
+   * 渡された状態の値ではなく、セッションの今の状態からカードと同じ規則で描き直す。
+   */
+  refreshSlotBadge(sessionId: number): void {
     const idx = this._slots.findIndex(s => s.sessionId === sessionId);
     if (idx < 0 || !this._area) return;
     const slotEls = this._area.querySelectorAll('.pane-slot');
     const el = slotEls[idx];
     if (!el) return;
-    const badge = el.querySelector('.ph-badge');
+    const badge = el.querySelector('.ph-badge') as HTMLElement | null;
     if (!badge) return;
-    const cssStatus = status === 'idle' ? 'standby' : status;
-    badge.className = `ph-badge ${cssStatus}`;
-    badge.textContent = status === 'waiting' ? '⚠' : status === 'running' ? '●' : '—';
-    el.classList.toggle('waiting-approval', status === 'waiting');
+    el.classList.toggle('waiting-approval', applyPaneStateBadge(badge, sessions.get(sessionId)));
   }
 
   /** Hub からセッション更新を受けたときに再描画する。 */
@@ -261,13 +263,9 @@ export class DetachedGridManager {
     dir.title = session.cwd || '';
     header.appendChild(dir);
 
-    // ステータスバッジ
+    // 状態記号。カードと同じ記号・規則で描く（pane-state-badge.ts）。
     const badge = document.createElement('span');
-    badge.className = `ph-badge ${session.state || 'standby'}`;
-    badge.textContent =
-      session.state === 'waiting' ? '⚠'
-    : session.state === 'running' ? '●'
-    : '—';
+    applyPaneStateBadge(badge, session);
     header.appendChild(badge);
 
     return header;
@@ -405,6 +403,7 @@ export class DetachedGridManager {
         if (!termArea.isConnected || !termArea.contains(container)) return;
         if (container.clientWidth > 0 && container.clientHeight > 0) {
           t.term.open(container);
+          installTerminalContextMenu(session.id, container);
           ensureAltScrollRail(session.id, t);
           ensureAltDragSelect(session.id, t);
           enableWebglRenderer(t);

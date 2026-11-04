@@ -363,21 +363,25 @@ export function ensureTerminal(id) {
           const capturedPath = resolveTerminalPathCandidate(pathStr, id);
           const startPos = ciToXY(startCI);
           const endPos = ciToXY(endCI);
+          // ssh 先のパスは、送り先を決めたシェルなら送り先から取ってこられる（attachments.ts）。
+          const openMenu = (x: number, y: number) => showPathPopup(capturedPath, x, y, id, 'file', remoteFetchMenuItems(id, pathStr));
+          const hovered: HoveredTerminalLink = { text: pathStr, open: openMenu };
           links.push({
             range: { start: startPos, end: endPos },
             text: pathStr,
             hover() {
-              // ホバーではポップアップを開かない（クリック起動のみ）。
-              // xterm のリンク下線表示は維持される。
+              // ホバーではポップアップを開かない（クリック・右クリック起動のみ）。
+              // xterm のリンク下線表示は維持される。右クリックの宛先だけ覚えておく。
+              hoveredTerminalLinks.set(id, hovered);
             },
             leave() {
+              if (hoveredTerminalLinks.get(id) === hovered) hoveredTerminalLinks.delete(id);
               scheduleHidePathPopup();
             },
             activate(_event, _text) {
               _event.preventDefault();
               _event.stopPropagation();
-              // ssh 先のパスは、送り先を決めたシェルなら送り先から取ってこられる（attachments.ts）。
-              showPathPopup(capturedPath, _event.clientX, _event.clientY, id, 'file', remoteFetchMenuItems(id, pathStr));
+              openMenu(_event.clientX, _event.clientY);
             }
           });
         };
@@ -391,17 +395,21 @@ export function ensureTerminal(id) {
           if (overlapsExistingLink(startCI, endCI)) continue;
           markOccupied(startCI, endCI);
           const url = c.url;
+          const hovered: HoveredTerminalLink = { text: url, open: (x: number, y: number) => showUrlPopup(url, x, y) };
           links.push({
             range: { start: ciToXY(startCI), end: ciToXY(endCI) },
             text: url,
-            hover() {},
+            hover() {
+              hoveredTerminalLinks.set(id, hovered);
+            },
             leave() {
+              if (hoveredTerminalLinks.get(id) === hovered) hoveredTerminalLinks.delete(id);
               scheduleHidePathPopup();
             },
             activate(event) {
               event.preventDefault();
               event.stopPropagation();
-              showUrlPopup(url, event.clientX, event.clientY);
+              hovered.open(event.clientX, event.clientY);
             },
           });
         }
@@ -758,16 +766,43 @@ export function whenLayoutReady(id, container, attempt = 0, generation = null) {
     if (!isPtyResizeSuppressed()) {
       sendResize(id, t.term.cols, t.term.rows, 'terminal-init');
     }
-    container.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      const sel = altDragSelectionText(id, t.term);
-      if (sel) openTermCtxMenu(e.clientX, e.clientY, sel, id);
-    });
+    installTerminalContextMenu(id, container);
   } else if (attempt < TERMINAL_LAYOUT_READY_MAX_FRAMES) {
     requestAnimationFrame(() => whenLayoutReady(id, container, attempt + 1, expectedGeneration));
   } else {
     console.debug('[terminal] layout did not become measurable; stopping retry', { id, attempt });
   }
+}
+
+// ---- 端末の右クリック ----
+// リンク（パス・URL）の上で右クリックしたら、左クリックと同じメニュー（既定のアプリで開く等）を出す。
+// 端末を画面へ置く経路は 3 つ（単独表示 / マルチペイン / 別窓グリッド）あり、どれで開いても同じ動きに
+// するため、登録は installTerminalContextMenu 1 つに集めてある。ここを通さない経路ができると、
+// その画面だけブラウザ標準のメニューが出る。
+interface HoveredTerminalLink {
+  text: string;
+  open: (x: number, y: number) => void;
+}
+// 今マウスが乗っているリンク（xterm の hover / leave で出し入れする）。右クリックの宛先になる。
+const hoveredTerminalLinks = new Map<number, HoveredTerminalLink>();
+const contextMenuInstalled = new WeakSet<HTMLElement>();
+
+export function installTerminalContextMenu(id: number, container: HTMLElement | null | undefined): void {
+  if (!container || contextMenuInstalled.has(container)) return;
+  contextMenuInstalled.add(container);
+  container.addEventListener('contextmenu', (e: MouseEvent) => {
+    e.preventDefault();
+    const t = terminals.get(id);
+    const sel = t ? altDragSelectionText(id, t.term) : '';
+    const link = hoveredTerminalLinks.get(id);
+    // 選択範囲がそのリンクの文字を含むときは、選択範囲をコピーするつもりの操作とみなして
+    // 従来のコピーのメニューを出す。それ以外（選択が無い・別の場所に古い選択が残っている）はリンクを優先する。
+    if (link && !(sel && sel.includes(link.text))) {
+      link.open(e.clientX, e.clientY);
+      return;
+    }
+    if (sel) openTermCtxMenu(e.clientX, e.clientY, sel, id);
+  });
 }
 
 // ---- 選択範囲コピーの右クリックメニュー ----

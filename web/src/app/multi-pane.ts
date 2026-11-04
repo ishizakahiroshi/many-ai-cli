@@ -2,10 +2,11 @@
 import { inputEl } from '../app.js';
 import { mountStartupView, mountTerminalStartup } from './session-startup-view.js';
 import { sessionStartups, type SessionStartup } from './session-startup.js';
-import { canPageAltBuffer, disableWebglRenderer, enableWebglRenderer, ensureTerminal, releaseHiddenWebglRenderers, scrollAltBufferPage, termArea } from './terminal.js';
+import { canPageAltBuffer, disableWebglRenderer, enableWebglRenderer, ensureTerminal, installTerminalContextMenu, releaseHiddenWebglRenderers, scrollAltBufferPage, termArea } from './terminal.js';
 import { ensureAltScrollRail, requestEdge } from './alt-scroll-rail-view.js';
 import { ensureAltDragSelect } from './alt-drag-select-view.js';
-import { activeSessionId, openProjectKey, set_openProjectKey } from './state.js';
+import { activeSessionId, openProjectKey, sessions, set_openProjectKey } from './state.js';
+import { applyPaneStateBadge } from './pane-state-badge.js';
 import { NO_PROJECT_KEY, deriveProjectKeyFromCwd, projectKeyForSession } from './sidebar-tree.js';
 import { isValidTabName } from './project-view-memory.js';
 import { saveOpenProjectKey } from './project-view-store.js';
@@ -583,12 +584,9 @@ export class MultiPaneManager {
     dir.title = session.cwd || '';
     header.appendChild(dir);
 
-    // ステータスバッジ
+    // 状態記号。カードと同じ記号・規則で描く（pane-state-badge.ts）。
     const badge = document.createElement('span');
-    badge.className = `ph-badge ${session.state || 'standby'}`;
-    badge.textContent = session.state === 'waiting' ? '⚠'
-                      : session.state === 'running' ? '●'
-                      : '—';
+    applyPaneStateBadge(badge, session);
     header.appendChild(badge);
 
     // ピン留め（plan_multi-repo-scope.md B1）。並び順で自動に埋めるときだけ効くので、
@@ -1441,32 +1439,28 @@ export class MultiPaneManager {
   }
 
   /**
-   * C4: ペインヘッダのステータスバッジをリアルタイム更新
+   * C4: ペインヘッダの状態記号をリアルタイム更新。
+   * 渡される状態の値ではなく、セッションの今の状態からカードと同じ規則で描き直す
+   * （state だけを見て別の記号で描くと、カードと見出しで同じセッションが違って見える）。
    * @param {number} sessionId - セッション ID
-   * @param {'waiting'|'running'|'idle'} status - 新しいステータス
    */
-  updateSlotBadge(sessionId, status) {
+  refreshSlotBadge(sessionId) {
     const slotIdx = this.slots.findIndex(s => s && s.session && s.session.id === sessionId);
     if (slotIdx < 0) return;
     if (!this.area) return;
     const slotEls = this.area.querySelectorAll('.pane-slot');
     const el = slotEls[slotIdx];
     if (!el) return;
-    const badge = el.querySelector('.ph-badge');
+    const badge = el.querySelector('.ph-badge') as HTMLElement | null;
     if (!badge) return;
-    // クラスと表示テキストを更新
-    // 'idle' は CSS では 'standby' に対応するため変換する
-    const cssStatus = status === 'idle' ? 'standby' : status;
-    badge.className = `ph-badge ${cssStatus}`;
-    badge.textContent = status === 'waiting' ? '⚠' : status === 'running' ? '●' : '—';
     // 承認待ちペインに薄黄アウトライン
-    el.classList.toggle('waiting-approval', status === 'waiting');
+    el.classList.toggle('waiting-approval', applyPaneStateBadge(badge, sessions.get(sessionId) ?? this.slots[slotIdx].session));
   }
 
   /**
    * 子 plan: docs/local/plan_session-card-label-edit.md C2。
    * カード右クリックの改名は session_update（session_meta）で届くが、状態遷移が
-   * 無いため updateSlotBadge の経路には乗らない。ペイン見出しの ph-dir だけを
+   * 無いため refreshSlotBadge の経路には乗らない。ペイン見出しの ph-dir だけを
    * その場で書き換え、フルの render() は起こさない（他ペインの再アタッチを避ける）。
    */
   updateSlotLabel(sessionId, text, cwd) {
@@ -1542,6 +1536,7 @@ export class MultiPaneManager {
         if (!termArea.isConnected || !termArea.contains(container)) return;
         if (container.clientWidth > 0 && container.clientHeight > 0) {
           t.term.open(container);
+          installTerminalContextMenu(session.id, container);
           ensureAltScrollRail(session.id, t);
           ensureAltDragSelect(session.id, t);
           enableWebglRenderer(t);

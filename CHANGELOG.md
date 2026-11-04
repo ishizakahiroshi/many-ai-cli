@@ -32,6 +32,15 @@ Release artifacts are published at
   owner startup and bound to the exact artifact and execution. Comparisons stay
   separate from task success, effects and live HTTP execution capabilities.
 
+- Draw the state symbol in each multi grid and detached grid pane header with
+  the same symbols and rules as the session card (including waiting for input,
+  starting, and finished-but-unread), and keep it in step with the card.
+
+- Right-click a file path or URL in the terminal to open the same menu as a
+  left click. The terminal's context menu is now installed the same way in the
+  single view, the multi grid and the detached grid. Right-clicking a selection
+  that contains the link still copies as before.
+
 - Allow editing quick commands by right-clicking their buttons.
 
 - Show a "starting" state for new in-window CLI launches until the correlated

@@ -646,7 +646,7 @@ export function _connectWs() {
 	  cur.auto_title = m.session_meta.auto_title;
 	  // 子 plan: plan_session-card-label-edit.md C2 — カード右クリックの改名は
 	  // handleSessionMeta が state を変えないまま session_meta だけで届くため、
-	  // 下の m.state ブロック（updateSlotBadge 経路）を通らない。Grid ペイン見出し
+	  // 下の状態記号の更新（refreshSlotBadge 経路）を通らない。Grid ペイン見出し
 	  // （multi-pane）と別窓 Grid（detached-grid）の ph-dir をここで直接書き換える。
 	  // pane-placement-menu.ts の slotTitle() は開くたびに live の session.label を
 	  // 読むので、こちらは手当て不要（同じ session オブジェクト参照を見ている）。
@@ -748,27 +748,26 @@ export function _connectWs() {
     if (!isNew && beforeLayout === sessionLayoutSnapshot(cur) && (m.state || m.last_output_at)) {
       fastRenderSessionId = m.session_id;
     }
-    // C4: セッション state 変化をマルチペインバッジに反映
-    if (m.state) {
+    // C4: セッションの状態変化をペイン見出しの状態記号に反映する。
+    // 記号はカードと同じ規則（stateActivityDecoration）で描くので、state の値が変わった
+    // ときだけでなく、承認待ち・入力待ち・処理中の印（activity / awaiting_* /
+    // workflow_active）だけが変わったときも描き直す。
+    const paneBadgeChanged = !!(m.state || m.activity || m.awaiting_user !== undefined
+      || m.awaiting_approval !== undefined || m.workflow_active !== undefined);
+    if (paneBadgeChanged) {
       const mgr = window.multiPaneManager;
-      if (mgr && typeof mgr.updateSlotBadge === 'function') {
-        const badgeStatus = m.state === 'waiting' ? 'waiting'
-                          : m.state === 'running' ? 'running'
-                          : 'standby';
-        mgr.updateSlotBadge(m.session_id, badgeStatus);
+      if (mgr && typeof mgr.refreshSlotBadge === 'function') {
+        mgr.refreshSlotBadge(m.session_id);
       }
-      // C1: detached-grid モード: バッジ更新 + セッション追加時に再描画
-      const dgMgr = window.detachedGridManager;
-      if (dgMgr) {
-        if (typeof dgMgr.updateSlotBadge === 'function') {
-          const badgeStatus = m.state === 'waiting' ? 'waiting'
-                            : m.state === 'running' ? 'running'
-                            : 'standby';
-          dgMgr.updateSlotBadge(m.session_id, badgeStatus);
-        }
-        if (isNew && typeof dgMgr.onSessionsUpdated === 'function') {
-          dgMgr.onSessionsUpdated();
-        }
+    }
+    // C1: detached-grid モード: バッジ更新 + セッション追加時に再描画
+    const dgMgr = window.detachedGridManager;
+    if (dgMgr) {
+      if (paneBadgeChanged && typeof dgMgr.refreshSlotBadge === 'function') {
+        dgMgr.refreshSlotBadge(m.session_id);
+      }
+      if (m.state && isNew && typeof dgMgr.onSessionsUpdated === 'function') {
+        dgMgr.onSessionsUpdated();
       }
     }
     // C5: 新規セッションは非★グループ末尾（forceToFront=false）

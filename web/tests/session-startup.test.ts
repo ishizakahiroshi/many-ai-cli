@@ -167,7 +167,7 @@ test('actual grid attachment creates the terminal when correlation arrives befor
   const context: any = { mountTerminalStartup: () => events.push('feedback'),
     ensureTerminal: () => { events.push('ensure'); entry = { term: { open: () => events.push('open') }, autoScroll: false }; },
     document: { createElement: () => ({ style: {}, clientWidth: 400, clientHeight: 250 }) }, requestAnimationFrame: (frame: () => void) => frames.push(frame),
-    ensureAltScrollRail: () => {}, ensureAltDragSelect: () => {}, enableWebglRenderer: () => {},
+    ensureAltScrollRail: () => {}, ensureAltDragSelect: () => {}, enableWebglRenderer: () => {}, installTerminalContextMenu: () => {},
     window: { getTerminalEntry: () => { events.push('lookup'); return entry; }, flushPendingTerminalChunks: () => events.push('flush') } };
   runInNewContext(compile('class Manager {' + text.slice(start, end) + '}\nglobalThis.Manager=Manager;'), context);
   const manager = new context.Manager(); manager._shouldForceBottomOnAttach = () => false; manager._ensureScrollHandler = () => {};
