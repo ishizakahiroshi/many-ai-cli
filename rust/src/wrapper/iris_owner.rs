@@ -1327,8 +1327,15 @@ mod real_project_argv_tests {
             ("MANY_AI_CLI_HUB_TOKEN", None),
             ("DISABLE_UPDATES", Some("1")),
             ("DISABLE_AUTOUPDATER", Some("1")),
+            ("CLAUDE_CODE_USE_POWERSHELL_TOOL", Some("0")),
         ]);
-        let inherited = strings(&["CLAUDE_PID=1", "PATH", "MANY_AI_CLI_SESSION_ID"]);
+        // An inherited PowerShell switch is overridden by the fixed value.
+        let inherited = strings(&[
+            "CLAUDE_PID=1",
+            "PATH",
+            "MANY_AI_CLI_SESSION_ID",
+            "CLAUDE_CODE_USE_POWERSHELL_TOOL=1",
+        ]);
         assert_eq!(check_real_project_environment(&good, &inherited), Ok(()));
         // Smoke finding: updates must be blocked, with the fixed value.
         for env in [
@@ -1345,6 +1352,13 @@ mod real_project_argv_tests {
                 ("CLAUDE_CONFIG_DIR", Some(r"C:\synthetic")),
                 ("DISABLE_UPDATES", None),
                 ("DISABLE_AUTOUPDATER", Some("1")),
+            ],
+            // The PowerShell tool left on.
+            vec![
+                ("CLAUDE_CONFIG_DIR", Some(r"C:\synthetic")),
+                ("DISABLE_UPDATES", Some("1")),
+                ("DISABLE_AUTOUPDATER", Some("1")),
+                ("CLAUDE_CODE_USE_POWERSHELL_TOOL", Some("1")),
             ],
         ] {
             assert_eq!(

@@ -1479,6 +1479,38 @@ mod native {
         assert_eq!(v["change_count"], 0);
     }
 
+    /// Real run finding (case A, 450 entries): a folder record above the
+    /// protocol message limit made the whole owner store unreadable for every
+    /// later reader (other launches refused, the record could not be read).
+    #[tokio::test]
+    async fn a_large_project_folder_keeps_the_owner_store_readable() {
+        let seed = |dir: &Path| {
+            seed_project(dir);
+            let many = dir.join("src").join("generated-synthetic-module-folder");
+            std::fs::create_dir_all(&many).unwrap();
+            for i in 0..600 {
+                std::fs::write(
+                    many.join(format!("synthetic_generated_module_number_{i:04}.py")),
+                    format!("value = {i}\n"),
+                )
+                .unwrap();
+            }
+        };
+        let f = Native::new(seed, &["src"], &[]);
+        let plan = json!([write("src/a.py", "print(2)\n")]);
+        let (result, launches) = run(&f, plan).await;
+        result.unwrap();
+        assert_eq!(launches, 1);
+        let (_, folder) = f.record();
+        let before = folder["before"].to_string();
+        assert!(before.len() > 65_536, "the record is above the old limit");
+        // A fresh reader (another launch, the Hub) still opens the store.
+        let v = f.verification().await;
+        assert_record(&v);
+        assert_eq!(v["folder_effects"], SCOPED_CHANGE);
+        assert_eq!(v["change_count"], 1);
+    }
+
     #[tokio::test]
     async fn out_of_scope_protected_stream_and_folder_changes_are_unexpected() {
         let cases = [

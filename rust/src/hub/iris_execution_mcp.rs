@@ -90,7 +90,13 @@ impl<'de> Visitor<'de> for StrictValue {
 }
 
 pub fn parse_json(bytes: &[u8]) -> Result<Value, ProtocolError> {
-    if bytes.len() > MAX_BYTES {
+    parse_json_bounded(bytes, MAX_BYTES)
+}
+
+/// `parse_json` with a caller-chosen byte limit (strict, bounded depth),
+/// for stored documents that are not protocol messages.
+pub fn parse_json_bounded(bytes: &[u8], max_bytes: usize) -> Result<Value, ProtocolError> {
+    if bytes.len() > max_bytes {
         return Err(error(-32700, "JSON byte limit exceeded"));
     }
     let mut decoder = serde_json::Deserializer::from_slice(bytes);

@@ -1,6 +1,9 @@
 //! Trusted local owner evidence. This is a library API, never an HTTP/MCP writer.
 //! File integrity, local process cessation and reported task outcome remain separate.
-use super::{iris_execution_journal::Binding, iris_execution_mcp::parse_json};
+use super::{
+    iris_execution_journal::Binding,
+    iris_execution_mcp::{parse_json, parse_json_bounded},
+};
 use crate::process::pty::{LocalCessation, PtyExit};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
@@ -31,6 +34,19 @@ pub(crate) fn fail(code: &str) -> OwnerError {
     }
 }
 pub(crate) type Result<T> = std::result::Result<T, OwnerError>;
+/// The largest document one owner store row may hold. A folder record lists
+/// every entry of the approved folder (up to `MAX_ENTRIES`), far above the
+/// protocol message limit; every row is written only if it can be read back
+/// under this same limit, so one row can never make the store unreadable.
+pub const MAX_STORED_DOCUMENT_BYTES: usize = 4 * 1024 * 1024;
+/// The serialized row, or `DOCUMENT_TOO_LARGE` before anything is written.
+fn storable(document: &Value) -> Result<String> {
+    let raw = document.to_string();
+    if raw.len() > MAX_STORED_DOCUMENT_BYTES {
+        return Err(fail("DOCUMENT_TOO_LARGE"));
+    }
+    Ok(raw)
+}
 pub(crate) fn sql<T>(r: rusqlite::Result<T>) -> Result<T> {
     r.map_err(|_| fail("STORAGE"))
 }
@@ -663,7 +679,7 @@ impl OwnerStore {
         if r["root_pid"].is_null() || r["local_tree_ceased"] == true {
             return Err(fail("AUTO_STOP_ORDER"));
         }
-        let raw = document.to_string();
+        let raw = storable(document)?;
         let b = &t.binding;
         sql(tx.execute(
             "INSERT INTO auto_stop_records VALUES(?,?,?,?,?)",
@@ -720,7 +736,7 @@ impl OwnerStore {
         {
             return Err(fail("FOLDER_TRUST_CONFLICT"));
         }
-        let raw = document.to_string();
+        let raw = storable(document)?;
         sql(tx.execute(
             "INSERT INTO trust_records VALUES(?,?,?,?,?,?)",
             params![
@@ -787,7 +803,7 @@ impl OwnerStore {
         if !ordered {
             return Err(fail("FOLDER_ORDER"));
         }
-        let raw = document.to_string();
+        let raw = storable(document)?;
         sql(tx.execute(
             "INSERT INTO folder_records VALUES(?,?,?,?,?,?)",
             params![
@@ -1202,7 +1218,7 @@ fn checked_document(raw: &str, digest: &str) -> Result<Value> {
     if sha(raw.as_bytes()) != digest {
         return Err(fail("STORAGE"));
     }
-    parse_json(raw.as_bytes()).map_err(|_| fail("STORAGE"))
+    parse_json_bounded(raw.as_bytes(), MAX_STORED_DOCUMENT_BYTES).map_err(|_| fail("STORAGE"))
 }
 fn validate_owner(v: &Value) -> Result<()> {
     let t: OwnerTicket =
@@ -1290,7 +1306,7 @@ fn save(db: &Connection, r: &Value) -> Result<()> {
     validate_owner(r)?;
     let t: OwnerTicket =
         serde_json::from_value(r["ticket"].clone()).map_err(|_| fail("STORAGE"))?;
-    let raw = r.to_string();
+    let raw = storable(r)?;
     sql(db.execute("INSERT INTO owners VALUES(?,?,?,?,?) ON CONFLICT(principal,workspace,attempt) DO UPDATE SET document=excluded.document,digest=excluded.digest",params![t.binding.principal_id,t.binding.workspace_id,t.binding.attempt_id,raw,sha(raw.as_bytes())]))?;
     Ok(())
 }
@@ -1321,7 +1337,7 @@ fn persist_receipt(db: &Connection, r: &Value, payload: &Value) -> Result<()> {
     save(db, r)?;
     let t: OwnerTicket =
         serde_json::from_value(r["ticket"].clone()).map_err(|_| fail("STORAGE"))?;
-    let raw = payload.to_string();
+    let raw = storable(payload)?;
     sql(db.execute(
         "INSERT INTO receipts VALUES(?,?,?,?,?,?)",
         params![
@@ -1358,6 +1374,36 @@ mod tests {
             provider: "synthetic".into(),
             profile_id: "synthetic".into(),
         }
+    }
+    /// Real run finding: a folder record above the protocol limit is stored
+    /// and read back by a fresh reader; a row above the store limit is
+    /// refused before anything is written, so the store stays readable.
+    #[test]
+    fn folder_records_are_written_only_if_they_read_back() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("owner.db");
+        let mut s = OwnerStore::open(&p).unwrap();
+        let t = s.begin_owner(&binding(), "owner", 1, 100).unwrap();
+        let document = |entries: usize, pad: usize| {
+            let entries: Vec<Value> = (0..entries)
+                .map(|i| json!({"path": format!("src/{}{i:05}.py", "x".repeat(pad)),"kind":"file"}))
+                .collect();
+            json!({"ticket":t,"phase":"before","complete":true,"entries":entries,
+                "verification_scope":super::super::iris_execution_folder::SCOPE,
+                "effects_verified":false,"task_outcome_verified":false,"remote_jobs_stopped":false})
+        };
+        let too_large = document(1000, 4200);
+        assert!(too_large.to_string().len() > MAX_STORED_DOCUMENT_BYTES);
+        assert_eq!(
+            s.record_folder(&t, "before", &too_large).unwrap_err().code,
+            "DOCUMENT_TOO_LARGE"
+        );
+        let large = document(1000, 40);
+        assert!(large.to_string().len() > super::super::iris_execution_mcp::MAX_BYTES);
+        s.record_folder(&t, "before", &large).unwrap();
+        drop(s);
+        let fresh = OwnerStore::open(&p).unwrap();
+        assert_eq!(fresh.query_folder(&binding()).unwrap()["before"], large);
     }
     #[test]
     fn durable_multi_connection_identity_and_seq() {

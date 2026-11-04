@@ -579,7 +579,10 @@ pub const REAL_PROJECT_ENV_KEPT: [&str; 2] = ["CLAUDE_CONFIG_DIR", "MANY_AI_CLI_
 /// Whether a real project provider must not receive `name`.
 pub fn real_project_env_removed(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
-    if REAL_PROJECT_ENV_KEPT.contains(&upper.as_str()) {
+    if REAL_PROJECT_ENV_KEPT.contains(&upper.as_str())
+        || REAL_PROJECT_ENV_SET.iter().any(|(set, _)| *set == upper)
+    {
+        // Kept, or always set to a fixed value (checked at the exec boundary).
         return false;
     }
     REAL_PROJECT_ENV_REMOVED_NAMES.contains(&upper.as_str())
@@ -647,9 +650,16 @@ pub fn apply_real_project_environment(
 }
 
 /// Names a real project provider always gets with these values: Claude's
-/// own switches that block every update path (background and manual).
-pub const REAL_PROJECT_ENV_SET: [(&str, &str); 2] =
-    [("DISABLE_UPDATES", "1"), ("DISABLE_AUTOUPDATER", "1")];
+/// own switches that block every update path (background and manual), and
+/// no PowerShell tool (real run finding: case A ran its approved test command
+/// through the PowerShell tool with a pipe, which the approved
+/// `Bash(...)` rule does not cover, and stopped on the prompt). Commands run
+/// only through the Bash tool, where the approved rule applies.
+pub const REAL_PROJECT_ENV_SET: [(&str, &str); 3] = [
+    ("DISABLE_UPDATES", "1"),
+    ("DISABLE_AUTOUPDATER", "1"),
+    ("CLAUDE_CODE_USE_POWERSHELL_TOOL", "0"),
+];
 
 pub fn env_without(env: &[String], names: &[&str]) -> Vec<String> {
     env.iter()
@@ -1450,12 +1460,38 @@ mod tests {
             env.get(std::ffi::OsStr::new("PATH")),
             Some(&Some("x".into()))
         );
-        // Smoke finding: updates are blocked for the run.
-        for name in ["DISABLE_UPDATES", "DISABLE_AUTOUPDATER"] {
+        // Smoke finding: updates are blocked for the run. Real run finding:
+        // no PowerShell tool, even when the wrapper had it switched on.
+        for (name, value) in [
+            ("DISABLE_UPDATES", "1"),
+            ("DISABLE_AUTOUPDATER", "1"),
+            ("CLAUDE_CODE_USE_POWERSHELL_TOOL", "0"),
+        ] {
             assert_eq!(
                 env.get(std::ffi::OsStr::new(name)),
-                Some(&Some("1".into())),
+                Some(&Some(value.into())),
                 "{name}"
+            );
+        }
+        assert!(!real_project_env_removed("CLAUDE_CODE_USE_POWERSHELL_TOOL"));
+        let mut on = std::collections::BTreeMap::new();
+        on.insert("claude_code_use_powershell_tool".into(), Some("1".into()));
+        apply_real_project_environment(&mut on, &[], Some(config)).unwrap();
+        let spellings: Vec<_> = on
+            .iter()
+            .filter(|(k, _)| {
+                k.to_string_lossy()
+                    .eq_ignore_ascii_case("CLAUDE_CODE_USE_POWERSHELL_TOOL")
+            })
+            .map(|(k, v)| (k.to_string_lossy().into_owned(), v.clone()))
+            .collect();
+        if cfg!(windows) {
+            assert_eq!(
+                spellings,
+                vec![(
+                    "CLAUDE_CODE_USE_POWERSHELL_TOOL".to_string(),
+                    Some("0".into())
+                )]
             );
         }
         // The Claude folder is required and absolute.
