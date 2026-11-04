@@ -180,6 +180,26 @@ impl ArtifactPermit {
             ];
         Self::build(root, relative, binding, max_bytes, effects, exact)
     }
+    /// Real project (`folder-diff`) collector grants only. The scope is
+    /// exactly the three folder-diff values the trusted collector can write.
+    pub(crate) fn folder_diff(
+        root: &Path,
+        relative: &str,
+        binding: &Binding,
+        max_bytes: u64,
+        effects: Vec<String>,
+    ) -> Result<Self> {
+        let mut sorted = effects.clone();
+        sorted.sort();
+        let mut expected = [
+            super::iris_execution_folder::NO_CHANGE,
+            super::iris_execution_folder::SCOPED_CHANGE,
+            super::iris_execution_folder::UNEXPECTED_CHANGE,
+        ];
+        expected.sort();
+        let exact = sorted == expected;
+        Self::build(root, relative, binding, max_bytes, effects, exact)
+    }
     fn build(
         root: &Path,
         relative: &str,
@@ -582,7 +602,82 @@ impl OwnerStore {
                 load(&db, &ticket.binding)?.ok_or_else(|| fail("STORAGE"))?;
             }
         }
+        if auto_stop_table(&db)? {
+            let rows = sql(db.prepare(
+                "SELECT principal,workspace,attempt,document,digest FROM auto_stop_records",
+            ))?
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, String>(4)?,
+                ))
+            })
+            .map_err(|_| fail("STORAGE"))?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|_| fail("STORAGE"))?;
+            for (principal, workspace, attempt, raw, digest) in rows {
+                let v = checked_document(&raw, &digest)?;
+                let ticket: OwnerTicket =
+                    serde_json::from_value(v["ticket"].clone()).map_err(|_| fail("STORAGE"))?;
+                if !auto_stop_flags(&v)
+                    || !same_key(&ticket.binding, &principal, &workspace, &attempt)
+                {
+                    return Err(fail("STORAGE"));
+                }
+                load(&db, &ticket.binding)?.ok_or_else(|| fail("STORAGE"))?;
+            }
+        }
         Ok(Self { db })
+    }
+    /// Real project watchdog only: why the Hub requested an automatic stop
+    /// (`STOPPED_AWAITING_APPROVAL` or `STOPPED_RUNTIME_LIMIT`), saved before
+    /// the stop request so a watchdog stop never exists without its reason.
+    /// One row per attempt, created on first use and never replaced; an
+    /// identical row is returned as history. It proves no cessation: only the
+    /// owner's `local_tree_ceased` record confirms the stop.
+    pub fn record_auto_stop(&mut self, t: &OwnerTicket, document: &Value) -> Result<Value> {
+        if document["ticket"] != json!(t) || !auto_stop_flags(document) {
+            return Err(fail("AUTO_STOP_RECORD"));
+        }
+        let tx = sql(self
+            .db
+            .transaction_with_behavior(TransactionBehavior::Immediate))?;
+        let r = bound(&tx, t)?;
+        sql(tx.execute_batch(AUTO_STOP_TABLE))?;
+        if let Some(old) = auto_stop_row(&tx, &t.binding)? {
+            if old == *document {
+                return Ok(old);
+            }
+            return Err(fail("AUTO_STOP_CONFLICT"));
+        }
+        if r["root_pid"].is_null() || r["local_tree_ceased"] == true {
+            return Err(fail("AUTO_STOP_ORDER"));
+        }
+        let raw = document.to_string();
+        let b = &t.binding;
+        sql(tx.execute(
+            "INSERT INTO auto_stop_records VALUES(?,?,?,?,?)",
+            params![
+                b.principal_id,
+                b.workspace_id,
+                b.attempt_id,
+                raw,
+                sha(raw.as_bytes())
+            ],
+        ))?;
+        sql(tx.commit())?;
+        Ok(document.clone())
+    }
+    /// The attempt's automatic stop reason row, or null when none exists.
+    pub fn query_auto_stop(&self, b: &Binding) -> Result<Value> {
+        check_binding(b)?;
+        let tx = sql(self.db.unchecked_transaction())?;
+        let row = auto_stop_row(&tx, b)?.unwrap_or(Value::Null);
+        sql(tx.commit())?;
+        Ok(row)
     }
     /// Folder-trust observations for the real bounded launch only, in two
     /// rows per attempt: `intent` (exact approved folder, the key about to be
@@ -1048,6 +1143,50 @@ fn trust_row(db: &Connection, b: &Binding, phase: &str) -> Result<Option<Value>>
     };
     let v = checked_document(&raw, &digest)?;
     if v["ticket"]["binding"] != json!(b) || v["phase"] != phase || !trust_flags(&v) {
+        return Err(fail("STORAGE"));
+    }
+    Ok(Some(v))
+}
+const AUTO_STOP_TABLE: &str = "CREATE TABLE IF NOT EXISTS auto_stop_records(principal TEXT NOT NULL,workspace TEXT NOT NULL,attempt TEXT NOT NULL,document TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(principal,workspace,attempt),FOREIGN KEY(principal,workspace,attempt) REFERENCES owners(principal,workspace,attempt));";
+pub const STOPPED_AWAITING_APPROVAL: &str = "STOPPED_AWAITING_APPROVAL";
+pub const STOPPED_RUNTIME_LIMIT: &str = "STOPPED_RUNTIME_LIMIT";
+fn auto_stop_flags(v: &Value) -> bool {
+    v["kind"] == "auto_stop"
+        && matches!(
+            v["reason"].as_str(),
+            Some(STOPPED_AWAITING_APPROVAL | STOPPED_RUNTIME_LIMIT)
+        )
+        && v["stop_request_id"].as_str().is_some_and(id)
+        && v["requested_at_ms"].is_u64()
+        && v["task_outcome"] == "unknown"
+        && v["effects_verified"] == false
+        && v["task_outcome_verified"] == false
+        && v["remote_jobs_stopped"] == false
+}
+fn auto_stop_table(db: &Connection) -> Result<bool> {
+    let count: i64 = sql(db.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='auto_stop_records'",
+        [],
+        |r| r.get(0),
+    ))?;
+    Ok(count == 1)
+}
+fn auto_stop_row(db: &Connection, b: &Binding) -> Result<Option<Value>> {
+    if !auto_stop_table(db)? {
+        return Ok(None);
+    }
+    let row: Option<(String, String)> = sql(db
+        .query_row(
+            "SELECT document,digest FROM auto_stop_records WHERE principal=? AND workspace=? AND attempt=?",
+            params![b.principal_id, b.workspace_id, b.attempt_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional())?;
+    let Some((raw, digest)) = row else {
+        return Ok(None);
+    };
+    let v = checked_document(&raw, &digest)?;
+    if v["ticket"]["binding"] != json!(b) || !auto_stop_flags(&v) {
         return Err(fail("STORAGE"));
     }
     Ok(Some(v))

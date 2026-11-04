@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "8e959f2d9d6043e317ea652603915a617fddfb5d",
+    "commit": "173712ea5badb9fc4dcd138c522d00aa3dd55f49",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2075,
-    "analyzed": 1610,
+    "discovered": 2076,
+    "analyzed": 1611,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 450,
@@ -30940,6 +30940,7 @@
         "reads": {
           "state": "value",
           "value": [
+            "auto_stop_records",
             "folder_records",
             "owners",
             "receipts",
@@ -30950,6 +30951,7 @@
         "writes": {
           "state": "value",
           "value": [
+            "auto_stop_records",
             "folder_records",
             "owners",
             "receipts",
@@ -40699,6 +40701,35 @@
         "summary": {
           "state": "value",
           "value": "Hub composition of the explicit real bounded profile. No Hub, provider,"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/tests/iris_real_project.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "`iris-owned-real-project/1` acceptance (Many Iris C9 C2). No real provider,"
         },
         "authentication": {
           "state": "not_configured"
@@ -51420,6 +51451,19 @@
       "in_schema_snapshot": false,
       "unresolved_in": [
         "rust/src/hub/iris_execution_journal.rs"
+      ]
+    },
+    {
+      "name": "auto_stop_records",
+      "read_by": [
+        "rust/src/hub/iris_execution_owner.rs"
+      ],
+      "written_by": [
+        "rust/src/hub/iris_execution_owner.rs"
+      ],
+      "in_schema_snapshot": false,
+      "unresolved_in": [
+        "rust/src/hub/iris_execution_owner.rs"
       ]
     },
     {

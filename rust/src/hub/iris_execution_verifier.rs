@@ -12,6 +12,20 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 const VERIFIER: &str = "strict-json-payload-equality/1";
+/// Real project profile only: the policy pins the work folder's launch
+/// baseline and launch limits. It never produces a verdict.
+pub const FOLDER_RECORD_VERIFIER: &str = "folder-change-record/1";
+pub const DEFAULT_MAX_RUNTIME_SEC: u64 = 1800;
+pub const MAX_RUNTIME_SEC_LIMIT: u64 = 3600;
+const MAX_ALLOWED_PATHS: usize = 64;
+const MAX_ALLOWED_TOOLS: usize = 16;
+
+/// Present-only field: absent is `None`, any JSON value including `null` is
+/// `Some`. Keeps the existing strict policy shape exactly: a strict policy
+/// that names a folder field, even as null, is still refused.
+fn present<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Option<Value>, D::Error> {
+    Value::deserialize(d).map(Some)
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -22,7 +36,103 @@ struct PolicyDocument {
     verifier: String,
     binding: Binding,
     expires_at_ms: u64,
-    expected_payload: Value,
+    #[serde(default, deserialize_with = "present")]
+    expected_payload: Option<Value>,
+    #[serde(default, deserialize_with = "present")]
+    baseline_sha256: Option<Value>,
+    #[serde(default, deserialize_with = "present")]
+    baseline_entry_count: Option<Value>,
+    #[serde(default, deserialize_with = "present")]
+    allowed_paths: Option<Value>,
+    #[serde(default, deserialize_with = "present")]
+    allowed_tools: Option<Value>,
+    #[serde(default, deserialize_with = "present")]
+    max_runtime_sec: Option<Value>,
+}
+
+/// The `folder-change-record/1` launch limits, from operator bytes only.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FolderPolicy {
+    pub baseline_sha256: String,
+    pub baseline_entry_count: u64,
+    /// Relative `/`-separated folder paths, or `.` for the whole folder.
+    pub allowed_paths: Vec<String>,
+    pub allowed_tools: Vec<String>,
+    pub max_runtime_sec: u64,
+}
+impl FolderPolicy {
+    pub fn document(&self) -> Value {
+        json!({"baseline_sha256":self.baseline_sha256,
+            "baseline_entry_count":self.baseline_entry_count,
+            "allowed_paths":self.allowed_paths,"allowed_tools":self.allowed_tools,
+            "max_runtime_sec":self.max_runtime_sec})
+    }
+}
+
+/// `.` or a relative path of plain names joined by `/`, optionally ending in
+/// one `/` (a folder, e.g. `.pytest-tmp/`). No drive, root, backslash, `..`,
+/// empty or reserved component, and never a protected name.
+pub fn valid_allowed_path(raw: &str) -> bool {
+    if raw == "." {
+        return true;
+    }
+    let raw = raw.strip_suffix('/').unwrap_or(raw);
+    !raw.is_empty()
+        && raw.len() <= 1024
+        && !raw.contains('\\')
+        && raw.split('/').all(|part| {
+            !part.is_empty()
+                && part != "."
+                && part != ".."
+                && !super::iris_execution_folder::protected_name(part)
+                && super::iris_execution_owner::relative_path(part).is_ok()
+        })
+}
+
+fn folder_policy(d: &PolicyDocument) -> Option<FolderPolicy> {
+    let baseline_sha256 = d.baseline_sha256.as_ref()?.as_str()?.to_owned();
+    let baseline_entry_count = d.baseline_entry_count.as_ref()?.as_u64()?;
+    let strings = |value: &Value, limit: usize| -> Option<Vec<String>> {
+        let items = value.as_array()?;
+        if items.len() > limit {
+            return None;
+        }
+        let mut out: Vec<String> = Vec::new();
+        for item in items {
+            let text = item.as_str()?.to_owned();
+            if out.contains(&text) {
+                return None;
+            }
+            out.push(text);
+        }
+        Some(out)
+    };
+    let allowed_paths = strings(d.allowed_paths.as_ref()?, MAX_ALLOWED_PATHS)?;
+    let allowed_tools = strings(d.allowed_tools.as_ref()?, MAX_ALLOWED_TOOLS)?;
+    let max_runtime_sec = match &d.max_runtime_sec {
+        None => DEFAULT_MAX_RUNTIME_SEC,
+        Some(value) => value.as_u64()?,
+    };
+    if !hash(&baseline_sha256)
+        || baseline_entry_count == 0
+        || baseline_entry_count > super::iris_execution_folder::MAX_ENTRIES as u64
+        || allowed_paths.is_empty()
+        || !allowed_paths.iter().all(|p| valid_allowed_path(p))
+        || !allowed_tools
+            .iter()
+            .all(|t| crate::config::valid_allowed_tool_value(t) && t.trim() == t)
+        || max_runtime_sec == 0
+        || max_runtime_sec > MAX_RUNTIME_SEC_LIMIT
+    {
+        return None;
+    }
+    Some(FolderPolicy {
+        baseline_sha256,
+        baseline_entry_count,
+        allowed_paths,
+        allowed_tools,
+        max_runtime_sec,
+    })
 }
 
 /// Construct only from operator-approved bytes before beginning the owner
@@ -31,6 +141,7 @@ pub(crate) struct PinnedPolicy {
     document: PolicyDocument,
     spec_hash: String,
     pinned_at_ms: u64,
+    folder: Option<FolderPolicy>,
 }
 impl std::fmt::Debug for PinnedPolicy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -46,8 +157,28 @@ impl PinnedPolicy {
         let value = parse_json(raw).map_err(|_| fail("VERIFIER_POLICY"))?;
         let document: PolicyDocument =
             serde_json::from_value(value).map_err(|_| fail("VERIFIER_POLICY"))?;
+        // Exactly one shape per verifier. The strict shape is unchanged: it
+        // requires expected_payload and admits none of the folder fields.
+        let folder_fields = [
+            &document.baseline_sha256,
+            &document.baseline_entry_count,
+            &document.allowed_paths,
+            &document.allowed_tools,
+            &document.max_runtime_sec,
+        ];
+        let folder = match document.verifier.as_str() {
+            VERIFIER
+                if document.expected_payload.is_some()
+                    && folder_fields.iter().all(|f| f.is_none()) =>
+            {
+                None
+            }
+            FOLDER_RECORD_VERIFIER if document.expected_payload.is_none() => {
+                Some(folder_policy(&document).ok_or_else(|| fail("VERIFIER_POLICY"))?)
+            }
+            _ => return Err(fail("VERIFIER_POLICY")),
+        };
         if document.schema_version != 1
-            || document.verifier != VERIFIER
             || !id(&document.policy_id)
             || document.policy_revision == 0
             || document.policy_revision > i64::MAX as u64
@@ -62,10 +193,15 @@ impl PinnedPolicy {
             document,
             spec_hash: sha(raw),
             pinned_at_ms,
+            folder,
         })
     }
     pub(crate) fn binding(&self) -> &Binding {
         &self.document.binding
+    }
+    /// The real project launch limits; `None` for a fixed-payload policy.
+    pub(crate) fn folder(&self) -> Option<&FolderPolicy> {
+        self.folder.as_ref()
     }
     pub(crate) fn spec_hash(&self) -> &str {
         &self.spec_hash
@@ -78,12 +214,19 @@ impl PinnedPolicy {
     }
     /// Public pin metadata only; never disclose operator expectations.
     pub(crate) fn pin_receipt(&self) -> Value {
-        json!({
+        let mut receipt = json!({
             "kind":"verification_policy_pin", "binding":self.binding(),
             "spec_hash":self.spec_hash(), "policy_id":self.document.policy_id,
             "policy_revision":self.document.policy_revision,
             "pinned_at_ms":self.pinned_at_ms()
-        })
+        });
+        // Fixed-payload pins keep their exact shape. Folder limits are public
+        // operator values (no expectation to hide), recorded with the pin.
+        if let Some(folder) = &self.folder {
+            receipt["verifier"] = json!(FOLDER_RECORD_VERIFIER);
+            receipt["folder_policy"] = folder.document();
+        }
+        receipt
     }
 }
 
@@ -112,6 +255,15 @@ pub(crate) fn evaluate(
     artifact_sha256: &str,
     now_ms: u64,
 ) -> Result<Value> {
+    // A folder record policy has no expectation and never yields a verdict.
+    let Some(expected) = policy
+        .document
+        .expected_payload
+        .as_ref()
+        .filter(|_| policy.folder.is_none())
+    else {
+        return Err(fail("VERIFIER_POLICY"));
+    };
     if now_ms > i64::MAX as u64
         || now_ms < policy.pinned_at_ms()
         || now_ms >= policy.document.expires_at_ms
@@ -181,7 +333,7 @@ pub(crate) fn evaluate(
     {
         return Err(fail("VERIFIER_ENVELOPE"));
     }
-    let verdict = if envelope.payload == policy.document.expected_payload {
+    let verdict = if envelope.payload == *expected {
         "pass"
     } else {
         "fail"
@@ -275,6 +427,89 @@ mod tests {
         assert!(PinnedPolicy::parse(br#"{"schema_version":1,"schema_version":1}"#, 100).is_err());
         let deep = format!("{}0{}", "[".repeat(70), "]".repeat(70));
         assert!(PinnedPolicy::parse(deep.as_bytes(), 100).is_err());
+    }
+    fn folder_document() -> Value {
+        json!({"schema_version":1,"policy_id":"policy","policy_revision":1,
+            "verifier":FOLDER_RECORD_VERIFIER,"binding":binding(),"expires_at_ms":1000,
+            "baseline_sha256":"c".repeat(64),"baseline_entry_count":3,
+            "allowed_paths":["src",".pytest-tmp/"],
+            "allowed_tools":["Bash(python -B -m pytest -p no:cacheprovider --basetemp=.pytest-tmp:*)"]})
+    }
+    #[test]
+    fn folder_record_policy_has_its_own_strict_shape_and_never_a_verdict() {
+        let policy = PinnedPolicy::parse(folder_document().to_string().as_bytes(), 100).unwrap();
+        let folder = policy.folder().unwrap();
+        assert_eq!(folder.max_runtime_sec, DEFAULT_MAX_RUNTIME_SEC);
+        assert_eq!(folder.allowed_paths, ["src", ".pytest-tmp/"]);
+        assert_eq!(policy.pin_receipt()["verifier"], FOLDER_RECORD_VERIFIER);
+        assert_eq!(policy.pin_receipt()["folder_policy"], folder.document());
+        // The fixed-payload pin keeps its exact key set.
+        let strict = pinned().pin_receipt();
+        assert!(strict.get("verifier").is_none() && strict.get("folder_policy").is_none());
+        let ok = |field: &str, value: Option<Value>| {
+            let mut v = folder_document();
+            match value {
+                Some(value) => v[field] = value,
+                None => {
+                    v.as_object_mut().unwrap().remove(field);
+                }
+            }
+            PinnedPolicy::parse(v.to_string().as_bytes(), 100).is_ok()
+        };
+        assert!(ok("max_runtime_sec", Some(json!(3600))));
+        assert!(ok("allowed_tools", Some(json!([]))));
+        assert!(ok("allowed_paths", Some(json!(["."]))));
+        for (field, value) in [
+            ("expected_payload", Some(json!(1))),
+            ("expected_payload", Some(Value::Null)),
+            ("max_runtime_sec", Some(json!(0))),
+            ("max_runtime_sec", Some(json!(3601))),
+            ("allowed_paths", Some(json!([]))),
+            ("allowed_paths", Some(json!(["C:/x"]))),
+            ("allowed_paths", Some(json!(["/x"]))),
+            ("allowed_paths", Some(json!(["../x"]))),
+            ("allowed_paths", Some(json!(["a\\b"]))),
+            ("allowed_paths", Some(json!(["a//b"]))),
+            ("allowed_paths", Some(json!([".claude"]))),
+            ("allowed_paths", Some(json!(["src", "src"]))),
+            ("allowed_tools", Some(json!(["Bash(rm -rf /;x)"]))),
+            ("allowed_tools", Some(json!(["--dangerously"]))),
+            ("allowed_tools", Some(json!([" Read"]))),
+            ("baseline_sha256", Some(json!("x"))),
+            ("baseline_entry_count", Some(json!(0))),
+            ("baseline_entry_count", Some(json!(1001))),
+            ("allowed_tools", None),
+            ("baseline_sha256", None),
+            ("extra", Some(json!(1))),
+        ] {
+            assert!(!ok(field, value.clone()), "{field} {value:?}");
+        }
+        // A strict policy naming any folder field, even as null, is refused.
+        for field in [
+            "baseline_sha256",
+            "allowed_paths",
+            "allowed_tools",
+            "max_runtime_sec",
+        ] {
+            let mut v = policy_document();
+            v[field] = Value::Null;
+            assert!(
+                PinnedPolicy::parse(v.to_string().as_bytes(), 100).is_err(),
+                "{field}"
+            );
+        }
+        let mut null_payload = policy_document();
+        null_payload["expected_payload"] = Value::Null;
+        assert!(PinnedPolicy::parse(null_payload.to_string().as_bytes(), 100).is_ok());
+        // No verdict can be produced from a folder record policy.
+        let (_root, owners, permit, ticket, digest) =
+            fixture(json!({"answer":"operator-only-marker"}), "unknown");
+        assert_eq!(
+            evaluate(&policy, &owners, &permit, &ticket, &digest, 200)
+                .unwrap_err()
+                .code,
+            "VERIFIER_POLICY"
+        );
     }
     #[test]
     fn verdict_is_payload_only_and_never_promotes_task_or_effects() {

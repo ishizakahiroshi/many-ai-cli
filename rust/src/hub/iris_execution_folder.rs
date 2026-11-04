@@ -454,9 +454,395 @@ pub fn compare(
     )
 }
 
+/// Real project effects (`folder-diff` collector). `UNEXPECTED_CHANGE` above is
+/// shared; the real bounded vocabulary is unchanged.
+pub const NO_CHANGE: &str = "folder-no-change";
+pub const SCOPED_CHANGE: &str = "folder-scoped-change";
+/// Upper bound of the full change list artifact (JSON bytes).
+pub const MAX_CHANGES_BYTES: u64 = 1024 * 1024;
+
+/// Names that must never exist in a real project work folder and whose
+/// creation is always unexpected: VCS metadata and project-level provider
+/// settings or server definitions. Compared without letter case.
+pub fn protected_name(name: &str) -> bool {
+    [".git", ".claude", ".mcp.json"]
+        .iter()
+        .any(|p| name.eq_ignore_ascii_case(p))
+}
+
+fn has_protected_component(path: &str) -> bool {
+    // A stream entry is "<file>:<name>:$DATA"; its file part is checked.
+    path.split('/')
+        .any(|part| protected_name(part.split(':').next().unwrap_or(part)))
+}
+
+/// SHA256 of the canonical baseline text of a snapshot: one line per entry in
+/// snapshot order (sorted by relative path, the folder itself first with the
+/// empty path), `kind TAB size TAB sha256-or-dash TAB path LF`, UTF-8. Native
+/// attributes and link counts are not part of the digest (links are checked
+/// separately). A name with a control character has no digest.
+pub fn baseline_digest(entries: &[FolderEntry]) -> Option<String> {
+    let mut text = String::new();
+    for e in entries {
+        if e.path.chars().any(char::is_control) {
+            return None;
+        }
+        text.push_str(&format!(
+            "{}\t{}\t{}\t{}\n",
+            e.kind,
+            e.size,
+            e.sha256.as_deref().unwrap_or("-"),
+            e.path
+        ));
+    }
+    Some(sha(text.as_bytes()))
+}
+
+/// A real project launch baseline: plain single-link files and directories
+/// only, no named stream (including on the folder itself) and no protected
+/// name anywhere. It must equal the operator-pinned digest and entry count.
+pub fn check_project_baseline(
+    entries: &[FolderEntry],
+    baseline_sha256: &str,
+    baseline_entry_count: u64,
+) -> Result<()> {
+    if entries
+        .iter()
+        .any(|e| !(e.kind == "dir" || (e.kind == "file" && e.links == 1)))
+    {
+        return Err(fail("FOLDER_ALIAS"));
+    }
+    if entries.iter().any(|e| has_protected_component(&e.path)) {
+        return Err(fail("FOLDER_PROTECTED_NAME"));
+    }
+    if entries.len() as u64 != baseline_entry_count
+        || baseline_digest(entries).as_deref() != Some(baseline_sha256)
+    {
+        return Err(fail("FOLDER_BASELINE_MISMATCH"));
+    }
+    Ok(())
+}
+
+fn side(entry: Option<&&FolderEntry>) -> (Value, Value) {
+    match entry {
+        Some(e) => (json!(e.size), json!(e.sha256)),
+        None => (Value::Null, Value::Null),
+    }
+}
+
+/// Every difference between two snapshots, sorted by path: path, change
+/// (`added`, `modified` or `removed`), kind (the after kind, or the before
+/// kind for a removal), and the before and after size and SHA256.
+pub fn change_records(before: &[FolderEntry], after: &[FolderEntry]) -> Vec<Value> {
+    let old: BTreeMap<_, _> = before.iter().map(|e| (e.path.as_str(), e)).collect();
+    let new: BTreeMap<_, _> = after.iter().map(|e| (e.path.as_str(), e)).collect();
+    let mut paths: Vec<&str> = old.keys().chain(new.keys()).copied().collect();
+    paths.sort_unstable();
+    paths.dedup();
+    let mut out = Vec::new();
+    for path in paths {
+        let (o, n) = (old.get(path), new.get(path));
+        let change = match (o, n) {
+            (None, Some(_)) => "added",
+            (Some(_), None) => "removed",
+            (Some(a), Some(b)) if a != b => "modified",
+            _ => continue,
+        };
+        let kind = n.or(o).map(|e| e.kind.clone()).unwrap_or_default();
+        let (before_size, before_sha256) = side(o);
+        let (after_size, after_sha256) = side(n);
+        out.push(json!({"path":path,"change":change,"kind":kind,
+            "before_size":before_size,"before_sha256":before_sha256,
+            "after_size":after_size,"after_sha256":after_sha256}));
+    }
+    out
+}
+
+/// `.` is the whole folder; `a` and `a/` both mean `a` itself and everything
+/// below it, at a `/` boundary only (so `src` never covers `src2.py`).
+fn in_scope(path: &str, allowed: &[String]) -> bool {
+    allowed.iter().any(|a| {
+        let a = a.strip_suffix('/').unwrap_or(a);
+        a == "." || path == a || path.strip_prefix(a).is_some_and(|r| r.starts_with('/'))
+    })
+}
+
+/// Effects of a real project run. `NO_CHANGE` when nothing differs;
+/// `SCOPED_CHANGE` only when every difference is the addition, modification
+/// (content only) or removal of a plain single-link file under an allowed
+/// path; otherwise `UNEXPECTED_CHANGE` with the first reason code in path
+/// order. Directories, links, streams, attribute changes, hard links and
+/// protected names are never scoped.
+pub fn classify(
+    before: &[FolderEntry],
+    after: &[FolderEntry],
+    allowed: &[String],
+) -> (&'static str, Option<&'static str>) {
+    let old: BTreeMap<_, _> = before.iter().map(|e| (e.path.as_str(), e)).collect();
+    let new: BTreeMap<_, _> = after.iter().map(|e| (e.path.as_str(), e)).collect();
+    let mut paths: Vec<&str> = old.keys().chain(new.keys()).copied().collect();
+    paths.sort_unstable();
+    paths.dedup();
+    let mut changed = false;
+    for path in paths {
+        let (o, n) = (old.get(path).copied(), new.get(path).copied());
+        if o == n {
+            continue;
+        }
+        changed = true;
+        let entries = [o, n];
+        let reason = if has_protected_component(path) {
+            Some("PROTECTED_NAME")
+        } else if entries.iter().flatten().any(|e| e.kind == "stream") {
+            Some("STREAM")
+        } else if entries.iter().flatten().any(|e| e.kind == "link") {
+            Some("LINK")
+        } else if entries.iter().flatten().any(|e| e.kind != "file") {
+            Some(
+                if matches!((o, n), (Some(a), Some(b)) if a.kind == b.kind) {
+                    "ATTRIBUTES"
+                } else {
+                    "NOT_PLAIN_FILE"
+                },
+            )
+        } else if n.is_some_and(|e| e.links != 1) {
+            Some("HARD_LINK")
+        } else if matches!((o, n), (Some(a), Some(b)) if a.attributes != b.attributes) {
+            Some("ATTRIBUTES")
+        } else if !in_scope(path, allowed) {
+            Some("OUT_OF_SCOPE")
+        } else {
+            None
+        };
+        if reason.is_some() {
+            return (UNEXPECTED_CHANGE, reason);
+        }
+    }
+    (if changed { SCOPED_CHANGE } else { NO_CHANGE }, None)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn entry(path: &str, kind: &str, size: u64, links: u64, digest: Option<&str>) -> FolderEntry {
+        FolderEntry {
+            path: path.into(),
+            kind: kind.into(),
+            size,
+            links,
+            sha256: digest.map(Into::into),
+            attributes: 0x20,
+        }
+    }
+
+    #[test]
+    fn baseline_digest_is_the_documented_canonical_text() {
+        let entries = vec![
+            entry("", "dir", 0, 0, None),
+            entry("src", "dir", 0, 0, None),
+            entry("src/a.py", "file", 3, 1, Some(&"c".repeat(64))),
+        ];
+        let text = format!(
+            "dir\t0\t-\t\ndir\t0\t-\tsrc\nfile\t3\t{}\tsrc/a.py\n",
+            "c".repeat(64)
+        );
+        assert_eq!(baseline_digest(&entries).unwrap(), sha(text.as_bytes()));
+        let digest = baseline_digest(&entries).unwrap();
+        check_project_baseline(&entries, &digest, 3).unwrap();
+        assert_eq!(
+            check_project_baseline(&entries, &digest, 2)
+                .unwrap_err()
+                .code,
+            "FOLDER_BASELINE_MISMATCH"
+        );
+        assert_eq!(
+            check_project_baseline(&entries, &"0".repeat(64), 3)
+                .unwrap_err()
+                .code,
+            "FOLDER_BASELINE_MISMATCH"
+        );
+        let mut bad = entries.clone();
+        bad[2].links = 2;
+        assert_eq!(
+            check_project_baseline(&bad, &digest, 3).unwrap_err().code,
+            "FOLDER_ALIAS"
+        );
+        for kind in ["link", "stream", "other"] {
+            let mut bad = entries.clone();
+            bad.push(entry("z", kind, 0, 0, None));
+            assert_eq!(
+                check_project_baseline(&bad, &digest, 4).unwrap_err().code,
+                "FOLDER_ALIAS",
+                "{kind}"
+            );
+        }
+        for name in [".git", ".Claude", ".MCP.json", "src/.claude"] {
+            let mut bad = entries.clone();
+            bad.push(entry(name, "dir", 0, 0, None));
+            assert_eq!(
+                check_project_baseline(&bad, &digest, 4).unwrap_err().code,
+                "FOLDER_PROTECTED_NAME",
+                "{name}"
+            );
+        }
+        let mut control = entries.clone();
+        control[2].path = "src/a\n.py".into();
+        assert!(baseline_digest(&control).is_none());
+    }
+
+    #[test]
+    fn change_records_list_every_difference_with_both_sides() {
+        let before = vec![
+            entry("", "dir", 0, 0, None),
+            entry("keep.txt", "file", 1, 1, Some(&"a".repeat(64))),
+            entry("old.txt", "file", 2, 1, Some(&"b".repeat(64))),
+            entry("src/a.py", "file", 3, 1, Some(&"c".repeat(64))),
+        ];
+        let after = vec![
+            entry("", "dir", 0, 0, None),
+            entry("keep.txt", "file", 1, 1, Some(&"a".repeat(64))),
+            entry("new.txt", "file", 4, 1, Some(&"d".repeat(64))),
+            entry("src/a.py", "file", 5, 1, Some(&"e".repeat(64))),
+        ];
+        let records = change_records(&before, &after);
+        assert_eq!(
+            records,
+            vec![
+                json!({"path":"new.txt","change":"added","kind":"file","before_size":null,
+                    "before_sha256":null,"after_size":4,"after_sha256":"d".repeat(64)}),
+                json!({"path":"old.txt","change":"removed","kind":"file","before_size":2,
+                    "before_sha256":"b".repeat(64),"after_size":null,"after_sha256":null}),
+                json!({"path":"src/a.py","change":"modified","kind":"file","before_size":3,
+                    "before_sha256":"c".repeat(64),"after_size":5,"after_sha256":"e".repeat(64)}),
+            ]
+        );
+        assert!(change_records(&before, &before).is_empty());
+    }
+
+    #[test]
+    fn classify_scopes_only_plain_file_content_under_allowed_paths() {
+        let base = vec![
+            entry("", "dir", 0, 0, None),
+            entry("src", "dir", 0, 0, None),
+            entry("src/a.py", "file", 3, 1, Some(&"c".repeat(64))),
+            entry("README.md", "file", 3, 1, Some(&"f".repeat(64))),
+        ];
+        let src = vec!["src".to_string()];
+        assert_eq!(classify(&base, &base, &src), (NO_CHANGE, None));
+        let mut modified = base.clone();
+        modified[2].sha256 = Some("d".repeat(64));
+        assert_eq!(classify(&base, &modified, &src), (SCOPED_CHANGE, None));
+        let mut added = base.clone();
+        added.push(entry("src/b.py", "file", 1, 1, Some(&"e".repeat(64))));
+        assert_eq!(classify(&base, &added, &src), (SCOPED_CHANGE, None));
+        let removed: Vec<_> = base
+            .iter()
+            .filter(|e| e.path != "src/a.py")
+            .cloned()
+            .collect();
+        assert_eq!(classify(&base, &removed, &src), (SCOPED_CHANGE, None));
+        // The whole folder only with ".".
+        let mut readme = base.clone();
+        readme[3].size = 9;
+        assert_eq!(
+            classify(&base, &readme, &src),
+            (UNEXPECTED_CHANGE, Some("OUT_OF_SCOPE"))
+        );
+        assert_eq!(
+            classify(&base, &readme, &[".".to_string()]),
+            (SCOPED_CHANGE, None)
+        );
+        // A prefix that is not a folder boundary is not in scope.
+        let mut sibling = base.clone();
+        sibling.push(entry("src2.py", "file", 1, 1, Some(&"e".repeat(64))));
+        assert_eq!(
+            classify(&base, &sibling, &src),
+            (UNEXPECTED_CHANGE, Some("OUT_OF_SCOPE"))
+        );
+        let unexpected = |extra: FolderEntry| {
+            let mut after = base.clone();
+            after.push(extra);
+            classify(&base, &after, &[".".to_string()])
+        };
+        assert_eq!(
+            unexpected(entry("src/new", "dir", 0, 0, None)),
+            (UNEXPECTED_CHANGE, Some("NOT_PLAIN_FILE"))
+        );
+        assert_eq!(
+            unexpected(entry("src/l", "link", 0, 0, None)),
+            (UNEXPECTED_CHANGE, Some("LINK"))
+        );
+        assert_eq!(
+            unexpected(entry(
+                "src/a.py:x:$DATA",
+                "stream",
+                1,
+                0,
+                Some(&"e".repeat(64))
+            )),
+            (UNEXPECTED_CHANGE, Some("STREAM"))
+        );
+        assert_eq!(
+            unexpected(entry("src/h.py", "file", 1, 2, Some(&"e".repeat(64)))),
+            (UNEXPECTED_CHANGE, Some("HARD_LINK"))
+        );
+        for name in [".claude", ".mcp.json", "src/.Claude", ".git"] {
+            assert_eq!(
+                unexpected(entry(name, "file", 1, 1, Some(&"e".repeat(64)))),
+                (UNEXPECTED_CHANGE, Some("PROTECTED_NAME")),
+                "{name}"
+            );
+        }
+        let mut hidden = base.clone();
+        hidden[2].attributes |= 0x2;
+        assert_eq!(
+            classify(&base, &hidden, &[".".to_string()]),
+            (UNEXPECTED_CHANGE, Some("ATTRIBUTES"))
+        );
+        let mut folder_attributes = base.clone();
+        folder_attributes[0].attributes |= 0x1;
+        assert_eq!(
+            classify(&base, &folder_attributes, &[".".to_string()]),
+            (UNEXPECTED_CHANGE, Some("ATTRIBUTES"))
+        );
+    }
+
+    #[test]
+    fn trailing_slash_allowed_path_scopes_files_below_it() {
+        // Case A (C9): allowed_paths ["src", ".pytest-tmp/"].
+        let base = vec![
+            entry("", "dir", 0, 0, None),
+            entry(".pytest-tmp", "dir", 0, 0, None),
+            entry("src", "dir", 0, 0, None),
+        ];
+        let allowed = vec!["src".to_string(), ".pytest-tmp/".to_string()];
+        let mut file = base.clone();
+        file.push(entry(
+            ".pytest-tmp/log.txt",
+            "file",
+            1,
+            1,
+            Some(&"e".repeat(64)),
+        ));
+        assert_eq!(classify(&base, &file, &allowed), (SCOPED_CHANGE, None));
+        // Not a prefix match: `.pytest-tmp2` is outside.
+        let mut sibling = base.clone();
+        sibling.push(entry(".pytest-tmp2", "file", 1, 1, Some(&"e".repeat(64))));
+        assert_eq!(
+            classify(&base, &sibling, &allowed),
+            (UNEXPECTED_CHANGE, Some("OUT_OF_SCOPE"))
+        );
+        // Shared contract: only plain files are scoped, so a new folder
+        // under an allowed path (pytest's per-test basetemp folders) is
+        // unexpected. Recorded here so a contract change is visible.
+        let mut folder = base.clone();
+        folder.push(entry(".pytest-tmp/test0", "dir", 0, 0, None));
+        assert_eq!(
+            classify(&base, &folder, &allowed),
+            (UNEXPECTED_CHANGE, Some("NOT_PLAIN_FILE"))
+        );
+    }
 
     #[test]
     fn snapshot_compare_and_limits_are_exact() {

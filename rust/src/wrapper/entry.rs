@@ -387,13 +387,16 @@ pub async fn run_cli(
                 &launch.provider,
                 profile,
             )?
-            .with_folder_trust(
-                crate::application::spawn_policy::NativeFolderTrust::new(
-                    context.paths.clone(),
-                    context.home_dir.to_path_buf(),
-                    context.home_dir.to_path_buf(),
-                ),
-            );
+            .with_folder_trust(crate::application::spawn_policy::NativeFolderTrust::new(
+                context.paths.clone(),
+                context.home_dir.to_path_buf(),
+                context.home_dir.to_path_buf(),
+            ))
+            // The tools this launch really passes; the real project owner
+            // compares them with its pinned policy before the claim.
+            .with_launch_tools(launch::parse_allowed_tool_values(
+                &launch.args.allowed_tools,
+            ));
             owner_instruction_hash = Some(owner.instruction_hash().to_owned());
             Some(std::sync::Arc::new(owner) as std::sync::Arc<dyn runtime::ExecutionOwnerObserver>)
         }

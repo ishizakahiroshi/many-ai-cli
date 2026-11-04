@@ -1,6 +1,6 @@
 //! Opt-in trusted coordinator; never wired to HTTP or production capabilities.
 //! A committed start/dispatch claim is never retried, including after shutdown.
-use super::iris_execution_launch::{OwnedLaunchPort, prepare_spec};
+use super::iris_execution_launch::{OwnedLaunchPort, prepare_spec, prepare_spec_with_tools};
 use crate::{
     hub::{
         iris_execution_grants::{ApprovedGrant, GrantLoader},
@@ -229,6 +229,24 @@ fn persist_unknown(journal: &Mutex<Journal>, binding: &Binding) -> Result<(), Di
 /// Additional trusted profile admission, checked again when queued work reaches
 /// the launch boundary. This is not supplied by the HTTP caller.
 pub type LaunchAdmission = Arc<dyn Fn(&Binding) -> Result<(), DispatchError> + Send + Sync>;
+/// Allowed tools of the trusted profile policy for this binding, read after
+/// admission on the same bounded blocking lane. Never caller-supplied.
+pub type LaunchTools = Arc<dyn Fn(&Binding) -> Result<Vec<String>, DispatchError> + Send + Sync>;
+/// Which fresh operator grants a profile may launch (for example only
+/// `folder-diff` collector grants). Checked at submit and at launch.
+pub type GrantCheck = Arc<dyn Fn(&ApprovedGrant) -> bool + Send + Sync>;
+/// Called once when an attempt is observed running (root bound, no saved
+/// stop). It must not block; it may start its own task.
+pub type LaunchSupervisor = Arc<dyn Fn(OwnerTicket, SessionBinding) + Send + Sync>;
+
+/// Optional trusted profile hooks. All `None` is the existing behavior.
+#[derive(Clone, Default)]
+pub struct DispatcherHooks {
+    pub admission: Option<LaunchAdmission>,
+    pub launch_tools: Option<LaunchTools>,
+    pub grant_check: Option<GrantCheck>,
+    pub supervisor: Option<LaunchSupervisor>,
+}
 
 struct Shared {
     journal: Arc<Mutex<Journal>>,
@@ -237,7 +255,7 @@ struct Shared {
     port: Arc<dyn OwnedLaunchPort>,
     config: DispatcherConfig,
     cleanup: CleanupLane,
-    admission: Option<LaunchAdmission>,
+    hooks: DispatcherHooks,
 }
 impl Shared {
     fn unknown(&self, binding: &Binding) {
@@ -299,6 +317,27 @@ impl OwnedDispatcher {
         config: DispatcherConfig,
         admission: Option<LaunchAdmission>,
     ) -> Result<Self, DispatchError> {
+        Self::new_with_hooks(
+            journal,
+            owners,
+            runtime_root,
+            port,
+            config,
+            DispatcherHooks {
+                admission,
+                ..Default::default()
+            },
+        )
+    }
+
+    pub fn new_with_hooks(
+        journal: Arc<Mutex<Journal>>,
+        owners: Arc<Mutex<OwnerStore>>,
+        runtime_root: PathBuf,
+        port: Arc<dyn OwnedLaunchPort>,
+        config: DispatcherConfig,
+        hooks: DispatcherHooks,
+    ) -> Result<Self, DispatchError> {
         config.validate()?;
         let runtime_root = runtime_root
             .canonicalize()
@@ -324,7 +363,7 @@ impl OwnedDispatcher {
             port,
             config,
             cleanup,
-            admission,
+            hooks,
         });
         let (queue, receiver) = mpsc::channel(shared.config.queue_capacity);
         let (stopping, stopped) = watch::channel(false);
@@ -361,7 +400,12 @@ impl OwnedDispatcher {
             mpsc::error::TrySendError::Full(_) => DispatchError::Busy,
             mpsc::error::TrySendError::Closed(_) => DispatchError::WorkerStopped,
         })?;
-        let _grant = fresh_grant(&mut journal, &self.shared.runtime_root, binding)?;
+        let grant = fresh_grant(&mut journal, &self.shared.runtime_root, binding)?;
+        if let Some(check) = &self.shared.hooks.grant_check
+            && !check(&grant)
+        {
+            return Err(DispatchError::GrantRejected);
+        }
         let at = now()?;
         let receipt = match journal.start(request_id, binding, at).map_err(|error| {
             if error.code == "REQUEST_CONFLICT" {
@@ -550,12 +594,17 @@ async fn process(
         return Err(DispatchError::WorkerStopped);
     }
     let binding = &job.ticket.binding;
-    let spec = {
+    let (grant, mut spec) = {
         let mut journal = shared
             .journal
             .lock()
             .map_err(|_| DispatchError::Persistence)?;
         let grant = fresh_grant(&mut journal, &shared.runtime_root, binding)?;
+        if let Some(check) = &shared.hooks.grant_check
+            && !check(&grant)
+        {
+            return Err(DispatchError::GrantRejected);
+        }
         journal
             .authorize_dispatch(binding, now()?)
             .map_err(|_| DispatchError::AdmissionRejected)?;
@@ -565,9 +614,10 @@ async fn process(
         if claim["claim_id"] != job.claim.claim_id() || job.claim.binding() != binding {
             return Err(DispatchError::Conflict);
         }
-        prepare_spec(&grant, &job.ticket).map_err(|_| DispatchError::GrantRejected)?
+        let spec = prepare_spec(&grant, &job.ticket).map_err(|_| DispatchError::GrantRejected)?;
+        (grant, spec)
     };
-    if let Some(admit) = &shared.admission {
+    if let Some(admit) = &shared.hooks.admission {
         let admit = admit.clone();
         let admitted_binding = binding.clone();
         // Profile admission reads operator files and a SQLite-backed pin. A
@@ -582,6 +632,23 @@ async fn process(
                     .map_err(|_| DispatchError::Unavailable)??;
             }
         }
+    }
+    if let Some(tools) = &shared.hooks.launch_tools {
+        // The pinned policy's tools, read after admission on the same kind of
+        // bounded blocking lane; the spec is rebuilt from the fresh grant.
+        let tools = tools.clone();
+        let tools_binding = binding.clone();
+        let read = tokio::task::spawn_blocking(move || tools(&tools_binding));
+        let tools = tokio::select! {
+            biased;
+            _ = stopped.changed() => return Err(DispatchError::WorkerStopped),
+            result = timeout(shared.config.registration_timeout, read) => {
+                result.map_err(|_| DispatchError::Unavailable)?
+                    .map_err(|_| DispatchError::Unavailable)??
+            }
+        };
+        spec = prepare_spec_with_tools(&grant, &job.ticket, &tools)
+            .map_err(|_| DispatchError::GrantRejected)?;
     }
     let cancel = HttpWaitCancellation::default();
     let outcome = tokio::select! {
@@ -654,6 +721,8 @@ async fn process(
                     shared.port.stop_owner(&job.ticket, &stop_id),
                 )
                 .await;
+            } else if let Some(supervisor) = &shared.hooks.supervisor {
+                supervisor(job.ticket.clone(), session);
             }
             return Ok(());
         }

@@ -41,7 +41,20 @@ pub struct ApprovedGrant {
     /// Present only for the real bounded pair: the provider writes this file in
     /// approved_cwd and the trusted collector builds the result envelope.
     pub payload: Option<ArtifactPermit>,
+    /// Present only for a real pair `collector: "folder-diff"` grant (real
+    /// project profile): the full change list artifact beside the result. The
+    /// trusted collector writes it once; it is never provider-written.
+    pub changes: Option<ArtifactPermit>,
 }
+impl ApprovedGrant {
+    /// True for a real project (`folder-diff`) collector grant.
+    pub fn folder_diff(&self) -> bool {
+        self.changes.is_some()
+    }
+}
+const FOLDER_DIFF: &str = "folder-diff";
+/// Suffix of the change list artifact beside the grant's result path.
+pub const CHANGES_SUFFIX: &str = ".changes.json";
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Manifest {
@@ -68,6 +81,46 @@ struct Entry {
     launch_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     payload_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    collector: Option<String>,
+}
+
+fn folder_diff(e: &Entry) -> Result<bool> {
+    match e.collector.as_deref() {
+        None => Ok(false),
+        Some(FOLDER_DIFF) => Ok(true),
+        Some(_) => Err(fail("MANIFEST_POLICY")),
+    }
+}
+
+/// No `.git` entry at the folder or any ancestor: the folder is not inside a
+/// repository, so a provider's project lookup cannot reach above it.
+fn no_repository_above(cwd: &Path) -> Result<()> {
+    for ancestor in cwd.ancestors() {
+        if std::fs::symlink_metadata(ancestor.join(".git")).is_ok() {
+            return Err(fail("APPROVED_CWD"));
+        }
+    }
+    Ok(())
+}
+
+/// Real project folders may neither repeat nor contain one another, and may
+/// not overlap another real pair collector folder.
+fn no_overlapping_folders(grants: &[ApprovedGrant]) -> Result<()> {
+    for (i, a) in grants.iter().enumerate() {
+        for b in &grants[i + 1..] {
+            let collector = |g: &ApprovedGrant| g.payload.is_some() || g.folder_diff();
+            if (a.folder_diff() || b.folder_diff())
+                && collector(a)
+                && collector(b)
+                && (a.approved_cwd.starts_with(&b.approved_cwd)
+                    || b.approved_cwd.starts_with(&a.approved_cwd))
+            {
+                return Err(fail("MANIFEST_POLICY"));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn launch_mode(e: &Entry) -> Result<LaunchMode> {
@@ -136,6 +189,7 @@ impl GrantLoader {
             let launch_mode = entry_policy(e, &mut seen)?;
             approved.push(approve_entry(&self.root, &artifacts, e, launch_mode)?);
         }
+        no_overlapping_folders(&approved)?;
         let digest = manifest_digest(&manifest)?;
         let tx = sql(self
             .db
@@ -382,10 +436,15 @@ fn entry_policy(e: &Entry, seen: &mut BTreeSet<String>) -> Result<LaunchMode> {
     // A collector grant is real-pair only, and automatic edits are
     // only allowed when the trusted folder comparison will run. The
     // real pair is collector-only: it never reaches the path that
-    // adopts a provider-written result file as an outcome.
+    // adopts a provider-written result file as an outcome. The two
+    // collectors (payload, folder-diff) are exclusive, and folder-diff
+    // (real project) always runs with bounded-edit.
     let collected = e.payload_path.is_some();
-    if collected != real_bounded_binding(&e.binding)
-        || (launch_mode == LaunchMode::BoundedEdit && !collected)
+    let diff = folder_diff(e)?;
+    if (collected && diff)
+        || (collected || diff) != real_bounded_binding(&e.binding)
+        || (launch_mode == LaunchMode::BoundedEdit && !(collected || diff))
+        || (diff && launch_mode != LaunchMode::BoundedEdit)
     {
         return Err(fail("MANIFEST_POLICY"));
     }
@@ -399,8 +458,17 @@ fn approve_entry(
     launch_mode: LaunchMode,
 ) -> Result<ApprovedGrant> {
     let collected = e.payload_path.is_some();
+    let diff = folder_diff(e)?;
     let permit = |root: &Path, path: &str| {
-        if collected {
+        if diff {
+            ArtifactPermit::folder_diff(
+                root,
+                path,
+                &e.binding,
+                e.max_artifact_bytes,
+                e.effect_scope.clone(),
+            )
+        } else if collected {
             ArtifactPermit::collected(
                 root,
                 path,
@@ -445,6 +513,23 @@ fn approve_entry(
         }
         None => None,
     };
+    let changes = if diff {
+        // Same folder rules as the payload collector, plus no repository
+        // at or above the folder. The change list lives beside the result.
+        if root.starts_with(&cwd) || cwd.starts_with(root) || cwd.starts_with(artifacts) {
+            return Err(fail("APPROVED_CWD"));
+        }
+        no_repository_above(&cwd)?;
+        Some(ArtifactPermit::folder_diff(
+            artifacts,
+            &format!("{}{CHANGES_SUFFIX}", e.result_path),
+            &e.binding,
+            super::iris_execution_folder::MAX_CHANGES_BYTES,
+            e.effect_scope.clone(),
+        )?)
+    } else {
+        None
+    };
     Ok(ApprovedGrant {
         grant: Grant {
             binding: e.binding.clone(),
@@ -458,6 +543,7 @@ fn approve_entry(
         allow_remote_jobs: e.allow_remote_jobs,
         launch_mode,
         payload,
+        changes,
     })
 }
 fn scope_key(b: &Binding) -> String {

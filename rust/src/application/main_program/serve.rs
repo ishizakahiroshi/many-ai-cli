@@ -1345,10 +1345,11 @@ impl HubComposition {
             crate::hub::iris_execution::IrisExecutionHttp::from_local(paths.root(), bound_port)
                 .map_err(io::Error::other)?
         {
-            // Opt-in only: without iris-execution/owned-real-policies.json the
-            // owner is used exactly as before. A failed composition keeps the
-            // inspection-only owner and logs a fixed reason code only.
-            let (owner, outcome) = owner.compose_real_bounded(paths.root(), |owners| {
+            // Opt-in only: without iris-execution/owned-real-policies.json or
+            // owned-real-project-policies.json the owner is used exactly as
+            // before; both at once attach neither. A failed composition keeps
+            // the inspection-only owner and logs a fixed reason code only.
+            let (owner, outcome) = owner.compose_real_profiles(paths.root(), |owners| {
                 Arc::new(
                     crate::application::iris_execution_launch::CoreLaunchPort::new(
                         core.clone(),
@@ -1359,11 +1360,15 @@ impl HubComposition {
             });
             match outcome {
                 crate::hub::iris_execution::RealBoundedComposition::NotRequested => {}
-                crate::hub::iris_execution::RealBoundedComposition::Attached => {
-                    logger.write("INFO", "iris real bounded profile attached", "")
-                }
+                crate::hub::iris_execution::RealBoundedComposition::Attached => logger.write(
+                    "INFO",
+                    "iris real profile attached",
+                    owner.capabilities()["owned_dispatch"]["profile"]
+                        .as_str()
+                        .unwrap_or(""),
+                ),
                 crate::hub::iris_execution::RealBoundedComposition::Rejected(code) => {
-                    logger.write("WARN", "iris real bounded profile unavailable", code)
+                    logger.write("WARN", "iris real profile unavailable", code)
                 }
             }
             services = services.with_iris_execution(Arc::new(owner));

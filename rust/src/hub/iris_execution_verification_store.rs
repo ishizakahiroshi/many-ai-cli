@@ -324,4 +324,36 @@ impl VerificationStore {
     pub fn check_admission(&self) -> Result<()> {
         self.writable()
     }
+
+    /// Wrapper exec boundary (another process): the pinned policy of this
+    /// exact binding, read without creating, migrating or writing the store.
+    /// The same integrity checks as `open` apply to that one row; a restore
+    /// hold refuses because no new launch may follow a restored store.
+    pub(crate) fn read_pinned_policy(path: &Path, binding: &Binding) -> Result<PinnedPolicy> {
+        if !path.exists() {
+            return Err(fail("NOT_FOUND"));
+        }
+        check_store_path(path)?;
+        let db = sql(Connection::open_with_flags(
+            path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        ))?;
+        sql(db.busy_timeout(Duration::from_millis(2500)))?;
+        sql(db.execute_batch("PRAGMA query_only=ON;"))?;
+        let tx = sql(db.unchecked_transaction())?;
+        if sql(tx.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0)))? != 1 {
+            return Err(fail("VERIFIER_SCHEMA"));
+        }
+        let held: i64 = sql(tx.query_row(
+            "SELECT restore_hold FROM meta WHERE singleton=1",
+            [],
+            |r| r.get(0),
+        ))?;
+        if held != 0 {
+            return Err(fail("VERIFIER_RESTORE_HOLD"));
+        }
+        let policy = load_policy(&tx, &key(binding)?)?;
+        sql(tx.commit())?;
+        Ok(policy)
+    }
 }

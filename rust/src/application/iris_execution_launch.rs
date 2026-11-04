@@ -40,6 +40,12 @@ pub trait OwnedLaunchPort: Send + Sync {
         ticket: &'a OwnerTicket,
         stop_request_id: &'a str,
     ) -> CoreFuture<'a, Result<Value, BridgeError>>;
+    /// Core's current permission-prompt state of this exact session
+    /// (`activity.awaiting_approval`), or `None` when the binding is not the
+    /// current connected session or the port cannot observe it. Read-only.
+    fn awaiting_approval(&self, _binding: SessionBinding) -> Option<bool> {
+        None
+    }
 }
 /// Production composition can only forward through SessionEngine, preserving
 /// provider admission, core-issued proof, and registered binding validation.
@@ -112,6 +118,17 @@ impl OwnedLaunchPort for CoreLaunchPort {
                 .await
         })
     }
+    /// Source: the session snapshot's `activity.awaiting_approval`, which
+    /// Core sets from its approval record (terminal/session/observations.rs,
+    /// `refresh_awaiting`). Checked against the exact current binding first.
+    fn awaiting_approval(&self, binding: SessionBinding) -> Option<bool> {
+        if !self.core.is_current(binding) {
+            return None;
+        }
+        self.core
+            .snapshot(binding.session)
+            .map(|snapshot| snapshot.activity.awaiting_approval)
+    }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrepareError {
@@ -163,9 +180,24 @@ fn static_binding(mut value: Value) -> Value {
 /// (claude/claude-hiroshi, payload_path, bounded-edit, enabled current policy)
 /// the owner trusts exactly the canonical approved_cwd in Claude's own config
 /// immediately before the spawn claim, records it, and refuses on failure.
+/// The real project profile (claude/claude-hiroshi, folder-diff, bounded-edit,
+/// pinned `folder-change-record/1` policy) shares that exception and adds only
+/// its policy's `allowed_tools`, through [`prepare_spec_with_tools`].
 pub fn prepare_spec(
     grant: &ApprovedGrant,
     ticket: &OwnerTicket,
+) -> Result<WrappedSpawnSpec, PrepareError> {
+    prepare_spec_with_tools(grant, ticket, &[])
+}
+
+/// As [`prepare_spec`], plus the allowed tools of the pinned real project
+/// policy. Tools ride only on a real pair `folder-diff` grant and only on the
+/// existing `--allowed-tools` route (`InternalSpawnGrants::from_config`); no
+/// caller argument can add one. Every other grant must pass no tools.
+pub fn prepare_spec_with_tools(
+    grant: &ApprovedGrant,
+    ticket: &OwnerTicket,
+    tools: &[String],
 ) -> Result<WrappedSpawnSpec, PrepareError> {
     let b = &ticket.binding;
     if static_binding(json!(grant.grant.binding)) != static_binding(json!(b)) {
@@ -205,10 +237,27 @@ pub fn prepare_spec(
         }
         LaunchMode::BoundedEdit => return Err(PrepareError::UnsupportedPolicy),
     };
-    // A payload rides only on the real pair, and the real pair always has one:
-    // it is never launched on the path that adopts a provider-written result.
-    if grant.payload.is_some() != real_bounded_binding(b) {
+    // A collector (payload or folder-diff, never both) rides only on the real
+    // pair, and the real pair always has one: it is never launched on the
+    // path that adopts a provider-written result.
+    let collector = grant.payload.is_some() || grant.folder_diff();
+    if collector != real_bounded_binding(b)
+        || (grant.payload.is_some() && grant.folder_diff())
+        || (grant.folder_diff() && permission_mode != "acceptEdits")
+    {
         return Err(PrepareError::UnsupportedPolicy);
+    }
+    let mut seen: Vec<&String> = Vec::new();
+    for tool in tools {
+        if !grant.folder_diff()
+            || seen.contains(&tool)
+            || seen.len() >= 16
+            || tool.trim() != tool
+            || !crate::config::valid_allowed_tool_value(tool)
+        {
+            return Err(PrepareError::UnsupportedPolicy);
+        }
+        seen.push(tool);
     }
     let cwd = grant
         .approved_cwd
@@ -261,7 +310,11 @@ pub fn prepare_spec(
         subscription_profile_id: b.profile_id.clone(),
         subscription_login: false,
         usage_probe: false,
-        grants: InternalSpawnGrants::default(),
+        grants: if tools.is_empty() {
+            InternalSpawnGrants::default()
+        } else {
+            InternalSpawnGrants::from_config(tools.to_vec())
+        },
         cancellation: TaskCancellation::default(),
     })
 }
@@ -327,6 +380,7 @@ mod tests {
             allow_remote_jobs: false,
             launch_mode: LaunchMode::Default,
             payload: None,
+            changes: None,
         };
         (
             root,

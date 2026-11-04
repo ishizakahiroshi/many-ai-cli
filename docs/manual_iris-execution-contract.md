@@ -319,6 +319,110 @@ Opening the owner database checks that each folder and trust row's key columns
 match the binding inside its document. The trust entry
 stays in that Claude configuration afterwards; it is not removed automatically.
 
+## Real project profile (`iris-owned-real-project/1`)
+
+A separate opt-in profile for approved real project work in a copied work
+folder. It uses the same single pair (provider `claude`, subscription profile
+`claude-hiroshi`) and changes neither `iris-owned-dispatch/1` nor
+`iris-owned-real-bounded/1`.
+
+Selection. The fixed source is `iris-execution/owned-real-project-policies.json`
+(same manifest shape as the other profiles, `profile:
+"iris-owned-real-project/1"`). When it and `owned-real-policies.json` both exist
+(or either path is unreadable while the other exists), the Hub attaches neither
+and logs `REAL_PROFILE_SOURCE_CONFLICT`. Other failures use `REAL_PROJECT_*`
+codes and keep the inspection-only owner.
+
+Policy. Every policy in that source uses verifier `folder-change-record/1` and
+the other sources never accept it. Its fields are the usual identity fields
+plus:
+
+- `baseline_sha256` and `baseline_entry_count`: the work folder before launch
+  (see below);
+- `allowed_paths`: non-empty relative paths with `/` separators (`.` for the
+  whole folder; a trailing `/` is allowed). No drive, root, backslash, `..`,
+  empty component, or `.git`/`.claude`/`.mcp.json` component;
+- `allowed_tools`: at most 16 values, each accepted by the configuration's
+  allowed-tool rule (letters, digits, space and `()*.:/_-=`, not starting with
+  `-`, space or `=`, at most 120 bytes), no duplicates;
+- `max_runtime_sec`: 1 to 3600, default 1800.
+
+There is no `expected_payload` and no verdict. The pin receipt adds `verifier`
+and `folder_policy` (these public limits only).
+
+Baseline digest. Take the folder snapshot (the folder itself first with the
+empty path, then every entry sorted by its `/`-separated relative path as
+UTF-8 bytes). For each entry write the line `kind TAB size TAB sha256 TAB
+path LF`, where `kind` is `dir` or `file`, `size` is the file byte count (0 for
+a directory), `sha256` is the lowercase file content hash or `-` for a
+directory, and `path` is empty for the folder itself. `baseline_sha256` is the
+SHA256 of that UTF-8 text and `baseline_entry_count` the number of lines.
+Native attributes and link counts are not in the digest.
+
+Grant. A real pair entry may carry `collector: "folder-diff"` instead of
+`payload_path` (never both). It requires `launch_mode: "bounded-edit"`, the
+effect scope exactly `folder-no-change`, `folder-scoped-change` and
+`folder-unexpected-change`, and an absolute folder outside the runtime root
+with no `.git` entry at the folder or any ancestor. Two folder-diff folders, or
+a folder-diff folder and another collector folder, may not be equal or nested.
+The full change list is written to `<result_path>.changes.json` under
+`iris-execution-artifacts` (at most 1 MiB). The real bounded profile refuses a
+folder-diff grant and this profile refuses a payload grant
+(`DISPATCH_GRANT_REJECTED`).
+
+Launch. After admission the dispatcher reads the pinned policy's
+`allowed_tools` and passes them on the existing `--allowed-tools` route
+(`acceptEdits`, no risk confirmation, no other grant). At the exec boundary the
+wrapper requires: the enabled current policy for the exact binding with the
+same SHA256 the Hub pinned (read from `iris-execution/verification.sqlite3`
+without writing it); the launch's own allowed tools equal to the policy's; and
+a folder snapshot with only plain single-link files and directories, no named
+stream, no `.git`/`.claude`/`.mcp.json` anywhere, and the pinned digest and
+entry count. It records that baseline, writes folder trust as for the real
+bounded profile (over this baseline instead of an empty folder), checks the
+baseline again, and only then claims the spawn. Any failure refuses the launch.
+
+Collection. After the owner's recorded local cessation, the wrapper records
+the after snapshot and every difference (`path`, `change` added/modified/
+removed, `kind`, before and after `size` and `sha256`). Effects are
+`folder-no-change`; `folder-scoped-change` when every difference is the
+addition, content modification or removal of a plain single-link file under an
+allowed path; otherwise `folder-unexpected-change` with the first reason in
+path order (`PROTECTED_NAME`, `STREAM`, `LINK`, `NOT_PLAIN_FILE` for any folder
+addition or removal or kind change, `ATTRIBUTES`, `HARD_LINK`, `OUT_OF_SCOPE`),
+or when the after snapshot fails (`AFTER_SNAPSHOT_FAILED`) or the change list
+cannot be written once (`CHANGES_LIMIT`, `CHANGES_PREEXISTING`,
+`CHANGES_WRITE`). The collector writes the envelope itself (`outcome:
+"unknown"`, `synthetic: false`, payload = count, list SHA256 and size, allowed
+paths and reason). The `collection` record (`collector: "folder-diff"`) holds
+the effects, reason, change count and list SHA256, never the list.
+
+Watchdog. When the attempt is observed running, the Hub watches Core's session
+state of that exact session (`activity.awaiting_approval`, set from Core's
+approval record) once per second. A permission prompt open continuously for
+60 seconds (`STOPPED_AWAITING_APPROVAL`) or a run time since the provider root
+started of at least `max_runtime_sec` (`STOPPED_RUNTIME_LIMIT`) first saves an
+`auto_stop` row (reason, deterministic stop request ID, time,
+`task_outcome: "unknown"`) in the owner database, then requests the owner-bound
+stop on the same path as `owned_stop`. One stop per attempt, no retry, no
+handoff. The watchdog lives in the Hub process; a restarted Hub does not resume
+it. Observations add `execution.watch` (last prompt state, run time, limits and
+the saved auto stop).
+
+Verification field. Always the shared record:
+
+```json
+{"kind":"real_project_record","reason":null,"folder_effects":null,"folder_reason":null,"change_count":null,"changes_sha256":null,"check":{"status":"not-run-by-collector"},"unobserved":["outside-approved-cwd","network","remote-jobs","acl"],"task_outcome_verified":false,"effects_verified":false,"remote_jobs_stopped":false}
+```
+
+It is filled under the C10 conditions (confirmed local stop, outcome receipt,
+folder-diff collection with the same ticket, result SHA256, outcome sequence
+and effects). Until then `reason` is `VERIFY_OWNER_MISSING`,
+`VERIFY_STOP_UNCONFIRMED`, `VERIFY_OUTCOME_MISSING`, `VERIFY_COLLECTION_MISSING`
+or `VERIFY_COLLECTION_MISMATCH` and the other fields are null. Once filled,
+`reason` is the saved watchdog reason or null. The record is read-only and is
+never a verdict; the three flags are always false.
+
 ## Native stop and result limits
 
 The exact-session bridge can request cancellation only for a previously proven

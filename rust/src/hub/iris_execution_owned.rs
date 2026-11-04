@@ -5,24 +5,31 @@ use super::{
     iris_execution_grants::GrantLoader,
     iris_execution_journal::{Binding, Journal},
     iris_execution_mcp::{MAX_BYTES, parse_json},
-    iris_execution_owner::{OwnerStore, OwnerTicket, check_binding, secure_open},
-    iris_execution_verification_store::VerificationStore,
-    iris_execution_verifier::PinnedPolicy,
-};
-use crate::application::{
-    iris_execution_dispatcher::{
-        DispatchError, DispatcherConfig, LaunchAdmission, OwnedDispatcher,
+    iris_execution_owner::{
+        OwnerStore, OwnerTicket, STOPPED_AWAITING_APPROVAL, STOPPED_RUNTIME_LIMIT, check_binding,
+        secure_open,
     },
-    iris_execution_launch::OwnedLaunchPort,
+    iris_execution_verification_store::VerificationStore,
+    iris_execution_verifier::{DEFAULT_MAX_RUNTIME_SEC, FolderPolicy, PinnedPolicy},
+};
+use crate::{
+    application::{
+        iris_execution_dispatcher::{
+            DispatchError, DispatcherConfig, DispatcherHooks, GrantCheck, LaunchAdmission,
+            LaunchSupervisor, LaunchTools, OwnedDispatcher,
+        },
+        iris_execution_launch::OwnedLaunchPort,
+    },
+    proto::core::SessionBinding,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     io::Read,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{Arc, Mutex, OnceLock, Weak},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 pub const PROFILE: &str = "iris-owned-dispatch/1";
@@ -33,6 +40,11 @@ pub const REAL_BOUNDED_PROFILE: &str = "iris-owned-real-bounded/1";
 /// pair is the only place that names it; every gate calls real_bounded_binding.
 pub const REAL_BOUNDED_PROVIDER: &str = "claude";
 pub const REAL_BOUNDED_PROFILE_ID: &str = "claude-hiroshi";
+/// Separate opt-in version for approved real project work in a copied work
+/// folder. Same single pair, its own policy source (`folder-change-record/1`),
+/// `folder-diff` collector grants only, and a Hub-side watchdog stop.
+pub const REAL_PROJECT_PROFILE: &str = "iris-owned-real-project/1";
+pub const REAL_PROJECT_POLICY_FILE: &str = "owned-real-project-policies.json";
 type ToolResult = Result<Value, (String, String)>;
 
 /// Exact provider/profile identity of the real bounded profile.
@@ -45,18 +57,21 @@ pub fn real_bounded_binding(binding: &Binding) -> bool {
 pub enum OwnedProfileKind {
     SyntheticDispatch,
     RealBounded,
+    RealProject,
 }
 impl OwnedProfileKind {
     pub fn profile(self) -> &'static str {
         match self {
             Self::SyntheticDispatch => PROFILE,
             Self::RealBounded => REAL_BOUNDED_PROFILE,
+            Self::RealProject => REAL_PROJECT_PROFILE,
         }
     }
     fn policy_file(self) -> &'static str {
         match self {
             Self::SyntheticDispatch => "owned-policies.json",
             Self::RealBounded => "owned-real-policies.json",
+            Self::RealProject => REAL_PROJECT_POLICY_FILE,
         }
     }
     fn admits(self, binding: &Binding) -> bool {
@@ -64,9 +79,63 @@ impl OwnedProfileKind {
             Self::SyntheticDispatch => {
                 binding.provider == "synthetic" && binding.profile_id == "synthetic"
             }
-            Self::RealBounded => real_bounded_binding(binding),
+            Self::RealBounded | Self::RealProject => real_bounded_binding(binding),
         }
     }
+    /// The real project profile pins only `folder-change-record/1`; the other
+    /// profiles only the fixed-payload verifier, exactly as before.
+    fn accepts(self, policy: &PinnedPolicy) -> bool {
+        policy.folder().is_some() == (self == Self::RealProject)
+    }
+}
+
+/// Watchdog limits of the real project profile. Production uses the
+/// default (60 s of continuous permission prompt, 1 s observation step).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RealProjectWatch {
+    pub awaiting_limit: Duration,
+    pub poll_interval: Duration,
+}
+impl Default for RealProjectWatch {
+    fn default() -> Self {
+        Self {
+            awaiting_limit: Duration::from_secs(60),
+            poll_interval: Duration::from_secs(1),
+        }
+    }
+}
+impl RealProjectWatch {
+    fn valid(&self) -> bool {
+        !self.awaiting_limit.is_zero()
+            && self.awaiting_limit <= Duration::from_secs(60)
+            && !self.poll_interval.is_zero()
+            && self.poll_interval <= Duration::from_secs(1)
+            && self.poll_interval <= self.awaiting_limit
+    }
+}
+
+/// In-memory watchdog observation of one running attempt (lost on restart).
+#[derive(Clone, Default)]
+struct WatchEntry {
+    awaiting_approval: Option<bool>,
+    awaiting_since_ms: Option<u64>,
+    observed_at_ms: Option<u64>,
+}
+
+struct WatchState {
+    config: RealProjectWatch,
+    entries: Mutex<HashMap<String, WatchEntry>>,
+}
+
+fn attempt_key(b: &Binding) -> String {
+    json!([b.principal_id, b.workspace_id, b.attempt_id]).to_string()
+}
+
+/// Deterministic per binding, so a repeated watchdog stop replays the same
+/// journal receipt instead of creating another stop request.
+pub fn auto_stop_request_id(b: &Binding) -> String {
+    let digest = super::iris_execution_owner::sha(json!(b).to_string().as_bytes());
+    format!("iris-auto-stop-{}", &digest[..48])
 }
 
 #[derive(Deserialize)]
@@ -88,6 +157,8 @@ pub struct OwnedProfile {
     kind: OwnedProfileKind,
     // Serializes only new admission composition. No guard crosses await.
     admission: Arc<Mutex<()>>,
+    // Real project watchdog observations; None for the other kinds.
+    watch: Option<Arc<WatchState>>,
 }
 
 fn error(code: &str) -> (String, String) {
@@ -136,6 +207,7 @@ fn read_manifest(root: &Path, kind: OwnedProfileKind) -> Result<Manifest, (Strin
         // the selected new-admission policy is parsed against current time.
         let policy = PinnedPolicy::parse(&raw, 0).map_err(|_| error("OWNED_POLICY_SOURCE"))?;
         if !kind.admits(policy.binding())
+            || !kind.accepts(&policy)
             || !seen.insert(
                 serde_json::to_vec(policy.binding()).map_err(|_| error("OWNED_POLICY_SOURCE"))?,
             )
@@ -164,6 +236,29 @@ pub fn real_bounded_launch_admitted(root: &Path, binding: &Binding, at_ms: u64) 
         return false;
     };
     current_policy(&root, OwnedProfileKind::RealBounded, binding, at_ms).is_ok()
+}
+
+/// Exec-boundary policy of the real project profile: the exact pair, the
+/// enabled fixed source with a current policy for this complete binding,
+/// and the same bytes (spec hash) the Hub pinned at admission, read from
+/// `iris-execution/verification.sqlite3` without writing it. Only the
+/// operator's folder limits leave this function; any failure is `None`.
+pub fn real_project_launch_policy(
+    root: &Path,
+    binding: &Binding,
+    at_ms: u64,
+) -> Option<FolderPolicy> {
+    let root = root.canonicalize().ok()?;
+    let raw = current_policy(&root, OwnedProfileKind::RealProject, binding, at_ms).ok()?;
+    let policy = PinnedPolicy::parse(&raw, at_ms).ok()?;
+    let pinned = VerificationStore::read_pinned_policy(
+        &root.join("iris-execution").join("verification.sqlite3"),
+        binding,
+    )
+    .ok()?;
+    (pinned.spec_hash() == policy.spec_hash() && pinned.binding() == binding)
+        .then(|| policy.folder().cloned())
+        .flatten()
 }
 
 fn current_policy(
@@ -201,7 +296,7 @@ fn capability_document(
 ) -> Value {
     let live = match kind {
         OwnedProfileKind::SyntheticDispatch => false,
-        OwnedProfileKind::RealBounded => {
+        OwnedProfileKind::RealBounded | OwnedProfileKind::RealProject => {
             admitted && manifest.is_some_and(|m| m.enabled && !m.policies.is_empty())
         }
     };
@@ -222,6 +317,142 @@ fn real_bounded_verification_document(
         "folder_effects":collection["effects"],"folder_reason":collection["reason"],
         "receipt":receipt,"task_outcome_verified":false,"effects_verified":false,
         "remote_jobs_stopped":false})
+}
+
+/// What a real project collection never observes; always listed.
+const UNOBSERVED: [&str; 4] = ["outside-approved-cwd", "network", "remote-jobs", "acl"];
+
+/// The real project profile's `verification` field (shared contract with
+/// Iris): a fixed key set, never a verdict. While a condition is missing the
+/// record fields are null and `reason` is the waiting code; once filled,
+/// `reason` is the watchdog stop code or null. A record only: the three
+/// flags are always false and the check is never run by the collector.
+fn real_project_record(reason: Option<&str>, collection: Option<&Value>) -> Value {
+    let field = |name: &str| collection.map_or(Value::Null, |c| c[name].clone());
+    json!({"kind":"real_project_record","reason":reason,
+        "folder_effects":field("effects"),"folder_reason":field("reason"),
+        "change_count":field("change_count"),"changes_sha256":field("changes_sha256"),
+        "check":{"status":"not-run-by-collector"},"unobserved":UNOBSERVED,
+        "task_outcome_verified":false,"effects_verified":false,"remote_jobs_stopped":false})
+}
+
+/// Hub-side watchdog of one running real project attempt. It observes Core's
+/// permission-prompt state of the exact session and the run time since the
+/// owner bound the provider root. When the prompt has been continuously open
+/// for the limit, or the run time reaches the pinned `max_runtime_sec`, it
+/// saves the reason, then requests the owner-bound stop through the same
+/// dispatcher path as `owned_stop` (deterministic request ID, no retry, no
+/// handoff). Confirmation is only the owner's later `local_tree_ceased`.
+struct Watchdog {
+    state: Arc<WatchState>,
+    port: Arc<dyn OwnedLaunchPort>,
+    owners: Arc<Mutex<OwnerStore>>,
+    verifications: Arc<Mutex<VerificationStore>>,
+    dispatcher: Option<Weak<OwnedDispatcher>>,
+}
+
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Option<T> + Send + 'static) -> Option<T> {
+    tokio::task::spawn_blocking(f).await.ok().flatten()
+}
+
+impl Watchdog {
+    fn set(&self, binding: &Binding, entry: WatchEntry) {
+        if let Ok(mut entries) = self.state.entries.lock() {
+            entries.insert(attempt_key(binding), entry);
+        }
+    }
+
+    async fn run(self, ticket: OwnerTicket, session: SessionBinding) {
+        let binding = ticket.binding.clone();
+        let store = self.verifications.clone();
+        let pin_binding = binding.clone();
+        // The pinned policy's limit. A missing pin cannot have launched; the
+        // default (never above the policy maximum) stops earlier, not later.
+        let max_runtime_ms = blocking(move || {
+            store.lock().ok()?.policy_pin(&pin_binding).ok()?["folder_policy"]["max_runtime_sec"]
+                .as_u64()
+        })
+        .await
+        .unwrap_or(DEFAULT_MAX_RUNTIME_SEC)
+        .saturating_mul(1000);
+        let limit_ms = self.state.config.awaiting_limit.as_millis() as u64;
+        let mut entry = WatchEntry::default();
+        loop {
+            tokio::time::sleep(self.state.config.poll_interval).await;
+            let owners = self.owners.clone();
+            let query_binding = binding.clone();
+            let Some(owner) =
+                blocking(move || owners.lock().ok()?.query(&query_binding).ok()).await
+            else {
+                return;
+            };
+            if owner["ticket"] != json!(ticket) || owner["local_tree_ceased"] == true {
+                return;
+            }
+            let Ok(now) = now_ms() else { return };
+            let awaiting = self.port.awaiting_approval(session);
+            entry.awaiting_approval = awaiting;
+            entry.observed_at_ms = Some(now);
+            entry.awaiting_since_ms = match awaiting {
+                Some(true) => Some(entry.awaiting_since_ms.unwrap_or(now)),
+                _ => None,
+            };
+            self.set(&binding, entry.clone());
+            let runtime_ms = owner["root_started_at_ms"]
+                .as_u64()
+                .map(|start| now.saturating_sub(start));
+            let reason = if entry
+                .awaiting_since_ms
+                .is_some_and(|since| now.saturating_sub(since) >= limit_ms)
+            {
+                STOPPED_AWAITING_APPROVAL
+            } else if runtime_ms.is_some_and(|ms| ms >= max_runtime_ms) {
+                STOPPED_RUNTIME_LIMIT
+            } else {
+                continue;
+            };
+            self.stop(&ticket, reason, now, entry.awaiting_since_ms, runtime_ms)
+                .await;
+            return;
+        }
+    }
+
+    async fn stop(
+        &self,
+        ticket: &OwnerTicket,
+        reason: &str,
+        now: u64,
+        awaiting_since_ms: Option<u64>,
+        runtime_ms: Option<u64>,
+    ) {
+        let request_id = auto_stop_request_id(&ticket.binding);
+        let document = json!({"kind":"auto_stop","ticket":ticket,"reason":reason,
+            "stop_request_id":request_id,"requested_at_ms":now,
+            "awaiting_since_ms":awaiting_since_ms,"runtime_ms":runtime_ms,
+            "awaiting_limit_ms":self.state.config.awaiting_limit.as_millis() as u64,
+            "task_outcome":"unknown","effects_verified":false,"task_outcome_verified":false,
+            "remote_jobs_stopped":false});
+        let owners = self.owners.clone();
+        let record_ticket = ticket.clone();
+        // The reason is saved before the stop request. A provider that has
+        // already ended (AUTO_STOP_ORDER) needs no stop; any other storage
+        // failure still stops, because stopping is the safe direction.
+        let recorded = tokio::task::spawn_blocking(move || {
+            owners
+                .lock()
+                .map_err(|_| "OWNED_STORAGE".to_string())?
+                .record_auto_stop(&record_ticket, &document)
+                .map_err(|e| e.code)
+        })
+        .await;
+        if matches!(&recorded, Ok(Err(code)) if code == "AUTO_STOP_ORDER") {
+            return;
+        }
+        let Some(dispatcher) = self.dispatcher.as_ref().and_then(Weak::upgrade) else {
+            return;
+        };
+        let _ = dispatcher.request_stop(&request_id, &ticket.binding).await;
+    }
 }
 
 fn identity(
@@ -324,6 +555,53 @@ impl OwnedProfile {
         )
     }
 
+    /// Explicit `iris-owned-real-project/1` composition with the production
+    /// watchdog (60 s permission prompt, policy `max_runtime_sec`).
+    pub fn new_real_project(
+        journal: Arc<Mutex<Journal>>,
+        owners: Arc<Mutex<OwnerStore>>,
+        verifications: VerificationStore,
+        runtime_root: PathBuf,
+        port: Arc<dyn OwnedLaunchPort>,
+        config: DispatcherConfig,
+    ) -> Result<Self, String> {
+        Self::new_real_project_with_watch(
+            journal,
+            owners,
+            verifications,
+            runtime_root,
+            port,
+            config,
+            RealProjectWatch::default(),
+        )
+    }
+
+    /// As [`Self::new_real_project`] with explicit (never longer) watchdog
+    /// limits, for trusted composition and isolated tests.
+    pub fn new_real_project_with_watch(
+        journal: Arc<Mutex<Journal>>,
+        owners: Arc<Mutex<OwnerStore>>,
+        verifications: VerificationStore,
+        runtime_root: PathBuf,
+        port: Arc<dyn OwnedLaunchPort>,
+        config: DispatcherConfig,
+        watch: RealProjectWatch,
+    ) -> Result<Self, String> {
+        if !watch.valid() {
+            return Err("OWNED_WATCH_CONFIGURATION".into());
+        }
+        Self::compose(
+            OwnedProfileKind::RealProject,
+            journal,
+            owners,
+            verifications,
+            runtime_root,
+            port,
+            config,
+            Some(watch),
+        )
+    }
+
     fn with_kind(
         kind: OwnedProfileKind,
         journal: Arc<Mutex<Journal>>,
@@ -333,7 +611,39 @@ impl OwnedProfile {
         port: Arc<dyn OwnedLaunchPort>,
         config: DispatcherConfig,
     ) -> Result<Self, String> {
+        Self::compose(
+            kind,
+            journal,
+            owners,
+            verifications,
+            runtime_root,
+            port,
+            config,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn compose(
+        kind: OwnedProfileKind,
+        journal: Arc<Mutex<Journal>>,
+        owners: Arc<Mutex<OwnerStore>>,
+        verifications: VerificationStore,
+        runtime_root: PathBuf,
+        port: Arc<dyn OwnedLaunchPort>,
+        config: DispatcherConfig,
+        watch: Option<RealProjectWatch>,
+    ) -> Result<Self, String> {
+        if (kind == OwnedProfileKind::RealProject) != watch.is_some() {
+            return Err("OWNED_WATCH_CONFIGURATION".into());
+        }
         config.validate().map_err(|e| e.to_string())?;
+        let watch = watch.map(|config| {
+            Arc::new(WatchState {
+                config,
+                entries: Mutex::new(HashMap::new()),
+            })
+        });
         let runtime_root = runtime_root
             .canonicalize()
             .map_err(|_| "OWNED_RUNTIME_ROOT")?;
@@ -380,17 +690,68 @@ impl OwnedProfile {
                 }
                 Ok(())
             });
-            Some(Arc::new(
-                OwnedDispatcher::new_with_admission(
+            let mut hooks = DispatcherHooks {
+                admission: Some(launch_admission),
+                ..Default::default()
+            };
+            let cell: Arc<OnceLock<Weak<OwnedDispatcher>>> = Arc::new(OnceLock::new());
+            match kind {
+                OwnedProfileKind::SyntheticDispatch => {}
+                OwnedProfileKind::RealBounded => {
+                    // A real project grant never runs under the real bounded
+                    // profile (and never existed before it).
+                    let check: GrantCheck = Arc::new(|grant| !grant.folder_diff());
+                    hooks.grant_check = Some(check);
+                }
+                OwnedProfileKind::RealProject => {
+                    let check: GrantCheck = Arc::new(|grant| grant.folder_diff());
+                    hooks.grant_check = Some(check);
+                    let store = verifications.clone();
+                    // The tools of the policy pinned for this binding; the
+                    // admission above already matched it to the source.
+                    let tools: LaunchTools = Arc::new(move |binding| {
+                        let pin = store
+                            .lock()
+                            .map_err(|_| DispatchError::Persistence)?
+                            .policy_pin(binding)
+                            .map_err(|_| DispatchError::AdmissionRejected)?;
+                        serde_json::from_value(pin["folder_policy"]["allowed_tools"].clone())
+                            .map_err(|_| DispatchError::AdmissionRejected)
+                    });
+                    hooks.launch_tools = Some(tools);
+                    let supervisor: LaunchSupervisor = {
+                        let state = watch.clone().ok_or("OWNED_WATCH_CONFIGURATION")?;
+                        let port = port.clone();
+                        let owners = owners.clone();
+                        let verifications = verifications.clone();
+                        let cell = cell.clone();
+                        Arc::new(move |ticket, session| {
+                            let watchdog = Watchdog {
+                                state: state.clone(),
+                                port: port.clone(),
+                                owners: owners.clone(),
+                                verifications: verifications.clone(),
+                                dispatcher: cell.get().cloned(),
+                            };
+                            tokio::spawn(watchdog.run(ticket, session));
+                        })
+                    };
+                    hooks.supervisor = Some(supervisor);
+                }
+            }
+            let dispatcher = Arc::new(
+                OwnedDispatcher::new_with_hooks(
                     journal.clone(),
                     owners.clone(),
                     runtime_root.clone(),
                     port,
                     config,
-                    Some(launch_admission),
+                    hooks,
                 )
                 .map_err(|e| e.to_string())?,
-            ))
+            );
+            let _ = cell.set(Arc::downgrade(&dispatcher));
+            Some(dispatcher)
         } else {
             // Restored/legacy journals remain inspection-only; constructing a
             // dispatcher would reject them and unnecessarily hide old receipts.
@@ -404,6 +765,7 @@ impl OwnedProfile {
             runtime_root,
             kind,
             admission: Arc::new(Mutex::new(())),
+            watch,
         })
     }
 
@@ -644,9 +1006,108 @@ impl OwnedProfile {
         }
     }
 
+    /// Real project record (shared contract with Iris). Filled under the C10
+    /// conditions: the owner's confirmed local stop, the collector's outcome
+    /// receipt and the folder-diff collection naming the same ticket, result
+    /// SHA256, outcome sequence and effects. Read-only: nothing is evaluated
+    /// or written here, so restored and inspection-only compositions read it
+    /// the same way.
+    fn real_project_verification(&self, binding: &Binding) -> ToolResult {
+        let (owner, collection, auto_stop) = {
+            let owners = self.owners.lock().map_err(|_| error("OWNED_STORAGE"))?;
+            let owner = match owners.query(binding) {
+                Ok(value) => value,
+                Err(e) if e.code == "NOT_FOUND" => Value::Null,
+                Err(e) => return Err((e.code, e.detail)),
+            };
+            let folder = owners
+                .query_folder(binding)
+                .map_err(|e| (e.code, e.detail))?;
+            let auto_stop = owners
+                .query_auto_stop(binding)
+                .map_err(|e| (e.code, e.detail))?;
+            (owner, folder["collection"].clone(), auto_stop)
+        };
+        let outcome = &owner["outcome_receipt"];
+        let waiting = if !self.kind.admits(binding) {
+            Some("OWNED_PROVIDER_UNAVAILABLE")
+        } else if owner.is_null() {
+            Some("VERIFY_OWNER_MISSING")
+        } else if owner["local_tree_ceased"] != true {
+            Some("VERIFY_STOP_UNCONFIRMED")
+        } else if outcome.is_null() {
+            Some("VERIFY_OUTCOME_MISSING")
+        } else if collection.is_null() {
+            Some("VERIFY_COLLECTION_MISSING")
+        } else if collection["collector"] != "folder-diff"
+            || outcome["ticket"] != owner["ticket"]
+            || collection["ticket"] != owner["ticket"]
+            || collection["result_sha256"] != outcome["artifact_sha256"]
+            || collection["outcome_sequence"] != outcome["sequence"]
+            || collection["effects"] != outcome["reported_effects"]
+        {
+            Some("VERIFY_COLLECTION_MISMATCH")
+        } else {
+            None
+        };
+        Ok(match waiting {
+            Some(reason) => real_project_record(Some(reason), None),
+            None => real_project_record(auto_stop["reason"].as_str(), Some(&collection)),
+        })
+    }
+
+    /// Watchdog view for the observation: Core's last permission-prompt
+    /// state (null when not observed by this Hub, e.g. after a restart), the
+    /// run time since the root started, the limits and any saved auto stop.
+    fn watch_document(&self, binding: &Binding, execution: &Value) -> ToolResult {
+        let Some(state) = &self.watch else {
+            return Ok(Value::Null);
+        };
+        let entry = state
+            .entries
+            .lock()
+            .map_err(|_| error("OWNED_STORAGE"))?
+            .get(&attempt_key(binding))
+            .cloned()
+            .unwrap_or_default();
+        let owner = &execution["owner"];
+        let end = if owner["local_tree_ceased"] == true {
+            owner["cessation_receipt"]["observed_at_ms"].as_u64()
+        } else {
+            now_ms().ok()
+        };
+        let runtime_ms = match (owner["root_started_at_ms"].as_u64(), end) {
+            (Some(start), Some(end)) => json!(end.saturating_sub(start)),
+            _ => Value::Null,
+        };
+        let max_runtime_sec = match self
+            .verifications
+            .lock()
+            .map_err(|_| error("OWNED_STORAGE"))?
+            .policy_pin(binding)
+        {
+            Ok(pin) => pin["folder_policy"]["max_runtime_sec"].clone(),
+            Err(_) => Value::Null,
+        };
+        let auto_stop = self
+            .owners
+            .lock()
+            .map_err(|_| error("OWNED_STORAGE"))?
+            .query_auto_stop(binding)
+            .map_err(|e| (e.code, e.detail))?;
+        Ok(json!({"awaiting_approval":entry.awaiting_approval,
+            "awaiting_since_ms":entry.awaiting_since_ms,"observed_at_ms":entry.observed_at_ms,
+            "awaiting_limit_sec":state.config.awaiting_limit.as_secs_f64(),
+            "runtime_ms":runtime_ms,"max_runtime_sec":max_runtime_sec,"auto_stop":auto_stop}))
+    }
+
     fn observe(&self, binding: &Binding, request: Value) -> ToolResult {
-        let execution = self.execution(binding)?;
+        let mut execution = self.execution(binding)?;
+        if self.kind == OwnedProfileKind::RealProject {
+            execution["watch"] = self.watch_document(binding, &execution)?;
+        }
         let verification = match self.kind {
+            OwnedProfileKind::RealProject => self.real_project_verification(binding)?,
             OwnedProfileKind::RealBounded => self.real_bounded_verification(binding)?,
             OwnedProfileKind::SyntheticDispatch => match self
                 .verifications

@@ -45,6 +45,54 @@ pub struct IrisExecutionHttp {
 
 /// Operator file whose presence alone opts a Hub into the real bounded profile.
 pub const REAL_BOUNDED_POLICY_SOURCE: &str = "owned-real-policies.json";
+/// Operator file whose presence alone opts a Hub into the real project
+/// profile. Both files at once is refused: neither profile is attached.
+pub const REAL_PROJECT_POLICY_SOURCE: &str = super::iris_execution_owned::REAL_PROJECT_POLICY_FILE;
+
+/// Fixed reason codes per real profile (no path or content ever).
+struct Codes {
+    source: &'static str,
+    conflict: &'static str,
+    present: &'static str,
+    owner_store: &'static str,
+    runtime: &'static str,
+    journal: &'static str,
+    verifier: &'static str,
+    build: &'static str,
+    identity: &'static str,
+}
+const BOUNDED_CODES: Codes = Codes {
+    source: "REAL_BOUNDED_POLICY_SOURCE",
+    conflict: "REAL_PROFILE_SOURCE_CONFLICT",
+    present: "REAL_BOUNDED_PROFILE_PRESENT",
+    owner_store: "REAL_BOUNDED_OWNER_STORE",
+    runtime: "REAL_BOUNDED_RUNTIME",
+    journal: "REAL_BOUNDED_JOURNAL",
+    verifier: "REAL_BOUNDED_VERIFIER_STORAGE",
+    build: "REAL_BOUNDED_PROFILE_BUILD",
+    identity: "REAL_BOUNDED_STORE_IDENTITY",
+};
+const PROJECT_CODES: Codes = Codes {
+    source: "REAL_PROJECT_POLICY_SOURCE",
+    conflict: "REAL_PROFILE_SOURCE_CONFLICT",
+    present: "REAL_PROJECT_PROFILE_PRESENT",
+    owner_store: "REAL_PROJECT_OWNER_STORE",
+    runtime: "REAL_PROJECT_RUNTIME",
+    journal: "REAL_PROJECT_JOURNAL",
+    verifier: "REAL_PROJECT_VERIFIER_STORAGE",
+    build: "REAL_PROJECT_PROFILE_BUILD",
+    identity: "REAL_PROJECT_STORE_IDENTITY",
+};
+
+/// `Ok(true)` present, `Ok(false)` definitely absent. An alias, directory or
+/// unreadable entry is a failed request, not absence.
+fn source_present(dir: &Path, name: &str) -> Result<bool, ()> {
+    match std::fs::symlink_metadata(dir.join(name)) {
+        Ok(_) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(_) => Err(()),
+    }
+}
 
 /// Outcome of the explicit real bounded composition. Rejections carry fixed
 /// reason codes only, never paths, file contents or credentials.
@@ -333,31 +381,96 @@ impl IrisExecutionHttp {
             Arc<Mutex<super::iris_execution_owner::OwnerStore>>,
         ) -> Arc<dyn crate::application::iris_execution_launch::OwnedLaunchPort>,
     {
+        self.compose_real_kind(
+            super::iris_execution_owned::OwnedProfileKind::RealBounded,
+            root,
+            port,
+        )
+    }
+
+    /// Trusted Hub composition of `iris-owned-real-project/1` only, selected
+    /// solely by `iris-execution/owned-real-project-policies.json`, with the
+    /// same rules and fixed codes (`REAL_PROJECT_*`) as the real bounded
+    /// composition and the production watchdog.
+    pub fn compose_real_project<F>(self, root: &Path, port: F) -> (Self, RealBoundedComposition)
+    where
+        F: FnOnce(
+            Arc<Mutex<super::iris_execution_owner::OwnerStore>>,
+        ) -> Arc<dyn crate::application::iris_execution_launch::OwnedLaunchPort>,
+    {
+        self.compose_real_kind(
+            super::iris_execution_owned::OwnedProfileKind::RealProject,
+            root,
+            port,
+        )
+    }
+
+    /// Hub startup: attach whichever real profile its fixed source selects.
+    /// Both sources at once attach neither (`REAL_PROFILE_SOURCE_CONFLICT`).
+    pub fn compose_real_profiles<F>(self, root: &Path, port: F) -> (Self, RealBoundedComposition)
+    where
+        F: FnOnce(
+            Arc<Mutex<super::iris_execution_owner::OwnerStore>>,
+        ) -> Arc<dyn crate::application::iris_execution_launch::OwnedLaunchPort>,
+    {
+        let dir = root.join("iris-execution");
+        match source_present(&dir, REAL_PROJECT_POLICY_SOURCE) {
+            Ok(false) => self.compose_real_bounded(root, port),
+            _ => self.compose_real_project(root, port),
+        }
+    }
+
+    fn compose_real_kind<F>(
+        self,
+        kind: super::iris_execution_owned::OwnedProfileKind,
+        root: &Path,
+        port: F,
+    ) -> (Self, RealBoundedComposition)
+    where
+        F: FnOnce(
+            Arc<Mutex<super::iris_execution_owner::OwnerStore>>,
+        ) -> Arc<dyn crate::application::iris_execution_launch::OwnedLaunchPort>,
+    {
         use super::iris_execution_owned::{OwnedProfile, OwnedProfileKind, check_policy_source};
+        let (own, other, codes) = match kind {
+            OwnedProfileKind::RealProject => (
+                REAL_PROJECT_POLICY_SOURCE,
+                REAL_BOUNDED_POLICY_SOURCE,
+                &PROJECT_CODES,
+            ),
+            _ => (
+                REAL_BOUNDED_POLICY_SOURCE,
+                REAL_PROJECT_POLICY_SOURCE,
+                &BOUNDED_CODES,
+            ),
+        };
         let reject = |owner, code| (owner, RealBoundedComposition::Rejected(code));
         let dir = root.join("iris-execution");
         // An alias, directory or unreadable entry is a failed request, not
         // absence; only a definite "not found" keeps the current behavior.
-        match std::fs::symlink_metadata(dir.join(REAL_BOUNDED_POLICY_SOURCE)) {
-            Ok(_) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return (self, RealBoundedComposition::NotRequested);
-            }
-            Err(_) => return reject(self, "REAL_BOUNDED_POLICY_SOURCE"),
+        match source_present(&dir, own) {
+            Ok(true) => {}
+            Ok(false) => return (self, RealBoundedComposition::NotRequested),
+            Err(()) => return reject(self, codes.source),
+        }
+        // The two real profiles share one provider pair; exactly one source
+        // may select it. Anything at the other path (even unreadable) refuses.
+        if source_present(&dir, other) != Ok(false) {
+            return reject(self, codes.conflict);
         }
         if self.owned_profile.is_some() {
-            return reject(self, "REAL_BOUNDED_PROFILE_PRESENT");
+            return reject(self, codes.present);
         }
         let Some(owners) = self.owner_store.clone() else {
-            return reject(self, "REAL_BOUNDED_OWNER_STORE");
+            return reject(self, codes.owner_store);
         };
-        if check_policy_source(root, OwnedProfileKind::RealBounded).is_err() {
-            return reject(self, "REAL_BOUNDED_POLICY_SOURCE");
+        if check_policy_source(root, kind).is_err() {
+            return reject(self, codes.source);
         }
         // What the dispatcher needs from this process is settled before the
         // verification store is opened: a rejected request creates no file.
         if tokio::runtime::Handle::try_current().is_err() {
-            return reject(self, "REAL_BOUNDED_RUNTIME");
+            return reject(self, codes.runtime);
         }
         let owned_dispatch = self
             .journal
@@ -365,29 +478,41 @@ impl IrisExecutionHttp {
             .ok()
             .and_then(|journal| journal.supports_owned_dispatch().ok());
         if owned_dispatch != Some(true) {
-            return reject(self, "REAL_BOUNDED_JOURNAL");
+            return reject(self, codes.journal);
         }
         let verifications = match super::iris_execution_verification_store::VerificationStore::open(
             &dir.join("verification.sqlite3"),
         ) {
             Ok(store) => store,
-            Err(_) => return reject(self, "REAL_BOUNDED_VERIFIER_STORAGE"),
+            Err(_) => return reject(self, codes.verifier),
         };
         let launch = port(owners.clone());
-        let profile = match OwnedProfile::new_real_bounded(
-            self.journal.clone(),
-            owners,
-            verifications,
-            root.to_path_buf(),
-            launch,
-            crate::application::iris_execution_dispatcher::DispatcherConfig::default(),
-        ) {
+        let config = crate::application::iris_execution_dispatcher::DispatcherConfig::default();
+        let built = match kind {
+            OwnedProfileKind::RealProject => OwnedProfile::new_real_project(
+                self.journal.clone(),
+                owners,
+                verifications,
+                root.to_path_buf(),
+                launch,
+                config,
+            ),
+            _ => OwnedProfile::new_real_bounded(
+                self.journal.clone(),
+                owners,
+                verifications,
+                root.to_path_buf(),
+                launch,
+                config,
+            ),
+        };
+        let profile = match built {
             Ok(profile) => Arc::new(profile),
-            Err(_) => return reject(self, "REAL_BOUNDED_PROFILE_BUILD"),
+            Err(_) => return reject(self, codes.build),
         };
         match self.clone().with_owned_profile(profile) {
             Ok(attached) => (attached, RealBoundedComposition::Attached),
-            Err(_) => reject(self, "REAL_BOUNDED_STORE_IDENTITY"),
+            Err(_) => reject(self, codes.identity),
         }
     }
 
