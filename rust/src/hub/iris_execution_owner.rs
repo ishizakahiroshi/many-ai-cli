@@ -138,6 +138,9 @@ impl VerifiedArtifact {
     }
 }
 impl ArtifactPermit {
+    pub(crate) fn binding(&self) -> &Binding {
+        &self.binding
+    }
     /// Destination selected by the operator manifest; reads must still use verify.
     pub fn approved_path(&self) -> PathBuf {
         self.root.join(&self.relative)
@@ -379,6 +382,25 @@ pub struct OwnerStore {
     db: Connection,
 }
 impl OwnerStore {
+    /// Hold the owner database writer lane until an external policy commit has
+    /// completed. Another connection cannot create this intent between the
+    /// absence check and durable policy pin. No owner schema is changed.
+    pub(crate) fn before_owner_intent<T>(
+        &mut self,
+        binding: &Binding,
+        commit_policy: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        check_binding(binding)?;
+        let tx = sql(self
+            .db
+            .transaction_with_behavior(TransactionBehavior::Immediate))?;
+        if load(&tx, binding)?.is_some() {
+            return Err(fail("VERIFIER_LATE_POLICY"));
+        }
+        let result = commit_policy()?;
+        sql(tx.commit())?;
+        Ok(result)
+    }
     pub fn open(path: &Path) -> Result<Self> {
         let existed = path.exists();
         if let Some(parent) = path.parent() {
@@ -679,6 +701,10 @@ struct OutcomeDocument {
     outcome: String,
     effects: String,
     synthetic: bool,
+    // Optional data is integrity-bound only. Independent comparison is stored
+    // separately and never changes this owner's task/effects authority flags.
+    #[serde(default, rename = "payload")]
+    _payload: Option<Value>,
 }
 fn checked_document(raw: &str, digest: &str) -> Result<Value> {
     if sha(raw.as_bytes()) != digest {
@@ -937,6 +963,28 @@ mod tests {
         assert_eq!(
             c.claim_spawn(&t, 9, 101).unwrap_err().code,
             "OWNER_ALREADY_CLAIMED"
+        );
+    }
+    #[test]
+    fn policy_commit_guard_excludes_other_owner_writers() {
+        let d = tempfile::tempdir().unwrap();
+        let path = d.path().join("owner.db");
+        let mut first = OwnerStore::open(&path).unwrap();
+        let mut second = OwnerStore::open(&path).unwrap();
+        second.db.busy_timeout(Duration::from_millis(30)).unwrap();
+        first
+            .before_owner_intent(&binding(), || {
+                assert!(second.begin_owner(&binding(), "owner", 1, 100).is_err());
+                Ok(())
+            })
+            .unwrap();
+        second.begin_owner(&binding(), "owner", 1, 100).unwrap();
+        assert_eq!(
+            first
+                .before_owner_intent(&binding(), || Ok(()))
+                .unwrap_err()
+                .code,
+            "VERIFIER_LATE_POLICY"
         );
     }
     #[test]

@@ -22,6 +22,16 @@ Release artifacts are published at
   project has been opened, "this project only" uses the selected session's
   project.
 
+- Add the separately selected `iris-owned-dispatch/1` HTTP profile for isolated
+  synthetic launch-port acceptance. Admission pins fixed operator policy before
+  the one-use dispatcher; lost responses retain the original request identity.
+  Native observations do not enable task success, effects proof or handoff, and
+  the normal Hub keeps live provider dispatch disabled.
+
+- Add trusted local, immutable fixed-payload verification records, pinned before
+  owner startup and bound to the exact artifact and execution. Comparisons stay
+  separate from task success, effects and live HTTP execution capabilities.
+
 - Allow editing quick commands by right-clicking their buttons.
 
 - Show a "starting" state for new in-window CLI launches until the correlated

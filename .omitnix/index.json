@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "dad22b4e60810d2459b73c6d517c6b6b27bfa7cc",
+    "commit": "6cd0dee884ff2986e185fd2421b60e2f1a6ab511",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,9 +138,9 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2063,
-    "analyzed": 1601,
-    "unresolved": 12,
+    "discovered": 2067,
+    "analyzed": 1603,
+    "unresolved": 14,
     "unknown": 0,
     "unclaimed": 450,
     "skipped_by_config": 0
@@ -30865,6 +30865,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/hub/iris_execution_owned.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Explicit, opt-in owned dispatch for isolated fake-port acceptance."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/hub/iris_execution_owner.rs",
       "adapter": "rust",
       "status": "unresolved",
@@ -30912,6 +30941,87 @@
         "summary": {
           "state": "value",
           "value": "Internal, deliberately incomplete runtime bridge for Iris-owned attempts."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/hub/iris_execution_verification_store.rs",
+      "adapter": "rust",
+      "status": "unresolved",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Trusted local fixed-payload acceptance records, independent of execution."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "value",
+          "value": [
+            "meta",
+            "policies",
+            "verifications"
+          ]
+        },
+        "writes": {
+          "state": "value",
+          "value": [
+            "meta"
+          ]
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": [
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: SELECT spec_hash,raw_document,pinned_at_ms,receipt,receipt_digest FROM..."
+        },
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: SELECT input_hash,ticket_json,receipt,receipt_digest FROM verification..."
+        },
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: INSERT INTO policies VALUES(?1,?2,?3,?4,?5,?6)"
+        },
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: INSERT INTO verifications VALUES(?1,?2,?3,?4,?5)"
+        }
+      ]
+    },
+    {
+      "path": "rust/src/hub/iris_execution_verifier.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Trusted fixed-payload comparison only. This is not a task/effects verifier"
         },
         "authentication": {
           "state": "not_configured"
@@ -40397,6 +40507,51 @@
         }
       },
       "unresolved": []
+    },
+    {
+      "path": "rust/tests/iris_independent_verification.rs",
+      "adapter": "rust",
+      "status": "unresolved",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Independent blackbox acceptance for fixed-payload verification only."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "value",
+          "value": [
+            "policies",
+            "verifications"
+          ]
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": [
+        {
+          "code": "dynamic_sql",
+          "detail": "assembled at run time: UPDATE verifications SET receipt=' omitnix_placeholder '"
+        },
+        {
+          "code": "dynamic_sql",
+          "detail": "assembled at run time: UPDATE policies SET raw_document=' omitnix_placeholder '"
+        },
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: UPDATE verifications SET receipt=?1,receipt_digest=?2"
+        }
+      ]
     },
     {
       "path": "rust/tests/iris_owned_dispatch.rs",
@@ -51141,14 +51296,17 @@
     {
       "name": "meta",
       "read_by": [
-        "rust/src/hub/iris_execution_journal.rs"
+        "rust/src/hub/iris_execution_journal.rs",
+        "rust/src/hub/iris_execution_verification_store.rs"
       ],
       "written_by": [
-        "rust/src/hub/iris_execution_journal.rs"
+        "rust/src/hub/iris_execution_journal.rs",
+        "rust/src/hub/iris_execution_verification_store.rs"
       ],
       "in_schema_snapshot": false,
       "unresolved_in": [
-        "rust/src/hub/iris_execution_journal.rs"
+        "rust/src/hub/iris_execution_journal.rs",
+        "rust/src/hub/iris_execution_verification_store.rs"
       ]
     },
     {
@@ -51174,6 +51332,20 @@
       ],
       "in_schema_snapshot": false,
       "unresolved_in": []
+    },
+    {
+      "name": "policies",
+      "read_by": [
+        "rust/src/hub/iris_execution_verification_store.rs"
+      ],
+      "written_by": [
+        "rust/tests/iris_independent_verification.rs"
+      ],
+      "in_schema_snapshot": false,
+      "unresolved_in": [
+        "rust/src/hub/iris_execution_verification_store.rs",
+        "rust/tests/iris_independent_verification.rs"
+      ]
     },
     {
       "name": "receipts",
@@ -51239,6 +51411,20 @@
       "unresolved_in": [
         "rust/src/hub/iris_execution_journal.rs"
       ]
+    },
+    {
+      "name": "verifications",
+      "read_by": [
+        "rust/src/hub/iris_execution_verification_store.rs"
+      ],
+      "written_by": [
+        "rust/tests/iris_independent_verification.rs"
+      ],
+      "in_schema_snapshot": false,
+      "unresolved_in": [
+        "rust/src/hub/iris_execution_verification_store.rs",
+        "rust/tests/iris_independent_verification.rs"
+      ]
     }
   ],
   "table_gaps": {
@@ -51246,12 +51432,14 @@
       "go/internal/sessionstore/store.go",
       "rust/src/hub/iris_execution_journal.rs",
       "rust/src/hub/iris_execution_owner.rs",
+      "rust/src/hub/iris_execution_verification_store.rs",
       "rust/src/storage/history.rs",
       "rust/src/storage/repository.rs",
       "rust/tests/dependency_contracts.rs",
+      "rust/tests/iris_independent_verification.rs",
       "rust/tests/storage_contracts.rs"
     ],
-    "unresolved_count": 35,
-    "note": "35 statements in 7 files could not be read, so the table list may be incomplete: a table mentioned only there is missing from it entirely, and a table that is listed may be touched in more places than it names."
+    "unresolved_count": 42,
+    "note": "42 statements in 9 files could not be read, so the table list may be incomplete: a table mentioned only there is missing from it entirely, and a table that is listed may be touched in more places than it names."
   }
 }

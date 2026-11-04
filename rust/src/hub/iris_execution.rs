@@ -28,6 +28,7 @@ pub trait ExecutionBackend: Send + Sync {
     fn stop(&self, binding: &Binding, stop_request_id: &str) -> ToolResult;
 }
 
+#[derive(Clone)]
 pub struct IrisExecutionHttp {
     token: String,
     principal: String,
@@ -35,9 +36,10 @@ pub struct IrisExecutionHttp {
     host: String,
     instance: String,
     port: u16,
-    journal: Mutex<Journal>,
+    journal: Arc<Mutex<Journal>>,
     backend: Option<Arc<dyn ExecutionBackend>>,
-    owner_store: Option<Mutex<super::iris_execution_owner::OwnerStore>>,
+    owner_store: Option<Arc<Mutex<super::iris_execution_owner::OwnerStore>>>,
+    owned_profile: Option<Arc<super::iris_execution_owned::OwnedProfile>>,
     operator_grants_loaded: bool,
 }
 
@@ -96,7 +98,7 @@ impl IrisExecutionHttp {
             journal,
             None,
         )?;
-        owner.owner_store = Some(Mutex::new(owner_store));
+        owner.owner_store = Some(Arc::new(Mutex::new(owner_store)));
         owner.operator_grants_loaded = operator_grants_loaded;
         Ok(Some(owner))
     }
@@ -110,6 +112,29 @@ impl IrisExecutionHttp {
         instance: String,
         port: u16,
         journal: Journal,
+        backend: Option<Arc<dyn ExecutionBackend>>,
+    ) -> Result<Self, String> {
+        Self::new_shared(
+            token,
+            principal,
+            workspace,
+            host,
+            instance,
+            port,
+            Arc::new(Mutex::new(journal)),
+            backend,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_shared(
+        token: String,
+        principal: String,
+        workspace: String,
+        host: String,
+        instance: String,
+        port: u16,
+        journal: Arc<Mutex<Journal>>,
         backend: Option<Arc<dyn ExecutionBackend>>,
     ) -> Result<Self, String> {
         if token.len() != 64
@@ -128,9 +153,10 @@ impl IrisExecutionHttp {
             host,
             instance,
             port,
-            journal: Mutex::new(journal),
+            journal,
             backend,
             owner_store: None,
+            owned_profile: None,
             operator_grants_loaded: false,
         })
     }
@@ -210,7 +236,7 @@ impl IrisExecutionHttp {
         let value = mcp::handle_with_tools(
             &request_value,
             "many-ai-cli-execution",
-            &tools(),
+            &self.tools(),
             &mut |tool, args| self.call(tool, args, now),
         );
         if value.is_null() {
@@ -220,6 +246,14 @@ impl IrisExecutionHttp {
     }
 
     pub fn capabilities(&self) -> Value {
+        let mut value = self.legacy_capabilities();
+        if let Some(profile) = &self.owned_profile {
+            value["owned_dispatch"] = profile.capabilities();
+        }
+        value
+    }
+
+    fn legacy_capabilities(&self) -> Value {
         let backend = self
             .backend
             .as_ref()
@@ -239,8 +273,149 @@ impl IrisExecutionHttp {
     }
 
     pub fn with_owner_store(mut self, store: super::iris_execution_owner::OwnerStore) -> Self {
-        self.owner_store = Some(Mutex::new(store));
+        self.owner_store = Some(Arc::new(Mutex::new(store)));
         self
+    }
+
+    pub fn with_shared_owner_store(
+        mut self,
+        store: Arc<Mutex<super::iris_execution_owner::OwnerStore>>,
+    ) -> Self {
+        self.owner_store = Some(store);
+        self
+    }
+
+    /// Trusted composition only. The HTTP owner and dispatcher must share the
+    /// exact store objects, rather than opening another connection or journal.
+    pub fn with_owned_profile(
+        mut self,
+        profile: Arc<super::iris_execution_owned::OwnedProfile>,
+    ) -> Result<Self, String> {
+        let owners = self
+            .owner_store
+            .as_ref()
+            .ok_or("Owned profile requires owner store")?;
+        if !profile.shares(&self.journal, owners) {
+            return Err("Owned profile store identity mismatch".into());
+        }
+        self.owned_profile = Some(profile);
+        Ok(self)
+    }
+
+    fn tools(&self) -> Vec<Value> {
+        let mut definitions = tools();
+        if self.owned_profile.is_some() {
+            for name in [
+                "owned_start",
+                "owned_poll",
+                "owned_stop",
+                "owned_request",
+                "owned_evidence",
+            ] {
+                let mut props = json!({"profile":{"type":"string"}});
+                let mut required = vec!["profile"];
+                if name != "owned_request" {
+                    props["binding"] = json!({"type":"object"});
+                    required.push("binding");
+                }
+                if ["owned_start", "owned_stop", "owned_request"].contains(&name) {
+                    props["request_id"] = json!({"type":"string"});
+                    required.push("request_id");
+                }
+                definitions.push(mcp::tool(name, props, &required));
+            }
+        }
+        definitions
+    }
+
+    /// The async path preserves the same preflight, bounded parser and MCP
+    /// envelope validation. The protocol layer validates arguments before any
+    /// owned operation, and no journal guard crosses an await.
+    pub async fn handle_authenticated_async(&self, request: &Request, now: i64) -> Response {
+        if let Err(error) = self.preflight(request) {
+            return error;
+        }
+        let input = match mcp::parse_json(&request.body) {
+            Ok(value) => value,
+            Err(error) => {
+                return Response::json(400, &mcp::error_response(None, &error)).no_store();
+            }
+        };
+        let headers: Vec<_> = request
+            .headers
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        if let Err(error) = mcp::validate_http(&headers, &input) {
+            return Response::json(400, &mcp::error_response(input.get("id"), &error)).no_store();
+        }
+        let definitions = self.tools();
+        let owner = self.clone();
+        let decoded = input.clone();
+        let schema = definitions.clone();
+        // Capabilities and legacy inspection also touch synchronous stores.
+        // Keep their mutex/file waits off the runtime's stop/deadline lane.
+        let prepared = tokio::task::spawn_blocking(move || {
+            let mut pending = None;
+            let preliminary = mcp::handle_with_tools(
+                &decoded,
+                "many-ai-cli-execution",
+                &schema,
+                &mut |tool, args| {
+                    if tool.starts_with("owned_") {
+                        pending = Some((tool.to_owned(), args.clone()));
+                        Ok(Value::Null)
+                    } else {
+                        owner.call(tool, args, now)
+                    }
+                },
+            );
+            (preliminary, pending)
+        })
+        .await;
+        let (preliminary, pending) = match prepared {
+            Ok(result) => result,
+            Err(_) => {
+                return Response::error(
+                    503,
+                    "execution_unavailable",
+                    "Execution inspection unavailable",
+                )
+                .no_store();
+            }
+        };
+        let output = if let Some((tool, args)) = pending {
+            let result = match &self.owned_profile {
+                Some(profile) => {
+                    profile
+                        .call(
+                            &tool,
+                            &args,
+                            &self.principal,
+                            &self.workspace,
+                            &self.host,
+                            &self.instance,
+                        )
+                        .await
+                }
+                None => Err((
+                    "OWNED_PROFILE_UNAVAILABLE".into(),
+                    "Owned profile is unavailable".into(),
+                )),
+            };
+            mcp::handle_with_tools(
+                &input,
+                "many-ai-cli-execution",
+                &definitions,
+                &mut |_, _| result.clone(),
+            )
+        } else {
+            preliminary
+        };
+        if output.is_null() {
+            return Response::bytes(202, "application/json", Vec::new()).no_store();
+        }
+        Response::json(200, &output).no_store()
     }
 
     fn call(&self, tool: &str, args: &Value, now: i64) -> ToolResult {
@@ -313,7 +488,9 @@ impl IrisExecutionHttp {
             }
             // Production adapters without owner evidence cannot be used as a
             // backdoor around Iris' capability gate, even by direct tool calls.
-            if self.capabilities()["execution_ready"] != true || binding.provider != "synthetic" {
+            if self.legacy_capabilities()["execution_ready"] != true
+                || binding.provider != "synthetic"
+            {
                 return Err(error("EXECUTION_UNAVAILABLE"));
             }
             match journal

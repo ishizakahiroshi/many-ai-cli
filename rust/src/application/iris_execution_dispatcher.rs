@@ -226,6 +226,10 @@ fn persist_unknown(journal: &Mutex<Journal>, binding: &Binding) -> Result<(), Di
     }
     Ok(())
 }
+/// Additional trusted profile admission, checked again when queued work reaches
+/// the launch boundary. This is not supplied by the HTTP caller.
+pub type LaunchAdmission = Arc<dyn Fn(&Binding) -> Result<(), DispatchError> + Send + Sync>;
+
 struct Shared {
     journal: Arc<Mutex<Journal>>,
     owners: Arc<Mutex<OwnerStore>>,
@@ -233,6 +237,7 @@ struct Shared {
     port: Arc<dyn OwnedLaunchPort>,
     config: DispatcherConfig,
     cleanup: CleanupLane,
+    admission: Option<LaunchAdmission>,
 }
 impl Shared {
     fn unknown(&self, binding: &Binding) {
@@ -283,6 +288,17 @@ impl OwnedDispatcher {
         port: Arc<dyn OwnedLaunchPort>,
         config: DispatcherConfig,
     ) -> Result<Self, DispatchError> {
+        Self::new_with_admission(journal, owners, runtime_root, port, config, None)
+    }
+
+    pub fn new_with_admission(
+        journal: Arc<Mutex<Journal>>,
+        owners: Arc<Mutex<OwnerStore>>,
+        runtime_root: PathBuf,
+        port: Arc<dyn OwnedLaunchPort>,
+        config: DispatcherConfig,
+        admission: Option<LaunchAdmission>,
+    ) -> Result<Self, DispatchError> {
         config.validate()?;
         let runtime_root = runtime_root
             .canonicalize()
@@ -308,6 +324,7 @@ impl OwnedDispatcher {
             port,
             config,
             cleanup,
+            admission,
         });
         let (queue, receiver) = mpsc::channel(shared.config.queue_capacity);
         let (stopping, stopped) = watch::channel(false);
@@ -550,6 +567,22 @@ async fn process(
         }
         prepare_spec(&grant, &job.ticket).map_err(|_| DispatchError::GrantRejected)?
     };
+    if let Some(admit) = &shared.admission {
+        let admit = admit.clone();
+        let admitted_binding = binding.clone();
+        // Profile admission reads operator files and a SQLite-backed pin. A
+        // contended verifier must not block Tokio's stop/deadline lane. A late
+        // blocking result is read-only and can never launch a timed-out job.
+        let check = tokio::task::spawn_blocking(move || admit(&admitted_binding));
+        tokio::select! {
+            biased;
+            _ = stopped.changed() => return Err(DispatchError::WorkerStopped),
+            result = timeout(shared.config.registration_timeout, check) => {
+                result.map_err(|_| DispatchError::Unavailable)?
+                    .map_err(|_| DispatchError::Unavailable)??;
+            }
+        }
+    }
     let cancel = HttpWaitCancellation::default();
     let outcome = tokio::select! {
         biased;

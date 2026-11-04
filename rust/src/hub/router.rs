@@ -528,7 +528,8 @@ impl ServiceRouter {
                 self.iris_execution
                     .as_ref()
                     .expect("preflight checked owner")
-                    .handle_authenticated(request, now),
+                    .handle_authenticated_async(request, now)
+                    .await,
             );
         }
         if super::approval_pattern_routes::is_route(&request.path) {
