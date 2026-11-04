@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "09c99b54380c1ca99f37a6a6c4c3a39c1b597be0",
+    "commit": "4f7e2608f7370b90cde3e24285716679f130752e",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -139,8 +139,8 @@
   },
   "coverage": {
     "discovered": 2075,
-    "analyzed": 1611,
-    "unresolved": 14,
+    "analyzed": 1610,
+    "unresolved": 15,
     "unknown": 0,
     "unclaimed": 450,
     "skipped_by_config": 0
@@ -40651,7 +40651,7 @@
     {
       "path": "rust/tests/iris_real_bounded.rs",
       "adapter": "rust",
-      "status": "analyzed",
+      "status": "unresolved",
       "fields": {
         "summary": {
           "state": "value",
@@ -40675,7 +40675,16 @@
           "state": "out_of_scope"
         }
       },
-      "unresolved": []
+      "unresolved": [
+        {
+          "code": "dynamic_sql",
+          "detail": "assembled at run time: UPDATE omitnix_placeholder SET attempt='other-attempt' WHERE attempt='..."
+        },
+        {
+          "code": "dynamic_table_name",
+          "detail": "the table name is a run-time value: UPDATE omitnix_placeholder SET attempt='other-attempt' WHERE attempt='..."
+        }
+      ]
     },
     {
       "path": "rust/tests/iris_real_bounded_composition.rs",
@@ -51709,9 +51718,10 @@
       "rust/src/storage/repository.rs",
       "rust/tests/dependency_contracts.rs",
       "rust/tests/iris_independent_verification.rs",
+      "rust/tests/iris_real_bounded.rs",
       "rust/tests/storage_contracts.rs"
     ],
-    "unresolved_count": 42,
-    "note": "42 statements in 9 files could not be read, so the table list may be incomplete: a table mentioned only there is missing from it entirely, and a table that is listed may be touched in more places than it names."
+    "unresolved_count": 44,
+    "note": "44 statements in 10 files could not be read, so the table list may be incomplete: a table mentioned only there is missing from it entirely, and a table that is listed may be touched in more places than it names."
   }
 }

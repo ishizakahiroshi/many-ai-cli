@@ -523,38 +523,60 @@ impl OwnerStore {
             }
         }
         if folder_table(&db)? {
-            let rows = sql(db.prepare("SELECT kind,document,digest FROM folder_records"))?
-                .query_map([], |r| {
-                    Ok((
-                        r.get::<_, String>(0)?,
-                        r.get::<_, String>(1)?,
-                        r.get::<_, String>(2)?,
-                    ))
-                })
-                .map_err(|_| fail("STORAGE"))?
-                .collect::<rusqlite::Result<Vec<_>>>()
-                .map_err(|_| fail("STORAGE"))?;
-            for (kind, raw, digest) in rows {
+            let rows = sql(db.prepare(
+                "SELECT principal,workspace,attempt,kind,document,digest FROM folder_records",
+            ))?
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, String>(4)?,
+                    r.get::<_, String>(5)?,
+                ))
+            })
+            .map_err(|_| fail("STORAGE"))?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|_| fail("STORAGE"))?;
+            for (principal, workspace, attempt, kind, raw, digest) in rows {
                 let v = checked_document(&raw, &digest)?;
                 let ticket: OwnerTicket =
                     serde_json::from_value(v["ticket"].clone()).map_err(|_| fail("STORAGE"))?;
-                if v["phase"] != kind.as_str() || !folder_flags(&v) {
+                if v["phase"] != kind.as_str()
+                    || !folder_flags(&v)
+                    || !same_key(&ticket.binding, &principal, &workspace, &attempt)
+                {
                     return Err(fail("STORAGE"));
                 }
                 load(&db, &ticket.binding)?.ok_or_else(|| fail("STORAGE"))?;
             }
         }
         if trust_table(&db)? {
-            let rows = sql(db.prepare("SELECT document,digest FROM trust_records"))?
-                .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
-                .map_err(|_| fail("STORAGE"))?
-                .collect::<rusqlite::Result<Vec<_>>>()
-                .map_err(|_| fail("STORAGE"))?;
-            for (raw, digest) in rows {
+            let rows = sql(db.prepare(
+                "SELECT principal,workspace,attempt,phase,document,digest FROM trust_records",
+            ))?
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, String>(4)?,
+                    r.get::<_, String>(5)?,
+                ))
+            })
+            .map_err(|_| fail("STORAGE"))?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|_| fail("STORAGE"))?;
+            for (principal, workspace, attempt, phase, raw, digest) in rows {
                 let v = checked_document(&raw, &digest)?;
                 let ticket: OwnerTicket =
                     serde_json::from_value(v["ticket"].clone()).map_err(|_| fail("STORAGE"))?;
-                if !trust_flags(&v) {
+                if !trust_flags(&v)
+                    || v["phase"] != phase.as_str()
+                    || !same_key(&ticket.binding, &principal, &workspace, &attempt)
+                {
                     return Err(fail("STORAGE"));
                 }
                 load(&db, &ticket.binding)?.ok_or_else(|| fail("STORAGE"))?;
@@ -562,12 +584,19 @@ impl OwnerStore {
         }
         Ok(Self { db })
     }
-    /// One folder-trust observation per attempt, for the real bounded launch
-    /// only: the exact approved folder, time and result, written before the
-    /// one-use spawn claim. Created on first use, so other stores keep their
-    /// exact schema. A record never changes owner or receipt authority and is
-    /// never replaced: re-entering with the same ticket conflicts.
+    /// Folder-trust observations for the real bounded launch only, in two
+    /// rows per attempt: `intent` (exact approved folder, the key about to be
+    /// written and the time) before the vendor write, then `result` after it.
+    /// A failure decided before any write has a result row only. Both precede
+    /// the one-use spawn claim. Created on first use, so other stores keep
+    /// their exact schema. Rows never change owner or receipt authority and
+    /// are never replaced. An intent row is accepted only when no row exists;
+    /// a result row only when no result exists.
     pub fn record_folder_trust(&mut self, t: &OwnerTicket, document: &Value) -> Result<Value> {
+        let phase = match document["phase"].as_str() {
+            Some(phase @ ("intent" | "result")) => phase,
+            _ => return Err(fail("FOLDER_TRUST_RECORD")),
+        };
         if document["ticket"] != json!(t) || !trust_flags(document) {
             return Err(fail("FOLDER_TRUST_RECORD"));
         }
@@ -580,16 +609,23 @@ impl OwnerStore {
         }
         sql(tx.execute_batch(TRUST_TABLE))?;
         let b = &t.binding;
-        if trust_row(&tx, b)?.is_some() {
+        let intent = trust_row(&tx, b, "intent")?;
+        if trust_row(&tx, b, "result")?.is_some() || (phase == "intent" && intent.is_some()) {
+            return Err(fail("FOLDER_TRUST_CONFLICT"));
+        }
+        if let Some(intent) = &intent
+            && (intent["target"] != document["target"] || intent["key"] != document["planned_key"])
+        {
             return Err(fail("FOLDER_TRUST_CONFLICT"));
         }
         let raw = document.to_string();
         sql(tx.execute(
-            "INSERT INTO trust_records VALUES(?,?,?,?,?)",
+            "INSERT INTO trust_records VALUES(?,?,?,?,?,?)",
             params![
                 b.principal_id,
                 b.workspace_id,
                 b.attempt_id,
+                phase,
                 raw,
                 sha(raw.as_bytes())
             ],
@@ -597,13 +633,16 @@ impl OwnerStore {
         sql(tx.commit())?;
         Ok(document.clone())
     }
-    /// The attempt's folder-trust record, or null when none was written.
+    /// The attempt's folder-trust rows: `{"intent":…,"result":…}`, each null
+    /// when absent. An intent without a result means the write may have
+    /// happened without a recorded outcome.
     pub fn query_folder_trust(&self, b: &Binding) -> Result<Value> {
         check_binding(b)?;
         let tx = sql(self.db.unchecked_transaction())?;
-        let value = trust_row(&tx, b)?.unwrap_or(Value::Null);
+        let intent = trust_row(&tx, b, "intent")?.unwrap_or(Value::Null);
+        let result = trust_row(&tx, b, "result")?.unwrap_or(Value::Null);
         sql(tx.commit())?;
-        Ok(value)
+        Ok(json!({"intent":intent,"result":result}))
     }
     /// Separate, append-only folder observations for collector grants. The
     /// table is created on first use, so stores without collector grants keep
@@ -960,20 +999,30 @@ fn folder_row(db: &Connection, b: &Binding, kind: &str) -> Result<Option<Value>>
     }
     Ok(Some(v))
 }
-const TRUST_TABLE: &str = "CREATE TABLE IF NOT EXISTS trust_records(principal TEXT NOT NULL,workspace TEXT NOT NULL,attempt TEXT NOT NULL,document TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(principal,workspace,attempt),FOREIGN KEY(principal,workspace,attempt) REFERENCES owners(principal,workspace,attempt));";
+const TRUST_TABLE: &str = "CREATE TABLE IF NOT EXISTS trust_records(principal TEXT NOT NULL,workspace TEXT NOT NULL,attempt TEXT NOT NULL,phase TEXT NOT NULL CHECK(phase IN('intent','result')),document TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(principal,workspace,attempt,phase),FOREIGN KEY(principal,workspace,attempt) REFERENCES owners(principal,workspace,attempt));";
 /// A trust record is an observation only: it grants no tool, risk
-/// confirmation or approval and never verifies effects or the task.
+/// confirmation or approval and never verifies effects or the task. The
+/// intent row (`result: "pending"`) is written before the vendor write; the
+/// result row afterwards.
 fn trust_flags(v: &Value) -> bool {
     v["kind"] == "folder_trust"
         && v["scope"] == "approved-cwd-only"
-        && matches!(
-            v["result"].as_str(),
-            Some("written" | "already-trusted" | "failed")
-        )
+        && match v["phase"].as_str() {
+            Some("intent") => v["result"] == "pending",
+            Some("result") => matches!(
+                v["result"].as_str(),
+                Some("written" | "already-trusted" | "failed")
+            ),
+            _ => false,
+        }
         && v["tool_grants"] == json!([])
         && v["risk_confirmed"] == false
         && v["effects_verified"] == false
         && v["task_outcome_verified"] == false
+}
+/// The row key must be the binding in its own document (R3-3).
+fn same_key(b: &Binding, principal: &str, workspace: &str, attempt: &str) -> bool {
+    b.principal_id == principal && b.workspace_id == workspace && b.attempt_id == attempt
 }
 fn trust_table(db: &Connection) -> Result<bool> {
     let count: i64 = sql(db.query_row(
@@ -983,14 +1032,14 @@ fn trust_table(db: &Connection) -> Result<bool> {
     ))?;
     Ok(count == 1)
 }
-fn trust_row(db: &Connection, b: &Binding) -> Result<Option<Value>> {
+fn trust_row(db: &Connection, b: &Binding, phase: &str) -> Result<Option<Value>> {
     if !trust_table(db)? {
         return Ok(None);
     }
     let row: Option<(String, String)> = sql(db
         .query_row(
-            "SELECT document,digest FROM trust_records WHERE principal=? AND workspace=? AND attempt=?",
-            params![b.principal_id, b.workspace_id, b.attempt_id],
+            "SELECT document,digest FROM trust_records WHERE principal=? AND workspace=? AND attempt=? AND phase=?",
+            params![b.principal_id, b.workspace_id, b.attempt_id, phase],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .optional())?;
@@ -998,7 +1047,7 @@ fn trust_row(db: &Connection, b: &Binding) -> Result<Option<Value>> {
         return Ok(None);
     };
     let v = checked_document(&raw, &digest)?;
-    if v["ticket"]["binding"] != json!(b) || !trust_flags(&v) {
+    if v["ticket"]["binding"] != json!(b) || v["phase"] != phase || !trust_flags(&v) {
         return Err(fail("STORAGE"));
     }
     Ok(Some(v))

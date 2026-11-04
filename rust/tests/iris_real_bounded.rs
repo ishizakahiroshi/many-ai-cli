@@ -89,6 +89,14 @@ impl Fixture {
     fn new() -> Self {
         Self::with_grant(|_, _| {})
     }
+    /// Collector grant without bounded-edit. Folder trust needs an empty
+    /// approved folder (R3-1), so tests that seed the folder to exercise the
+    /// collector comparison use the default launch mode, which never trusts.
+    fn seeded_collector() -> Self {
+        Self::with_grant(|g, _| {
+            g.as_object_mut().unwrap().remove("launch_mode");
+        })
+    }
     fn with_grant(edit: impl FnOnce(&mut Value, &Path)) -> Self {
         Self::for_pair(REAL_BOUNDED_PROVIDER, REAL_BOUNDED_PROFILE_ID, edit)
     }
@@ -233,8 +241,13 @@ impl Fixture {
     fn home_file(&self) -> PathBuf {
         self.trust().config_path("claude", &[]).unwrap()
     }
+    /// The folder-trust result row (null when none).
     fn trust_record(&self) -> Value {
-        self.owners().query_folder_trust(&self.binding).unwrap()
+        self.owners().query_folder_trust(&self.binding).unwrap()["result"].clone()
+    }
+    /// The folder-trust intent row written before the vendor write.
+    fn trust_intent(&self) -> Value {
+        self.owners().query_folder_trust(&self.binding).unwrap()["intent"].clone()
     }
     fn process(&self, plan: &Value) -> ProcessPlan {
         let mut env = BTreeMap::new();
@@ -465,7 +478,7 @@ async fn payload_only_answer_builds_trusted_envelope_and_fixed_payload_passes() 
 #[tokio::test]
 async fn extra_file_or_modified_seed_is_unexpected_change() {
     for modify_seed in [false, true] {
-        let f = Fixture::new();
+        let f = Fixture::seeded_collector();
         std::fs::write(f.workspace().join("seed.txt"), b"synthetic seed").unwrap();
         let mut plan = vec![write("answer.json", ANSWER)];
         plan.push(if modify_seed {
@@ -690,7 +703,7 @@ async fn c4_alternate_data_stream_writes_are_unexpected_change() {
     ];
     let mut observed = Vec::new();
     for (name, extra) in cases {
-        let f = Fixture::new();
+        let f = Fixture::seeded_collector();
         std::fs::write(f.workspace().join("seed.txt"), b"synthetic seed").unwrap();
         std::fs::create_dir(f.workspace().join("sub")).unwrap();
         run(
@@ -1174,9 +1187,20 @@ async fn c8_real_bounded_launch_trusts_exactly_the_approved_folder_before_claim(
     assert_eq!(record["reason"], Value::Null);
     assert_eq!(record["tool_grants"], json!([]));
     assert_eq!(record["risk_confirmed"], false);
+    // The intent precedes the write and names the same target and key.
+    let intent = f.trust_intent();
+    assert_eq!(intent["phase"], "intent");
+    assert_eq!(intent["result"], "pending");
+    assert_eq!(intent["key"], key);
+    assert_eq!(intent["target"], record["target"]);
+    assert_eq!(record["planned_key"], key);
     let (owner, folder) = f.record();
     assert_never_promoted(&owner, &folder);
-    assert!(record["observed_at_ms"].as_u64().unwrap() <= owner["claimed_at_ms"].as_u64().unwrap());
+    assert!(
+        intent["observed_at_ms"].as_u64().unwrap() <= record["observed_at_ms"].as_u64().unwrap()
+    );
+    // The claim carries the admission time of the same before_spawn call.
+    assert!(intent["observed_at_ms"].as_u64().unwrap() <= owner["claimed_at_ms"].as_u64().unwrap());
     // The trust write lands outside the approved folder: still payload-only.
     assert_eq!(folder["collection"]["effects"], PAYLOAD_ONLY);
 }
@@ -1238,6 +1262,13 @@ async fn c8_trust_failure_refuses_launch_and_is_recorded() {
         assert_eq!(trust["result"], "failed", "{name}");
         assert_eq!(trust["reason"], reason, "{name}");
         assert_eq!(trust["written"], false, "{name}");
+        // Only a failure of the writer itself follows a recorded intent; a
+        // failure decided before any write has the result row only.
+        assert_eq!(
+            !f.trust_intent().is_null(),
+            reason == "FOLDER_TRUST_WRITE",
+            "{name}"
+        );
         assert_eq!(std::fs::read(f.config_file()).ok(), before, "{name}");
         assert!(
             !elsewhere
@@ -1297,6 +1328,7 @@ async fn c8_no_trust_outside_the_real_bounded_launch() {
         assert!(!f.config_file().exists(), "{name}");
         assert!(!f.home_file().exists(), "{name}");
         assert!(f.trust_record().is_null(), "{name}");
+        assert!(f.trust_intent().is_null(), "{name}");
     }
 }
 
@@ -1329,4 +1361,197 @@ fn c8_same_ticket_never_reaches_the_writer_twice() {
     assert!(f.adopt().before_spawn(2, &plan).is_err());
     assert!(!f.config_file().exists());
     assert_eq!(f.trust_record(), first);
+}
+
+// ---- Review 3 (adversarial, synthetic only) ----
+
+/// R3-1: trust is written only over an empty approved folder. A folder that
+/// already holds Claude project settings (synthetic hook and MCP files), any
+/// other plain file, or a named stream on the folder itself is refused before
+/// the trust write and the launch, with `FOLDER_TRUST_NOT_EMPTY`.
+#[tokio::test]
+async fn r3_trust_is_written_over_a_folder_with_project_settings() {
+    for case in ["project-settings", "plain-file", "folder-stream"] {
+        let f = Fixture::new();
+        let ws = f.workspace();
+        match case {
+            "project-settings" => {
+                std::fs::create_dir(ws.join(".claude")).unwrap();
+                std::fs::write(
+                    ws.join(".claude").join("settings.json"),
+                    r#"{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo synthetic-hook"}]}]},"permissions":{"allow":["Bash(*)"]}}"#,
+                )
+                .unwrap();
+                std::fs::write(
+                    ws.join(".mcp.json"),
+                    r#"{"mcpServers":{"synthetic":{"command":"synthetic"}}}"#,
+                )
+                .unwrap();
+            }
+            "plain-file" => std::fs::write(ws.join("notes.txt"), b"synthetic").unwrap(),
+            _ => {
+                let mut target = ws.canonicalize().unwrap().into_os_string();
+                target.push(":synthetic-stream");
+                std::fs::write(Path::new(&target), b"synthetic").unwrap();
+            }
+        }
+        let factory = CountFactory::default();
+        let result = run(&f, json!([write("answer.json", ANSWER)]), &factory).await;
+        let record = f.trust_record();
+        println!(
+            "R3-1 {case}: result_ok={} launches={} trust_result={} reason={}",
+            result.is_ok(),
+            factory.0.load(Ordering::SeqCst),
+            record["result"],
+            record["reason"]
+        );
+        assert!(result.is_err(), "{case}");
+        assert_eq!(factory.0.load(Ordering::SeqCst), 0, "{case}");
+        assert_eq!(record["result"], "failed", "{case}");
+        assert_eq!(record["reason"], "FOLDER_TRUST_NOT_EMPTY", "{case}");
+        assert!(f.trust_intent().is_null(), "{case}");
+        assert!(!f.config_file().exists(), "{case}");
+        assert!(f.record().0["claimed_session"].is_null(), "{case}");
+    }
+}
+
+/// R3-2: an intent row (target, planned key, time) is written before the
+/// vendor write, so a trust can never exist without a record. When the result
+/// insert fails, the launch is refused, the intent remains, and a re-entry with
+/// the same ticket is refused instead of recording a false "already-trusted".
+#[tokio::test]
+async fn r3_trust_written_without_record_when_record_insert_fails() {
+    let f = Fixture::new();
+    let owner = f.adopt();
+    {
+        // Same schema the store creates on first use; only the result row is
+        // blocked, the intent row is accepted.
+        let db =
+            rusqlite::Connection::open(f.root.path().join("iris-execution/owner.sqlite3")).unwrap();
+        db.execute_batch(
+            "CREATE TABLE IF NOT EXISTS trust_records(principal TEXT NOT NULL,workspace TEXT NOT NULL,attempt TEXT NOT NULL,phase TEXT NOT NULL CHECK(phase IN('intent','result')),document TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(principal,workspace,attempt,phase),FOREIGN KEY(principal,workspace,attempt) REFERENCES owners(principal,workspace,attempt));
+             CREATE TRIGGER synthetic_block BEFORE INSERT ON trust_records WHEN NEW.phase='result' BEGIN SELECT RAISE(ABORT,'synthetic'); END;",
+        )
+        .unwrap();
+    }
+    let factory = CountFactory::default();
+    let result = run_owner(
+        &f,
+        owner,
+        f.process(&json!([write("answer.json", ANSWER)])),
+        &factory,
+    )
+    .await;
+    let key = claude_key(&f.workspace());
+    let trusted = f.config_file().exists()
+        && read_config(&f)["projects"][&key]["hasTrustDialogAccepted"] == true;
+    let record = f.trust_record();
+    println!(
+        "R3-2 first: result_ok={} launches={} config_trusted={} record_null={}",
+        result.is_ok(),
+        factory.0.load(Ordering::SeqCst),
+        trusted,
+        record.is_null()
+    );
+    assert!(result.is_err());
+    assert_eq!(factory.0.load(Ordering::SeqCst), 0);
+    assert!(trusted, "the write happened");
+    assert!(record.is_null(), "the result row was blocked");
+    // ...but the write is never unrecorded: its intent names target and key.
+    let intent = f.trust_intent();
+    assert_eq!(intent["result"], "pending");
+    assert_eq!(intent["key"], key);
+    {
+        let db =
+            rusqlite::Connection::open(f.root.path().join("iris-execution/owner.sqlite3")).unwrap();
+        db.execute_batch("DROP TRIGGER synthetic_block;").unwrap();
+    }
+    let factory = CountFactory::default();
+    let again = run(&f, json!([write("answer.json", ANSWER)]), &factory).await;
+    let record = f.trust_record();
+    println!(
+        "R3-2 re-entry: result_ok={} launches={} trust_result={} written={}",
+        again.is_ok(),
+        factory.0.load(Ordering::SeqCst),
+        record["result"],
+        record["written"]
+    );
+    // An intent without a result refuses re-entry: no launch and no false
+    // "already-trusted" row for the trust this attempt wrote itself.
+    assert!(again.is_err());
+    assert_eq!(factory.0.load(Ordering::SeqCst), 0);
+    assert!(record.is_null());
+    assert_eq!(f.trust_intent(), intent);
+}
+
+/// R3-3: OwnerStore::open checks that each trust and folder row's key columns
+/// (principal, workspace, attempt) are the binding in its own document.
+#[test]
+fn r3_open_rejects_rows_whose_key_differs_from_their_ticket() {
+    for table in ["trust_records", "folder_records"] {
+        let f = Fixture::new();
+        f.adopt().before_spawn(1, &f.process(&json!([]))).unwrap();
+        let db_path = f.root.path().join("iris-execution/owner.sqlite3");
+        assert!(OwnerStore::open(&db_path).is_ok(), "{table}");
+        {
+            // Move only the row key; the document and its digest stay intact.
+            let db = rusqlite::Connection::open(&db_path).unwrap();
+            db.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
+            db.execute(
+                &format!("UPDATE {table} SET attempt='other-attempt' WHERE attempt='attempt'"),
+                [],
+            )
+            .unwrap_or_else(|e| panic!("{table}: {e}"));
+        }
+        let opened = OwnerStore::open(&db_path);
+        println!("R3-3 {table}: open_ok={}", opened.is_ok());
+        assert!(opened.is_err(), "{table}");
+    }
+}
+
+/// R3-3 (control): the approved folder itself, reached through a junction, is
+/// never trusted under the junction spelling: the cwd check refuses first.
+#[tokio::test]
+async fn r3_junction_spelling_of_the_approved_folder_is_refused_before_trust() {
+    let f = Fixture::new();
+    let alias = f.work.path().join("alias");
+    let status = std::process::Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(&alias)
+        .arg(f.workspace())
+        .stdout(std::process::Stdio::null())
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let mut process = f.process(&json!([write("answer.json", ANSWER)]));
+    process.cwd = alias.clone();
+    let factory = CountFactory::default();
+    let result = run_owner(&f, f.adopt(), process, &factory).await;
+    println!(
+        "R3-3 result_ok={} launches={} record={}",
+        result.is_ok(),
+        factory.0.load(Ordering::SeqCst),
+        f.trust_record()
+    );
+    // canonicalize(alias) == approved_cwd, so the launch proceeds; the key written
+    // must still be the canonical folder, never the alias spelling.
+    if f.config_file().exists() {
+        let projects = read_config(&f)["projects"].clone();
+        let alias_key = alias.to_string_lossy().replace('\\', "/");
+        assert!(projects.get(&alias_key).is_none());
+        assert_eq!(projects.as_object().unwrap().len(), 1);
+    }
+}
+
+/// R3-4 (control): a lowercase / 8.3 / verbatim spelling of the cwd never
+/// widens the trust; only the canonical key is ever written.
+#[test]
+fn r3_exact_trust_key_is_the_canonical_folder_only() {
+    let f = Fixture::new();
+    let plan = f.process(&json!([]));
+    f.adopt().before_spawn(1, &plan).unwrap();
+    let projects = read_config(&f)["projects"].as_object().unwrap().clone();
+    let keys: Vec<_> = projects.keys().cloned().collect();
+    println!("R3-4 keys={}", keys.len());
+    assert_eq!(keys, vec![claude_key(&f.workspace())]);
 }

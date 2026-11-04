@@ -21,6 +21,23 @@ pub struct FolderTrustResult {
     pub key: String,
     pub existing: String,
 }
+/// The owner keeps Rust's canonical (verbatim on Windows) spelling. The Claude
+/// key is the plain drive spelling; a path that cannot be safely simplified
+/// stays verbatim and is refused as unsupported.
+fn exact_claude_folder(cwd: &Path) -> io::Result<PathBuf> {
+    let text = cwd
+        .to_str()
+        .ok_or_else(|| invalid("folder trust requires a UTF-8 working directory"))?;
+    #[cfg(windows)]
+    let text = project::simplify_verbatim(text);
+    let exact = PathBuf::from(text);
+    if !exact.is_absolute() || project::clean(&exact) != exact || project::unsupported(&exact) {
+        return Err(invalid(
+            "folder trust requires a supported absolute working directory",
+        ));
+    }
+    Ok(exact)
+}
 pub struct NativeFolderTrust {
     paths: RuntimePaths,
     home: PathBuf,
@@ -53,6 +70,11 @@ impl NativeFolderTrust {
     /// other folder; and the result must leave `cwd` trusted, either written
     /// now or already trusted by Claude's own lookup. Anything else is an error
     /// and the caller must not launch.
+    /// The key [`Self::grant_exact_claude`] writes for `cwd`, computed without
+    /// any I/O so the caller can record its intent before the write.
+    pub fn exact_claude_key(cwd: &Path) -> io::Result<String> {
+        exact_claude_folder(cwd).map(|exact| project::claude_key(&exact))
+    }
     pub fn grant_exact_claude(
         &self,
         environment: &[String],
@@ -74,20 +96,7 @@ impl NativeFolderTrust {
                 "exact folder trust requires an explicit absolute Claude configuration directory",
             ));
         }
-        // The owner keeps Rust's canonical (verbatim on Windows) spelling. The
-        // Claude key is the plain drive spelling; a path that cannot be safely
-        // simplified stays verbatim and is refused below as unsupported.
-        let text = cwd
-            .to_str()
-            .ok_or_else(|| invalid("folder trust requires a UTF-8 working directory"))?;
-        #[cfg(windows)]
-        let text = project::simplify_verbatim(text);
-        let exact = PathBuf::from(text);
-        if !exact.is_absolute() || project::clean(&exact) != exact {
-            return Err(invalid(
-                "folder trust requires a supported absolute working directory",
-            ));
-        }
+        let exact = exact_claude_folder(cwd)?;
         let result = self.grant_checked("claude", environment, &exact, true)?;
         if !result.written && result.existing != "trusted" {
             return Err(io::Error::other(

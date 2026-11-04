@@ -86,14 +86,17 @@ impl DurableExecutionOwner {
             && self.grant.launch_mode == LaunchMode::BoundedEdit
             && live.launch_mode == LaunchMode::BoundedEdit
     }
-    /// Trust exactly the approved folder in the provider's own Claude config,
-    /// record target/time/result before the claim, and refuse on any failure.
+    /// Trust exactly the approved folder in the provider's own Claude config
+    /// and refuse on any failure. Two records, both before the claim: an
+    /// intent (target, planned key, time) before the vendor write, so a write
+    /// can never exist without a record, then the result after it.
     fn trust_folder(
         &self,
         store: &mut OwnerStore,
         ticket: &OwnerTicket,
         process: &ProcessPlan,
         at: u64,
+        baseline_empty: bool,
     ) -> io::Result<()> {
         // The provider's exact environment: the wrapper builds a complete map.
         let environment = process
@@ -103,25 +106,44 @@ impl DurableExecutionOwner {
                 Some(format!("{}={}", key.to_str()?, value.as_ref()?.to_str()?))
             })
             .collect::<Vec<_>>();
-        // One trust decision per attempt, before its claim. A re-entry with
-        // the same ticket is refused before the writer is reached again.
+        // One trust decision per attempt, before its claim. Any earlier row,
+        // in particular an intent without a result, refuses re-entry before
+        // the writer is reached again.
+        let earlier = store
+            .query_folder_trust(&ticket.binding)
+            .map_err(|_| failure())?;
         if !store.query(&ticket.binding).map_err(|_| failure())?["claimed_session"].is_null()
-            || !store
-                .query_folder_trust(&ticket.binding)
-                .map_err(|_| failure())?
-                .is_null()
+            || !earlier["intent"].is_null()
+            || !earlier["result"].is_null()
         {
             return Err(failure());
         }
         let target = self.grant.approved_cwd.to_string_lossy().into_owned();
+        let planned_key = NativeFolderTrust::exact_claude_key(&self.grant.approved_cwd).ok();
+        let flags = json!({"kind":"folder_trust","ticket":ticket,"target":target,
+            "scope":"approved-cwd-only","tool_grants":[],"risk_confirmed":false,
+            "effects_verified":false,"task_outcome_verified":false});
         let outcome = if !real_bounded_launch_admitted(&self.root, &ticket.binding, at) {
             Err("FOLDER_TRUST_PROFILE")
+        } else if !baseline_empty {
+            Err("FOLDER_TRUST_NOT_EMPTY")
         } else {
-            match &self.trust {
-                None => Err("FOLDER_TRUST_UNAVAILABLE"),
-                Some(trust) => trust
-                    .grant_exact_claude(&environment, &self.grant.approved_cwd)
-                    .map_err(|_| "FOLDER_TRUST_WRITE"),
+            match (&self.trust, &planned_key) {
+                (None, _) => Err("FOLDER_TRUST_UNAVAILABLE"),
+                (_, None) => Err("FOLDER_TRUST_WRITE"),
+                (Some(trust), Some(key)) => {
+                    let mut intent = flags.clone();
+                    intent["phase"] = json!("intent");
+                    intent["result"] = json!("pending");
+                    intent["key"] = json!(key);
+                    intent["observed_at_ms"] = json!(at);
+                    store
+                        .record_folder_trust(ticket, &intent)
+                        .map_err(|_| failure())?;
+                    trust
+                        .grant_exact_claude(&environment, &self.grant.approved_cwd)
+                        .map_err(|_| "FOLDER_TRUST_WRITE")
+                }
             }
         };
         let (result, key, written, existing, reason) = match &outcome {
@@ -138,11 +160,19 @@ impl DurableExecutionOwner {
             ),
             Err(code) => ("failed", Value::Null, false, Value::Null, json!(code)),
         };
-        let document = json!({"kind":"folder_trust","ticket":ticket,"target":target,
-            "key":key,"written":written,"existing":existing,"result":result,
-            "reason":reason,"observed_at_ms":at,"scope":"approved-cwd-only",
-            "tool_grants":[],"risk_confirmed":false,
-            "effects_verified":false,"task_outcome_verified":false});
+        let mut document = flags;
+        for (field, value) in [
+            ("phase", json!("result")),
+            ("planned_key", json!(planned_key)),
+            ("key", key),
+            ("written", json!(written)),
+            ("existing", existing),
+            ("result", json!(result)),
+            ("reason", reason),
+            ("observed_at_ms", json!(now_ms().unwrap_or(at).max(at))),
+        ] {
+            document[field] = value;
+        }
         store
             .record_folder_trust(ticket, &document)
             .map_err(|_| failure())?;
@@ -363,6 +393,7 @@ impl ExecutionOwnerObserver for DurableExecutionOwner {
                 at,
             )
             .map_err(|_| failure())?;
+        let mut baseline_empty = false;
         if self.grant.payload.is_some() {
             // Collector grants persist the whole approved folder baseline
             // before the claim. An oversized, unreadable or aliased folder
@@ -370,6 +401,7 @@ impl ExecutionOwnerObserver for DurableExecutionOwner {
             let entries = folder::snapshot(&self.grant.approved_cwd)
                 .and_then(|entries| folder::require_plain(&entries).map(|_| entries))
                 .map_err(|_| failure())?;
+            baseline_empty = folder::only_the_folder(&entries);
             let document = folder::snapshot_document(&ticket, "before", &Ok(entries), at);
             store
                 .record_folder(&ticket, "before", &document)
@@ -379,7 +411,15 @@ impl ExecutionOwnerObserver for DurableExecutionOwner {
             // Immediately before the claim and spawn, after the baseline: a
             // Claude config that happened to live inside the approved folder
             // would show up as a change, never be hidden by the baseline.
-            self.trust_folder(&mut store, &ticket, process, at)?;
+            // Trust is written only over the recorded empty baseline.
+            self.trust_folder(&mut store, &ticket, process, at, baseline_empty)?;
+            // Still empty after the write, right before the claim; otherwise
+            // the trusted folder would expose content nobody checked.
+            if !folder::snapshot(&self.grant.approved_cwd)
+                .is_ok_and(|entries| folder::only_the_folder(&entries))
+            {
+                return Err(failure());
+            }
         }
         // The persisted one-use claim closes the crash/replay boundary before
         // factory.spawn. Re-entering with the same ticket is never a retry.

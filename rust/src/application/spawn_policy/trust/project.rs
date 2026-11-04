@@ -100,7 +100,7 @@ pub(super) fn comparable(key: &str) -> PathBuf {
 pub(super) fn same_path(a: &Path, b: &Path) -> bool {
     normalize(&clean(a).to_string_lossy()) == normalize(&clean(b).to_string_lossy())
 }
-fn claude_key(path: &Path) -> String {
+pub(super) fn claude_key(path: &Path) -> String {
     let s = clean(path).to_string_lossy().into_owned();
     if cfg!(windows) {
         s.replace('\\', "/")

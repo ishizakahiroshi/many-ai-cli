@@ -379,6 +379,14 @@ pub fn require_plain(entries: &[FolderEntry]) -> Result<()> {
     Ok(())
 }
 
+/// True only for a snapshot of an empty folder: the folder itself and nothing
+/// else, so no file, subfolder or named stream (including the folder's own).
+/// Emptiness is required, not a list of forbidden names: a folder about to be
+/// trusted can carry no project settings, hooks or server definitions.
+pub fn only_the_folder(entries: &[FolderEntry]) -> bool {
+    matches!(entries, [only] if only.path.is_empty() && only.kind == "dir")
+}
+
 /// True only when the after snapshot holds the payload as a plain file whose
 /// SHA256 equals the bytes the collector later read for the envelope. A
 /// missing or failed snapshot, or any other digest, means the payload changed.

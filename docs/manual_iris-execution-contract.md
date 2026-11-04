@@ -253,6 +253,14 @@ configuration immediately before the one-use spawn claim:
 - `iris-execution/owned-real-policies.json` is enabled and holds a current
   policy for this exact binding.
 
+The approved folder must also be empty: the recorded launch baseline may hold
+only the folder itself, with no file, subfolder or named stream (including a
+stream on the folder). Emptiness is required rather than a list of forbidden
+names, so no project settings, hooks or server definitions can be trusted
+along with the folder. A non-empty folder is refused with
+`FOLDER_TRUST_NOT_EMPTY`, and the folder is checked again right before the
+claim.
+
 The write uses the same native Claude writer as ordinary child launches (the
 CLI-compatible lock, atomic replacement and read-back verification), with the
 `CLAUDE_CONFIG_DIR` from the provider's exact environment. That value must be
@@ -263,11 +271,17 @@ else is added: no other folder, tool permission, risk confirmation or automatic
 approval. Codex, synthetic, the synthetic owned profile and `default` launches
 never trust a folder.
 
-The owner database keeps one `folder_trust` record per attempt with the target
-path, the written key, the time and the result (`written`, `already-trusted`
-or `failed` with a fixed reason code). It is written before the spawn claim and
-never replaced. When the first three conditions hold but the profile check,
-the writer or the record fails, the wrapper does not launch. The trust entry
+The owner database keeps up to two `folder_trust` rows per attempt, both before
+the spawn claim and never replaced. The `intent` row (target path, the key about
+to be written, time) is saved before the configuration is touched, so a write
+never exists without a record. The `result` row then holds the written key, the
+time and the result (`written`, `already-trusted` or `failed` with a fixed
+reason code). A failure decided before any write has a result row only. An
+intent without a result, or any earlier row, refuses a re-entry with the same
+ticket. When the first three conditions hold but the profile check, the empty
+folder check, the writer or a record fails, the wrapper does not launch.
+Opening the owner database checks that each folder and trust row's key columns
+match the binding inside its document. The trust entry
 stays in that Claude configuration afterwards; it is not removed automatically.
 
 ## Native stop and result limits
