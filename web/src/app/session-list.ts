@@ -1830,6 +1830,12 @@ export function updateProjectGroupStatusChipsForSession(s) {
 }
 
 export function updateSessionCardStateInPlace(id) {
+  // ペイン見出しの状態記号も、カードと同じ入口・同じタイミングで追従させる。起動中の表示が
+  // 出る・消える、終わって未読の印が付く・消える、も Hub の状態更新を待たずここを通るので、
+  // ここで描き直さないと、カードだけが先に変わって見出しが古い記号のまま残る。
+  // 下の早期 return（サイドバーが無い別窓・カードが無い）より前に置く。
+  window.multiPaneManager?.refreshSlotBadge?.(id);
+  window.detachedGridManager?.refreshSlotBadge?.(id);
   const root = document.getElementById('sessions');
   const s = sessions.get(id);
   if (!root || !s) return false;

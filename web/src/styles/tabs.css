@@ -101,13 +101,12 @@ body.pane-resizing .xterm { pointer-events: none; }
   flex: 1; min-width: 0; font-size: var(--fs-2xs); color: var(--muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* 状態記号はカードのピル（.card-state-pill）と同じクラスを付けて、形・色・回転・点滅を
+   styles.css の規則から受け取る（pane-state-badge.ts）。ここへ色を書くと、同じ状態の
+   色がカードと見出しでずれるので、余白だけを持つ。 */
 .pane-slot .ph-badge {
-  flex-shrink: 0; font-size: var(--fs-2xs); padding: 0 3px;
+  flex-shrink: 0; margin: 0 3px;
 }
-.pane-slot .ph-badge.running  { color: var(--green,  #22c55e); }
-.pane-slot .ph-badge.waiting  { color: var(--yellow, #eab308); }
-.pane-slot .ph-badge.standby  { color: var(--muted); }
-.pane-slot .ph-badge.error    { color: var(--red,    #ef4444); }
 /* ✕ 閉じるボタン: ペインヘッダ右端、hover時のみ表示 */
 .pane-slot .ph-close {
   flex-shrink: 0; width: var(--ui-control-size, var(--ui-control-regular)); height: var(--ui-control-size, var(--ui-control-regular))
