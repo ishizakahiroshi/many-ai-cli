@@ -2,7 +2,8 @@
 import { t } from '../i18n.js';
 import { apiFetch, escapeHtml, showToast, ti18n, COPY_ICON, COPIED_ICON } from './util.js';
 import { activeSessionId, sessions } from './state.js';
-import { callOpenApi, computeRelPath, copyPathText, getFilesAssetUrl, isAnyAiCliPreviewable, isImagePath, isMediaPath, isVideoPath, showPathPopup } from './path-links.js';
+import { callOpenApi, computeRelPath, copyPathText, getFilesAssetUrl, isAnyAiCliPreviewable, isImagePath, isMediaPath, isVideoPath, openFileModal, showPathPopup } from './path-links.js';
+import { FILES_PANE_CLASS } from './files-open-mode.js';
 import { findUrlCandidates } from './url-detect.js';
 import { bindUrlLinksIn, linkifyUrlsInElement } from './url-links.js';
 import { refitActiveTerminalAfterLayout } from './terminal.js';
@@ -901,6 +902,8 @@ export const FilesTabManager = (function () {
     tab.paneOwnerSessionId = sessionId;
     tab.paneHost = host;
     tab.contentEl.classList.add('active');
+    // 分割ペインの Files はツリーだけを出し、選んだファイルは中央のモーダルで開く（右にプレビューを並べると狭い）。
+    if (kind === 'files') tab.contentEl.classList.add(FILES_PANE_CLASS);
     host.appendChild(tab.contentEl);
     return true;
   }
@@ -910,6 +913,7 @@ export const FilesTabManager = (function () {
     const tab = tabs.find(candidate => candidate.paneHost === host);
     if (!tab?.contentEl) return;
     tab.paneHost = null;
+    tab.contentEl.classList.remove(FILES_PANE_CLASS);
     tab.contentEl.classList.toggle('active', tab.id === activeTabId);
     filesContents.appendChild(tab.contentEl);
   }
@@ -1113,7 +1117,12 @@ export const FilesTabManager = (function () {
       const previewPane = tabObj.contentEl.querySelector('[data-files-preview]');
       const treePane = tabObj.contentEl.querySelector('[data-files-tree]');
       if (previewPane && previewPane._filesPreview) {
-        previewPane._filesPreview.loadFile(fileAbsPath, relPath);
+        // 分割ペインに置かれた Files にはプレビュー欄が無いので、モーダルで開く。
+        if (tabObj.contentEl.classList.contains(FILES_PANE_CLASS)) {
+          openFileModal(fileAbsPath, resolveLiveSessionId(sessionId, filesRoot, gitRoot), filesRoot);
+        } else {
+          previewPane._filesPreview.loadFile(fileAbsPath, relPath);
+        }
         if (treePane && treePane._filesTree && treePane._filesTree.selectFile) {
           treePane._filesTree.selectFile(fileAbsPath);
         }
@@ -3191,6 +3200,12 @@ export const FilesPreview = (function () {
       sessionId,
       gitRoot,
       onFileSelect: (node) => {
+        // 分割ペインの Files: 端末の隣は狭いので、選んだファイルは中央のモーダルで開く（🗗 で別窓にもできる）。
+        if (contentEl.classList.contains(FILES_PANE_CLASS)) {
+          FilesTabManager.lsUpdateOpenedFile(gitRoot, filesRoot, node.absPath);
+          openFileModal(node.absPath, resolveLiveSessionId(sessionId, filesRoot, gitRoot), filesRoot);
+          return;
+        }
         if (!previewPaneEl._filesPreview) return;
         const relPath = node.relPath;
         previewPaneEl._filesPreview.loadFile(node.absPath, relPath);
@@ -3209,6 +3224,8 @@ export const FilesPreview = (function () {
         const openedFile = entry.openedFile;
         // ツリーが API 取得後に描画されるまで少し待つ
         const trySelect: any = () => {
+          // 分割ペインでは自動選択しない（選ぶとモーダルが勝手に開いてしまう）。
+          if (contentEl.classList.contains(FILES_PANE_CLASS)) return;
           const fileEl = treePaneEl.querySelector(`.files-tree-item[data-abs-path="${CSS.escape(openedFile)}"]`);
           if (fileEl) {
             fileEl.click();

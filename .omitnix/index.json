@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "e906b97a1bcfec1d2c42bc470def151ec85fe524",
+    "commit": "7d0dd6100b57000359e4c33b2c188e10f95e465a",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2069,
-    "analyzed": 1605,
+    "discovered": 2071,
+    "analyzed": 1607,
     "unresolved": 14,
     "unknown": 0,
     "unclaimed": 450,
@@ -44528,6 +44528,36 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/files-open-mode.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Files タブを押したときの開き方の判定。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/files-view.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -50154,6 +50184,36 @@
     },
     {
       "path": "web/tests/derive-dialog-store.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/files-open-mode.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

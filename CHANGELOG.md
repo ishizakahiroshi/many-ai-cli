@@ -43,6 +43,13 @@ Release artifacts are published at
 
 - Allow editing quick commands by right-clicking their buttons.
 
+- Open the Files tab beside the terminal instead of replacing it. Clicking
+  Files while viewing a terminal now adds Files as a split pane next to the
+  CLI (drag the border to resize; close the pane to return to the full
+  terminal). A file chosen in that pane opens in the centered preview modal,
+  which can still be popped out to its own window. On narrow screens, and from
+  the chat/Git/other views, Files still switches the whole view as before.
+
 - Show a "starting" state for new in-window CLI launches until the correlated
   terminal's first screen arrives, and no longer hold the display for saving
   launch preferences. A launch from the single view stays in the single view

@@ -47,6 +47,7 @@ import { detectSupport } from '../vendor/vtype-core/index.js';
 import type { NVIDIANIMSettingsStatus } from '../types/proto.js';
 import { invalidateSpawnModelGroups } from './spawn-model-groups.js';
 import { detachedTabName, isDetachedTabView } from './detached-view-mode.js';
+import { FILES_BESIDE_MIN_WIDTH_QUERY, shouldOpenFilesBeside, type FilesOpenSurface } from './files-open-mode.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -3713,6 +3714,33 @@ export function switchToTerminalView() {
   }
 }
 
+// 今の画面の様子を読む（Files を端末の隣へ開くかの判定材料。判定そのものは files-open-mode.ts）。
+function readFilesOpenSurface(): FilesOpenSurface {
+  const area = document.getElementById('display-area');
+  const multi = document.getElementById('multi-view');
+  const displayVisible = !!area && !area.hidden;
+  const modeClass = displayVisible ? Array.from(area.classList).find(name => name.startsWith('mode-')) : undefined;
+  return {
+    hasSession: activeSessionId != null && sessions.has(activeSessionId),
+    compact: !!window.matchMedia?.(FILES_BESIDE_MIN_WIDTH_QUERY).matches,
+    detached: !!detachedTabName(),
+    displayVisible,
+    displayMode: modeClass ? modeClass.slice('mode-'.length) : null,
+    multiVisible: !!multi && !multi.hidden,
+    multiPaneMode: multi?.dataset.paneMode ?? null,
+  };
+}
+
+// Files は端末を隠さず、分割ペインとして隣に開く。Shift+Enter（tab-bar-order.ts）と同じ配置の依頼を出すだけで、
+// 分割・境界線・閉じたあとの単一画面への復帰は multi-pane.ts / flexible-pane-views.ts に任せる。
+function openFilesBesideTerminal(): boolean {
+  if (!shouldOpenFilesBeside(readFilesOpenSurface())) return false;
+  window.dispatchEvent(new CustomEvent('pane-placement-request', {
+    detail: { kind: 'tab', tabName: 'files', sessionId: activeSessionId },
+  }));
+  return true;
+}
+
 // ─── タブボタンのクリックハンドラ配線 ───
 (function wireUnifiedTabBar() {
   const bar = document.getElementById('unified-tab-bar');
@@ -3721,6 +3749,8 @@ export function switchToTerminalView() {
     btn.addEventListener('click', () => {
       const name = btn.dataset.tab;
       if (!VALID_TAB_NAMES.has(name)) return;
+      // 並べて開いたときは「今の表示」が変わらない（端末のまま）ので、表示の記憶は書き換えない。
+      if (name === 'files' && openFilesBesideTerminal()) return;
       saveViewPreference(viewStorage(), viewDevice(), name);
       // 利用者がマルチのタブを押して開いたときだけ、開いたときの範囲（既定・聞くカード）を
       // 効かせる。D&D の分割や作業面からの切り替えは setActiveTab を直接呼ぶので対象外

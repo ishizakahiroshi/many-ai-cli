@@ -69,6 +69,19 @@
   font-size: var(--fs-sm);
 }
 
+/* 端末の隣の分割ペインに置いた Files（files-view.ts の mountPaneContent が印を付ける）。
+   ツリーだけを出し、選んだファイルは中央のモーダルで開く。ツリー幅は分割の境界線で変える。 */
+.files-tab-content--pane .files-tab-preview-pane,
+.files-tab-content--pane .files-tab-tree-resizer {
+  display: none;
+}
+.files-tab-content--pane .files-tab-tree-pane {
+  width: auto !important;
+  min-width: 0;
+  max-width: none;
+  flex: 1;
+}
+
 /* ──────────────────────────────────────────────
    FilesTreeView (左ペイン)
 ────────────────────────────────────────────── */
