@@ -165,9 +165,11 @@ remote-job, task-outcome or effects verification.
 ## Independent fixed-payload records
 
 The trusted Rust `VerificationStore` is a separate, opt-in local library. It is
-not wired into HTTP, the scheduler or the operator grant manifest. It does not
-grant execution permission. Its schema-1 SQLite database stores immutable
-policies and original comparison receipts with FULL transactions. The owner
+not wired into the scheduler or the operator grant manifest, and HTTP callers
+cannot reach it, except for the real bounded profile's observation described
+below. It does not grant execution permission. Its schema-1 SQLite database
+stores immutable policies and original comparison receipts with FULL
+transactions. The owner
 database writer lock spans each new policy commit, so another connection cannot
 begin the attempt between the absence check and the durable pin.
 
@@ -237,6 +239,33 @@ store inspection run off the async timer lane. `owned_request` returns separate
 `verification` fields. A missing verification is null; other storage errors fail
 closed. These observations never claim task success, global effects or remote
 job cessation. Restored stores permit history inspection but refuse new work.
+
+For `iris-owned-real-bounded/1` only, the Hub runs the fixed-payload comparison
+on this observation path (`owned_request`, `owned_poll` and `owned_evidence`),
+inside the same blocking lane. It is attempted only when all of the following
+are durable: the owner record has `local_tree_ceased`; the collector's outcome
+receipt exists; the folder `collection` record exists and names the same
+ticket, result SHA256 and outcome sequence; and admission pinned the policy for
+this binding. The inputs are the verifier contract above: the owner's exact
+ticket and integrity receipt, the approved result permit of the operator's
+collector grant, and the pinned policy. Nothing comes from the caller. The
+comparison is one-time per binding: an existing receipt is returned as history,
+including after a restart or under a restore hold, and is never re-evaluated. A
+restored verification store, an inspection-only (restored journal) composition
+or another provider pair never writes a receipt.
+
+The real bounded `verification` field is always an object: `kind`
+(`real_bounded_verification`), `verdict` (`pass`, `fail` or null), `reason`
+(null, or a fixed code such as `VERIFY_STOP_UNCONFIRMED`,
+`VERIFY_OUTCOME_MISSING`, `VERIFY_COLLECTION_MISSING`,
+`VERIFY_COLLECTION_MISMATCH`, `VERIFY_POLICY_NOT_PINNED`,
+`VERIFY_GRANT_UNAVAILABLE`, `VERIFIER_RESTORE_HOLD` or a verifier code such as
+`VERIFIER_EXPIRED`), `folder_effects` and `folder_reason` from the collection
+record, the original `receipt` (or null), and `task_outcome_verified`,
+`effects_verified` and `remote_jobs_stopped`, which are always false. The
+verdict is therefore never returned without the folder effects. Pass and fail
+are records only: fail authorizes no retry or handoff, and pass is not task
+acceptance. The synthetic profile's field is unchanged.
 
 ## Folder trust for the real bounded profile only
 

@@ -4,23 +4,33 @@
 //! collector may build the result envelope, and only after recorded cessation.
 #![cfg(windows)]
 use many_ai_cli::{
-    application::spawn_policy::NativeFolderTrust,
+    application::{
+        iris_execution_dispatcher::DispatcherConfig, iris_execution_launch::OwnedLaunchPort,
+        spawn_policy::NativeFolderTrust,
+    },
     config::RuntimePaths,
     hub::{
         iris_execution_folder::{PAYLOAD_ONLY, UNEXPECTED_CHANGE},
         iris_execution_grants::GrantLoader,
         iris_execution_journal::{Binding, Grant, Journal},
         iris_execution_owned::{
-            REAL_BOUNDED_PROFILE, REAL_BOUNDED_PROFILE_ID, REAL_BOUNDED_PROVIDER,
+            OwnedProfile, PROFILE, REAL_BOUNDED_PROFILE, REAL_BOUNDED_PROFILE_ID,
+            REAL_BOUNDED_PROVIDER,
         },
         iris_execution_owner::{OwnerStore, OwnerTicket},
+        iris_execution_runtime::BridgeError,
         iris_execution_verification_store::VerificationStore,
     },
     process::{
         Cancellation, ProcessPlan,
         pty::{NativePtyFactory, PtyFactory, PtySession, PtySize},
     },
-    proto::{Message, core::CoreFuture},
+    proto::{
+        Message,
+        core::{
+            CoreFuture, HttpWaitCancellation, SessionBinding, SpawnWaitOutcome, WrappedSpawnSpec,
+        },
+    },
     wrapper::{
         iris_owner::DurableExecutionOwner,
         runtime::{self, ExecutionOwnerObserver, WrapperOptions},
@@ -34,7 +44,7 @@ use std::{
     io,
     path::{Path, PathBuf},
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -67,7 +77,8 @@ struct Fixture {
     binding: Binding,
     ticket: OwnerTicket,
     manifest: Value,
-    _journal: Journal,
+    /// Shared with the Hub-side profile in the C10 tests (one owner per file).
+    journal: Arc<Mutex<Journal>>,
 }
 /// Real bounded policy source for the fixture binding (the new profile).
 fn write_real_policies(root: &Path, binding: &Binding, enabled: bool) {
@@ -172,7 +183,7 @@ impl Fixture {
             binding,
             ticket,
             manifest,
-            _journal: journal,
+            journal: Arc::new(Mutex::new(journal)),
         }
     }
     fn workspace(&self) -> PathBuf {
@@ -1554,4 +1565,311 @@ fn r3_exact_trust_key_is_the_canonical_folder_only() {
     let keys: Vec<_> = projects.keys().cloned().collect();
     println!("R3-4 keys={}", keys.len());
     assert_eq!(keys, vec![claude_key(&f.workspace())]);
+}
+
+// C10: the fixed-payload comparison on the Hub's owned observation path. The
+// wrapper above already ran the synthetic stand-in; the Hub-side profile is
+// composed over the same runtime root with a launch port that must never run.
+
+struct NeverPort;
+impl OwnedLaunchPort for NeverPort {
+    fn launch_registered<'a>(
+        &'a self,
+        _: WrappedSpawnSpec,
+        _: Duration,
+        _: &'a HttpWaitCancellation,
+    ) -> CoreFuture<'a, SpawnWaitOutcome> {
+        panic!("observation must never launch")
+    }
+    fn is_current(&self, _: SessionBinding) -> bool {
+        panic!("observation must never query a session")
+    }
+    fn bind_owner(&self, _: &OwnerTicket, _: SessionBinding) -> Result<Value, BridgeError> {
+        panic!("observation must never bind an owner")
+    }
+    fn stop_owner<'a>(
+        &'a self,
+        _: &'a OwnerTicket,
+        _: &'a str,
+    ) -> CoreFuture<'a, Result<Value, BridgeError>> {
+        panic!("observation must never stop an owner")
+    }
+}
+
+const WRONG_ANSWER: &str = r#"{"sorted":["alder"],"count":1}"#;
+
+impl Fixture {
+    fn verification_path(&self) -> PathBuf {
+        self.root.path().join("verification.sqlite3")
+    }
+    /// The Hub's real bounded profile over this runtime root.
+    fn real_profile(&self, verifications: VerificationStore) -> OwnedProfile {
+        OwnedProfile::new_real_bounded(
+            self.journal.clone(),
+            Arc::new(Mutex::new(self.owners())),
+            verifications,
+            self.root.path().to_path_buf(),
+            Arc::new(NeverPort),
+            DispatcherConfig::default(),
+        )
+        .unwrap()
+    }
+    /// The existing synthetic profile over this runtime root.
+    fn synthetic_profile(&self) -> OwnedProfile {
+        OwnedProfile::new(
+            self.journal.clone(),
+            Arc::new(Mutex::new(self.owners())),
+            self.verifications(),
+            self.root.path().to_path_buf(),
+            Arc::new(NeverPort),
+            DispatcherConfig::default(),
+        )
+        .unwrap()
+    }
+}
+
+async fn observe(profile: &OwnedProfile, tool: &str, f: &Fixture, name: &str) -> Value {
+    let args = if tool == "owned_request" {
+        json!({"profile":name,"request_id":"start"})
+    } else {
+        json!({"profile":name,"binding":f.binding})
+    };
+    profile
+        .call(tool, &args, "iris", "workspace", "host", "instance")
+        .await
+        .unwrap_or_else(|e| panic!("{tool}: {e:?}"))
+}
+
+/// The record never carries authority, whatever the verdict.
+fn assert_record_only(v: &Value) {
+    assert_eq!(v["kind"], "real_bounded_verification", "{v}");
+    assert_eq!(v["task_outcome_verified"], false, "{v}");
+    assert_eq!(v["effects_verified"], false, "{v}");
+    assert_eq!(v["remote_jobs_stopped"], false, "{v}");
+    if !v["receipt"].is_null() {
+        assert_eq!(v["receipt"]["task_outcome_verified"], false);
+        assert_eq!(v["receipt"]["effects_verified"], false);
+        assert_eq!(v["receipt"]["remote_jobs_stopped"], false);
+        assert_eq!(v["receipt"]["verification_scope"], "fixed-payload-only");
+    }
+    // Neither the expected nor the actual payload is disclosed.
+    assert!(!v.to_string().contains("alder"), "{v}");
+}
+
+/// The comparison was not attempted: no verdict and no stored receipt.
+fn assert_not_compared(f: &Fixture, v: &Value, reason: &str) {
+    assert_record_only(v);
+    assert_eq!(v["verdict"], Value::Null, "{v}");
+    assert_eq!(v["receipt"], Value::Null, "{v}");
+    assert_eq!(v["reason"], reason, "{v}");
+    assert_eq!(
+        f.verifications().query(&f.binding).unwrap_err().code,
+        "NOT_FOUND"
+    );
+}
+
+async fn ran(answer: Option<&str>, pin: bool) -> Fixture {
+    let f = Fixture::new();
+    if pin {
+        f.pin();
+    }
+    let plan = match answer {
+        Some(body) => json!([write("answer.json", body)]),
+        None => json!([]),
+    };
+    let factory = CountFactory::default();
+    run(&f, plan, &factory).await.unwrap();
+    assert_eq!(factory.0.load(Ordering::SeqCst), 1);
+    f
+}
+
+#[tokio::test]
+async fn c10_correct_answer_records_pass_paired_with_folder_effects() {
+    let f = ran(Some(ANSWER), true).await;
+    let profile = f.real_profile(f.verifications());
+    let observed = observe(&profile, "owned_request", &f, REAL_BOUNDED_PROFILE).await;
+    let v = &observed["verification"];
+    assert_record_only(v);
+    assert_eq!(v["verdict"], "pass", "{v}");
+    assert_eq!(v["reason"], Value::Null);
+    assert_eq!(v["folder_effects"], PAYLOAD_ONLY);
+    assert_eq!(v["folder_reason"], Value::Null);
+    assert_eq!(v["receipt"]["verdict"], "pass");
+    let (owner, folder) = f.record();
+    assert_eq!(
+        v["receipt"]["input_sha256"],
+        owner["outcome_receipt"]["artifact_sha256"]
+    );
+    assert_eq!(
+        v["receipt"]["input_sha256"],
+        folder["collection"]["result_sha256"]
+    );
+    assert_eq!(f.verifications().query(&f.binding).unwrap(), v["receipt"]);
+    assert_never_promoted(&owner, &folder);
+}
+
+#[tokio::test]
+async fn c10_wrong_answer_records_fail_without_retry_authority() {
+    let f = ran(Some(WRONG_ANSWER), true).await;
+    let profile = f.real_profile(f.verifications());
+    let v =
+        observe(&profile, "owned_evidence", &f, REAL_BOUNDED_PROFILE).await["verification"].clone();
+    assert_record_only(&v);
+    assert_eq!(v["verdict"], "fail", "{v}");
+    assert_eq!(v["reason"], Value::Null);
+    assert_eq!(v["folder_effects"], PAYLOAD_ONLY);
+    assert_eq!(v["receipt"]["verdict"], "fail");
+    // A fail is history only: the same request replays its original receipt
+    // and nothing is launched again (the launch port would panic).
+    let replay = profile
+        .call(
+            "owned_start",
+            &json!({"profile":REAL_BOUNDED_PROFILE,"binding":f.binding,"request_id":"start"}),
+            "iris",
+            "workspace",
+            "host",
+            "instance",
+        )
+        .await
+        .unwrap();
+    assert_eq!(replay["operation"], "start");
+    let (owner, folder) = f.record();
+    assert_never_promoted(&owner, &folder);
+}
+
+#[tokio::test]
+async fn c10_no_comparison_before_stop_confirmation() {
+    // Outcome receipt present, but no local cessation and no collection.
+    let f = Fixture::new();
+    f.pin();
+    let mut owners = f.owners();
+    let t = owners
+        .begin_owner(
+            &f.binding,
+            &f.ticket.owner_id,
+            f.ticket.owner_epoch,
+            now_ms(),
+        )
+        .unwrap();
+    owners.claim_spawn(&t, 1, now_ms()).unwrap();
+    owners.bind_root(&t, 4242, now_ms()).unwrap();
+    let envelope = json!({"binding":f.binding,"owner_id":t.owner_id,"owner_epoch":t.owner_epoch,
+        "instruction_hash":f.binding.instruction_hash,"outcome":"unknown",
+        "effects":PAYLOAD_ONLY,"synthetic":false,
+        "payload":serde_json::from_str::<Value>(ANSWER).unwrap()})
+    .to_string();
+    std::fs::write(f.result_path(), &envelope).unwrap();
+    let grant = GrantLoader::open(f.root.path())
+        .unwrap()
+        .load_approved()
+        .unwrap()
+        .pop()
+        .unwrap();
+    owners
+        .append_outcome(&t, 1, &grant.result, &sha(envelope.as_bytes()))
+        .unwrap();
+    drop(owners);
+    let profile = f.real_profile(f.verifications());
+    let v =
+        observe(&profile, "owned_request", &f, REAL_BOUNDED_PROFILE).await["verification"].clone();
+    assert_not_compared(&f, &v, "VERIFY_STOP_UNCONFIRMED");
+    assert_eq!(v["folder_effects"], Value::Null);
+}
+
+#[tokio::test]
+async fn c10_no_comparison_without_an_outcome_receipt() {
+    let f = ran(None, true).await;
+    let (owner, folder) = f.record();
+    assert_eq!(owner["local_tree_ceased"], true);
+    assert!(owner["outcome_receipt"].is_null());
+    let profile = f.real_profile(f.verifications());
+    let v =
+        observe(&profile, "owned_request", &f, REAL_BOUNDED_PROFILE).await["verification"].clone();
+    assert_not_compared(&f, &v, "VERIFY_OUTCOME_MISSING");
+    // The folder record is still paired with the (absent) verdict.
+    assert_eq!(v["folder_effects"], folder["collection"]["effects"]);
+    assert_eq!(v["folder_reason"], "PAYLOAD_UNAVAILABLE");
+}
+
+#[tokio::test]
+async fn c10_no_comparison_without_an_admission_pin() {
+    let f = ran(Some(ANSWER), false).await;
+    let profile = f.real_profile(f.verifications());
+    let v =
+        observe(&profile, "owned_request", &f, REAL_BOUNDED_PROFILE).await["verification"].clone();
+    assert_not_compared(&f, &v, "VERIFY_POLICY_NOT_PINNED");
+    assert_eq!(v["folder_effects"], PAYLOAD_ONLY);
+}
+
+#[tokio::test]
+async fn c10_second_call_and_restart_return_the_original_receipt() {
+    let f = ran(Some(ANSWER), true).await;
+    let profile = f.real_profile(f.verifications());
+    let first =
+        observe(&profile, "owned_request", &f, REAL_BOUNDED_PROFILE).await["verification"].clone();
+    assert_eq!(first["verdict"], "pass", "{first}");
+    tokio::time::sleep(Duration::from_millis(5)).await;
+    for tool in ["owned_request", "owned_evidence", "owned_poll"] {
+        let again = observe(&profile, tool, &f, REAL_BOUNDED_PROFILE).await;
+        assert_eq!(again["verification"], first, "{tool}");
+    }
+    drop(profile);
+    // A restarted Hub (new store connections) reads the same history.
+    let restarted = f.real_profile(f.verifications());
+    let after = observe(&restarted, "owned_request", &f, REAL_BOUNDED_PROFILE).await;
+    assert_eq!(after["verification"], first);
+}
+
+#[tokio::test]
+async fn c10_restored_store_never_compares() {
+    let f = ran(Some(ANSWER), true).await;
+    let restored = VerificationStore::open_restored(&f.verification_path()).unwrap();
+    let profile = f.real_profile(restored);
+    let v =
+        observe(&profile, "owned_request", &f, REAL_BOUNDED_PROFILE).await["verification"].clone();
+    assert_not_compared(&f, &v, "VERIFIER_RESTORE_HOLD");
+    assert_eq!(v["folder_effects"], PAYLOAD_ONLY);
+    // The hold persists: a normal reopen still refuses new comparisons.
+    let reopened = f.real_profile(f.verifications());
+    let v = observe(&reopened, "owned_evidence", &f, REAL_BOUNDED_PROFILE).await["verification"]
+        .clone();
+    assert_not_compared(&f, &v, "VERIFIER_RESTORE_HOLD");
+}
+
+#[tokio::test]
+async fn c10_existing_synthetic_profile_never_compares() {
+    let without_collector = |g: &mut Value, _: &Path| {
+        let g = g.as_object_mut().unwrap();
+        g.remove("payload_path");
+        g.remove("launch_mode");
+        g.insert("effect_scope".into(), json!(["none"]));
+    };
+    let f = Fixture::for_pair("synthetic", "synthetic", without_collector);
+    f.pin();
+    let envelope = json!({"binding":f.binding,"owner_id":f.ticket.owner_id,
+        "owner_epoch":f.ticket.owner_epoch,"instruction_hash":f.binding.instruction_hash,
+        "outcome":"unknown","effects":"none","synthetic":true,
+        "payload":serde_json::from_str::<Value>(ANSWER).unwrap()})
+    .to_string();
+    let factory = CountFactory::default();
+    run(
+        &f,
+        json!([write(f.result_path().to_str().unwrap(), &envelope)]),
+        &factory,
+    )
+    .await
+    .unwrap();
+    let (owner, _) = f.record();
+    assert_eq!(owner["local_tree_ceased"], true);
+    assert!(!owner["outcome_receipt"].is_null());
+    let profile = f.synthetic_profile();
+    for tool in ["owned_request", "owned_evidence", "owned_poll"] {
+        let observed = observe(&profile, tool, &f, PROFILE).await;
+        // Unchanged shape: the historical receipt or null, never a new one.
+        assert!(observed["verification"].is_null(), "{tool}: {observed}");
+    }
+    assert_eq!(
+        f.verifications().query(&f.binding).unwrap_err().code,
+        "NOT_FOUND"
+    );
 }

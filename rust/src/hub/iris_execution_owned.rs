@@ -2,9 +2,10 @@
 //! Native evidence stays native: neither payload equality nor local cessation
 //! grants task success, global effects proof, or automatic handoff authority.
 use super::{
+    iris_execution_grants::GrantLoader,
     iris_execution_journal::{Binding, Journal},
     iris_execution_mcp::{MAX_BYTES, parse_json},
-    iris_execution_owner::{OwnerStore, check_binding, secure_open},
+    iris_execution_owner::{OwnerStore, OwnerTicket, check_binding, secure_open, static_binding},
     iris_execution_verification_store::VerificationStore,
     iris_execution_verifier::PinnedPolicy,
 };
@@ -206,6 +207,21 @@ fn capability_document(
     };
     json!({"profile":kind.profile(),"admission_enabled":admitted,"query_by_request":true,
         "automatic_handoff":false,"live_provider_execution":live})
+}
+
+/// The real bounded profile's `verification` field. The fixed-payload verdict
+/// (or null with a fixed reason code) is always paired with the collector's
+/// folder effects, so a verdict is never read without them. Pass or fail, it is
+/// a record only: it verifies neither the task, the effects nor remote jobs.
+fn real_bounded_verification_document(
+    receipt: &Value,
+    collection: &Value,
+    reason: Option<&str>,
+) -> Value {
+    json!({"kind":"real_bounded_verification","verdict":receipt["verdict"],"reason":reason,
+        "folder_effects":collection["effects"],"folder_reason":collection["reason"],
+        "receipt":receipt,"task_outcome_verified":false,"effects_verified":false,
+        "remote_jobs_stopped":false})
 }
 
 fn identity(
@@ -493,17 +509,151 @@ impl OwnedProfile {
         Ok(execution)
     }
 
-    fn observe(&self, binding: &Binding, request: Value) -> ToolResult {
-        let execution = self.execution(binding)?;
-        let verification = match self
+    /// Fixed-payload comparison for the real bounded profile only (C10). It
+    /// runs inside `observe`, which `call` already places on the blocking
+    /// lane, so SQLite and mutex waits never hold the Tokio timer lane.
+    ///
+    /// The comparison is attempted only when all of these are durable: the
+    /// owner's local cessation, the collector's outcome receipt, the folder
+    /// collection for those same result bytes, and the policy pinned at
+    /// admission. Otherwise the verdict stays null with a fixed reason code.
+    /// The inputs are the existing verifier contract: the owner's exact ticket
+    /// and integrity receipt, the approved result permit of the operator grant
+    /// and the pinned policy only. One-time per binding: an existing receipt
+    /// is returned as history (also under a restore hold) and is never
+    /// re-evaluated; a concurrent or restarted observer gets the same
+    /// original receipt from the store's own replay. Restored or
+    /// inspection-only compositions never write a new receipt.
+    fn real_bounded_verification(&self, binding: &Binding) -> ToolResult {
+        let (owner, collection) = {
+            let owners = self.owners.lock().map_err(|_| error("OWNED_STORAGE"))?;
+            let owner = match owners.query(binding) {
+                Ok(value) => value,
+                Err(e) if e.code == "NOT_FOUND" => Value::Null,
+                Err(e) => return Err((e.code, e.detail)),
+            };
+            let folder = owners
+                .query_folder(binding)
+                .map_err(|e| (e.code, e.detail))?;
+            (owner, folder["collection"].clone())
+        };
+        let unavailable = |reason: &str| {
+            real_bounded_verification_document(&Value::Null, &collection, Some(reason))
+        };
+        {
+            let store = self
+                .verifications
+                .lock()
+                .map_err(|_| error("OWNED_STORAGE"))?;
+            match store.query(binding) {
+                Ok(receipt) => {
+                    return Ok(real_bounded_verification_document(
+                        &receipt,
+                        &collection,
+                        None,
+                    ));
+                }
+                Err(e) if e.code == "NOT_FOUND" => {}
+                Err(e) => return Err((e.code, e.detail)),
+            }
+        }
+        let outcome = &owner["outcome_receipt"];
+        let reason = if !self.kind.admits(binding) {
+            Some("OWNED_PROVIDER_UNAVAILABLE")
+        } else if self.dispatcher.is_none() {
+            Some("VERIFY_INSPECTION_ONLY")
+        } else if owner.is_null() {
+            Some("VERIFY_OWNER_MISSING")
+        } else if owner["local_tree_ceased"] != true {
+            Some("VERIFY_STOP_UNCONFIRMED")
+        } else if outcome.is_null() {
+            Some("VERIFY_OUTCOME_MISSING")
+        } else if collection.is_null() {
+            Some("VERIFY_COLLECTION_MISSING")
+        } else if outcome["ticket"] != owner["ticket"]
+            || collection["ticket"] != owner["ticket"]
+            || collection["result_sha256"] != outcome["artifact_sha256"]
+            || collection["outcome_sequence"] != outcome["sequence"]
+        {
+            Some("VERIFY_COLLECTION_MISMATCH")
+        } else {
+            None
+        };
+        if let Some(reason) = reason {
+            return Ok(unavailable(reason));
+        }
+        {
+            let store = self
+                .verifications
+                .lock()
+                .map_err(|_| error("OWNED_STORAGE"))?;
+            if let Err(e) = store.check_admission() {
+                return Ok(unavailable(&e.code));
+            }
+            match store.policy_pin(binding) {
+                Ok(_) => {}
+                Err(e) if e.code == "NOT_FOUND" => {
+                    return Ok(unavailable("VERIFY_POLICY_NOT_PINNED"));
+                }
+                Err(e) => return Err((e.code, e.detail)),
+            }
+        }
+        let ticket: OwnerTicket =
+            serde_json::from_value(owner["ticket"].clone()).map_err(|_| error("OWNED_STORAGE"))?;
+        let Some(digest) = outcome["artifact_sha256"].as_str() else {
+            return Ok(unavailable("VERIFY_OUTCOME_MISSING"));
+        };
+        if ticket.binding != *binding {
+            return Ok(unavailable("VERIFY_COLLECTION_MISMATCH"));
+        }
+        // The approved result permit of the exact collector grant. No lock is
+        // held while the operator manifest is read.
+        let permit = GrantLoader::open(&self.runtime_root)
+            .and_then(|mut loader| loader.load_approved())
+            .ok()
+            .and_then(|grants| {
+                grants
+                    .into_iter()
+                    .find(|g| {
+                        g.payload.is_some()
+                            && static_binding(&g.grant.binding) == static_binding(binding)
+                    })
+                    .map(|g| g.result)
+            });
+        let Some(permit) = permit else {
+            return Ok(unavailable("VERIFY_GRANT_UNAVAILABLE"));
+        };
+        let at = now_ms()?;
+        // Same lock order as admission: verifier store, then owner store.
+        let mut store = self
             .verifications
             .lock()
-            .map_err(|_| error("OWNED_STORAGE"))?
-            .query(binding)
-        {
-            Ok(value) => value,
-            Err(e) if e.code == "NOT_FOUND" => Value::Null,
-            Err(e) => return Err((e.code, e.detail)),
+            .map_err(|_| error("OWNED_STORAGE"))?;
+        let owners = self.owners.lock().map_err(|_| error("OWNED_STORAGE"))?;
+        match store.verify(&owners, &permit, &ticket, digest, at) {
+            Ok(receipt) => Ok(real_bounded_verification_document(
+                &receipt,
+                &collection,
+                None,
+            )),
+            Err(e) => Ok(unavailable(&e.code)),
+        }
+    }
+
+    fn observe(&self, binding: &Binding, request: Value) -> ToolResult {
+        let execution = self.execution(binding)?;
+        let verification = match self.kind {
+            OwnedProfileKind::RealBounded => self.real_bounded_verification(binding)?,
+            OwnedProfileKind::SyntheticDispatch => match self
+                .verifications
+                .lock()
+                .map_err(|_| error("OWNED_STORAGE"))?
+                .query(binding)
+            {
+                Ok(value) => value,
+                Err(e) if e.code == "NOT_FOUND" => Value::Null,
+                Err(e) => return Err((e.code, e.detail)),
+            },
         };
         Ok(
             json!({"profile":self.kind.profile(),"binding":binding,"request":request,

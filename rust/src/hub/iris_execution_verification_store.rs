@@ -1,5 +1,8 @@
 //! Trusted local fixed-payload acceptance records, independent of execution.
-//! No HTTP writer, launch permission, task outcome promotion or effects proof.
+//! The only production caller of `verify` is the real bounded profile's owned
+//! observation (`iris_execution_owned`), behind its four durable conditions.
+//! No caller-supplied input, launch permission, task outcome promotion or
+//! effects proof.
 use super::{
     iris_execution_journal::Binding,
     iris_execution_mcp::parse_json,
