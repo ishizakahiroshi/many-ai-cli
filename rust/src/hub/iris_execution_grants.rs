@@ -9,7 +9,7 @@ use super::{
         sha, sql, static_binding,
     },
 };
-use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use serde_json::Value;
@@ -92,7 +92,7 @@ impl GrantLoader {
         if !root.is_dir() {
             return Err(fail("TRUST_ROOT"));
         }
-        let path = root.join("iris-execution-grant-trust.sqlite3");
+        let path = root.join(TRUST_STORE);
         let existed = path.exists();
         if existed {
             check_store_path(&path)?;
@@ -128,128 +128,15 @@ impl GrantLoader {
         Ok(Self { root, db })
     }
     pub fn load_approved(&mut self) -> Result<Vec<ApprovedGrant>> {
-        let mut file = secure_open(&self.root, Path::new("iris-execution-approved-grants.json"))?;
-        if file.metadata().map_err(|_| fail("MANIFEST_READ"))?.len() > 65536 {
-            return Err(fail("MANIFEST_LIMIT"));
-        }
-        let mut bytes = Vec::new();
-        file.by_ref()
-            .take(65537)
-            .read_to_end(&mut bytes)
-            .map_err(|_| fail("MANIFEST_READ"))?;
-        let value = parse_json(&bytes).map_err(|_| fail("MANIFEST_JSON"))?;
-        let manifest: Manifest =
-            serde_json::from_value(value).map_err(|_| fail("MANIFEST_JSON"))?;
-        if manifest.schema_version != 1
-            || manifest.manifest_revision == 0
-            || manifest.manifest_revision > i64::MAX as u64
-            || manifest.approval_state != "approved"
-            || manifest.grants.len() > 128
-        {
-            return Err(fail("MANIFEST_POLICY"));
-        }
-        let artifact_path = self.root.join("iris-execution-artifacts");
-        let meta = std::fs::symlink_metadata(&artifact_path).map_err(|_| fail("ARTIFACT_ROOT"))?;
-        if meta.file_type().is_symlink() || !meta.is_dir() {
-            return Err(fail("ARTIFACT_ROOT"));
-        }
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::MetadataExt;
-            if meta.file_attributes() & 0x400 != 0 {
-                return Err(fail("ARTIFACT_ROOT"));
-            }
-        }
-        let artifacts = artifact_path
-            .canonicalize()
-            .map_err(|_| fail("ARTIFACT_ROOT"))?;
-        if !artifacts.starts_with(&self.root) {
-            return Err(fail("ARTIFACT_ROOT"));
-        }
+        let manifest = read_manifest(&self.root)?;
+        let artifacts = artifacts_root(&self.root)?;
         let mut approved = Vec::new();
         let mut seen = BTreeSet::new();
         for e in &manifest.grants {
-            check_binding(&e.binding)?;
-            if e.expires_at < 0 || !seen.insert(scope_key(&e.binding)) {
-                return Err(fail("MANIFEST_POLICY"));
-            }
-            let launch_mode = launch_mode(e)?;
-            // A collector grant is real-pair only, and automatic edits are
-            // only allowed when the trusted folder comparison will run. The
-            // real pair is collector-only: it never reaches the path that
-            // adopts a provider-written result file as an outcome.
-            let collected = e.payload_path.is_some();
-            if collected != real_bounded_binding(&e.binding)
-                || (launch_mode == LaunchMode::BoundedEdit && !collected)
-            {
-                return Err(fail("MANIFEST_POLICY"));
-            }
-            let permit = |root: &Path, path: &str| {
-                if collected {
-                    ArtifactPermit::collected(
-                        root,
-                        path,
-                        &e.binding,
-                        e.max_artifact_bytes,
-                        e.effect_scope.clone(),
-                    )
-                } else {
-                    ArtifactPermit::approved(
-                        root,
-                        path,
-                        &e.binding,
-                        e.max_artifact_bytes,
-                        e.effect_scope.clone(),
-                    )
-                }
-            };
-            let instruction = permit(&artifacts, &e.instruction_path)?;
-            let result = permit(&artifacts, &e.result_path)?;
-            if !e.revoked {
-                instruction.verify(Some(&e.binding.instruction_hash))?;
-            }
-            let cwd = Path::new(&e.approved_cwd);
-            let cwd = if cwd.is_absolute() {
-                cwd.to_path_buf()
-            } else {
-                self.root.join(relative_path(&e.approved_cwd)?)
-            };
-            let cwd = cwd.canonicalize().map_err(|_| fail("APPROVED_CWD"))?;
-            if !cwd.is_dir() {
-                return Err(fail("APPROVED_CWD"));
-            }
-            let payload = match &e.payload_path {
-                // The compared folder must not hold or sit inside trusted
-                // state: nothing at or below the runtime root (artifacts,
-                // owner databases, grant manifests), and not an ancestor.
-                Some(path) => {
-                    if self.root.starts_with(&cwd)
-                        || cwd.starts_with(&self.root)
-                        || cwd.starts_with(&artifacts)
-                    {
-                        return Err(fail("APPROVED_CWD"));
-                    }
-                    Some(permit(&cwd, path)?)
-                }
-                None => None,
-            };
-            approved.push(ApprovedGrant {
-                grant: Grant {
-                    binding: e.binding.clone(),
-                    expires_at: e.expires_at,
-                    revoked: e.revoked,
-                },
-                approved_cwd: cwd,
-                instruction,
-                result,
-                effect_scope: e.effect_scope.clone(),
-                allow_remote_jobs: e.allow_remote_jobs,
-                launch_mode,
-                payload,
-            });
+            let launch_mode = entry_policy(e, &mut seen)?;
+            approved.push(approve_entry(&self.root, &artifacts, e, launch_mode)?);
         }
-        let canonical = serde_json::to_vec(&manifest).map_err(|_| fail("MANIFEST_JSON"))?;
-        let digest = sha(&canonical);
+        let digest = manifest_digest(&manifest)?;
         let tx = sql(self
             .db
             .transaction_with_behavior(TransactionBehavior::Immediate))?;
@@ -315,6 +202,263 @@ impl GrantLoader {
         sql(tx.commit())?;
         Ok(approved)
     }
+
+    /// Read-only result permit of the one collector grant bound to `binding`
+    /// (C10 observation path). Unlike `load_approved` it never writes the grant
+    /// trust store and never inspects the files or folders of other entries.
+    ///
+    /// Kept from `load_approved`: the fixed manifest source, size, schema and
+    /// policy checks over every entry (no file access), downgrade and
+    /// same-revision tamper detection against the recorded manifest digests,
+    /// explicit revocation of known scopes, and, for the bound entry only, the
+    /// instruction hash, approved folder, payload and artifact root checks
+    /// that build the identical permit. Added: the bound entry must equal the
+    /// entry pinned at admission (same approval revision and digest), and
+    /// must not be revoked or expired at `now_s`.
+    pub fn pinned_result_permit(
+        runtime_root: &Path,
+        binding: &Binding,
+        now_s: i64,
+    ) -> Result<ArtifactPermit> {
+        check_binding(binding)?;
+        let root = runtime_root
+            .canonicalize()
+            .map_err(|_| fail("TRUST_ROOT"))?;
+        if !root.is_dir() {
+            return Err(fail("TRUST_ROOT"));
+        }
+        let manifest = read_manifest(&root)?;
+        let mut seen = BTreeSet::new();
+        let mut target = None;
+        for e in &manifest.grants {
+            let launch_mode = entry_policy(e, &mut seen)?;
+            if e.payload_path.is_some() && static_binding(&e.binding) == static_binding(binding) {
+                target = Some((e, launch_mode));
+            }
+        }
+        let Some((entry, launch_mode)) = target else {
+            return Err(fail("GRANT_UNAVAILABLE"));
+        };
+        let digest = manifest_digest(&manifest)?;
+        // Admission state, read in one snapshot without any write. A missing
+        // store means nothing was pinned; it is never created here.
+        let path = root.join(TRUST_STORE);
+        if !path.exists() {
+            return Err(fail("GRANT_NOT_PINNED"));
+        }
+        check_store_path(&path)?;
+        let mut db = sql(Connection::open_with_flags(
+            &path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        ))?;
+        sql(db.busy_timeout(Duration::from_millis(2500)))?;
+        sql(db.execute_batch("PRAGMA query_only=ON;"))?;
+        if sql(db.query_row("PRAGMA quick_check", [], |r| r.get::<_, String>(0)))? != "ok" {
+            return Err(fail("STORAGE"));
+        }
+        let tx = sql(db.transaction_with_behavior(TransactionBehavior::Deferred))?;
+        if sql(tx.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0)))? != 1 {
+            return Err(fail("SCHEMA"));
+        }
+        let latest: i64 = sql(tx.query_row(
+            "SELECT COALESCE(MAX(revision),0) FROM manifests",
+            [],
+            |r| r.get(0),
+        ))?;
+        if manifest.manifest_revision < (latest as u64) {
+            return Err(fail("MANIFEST_DOWNGRADE"));
+        }
+        let recorded: Option<String> = sql(tx
+            .query_row(
+                "SELECT digest FROM manifests WHERE revision=?",
+                [manifest.manifest_revision as i64],
+                |r| r.get(0),
+            )
+            .optional())?;
+        if recorded.is_some_and(|old| old != digest) {
+            return Err(fail("MANIFEST_CONFLICT"));
+        }
+        let pins = sql(tx.prepare("SELECT scope_key,revision,digest,entry FROM pins"))?
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                ))
+            })
+            .map_err(|_| fail("STORAGE"))?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|_| fail("STORAGE"))?;
+        drop(tx);
+        let key = scope_key(&entry.binding);
+        let mut pinned = None;
+        for (scope, revision, pin_digest, raw) in pins {
+            // Same integrity check `open` applies to every pin row.
+            let value = parse_json(raw.as_bytes()).map_err(|_| fail("STORAGE"))?;
+            let old: Entry = serde_json::from_value(value).map_err(|_| fail("STORAGE"))?;
+            if entry_digest(&old)? != pin_digest {
+                return Err(fail("STORAGE"));
+            }
+            if !seen.contains(&scope) {
+                return Err(fail("EXPLICIT_REVOCATION_REQUIRED"));
+            }
+            if scope == key {
+                pinned = Some((revision, pin_digest));
+            }
+        }
+        let Some((revision, pin_digest)) = pinned else {
+            return Err(fail("GRANT_NOT_PINNED"));
+        };
+        if revision != entry.binding.approval_revision as i64 || pin_digest != entry_digest(entry)?
+        {
+            return Err(fail("GRANT_PIN_MISMATCH"));
+        }
+        if entry.revoked {
+            return Err(fail("GRANT_REVOKED"));
+        }
+        if entry.expires_at <= now_s {
+            return Err(fail("GRANT_EXPIRED"));
+        }
+        let artifacts = artifacts_root(&root)?;
+        Ok(approve_entry(&root, &artifacts, entry, launch_mode)?.result)
+    }
+}
+const TRUST_STORE: &str = "iris-execution-grant-trust.sqlite3";
+fn read_manifest(root: &Path) -> Result<Manifest> {
+    let mut file = secure_open(root, Path::new("iris-execution-approved-grants.json"))?;
+    if file.metadata().map_err(|_| fail("MANIFEST_READ"))?.len() > 65536 {
+        return Err(fail("MANIFEST_LIMIT"));
+    }
+    let mut bytes = Vec::new();
+    file.by_ref()
+        .take(65537)
+        .read_to_end(&mut bytes)
+        .map_err(|_| fail("MANIFEST_READ"))?;
+    let value = parse_json(&bytes).map_err(|_| fail("MANIFEST_JSON"))?;
+    let manifest: Manifest = serde_json::from_value(value).map_err(|_| fail("MANIFEST_JSON"))?;
+    if manifest.schema_version != 1
+        || manifest.manifest_revision == 0
+        || manifest.manifest_revision > i64::MAX as u64
+        || manifest.approval_state != "approved"
+        || manifest.grants.len() > 128
+    {
+        return Err(fail("MANIFEST_POLICY"));
+    }
+    Ok(manifest)
+}
+fn manifest_digest(manifest: &Manifest) -> Result<String> {
+    let canonical = serde_json::to_vec(manifest).map_err(|_| fail("MANIFEST_JSON"))?;
+    Ok(sha(&canonical))
+}
+fn artifacts_root(root: &Path) -> Result<PathBuf> {
+    let artifact_path = root.join("iris-execution-artifacts");
+    let meta = std::fs::symlink_metadata(&artifact_path).map_err(|_| fail("ARTIFACT_ROOT"))?;
+    if meta.file_type().is_symlink() || !meta.is_dir() {
+        return Err(fail("ARTIFACT_ROOT"));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if meta.file_attributes() & 0x400 != 0 {
+            return Err(fail("ARTIFACT_ROOT"));
+        }
+    }
+    let artifacts = artifact_path
+        .canonicalize()
+        .map_err(|_| fail("ARTIFACT_ROOT"))?;
+    if !artifacts.starts_with(root) {
+        return Err(fail("ARTIFACT_ROOT"));
+    }
+    Ok(artifacts)
+}
+/// Manifest policy of one entry; no file or folder is opened.
+fn entry_policy(e: &Entry, seen: &mut BTreeSet<String>) -> Result<LaunchMode> {
+    check_binding(&e.binding)?;
+    if e.expires_at < 0 || !seen.insert(scope_key(&e.binding)) {
+        return Err(fail("MANIFEST_POLICY"));
+    }
+    let launch_mode = launch_mode(e)?;
+    // A collector grant is real-pair only, and automatic edits are
+    // only allowed when the trusted folder comparison will run. The
+    // real pair is collector-only: it never reaches the path that
+    // adopts a provider-written result file as an outcome.
+    let collected = e.payload_path.is_some();
+    if collected != real_bounded_binding(&e.binding)
+        || (launch_mode == LaunchMode::BoundedEdit && !collected)
+    {
+        return Err(fail("MANIFEST_POLICY"));
+    }
+    Ok(launch_mode)
+}
+/// Instruction, approved folder and payload checks of one entry, and its permits.
+fn approve_entry(
+    root: &Path,
+    artifacts: &Path,
+    e: &Entry,
+    launch_mode: LaunchMode,
+) -> Result<ApprovedGrant> {
+    let collected = e.payload_path.is_some();
+    let permit = |root: &Path, path: &str| {
+        if collected {
+            ArtifactPermit::collected(
+                root,
+                path,
+                &e.binding,
+                e.max_artifact_bytes,
+                e.effect_scope.clone(),
+            )
+        } else {
+            ArtifactPermit::approved(
+                root,
+                path,
+                &e.binding,
+                e.max_artifact_bytes,
+                e.effect_scope.clone(),
+            )
+        }
+    };
+    let instruction = permit(artifacts, &e.instruction_path)?;
+    let result = permit(artifacts, &e.result_path)?;
+    if !e.revoked {
+        instruction.verify(Some(&e.binding.instruction_hash))?;
+    }
+    let cwd = Path::new(&e.approved_cwd);
+    let cwd = if cwd.is_absolute() {
+        cwd.to_path_buf()
+    } else {
+        root.join(relative_path(&e.approved_cwd)?)
+    };
+    let cwd = cwd.canonicalize().map_err(|_| fail("APPROVED_CWD"))?;
+    if !cwd.is_dir() {
+        return Err(fail("APPROVED_CWD"));
+    }
+    let payload = match &e.payload_path {
+        // The compared folder must not hold or sit inside trusted
+        // state: nothing at or below the runtime root (artifacts,
+        // owner databases, grant manifests), and not an ancestor.
+        Some(path) => {
+            if root.starts_with(&cwd) || cwd.starts_with(root) || cwd.starts_with(artifacts) {
+                return Err(fail("APPROVED_CWD"));
+            }
+            Some(permit(&cwd, path)?)
+        }
+        None => None,
+    };
+    Ok(ApprovedGrant {
+        grant: Grant {
+            binding: e.binding.clone(),
+            expires_at: e.expires_at,
+            revoked: e.revoked,
+        },
+        approved_cwd: cwd,
+        instruction,
+        result,
+        effect_scope: e.effect_scope.clone(),
+        allow_remote_jobs: e.allow_remote_jobs,
+        launch_mode,
+        payload,
+    })
 }
 fn scope_key(b: &Binding) -> String {
     json!([
@@ -506,6 +650,37 @@ mod tests {
             super::super::iris_execution_folder::PAYLOAD_ONLY,
             super::super::iris_execution_folder::UNEXPECTED_CHANGE
         ]);
+    }
+    #[test]
+    fn pinned_result_permit_is_read_only_and_checks_the_bound_entry() {
+        let d = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let mut v = manifest(d.path(), 1, 1);
+        real(&mut v);
+        collected(&mut v, outside.path());
+        write(d.path(), &v);
+        let b: Binding = serde_json::from_value(v["grants"][0]["binding"].clone()).unwrap();
+        let read = |now: i64| GrantLoader::pinned_result_permit(d.path(), &b, now);
+        // Nothing admitted yet: refused, and the trust store is not created.
+        assert_eq!(read(0).err().unwrap().code, "GRANT_NOT_PINNED");
+        assert!(!d.path().join(TRUST_STORE).exists());
+        let grant = GrantLoader::open(d.path())
+            .unwrap()
+            .load_approved()
+            .unwrap()
+            .pop()
+            .unwrap();
+        let permit = read(0).unwrap();
+        assert_eq!(permit.approved_path(), grant.result.approved_path());
+        assert_eq!(permit.binding(), grant.result.binding());
+        assert_eq!(read(10000000000).err().unwrap().code, "GRANT_EXPIRED");
+        // The bound entry's own instruction and folder are still checked.
+        let instruction = d.path().join("iris-execution-artifacts/instruction.txt");
+        std::fs::write(&instruction, b"tamper").unwrap();
+        assert_eq!(read(0).err().unwrap().code, "ARTIFACT_HASH");
+        std::fs::write(&instruction, b"instruction").unwrap();
+        std::fs::remove_dir(outside.path().join("workspace")).unwrap();
+        assert_eq!(read(0).err().unwrap().code, "APPROVED_CWD");
     }
     #[test]
     fn real_pair_without_collector_is_refused() {

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "4f7e2608f7370b90cde3e24285716679f130752e",
+    "commit": "8e959f2d9d6043e317ea652603915a617fddfb5d",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -40664,12 +40664,17 @@
           "state": "not_configured"
         },
         "reads": {
-          "state": "none_observed",
-          "value": []
+          "state": "value",
+          "value": [
+            "manifests",
+            "pins"
+          ]
         },
         "writes": {
-          "state": "none_observed",
-          "value": []
+          "state": "value",
+          "value": [
+            "folder_records"
+          ]
         },
         "screen_to_api": {
           "state": "out_of_scope"
@@ -51477,11 +51482,13 @@
         "rust/src/hub/iris_execution_owner.rs"
       ],
       "written_by": [
-        "rust/src/hub/iris_execution_owner.rs"
+        "rust/src/hub/iris_execution_owner.rs",
+        "rust/tests/iris_real_bounded.rs"
       ],
       "in_schema_snapshot": false,
       "unresolved_in": [
-        "rust/src/hub/iris_execution_owner.rs"
+        "rust/src/hub/iris_execution_owner.rs",
+        "rust/tests/iris_real_bounded.rs"
       ]
     },
     {
@@ -51500,13 +51507,16 @@
     {
       "name": "manifests",
       "read_by": [
-        "rust/src/hub/iris_execution_grants.rs"
+        "rust/src/hub/iris_execution_grants.rs",
+        "rust/tests/iris_real_bounded.rs"
       ],
       "written_by": [
         "rust/src/hub/iris_execution_grants.rs"
       ],
       "in_schema_snapshot": false,
-      "unresolved_in": []
+      "unresolved_in": [
+        "rust/tests/iris_real_bounded.rs"
+      ]
     },
     {
       "name": "messages",
@@ -51591,13 +51601,16 @@
     {
       "name": "pins",
       "read_by": [
-        "rust/src/hub/iris_execution_grants.rs"
+        "rust/src/hub/iris_execution_grants.rs",
+        "rust/tests/iris_real_bounded.rs"
       ],
       "written_by": [
         "rust/src/hub/iris_execution_grants.rs"
       ],
       "in_schema_snapshot": false,
-      "unresolved_in": []
+      "unresolved_in": [
+        "rust/tests/iris_real_bounded.rs"
+      ]
     },
     {
       "name": "policies",

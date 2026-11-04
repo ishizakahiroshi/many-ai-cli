@@ -5,7 +5,7 @@ use super::{
     iris_execution_grants::GrantLoader,
     iris_execution_journal::{Binding, Journal},
     iris_execution_mcp::{MAX_BYTES, parse_json},
-    iris_execution_owner::{OwnerStore, OwnerTicket, check_binding, secure_open, static_binding},
+    iris_execution_owner::{OwnerStore, OwnerTicket, check_binding, secure_open},
     iris_execution_verification_store::VerificationStore,
     iris_execution_verifier::PinnedPolicy,
 };
@@ -515,11 +515,12 @@ impl OwnedProfile {
     ///
     /// The comparison is attempted only when all of these are durable: the
     /// owner's local cessation, the collector's outcome receipt, the folder
-    /// collection for those same result bytes, and the policy pinned at
-    /// admission. Otherwise the verdict stays null with a fixed reason code.
+    /// collection for those same result bytes and effects, the policy pinned
+    /// at admission and the collector grant entry pinned at admission.
+    /// Otherwise the verdict stays null with a fixed reason code.
     /// The inputs are the existing verifier contract: the owner's exact ticket
     /// and integrity receipt, the approved result permit of the operator grant
-    /// and the pinned policy only. One-time per binding: an existing receipt
+    /// (read without writing the grant trust store) and the pinned policy only. One-time per binding: an existing receipt
     /// is returned as history (also under a restore hold) and is never
     /// re-evaluated; a concurrent or restarted observer gets the same
     /// original receipt from the store's own replay. Restored or
@@ -574,6 +575,7 @@ impl OwnedProfile {
             || collection["ticket"] != owner["ticket"]
             || collection["result_sha256"] != outcome["artifact_sha256"]
             || collection["outcome_sequence"] != outcome["sequence"]
+            || collection["effects"] != outcome["reported_effects"]
         {
             Some("VERIFY_COLLECTION_MISMATCH")
         } else {
@@ -606,24 +608,26 @@ impl OwnedProfile {
         if ticket.binding != *binding {
             return Ok(unavailable("VERIFY_COLLECTION_MISMATCH"));
         }
-        // The approved result permit of the exact collector grant. No lock is
-        // held while the operator manifest is read.
-        let permit = GrantLoader::open(&self.runtime_root)
-            .and_then(|mut loader| loader.load_approved())
-            .ok()
-            .and_then(|grants| {
-                grants
-                    .into_iter()
-                    .find(|g| {
-                        g.payload.is_some()
-                            && static_binding(&g.grant.binding) == static_binding(binding)
-                    })
-                    .map(|g| g.result)
-            });
-        let Some(permit) = permit else {
-            return Ok(unavailable("VERIFY_GRANT_UNAVAILABLE"));
-        };
         let at = now_ms()?;
+        // The approved result permit of the exact collector grant, read
+        // without writing the grant trust store and without depending on
+        // other entries' files or folders. It must equal the entry pinned at
+        // admission. No lock is held while the operator manifest is read.
+        let permit = match GrantLoader::pinned_result_permit(
+            &self.runtime_root,
+            binding,
+            (at / 1000) as i64,
+        ) {
+            Ok(permit) => permit,
+            Err(e) => {
+                return Ok(unavailable(match e.code.as_str() {
+                    "GRANT_NOT_PINNED" | "GRANT_PIN_MISMATCH" => "VERIFY_GRANT_NOT_PINNED",
+                    "GRANT_REVOKED" => "VERIFY_GRANT_REVOKED",
+                    "GRANT_EXPIRED" => "VERIFY_GRANT_EXPIRED",
+                    _ => "VERIFY_GRANT_UNAVAILABLE",
+                }));
+            }
+        };
         // Same lock order as admission: verifier store, then owner store.
         let mut store = self
             .verifications

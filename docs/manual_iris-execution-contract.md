@@ -245,10 +245,15 @@ on this observation path (`owned_request`, `owned_poll` and `owned_evidence`),
 inside the same blocking lane. It is attempted only when all of the following
 are durable: the owner record has `local_tree_ceased`; the collector's outcome
 receipt exists; the folder `collection` record exists and names the same
-ticket, result SHA256 and outcome sequence; and admission pinned the policy for
-this binding. The inputs are the verifier contract above: the owner's exact
-ticket and integrity receipt, the approved result permit of the operator's
+ticket, result SHA256, outcome sequence and effects; and admission pinned the
+policy for this binding. The inputs are the verifier contract above: the owner's
+exact ticket and integrity receipt, the approved result permit of the operator's
 collector grant, and the pinned policy. Nothing comes from the caller. The
+permit is read without writing the grant trust store and from the bound entry
+only: other entries' files and folders are not opened, while the manifest
+policy, downgrade and same-revision tamper checks still apply. The bound entry
+must equal the entry pinned at admission (approval revision and digest) and
+must be neither revoked nor expired. The
 comparison is one-time per binding: an existing receipt is returned as history,
 including after a restart or under a restore hold, and is never re-evaluated. A
 restored verification store, an inspection-only (restored journal) composition
@@ -259,7 +264,8 @@ The real bounded `verification` field is always an object: `kind`
 (null, or a fixed code such as `VERIFY_STOP_UNCONFIRMED`,
 `VERIFY_OUTCOME_MISSING`, `VERIFY_COLLECTION_MISSING`,
 `VERIFY_COLLECTION_MISMATCH`, `VERIFY_POLICY_NOT_PINNED`,
-`VERIFY_GRANT_UNAVAILABLE`, `VERIFIER_RESTORE_HOLD` or a verifier code such as
+`VERIFY_GRANT_UNAVAILABLE`, `VERIFY_GRANT_NOT_PINNED`, `VERIFY_GRANT_REVOKED`,
+`VERIFY_GRANT_EXPIRED`, `VERIFIER_RESTORE_HOLD` or a verifier code such as
 `VERIFIER_EXPIRED`), `folder_effects` and `folder_reason` from the collection
 record, the original `receipt` (or null), and `task_outcome_verified`,
 `effects_verified` and `remote_jobs_stopped`, which are always false. The

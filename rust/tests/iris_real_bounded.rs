@@ -1873,3 +1873,266 @@ async fn c10_existing_synthetic_profile_never_compares() {
         "NOT_FOUND"
     );
 }
+
+const GRANT_TRUST: &str = "iris-execution-grant-trust.sqlite3";
+
+impl Fixture {
+    fn write_manifest(&self, manifest: &Value) {
+        std::fs::write(
+            self.root.path().join("iris-execution-approved-grants.json"),
+            manifest.to_string(),
+        )
+        .unwrap();
+    }
+    /// Every row of the grant trust store, read without writing.
+    fn grant_trust_rows(&self) -> (Vec<(i64, String)>, Vec<(String, i64, String, String)>) {
+        let db = rusqlite::Connection::open_with_flags(
+            self.root.path().join(GRANT_TRUST),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .unwrap();
+        let manifests = db
+            .prepare("SELECT revision,digest FROM manifests ORDER BY revision")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        let pins = db
+            .prepare("SELECT scope_key,revision,digest,entry FROM pins ORDER BY scope_key")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        (manifests, pins)
+    }
+}
+
+// ---- review4 (adversarial review of 8e959f2d) ----
+
+/// R4-a: many observers at once (same Hub and a second Hub connection on the
+/// same files) must produce exactly one receipt and the same verdict.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn review4_concurrent_observers_share_one_receipt() {
+    let f = ran(Some(ANSWER), true).await;
+    let a = f.real_profile(f.verifications());
+    let b = f.real_profile(f.verifications());
+    let mut handles = Vec::new();
+    for i in 0..16 {
+        let p = if i % 2 == 0 { a.clone() } else { b.clone() };
+        let tool = ["owned_poll", "owned_evidence", "owned_request"][i % 3];
+        let args = if tool == "owned_request" {
+            json!({"profile":REAL_BOUNDED_PROFILE,"request_id":"start"})
+        } else {
+            json!({"profile":REAL_BOUNDED_PROFILE,"binding":f.binding})
+        };
+        handles.push(tokio::spawn(async move {
+            p.call(tool, &args, "iris", "workspace", "host", "instance")
+                .await
+                .map(|v| v["verification"].clone())
+        }));
+    }
+    let mut seen = Vec::new();
+    for h in handles {
+        seen.push(h.await.unwrap().expect("observe must not fail"));
+    }
+    let receipts: std::collections::BTreeSet<String> = seen
+        .iter()
+        .filter(|v| !v["receipt"].is_null())
+        .map(|v| v["receipt"].to_string())
+        .collect();
+    let verdicts: std::collections::BTreeSet<String> =
+        seen.iter().map(|v| v["verdict"].to_string()).collect();
+    assert_eq!(receipts.len(), 1, "{seen:?}");
+    assert_eq!(verdicts.len(), 1, "{seen:?}");
+    assert_eq!(
+        f.verifications().query(&f.binding).unwrap()["verdict"],
+        "pass"
+    );
+}
+
+/// R4-b: a pass is still read with folder-unexpected-change beside it.
+#[tokio::test]
+async fn review4_pass_is_paired_with_unexpected_change() {
+    let f = Fixture::new();
+    f.pin();
+    let factory = CountFactory::default();
+    run(
+        &f,
+        json!([write("answer.json", ANSWER), write("extra.txt", "x")]),
+        &factory,
+    )
+    .await
+    .unwrap();
+    let profile = f.real_profile(f.verifications());
+    let v = observe(&profile, "owned_poll", &f, REAL_BOUNDED_PROFILE).await["verification"].clone();
+    assert_eq!(v["verdict"], "pass", "{v}");
+    assert_eq!(v["folder_effects"], UNEXPECTED_CHANGE);
+    assert_eq!(v["task_outcome_verified"], false);
+    assert_eq!(v["effects_verified"], false);
+}
+
+/// R4-c (fixed by C10 follow-up): the comparison reads only the bound
+/// collector grant, so cleaning up an unrelated, finished task's work folder
+/// never blocks this binding's verdict.
+#[tokio::test]
+async fn review4_unrelated_grant_folder_cleanup_keeps_the_verdict() {
+    let f = ran(Some(ANSWER), true).await;
+    let gone = tempfile::tempdir().unwrap();
+    let gone_path = gone.path().canonicalize().unwrap();
+    let mut other = f.manifest["grants"][0].clone();
+    other["binding"]["task_id"] = json!("task-other");
+    other["approved_cwd"] = json!(gone_path);
+    let mut manifest = f.manifest.clone();
+    manifest["manifest_revision"] = json!(2);
+    manifest["grants"].as_array_mut().unwrap().push(other);
+    f.write_manifest(&manifest);
+    // The operator manifest is admitted while the other folder exists.
+    GrantLoader::open(f.root.path())
+        .unwrap()
+        .load_approved()
+        .unwrap();
+    drop(gone); // the other task's work folder is cleaned up
+    assert!(!gone_path.exists());
+    let profile = f.real_profile(f.verifications());
+    let v = observe(&profile, "owned_poll", &f, REAL_BOUNDED_PROFILE).await["verification"].clone();
+    assert_record_only(&v);
+    assert_eq!(v["reason"], Value::Null, "{v}");
+    assert_eq!(v["verdict"], "pass", "{v}");
+}
+
+/// R4-d: another provider pair observed through the real bounded profile
+/// never writes a receipt, even with a pinned policy.
+#[tokio::test]
+async fn review4_other_pair_under_real_profile_never_compares() {
+    let without_collector = |g: &mut Value, _: &Path| {
+        let g = g.as_object_mut().unwrap();
+        g.remove("payload_path");
+        g.remove("launch_mode");
+        g.insert("effect_scope".into(), json!(["none"]));
+    };
+    let f = Fixture::for_pair("synthetic", "synthetic", without_collector);
+    f.pin();
+    // The real profile's own policy source must exist for composition only.
+    std::fs::write(
+        f.root
+            .path()
+            .join("iris-execution/owned-real-policies.json"),
+        json!({"schema_version":1,"profile":REAL_BOUNDED_PROFILE,"enabled":true,"policies":[]})
+            .to_string(),
+    )
+    .unwrap();
+    let profile = f.real_profile(f.verifications());
+    let observed = profile
+        .call(
+            "owned_poll",
+            &json!({"profile":REAL_BOUNDED_PROFILE,"binding":f.binding}),
+            "iris",
+            "workspace",
+            "host",
+            "instance",
+        )
+        .await;
+    if let Ok(v) = observed {
+        assert_eq!(v["verification"]["verdict"], Value::Null);
+    }
+    assert_eq!(
+        f.verifications().query(&f.binding).unwrap_err().code,
+        "NOT_FOUND"
+    );
+}
+
+/// F3: observation reads the grant trust store and never writes it, even
+/// when the operator manifest has a newer, not yet admitted revision.
+#[tokio::test]
+async fn c10_observation_never_writes_the_grant_trust_store() {
+    let f = ran(Some(ANSWER), true).await;
+    let before = f.grant_trust_rows();
+    assert_eq!(before.0.len(), 1);
+    assert_eq!(before.1.len(), 1);
+    // Same entries under a newer manifest revision nobody admitted yet.
+    let mut manifest = f.manifest.clone();
+    manifest["manifest_revision"] = json!(2);
+    f.write_manifest(&manifest);
+    let profile = f.real_profile(f.verifications());
+    for tool in [
+        "owned_poll",
+        "owned_poll",
+        "owned_evidence",
+        "owned_request",
+        "owned_poll",
+    ] {
+        let v = observe(&profile, tool, &f, REAL_BOUNDED_PROFILE).await["verification"].clone();
+        assert_eq!(v["verdict"], "pass", "{tool}: {v}");
+        assert_eq!(f.grant_trust_rows(), before, "{tool}");
+    }
+}
+
+/// F2/F3: an entry that differs from the digest pinned at admission (same
+/// binding, rewritten payload path) is never used for the comparison.
+#[tokio::test]
+async fn c10_manifest_entry_differing_from_the_pin_is_not_compared() {
+    let f = ran(Some(ANSWER), true).await;
+    let before = f.grant_trust_rows();
+    let profile = f.real_profile(f.verifications());
+    // A newer manifest revision with a rewritten entry: not pinned.
+    let mut manifest = f.manifest.clone();
+    manifest["manifest_revision"] = json!(2);
+    manifest["grants"][0]["payload_path"] = json!("other.json");
+    f.write_manifest(&manifest);
+    let v = observe(&profile, "owned_poll", &f, REAL_BOUNDED_PROFILE).await["verification"].clone();
+    assert_not_compared(&f, &v, "VERIFY_GRANT_NOT_PINNED");
+    // The same rewrite under the admitted revision is a manifest tamper.
+    manifest["manifest_revision"] = json!(1);
+    f.write_manifest(&manifest);
+    let v = observe(&profile, "owned_poll", &f, REAL_BOUNDED_PROFILE).await["verification"].clone();
+    assert_not_compared(&f, &v, "VERIFY_GRANT_UNAVAILABLE");
+    assert_eq!(f.grant_trust_rows(), before);
+    // The admitted manifest still compares.
+    f.write_manifest(&f.manifest);
+    let v = observe(&profile, "owned_poll", &f, REAL_BOUNDED_PROFILE).await["verification"].clone();
+    assert_eq!(v["verdict"], "pass", "{v}");
+}
+
+/// F3: without the admission pin there is no comparison, and observation
+/// never creates the grant trust store to pin it.
+#[tokio::test]
+async fn c10_missing_grant_pin_is_not_compared() {
+    let f = ran(Some(ANSWER), true).await;
+    for suffix in ["", "-wal", "-shm"] {
+        let path = f.root.path().join(format!("{GRANT_TRUST}{suffix}"));
+        if path.exists() {
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+    let profile = f.real_profile(f.verifications());
+    let v = observe(&profile, "owned_poll", &f, REAL_BOUNDED_PROFILE).await["verification"].clone();
+    assert_not_compared(&f, &v, "VERIFY_GRANT_NOT_PINNED");
+    assert!(!f.root.path().join(GRANT_TRUST).exists());
+}
+
+/// F5: the collection must name the same effects the outcome reports.
+#[tokio::test]
+async fn c10_effects_mismatch_is_a_collection_mismatch() {
+    let f = ran(Some(ANSWER), true).await;
+    let (owner, folder) = f.record();
+    assert_eq!(owner["outcome_receipt"]["reported_effects"], PAYLOAD_ONLY);
+    let mut collection = folder["collection"].clone();
+    collection["effects"] = json!(UNEXPECTED_CHANGE);
+    let raw = collection.to_string();
+    let db =
+        rusqlite::Connection::open(f.root.path().join("iris-execution/owner.sqlite3")).unwrap();
+    let changed = db
+        .execute(
+            "UPDATE folder_records SET document=?,digest=? WHERE kind='collection'",
+            rusqlite::params![raw, sha(raw.as_bytes())],
+        )
+        .unwrap();
+    assert_eq!(changed, 1);
+    drop(db);
+    let profile = f.real_profile(f.verifications());
+    let v = observe(&profile, "owned_poll", &f, REAL_BOUNDED_PROFILE).await["verification"].clone();
+    assert_not_compared(&f, &v, "VERIFY_COLLECTION_MISMATCH");
+    assert_eq!(v["folder_effects"], UNEXPECTED_CHANGE);
+}
