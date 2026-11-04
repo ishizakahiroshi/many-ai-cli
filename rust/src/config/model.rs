@@ -4497,13 +4497,17 @@ const DEFAULT_BOUNDED_ALLOWED_TOOLS: &[(&str, &[&str])] = &[
     ),
 ];
 
+/// `=` is accepted so a command option value can be named inside a tool
+/// pattern (for example `--basetemp=.pytest-tmp`). Values are passed as
+/// separate argv items, never through a shell, and still cannot start with
+/// `-`, a space or `=`, so `=` cannot form a wrapper option of its own.
 pub fn valid_allowed_tool_value(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= MAX_ALLOWED_TOOL_VALUE_LEN
-        && !matches!(value.as_bytes()[0], b'-' | b' ')
+        && !matches!(value.as_bytes()[0], b'-' | b' ' | b'=')
         && value
             .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || b" ()*.:/_-".contains(&c))
+            .all(|c| c.is_ascii_alphanumeric() || b" ()*.:/_-=".contains(&c))
 }
 
 impl OrchestrationConfig {
@@ -5148,8 +5152,14 @@ mod launch_helper_tests {
             "Bash(git log *)",
             "shell(git status:*)",
             "Bash(go test ./...)",
+            // Iris real project A (C9): an option value inside the pattern.
+            "Bash(python -B -m pytest -p no:cacheprovider --basetemp=.pytest-tmp:*)",
         ] {
             assert!(valid_allowed_tool_value(value));
+        }
+        // `=` still cannot start a value or carry shell syntax.
+        for value in ["=x", "Bash(a=$(b))", "Bash(a=b;c)", "Bash(a=b,c)"] {
+            assert!(!valid_allowed_tool_value(value), "{value}");
         }
         for value in [
             "",
