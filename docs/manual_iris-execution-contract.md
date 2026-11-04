@@ -5,7 +5,7 @@ tags: [many-iris, execution-contract, mcp]
 owner: maintainers
 review_status: draft
 related: [../README.md, ../README.ja.md, ../CHANGELOG.md]
-last_reviewed: 2026-11-03
+last_reviewed: 2026-11-04
 ---
 
 # Many Iris execution contract
@@ -237,6 +237,38 @@ store inspection run off the async timer lane. `owned_request` returns separate
 `verification` fields. A missing verification is null; other storage errors fail
 closed. These observations never claim task success, global effects or remote
 job cessation. Restored stores permit history inspection but refuse new work.
+
+## Folder trust for the real bounded profile only
+
+The Iris launch path does not synthesize folder trust: the prepared spawn spec
+never carries a folder-trust grant, tool grant or risk confirmation. There is one
+exception, for the separate `iris-owned-real-bounded/1` profile. When all of the
+following hold, the wrapper trusts the approved folder in Claude's own
+configuration immediately before the one-use spawn claim:
+
+- the binding is the profile's single pair, provider `claude` with the
+  subscription profile `claude-hiroshi`;
+- the freshly reloaded grant has a `payload_path`;
+- the grant's `launch_mode` is `bounded-edit`;
+- `iris-execution/owned-real-policies.json` is enabled and holds a current
+  policy for this exact binding.
+
+The write uses the same native Claude writer as ordinary child launches (the
+CLI-compatible lock, atomic replacement and read-back verification), with the
+`CLAUDE_CONFIG_DIR` from the provider's exact environment. That value must be
+explicit and absolute. Only the canonical `approved_cwd` itself is trusted: if
+Claude's lookup would trust a repository root above it, the launch is refused.
+An ancestor that Claude already trusts is accepted without writing. Nothing
+else is added: no other folder, tool permission, risk confirmation or automatic
+approval. Codex, synthetic, the synthetic owned profile and `default` launches
+never trust a folder.
+
+The owner database keeps one `folder_trust` record per attempt with the target
+path, the written key, the time and the result (`written`, `already-trusted`
+or `failed` with a fixed reason code). It is written before the spawn claim and
+never replaced. When the first three conditions hold but the profile check,
+the writer or the record fails, the wrapper does not launch. The trust entry
+stays in that Claude configuration afterwards; it is not removed automatically.
 
 ## Native stop and result limits
 

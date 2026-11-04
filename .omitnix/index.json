@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "78c14facf262c5b06f8b8de7627b909fbfb28472",
+    "commit": "09c99b54380c1ca99f37a6a6c4c3a39c1b597be0",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -30943,7 +30943,8 @@
             "folder_records",
             "owners",
             "receipts",
-            "sqlite_master"
+            "sqlite_master",
+            "trust_records"
           ]
         },
         "writes": {
@@ -30951,7 +30952,8 @@
           "value": [
             "folder_records",
             "owners",
-            "receipts"
+            "receipts",
+            "trust_records"
           ]
         },
         "screen_to_api": {
@@ -51666,6 +51668,19 @@
       "in_schema_snapshot": false,
       "unresolved_in": [
         "rust/src/hub/iris_execution_journal.rs",
+        "rust/src/hub/iris_execution_owner.rs"
+      ]
+    },
+    {
+      "name": "trust_records",
+      "read_by": [
+        "rust/src/hub/iris_execution_owner.rs"
+      ],
+      "written_by": [
+        "rust/src/hub/iris_execution_owner.rs"
+      ],
+      "in_schema_snapshot": false,
+      "unresolved_in": [
         "rust/src/hub/iris_execution_owner.rs"
       ]
     },

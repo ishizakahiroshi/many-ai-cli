@@ -4,11 +4,15 @@
 //! collector may build the result envelope, and only after recorded cessation.
 #![cfg(windows)]
 use many_ai_cli::{
+    application::spawn_policy::NativeFolderTrust,
+    config::RuntimePaths,
     hub::{
         iris_execution_folder::{PAYLOAD_ONLY, UNEXPECTED_CHANGE},
         iris_execution_grants::GrantLoader,
         iris_execution_journal::{Binding, Grant, Journal},
-        iris_execution_owned::{REAL_BOUNDED_PROFILE_ID, REAL_BOUNDED_PROVIDER},
+        iris_execution_owned::{
+            REAL_BOUNDED_PROFILE, REAL_BOUNDED_PROFILE_ID, REAL_BOUNDED_PROVIDER,
+        },
         iris_execution_owner::{OwnerStore, OwnerTicket},
         iris_execution_verification_store::VerificationStore,
     },
@@ -56,22 +60,45 @@ fn now_ms() -> u64 {
 
 struct Fixture {
     root: tempfile::TempDir,
-    /// The approved folder lives outside the runtime root (C4-D).
+    /// The approved folder lives outside the runtime root (C4-D). This
+    /// temporary folder is also the only place the synthetic Claude
+    /// configuration may live: folder trust runs on trial paths rooted here.
     work: tempfile::TempDir,
     binding: Binding,
     ticket: OwnerTicket,
     manifest: Value,
     _journal: Journal,
 }
+/// Real bounded policy source for the fixture binding (the new profile).
+fn write_real_policies(root: &Path, binding: &Binding, enabled: bool) {
+    let manifest = json!({"schema_version":1,"profile":REAL_BOUNDED_PROFILE,
+        "enabled":enabled,"policies":[policy(binding)]});
+    std::fs::write(
+        root.join("iris-execution/owned-real-policies.json"),
+        manifest.to_string(),
+    )
+    .unwrap();
+}
+fn policy(binding: &Binding) -> Value {
+    json!({"schema_version":1,"policy_id":"policy","policy_revision":1,
+        "verifier":"strict-json-payload-equality/1","binding":binding,
+        "expires_at_ms":now_ms()+600_000,
+        "expected_payload":serde_json::from_str::<Value>(ANSWER).unwrap()})
+}
 impl Fixture {
     fn new() -> Self {
         Self::with_grant(|_, _| {})
     }
     fn with_grant(edit: impl FnOnce(&mut Value, &Path)) -> Self {
+        Self::for_pair(REAL_BOUNDED_PROVIDER, REAL_BOUNDED_PROFILE_ID, edit)
+    }
+    fn for_pair(provider: &str, profile: &str, edit: impl FnOnce(&mut Value, &Path)) -> Self {
         let root = tempfile::tempdir().unwrap();
         let work = tempfile::tempdir().unwrap();
         let path = root.path();
         std::fs::create_dir(work.path().join("workspace")).unwrap();
+        std::fs::create_dir(work.path().join("claude-config")).unwrap();
+        std::fs::create_dir(work.path().join("vendor-home")).unwrap();
         let workspace = work.path().join("workspace").canonicalize().unwrap();
         std::fs::create_dir(path.join("iris-execution-artifacts")).unwrap();
         std::fs::write(
@@ -94,8 +121,8 @@ impl Fixture {
             executor_instance_id: "instance".into(),
             attempt_id: "attempt".into(),
             fence: 1,
-            provider: REAL_BOUNDED_PROVIDER.into(),
-            profile_id: REAL_BOUNDED_PROFILE_ID.into(),
+            provider: provider.into(),
+            profile_id: profile.into(),
         };
         let ticket = OwnerTicket {
             binding: binding.clone(),
@@ -128,6 +155,9 @@ impl Fixture {
         journal
             .start("start", &binding, (now_ms() / 1000) as i64)
             .unwrap();
+        if provider == REAL_BOUNDED_PROVIDER && profile == REAL_BOUNDED_PROFILE_ID {
+            write_real_policies(path, &binding, true);
+        }
         Self {
             root,
             work,
@@ -166,20 +196,54 @@ impl Fixture {
             .unwrap();
     }
     fn adopt(&self) -> Arc<DurableExecutionOwner> {
-        Arc::new(
-            DurableExecutionOwner::adopt(
-                self.root.path(),
-                &serde_json::to_string(&self.ticket).unwrap(),
-                REAL_BOUNDED_PROVIDER,
-                REAL_BOUNDED_PROFILE_ID,
-            )
-            .unwrap(),
+        Arc::new(self.adopt_without_trust().with_folder_trust(self.trust()))
+    }
+    fn adopt_without_trust(&self) -> DurableExecutionOwner {
+        DurableExecutionOwner::adopt(
+            self.root.path(),
+            &serde_json::to_string(&self.ticket).unwrap(),
+            &self.binding.provider,
+            &self.binding.profile_id,
         )
+        .unwrap()
+    }
+    /// Same writer as production, on trial paths rooted at the temporary
+    /// work folder: any vendor read or write outside it is refused, so no
+    /// real Claude configuration can be opened even by a wrong environment.
+    fn trust(&self) -> NativeFolderTrust {
+        let jail = self.work.path().canonicalize().unwrap();
+        let paths = RuntimePaths::trial(&jail, 49184, &self.root.path().join("installed")).unwrap();
+        let home = self.work.path().join("vendor-home");
+        NativeFolderTrust::new(paths, home.clone(), home)
+    }
+    fn config_dir(&self) -> PathBuf {
+        self.work.path().join("claude-config")
+    }
+    /// The synthetic state file the writer uses for `dir` (no name is
+    /// guessed here: the writer reports its own file).
+    fn state_in(&self, dir: &Path) -> PathBuf {
+        self.trust()
+            .config_path("claude", &[format!("CLAUDE_CONFIG_DIR={}", dir.display())])
+            .unwrap()
+    }
+    fn config_file(&self) -> PathBuf {
+        self.state_in(&self.config_dir())
+    }
+    /// The vendor-home fallback, which the exact grant must never use.
+    fn home_file(&self) -> PathBuf {
+        self.trust().config_path("claude", &[]).unwrap()
+    }
+    fn trust_record(&self) -> Value {
+        self.owners().query_folder_trust(&self.binding).unwrap()
     }
     fn process(&self, plan: &Value) -> ProcessPlan {
         let mut env = BTreeMap::new();
         env.insert(PLAN_ENV.into(), Some(plan.to_string().into()));
         env.insert(DONE_ENV.into(), Some(self.done_path().into_os_string()));
+        env.insert(
+            "CLAUDE_CONFIG_DIR".into(),
+            Some(self.config_dir().into_os_string()),
+        );
         ProcessPlan {
             executable: std::env::current_exe().unwrap(),
             args: vec![
@@ -259,7 +323,14 @@ impl PtyFactory for CountFactory {
     }
 }
 async fn run(f: &Fixture, plan: Value, factory: &CountFactory) -> io::Result<()> {
-    let owner = f.adopt();
+    run_owner(f, f.adopt(), f.process(&plan), factory).await
+}
+async fn run_owner(
+    f: &Fixture,
+    owner: Arc<DurableExecutionOwner>,
+    process: ProcessPlan,
+    factory: &CountFactory,
+) -> io::Result<()> {
     let connector = Connector {
         done: f.done_path(),
     };
@@ -269,7 +340,7 @@ async fn run(f: &Fixture, plan: Value, factory: &CountFactory) -> io::Result<()>
             token: "synthetic-only".into(),
             ..Default::default()
         },
-        f.process(&plan),
+        process,
     );
     options.execution_owner = Some(owner);
     options.reconnect_grace = Duration::ZERO;
@@ -1045,4 +1116,217 @@ async fn r2_payload_changed_reason_survives_invalid_json() {
         assert_eq!(c["effects"], UNEXPECTED_CHANGE, "{label}");
         assert_eq!(c["reason"], "PAYLOAD_CHANGED", "{label}: {c}");
     }
+}
+
+// ---- C8 folder trust (synthetic Claude configuration in a temporary folder) ----
+
+/// Claude's project key for a folder: plain drive spelling, forward slashes.
+fn claude_key(path: &Path) -> String {
+    path.canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .trim_start_matches(r"\\?\")
+        .replace('\\', "/")
+}
+fn read_config(f: &Fixture) -> Value {
+    serde_json::from_slice(&std::fs::read(f.config_file()).unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn c8_real_bounded_launch_trusts_exactly_the_approved_folder_before_claim() {
+    let f = Fixture::new();
+    let other = json!({"hasTrustDialogAccepted":false,"note":"synthetic"});
+    std::fs::write(
+        f.config_file(),
+        json!({"synthetic_identity":"SYNTHETIC_PLACEHOLDER",
+            "projects":{"Z:/synthetic/other":other}})
+        .to_string(),
+    )
+    .unwrap();
+    let factory = CountFactory::default();
+    run(&f, json!([write("answer.json", ANSWER)]), &factory)
+        .await
+        .unwrap();
+    assert_eq!(factory.0.load(Ordering::SeqCst), 1);
+    let key = claude_key(&f.workspace());
+    let config = read_config(&f);
+    let projects = config["projects"].as_object().unwrap();
+    assert_eq!(projects.len(), 2, "{projects:?}");
+    assert_eq!(projects[&key]["hasTrustDialogAccepted"], true);
+    assert_eq!(projects["Z:/synthetic/other"], other);
+    assert!(!projects.contains_key(&claude_key(f.work.path())));
+    assert_eq!(config["synthetic_identity"], "SYNTHETIC_PLACEHOLDER");
+    assert!(!f.home_file().exists());
+    let record = f.trust_record();
+    assert_eq!(record["kind"], "folder_trust");
+    assert_eq!(record["result"], "written");
+    assert_eq!(record["written"], true);
+    assert_eq!(record["key"], key);
+    assert_eq!(
+        record["target"],
+        f.workspace()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .as_ref()
+    );
+    assert_eq!(record["ticket"], json!(f.ticket));
+    assert_eq!(record["reason"], Value::Null);
+    assert_eq!(record["tool_grants"], json!([]));
+    assert_eq!(record["risk_confirmed"], false);
+    let (owner, folder) = f.record();
+    assert_never_promoted(&owner, &folder);
+    assert!(record["observed_at_ms"].as_u64().unwrap() <= owner["claimed_at_ms"].as_u64().unwrap());
+    // The trust write lands outside the approved folder: still payload-only.
+    assert_eq!(folder["collection"]["effects"], PAYLOAD_ONLY);
+}
+
+#[tokio::test]
+async fn c8_trust_failure_refuses_launch_and_is_recorded() {
+    let elsewhere = tempfile::tempdir().unwrap();
+    let cases = [
+        ("corrupt-config", "FOLDER_TRUST_WRITE"),
+        ("no-config-dir", "FOLDER_TRUST_WRITE"),
+        ("relative-config-dir", "FOLDER_TRUST_WRITE"),
+        ("config-outside-temporary-folder", "FOLDER_TRUST_WRITE"),
+        ("repository-root-above", "FOLDER_TRUST_WRITE"),
+        ("no-writer", "FOLDER_TRUST_UNAVAILABLE"),
+        ("policy-disabled", "FOLDER_TRUST_PROFILE"),
+        ("policy-absent", "FOLDER_TRUST_PROFILE"),
+    ];
+    for (name, reason) in cases {
+        let f = Fixture::new();
+        let mut process = f.process(&json!([write("answer.json", ANSWER)]));
+        let mut owner = Some(f.adopt());
+        match name {
+            "corrupt-config" => std::fs::write(f.config_file(), "{not json").unwrap(),
+            "no-config-dir" => {
+                process
+                    .env
+                    .remove(std::ffi::OsStr::new("CLAUDE_CONFIG_DIR"));
+            }
+            "relative-config-dir" => {
+                process
+                    .env
+                    .insert("CLAUDE_CONFIG_DIR".into(), Some("claude-config".into()));
+            }
+            "config-outside-temporary-folder" => {
+                process.env.insert(
+                    "CLAUDE_CONFIG_DIR".into(),
+                    Some(elsewhere.path().as_os_str().into()),
+                );
+            }
+            "repository-root-above" => std::fs::create_dir(f.work.path().join(".git")).unwrap(),
+            "no-writer" => owner = Some(Arc::new(f.adopt_without_trust())),
+            "policy-disabled" => write_real_policies(f.root.path(), &f.binding, false),
+            _ => std::fs::remove_file(
+                f.root
+                    .path()
+                    .join("iris-execution/owned-real-policies.json"),
+            )
+            .unwrap(),
+        }
+        let before = std::fs::read(f.config_file()).ok();
+        let factory = CountFactory::default();
+        let result = run_owner(&f, owner.take().unwrap(), process, &factory).await;
+        assert!(result.is_err(), "{name}");
+        assert_eq!(factory.0.load(Ordering::SeqCst), 0, "{name}");
+        let (record, folder) = f.record();
+        assert!(record["claimed_session"].is_null(), "{name}");
+        assert_never_promoted(&record, &folder);
+        let trust = f.trust_record();
+        assert_eq!(trust["result"], "failed", "{name}");
+        assert_eq!(trust["reason"], reason, "{name}");
+        assert_eq!(trust["written"], false, "{name}");
+        assert_eq!(std::fs::read(f.config_file()).ok(), before, "{name}");
+        assert!(
+            !elsewhere
+                .path()
+                .join(f.config_file().file_name().unwrap())
+                .exists(),
+            "{name}"
+        );
+        assert!(!f.home_file().exists(), "{name}");
+    }
+}
+
+#[tokio::test]
+async fn c8_no_trust_outside_the_real_bounded_launch() {
+    let without_collector = |g: &mut Value, _: &Path| {
+        let g = g.as_object_mut().unwrap();
+        g.remove("payload_path");
+        g.remove("launch_mode");
+        g.insert("effect_scope".into(), json!(["none"]));
+    };
+    let cases = [
+        (
+            "real-pair-default-mode",
+            Fixture::with_grant(|g, _| {
+                g.as_object_mut().unwrap().remove("launch_mode");
+            }),
+        ),
+        (
+            "synthetic",
+            Fixture::for_pair("synthetic", "synthetic", without_collector),
+        ),
+        (
+            "codex",
+            Fixture::for_pair("codex", "codex", without_collector),
+        ),
+    ];
+    for (name, f) in cases {
+        let factory = CountFactory::default();
+        // Non-collector pairs report through a result file; a missing one is
+        // a wrapper error after the spawn, so the stand-in writes a valid one.
+        let plan = if f.binding.provider == REAL_BOUNDED_PROVIDER {
+            json!([])
+        } else {
+            let envelope = json!({"binding":f.binding,"owner_id":f.ticket.owner_id,
+                "owner_epoch":f.ticket.owner_epoch,
+                "instruction_hash":f.binding.instruction_hash,"outcome":"unknown",
+                "effects":"none","synthetic":f.binding.provider == "synthetic"});
+            json!([write(
+                f.result_path().to_str().unwrap(),
+                &envelope.to_string()
+            )])
+        };
+        run(&f, plan, &factory)
+            .await
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert_eq!(factory.0.load(Ordering::SeqCst), 1, "{name}");
+        assert!(!f.config_file().exists(), "{name}");
+        assert!(!f.home_file().exists(), "{name}");
+        assert!(f.trust_record().is_null(), "{name}");
+    }
+}
+
+#[tokio::test]
+async fn c8_already_trusted_parent_is_accepted_without_writing() {
+    let f = Fixture::new();
+    let parent = claude_key(f.work.path());
+    let body = json!({"projects":{parent.clone():{"hasTrustDialogAccepted":true}}}).to_string();
+    std::fs::write(f.config_file(), &body).unwrap();
+    let factory = CountFactory::default();
+    run(&f, json!([write("answer.json", ANSWER)]), &factory)
+        .await
+        .unwrap();
+    assert_eq!(factory.0.load(Ordering::SeqCst), 1);
+    assert_eq!(std::fs::read_to_string(f.config_file()).unwrap(), body);
+    let record = f.trust_record();
+    assert_eq!(record["result"], "already-trusted");
+    assert_eq!(record["written"], false);
+    assert_eq!(record["key"], parent);
+}
+
+#[test]
+fn c8_same_ticket_never_reaches_the_writer_twice() {
+    let f = Fixture::new();
+    let plan = f.process(&json!([]));
+    f.adopt().before_spawn(1, &plan).unwrap();
+    let first = f.trust_record();
+    assert_eq!(first["result"], "written");
+    std::fs::remove_file(f.config_file()).unwrap();
+    assert!(f.adopt().before_spawn(2, &plan).is_err());
+    assert!(!f.config_file().exists());
+    assert_eq!(f.trust_record(), first);
 }

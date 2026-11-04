@@ -378,12 +378,22 @@ pub async fn run_cli(
             let profile = env(context.environment, "MANY_AI_CLI_SUBSCRIPTION_ID")
                 .filter(|s| !s.is_empty())
                 .unwrap_or("default");
+            // Same native writer and runtime paths as ordinary child trust.
+            // Only the real bounded launch uses it, with an absolute
+            // CLAUDE_CONFIG_DIR, so the relative-path base is never consulted.
             let owner = super::iris_owner::DurableExecutionOwner::adopt(
                 context.paths.root(),
                 encoded,
                 &launch.provider,
                 profile,
-            )?;
+            )?
+            .with_folder_trust(
+                crate::application::spawn_policy::NativeFolderTrust::new(
+                    context.paths.clone(),
+                    context.home_dir.to_path_buf(),
+                    context.home_dir.to_path_buf(),
+                ),
+            );
             owner_instruction_hash = Some(owner.instruction_hash().to_owned());
             Some(std::sync::Arc::new(owner) as std::sync::Arc<dyn runtime::ExecutionOwnerObserver>)
         }

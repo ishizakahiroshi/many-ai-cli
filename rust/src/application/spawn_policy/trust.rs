@@ -42,6 +42,67 @@ impl NativeFolderTrust {
         environment: &[String],
         cwd: &Path,
     ) -> io::Result<FolderTrustResult> {
+        self.grant_checked(provider, environment, cwd, false)
+    }
+    /// Iris real bounded launch only (the one exception to "the Iris launch
+    /// path synthesizes no folder trust"). Same config-path rule, lock, atomic
+    /// replacement and post-write verification as [`Self::grant`], narrowed:
+    /// Claude only; `CLAUDE_CONFIG_DIR` must be explicit and absolute in the
+    /// child's exact environment (no home fallback, no relative actor path);
+    /// the written key must be `cwd` itself, never a repository root or any
+    /// other folder; and the result must leave `cwd` trusted, either written
+    /// now or already trusted by Claude's own lookup. Anything else is an error
+    /// and the caller must not launch.
+    pub fn grant_exact_claude(
+        &self,
+        environment: &[String],
+        cwd: &Path,
+    ) -> io::Result<FolderTrustResult> {
+        let key = "CLAUDE_CONFIG_DIR";
+        let spelled = environment
+            .iter()
+            .filter_map(|entry| entry.split_once('='))
+            .filter(|(name, _)| name.eq_ignore_ascii_case(key))
+            .collect::<Vec<_>>();
+        if spelled.is_empty()
+            || spelled.iter().any(|(name, _)| *name != key)
+            || !env_value(environment, key)
+                .map(str::trim)
+                .is_some_and(|value| !value.is_empty() && Path::new(value).is_absolute())
+        {
+            return Err(invalid(
+                "exact folder trust requires an explicit absolute Claude configuration directory",
+            ));
+        }
+        // The owner keeps Rust's canonical (verbatim on Windows) spelling. The
+        // Claude key is the plain drive spelling; a path that cannot be safely
+        // simplified stays verbatim and is refused below as unsupported.
+        let text = cwd
+            .to_str()
+            .ok_or_else(|| invalid("folder trust requires a UTF-8 working directory"))?;
+        #[cfg(windows)]
+        let text = project::simplify_verbatim(text);
+        let exact = PathBuf::from(text);
+        if !exact.is_absolute() || project::clean(&exact) != exact {
+            return Err(invalid(
+                "folder trust requires a supported absolute working directory",
+            ));
+        }
+        let result = self.grant_checked("claude", environment, &exact, true)?;
+        if !result.written && result.existing != "trusted" {
+            return Err(io::Error::other(
+                "exact folder trust left the folder untrusted",
+            ));
+        }
+        Ok(result)
+    }
+    fn grant_checked(
+        &self,
+        provider: &str,
+        environment: &[String],
+        cwd: &Path,
+        exact: bool,
+    ) -> io::Result<FolderTrustResult> {
         let raw_path = self.config_path(provider, environment)?;
         let path = actor_path(&self.paths, &self.hub_cwd, &raw_path)?;
         if !cwd.is_absolute() || project::unsupported(cwd) {
@@ -61,6 +122,13 @@ impl NativeFolderTrust {
                 "folder trust target is the home folder or filesystem root",
             ));
         }
+        // Decided on the same plan that is written: a repository root found
+        // above `cwd` is never trusted in its place.
+        if exact && !project::same_path(&plan.target, cwd) {
+            return Err(invalid(
+                "folder trust target is not exactly the approved folder",
+            ));
+        }
         let mut result = match provider {
             "claude" => claude::grant(&path, &plan, &self.paths)?,
             "codex" => {
@@ -75,7 +143,9 @@ impl NativeFolderTrust {
         result.config_path = raw_path;
         Ok(result)
     }
-    fn config_path(&self, provider: &str, environment: &[String]) -> io::Result<PathBuf> {
+    /// The vendor file this writer would use for `provider` with the given
+    /// child environment. Read-only: nothing is opened or created.
+    pub fn config_path(&self, provider: &str, environment: &[String]) -> io::Result<PathBuf> {
         let (key, fallback, filename) = match provider {
             "claude" => ("CLAUDE_CONFIG_DIR", self.home.clone(), ".claude.json"),
             "codex" => ("CODEX_HOME", self.home.join(".codex"), "config.toml"),

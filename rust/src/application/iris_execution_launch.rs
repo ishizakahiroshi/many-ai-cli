@@ -157,7 +157,12 @@ fn static_binding(mut value: Value) -> Value {
 /// Only a freshly loaded fixed operator grant supplies launch content. This
 /// structural preparation is not a grant refresh or journal dispatch claim.
 /// No custom command, caller argv/environment, auto profile, login, headless,
-/// elevated risk approval, folder trust or tool grants are synthesized.
+/// elevated risk approval, folder trust or tool grants are synthesized here,
+/// and the spec never carries a folder-trust grant. One exception lives at the
+/// wrapper's exec boundary, not in this spec: for the real bounded profile only
+/// (claude/claude-hiroshi, payload_path, bounded-edit, enabled current policy)
+/// the owner trusts exactly the canonical approved_cwd in Claude's own config
+/// immediately before the spawn claim, records it, and refuses on failure.
 pub fn prepare_spec(
     grant: &ApprovedGrant,
     ticket: &OwnerTicket,

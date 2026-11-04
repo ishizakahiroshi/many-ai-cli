@@ -155,6 +155,16 @@ pub fn check_policy_source(root: &Path, kind: OwnedProfileKind) -> Result<(), &'
         .map_err(|_| "OWNED_POLICY_SOURCE")
 }
 
+/// Exec-boundary check that a launch belongs to the real bounded profile: the
+/// exact pair, its enabled fixed policy source, and a current (unexpired)
+/// policy for this complete binding. Only a yes/no leaves this function.
+pub fn real_bounded_launch_admitted(root: &Path, binding: &Binding, at_ms: u64) -> bool {
+    let Ok(root) = root.canonicalize() else {
+        return false;
+    };
+    current_policy(&root, OwnedProfileKind::RealBounded, binding, at_ms).is_ok()
+}
+
 fn current_policy(
     root: &Path,
     kind: OwnedProfileKind,

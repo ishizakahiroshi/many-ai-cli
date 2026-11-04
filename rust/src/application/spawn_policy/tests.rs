@@ -918,3 +918,146 @@ fn relative_vendor_seed_reads_hub_cwd_and_retains_environment_text() {
             .contains("synthetic-child-policy")
     );
 }
+
+// ---- Iris real bounded exact trust (synthetic Claude state only) ----
+// Every path lives under one trial root. Trial check_path refuses any vendor
+// read or write outside it, and the environment is an explicit list, so these
+// tests cannot reach a real Claude configuration even by mistake.
+struct IrisTrust {
+    _root: tempfile::TempDir,
+    trust: NativeFolderTrust,
+    base: PathBuf,
+    config: PathBuf,
+    /// The synthetic state file the writer would use for `config`.
+    state: PathBuf,
+    /// The home fallback file, which the exact grant must never use.
+    home_state: PathBuf,
+    work: PathBuf,
+}
+fn iris_trust_fixture() -> IrisTrust {
+    let root = tempfile::tempdir().unwrap();
+    let installed = root.path().join("installed");
+    std::fs::create_dir(&installed).unwrap();
+    let trial = root.path().join("trial");
+    std::fs::create_dir(&trial).unwrap();
+    let paths = RuntimePaths::trial(&trial, 49183, &installed).unwrap();
+    let base = visible_native_path(paths.root());
+    let home = base.join("vendor-home");
+    let config = base.join("claude-config");
+    let work = base.join("attempt").join("work");
+    for dir in [&home, &config, &work] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    let trust = NativeFolderTrust::new(paths, home.clone(), home);
+    IrisTrust {
+        state: trust
+            .config_path(
+                "claude",
+                &[format!("CLAUDE_CONFIG_DIR={}", config.display())],
+            )
+            .unwrap(),
+        home_state: trust.config_path("claude", &[]).unwrap(),
+        _root: root,
+        trust,
+        work: work.canonicalize().unwrap(),
+        base,
+        config,
+    }
+}
+fn iris_claude_key(path: &Path) -> String {
+    visible_native_path(path)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+fn iris_projects(state: &Path) -> serde_json::Map<String, serde_json::Value> {
+    let root: serde_json::Value = serde_json::from_slice(&std::fs::read(state).unwrap()).unwrap();
+    root["projects"].as_object().unwrap().clone()
+}
+#[test]
+fn iris_exact_claude_trust_writes_only_the_approved_folder() {
+    let f = iris_trust_fixture();
+    let other = r#"{"hasTrustDialogAccepted":false,"note":"synthetic"}"#;
+    std::fs::write(
+        &f.state,
+        format!(
+            r#"{{"synthetic_identity":"SYNTHETIC_PLACEHOLDER","projects":{{"Z:/synthetic/other":{other}}}}}"#
+        ),
+    )
+    .unwrap();
+    let env = vec![format!("CLAUDE_CONFIG_DIR={}", f.config.display())];
+    // The owner passes Rust's canonical (verbatim on Windows) spelling.
+    let result = f.trust.grant_exact_claude(&env, &f.work).unwrap();
+    let key = iris_claude_key(&f.work);
+    assert!(result.written);
+    assert_eq!(result.key, key);
+    let projects = iris_projects(&f.state);
+    assert_eq!(projects.len(), 2, "{projects:?}");
+    assert_eq!(projects[&key]["hasTrustDialogAccepted"], true);
+    assert_eq!(
+        projects["Z:/synthetic/other"],
+        serde_json::from_str::<serde_json::Value>(other).unwrap()
+    );
+    for parent in [f.work.parent().unwrap(), f.base.as_path()] {
+        assert!(!projects.contains_key(&iris_claude_key(parent)));
+    }
+    let text = std::fs::read_to_string(&f.state).unwrap();
+    assert!(text.contains("SYNTHETIC_PLACEHOLDER"));
+    assert!(!f.home_state.exists());
+    // Already trusted: no second write.
+    let again = f.trust.grant_exact_claude(&env, &f.work).unwrap();
+    assert!(!again.written);
+    assert_eq!(again.existing, "trusted");
+    assert_eq!(std::fs::read_to_string(&f.state).unwrap(), text);
+}
+#[test]
+fn iris_exact_claude_trust_refuses_repository_root_and_unanswered_entries() {
+    let f = iris_trust_fixture();
+    let env = vec![format!("CLAUDE_CONFIG_DIR={}", f.config.display())];
+    // Ordinary trust would widen to the repository root above the folder.
+    let git = f.work.parent().unwrap().join(".git");
+    std::fs::create_dir(&git).unwrap();
+    assert!(f.trust.grant_exact_claude(&env, &f.work).is_err());
+    assert!(!f.state.exists());
+    std::fs::remove_dir(&git).unwrap();
+    // An existing entry without an answer stays untrusted for Claude, so the
+    // exact grant refuses instead of reporting success.
+    let unanswered = format!(
+        r#"{{"projects":{{{}:{{"unknown":true}}}}}}"#,
+        serde_json::to_string(&iris_claude_key(&f.work)).unwrap()
+    );
+    std::fs::write(&f.state, &unanswered).unwrap();
+    assert!(f.trust.grant_exact_claude(&env, &f.work).is_err());
+    assert_eq!(std::fs::read_to_string(&f.state).unwrap(), unanswered);
+}
+#[test]
+fn iris_exact_claude_trust_requires_explicit_absolute_config_and_confined_folder() {
+    let f = iris_trust_fixture();
+    let config = f.config.display().to_string();
+    let cases = [
+        vec![],
+        vec!["CLAUDE_CONFIG_DIR=".into()],
+        vec!["CLAUDE_CONFIG_DIR=claude-config".into()],
+        vec![format!("claude_config_dir={config}")],
+        vec![
+            format!("CLAUDE_CONFIG_DIR={config}"),
+            format!("Claude_Config_Dir={config}"),
+        ],
+    ];
+    for env in cases {
+        assert!(
+            f.trust.grant_exact_claude(&env, &f.work).is_err(),
+            "{env:?}"
+        );
+        assert!(!f.state.exists(), "{env:?}");
+        assert!(!f.home_state.exists(), "{env:?}");
+    }
+    // A folder outside the trial root is refused before any write.
+    let outside = tempfile::tempdir().unwrap();
+    let env = vec![format!("CLAUDE_CONFIG_DIR={config}")];
+    assert!(
+        f.trust
+            .grant_exact_claude(&env, &outside.path().canonicalize().unwrap())
+            .is_err()
+    );
+    assert!(!f.state.exists());
+}

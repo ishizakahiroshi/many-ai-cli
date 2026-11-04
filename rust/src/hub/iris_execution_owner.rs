@@ -544,7 +544,66 @@ impl OwnerStore {
                 load(&db, &ticket.binding)?.ok_or_else(|| fail("STORAGE"))?;
             }
         }
+        if trust_table(&db)? {
+            let rows = sql(db.prepare("SELECT document,digest FROM trust_records"))?
+                .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+                .map_err(|_| fail("STORAGE"))?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(|_| fail("STORAGE"))?;
+            for (raw, digest) in rows {
+                let v = checked_document(&raw, &digest)?;
+                let ticket: OwnerTicket =
+                    serde_json::from_value(v["ticket"].clone()).map_err(|_| fail("STORAGE"))?;
+                if !trust_flags(&v) {
+                    return Err(fail("STORAGE"));
+                }
+                load(&db, &ticket.binding)?.ok_or_else(|| fail("STORAGE"))?;
+            }
+        }
         Ok(Self { db })
+    }
+    /// One folder-trust observation per attempt, for the real bounded launch
+    /// only: the exact approved folder, time and result, written before the
+    /// one-use spawn claim. Created on first use, so other stores keep their
+    /// exact schema. A record never changes owner or receipt authority and is
+    /// never replaced: re-entering with the same ticket conflicts.
+    pub fn record_folder_trust(&mut self, t: &OwnerTicket, document: &Value) -> Result<Value> {
+        if document["ticket"] != json!(t) || !trust_flags(document) {
+            return Err(fail("FOLDER_TRUST_RECORD"));
+        }
+        let tx = sql(self
+            .db
+            .transaction_with_behavior(TransactionBehavior::Immediate))?;
+        let r = bound(&tx, t)?;
+        if !r["claimed_session"].is_null() {
+            return Err(fail("FOLDER_TRUST_ORDER"));
+        }
+        sql(tx.execute_batch(TRUST_TABLE))?;
+        let b = &t.binding;
+        if trust_row(&tx, b)?.is_some() {
+            return Err(fail("FOLDER_TRUST_CONFLICT"));
+        }
+        let raw = document.to_string();
+        sql(tx.execute(
+            "INSERT INTO trust_records VALUES(?,?,?,?,?)",
+            params![
+                b.principal_id,
+                b.workspace_id,
+                b.attempt_id,
+                raw,
+                sha(raw.as_bytes())
+            ],
+        ))?;
+        sql(tx.commit())?;
+        Ok(document.clone())
+    }
+    /// The attempt's folder-trust record, or null when none was written.
+    pub fn query_folder_trust(&self, b: &Binding) -> Result<Value> {
+        check_binding(b)?;
+        let tx = sql(self.db.unchecked_transaction())?;
+        let value = trust_row(&tx, b)?.unwrap_or(Value::Null);
+        sql(tx.commit())?;
+        Ok(value)
     }
     /// Separate, append-only folder observations for collector grants. The
     /// table is created on first use, so stores without collector grants keep
@@ -897,6 +956,49 @@ fn folder_row(db: &Connection, b: &Binding, kind: &str) -> Result<Option<Value>>
     };
     let v = checked_document(&raw, &digest)?;
     if v["ticket"]["binding"] != json!(b) || v["phase"] != kind || !folder_flags(&v) {
+        return Err(fail("STORAGE"));
+    }
+    Ok(Some(v))
+}
+const TRUST_TABLE: &str = "CREATE TABLE IF NOT EXISTS trust_records(principal TEXT NOT NULL,workspace TEXT NOT NULL,attempt TEXT NOT NULL,document TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(principal,workspace,attempt),FOREIGN KEY(principal,workspace,attempt) REFERENCES owners(principal,workspace,attempt));";
+/// A trust record is an observation only: it grants no tool, risk
+/// confirmation or approval and never verifies effects or the task.
+fn trust_flags(v: &Value) -> bool {
+    v["kind"] == "folder_trust"
+        && v["scope"] == "approved-cwd-only"
+        && matches!(
+            v["result"].as_str(),
+            Some("written" | "already-trusted" | "failed")
+        )
+        && v["tool_grants"] == json!([])
+        && v["risk_confirmed"] == false
+        && v["effects_verified"] == false
+        && v["task_outcome_verified"] == false
+}
+fn trust_table(db: &Connection) -> Result<bool> {
+    let count: i64 = sql(db.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='trust_records'",
+        [],
+        |r| r.get(0),
+    ))?;
+    Ok(count == 1)
+}
+fn trust_row(db: &Connection, b: &Binding) -> Result<Option<Value>> {
+    if !trust_table(db)? {
+        return Ok(None);
+    }
+    let row: Option<(String, String)> = sql(db
+        .query_row(
+            "SELECT document,digest FROM trust_records WHERE principal=? AND workspace=? AND attempt=?",
+            params![b.principal_id, b.workspace_id, b.attempt_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional())?;
+    let Some((raw, digest)) = row else {
+        return Ok(None);
+    };
+    let v = checked_document(&raw, &digest)?;
+    if v["ticket"]["binding"] != json!(b) || !trust_flags(&v) {
         return Err(fail("STORAGE"));
     }
     Ok(Some(v))

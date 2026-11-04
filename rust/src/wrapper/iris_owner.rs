@@ -2,11 +2,13 @@
 //! before provider exec. The fixed operator manifest and durable Hub admission
 //! are both required; neither an environment value nor a spawn proof grants work.
 use crate::{
+    application::spawn_policy::NativeFolderTrust,
     hub::{
         iris_execution_folder as folder,
-        iris_execution_grants::{ApprovedGrant, GrantLoader},
+        iris_execution_grants::{ApprovedGrant, GrantLoader, LaunchMode},
         iris_execution_journal::Journal,
         iris_execution_mcp::parse_json,
+        iris_execution_owned::{real_bounded_binding, real_bounded_launch_admitted},
         iris_execution_owner::{OwnerStore, OwnerTicket, sha},
     },
     process::{
@@ -58,10 +60,93 @@ pub struct DurableExecutionOwner {
     ticket: OwnerTicket,
     grant: ApprovedGrant,
     store: Mutex<OwnerStore>,
+    trust: Option<NativeFolderTrust>,
 }
 impl DurableExecutionOwner {
     pub fn instruction_hash(&self) -> &str {
         &self.ticket.binding.instruction_hash
+    }
+    /// The same native Claude trust writer ordinary child launches use, built
+    /// by the caller from its explicit runtime paths and vendor home. It is
+    /// used only for the real bounded launch; without it that launch refuses.
+    pub fn with_folder_trust(mut self, trust: NativeFolderTrust) -> Self {
+        self.trust = Some(trust);
+        self
+    }
+    /// The first three conditions, from the freshly reloaded grant and this
+    /// ticket: the exact claude/claude-hiroshi pair, a collector payload and
+    /// bounded-edit. The fourth, an enabled current policy of the real bounded
+    /// profile, is checked in `trust_folder`; when it fails nothing is written
+    /// and the launch is refused. Codex, synthetic, the synthetic owned
+    /// profile and default launches never reach the writer.
+    fn wants_folder_trust(&self, live: &ApprovedGrant) -> bool {
+        real_bounded_binding(&self.ticket.binding)
+            && self.grant.payload.is_some()
+            && live.payload.is_some()
+            && self.grant.launch_mode == LaunchMode::BoundedEdit
+            && live.launch_mode == LaunchMode::BoundedEdit
+    }
+    /// Trust exactly the approved folder in the provider's own Claude config,
+    /// record target/time/result before the claim, and refuse on any failure.
+    fn trust_folder(
+        &self,
+        store: &mut OwnerStore,
+        ticket: &OwnerTicket,
+        process: &ProcessPlan,
+        at: u64,
+    ) -> io::Result<()> {
+        // The provider's exact environment: the wrapper builds a complete map.
+        let environment = process
+            .env
+            .iter()
+            .filter_map(|(key, value)| {
+                Some(format!("{}={}", key.to_str()?, value.as_ref()?.to_str()?))
+            })
+            .collect::<Vec<_>>();
+        // One trust decision per attempt, before its claim. A re-entry with
+        // the same ticket is refused before the writer is reached again.
+        if !store.query(&ticket.binding).map_err(|_| failure())?["claimed_session"].is_null()
+            || !store
+                .query_folder_trust(&ticket.binding)
+                .map_err(|_| failure())?
+                .is_null()
+        {
+            return Err(failure());
+        }
+        let target = self.grant.approved_cwd.to_string_lossy().into_owned();
+        let outcome = if !real_bounded_launch_admitted(&self.root, &ticket.binding, at) {
+            Err("FOLDER_TRUST_PROFILE")
+        } else {
+            match &self.trust {
+                None => Err("FOLDER_TRUST_UNAVAILABLE"),
+                Some(trust) => trust
+                    .grant_exact_claude(&environment, &self.grant.approved_cwd)
+                    .map_err(|_| "FOLDER_TRUST_WRITE"),
+            }
+        };
+        let (result, key, written, existing, reason) = match &outcome {
+            Ok(r) => (
+                if r.written {
+                    "written"
+                } else {
+                    "already-trusted"
+                },
+                json!(r.key),
+                r.written,
+                json!(r.existing),
+                Value::Null,
+            ),
+            Err(code) => ("failed", Value::Null, false, Value::Null, json!(code)),
+        };
+        let document = json!({"kind":"folder_trust","ticket":ticket,"target":target,
+            "key":key,"written":written,"existing":existing,"result":result,
+            "reason":reason,"observed_at_ms":at,"scope":"approved-cwd-only",
+            "tool_grants":[],"risk_confirmed":false,
+            "effects_verified":false,"task_outcome_verified":false});
+        store
+            .record_folder_trust(ticket, &document)
+            .map_err(|_| failure())?;
+        outcome.map(|_| ()).map_err(|_| failure())
     }
     /// Trusted local collector for the real bounded profile. It records the
     /// after snapshot and comparison, then builds the envelope itself from
@@ -232,6 +317,7 @@ impl DurableExecutionOwner {
             ticket,
             grant,
             store: Mutex::new(store),
+            trust: None,
         })
     }
 }
@@ -288,6 +374,12 @@ impl ExecutionOwnerObserver for DurableExecutionOwner {
             store
                 .record_folder(&ticket, "before", &document)
                 .map_err(|_| failure())?;
+        }
+        if self.wants_folder_trust(&live) {
+            // Immediately before the claim and spawn, after the baseline: a
+            // Claude config that happened to live inside the approved folder
+            // would show up as a change, never be hidden by the baseline.
+            self.trust_folder(&mut store, &ticket, process, at)?;
         }
         // The persisted one-use claim closes the crash/replay boundary before
         // factory.spawn. Re-entering with the same ticket is never a retry.
