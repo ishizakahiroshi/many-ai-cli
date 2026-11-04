@@ -1,8 +1,7 @@
 import { t } from '../i18n.js';
 import { escapeHtml, showToast } from './util.js';
 import { sessionStartups, terminalHasVisibleContent, type SessionStartup } from './session-startup.js';
-import { activeSessionId, terminals } from './state.js';
-import { setActiveTab } from './settings.js';
+import { terminals } from './state.js';
 import { providerIconHtml } from './provider-icon.js';
 import { uiButtonClass } from './ui-components.js';
 import { captureSessionListTab } from './session-list-tabs.js';
@@ -45,20 +44,35 @@ export function mountTerminalStartup(host: HTMLElement, id: number, startedAt: s
   }
   host.classList.add('session-startup-host'); mountStartupView(host, value.requestId);
 }
-export function beginSessionStartup(requestId: string, provider: string, name: string, tabId: string, review?: () => void): boolean {
+/** Where a launch's feedback went. The caller decides from this what to do with the form and with the new session. */
+export type StartupPlacement =
+  /** A startup pane in the open multi grid (or the user left this launch's box): close the form now, do not open the session later. */
+  | 'pane'
+  /** No pane: the new session's own terminal carries the feedback once it is opened (single view, per-session workspace). */
+  | 'terminal'
+  /** The open multi grid has no empty pane: say so, then open the session as usual. */
+  | 'no-space';
+/** The multi grid the user is working in. The single view and the per-session workspace (also a visible multi view) are not it. */
+function multiGridOpen(): boolean {
+  const multi = document.getElementById('multi-view');
+  return !!multi && !multi.hidden && multi.dataset.paneMode !== 'workspace';
+}
+export function beginSessionStartup(requestId: string, provider: string, name: string, tabId: string, review?: () => void): StartupPlacement {
   if (review) reviewActions.set(requestId, review);
   sessionStartups.begin(requestId, provider, name, tabId);
   slowTimers.set(requestId, setTimeout(() => { slowTimers.delete(requestId); sessionStartups.markSlow(requestId); }, 10000));
   // A confirmation may have stayed open while the user selected another box.
   // Keep its launch correlated to the captured tab, without taking over the new view.
-  if (captureSessionListTab() !== tabId) return true;
-  const manager = window.multiPaneManager;
-  if (!manager?.addStartup?.(requestId)) { sessionStartups.dismiss(requestId); return false; }
-  if (document.getElementById('multi-view')?.hidden) {
-    setActiveTab(activeSessionId, 'multi'); manager.picker?.hide();
-  }
-  return true;
+  if (captureSessionListTab() !== tabId) return 'pane';
+  // Only a multi grid the user already has open grows a pane. From the single view the launch stays there: splitting the
+  // terminal being looked at into a multi grid leaves the new session beside the old one in a view the user did not choose
+  // (bugfix_spawn-opens-multi-view_2026-11-04.md). The caller opens the session once registered, as before the startup pane existed.
+  if (!multiGridOpen()) return 'terminal';
+  if (!window.multiPaneManager?.addStartup?.(requestId)) { sessionStartups.dismiss(requestId); return 'no-space'; }
+  return 'pane';
 }
+/** Forget a launch that never got a visible place and never produced a session, so no stale request stays in the store. */
+export function dropSessionStartup(requestId: string): void { sessionStartups.dismiss(requestId); }
 export function noteSessionStartupOutcome(requestId: string, definiteFailure: boolean, detail = ''): void {
   const request = sessionStartups.requests.get(requestId);
   sessionStartups.outcome(requestId, definiteFailure, detail);

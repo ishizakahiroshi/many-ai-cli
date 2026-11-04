@@ -12,9 +12,14 @@ Release artifacts are published at
 
 - Allow editing quick commands by right-clicking their buttons.
 
-- Show new in-window CLI launches in their own pane immediately, then hand the
-  pane over to the correlated terminal when its first screen arrives. Other
-  panes remain usable, and saving launch preferences no longer delays display.
+- Show a "starting" state for new in-window CLI launches until the correlated
+  terminal's first screen arrives, and no longer hold the display for saving
+  launch preferences. A launch from the single view stays in the single view
+  and opens the new session there; it no longer turns the view into a split
+  multi grid. A launch from a multi grid that is already open shows the state
+  in its own pane, and the other panes remain usable.
+  While the starting screen is up, the session card shows the green spinning
+  ring instead of a static dot.
 
 - Add a trusted internal Iris dispatch coordinator with one-use durable claims,
   bounded startup queues and exact-session cancellation. Wrapper registration

@@ -80,12 +80,13 @@ test('actual startup reservation keeps the same focused session when grid growth
   assert.equal(manager.addStartup('synthetic-new'), true);
   assert.equal(manager.slots[focused]?.session.id, 4, 'input must remain on the same session after a new column is inserted');
 });
-function spawnFixture(options: { status?: number; pendingHttp?: boolean; rejectNetwork?: boolean } = {}) {
+function spawnFixture(options: { status?: number; pendingHttp?: boolean; rejectNetwork?: boolean; placement?: 'pane' | 'terminal' | 'no-space' } = {}) {
   // The filename below names the public UI module exercised by this fixture.
   const moduleSource = source('spawn-panel.ts'); // doxguard: allow panel
   const start = moduleSource.indexOf('  async function spawnSession()');
   const end = moduleSource.indexOf('\n  }', start) + 4;
   const no = () => {}; const store = new SessionStartupStore(); let resolveHttp: (value: any) => void = no;
+  const notices: string[] = [];
   const calls: string[] = []; const inputs: any = { 'spawn-provider': { value: 'claude' }, 'spawn-label': { value: 'Synthetic' }, 'spawn-permission-mode': { value: 'default' } };
   const context: any = { spawnLaunchSequence: 0, captureSpawnTab: () => 'tab-A', document: { getElementById: (id: string) => inputs[id] || { value: '' } },
     spawnCwdInput: { value: '/repos/example' }, spawnLaunchBlockReason: () => '', isPathMissing: () => false, commandMissingProviderIds: new Set(), spawnLaunchBtn: { disabled: false }, spawnModelInput: { value: '' },
@@ -93,15 +94,19 @@ function spawnFixture(options: { status?: number; pendingHttp?: boolean; rejectN
     getCachedSpawnModelGroups: () => [], isModelCompatibleWithProvider: () => true, resolveRoute: () => '', isCustomProviderValue: () => false,
     readSpawnDefaults: () => ({}), hasProviderBooleanSetting: () => false, spawnInitialPrompt: { value: '' }, selectedSubscriptionID: () => '', effortForSpawnBody: () => '', selectedEffort: () => '',
     claudeModelSelection: null, codexModelSelection: null, isClaudeHighRisk: () => false, spawnOrchestrationMode: false,
-    beginTrackedSpawn: () => 'A', beginSessionStartup: (id: string, provider: string, name: string, tab: string) => { calls.push('pane'); store.begin(id, provider, name, tab); return true; }, noteSessionStartupOutcome: (id: string, definite: boolean, detail: string) => store.outcome(id, definite, detail),
+    beginTrackedSpawn: () => 'A', beginSessionStartup: (id: string, provider: string, name: string, tab: string) => {
+      calls.push('pane'); store.begin(id, provider, name, tab);
+      const placement = options.placement || 'pane'; if (placement === 'no-space') store.dismiss(id); return placement;
+    }, noteSessionStartupOutcome: (id: string, definite: boolean, detail: string) => store.outcome(id, definite, detail),
+    dropSessionStartup: (id: string) => { calls.push('drop'); store.dismiss(id); },
     apiFetch: async () => { calls.push('http'); if (options.rejectNetwork) throw Error('synthetic disconnect'); if (options.pendingHttp) return new Promise(resolve => { resolveHttp = resolve; }); return { ok: (options.status || 200) === 200, status: options.status || 200 }; },
     saveCwdHistory: no, spawnSubscriptionRow: { hidden: true }, spawnIsolateWorktree: { checked: false }, spawnDelegation: { checked: false }, spawnRememberApprovalSettings: { checked: true },
     mergeProviderBooleanSetting: (value: any) => value, mergeApprovalSettings: (value: any) => value,
     saveSpawnSettings: () => { calls.push('preferences'); return new Promise(() => {}); }, newSessionPanel: { hidden: false }, setSpawnOrchestrationMode: no,
     waitForTrackedSpawn: () => { calls.push('legacy-wait'); return Promise.resolve([7]); }, activateSession: () => { calls.push('activate'); }, spawnErrorMessage: async () => 'synthetic rejection',
-    alert: () => { calls.push('alert'); }, showToast: no, t: (key: string) => key, window: {} };
+    alert: () => { calls.push('alert'); }, showToast: (text: string) => { notices.push(text); }, t: (key: string) => key, window: {} };
   runInNewContext(compile(moduleSource.slice(start, end)) + '\nglobalThis.spawn=spawnSession;', context);
-  return { context, calls, store, resolveHttp: (value: any) => resolveHttp(value) };
+  return { context, calls, store, notices, resolveHttp: (value: any) => resolveHttp(value) };
 }
 test('actual click paints pending UI before slow HTTP, and slow prefs do not hold completion', async () => {
   const fixture = spawnFixture({ pendingHttp: true }); const pending = fixture.context.spawn(); await tick();
@@ -133,10 +138,10 @@ test('actual view cleans failed reservations and does not take over a newer side
   const store = new SessionStartupStore(); let currentTab = 'tab-A', clears = 0, placements = 0, switches = 0; const notices: string[] = [];
   const context: any = { sessionStartups: store, captureSessionListTab: () => currentTab, setTimeout: () => 1, clearTimeout: () => clears++,
     window: { multiPaneManager: { addStartup: () => { placements++; return false; }, reconcileStartups: () => {} } },
-    document: { querySelectorAll: () => [], getElementById: () => ({ hidden: true }) }, setActiveTab: () => switches++, activeSessionId: 1, showToast: (text: string) => notices.push(text), t: (key: string) => key };
+    document: { querySelectorAll: () => [], getElementById: () => ({ hidden: false, dataset: {} }) }, setActiveTab: () => switches++, activeSessionId: 1, showToast: (text: string) => notices.push(text), t: (key: string) => key };
   runInNewContext(compile(source('session-startup-view.ts')) + '\nglobalThis.begin=beginSessionStartup;globalThis.outcome=noteSessionStartupOutcome;globalThis.timers=slowTimers;', context);
-  assert.equal(context.begin('A', 'claude', 'Claude Code', 'tab-A'), false); assert.equal(store.requests.size, 0); assert.equal(context.timers.size, 0); assert.equal(clears, 1);
-  currentTab = 'tab-B'; assert.equal(context.begin('B', 'claude', 'Claude Code', 'tab-A'), true);
+  assert.equal(context.begin('A', 'claude', 'Claude Code', 'tab-A'), 'no-space'); assert.equal(store.requests.size, 0); assert.equal(context.timers.size, 0); assert.equal(clears, 1);
+  currentTab = 'tab-B'; assert.equal(context.begin('B', 'claude', 'Claude Code', 'tab-A'), 'pane');
   assert.equal(placements, 1); assert.equal(switches, 0); assert.equal(store.requests.get('B')?.tabId, 'tab-A');
   context.outcome('B', true, 'synthetic refusal'); assert.equal(notices.length, 1); assert.match(notices[0], /synthetic refusal/);
   store.dismiss('B'); assert.equal(context.timers.size, 0); context.outcome('B', true, 'closed pane refusal'); assert.equal(notices.length, 2);
@@ -171,6 +176,57 @@ test('actual grid attachment creates the terminal when correlation arrives befor
   assert.deepEqual(events, ['feedback', 'ensure', 'lookup']);
   assert.equal(frames.length, 1); frames[0](); assert.equal(entry.everAttached, true); assert.deepEqual(events.slice(-2), ['open', 'flush']);
 });
+function viewFixture(multi: { hidden: boolean; paneMode?: string } | null) {
+  const store = new SessionStartupStore(); const log = { placements: 0, switches: 0 };
+  const context: any = { sessionStartups: store, captureSessionListTab: () => 'tab-A', setTimeout: () => 1, clearTimeout: () => {},
+    window: { multiPaneManager: { addStartup: () => { log.placements++; return true; }, reconcileStartups: () => {}, picker: { hide: () => {} } } },
+    document: { querySelectorAll: () => [], getElementById: () => multi && { hidden: multi.hidden, dataset: { paneMode: multi.paneMode } } },
+    setActiveTab: () => log.switches++, activeSessionId: 1, showToast: () => {}, t: (key: string) => key };
+  runInNewContext(compile(source('session-startup-view.ts')) + '\nglobalThis.begin=beginSessionStartup;', context);
+  return { store, log, begin: (id: string) => context.begin(id, 'claude', 'Claude Code', 'tab-A') };
+}
+test('launching from the single view never turns it into the multi view', () => {
+  // Closed multi view, the per-session workspace (also a visible multi view) and a page without the element.
+  for (const multi of [{ hidden: true }, { hidden: false, paneMode: 'workspace' }, null]) {
+    const fixture = viewFixture(multi); const placement = fixture.begin('S');
+    assert.equal(fixture.log.placements, 0, 'no startup pane may split the terminal the user is looking at');
+    assert.equal(fixture.log.switches, 0, 'the tab must not be switched to the multi view');
+    assert.equal(placement, 'terminal');
+    assert.equal(fixture.store.requests.get('S')?.phase, 'starting', 'the launch stays tracked for the new terminal');
+  }
+});
+test('an already open multi grid still receives its own startup pane without a tab switch', () => {
+  const fixture = viewFixture({ hidden: false, paneMode: 'overview' });
+  assert.equal(fixture.begin('G'), 'pane'); assert.equal(fixture.log.placements, 1); assert.equal(fixture.log.switches, 0);
+});
+test('a pending launch never opens a closed multi view from the pane manager', () => {
+  const text = source('multi-pane.ts'), start = text.indexOf('  addStartup('), end = text.indexOf('\n  reconcileStartups(', start);
+  const context: any = { window: { currentFlexiblePaneView: () => ({ kind: 'session', sessionId: 1, startedAt: 'synthetic' }) } };
+  runInNewContext(compile('class Manager {' + text.slice(start, end) + '}\nglobalThis.Manager=Manager;'), context);
+  const manager = new context.Manager(); manager.area = { hidden: true }; manager._contentForPayload = (value: any) => value;
+  const touched: string[] = [];
+  manager.setWorkspaceSession = () => touched.push('workspace'); manager.beginAutoSplit = () => { touched.push('split'); return true; };
+  manager._addContent = () => { touched.push('add'); return true; };
+  assert.equal(manager.addStartup('synthetic-new'), false); assert.deepEqual(touched, []);
+});
+test('single-view launch keeps the form until HTTP succeeds, then opens the new session as before', async () => {
+  const fixture = spawnFixture({ pendingHttp: true, placement: 'terminal' }); const pending = fixture.context.spawn(); await tick();
+  assert.equal(fixture.context.newSessionPanel.hidden, false, 'a refusal must still find the form with its inputs');
+  fixture.resolveHttp({ ok: true, status: 200 }); await pending; await tick();
+  assert.equal(fixture.context.newSessionPanel.hidden, true);
+  assert.ok(fixture.calls.includes('legacy-wait')); assert.ok(fixture.calls.includes('activate'));
+  assert.ok(!fixture.notices.includes('startup_no_space'), 'having no pane in the single view is not a lack of space');
+});
+test('single-view refusal and lost response report as before and forget the unplaced launch', async () => {
+  const refused = spawnFixture({ status: 403, placement: 'terminal' }); await refused.context.spawn();
+  assert.ok(refused.calls.includes('alert')); assert.equal(refused.store.requests.size, 0); assert.equal(refused.context.newSessionPanel.hidden, false);
+  const lost = spawnFixture({ rejectNetwork: true, placement: 'terminal' }); await lost.context.spawn();
+  assert.ok(lost.calls.includes('alert')); assert.equal(lost.store.requests.size, 0); assert.equal(lost.calls.filter(value => value === 'http').length, 1);
+});
+test('a full multi grid says why no pane appeared and still opens the new session', async () => {
+  const fixture = spawnFixture({ placement: 'no-space' }); await fixture.context.spawn();
+  assert.ok(fixture.notices.includes('startup_no_space')); assert.ok(fixture.calls.includes('activate'));
+});
 test('older accepted HTTP never clears or hides a reopened form or captures its new toggles', async () => {
   const fixture = spawnFixture({ pendingHttp: true }); let persisted: any; fixture.context.saveSpawnSettings = (value: any) => { persisted = value; return Promise.resolve(); };
   fixture.context.mergeProviderBooleanSetting = (base: any, _provider: string, values: any) => ({ ...base, ...values });
@@ -179,4 +235,50 @@ test('older accepted HTTP never clears or hides a reopened form or captures its 
   fixture.resolveHttp({ ok: true, status: 200 }); await pending;
   assert.equal(fixture.context.newSessionPanel.hidden, false); assert.equal(fixture.context.spawnInitialPrompt.value, 'new unsent prompt');
   assert.equal(persisted.isolate_worktree, false);
+});
+function decorationFixture(store: SessionStartupStore, stopped = false) {
+  const text = source('session-list.ts'); const start = text.indexOf('export function stateActivityDecoration('), end = text.indexOf('\n// provider アイコンの定義', start);
+  const labels: Record<string, string> = { running: '実行中', standby: 'スタンバイ', error: 'エラー' };
+  const context: any = { sessionStartups: store, stateLabel: (state: string) => labels[state] || state, ti18n: (_key: string, fallback: string) => fallback,
+    pendingSpawnConfirmationCount: () => 0, isSessionListStopped: () => stopped };
+  runInNewContext(compile(text.slice(start, end) + '\nglobalThis.decorate=stateActivityDecoration;'), context);
+  // The function runs in another VM realm; copy the result so deepEqual compares plain values.
+  return (session: any) => JSON.parse(JSON.stringify(context.decorate(session))) as { className: string; iconKind: string; label: string };
+}
+test('a session whose startup screen is up draws the green spinning ring even while the Hub still says standby', () => {
+  const store = new SessionStartupStore(); const decorate = decorationFixture(store);
+  const session = { id: 7, started_at: 'synthetic-start', state: 'standby' };
+  assert.deepEqual(decorate(session), { className: '', iconKind: 'dot', label: 'スタンバイ' }, 'no launch is tracked: unchanged');
+  store.begin('A', 'claude', 'Claude Code', 'tab-A'); assert.equal(decorate(session).iconKind, 'dot', 'a launch not yet registered has no card to draw');
+  store.bind('A', identity);
+  const starting = decorate(session);
+  assert.equal(starting.iconKind, 'ring'); assert.equal(starting.className, 'running'); assert.match(starting.label, /実行中/); assert.match(starting.label, /Starting/);
+  assert.equal(decorate({ ...session, started_at: 'reused-id-new-lifecycle' }).iconKind, 'dot', 'another lifecycle of the same numeric id is not this launch');
+  assert.equal(decorate({ ...session, id: 8 }).iconKind, 'dot');
+  store.outputPainted(identity); assert.deepEqual(decorate(session), { className: '', iconKind: 'dot', label: 'スタンバイ' }, 'the first screen ends it');
+});
+test('the startup ring never hides approval, failure or a launch that did not start', () => {
+  const store = new SessionStartupStore(); const decorate = decorationFixture(store);
+  store.begin('A', 'claude', 'Claude Code', 'tab-A'); store.bind('A', identity);
+  const session = { id: 7, started_at: 'synthetic-start', state: 'standby' };
+  assert.equal(decorate({ ...session, awaiting_approval: true }).iconKind, 'flag');
+  assert.equal(decorate({ ...session, awaiting_user: true }).iconKind, 'keyboard');
+  assert.equal(decorate({ ...session, state: 'error' }).iconKind, 'cross');
+  assert.equal(decorate({ ...session, state: 'running' }).className, '', 'a running session keeps its usual ring');
+  store.snapshot('hub-A', [{ id: 7, started_at: 'synthetic-start', state: 'error' }]);
+  assert.equal(store.requests.get('A')?.phase, 'failed'); assert.equal(decorate(session).iconKind, 'dot', 'a failed launch is not drawn as running');
+  const stopped = decorationFixture(new SessionStartupStore(), true);
+  assert.equal(stopped(session).className, 'stopped-unseen', 'without a launch the finished-not-opened dot is unchanged');
+});
+test('cards are redrawn when a startup screen begins and ends, and only then', () => {
+  const text = source('session-list.ts'); const start = text.indexOf('let startingCards'), end = text.indexOf('\nexport function renderSessionStateUpdate', start);
+  const store = new SessionStartupStore(); const redrawn: number[] = [];
+  runInNewContext(compile(text.slice(start, end)), { sessionStartups: store, updateSessionCardStateInPlace: (id: number) => { redrawn.push(id); return true; } });
+  store.begin('A', 'claude', 'Claude Code', 'tab-A'); assert.deepEqual(redrawn, [], 'not registered yet: there is no card');
+  store.bind('A', identity); assert.deepEqual(redrawn, [7]);
+  store.begin('B', 'codex', 'Codex', 'tab-A'); store.markSlow('A'); assert.deepEqual(redrawn, [7], 'unrelated store changes do not redraw');
+  store.outputPainted(identity); assert.deepEqual(redrawn, [7, 7], 'first screen returns the card to the Hub state');
+  store.outputPainted(identity); assert.deepEqual(redrawn, [7, 7]);
+  const other = { id: 9, startedAt: 'second' }; store.bind('B', other); assert.deepEqual(redrawn, [7, 7, 9]);
+  store.dismiss('B'); assert.deepEqual(redrawn, [7, 7, 9, 9], 'a dropped launch also returns its card');
 });

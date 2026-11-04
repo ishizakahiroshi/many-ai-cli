@@ -1,5 +1,5 @@
 import { beginTrackedSpawn, captureSpawnTab, waitForTrackedSpawn } from './session-spawn-tracker.js';
-import { beginSessionStartup, noteSessionStartupOutcome } from './session-startup-view.js';
+import { beginSessionStartup, dropSessionStartup, noteSessionStartupOutcome } from './session-startup-view.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { apiFetch, escapeHtml, showToast, token } from './util.js';
@@ -2951,13 +2951,16 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
       const submittedClaudeSelection = claudeModelSelection;
       startupRequest = spawnRequest;
       if (openTarget !== 'detached') {
-        startupPlaced = beginSessionStartup(spawnRequest, provider, providerName, spawnTabId, () => {
+        const placement = beginSessionStartup(spawnRequest, provider, providerName, spawnTabId, () => {
           // Reveal the retained form directly; opening it afresh reloads defaults
           // and would discard the rejected launch's inputs/initial prompt.
           newSessionPanel.hidden = false; updateSpawnLaunchButton(); spawnCwdInput.focus();
         });
+        // 'terminal' (single view) has no pane to wait in: the form stays until the HTTP answer and the
+        // registered session is opened below, as before; its own terminal then carries the startup feedback.
+        startupPlaced = placement === 'pane';
         if (startupPlaced) newSessionPanel.hidden = true;
-        else showToast(t('startup_no_space'));
+        else if (placement === 'no-space') showToast(t('startup_no_space'));
       }
       const res = await apiFetch('/api/spawn', {
         method: 'POST',
@@ -3075,17 +3078,17 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
         } else if (!startupPlaced) {
           void waitForTrackedSpawn(spawnRequest).then(ids => {
             if (ids.length) activateSession(ids[0]);
-            else showToast(t('spawn_correlation_unavailable'));
+            else { dropSessionStartup(spawnRequest); showToast(t('spawn_correlation_unavailable')); }
           });
         }
       } else {
         const detail = await spawnErrorMessage(res);
         if (startupPlaced) noteSessionStartupOutcome(spawnRequest, res.status >= 400 && res.status < 500, detail);
-        else alert(t('spawn_failed') + detail);
+        else { dropSessionStartup(spawnRequest); alert(t('spawn_failed') + detail); }
       }
     } catch (e) {
       if (startupPlaced) noteSessionStartupOutcome(startupRequest, false);
-      else alert(t('spawn_failed') + e.message);
+      else { dropSessionStartup(startupRequest); alert(t('spawn_failed') + e.message); }
     } finally {
       updateSpawnLaunchButton();
     }

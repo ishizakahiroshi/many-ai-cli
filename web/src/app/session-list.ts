@@ -1,5 +1,6 @@
 import { initializeSessionListTabs, renderSessionListTabs, isSessionInSelectedListTab, preserveSessionListSelection, visibleSessionListTree, revealSessionListOwner, sessionListScrollBeforeRender, sessionListScrollAfterRender, isSessionListStopped, noteSessionListOpened } from './session-list-tabs.js';
 import { isApprovalPending } from './approval-store.js';
+import { sessionStartups } from './session-startup.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { apiFetch, escapeHtml, ti18n } from './util.js';
@@ -439,6 +440,16 @@ export function stateActivityDecoration(s) {
     return { className: 'workflow-active', iconKind: 'ring', label: `${baseLabel}: ${activityLabel}` };
   }
   if (state === 'error' || state === 'disconnected') return { className: '', iconKind: 'cross', label: baseLabel };
+  // 「起動中…」の表示が端末の上に出ている間（登録済みで、最初の画面がまだ出ていない）は、
+  // Hub がスタンバイと返していても実行中の回る輪で描く。起動中は最初の画面が出るまで出力が
+  // 無い・途切れることがあり、Hub の「直近 3 秒に出力があるか」だけに任せると、起動を待って
+  // いる最中のカードが静止した ● になる。表示が消える（画面が出る・失敗する）と、また Hub の
+  // 状態だけで描く。クラス名に running を付けるのは、回転と緑がその名前の CSS にあるため
+  // （カード・セッション帯・ステータスバーの 3 か所とも同じ名前を見る）。
+  if (sessionStartups.forSession({ id: Number(s.id), startedAt: String(s.started_at || '') })?.phase === 'starting') {
+    const activityLabel = ti18n('startup_pending', 'Starting…');
+    return { className: 'running', iconKind: 'ring', label: `${stateLabel('running')}: ${activityLabel}` };
+  }
   // 作業を終えて止まった後、まだ開いていないセッションは同じ ● を黄色で描く（開くと従来の
   // グレーに戻る）。タブの枠付きの数字と同じ記録（session-list-tabs.ts）を見るので、
   // タブの数字とカードの黄色い●は常に同じセッションを指す。
@@ -1848,6 +1859,22 @@ export function updateSessionCardStateInPlace(id) {
   renderSessionStrip();
   return true;
 }
+
+// 「起動中…」の表示が始まる・終わるとき、そのセッションのカードを描き直す。起動中のカードは
+// Hub の状態ではなく起動の記録（sessionStartups）で描き分けるため、Hub から次の状態が届く
+// のを待つと、最初の画面が出た後も回る輪のまま、または起動中なのに静止した ● のままになる。
+let startingCards = new Map<string, number>();
+sessionStartups.subscribe(() => {
+  const now = new Map<string, number>();
+  for (const request of sessionStartups.requests.values()) {
+    if (request.session && request.phase === 'starting') now.set(`${request.session.id}:${request.session.startedAt}`, request.session.id);
+  }
+  const changed = new Set<number>();
+  for (const [key, id] of now) if (!startingCards.has(key)) changed.add(id);
+  for (const [key, id] of startingCards) if (!now.has(key)) changed.add(id);
+  startingCards = now;
+  for (const id of changed) updateSessionCardStateInPlace(id);
+});
 
 export function renderSessionStateUpdate(id) {
   renderSummaryAndNotifications();

@@ -1047,22 +1047,10 @@ export class MultiPaneManager {
   addStartup(requestId) {
     const content = this._contentForPayload({ kind: 'startup', requestId });
     if (!content) return false;
-    const open = this.area && !this.area.hidden;
+    // Only a multi grid the user already has open may grow. Opening one from the single view leaves the new
+    // session beside the old one in a view nobody chose (bugfix_spawn-opens-multi-view_2026-11-04.md).
+    if (!this.area || this.area.hidden) return false;
     const previous = this.slots[this.focusedIdx]?.session;
-    if (!open) {
-      this.setWorkspaceSession(null);
-      const existing = (window as any).currentFlexiblePaneView?.();
-      if (existing && this.beginAutoSplit(existing, content)) {
-        this.focusedIdx = 0; this.mobileActiveSlot = 1;
-        return true;
-      }
-      if (!existing) {
-        this.cols = 1; this.rows = 1; this.colFracs = [1]; this.rowFracs = [1];
-        this.customLayouts[this._layoutKey()] = { cols: 1, rows: 1, colFracs: [1], rowFracs: [1], slots: [content], autoSplit: true };
-        this.focusedIdx = this.mobileActiveSlot = 0; this._saveCustomLayouts();
-        return true;
-      }
-    }
     const added = this._addContent(content, undefined);
     if (added && previous) {
       const previousIdx = this.slots.findIndex(slot => slot?.session?.id === previous.id &&
