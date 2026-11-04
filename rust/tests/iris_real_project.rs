@@ -1119,6 +1119,19 @@ mod native {
                 "write" => std::fs::write(target, op["body"].as_str().unwrap()).unwrap(),
                 "mkdir" => std::fs::create_dir_all(target).unwrap(),
                 "remove" => std::fs::remove_file(target).unwrap(),
+                "rmdir" => std::fs::remove_dir_all(target).unwrap(),
+                "junction" => {
+                    // mklink reads a `/` in the link path as a switch.
+                    let link = op["path"].as_str().unwrap().replace('/', "\\");
+                    let status = std::process::Command::new("cmd")
+                        .args(["/C", "mklink", "/J"])
+                        .arg(link)
+                        .arg(op["target"].as_str().unwrap())
+                        .stdout(std::process::Stdio::null())
+                        .status()
+                        .unwrap();
+                    assert!(status.success());
+                }
                 "sleep" => std::thread::sleep(Duration::from_millis(op["ms"].as_u64().unwrap())),
                 other => panic!("unknown synthetic op {other}"),
             }
@@ -1131,6 +1144,9 @@ mod native {
     }
     fn mkdir(path: &str) -> Value {
         json!({"op":"mkdir","path":path})
+    }
+    fn rmdir(path: &str) -> Value {
+        json!({"op":"rmdir","path":path})
     }
     fn seed_project(dir: &Path) {
         std::fs::create_dir_all(dir.join("src")).unwrap();
@@ -1238,7 +1254,6 @@ mod native {
                 "PROTECTED_NAME",
             ),
             ("stream", json!([write("src/a.py:hidden", "x")]), "STREAM"),
-            ("new folder", json!([mkdir("src/new")]), "NOT_PLAIN_FILE"),
         ];
         let mut counted = 0;
         for (name, plan, code) in cases {
@@ -1259,7 +1274,153 @@ mod native {
             assert_eq!(v["folder_reason"], code, "{name}");
             counted += 1;
         }
-        println!("C2 unexpected cases={counted}");
+        // A new plain folder under an allowed path was `NOT_PLAIN_FILE` before
+        // the 2026-11-04 contract change; it is now a scoped change.
+        let f = Native::new(seed_project, &["src"], &[]);
+        let (result, launches) = run(&f, json!([mkdir("src/new")])).await;
+        result.unwrap();
+        assert_eq!(launches, 1);
+        let v = f.verification().await;
+        assert_record(&v);
+        assert_eq!(v["folder_effects"], SCOPED_CHANGE, "{v}");
+        assert_eq!(v["folder_reason"], Value::Null);
+        assert_eq!(v["change_count"], 1);
+        println!("C2 unexpected cases={counted} in-scope new folder=scoped");
+    }
+
+    /// The case A pytest pattern: `--basetemp=.pytest-tmp` creates several
+    /// nested folders with files and removes earlier ones. With `.pytest-tmp/`
+    /// allowed, every plain folder change is scoped and listed as `kind: dir`.
+    #[tokio::test]
+    async fn folders_under_allowed_paths_are_scoped_and_listed() {
+        let seed = |w: &Path| {
+            seed_project(w);
+            std::fs::create_dir_all(w.join(".pytest-tmp/old/deep")).unwrap();
+            std::fs::write(w.join(".pytest-tmp/old/deep/f.txt"), b"old\n").unwrap();
+        };
+        let f = Native::new(seed, &["src", ".pytest-tmp/"], &[TOOL_A]);
+        let plan = json!([
+            mkdir(".pytest-tmp/basetemp/test_a0/sub"),
+            write(".pytest-tmp/basetemp/test_a0/sub/out.txt", "out\n"),
+            // Made and removed during the run: not a difference at all.
+            mkdir(".pytest-tmp/basetemp/gone/inner"),
+            rmdir(".pytest-tmp/basetemp/gone"),
+            rmdir(".pytest-tmp/old"),
+            mkdir("src/new"),
+        ]);
+        let (result, launches) = run(&f, plan).await;
+        result.unwrap();
+        assert_eq!(launches, 1);
+        let (owner, folder) = f.record();
+        let collection = &folder["collection"];
+        assert_eq!(collection["effects"], SCOPED_CHANGE, "{collection}");
+        assert_eq!(collection["reason"], Value::Null);
+        assert_eq!(owner["outcome_receipt"]["reported_effects"], SCOPED_CHANGE);
+        let bytes = std::fs::read(f.artifact("task-result.json.changes.json")).unwrap();
+        assert_eq!(collection["changes_sha256"], sha(&bytes));
+        let list: Value = serde_json::from_slice(&bytes).unwrap();
+        let changes = list["changes"].as_array().unwrap();
+        let dir = |path: &str, change: &str| {
+            json!({"path":path,"change":change,"kind":"dir","before_size":
+                if change == "removed" { json!(0) } else { Value::Null },
+                "before_sha256":null,
+                "after_size": if change == "added" { json!(0) } else { Value::Null },
+                "after_sha256":null})
+        };
+        for expected in [
+            dir(".pytest-tmp/basetemp", "added"),
+            dir(".pytest-tmp/basetemp/test_a0", "added"),
+            dir(".pytest-tmp/basetemp/test_a0/sub", "added"),
+            dir(".pytest-tmp/old", "removed"),
+            dir(".pytest-tmp/old/deep", "removed"),
+            dir("src/new", "added"),
+        ] {
+            assert!(changes.contains(&expected), "{expected} in {changes:?}");
+        }
+        assert!(
+            changes.contains(&json!({"path":".pytest-tmp/old/deep/f.txt",
+            "change":"removed","kind":"file","before_size":4,"before_sha256":sha(b"old\n"),
+            "after_size":null,"after_sha256":null}))
+        );
+        assert!(
+            changes
+                .iter()
+                .any(|c| c["path"] == ".pytest-tmp/basetemp/test_a0/sub/out.txt"
+                    && c["change"] == "added"
+                    && c["kind"] == "file")
+        );
+        assert!(
+            !changes
+                .iter()
+                .any(|c| c["path"].as_str().unwrap().contains("gone"))
+        );
+        assert_eq!(changes.len(), 8, "{changes:?}");
+        assert_eq!(collection["change_count"], 8);
+        let v = f.verification().await;
+        assert_record(&v);
+        assert_eq!(v["folder_effects"], SCOPED_CHANGE);
+        assert_eq!(v["folder_reason"], Value::Null);
+        assert_eq!(v["change_count"], 8);
+        println!(
+            "C2 folders scoped: effects={} change_count={}",
+            v["folder_effects"], v["change_count"]
+        );
+    }
+
+    /// A plain folder added or removed outside every allowed path stays
+    /// unexpected, with the scope reason.
+    #[tokio::test]
+    async fn folders_outside_allowed_paths_stay_unexpected() {
+        let cases = [
+            ("added outside", json!([mkdir("docs/new")])),
+            ("removed outside", json!([rmdir(".pytest-tmp")])),
+            ("sibling prefix", json!([mkdir("src2")])),
+        ];
+        let mut counted = 0;
+        for (name, plan) in cases {
+            let f = Native::new(seed_project, &["src"], &[]);
+            let (result, launches) = run(&f, plan).await;
+            result.unwrap();
+            assert_eq!(launches, 1, "{name}");
+            let v = f.verification().await;
+            assert_record(&v);
+            assert_eq!(v["folder_effects"], UNEXPECTED_CHANGE, "{name}");
+            assert_eq!(v["folder_reason"], "OUT_OF_SCOPE", "{name}");
+            counted += 1;
+        }
+        println!("C2 folders outside unexpected={counted}");
+    }
+
+    /// A junction is a link, never a plain folder, even under an allowed path.
+    #[tokio::test]
+    async fn junction_under_allowed_path_stays_unexpected() {
+        let mut counted = 0;
+        for path in ["src/j", ".pytest-tmp/j"] {
+            let f = Native::new(seed_project, &["src", ".pytest-tmp/"], &[TOOL_A]);
+            let outside = f.work.path().join("outside");
+            std::fs::create_dir_all(&outside).unwrap();
+            let plan = json!([{"op":"junction","path":path,"target":outside}]);
+            let (result, launches) = run(&f, plan).await;
+            result.unwrap();
+            assert_eq!(launches, 1, "{path}");
+            let (_, folder) = f.record();
+            assert_eq!(folder["collection"]["effects"], UNEXPECTED_CHANGE, "{path}");
+            // The junction really exists and is listed as a link.
+            let bytes = std::fs::read(f.artifact("task-result.json.changes.json")).unwrap();
+            let list: Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(
+                list["changes"],
+                json!([{"path":path,"change":"added","kind":"link","before_size":null,
+                    "before_sha256":null,"after_size":0,"after_sha256":null}]),
+                "{path}"
+            );
+            let v = f.verification().await;
+            assert_record(&v);
+            assert_eq!(v["folder_effects"], UNEXPECTED_CHANGE, "{path}");
+            assert_eq!(v["folder_reason"], "LINK", "{path}");
+            counted += 1;
+        }
+        println!("C2 junction unexpected={counted}");
     }
 
     #[tokio::test]

@@ -569,10 +569,13 @@ fn in_scope(path: &str, allowed: &[String]) -> bool {
 
 /// Effects of a real project run. `NO_CHANGE` when nothing differs;
 /// `SCOPED_CHANGE` only when every difference is the addition, modification
-/// (content only) or removal of a plain single-link file under an allowed
-/// path; otherwise `UNEXPECTED_CHANGE` with the first reason code in path
-/// order. Directories, links, streams, attribute changes, hard links and
-/// protected names are never scoped.
+/// (content only) or removal of a plain single-link file, or the addition or
+/// removal of a plain folder, under an allowed path; otherwise
+/// `UNEXPECTED_CHANGE` with the first reason code in path order. A plain
+/// folder is a `dir` entry, which is never a link, junction or other reparse
+/// point (those are `link`). Links, streams, other entry kinds, kind changes,
+/// attribute changes (of files or folders), hard links and protected names
+/// are never scoped.
 pub fn classify(
     before: &[FolderEntry],
     after: &[FolderEntry],
@@ -591,13 +594,17 @@ pub fn classify(
         }
         changed = true;
         let entries = [o, n];
+        // A plain folder added or removed (not modified, not retyped) is
+        // judged by scope like a file.
+        let folder_added_or_removed =
+            matches!((o, n), (Some(e), None) | (None, Some(e)) if e.kind == "dir");
         let reason = if has_protected_component(path) {
             Some("PROTECTED_NAME")
         } else if entries.iter().flatten().any(|e| e.kind == "stream") {
             Some("STREAM")
         } else if entries.iter().flatten().any(|e| e.kind == "link") {
             Some("LINK")
-        } else if entries.iter().flatten().any(|e| e.kind != "file") {
+        } else if !folder_added_or_removed && entries.iter().flatten().any(|e| e.kind != "file") {
             Some(
                 if matches!((o, n), (Some(a), Some(b)) if a.kind == b.kind) {
                     "ATTRIBUTES"
@@ -605,7 +612,7 @@ pub fn classify(
                     "NOT_PLAIN_FILE"
                 },
             )
-        } else if n.is_some_and(|e| e.links != 1) {
+        } else if n.is_some_and(|e| e.kind == "file" && e.links != 1) {
             Some("HARD_LINK")
         } else if matches!((o, n), (Some(a), Some(b)) if a.attributes != b.attributes) {
             Some("ATTRIBUTES")
@@ -765,9 +772,27 @@ mod tests {
             after.push(extra);
             classify(&base, &after, &[".".to_string()])
         };
+        // A plain folder under an allowed path is scoped (2026-11-04).
         assert_eq!(
             unexpected(entry("src/new", "dir", 0, 0, None)),
+            (SCOPED_CHANGE, None)
+        );
+        // Any other non-file entry, and a kind change, stay unexpected.
+        assert_eq!(
+            unexpected(entry("src/dev", "other", 0, 0, None)),
             (UNEXPECTED_CHANGE, Some("NOT_PLAIN_FILE"))
+        );
+        let mut retyped = base.clone();
+        retyped[2] = entry("src/a.py", "dir", 0, 0, None);
+        assert_eq!(
+            classify(&base, &retyped, &[".".to_string()]),
+            (UNEXPECTED_CHANGE, Some("NOT_PLAIN_FILE"))
+        );
+        let mut folder_hidden = base.clone();
+        folder_hidden[1].attributes |= 0x2;
+        assert_eq!(
+            classify(&base, &folder_hidden, &[".".to_string()]),
+            (UNEXPECTED_CHANGE, Some("ATTRIBUTES"))
         );
         assert_eq!(
             unexpected(entry("src/l", "link", 0, 0, None)),
@@ -833,15 +858,89 @@ mod tests {
             classify(&base, &sibling, &allowed),
             (UNEXPECTED_CHANGE, Some("OUT_OF_SCOPE"))
         );
-        // Shared contract: only plain files are scoped, so a new folder
-        // under an allowed path (pytest's per-test basetemp folders) is
-        // unexpected. Recorded here so a contract change is visible.
+        // A new plain folder under an allowed path (pytest's per-test
+        // basetemp folders) is scoped since 2026-11-04.
         let mut folder = base.clone();
         folder.push(entry(".pytest-tmp/test0", "dir", 0, 0, None));
-        assert_eq!(
-            classify(&base, &folder, &allowed),
-            (UNEXPECTED_CHANGE, Some("NOT_PLAIN_FILE"))
+        assert_eq!(classify(&base, &folder, &allowed), (SCOPED_CHANGE, None));
+    }
+
+    #[test]
+    fn plain_folders_under_allowed_paths_are_scoped_and_listed() {
+        let base = vec![
+            entry("", "dir", 0, 0, None),
+            entry(".pytest-tmp", "dir", 0, 0, None),
+            entry(".pytest-tmp/old", "dir", 0, 0, None),
+            entry(".pytest-tmp/old/f.txt", "file", 1, 1, Some(&"a".repeat(64))),
+            entry("docs", "dir", 0, 0, None),
+            entry("src", "dir", 0, 0, None),
+        ];
+        let allowed = vec!["src".to_string(), ".pytest-tmp/".to_string()];
+        // Nested additions with a file, and a removal of a folder with its file.
+        let mut after: Vec<_> = base
+            .iter()
+            .filter(|e| !e.path.starts_with(".pytest-tmp/old"))
+            .cloned()
+            .collect();
+        after.push(entry(".pytest-tmp/basetemp", "dir", 0, 0, None));
+        after.push(entry(".pytest-tmp/basetemp/t0", "dir", 0, 0, None));
+        after.push(entry(".pytest-tmp/basetemp/t0/sub", "dir", 0, 0, None));
+        after.push(entry(
+            ".pytest-tmp/basetemp/t0/sub/o.txt",
+            "file",
+            1,
+            1,
+            Some(&"b".repeat(64)),
+        ));
+        after.push(entry("src/new", "dir", 0, 0, None));
+        after.sort_by(|a, b| a.path.cmp(&b.path));
+        assert_eq!(classify(&base, &after, &allowed), (SCOPED_CHANGE, None));
+        let records = change_records(&base, &after);
+        assert_eq!(records.len(), 7, "{records:?}");
+        assert!(
+            records.contains(&json!({"path":".pytest-tmp/basetemp/t0","change":"added",
+            "kind":"dir","before_size":null,"before_sha256":null,"after_size":0,
+            "after_sha256":null}))
         );
+        assert!(
+            records.contains(&json!({"path":".pytest-tmp/old","change":"removed",
+            "kind":"dir","before_size":0,"before_sha256":null,"after_size":null,
+            "after_sha256":null}))
+        );
+        assert_eq!(
+            records.iter().filter(|r| r["kind"] == "dir").count(),
+            5,
+            "{records:?}"
+        );
+        // Outside every allowed path: still unexpected, for scope.
+        let mut outside = base.clone();
+        outside.push(entry("docs/new", "dir", 0, 0, None));
+        assert_eq!(
+            classify(&base, &outside, &allowed),
+            (UNEXPECTED_CHANGE, Some("OUT_OF_SCOPE"))
+        );
+        let removed: Vec<_> = base.iter().filter(|e| e.path != "docs").cloned().collect();
+        assert_eq!(
+            classify(&base, &removed, &allowed),
+            (UNEXPECTED_CHANGE, Some("OUT_OF_SCOPE"))
+        );
+        // A link (junction or other reparse point) is never a plain folder.
+        let mut link = base.clone();
+        link.push(entry(".pytest-tmp/j", "link", 0, 0, None));
+        assert_eq!(
+            classify(&base, &link, &allowed),
+            (UNEXPECTED_CHANGE, Some("LINK"))
+        );
+        // A protected folder name under an allowed path stays unexpected.
+        for name in ["src/.claude", ".pytest-tmp/.git"] {
+            let mut protected = base.clone();
+            protected.push(entry(name, "dir", 0, 0, None));
+            assert_eq!(
+                classify(&base, &protected, &allowed),
+                (UNEXPECTED_CHANGE, Some("PROTECTED_NAME")),
+                "{name}"
+            );
+        }
     }
 
     #[test]

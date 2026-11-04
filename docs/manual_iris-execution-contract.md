@@ -386,10 +386,17 @@ Collection. After the owner's recorded local cessation, the wrapper records
 the after snapshot and every difference (`path`, `change` added/modified/
 removed, `kind`, before and after `size` and `sha256`). Effects are
 `folder-no-change`; `folder-scoped-change` when every difference is the
-addition, content modification or removal of a plain single-link file under an
-allowed path; otherwise `folder-unexpected-change` with the first reason in
-path order (`PROTECTED_NAME`, `STREAM`, `LINK`, `NOT_PLAIN_FILE` for any folder
-addition or removal or kind change, `ATTRIBUTES`, `HARD_LINK`, `OUT_OF_SCOPE`),
+addition, content modification or removal of a plain single-link file, or the
+addition or removal of a plain folder (a `dir` entry: never a link, junction
+or other reparse point, which are `link`), under an allowed path; otherwise
+`folder-unexpected-change` with the first reason in path order
+(`PROTECTED_NAME`, `STREAM`, `LINK`, `NOT_PLAIN_FILE` for any other entry kind
+or a kind change, `ATTRIBUTES` for an attribute change of a file or folder,
+`HARD_LINK`, `OUT_OF_SCOPE` for any change outside every allowed path,
+folders included). Folder additions and removals are listed in the change
+list with `kind: "dir"` (size 0, no SHA256). For example, with `.pytest-tmp/`
+allowed, the folders and files pytest creates or removes below it with
+`--basetemp=.pytest-tmp` are all scoped; a junction there is still `LINK`.
 or when the after snapshot fails (`AFTER_SNAPSHOT_FAILED`) or the change list
 cannot be written once (`CHANGES_LIMIT`, `CHANGES_PREEXISTING`,
 `CHANGES_WRITE`). The collector writes the envelope itself (`outcome:
