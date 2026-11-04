@@ -637,8 +637,19 @@ pub fn apply_real_project_environment(
         REAL_PROJECT_ENV_KEPT[0],
         Some(std::ffi::OsString::from(config_dir)),
     );
+    // No update during the run: Claude's updater otherwise downloads and
+    // installs a new Claude under the user's home (outside the work folder)
+    // while the approved instruction runs.
+    for (name, value) in REAL_PROJECT_ENV_SET {
+        replace(env, name, Some(std::ffi::OsString::from(value)));
+    }
     Ok(())
 }
+
+/// Names a real project provider always gets with these values: Claude's
+/// own switches that block every update path (background and manual).
+pub const REAL_PROJECT_ENV_SET: [(&str, &str); 2] =
+    [("DISABLE_UPDATES", "1"), ("DISABLE_AUTOUPDATER", "1")];
 
 pub fn env_without(env: &[String], names: &[&str]) -> Vec<String> {
     env.iter()
@@ -1439,6 +1450,14 @@ mod tests {
             env.get(std::ffi::OsStr::new("PATH")),
             Some(&Some("x".into()))
         );
+        // Smoke finding: updates are blocked for the run.
+        for name in ["DISABLE_UPDATES", "DISABLE_AUTOUPDATER"] {
+            assert_eq!(
+                env.get(std::ffi::OsStr::new(name)),
+                Some(&Some("1".into())),
+                "{name}"
+            );
+        }
         // The Claude folder is required and absolute.
         let mut env = std::collections::BTreeMap::new();
         assert!(apply_real_project_environment(&mut env, &[], None).is_err());

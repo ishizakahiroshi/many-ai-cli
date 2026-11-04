@@ -282,6 +282,18 @@ pub fn check_real_project_environment(
     if planned(REAL_PROJECT_ENV_KEPT[0]) != [true] {
         return Err("ENV_CLAUDE_CONFIG_DIR");
     }
+    // Updates are blocked for the run (one spelling, the fixed value).
+    for (name, value) in crate::wrapper::launch::REAL_PROJECT_ENV_SET {
+        let values: Vec<_> = plan
+            .env
+            .iter()
+            .filter(|(key, _)| key.to_string_lossy().eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.as_ref().map(|v| v.to_string_lossy().into_owned()))
+            .collect();
+        if values != [Some(value.to_owned())] {
+            return Err("ENV_UPDATES");
+        }
+    }
     for name in [
         crate::wrapper::launch_payload::RUNNER_ENV,
         crate::wrapper::launch_payload::PAYLOAD_ENV,
@@ -1313,9 +1325,33 @@ mod real_project_argv_tests {
             ("CLAUDE_PID", None),
             ("MANY_AI_CLI_SESSION_ID", Some("1")),
             ("MANY_AI_CLI_HUB_TOKEN", None),
+            ("DISABLE_UPDATES", Some("1")),
+            ("DISABLE_AUTOUPDATER", Some("1")),
         ]);
         let inherited = strings(&["CLAUDE_PID=1", "PATH", "MANY_AI_CLI_SESSION_ID"]);
         assert_eq!(check_real_project_environment(&good, &inherited), Ok(()));
+        // Smoke finding: updates must be blocked, with the fixed value.
+        for env in [
+            vec![
+                ("CLAUDE_CONFIG_DIR", Some(r"C:\synthetic")),
+                ("DISABLE_AUTOUPDATER", Some("1")),
+            ],
+            vec![
+                ("CLAUDE_CONFIG_DIR", Some(r"C:\synthetic")),
+                ("DISABLE_UPDATES", Some("0")),
+                ("DISABLE_AUTOUPDATER", Some("1")),
+            ],
+            vec![
+                ("CLAUDE_CONFIG_DIR", Some(r"C:\synthetic")),
+                ("DISABLE_UPDATES", None),
+                ("DISABLE_AUTOUPDATER", Some("1")),
+            ],
+        ] {
+            assert_eq!(
+                check_real_project_environment(&plan(&env), &[]),
+                Err("ENV_UPDATES")
+            );
+        }
         // An inherited removed name the plan does not remove.
         let more = strings(&["CLAUDE_PID", "ANTHROPIC_BASE_URL"]);
         assert_eq!(
