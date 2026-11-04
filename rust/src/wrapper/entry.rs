@@ -303,7 +303,7 @@ pub async fn run_cli(
     args: &[String],
     cancel: &Cancellation,
 ) -> io::Result<WrapperResult> {
-    let launch = launch::prepare_launch(context.config, provider, WrapperArgs::parse(args))
+    let mut launch = launch::prepare_launch(context.config, provider, WrapperArgs::parse(args))
         .map_err(io::Error::other)?;
     let port = effective_port(&context)?;
     let write_timeout = Duration::from_secs(
@@ -398,10 +398,20 @@ pub async fn run_cli(
                 &launch.args.allowed_tools,
             ));
             owner_instruction_hash = Some(owner.instruction_hash().to_owned());
-            Some(std::sync::Arc::new(owner) as std::sync::Arc<dyn runtime::ExecutionOwnerObserver>)
+            Some(std::sync::Arc::new(owner))
         }
         None => None,
     };
+    let real_project = owner.as_ref().is_some_and(|owner| owner.real_project());
+    if real_project {
+        // The approved instruction is the only instruction of a real project
+        // launch: no delegation prompt from the user preferences.
+        launch
+            .required_hooks
+            .retain(|hook| !matches!(hook, LaunchHook::DelegationPrompt { .. }));
+    }
+    let argv_owner = owner.clone();
+    let owner = owner.map(|owner| owner as std::sync::Arc<dyn runtime::ExecutionOwnerObserver>);
     if launch.headless {
         return run_headless(
             context,
@@ -456,13 +466,23 @@ pub async fn run_cli(
                 if let Some(expected) = owner_instruction_hash.as_deref() {
                     prepared.verify_source(expected)?;
                 }
-                if !prepared.arg.is_empty() {
+                if real_project && prepared.pointer {
+                    // Too long for one argument: Claude reads the approved
+                    // bytes itself at startup (no Read tool, no permission
+                    // prompt, no access to the folder holding the file).
+                    let (extra, arg) = launch::system_prompt_file_args(&prepared)?;
+                    args.extend(extra);
+                    args = launch::with_launch_prompt(&args, &arg);
+                } else if !prepared.arg.is_empty() {
                     args = launch::with_launch_prompt(&args, &prepared.arg);
                 }
                 prompt = Some(prepared);
             }
             let command =
                 resolver.resolve_provider(provider, launch.custom_argv.as_deref(), &args)?;
+            if let Some(owner) = &argv_owner {
+                owner.observe_provider_argv(&command.args);
+            }
             if let Some((mode, shell_executable)) = &selected_shell {
                 super::launch_payload::validate_inner_cmd(&command)?;
                 let payload = super::launch_payload::PreparedLaunchPayload::create(

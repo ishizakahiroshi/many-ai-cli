@@ -372,49 +372,115 @@ folder-diff grant and this profile refuses a payload grant
 
 Launch. After admission the dispatcher reads the pinned policy's
 `allowed_tools` and passes them on the existing `--allowed-tools` route
-(`acceptEdits`, no risk confirmation, no other grant). At the exec boundary the
-wrapper requires: the enabled current policy for the exact binding with the
-same SHA256 the Hub pinned (read from `iris-execution/verification.sqlite3`
-without writing it); the launch's own allowed tools equal to the policy's; and
-a folder snapshot with only plain single-link files and directories, no named
-stream, no `.git`/`.claude`/`.mcp.json` anywhere, and the pinned digest and
-entry count. It records that baseline, writes folder trust as for the real
-bounded profile (over this baseline instead of an empty folder), checks the
-baseline again, and only then claims the spawn. Any failure refuses the launch.
+(`acceptEdits`, no risk confirmation, no other grant). The spec is marked as a
+real project launch (server-owned registration metadata, set only for a
+folder-diff grant). The Hub then appends `-- --setting-sources project,local
+--strict-mcp-config` to the wrap arguments: Claude loads no user settings (the
+user's `permissions`, `hooks`, `defaultMode` and `additionalDirectories` do not
+apply), only project and local settings of the work folder (which its baseline
+keeps free of `.claude`), and no MCP server from any configuration file. The
+wrapper leaves out
+the delegation prompt for this launch, so the approved instruction is the only
+instruction. Hub automatic approval never answers a prompt of the session
+(checked in the approval runtime and again at the core send boundary); the
+flag lives in memory and is not restored after a Hub restart.
+
+At the exec boundary the wrapper requires: the enabled current policy for the
+exact binding with the same SHA256 the Hub pinned (read from
+`iris-execution/verification.sqlite3` without writing it); the launch's own
+allowed tools equal to the policy's; the final provider argv (recorded by the
+wrapper after every hook and the instruction) with exactly one
+`--setting-sources project,local`, `--strict-mcp-config`, exactly one
+`--permission-mode acceptEdits`, one `--allowedTools` only when the policy has
+tools, none of `--mcp-config`, `--add-dir`, `--plugin-dir`, `--agents`,
+`--system-prompt[-file]`, `--append-system-prompt`,
+`--dangerously-skip-permissions`, `--allow-dangerously-skip-permissions`,
+`--permission-prompt-tool` or `--disallowedTools`, at most one `--settings`
+file holding only `statusLine` and `crossSessionInbound`, and at most one
+`--append-system-prompt-file` whose bytes have the approved instruction
+SHA256; and a folder snapshot with only plain single-link files and
+directories, no named stream, no `.git`/`.claude`/`.mcp.json` anywhere (also
+after dropping trailing dots and spaces), no name with a trailing dot or space
+or a Windows device name (`CON`, `PRN`, `AUX`, `NUL`, `COM0`-`COM9`,
+`LPT0`-`LPT9`, superscript digits included, with or without an extension:
+`FOLDER_UNSAFE_NAME`), and the pinned digest and entry count. It records that
+baseline, writes folder trust as for the real bounded profile (over this
+baseline instead of an empty folder), checks the baseline again, and only then
+claims the spawn. Any failure refuses the launch.
+
+Instruction delivery. The instruction goes as the first argument when its
+command-line cost is at most 24,000 UTF-16 units. A longer one (Windows limits
+the whole command line to 32,767) is written once to a private file under the
+runtime's temporary folder and given as `--append-system-prompt-file`, which
+Claude reads itself at startup; the first argument is then a fixed message
+saying the instructions are in the appended system prompt. Claude's Read tool
+never opens that file, so no read permission for a folder outside the work
+folder is needed or granted. The file holds the expanded instruction bytes
+whose SHA256 the wrapper checks against the binding, and is removed when the
+session ends.
+
+Registration without running. When a registered launch does not reach running
+(the root is not bound within the root timeout, owner binding fails, the
+journal refuses, or the dispatcher stops), the dispatcher records a stop
+request with a deterministic ID (`iris-late-stop-…`) in the journal at once,
+so a wrapper that has not yet passed its exec-boundary journal check refuses
+to spawn. A task then delivers the owner-bound stop as soon as the root is
+bound, for as long as the exact session is current. When the journal already
+holds another stop request (an operator's), that one is delivered. No
+watchdog reason is saved for it, and the launch is never retried.
 
 Collection. After the owner's recorded local cessation, the wrapper records
 the after snapshot and every difference (`path`, `change` added/modified/
-removed, `kind`, before and after `size` and `sha256`). Effects are
-`folder-no-change`; `folder-scoped-change` when every difference is the
-addition, content modification or removal of a plain single-link file, or the
-addition or removal of a plain folder (a `dir` entry: never a link, junction
-or other reparse point, which are `link`), under an allowed path; otherwise
-`folder-unexpected-change` with the first reason in path order
-(`PROTECTED_NAME`, `STREAM`, `LINK`, `NOT_PLAIN_FILE` for any other entry kind
-or a kind change, `ATTRIBUTES` for an attribute change of a file or folder,
-`HARD_LINK`, `OUT_OF_SCOPE` for any change outside every allowed path,
-folders included). Folder additions and removals are listed in the change
-list with `kind: "dir"` (size 0, no SHA256). For example, with `.pytest-tmp/`
-allowed, the folders and files pytest creates or removes below it with
+removed, `kind`, before and after `size` and `sha256`). On Windows the archive
+attribute (0x20) alone is not a difference, because NTFS sets it on every
+write (with `FILE_ATTRIBUTE_NORMAL`, 0x80, which Windows reports when no other
+attribute is set, read the same as no attribute). Effects are `folder-no-change`; `folder-scoped-change` when every
+difference is the addition, content modification or removal of a plain
+single-link file, or the addition or removal of a plain folder (a `dir` entry:
+never a link, junction or other reparse point, which are `link`), under an
+allowed path; otherwise `folder-unexpected-change` with the first reason in
+path order (`PROTECTED_NAME`, also for a name that becomes protected when
+Windows drops trailing dots and spaces such as `.git.`; `UNSAFE_NAME` for any
+other name with a trailing dot or space or a Windows device name; `STREAM`,
+`LINK`, `NOT_PLAIN_FILE` for any other entry kind or a kind change,
+`ATTRIBUTES` for an attribute change of a file or folder, `HARD_LINK`,
+`OUT_OF_SCOPE` for any change outside every allowed path, folders included).
+Folder additions and removals are listed in the change list with
+`kind: "dir"` (size 0, no SHA256). For example, with `.pytest-tmp/` allowed,
+the folders and files pytest creates or removes below it with
 `--basetemp=.pytest-tmp` are all scoped; a junction there is still `LINK`.
-or when the after snapshot fails (`AFTER_SNAPSHOT_FAILED`) or the change list
-cannot be written once (`CHANGES_LIMIT`, `CHANGES_PREEXISTING`,
-`CHANGES_WRITE`). The collector writes the envelope itself (`outcome:
-"unknown"`, `synthetic: false`, payload = count, list SHA256 and size, allowed
-paths and reason). The `collection` record (`collector: "folder-diff"`) holds
-the effects, reason, change count and list SHA256, never the list.
+Effects are also `folder-unexpected-change` when the baseline record is
+unavailable (`BEFORE_UNAVAILABLE`), when the after snapshot fails
+(`AFTER_SNAPSHOT_FAILED`) or when the change list cannot be written once
+(`CHANGES_LIMIT`, `CHANGES_PREEXISTING`, `CHANGES_WRITE`). The change count is
+given only together with the list SHA256: when the list was not written both
+are null and the folder reason is set (the first reason found stands). The
+collector writes the envelope itself (`outcome: "unknown"`,
+`synthetic: false`, payload = count, list SHA256 and size, allowed paths and
+reason). The `collection` record (`collector: "folder-diff"`) holds the
+effects, reason, change count and list SHA256, never the list.
 
 Watchdog. When the attempt is observed running, the Hub watches Core's session
 state of that exact session (`activity.awaiting_approval`, set from Core's
 approval record) once per second. A permission prompt open continuously for
 60 seconds (`STOPPED_AWAITING_APPROVAL`) or a run time since the provider root
-started of at least `max_runtime_sec` (`STOPPED_RUNTIME_LIMIT`) first saves an
-`auto_stop` row (reason, deterministic stop request ID, time,
-`task_outcome: "unknown"`) in the owner database, then requests the owner-bound
-stop on the same path as `owned_stop`. One stop per attempt, no retry, no
-handoff. The watchdog lives in the Hub process; a restarted Hub does not resume
-it. Observations add `execution.watch` (last prompt state, run time, limits and
-the saved auto stop).
+started of at least `max_runtime_sec` (`STOPPED_RUNTIME_LIMIT`) first asks the
+journal for a stop request with the deterministic watchdog ID. Only when the
+journal newly accepts it does the watchdog save an `auto_stop` row (reason,
+that ID, time, `task_outcome: "unknown"`) in the owner database and then
+deliver the owner-bound stop on the same path as `owned_stop`. When a stop was
+already requested (an operator's `owned_stop`), no row is saved. One stop per
+attempt, no retry, no handoff. The watchdog lives in the Hub process; a
+restarted Hub does not resume it.
+
+Observations add `execution.watch` with state changes only, so polls of an
+unchanged attempt are equal: `awaiting_approval` (Core's last prompt state, or
+null when this Hub has not observed it), `stop_reason` (the effective watchdog
+reason, as in the record) and `ended_reason` (why the watchdog stopped
+watching, or null: `WATCH_STOP_REQUESTED`, `WATCH_STOP_NOT_ACCEPTED`,
+`WATCH_LOCAL_TREE_CEASED`, `WATCH_OWNER_UNAVAILABLE`, `WATCH_OWNER_MISMATCH`,
+`WATCH_CLOCK_UNAVAILABLE`, `WATCH_DISPATCHER_UNAVAILABLE`; in memory only).
+Run time, observation time and limits are not part of it.
 
 Verification field. Always the shared record:
 
@@ -427,8 +493,9 @@ folder-diff collection with the same ticket, result SHA256, outcome sequence
 and effects). Until then `reason` is `VERIFY_OWNER_MISSING`,
 `VERIFY_STOP_UNCONFIRMED`, `VERIFY_OUTCOME_MISSING`, `VERIFY_COLLECTION_MISSING`
 or `VERIFY_COLLECTION_MISMATCH` and the other fields are null. Once filled,
-`reason` is the saved watchdog reason or null. The record is read-only and is
-never a verdict; the three flags are always false.
+`reason` is the saved watchdog reason when the journal's stop request is the
+watchdog's own ID, otherwise null. The record is read-only and is never a
+verdict; the three flags are always false.
 
 ## Native stop and result limits
 

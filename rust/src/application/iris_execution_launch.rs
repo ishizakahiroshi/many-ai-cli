@@ -280,6 +280,9 @@ pub fn prepare_spec_with_tools(
         registration_metadata: SpawnRegistrationMetadata {
             iris_owner_context: context,
             prompt_at_launch: true,
+            // Real project only (a folder-diff grant on the real pair):
+            // settings isolation on the wrap argv, no automatic approval.
+            iris_real_project: grant.folder_diff(),
             ..Default::default()
         },
         spawn_attempt: None,
@@ -506,6 +509,8 @@ mod tests {
         assert_eq!(spec.grants, InternalSpawnGrants::default());
         assert!(spec.permission_preset.is_empty());
         assert_eq!(spec.execution_mode, "interactive");
+        // The real bounded profile is unchanged: no real project isolation.
+        assert!(!spec.registration_metadata.iris_real_project);
         for (provider, profile) in [
             ("codex", "codex"),
             ("codex", REAL_BOUNDED_PROFILE_ID),

@@ -1284,6 +1284,9 @@ pub struct SessionDetails {
     pub subagents: Option<super::SubagentTree>,
     pub done: Option<super::DoneSummary>,
     pub connected: bool,
+    /// Registered from an `iris-owned-real-project/1` launch (server-owned
+    /// registration metadata). Not restored after a Hub restart.
+    pub iris_real_project: bool,
 }
 /// Internal-only path identity consumed by transcript/file services.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -2510,6 +2513,11 @@ pub struct SpawnRegistrationMetadata {
     pub initial_prompt: String,
     pub handoff_from: LiveSessionId,
     pub prompt_at_launch: bool,
+    /// Server-owned: an `iris-owned-real-project/1` launch (only
+    /// `prepare_spec_with_tools` for a folder-diff grant sets it). The wrap
+    /// argv then carries the settings isolation flags, and Hub automatic
+    /// approval never answers this session's prompts.
+    pub iris_real_project: bool,
 }
 impl SpawnRegistrationMetadata {
     pub fn needs_initial_gate(&self) -> bool {

@@ -104,6 +104,7 @@ mod tests {
             subagents: None,
             done: None,
             connected: true,
+            iris_real_project: false,
         };
         let progress = WorkflowProgress {
             detected: true,

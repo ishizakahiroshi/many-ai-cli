@@ -32,6 +32,7 @@ fn view(
             subagents: None,
             done: None,
             connected: true,
+            iris_real_project: false,
         },
         tail: Vec::new(),
         output_generation: 0,

@@ -119,6 +119,12 @@ impl ApprovalRules {
             let Some(details) = core.details(session) else {
                 return Ok(false);
             };
+            // An Iris real project run is bounded by its pinned policy's
+            // tools only: a prompt there is never answered automatically
+            // (the Iris watchdog stops a prompt left open instead).
+            if details.iris_real_project {
+                return Ok(false);
+            }
             let decision = self.policy.evaluate_policy(
                 &data.summary.command,
                 &details.snapshot.cwd,

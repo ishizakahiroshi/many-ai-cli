@@ -67,11 +67,59 @@ struct Fixture {
     audit: Arc<Mutex<Vec<String>>>,
     config: Arc<ConfigStore>,
 }
+/// Registers like a launched wrapper, with the core-issued proof, so the
+/// session carries the server-owned registration metadata of its spec.
+#[derive(Default)]
+struct Registering(OnceLock<Weak<SessionEngine>>);
+impl WrappedSessionSpawner for Registering {
+    fn spawn_and_wait<'a>(
+        &'a self,
+        spec: WrappedSpawnSpec,
+        _: Duration,
+        _: &'a HttpWaitCancellation,
+    ) -> CoreFuture<'a, SpawnWaitOutcome> {
+        Box::pin(async move {
+            let core = self.0.get().unwrap().upgrade().unwrap();
+            let registered = core
+                .register(
+                    RegisterRequest {
+                        message: proto::Message {
+                            provider: spec.provider.clone(),
+                            cwd: spec.cwd.to_string_lossy().into_owned(),
+                            cols: 120,
+                            rows: 30,
+                            pid: 71,
+                            ..Default::default()
+                        },
+                        spawn_proof: Some(
+                            spec.registration_proof
+                                .as_ref()
+                                .unwrap()
+                                .as_header_value()
+                                .to_owned(),
+                        ),
+                    },
+                    WrapperConnectionId(90),
+                    Timestamp::now(),
+                )
+                .await
+                .unwrap();
+            SpawnWaitOutcome::Registered(registered.binding)
+        })
+    }
+}
 impl Fixture {
     fn new(enabled: bool) -> Self {
         Self::with_sink(enabled, Arc::new(Sink))
     }
     fn with_sink(enabled: bool, effects: Arc<dyn CoreEffectSink>) -> Self {
+        Self::build(enabled, effects, Arc::new(NoSpawn))
+    }
+    fn build(
+        enabled: bool,
+        effects: Arc<dyn CoreEffectSink>,
+        spawner: Arc<dyn WrappedSessionSpawner>,
+    ) -> Self {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir(root.path().join("runtime")).unwrap();
         std::fs::create_dir(root.path().join("installed")).unwrap();
@@ -109,7 +157,7 @@ impl Fixture {
             Arc::new(SessionJournal::new(paths, None, JournalOptions::default())),
             transport.clone(),
             effects.clone(),
-            Arc::new(NoSpawn),
+            spawner,
             CoreEventBus::new(64).unwrap(),
         ));
         rules
@@ -154,6 +202,14 @@ impl Fixture {
             )
             .await
             .unwrap();
+        self.prompt(registered.binding, command)
+    }
+    /// A low-risk native command prompt on the screen of `binding`.
+    fn prompt(
+        &self,
+        binding: SessionBinding,
+        command: &str,
+    ) -> (LiveSessionId, ImmutableApprovalRecord, CoreEffects) {
         let bytes = format!(
             "\x1b[2J\x1b[HRun: {command}\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No"
         )
@@ -161,7 +217,7 @@ impl Fixture {
         let effects = self
             .core
             .observe_output(
-                registered.binding,
+                binding,
                 OutputChunk {
                     total_pty_bytes: bytes.len() as i64,
                     bytes,
@@ -171,13 +227,80 @@ impl Fixture {
             .unwrap();
         let record = self
             .core
-            .details(registered.binding.session)
+            .details(binding.session)
             .unwrap()
             .approval
             .record
             .unwrap();
-        (registered.binding.session, record, effects)
+        (binding.session, record, effects)
     }
+}
+/// C4 item 1: Hub automatic approval never answers a prompt of a session
+/// registered from an Iris real project launch, even with a matching rule;
+/// the same rule still answers an ordinary session.
+#[tokio::test(start_paused = true)]
+async fn an_iris_real_project_session_is_never_approved_automatically() {
+    let spawner = Arc::new(Registering::default());
+    let f = Fixture::build(true, Arc::new(Sink), spawner.clone());
+    spawner.0.set(Arc::downgrade(&f.core)).unwrap();
+    f.rules
+        .policy
+        .add_and_reload("git status", "/synthetic/project")
+        .unwrap();
+    let spec = WrappedSpawnSpec {
+        registration_metadata: SpawnRegistrationMetadata {
+            iris_owner_context: "{}".into(),
+            prompt_at_launch: true,
+            iris_real_project: true,
+            ..Default::default()
+        },
+        spawn_attempt: None,
+        registration_proof: None,
+        provider: "claude".into(),
+        cwd: "/synthetic/project".into(),
+        model: String::new(),
+        model_selection: String::new(),
+        risk_confirmed: false,
+        label: "iris-attempt".into(),
+        permission_mode: "acceptEdits".into(),
+        sandbox: String::new(),
+        ask_for_approval: String::new(),
+        route: String::new(),
+        utf8_session: false,
+        effort: String::new(),
+        execution_mode: "interactive".into(),
+        permission_preset: String::new(),
+        initial_prompt: "synthetic".into(),
+        subscription_profile_id: String::new(),
+        subscription_login: false,
+        usage_probe: false,
+        grants: InternalSpawnGrants::default(),
+        cancellation: TaskCancellation::default(),
+    };
+    let binding = match f
+        .core
+        .spawn_and_wait(
+            spec,
+            Duration::from_secs(5),
+            &HttpWaitCancellation::default(),
+        )
+        .await
+    {
+        SpawnWaitOutcome::Registered(binding) => binding,
+        _ => panic!("synthetic registration failed"),
+    };
+    assert!(f.core.details(binding.session).unwrap().iris_real_project);
+    let (id, record, effects) = f.prompt(binding, "git status");
+    drop(effects);
+    assert!(!f.rules.try_apply(id, &record).await.unwrap());
+    assert_eq!(f.transport.0.load(Ordering::SeqCst), 0);
+    assert!(f.core.details(id).unwrap().approval.record.is_some());
+    f._owner.drain_effects().await;
+    assert!(f.audit.lock().unwrap().is_empty());
+    // An ordinary session with the same rule is still answered.
+    let (id, record) = f.candidate("git status").await;
+    assert!(!f.core.details(id).unwrap().iris_real_project);
+    assert!(f.rules.try_apply(id, &record).await.unwrap());
 }
 #[tokio::test(start_paused = true)]
 async fn disabled_setting_records_would_approve_history_without_sending_or_auditing() {

@@ -765,6 +765,31 @@ pub fn prepare_launch_prompt(
         cleanup: Some((dir, name)),
     })
 }
+/// The first message of a launch whose instruction was given as the appended
+/// system prompt. Fixed text: it carries no instruction content.
+pub const SYSTEM_PROMPT_FILE_LAUNCH_ARG: &str = "The complete instructions for this session were given to you as the appended system prompt. Follow them exactly.";
+
+/// For a prompt too long for one argument (`pointer`): Claude's
+/// `--append-system-prompt-file` with the same private file, read by Claude
+/// itself at startup instead of through its Read tool, and the fixed first
+/// message. The file holds the selected bytes unchanged and stays until the
+/// prompt is dropped at the end of the session.
+pub fn system_prompt_file_args(
+    prepared: &PreparedLaunchPrompt,
+) -> io::Result<(Vec<String>, String)> {
+    let path = prepared
+        .path
+        .as_ref()
+        .filter(|_| prepared.pointer)
+        .ok_or_else(|| io::Error::other("launch instruction has no private file"))?;
+    let path = path
+        .to_str()
+        .ok_or_else(|| io::Error::other("launch instruction path is not UTF-8"))?;
+    Ok((
+        vec!["--append-system-prompt-file".into(), path.into()],
+        SYSTEM_PROMPT_FILE_LAUNCH_ARG.into(),
+    ))
+}
 pub fn with_launch_prompt(provider_args: &[String], arg: &str) -> Vec<String> {
     std::iter::once(arg.to_owned())
         .chain(provider_args.iter().cloned())
@@ -1211,6 +1236,29 @@ mod tests {
         assert!(p.pointer);
         drop(p);
         assert!(!path.exists());
+    }
+    /// C4 item 6: a real project instruction too long for one argument is
+    /// given as the appended system prompt file (read by Claude at startup),
+    /// never as a pointer Claude would have to open with its Read tool.
+    #[test]
+    fn a_long_instruction_rides_on_the_system_prompt_file_unchanged() {
+        let (_root, _installed, paths) = trial();
+        let source = paths.root().join("prompt.md");
+        // Case B's size class: UTF-16 cost above the argument limit.
+        let body = format!("指示 {}\n", "あ".repeat(LAUNCH_PROMPT_MAX_ARG_COST + 10));
+        std::fs::write(&source, &body).unwrap();
+        let p = prepare_launch_prompt(&paths, &source, 42, None, 77).unwrap();
+        assert!(p.pointer);
+        let (extra, arg) = system_prompt_file_args(&p).unwrap();
+        assert_eq!(extra[0], "--append-system-prompt-file");
+        assert_eq!(std::path::Path::new(&extra[1]), p.path.as_deref().unwrap());
+        assert_eq!(std::fs::read(&extra[1]).unwrap(), body.as_bytes());
+        assert_eq!(arg, SYSTEM_PROMPT_FILE_LAUNCH_ARG);
+        assert!(launch_prompt_arg_cost(&arg) < 200 && !arg.contains(&extra[1]));
+        // A prompt that fits in one argument has no file to append.
+        std::fs::write(&source, "short\nsecond line").unwrap();
+        let p = prepare_launch_prompt(&paths, &source, 42, None, 77).unwrap();
+        assert!(!p.pointer && system_prompt_file_args(&p).is_err());
     }
     #[test]
     fn prompt_cost_subcommand_guard_and_shell_safety() {

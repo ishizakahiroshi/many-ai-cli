@@ -316,6 +316,77 @@ fn argv_environment_prompt_and_trial_root_follow_go_launch_order() {
     assert!(!path.exists());
     assert_eq!(t.policy.resolves.load(Ordering::SeqCst), 1);
 }
+/// C4 item 1: an Iris real project launch carries the settings isolation as
+/// provider arguments after every wrapper flag; no other launch does.
+#[test]
+fn iris_real_project_launch_isolates_the_provider_settings() {
+    use crate::wrapper::iris_owner::REAL_PROJECT_ISOLATION_ARGS;
+    let t = runtime(8, false);
+    let ticket = crate::hub::iris_execution_owner::OwnerTicket {
+        binding: crate::hub::iris_execution_journal::Binding {
+            principal_id: "iris".into(),
+            workspace_id: "workspace".into(),
+            plan_id: "plan".into(),
+            plan_revision: 1,
+            task_id: "task".into(),
+            instruction_revision: 1,
+            instruction_hash: "a".repeat(64),
+            approval_id: "approval".into(),
+            approval_revision: 1,
+            scope_hash: "b".repeat(64),
+            execution_host_id: "host".into(),
+            executor_instance_id: "instance".into(),
+            attempt_id: "attempt".into(),
+            fence: 1,
+            provider: "claude".into(),
+            profile_id: "claude-hiroshi".into(),
+        },
+        owner_id: "owner".into(),
+        owner_epoch: 1,
+    };
+    let mut request = spec(t.root.path(), 1);
+    request.provider = "claude".into();
+    request.subscription_profile_id = "claude-hiroshi".into();
+    request.permission_mode = "acceptEdits".into();
+    request.initial_prompt = "synthetic instruction".into();
+    request.registration_metadata.iris_owner_context = serde_json::to_string(&ticket).unwrap();
+    request.registration_metadata.iris_real_project = true;
+    let argv = |request: &WrappedSpawnSpec| {
+        launch::prepare(&t.options, t.policy.as_ref(), request, &|_| {}).map(|prepared| {
+            prepared
+                .process
+                .args
+                .iter()
+                .map(|s| s.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        })
+    };
+    let args = argv(&request).unwrap();
+    assert_eq!(
+        &args[args.len() - 4..],
+        [
+            "--",
+            "--setting-sources",
+            "project,local",
+            "--strict-mcp-config"
+        ]
+    );
+    // The wrapper reads them as provider arguments, after its own flags.
+    let wrap = args.iter().position(|a| a == "claude").unwrap();
+    let parsed = crate::wrapper::launch::WrapperArgs::parse(&args[wrap + 1..]);
+    assert!(parsed.parse_error.is_none());
+    assert_eq!(parsed.provider_args, REAL_PROJECT_ISOLATION_ARGS);
+    assert_eq!(parsed.permission_mode, "acceptEdits");
+    assert!(!parsed.prompt_file.is_empty());
+    // Every other launch (the real bounded profile included) is unchanged.
+    request.registration_metadata.iris_real_project = false;
+    let args = argv(&request).unwrap();
+    assert!(!args.iter().any(|a| a == "--" || a == "--setting-sources"));
+    // The flag never rides on another provider.
+    request.registration_metadata.iris_real_project = true;
+    request.provider = "codex".into();
+    assert!(argv(&request).is_err());
+}
 #[test]
 fn login_skips_provider_flags_prompt_and_risk() {
     let t = runtime(8, false);

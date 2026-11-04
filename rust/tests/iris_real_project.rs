@@ -348,6 +348,215 @@ fn fast_watch() -> RealProjectWatch {
     }
 }
 
+/// Like `FakePort`, but the wrapper binds the provider root only after
+/// `delay` (two baseline snapshots and the trust lock before the claim can
+/// outlast the dispatcher's root timeout).
+struct LatePort {
+    owners: Arc<Mutex<OwnerStore>>,
+    state: Arc<PortState>,
+    delay: Duration,
+}
+impl OwnedLaunchPort for LatePort {
+    fn launch_registered<'a>(
+        &'a self,
+        spec: WrappedSpawnSpec,
+        _: Duration,
+        _: &'a HttpWaitCancellation,
+    ) -> CoreFuture<'a, SpawnWaitOutcome> {
+        Box::pin(async move {
+            let ticket: OwnerTicket =
+                serde_json::from_str(&spec.registration_metadata.iris_owner_context).unwrap();
+            let index = self.state.launches.fetch_add(1, Ordering::SeqCst) as i64 + 1;
+            let session = SessionBinding {
+                session: LiveSessionId(100 + index),
+                incarnation: SessionIncarnation(1),
+                wrapper: WrapperConnectionId(200 + index as u64),
+            };
+            self.state.specs.lock().unwrap().push(spec);
+            self.state.sessions.lock().unwrap().push(session);
+            let owners = self.owners.clone();
+            let delay = self.delay;
+            std::thread::spawn(move || {
+                std::thread::sleep(delay);
+                let mut owners = owners.lock().unwrap();
+                owners
+                    .claim_spawn(&ticket, session.session.0, now_ms())
+                    .unwrap();
+                owners
+                    .bind_root(&ticket, 9000 + index as u32, now_ms())
+                    .unwrap();
+            });
+            SpawnWaitOutcome::Registered(session)
+        })
+    }
+    fn is_current(&self, binding: SessionBinding) -> bool {
+        self.state.sessions.lock().unwrap().contains(&binding)
+    }
+    fn bind_owner(&self, _: &OwnerTicket, _: SessionBinding) -> Result<Value, BridgeError> {
+        Ok(json!({"bound":true,"owned_execution_ceased":false}))
+    }
+    fn stop_owner<'a>(
+        &'a self,
+        ticket: &'a OwnerTicket,
+        id: &'a str,
+    ) -> CoreFuture<'a, Result<Value, BridgeError>> {
+        Box::pin(async move {
+            self.state
+                .stops
+                .lock()
+                .unwrap()
+                .push((ticket.binding.attempt_id.clone(), id.to_string()));
+            Ok(json!({"stop_request_id":id,"owned_execution_ceased":false}))
+        })
+    }
+    fn awaiting_approval(&self, binding: SessionBinding) -> Option<bool> {
+        self.is_current(binding)
+            .then(|| self.state.awaiting.load(Ordering::SeqCst))
+    }
+}
+
+async fn poll_watch(profile: &OwnedProfile, b: &Binding) -> Value {
+    call(
+        profile,
+        "owned_poll",
+        json!({"profile":REAL_PROJECT_PROFILE,"binding":b}),
+    )
+    .await
+    .unwrap()["execution"]["watch"]
+        .clone()
+}
+
+/// C4 R1 reversed: the root is bound after the dispatcher's root timeout.
+/// The attempt is not left running unwatched: one owner-bound stop with a
+/// fixed request ID is requested and delivered once the root is bound.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_root_bound_after_the_root_timeout_is_stopped_with_a_fixed_id() {
+    let f = HubFixture::new(1, &[], 1800);
+    let port = Arc::new(LatePort {
+        owners: f.owners.clone(),
+        state: f.state.clone(),
+        delay: Duration::from_millis(600),
+    });
+    let mut config = HubFixture::config();
+    config.root_timeout = Duration::from_millis(300);
+    let profile = OwnedProfile::new_real_project_with_watch(
+        f.journal.clone(),
+        f.owners.clone(),
+        f.verifications(),
+        f.root.path().to_path_buf(),
+        port,
+        config,
+        fast_watch(),
+    )
+    .unwrap();
+    let b = f.bindings[0].clone();
+    call(&profile, "owned_start", start_args(&b, "start-0"))
+        .await
+        .unwrap();
+    until("late stop", || f.state.stops.lock().unwrap().len() == 1).await;
+    let owner = f.owners.lock().unwrap().query(&b).unwrap();
+    let journal = f.journal.lock().unwrap().query(&b).unwrap();
+    let stops = f.state.stops.lock().unwrap().clone();
+    println!(
+        "C4 R1 reversed: root_bound={} stops={:?} journal_stop={}",
+        owner["root_pid"].is_u64(),
+        stops,
+        journal["stop_request_id"]
+    );
+    assert!(owner["root_pid"].is_u64(), "the root was bound late");
+    let id = journal["stop_request_id"].as_str().unwrap().to_string();
+    assert!(id.starts_with("iris-late-stop-"), "{id}");
+    assert_eq!(stops, [(b.attempt_id.clone(), id)]);
+    // Not a watchdog stop: no watchdog reason is saved for it.
+    assert!(
+        f.owners
+            .lock()
+            .unwrap()
+            .query_auto_stop(&b)
+            .unwrap()
+            .is_null()
+    );
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(f.state.launches.load(Ordering::SeqCst), 1);
+    assert_eq!(f.state.stops.lock().unwrap().len(), 1);
+}
+
+/// C4 R2 reversed: an operator stop is requested first and the prompt then
+/// stays open past the limit. The watchdog's own stop is not accepted, so
+/// no watchdog reason is saved and the watch says why it ended.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_operator_stop_first_leaves_no_watchdog_reason() {
+    let f = HubFixture::new(1, &[], 1800);
+    let profile = f.profile(fast_watch());
+    let b = f.bindings[0].clone();
+    call(&profile, "owned_start", start_args(&b, "start-0"))
+        .await
+        .unwrap();
+    until("running", || {
+        f.journal.lock().unwrap().query(&b).unwrap()["execution_state"] == "running"
+    })
+    .await;
+    call(
+        &profile,
+        "owned_stop",
+        json!({"profile":REAL_PROJECT_PROFILE,"binding":b,"request_id":"operator-stop-1"}),
+    )
+    .await
+    .unwrap();
+    f.state.awaiting.store(true, Ordering::SeqCst);
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    let journal = f.journal.lock().unwrap().query(&b).unwrap();
+    let row = f.owners.lock().unwrap().query_auto_stop(&b).unwrap();
+    let stops = f.state.stops.lock().unwrap().clone();
+    let watch = poll_watch(&profile, &b).await;
+    println!(
+        "C4 R2 reversed: journal_stop={} stops={stops:?} auto_stop_row={row} watch={watch}",
+        journal["stop_request_id"]
+    );
+    assert_eq!(journal["stop_request_id"], "operator-stop-1");
+    assert_eq!(
+        stops,
+        [(b.attempt_id.clone(), "operator-stop-1".to_string())]
+    );
+    assert!(row.is_null(), "{row}");
+    assert_eq!(watch["stop_reason"], Value::Null, "{watch}");
+    assert_eq!(watch["ended_reason"], "WATCH_STOP_NOT_ACCEPTED", "{watch}");
+}
+
+/// C4 (Iris side): `execution.watch` carries state changes only, so two
+/// polls without a state change are equal. Time-based values never appear.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_watch_changes_only_with_its_state() {
+    let f = HubFixture::new(1, &[], 1800);
+    let profile = f.profile(fast_watch());
+    let b = f.bindings[0].clone();
+    call(&profile, "owned_start", start_args(&b, "start-0"))
+        .await
+        .unwrap();
+    until("running", || {
+        f.journal.lock().unwrap().query(&b).unwrap()["execution_state"] == "running"
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let first = poll_watch(&profile, &b).await;
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    let second = poll_watch(&profile, &b).await;
+    println!("C4 watch: first={first} second={second}");
+    assert_eq!(first, second);
+    let mut keys: Vec<_> = first.as_object().unwrap().keys().cloned().collect();
+    keys.sort();
+    assert_eq!(keys, ["awaiting_approval", "ended_reason", "stop_reason"]);
+    assert_eq!(first["awaiting_approval"], false);
+    // A prompt is a state change; still no time in the document.
+    f.state.awaiting.store(true, Ordering::SeqCst);
+    tokio::time::sleep(Duration::from_millis(80)).await;
+    let prompt = poll_watch(&profile, &b).await;
+    assert_eq!(prompt["awaiting_approval"], true, "{prompt}");
+    f.state.awaiting.store(false, Ordering::SeqCst);
+    tokio::time::sleep(Duration::from_millis(80)).await;
+    assert_eq!(poll_watch(&profile, &b).await, first);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn awaiting_approval_for_the_limit_is_stopped_with_its_reason() {
     let f = HubFixture::new(1, &[TOOL_A], 1800);
@@ -387,9 +596,8 @@ async fn awaiting_approval_for_the_limit_is_stopped_with_its_reason() {
     assert_waiting(&observed["verification"], "VERIFY_STOP_UNCONFIRMED");
     let watch = &observed["execution"]["watch"];
     assert_eq!(watch["awaiting_approval"], true, "{watch}");
-    assert_eq!(watch["auto_stop"]["reason"], STOPPED_AWAITING_APPROVAL);
-    assert_eq!(watch["max_runtime_sec"], 1800);
-    assert!(watch["runtime_ms"].is_u64());
+    assert_eq!(watch["stop_reason"], STOPPED_AWAITING_APPROVAL, "{watch}");
+    assert_eq!(watch["ended_reason"], "WATCH_STOP_REQUESTED", "{watch}");
     // No retry: one launch, one stop, even after more watchdog steps.
     tokio::time::sleep(Duration::from_millis(300)).await;
     assert_eq!(f.state.launches.load(Ordering::SeqCst), 1);
@@ -556,6 +764,9 @@ fn tools_ride_only_on_folder_diff_grants_through_the_existing_route() {
     assert_eq!(spec.permission_mode, "acceptEdits");
     assert_eq!(spec.grants.allowed_tools(), [TOOL_A.to_string()]);
     assert!(!spec.grants.grant_folder_trust());
+    // C4 item 1: only a folder-diff launch is marked for settings isolation
+    // and excluded from automatic approval.
+    assert!(spec.registration_metadata.iris_real_project);
     assert!(
         prepare_spec(&grant, &ticket)
             .unwrap()
@@ -815,7 +1026,7 @@ mod native {
         },
         proto::Message,
         wrapper::{
-            iris_owner::DurableExecutionOwner,
+            iris_owner::{DurableExecutionOwner, REAL_PROJECT_ISOLATION_ARGS},
             runtime::{self, WrapperOptions},
             transport::{HubConnector, HubSocket},
         },
@@ -944,12 +1155,36 @@ mod native {
             )
         }
         fn owner(&self) -> Arc<DurableExecutionOwner> {
-            Arc::new(
+            let owner = Arc::new(
                 self.adopt()
                     .unwrap()
                     .with_folder_trust(self.trust())
                     .with_launch_tools(self.tools.clone()),
-            )
+            );
+            owner.observe_provider_argv(&self.claude_argv(&[]));
+            owner
+        }
+        /// The final Claude argv a real project wrapper records: the shape
+        /// the Hub and wrapper build (session, permission mode, the policy's
+        /// tools, then the Hub's isolation arguments), plus `extra`.
+        fn claude_argv(&self, extra: &[&str]) -> Vec<String> {
+            let mut argv: Vec<String> = [
+                "Synthetic first message.",
+                "--session-id",
+                "00000000-0000-4000-8000-000000000000",
+                "--permission-mode",
+                "acceptEdits",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+            if !self.tools.is_empty() {
+                argv.push("--allowedTools".into());
+                argv.extend(self.tools.iter().cloned());
+            }
+            argv.extend(REAL_PROJECT_ISOLATION_ARGS.iter().map(|s| s.to_string()));
+            argv.extend(extra.iter().map(|s| s.to_string()));
+            argv
         }
         fn process(&self, plan: &Value) -> ProcessPlan {
             let mut env = BTreeMap::new();
@@ -1528,11 +1763,18 @@ mod native {
         let owner = f.owner();
         let b = f.binding.clone();
         let ticket = f.ticket.clone();
+        let journal = f.journal.clone();
         let path = f.root.path().join("iris-execution/owner.sqlite3");
         let recorder = tokio::spawn(async move {
             loop {
                 let store = OwnerStore::open(&path).unwrap();
                 if store.query(&b).is_ok_and(|r| r["root_pid"].is_u64()) {
+                    // As the watchdog does: its own journal stop first.
+                    journal
+                        .lock()
+                        .unwrap()
+                        .stop(&auto_stop_request_id(&b), &b, (now_ms() / 1000) as i64)
+                        .unwrap();
                     let mut store = store;
                     let document = json!({"kind":"auto_stop","ticket":ticket,
                         "reason":STOPPED_AWAITING_APPROVAL,
@@ -1561,5 +1803,195 @@ mod native {
     async fn the_record_waits_without_an_owner() {
         let f = Native::new(seed_project, &["src"], &[]);
         assert_waiting(&f.verification().await, "VERIFY_OWNER_MISSING");
+    }
+
+    /// C4 item 1: the final Claude argv must remove the user settings and
+    /// every MCP server file, and nothing else may add settings, servers,
+    /// directories or another system prompt. Checked at the exec boundary
+    /// before the claim; a refusal spawns nothing.
+    #[tokio::test]
+    async fn the_final_argv_must_isolate_the_provider_settings() {
+        let f = Native::new(seed_project, &["src"], &[TOOL_A]);
+        let dir = f.work.path();
+        let file = |name: &str, body: &[u8]| {
+            let path = dir.join(name);
+            std::fs::write(&path, body).unwrap();
+            path.to_string_lossy().into_owned()
+        };
+        let status_only = file(
+            "status.json",
+            br#"{"statusLine":{"type":"command","command":"x","padding":0}}"#,
+        );
+        let with_permissions = file(
+            "permissions.json",
+            br#"{"statusLine":{},"permissions":{"allow":["Write(*)"]}}"#,
+        );
+        let with_hooks = file("hooks.json", br#"{"hooks":{}}"#);
+        let approved = file("approved.md", INSTRUCTION.as_bytes());
+        let other = file("other.md", b"Another instruction.\n");
+        let base = f.claude_argv(&[]);
+        let without = |flag: &str| {
+            let mut argv = base.clone();
+            let at = argv.iter().position(|a| a == flag).unwrap();
+            argv.remove(at);
+            if flag == "--setting-sources" {
+                argv.remove(at);
+            }
+            argv
+        };
+        let mut user_sources = base.clone();
+        let at = user_sources
+            .iter()
+            .position(|a| a == "project,local")
+            .unwrap();
+        user_sources[at] = "user,project,local".into();
+        let mut twice = base.clone();
+        twice.extend(["--setting-sources".to_string(), "project,local".into()]);
+        let mut bypass = base.clone();
+        bypass[4] = "bypassPermissions".into();
+        let refused: Vec<(&str, Vec<String>)> = vec![
+            ("no --setting-sources", without("--setting-sources")),
+            ("no --strict-mcp-config", without("--strict-mcp-config")),
+            ("user settings source", user_sources),
+            ("two setting sources", twice),
+            ("permission mode", bypass),
+            ("mcp config", f.claude_argv(&["--mcp-config", "x.json"])),
+            ("add dir", f.claude_argv(&["--add-dir", "C:\\"])),
+            (
+                "append prompt",
+                f.claude_argv(&["--append-system-prompt", "x"]),
+            ),
+            (
+                "settings with permissions",
+                f.claude_argv(&["--settings", &with_permissions]),
+            ),
+            (
+                "settings with hooks",
+                f.claude_argv(&["--settings", &with_hooks]),
+            ),
+            (
+                "two settings",
+                f.claude_argv(&["--settings", &status_only, "--settings", &status_only]),
+            ),
+            (
+                "another system prompt file",
+                f.claude_argv(&["--append-system-prompt-file", &other]),
+            ),
+        ];
+        let factory = CountFactory::default();
+        let mut count = 0;
+        for (name, argv) in refused {
+            let owner = f.owner();
+            owner.observe_provider_argv(&argv);
+            let result = run_owner(&f, owner, json!([]), &factory).await;
+            assert!(result.is_err(), "{name}");
+            assert_eq!(factory.0.load(Ordering::SeqCst), 0, "{name}");
+            let record = f.owners().query(&f.binding);
+            assert!(
+                record.is_err() || record.unwrap()["claimed_session"].is_null(),
+                "{name}"
+            );
+            count += 1;
+        }
+        // The status line settings and the approved instruction file pass.
+        let owner = f.owner();
+        owner.observe_provider_argv(&f.claude_argv(&[
+            "--settings",
+            &status_only,
+            "--append-system-prompt-file",
+            &approved,
+        ]));
+        run_owner(&f, owner, json!([]), &factory).await.unwrap();
+        assert_eq!(factory.0.load(Ordering::SeqCst), 1);
+        println!("C4 argv: refused={count} accepted=1");
+    }
+
+    /// C4 (Iris side): when the full change list cannot be written, the count
+    /// is null together with its SHA256 and the folder reason says why.
+    #[tokio::test]
+    async fn an_unwritable_change_list_leaves_count_and_hash_null() {
+        let f = Native::new(seed_project, &["src"], &[]);
+        // Something outside the work folder takes the list's name first.
+        let list = f.artifact("task-result.json.changes.json");
+        let plan = json!([
+            write("src/a.py", "print(2)\n"),
+            {"op":"write","path":list,"body":"{}"},
+        ]);
+        let (result, launches) = run(&f, plan).await;
+        result.unwrap();
+        assert_eq!(launches, 1);
+        let (_, folder) = f.record();
+        let collection = &folder["collection"];
+        let envelope: Value =
+            serde_json::from_slice(&std::fs::read(f.artifact("task-result.json")).unwrap())
+                .unwrap();
+        let v = f.verification().await;
+        println!(
+            "C4 unwritable list: effects={} reason={} count={} sha={} envelope_count={}",
+            v["folder_effects"],
+            v["folder_reason"],
+            v["change_count"],
+            v["changes_sha256"],
+            envelope["payload"]["change_count"]
+        );
+        assert_eq!(collection["effects"], UNEXPECTED_CHANGE, "{collection}");
+        assert_eq!(collection["reason"], "CHANGES_PREEXISTING");
+        assert_eq!(collection["change_count"], Value::Null);
+        assert_eq!(collection["changes_sha256"], Value::Null);
+        assert_eq!(envelope["payload"]["change_count"], Value::Null);
+        assert_eq!(envelope["payload"]["changes_sha256"], Value::Null);
+        assert_record(&v);
+        assert_eq!(v["folder_effects"], UNEXPECTED_CHANGE);
+        assert_eq!(v["folder_reason"], "CHANGES_PREEXISTING");
+        assert_eq!(v["change_count"], Value::Null);
+        assert_eq!(v["changes_sha256"], Value::Null);
+    }
+
+    /// C4 R2 reversed (record side): a saved watchdog reason is reported only
+    /// when the journal's stop request is the watchdog's own.
+    #[tokio::test]
+    async fn a_watchdog_reason_counts_only_for_its_own_journal_stop() {
+        let f = Native::new(seed_project, &["src"], &[]);
+        let factory = CountFactory::default();
+        let owner = f.owner();
+        let b = f.binding.clone();
+        let ticket = f.ticket.clone();
+        let journal = f.journal.clone();
+        let path = f.root.path().join("iris-execution/owner.sqlite3");
+        let recorder = tokio::spawn(async move {
+            loop {
+                let store = OwnerStore::open(&path).unwrap();
+                if store.query(&b).is_ok_and(|r| r["root_pid"].is_u64()) {
+                    // The operator's stop came first in the journal.
+                    journal
+                        .lock()
+                        .unwrap()
+                        .stop("operator-stop-1", &b, (now_ms() / 1000) as i64)
+                        .unwrap();
+                    let mut store = store;
+                    let document = json!({"kind":"auto_stop","ticket":ticket,
+                        "reason":STOPPED_AWAITING_APPROVAL,
+                        "stop_request_id":auto_stop_request_id(&b),
+                        "requested_at_ms":now_ms(),"awaiting_since_ms":now_ms(),
+                        "runtime_ms":1,"awaiting_limit_ms":60000,"task_outcome":"unknown",
+                        "effects_verified":false,"task_outcome_verified":false,
+                        "remote_jobs_stopped":false});
+                    return store.record_auto_stop(&ticket, &document).unwrap();
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        });
+        run_owner(&f, owner, json!([{"op":"sleep","ms":1500}]), &factory)
+            .await
+            .unwrap();
+        recorder.await.unwrap();
+        let v = f.verification().await;
+        println!(
+            "C4 record side: reason={} effects={}",
+            v["reason"], v["folder_effects"]
+        );
+        assert_record(&v);
+        assert_eq!(v["folder_effects"], NO_CHANGE);
+        assert_eq!(v["reason"], Value::Null);
     }
 }

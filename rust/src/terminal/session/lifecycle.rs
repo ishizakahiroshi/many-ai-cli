@@ -359,6 +359,7 @@ impl SessionEngine {
             usage_probe: m.usage_probe,
             subscription_login: m.subscription_login,
             custom_provider: self.options.custom_providers.contains(&m.provider),
+            iris_real_project: metadata.iris_real_project,
             native_tail: String::new(),
             usage: None,
             model_revision: 0,

@@ -470,10 +470,68 @@ pub fn protected_name(name: &str) -> bool {
         .any(|p| name.eq_ignore_ascii_case(p))
 }
 
-fn has_protected_component(path: &str) -> bool {
-    // A stream entry is "<file>:<name>:$DATA"; its file part is checked.
+/// The name Win32 path normalization resolves: trailing dots and spaces are
+/// dropped, so `.git.` or `.claude ` created through a verbatim path is opened
+/// as `.git` or `.claude` by an ordinary tool (for example a restore copy).
+fn win32_name(name: &str) -> &str {
+    name.trim_end_matches(['.', ' '])
+}
+
+/// Windows device names, with or without an extension (`NUL.txt`), in any
+/// letter case. COM0/LPT0 and the superscript digits are included as well.
+fn device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).trim_end_matches(' ');
+    let upper = stem.to_ascii_uppercase();
+    matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ["COM", "LPT"].iter().any(|prefix| {
+            upper.strip_prefix(prefix).is_some_and(|digit| {
+                matches!(
+                    digit,
+                    "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+                )
+            })
+        })
+}
+
+/// Every path component; a stream entry is "<file>:<name>:$DATA", whose file
+/// part is the component checked.
+fn components(path: &str) -> impl Iterator<Item = &str> {
     path.split('/')
-        .any(|part| protected_name(part.split(':').next().unwrap_or(part)))
+        .map(|part| part.split(':').next().unwrap_or(part))
+}
+
+fn has_protected_component(path: &str) -> bool {
+    components(path).any(|part| protected_name(part) || protected_name(win32_name(part)))
+}
+
+/// A component Windows does not keep as written (a trailing dot or space) or
+/// a device name: never a plain file or folder name of a work folder.
+fn has_unsafe_component(path: &str) -> bool {
+    components(path)
+        .any(|part| !part.is_empty() && (part.ends_with(['.', ' ']) || device_name(part)))
+}
+
+/// NTFS sets the archive attribute (0x20) on every write, and a copy may clear
+/// it, so it alone is never a difference of a real project folder. Windows
+/// reports `FILE_ATTRIBUTE_NORMAL` (0x80) exactly when no other attribute is
+/// set, so a file without the archive bit reads 0x80 and the same file after
+/// a write 0x20: both mean "no attribute" here. Unix modes are compared as
+/// they are.
+fn same_attributes(a: &FolderEntry, b: &FolderEntry) -> bool {
+    #[cfg(windows)]
+    const IGNORED: u32 = 0x20 | 0x80;
+    #[cfg(not(windows))]
+    const IGNORED: u32 = 0;
+    a.attributes & !IGNORED == b.attributes & !IGNORED
+}
+
+fn same_entry(a: &FolderEntry, b: &FolderEntry) -> bool {
+    a.path == b.path
+        && a.kind == b.kind
+        && a.size == b.size
+        && a.links == b.links
+        && a.sha256 == b.sha256
+        && same_attributes(a, b)
 }
 
 /// SHA256 of the canonical baseline text of a snapshot: one line per entry in
@@ -499,8 +557,10 @@ pub fn baseline_digest(entries: &[FolderEntry]) -> Option<String> {
 }
 
 /// A real project launch baseline: plain single-link files and directories
-/// only, no named stream (including on the folder itself) and no protected
-/// name anywhere. It must equal the operator-pinned digest and entry count.
+/// only, no named stream (including on the folder itself), no protected name
+/// anywhere (also after dropping trailing dots and spaces) and no name with a
+/// trailing dot or space or a Windows device name. It must equal the
+/// operator-pinned digest and entry count.
 pub fn check_project_baseline(
     entries: &[FolderEntry],
     baseline_sha256: &str,
@@ -514,6 +574,9 @@ pub fn check_project_baseline(
     }
     if entries.iter().any(|e| has_protected_component(&e.path)) {
         return Err(fail("FOLDER_PROTECTED_NAME"));
+    }
+    if entries.iter().any(|e| has_unsafe_component(&e.path)) {
+        return Err(fail("FOLDER_UNSAFE_NAME"));
     }
     if entries.len() as u64 != baseline_entry_count
         || baseline_digest(entries).as_deref() != Some(baseline_sha256)
@@ -545,7 +608,7 @@ pub fn change_records(before: &[FolderEntry], after: &[FolderEntry]) -> Vec<Valu
         let change = match (o, n) {
             (None, Some(_)) => "added",
             (Some(_), None) => "removed",
-            (Some(a), Some(b)) if a != b => "modified",
+            (Some(a), Some(b)) if !same_entry(a, b) => "modified",
             _ => continue,
         };
         let kind = n.or(o).map(|e| e.kind.clone()).unwrap_or_default();
@@ -574,8 +637,10 @@ fn in_scope(path: &str, allowed: &[String]) -> bool {
 /// `UNEXPECTED_CHANGE` with the first reason code in path order. A plain
 /// folder is a `dir` entry, which is never a link, junction or other reparse
 /// point (those are `link`). Links, streams, other entry kinds, kind changes,
-/// attribute changes (of files or folders), hard links and protected names
-/// are never scoped.
+/// attribute changes (of files or folders), hard links, protected names (also
+/// after Windows drops trailing dots and spaces: `PROTECTED_NAME`) and names
+/// with a trailing dot or space or a Windows device name (`UNSAFE_NAME`) are
+/// never scoped. The archive attribute alone is not a difference (Windows).
 pub fn classify(
     before: &[FolderEntry],
     after: &[FolderEntry],
@@ -589,7 +654,7 @@ pub fn classify(
     let mut changed = false;
     for path in paths {
         let (o, n) = (old.get(path).copied(), new.get(path).copied());
-        if o == n {
+        if matches!((o, n), (Some(a), Some(b)) if same_entry(a, b)) {
             continue;
         }
         changed = true;
@@ -600,6 +665,8 @@ pub fn classify(
             matches!((o, n), (Some(e), None) | (None, Some(e)) if e.kind == "dir");
         let reason = if has_protected_component(path) {
             Some("PROTECTED_NAME")
+        } else if has_unsafe_component(path) {
+            Some("UNSAFE_NAME")
         } else if entries.iter().flatten().any(|e| e.kind == "stream") {
             Some("STREAM")
         } else if entries.iter().flatten().any(|e| e.kind == "link") {
@@ -614,7 +681,7 @@ pub fn classify(
             )
         } else if n.is_some_and(|e| e.kind == "file" && e.links != 1) {
             Some("HARD_LINK")
-        } else if matches!((o, n), (Some(a), Some(b)) if a.attributes != b.attributes) {
+        } else if matches!((o, n), (Some(a), Some(b)) if !same_attributes(a, b)) {
             Some("ATTRIBUTES")
         } else if !in_scope(path, allowed) {
             Some("OUT_OF_SCOPE")
@@ -941,6 +1008,186 @@ mod tests {
                 "{name}"
             );
         }
+    }
+
+    /// C4 R5 reversed: names Win32 path normalization turns into a protected
+    /// name (trailing dot or space), other names with a trailing dot or space
+    /// and Windows device names are never scoped and never a baseline.
+    #[test]
+    fn trailing_dot_space_and_device_names_are_never_scoped() {
+        let base = vec![
+            entry("", "dir", 0, 0, None),
+            entry("src", "dir", 0, 0, None),
+            entry("src/a.py", "file", 3, 1, Some(&"c".repeat(64))),
+        ];
+        let digest = baseline_digest(&base).unwrap();
+        check_project_baseline(&base, &digest, 3).unwrap();
+        let src = vec!["src".to_string()];
+        let mut checked = 0;
+        for (name, kind, code, baseline) in [
+            (
+                "src/.git.",
+                "dir",
+                "PROTECTED_NAME",
+                "FOLDER_PROTECTED_NAME",
+            ),
+            (
+                "src/.git./config",
+                "file",
+                "PROTECTED_NAME",
+                "FOLDER_PROTECTED_NAME",
+            ),
+            (
+                "src/.claude ",
+                "dir",
+                "PROTECTED_NAME",
+                "FOLDER_PROTECTED_NAME",
+            ),
+            (
+                "src/.Mcp.json. .",
+                "file",
+                "PROTECTED_NAME",
+                "FOLDER_PROTECTED_NAME",
+            ),
+            ("src/a.py.", "file", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
+            ("src/b ", "file", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
+            ("src/dir./f.py", "file", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
+            ("src/CON", "file", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
+            ("src/nul.txt", "file", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
+            (
+                "src/Aux.tar.gz",
+                "file",
+                "UNSAFE_NAME",
+                "FOLDER_UNSAFE_NAME",
+            ),
+            ("src/prn", "dir", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
+            ("src/com1.py", "file", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
+            ("src/LPT9", "file", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
+            ("src/nul .txt", "file", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
+        ] {
+            let mut after = base.clone();
+            after.push(entry(
+                name,
+                kind,
+                1,
+                1,
+                (kind == "file").then_some("e".repeat(64)).as_deref(),
+            ));
+            after.sort_by(|a, b| a.path.cmp(&b.path));
+            assert_eq!(
+                classify(&base, &after, &src),
+                (UNEXPECTED_CHANGE, Some(code)),
+                "{name}"
+            );
+            let digest = baseline_digest(&after).unwrap();
+            assert_eq!(
+                check_project_baseline(&after, &digest, after.len() as u64)
+                    .unwrap_err()
+                    .code,
+                baseline,
+                "{name}"
+            );
+            checked += 1;
+        }
+        // Ordinary names that only look alike stay scoped.
+        for name in [
+            "src/console.py",
+            "src/com10.py",
+            "src/com.py",
+            "src/.gitignore",
+            "src/a.b.py",
+            "src/.git-notes",
+        ] {
+            let mut after = base.clone();
+            after.push(entry(name, "file", 1, 1, Some(&"e".repeat(64))));
+            after.sort_by(|a, b| a.path.cmp(&b.path));
+            assert_eq!(
+                classify(&base, &after, &src),
+                (SCOPED_CHANGE, None),
+                "{name}"
+            );
+        }
+        assert_eq!(checked, 14);
+    }
+
+    /// C4 R5 reversed on disk: the same names created through a verbatim path.
+    #[cfg(windows)]
+    #[test]
+    fn verbatim_trailing_dot_and_space_names_are_unexpected_on_disk() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().canonicalize().unwrap();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        let before = snapshot(&root).unwrap();
+        let verbatim = |rel: &str| {
+            let s = root.to_string_lossy().to_string();
+            let s = if s.starts_with(r"\\?\") {
+                s
+            } else {
+                format!(r"\\?\{s}")
+            };
+            std::path::PathBuf::from(format!(r"{s}\{rel}"))
+        };
+        std::fs::create_dir(verbatim(r"src\.git.")).unwrap();
+        std::fs::write(verbatim(r"src\.git.\config"), b"[core]\n").unwrap();
+        std::fs::create_dir(verbatim(r"src\.claude ")).unwrap();
+        std::fs::write(verbatim(r"src\.claude \settings.json"), b"{}").unwrap();
+        let after = snapshot(&root).unwrap();
+        let result = classify(&before, &after, &["src".to_string()]);
+        let baseline = check_project_baseline(
+            &after,
+            &baseline_digest(&after).unwrap(),
+            after.len() as u64,
+        );
+        let _ = std::fs::remove_dir_all(verbatim(r"src\.git."));
+        let _ = std::fs::remove_dir_all(verbatim(r"src\.claude "));
+        assert_eq!(result, (UNEXPECTED_CHANGE, Some("PROTECTED_NAME")));
+        assert_eq!(baseline.unwrap_err().code, "FOLDER_PROTECTED_NAME");
+    }
+
+    /// C4 R3 reversed: NTFS sets the archive attribute (0x20) on every write,
+    /// so it alone is never a difference; any other attribute still is.
+    #[cfg(windows)]
+    #[test]
+    fn the_archive_attribute_alone_is_not_a_difference() {
+        let base = vec![
+            entry("", "dir", 0, 0, None),
+            entry("src", "dir", 0, 0, None),
+            entry("src/a.py", "file", 3, 1, Some(&"c".repeat(64))),
+        ];
+        let src = vec!["src".to_string()];
+        // Without the archive bit and nothing else, Windows reports NORMAL.
+        let mut cleared = base.clone();
+        for e in &mut cleared {
+            e.attributes = 0x80;
+        }
+        assert_eq!(classify(&cleared, &base, &src), (NO_CHANGE, None));
+        assert!(change_records(&cleared, &base).is_empty());
+        let mut edited = base.clone();
+        edited[2].sha256 = Some("d".repeat(64));
+        assert_eq!(classify(&cleared, &edited, &src), (SCOPED_CHANGE, None));
+        assert_eq!(change_records(&cleared, &edited).len(), 1);
+        let mut hidden = edited.clone();
+        hidden[2].attributes |= 0x2;
+        assert_eq!(
+            classify(&cleared, &hidden, &src),
+            (UNEXPECTED_CHANGE, Some("ATTRIBUTES"))
+        );
+        // On disk: a file copied without the archive bit, then edited.
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().canonicalize().unwrap();
+        std::fs::create_dir(root.join("src")).unwrap();
+        let file = root.join("src").join("a.py");
+        std::fs::write(&file, b"print(1)\n").unwrap();
+        let status = std::process::Command::new("attrib")
+            .arg("-A")
+            .arg(&file)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let before = snapshot(&root).unwrap();
+        std::fs::write(&file, b"print(2)\n").unwrap();
+        let after = snapshot(&root).unwrap();
+        assert_eq!(classify(&before, &after, &src), (SCOPED_CHANGE, None));
     }
 
     #[test]

@@ -3,7 +3,7 @@
 //! grants task success, global effects proof, or automatic handoff authority.
 use super::{
     iris_execution_grants::GrantLoader,
-    iris_execution_journal::{Binding, Journal},
+    iris_execution_journal::{Acceptance, Binding, Journal},
     iris_execution_mcp::{MAX_BYTES, parse_json},
     iris_execution_owner::{
         OwnerStore, OwnerTicket, STOPPED_AWAITING_APPROVAL, STOPPED_RUNTIME_LIMIT, check_binding,
@@ -115,11 +115,15 @@ impl RealProjectWatch {
 }
 
 /// In-memory watchdog observation of one running attempt (lost on restart).
+/// Only `awaiting_approval` and `ended_reason` reach `execution.watch`; the
+/// times stay inside the watchdog.
 #[derive(Clone, Default)]
 struct WatchEntry {
     awaiting_approval: Option<bool>,
     awaiting_since_ms: Option<u64>,
-    observed_at_ms: Option<u64>,
+    /// Why the watchdog stopped watching (a fixed `WATCH_*` code), or `None`
+    /// while it still watches.
+    ended_reason: Option<&'static str>,
 }
 
 struct WatchState {
@@ -377,22 +381,28 @@ impl Watchdog {
         .saturating_mul(1000);
         let limit_ms = self.state.config.awaiting_limit.as_millis() as u64;
         let mut entry = WatchEntry::default();
-        loop {
+        // Every way out records why the watching ended (kept in memory and
+        // shown in `execution.watch`; a restarted Hub has no watchdog).
+        let ended = loop {
             tokio::time::sleep(self.state.config.poll_interval).await;
             let owners = self.owners.clone();
             let query_binding = binding.clone();
             let Some(owner) =
                 blocking(move || owners.lock().ok()?.query(&query_binding).ok()).await
             else {
-                return;
+                break "WATCH_OWNER_UNAVAILABLE";
             };
-            if owner["ticket"] != json!(ticket) || owner["local_tree_ceased"] == true {
-                return;
+            if owner["ticket"] != json!(ticket) {
+                break "WATCH_OWNER_MISMATCH";
             }
-            let Ok(now) = now_ms() else { return };
+            if owner["local_tree_ceased"] == true {
+                break "WATCH_LOCAL_TREE_CEASED";
+            }
+            let Ok(now) = now_ms() else {
+                break "WATCH_CLOCK_UNAVAILABLE";
+            };
             let awaiting = self.port.awaiting_approval(session);
             entry.awaiting_approval = awaiting;
-            entry.observed_at_ms = Some(now);
             entry.awaiting_since_ms = match awaiting {
                 Some(true) => Some(entry.awaiting_since_ms.unwrap_or(now)),
                 _ => None,
@@ -411,12 +421,19 @@ impl Watchdog {
             } else {
                 continue;
             };
-            self.stop(&ticket, reason, now, entry.awaiting_since_ms, runtime_ms)
+            break self
+                .stop(&ticket, reason, now, entry.awaiting_since_ms, runtime_ms)
                 .await;
-            return;
-        }
+        };
+        entry.ended_reason = Some(ended);
+        self.set(&binding, entry);
     }
 
+    /// The journal decides first: the watchdog's reason is saved only when
+    /// its own stop request (deterministic ID) is newly accepted. An earlier
+    /// stop (an operator's `owned_stop`) wins and no reason is saved. Then
+    /// the reason, then the owner-bound stop effect. Returns why the
+    /// watching ended.
     async fn stop(
         &self,
         ticket: &OwnerTicket,
@@ -424,8 +441,27 @@ impl Watchdog {
         now: u64,
         awaiting_since_ms: Option<u64>,
         runtime_ms: Option<u64>,
-    ) {
+    ) -> &'static str {
+        let Some(dispatcher) = self.dispatcher.as_ref().and_then(Weak::upgrade) else {
+            return "WATCH_DISPATCHER_UNAVAILABLE";
+        };
         let request_id = auto_stop_request_id(&ticket.binding);
+        let journal_dispatcher = dispatcher.clone();
+        let journal_id = request_id.clone();
+        let journal_binding = ticket.binding.clone();
+        let accepted = tokio::task::spawn_blocking(move || {
+            journal_dispatcher.record_stop(&journal_id, &journal_binding)
+        })
+        .await;
+        match accepted {
+            Ok(Ok(Acceptance::New(_))) => {}
+            // The watchdog's own earlier request (same ID): no new reason.
+            Ok(Ok(Acceptance::Replay(_))) => {
+                dispatcher.deliver_stop(&request_id, &ticket.binding).await;
+                return "WATCH_STOP_REQUESTED";
+            }
+            _ => return "WATCH_STOP_NOT_ACCEPTED",
+        }
         let document = json!({"kind":"auto_stop","ticket":ticket,"reason":reason,
             "stop_request_id":request_id,"requested_at_ms":now,
             "awaiting_since_ms":awaiting_since_ms,"runtime_ms":runtime_ms,
@@ -434,9 +470,9 @@ impl Watchdog {
             "remote_jobs_stopped":false});
         let owners = self.owners.clone();
         let record_ticket = ticket.clone();
-        // The reason is saved before the stop request. A provider that has
-        // already ended (AUTO_STOP_ORDER) needs no stop; any other storage
-        // failure still stops, because stopping is the safe direction.
+        // A provider that has already ended (AUTO_STOP_ORDER) needs no stop;
+        // any other storage failure still stops, because stopping is the
+        // safe direction.
         let recorded = tokio::task::spawn_blocking(move || {
             owners
                 .lock()
@@ -446,12 +482,10 @@ impl Watchdog {
         })
         .await;
         if matches!(&recorded, Ok(Err(code)) if code == "AUTO_STOP_ORDER") {
-            return;
+            return "WATCH_LOCAL_TREE_CEASED";
         }
-        let Some(dispatcher) = self.dispatcher.as_ref().and_then(Weak::upgrade) else {
-            return;
-        };
-        let _ = dispatcher.request_stop(&request_id, &ticket.binding).await;
+        dispatcher.deliver_stop(&request_id, &ticket.binding).await;
+        "WATCH_STOP_REQUESTED"
     }
 }
 
@@ -737,6 +771,9 @@ impl OwnedProfile {
                         })
                     };
                     hooks.supervisor = Some(supervisor);
+                    // A registered launch that misses running is stopped,
+                    // never left to run without the watchdog.
+                    hooks.late_stop = true;
                 }
             }
             let dispatcher = Arc::new(
@@ -1028,6 +1065,7 @@ impl OwnedProfile {
                 .map_err(|e| (e.code, e.detail))?;
             (owner, folder["collection"].clone(), auto_stop)
         };
+        let stop_reason = self.watchdog_stop_reason(binding, &auto_stop)?;
         let outcome = &owner["outcome_receipt"];
         let waiting = if !self.kind.admits(binding) {
             Some("OWNED_PROVIDER_UNAVAILABLE")
@@ -1052,14 +1090,46 @@ impl OwnedProfile {
         };
         Ok(match waiting {
             Some(reason) => real_project_record(Some(reason), None),
-            None => real_project_record(auto_stop["reason"].as_str(), Some(&collection)),
+            None => real_project_record(stop_reason, Some(&collection)),
         })
     }
 
-    /// Watchdog view for the observation: Core's last permission-prompt
+    /// The saved watchdog reason, only while the journal's stop request is
+    /// the watchdog's own (deterministic ID, the same ID in the saved row).
+    /// An operator stop, or any other stop request, has no watchdog reason.
+    fn watchdog_stop_reason(
+        &self,
+        binding: &Binding,
+        auto_stop: &Value,
+    ) -> Result<Option<&'static str>, (String, String)> {
+        let Some(reason) = auto_stop["reason"].as_str() else {
+            return Ok(None);
+        };
+        let journal_stop = match self
+            .journal
+            .lock()
+            .map_err(|_| error("OWNED_STORAGE"))?
+            .query(binding)
+        {
+            Ok(record) => record["stop_request_id"].clone(),
+            Err(e) if e.code == "NOT_FOUND" => Value::Null,
+            Err(e) => return Err((e.code, e.detail)),
+        };
+        let own = auto_stop_request_id(binding);
+        if journal_stop != own || auto_stop["stop_request_id"] != own {
+            return Ok(None);
+        }
+        Ok([STOPPED_AWAITING_APPROVAL, STOPPED_RUNTIME_LIMIT]
+            .into_iter()
+            .find(|code| *code == reason))
+    }
+
+    /// Watchdog view for the observation: state changes only, so repeated
+    /// polls of an unchanged attempt are equal. Core's last permission-prompt
     /// state (null when not observed by this Hub, e.g. after a restart), the
-    /// run time since the root started, the limits and any saved auto stop.
-    fn watch_document(&self, binding: &Binding, execution: &Value) -> ToolResult {
+    /// effective watchdog stop reason, and why the watchdog ended (null while
+    /// it watches or when this Hub never watched the attempt). No time.
+    fn watch_document(&self, binding: &Binding) -> ToolResult {
         let Some(state) = &self.watch else {
             return Ok(Value::Null);
         };
@@ -1070,41 +1140,21 @@ impl OwnedProfile {
             .get(&attempt_key(binding))
             .cloned()
             .unwrap_or_default();
-        let owner = &execution["owner"];
-        let end = if owner["local_tree_ceased"] == true {
-            owner["cessation_receipt"]["observed_at_ms"].as_u64()
-        } else {
-            now_ms().ok()
-        };
-        let runtime_ms = match (owner["root_started_at_ms"].as_u64(), end) {
-            (Some(start), Some(end)) => json!(end.saturating_sub(start)),
-            _ => Value::Null,
-        };
-        let max_runtime_sec = match self
-            .verifications
-            .lock()
-            .map_err(|_| error("OWNED_STORAGE"))?
-            .policy_pin(binding)
-        {
-            Ok(pin) => pin["folder_policy"]["max_runtime_sec"].clone(),
-            Err(_) => Value::Null,
-        };
         let auto_stop = self
             .owners
             .lock()
             .map_err(|_| error("OWNED_STORAGE"))?
             .query_auto_stop(binding)
             .map_err(|e| (e.code, e.detail))?;
+        let stop_reason = self.watchdog_stop_reason(binding, &auto_stop)?;
         Ok(json!({"awaiting_approval":entry.awaiting_approval,
-            "awaiting_since_ms":entry.awaiting_since_ms,"observed_at_ms":entry.observed_at_ms,
-            "awaiting_limit_sec":state.config.awaiting_limit.as_secs_f64(),
-            "runtime_ms":runtime_ms,"max_runtime_sec":max_runtime_sec,"auto_stop":auto_stop}))
+            "stop_reason":stop_reason,"ended_reason":entry.ended_reason}))
     }
 
     fn observe(&self, binding: &Binding, request: Value) -> ToolResult {
         let mut execution = self.execution(binding)?;
         if self.kind == OwnedProfileKind::RealProject {
-            execution["watch"] = self.watch_document(binding, &execution)?;
+            execution["watch"] = self.watch_document(binding)?;
         }
         let verification = match self.kind {
             OwnedProfileKind::RealProject => self.real_project_verification(binding)?,

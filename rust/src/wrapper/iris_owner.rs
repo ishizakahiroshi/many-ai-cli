@@ -29,8 +29,108 @@ use std::{
 };
 
 pub const OWNER_ENV: &str = "MANY_AI_CLI_IRIS_OWNER";
+/// Provider arguments the Hub adds to a real project launch: no user settings
+/// (`~/.claude/settings.json` permissions, hooks, default mode, additional
+/// directories), project and local settings only (the work folder has no
+/// `.claude`, which its baseline refuses), and no MCP server from any file.
+pub const REAL_PROJECT_ISOLATION_ARGS: [&str; 3] =
+    ["--setting-sources", "project,local", "--strict-mcp-config"];
+/// Claude flags a real project launch never carries: each would let something
+/// other than the pinned policy and the approved instruction shape the run.
+const REAL_PROJECT_REFUSED_FLAGS: [&str; 11] = [
+    "--mcp-config",
+    "--add-dir",
+    "--plugin-dir",
+    "--agents",
+    "--system-prompt",
+    "--system-prompt-file",
+    "--append-system-prompt",
+    "--dangerously-skip-permissions",
+    "--allow-dangerously-skip-permissions",
+    "--permission-prompt-tool",
+    "--disallowedTools",
+];
+/// The only keys the wrapper's own `--settings` file may hold (the Hub's
+/// status line and cross-session switch); never permissions or hooks.
+const REAL_PROJECT_SETTINGS_KEYS: [&str; 2] = ["statusLine", "crossSessionInbound"];
+const MAX_ARGV_FILE_BYTES: u64 = 1024 * 1024;
+
 fn failure() -> io::Error {
     io::Error::other("trusted execution owner conditions were not satisfied")
+}
+
+/// Every occurrence of `flag` (`--flag value` or `--flag=value`) with its
+/// value, if any.
+fn occurrences<'a>(argv: &'a [String], flag: &str) -> Vec<Option<&'a str>> {
+    let prefix = format!("{flag}=");
+    let mut out = Vec::new();
+    for (index, arg) in argv.iter().enumerate() {
+        if arg == flag {
+            out.push(argv.get(index + 1).map(String::as_str));
+        } else if let Some(value) = arg.strip_prefix(&prefix) {
+            out.push(Some(value));
+        }
+    }
+    out
+}
+
+fn small_file(path: &str) -> Result<Vec<u8>, &'static str> {
+    let meta = std::fs::symlink_metadata(path).map_err(|_| "ARGV_FILE")?;
+    if !meta.is_file() || meta.len() > MAX_ARGV_FILE_BYTES {
+        return Err("ARGV_FILE");
+    }
+    std::fs::read(path).map_err(|_| "ARGV_FILE")
+}
+
+/// The real project rules for the final provider argv, checked immediately
+/// before the spawn claim. Returns only a fixed code.
+pub fn check_real_project_argv(
+    argv: &[String],
+    instruction_hash: &str,
+    tools: &[String],
+) -> Result<(), &'static str> {
+    let [sources_flag, sources, strict] = REAL_PROJECT_ISOLATION_ARGS;
+    if occurrences(argv, sources_flag) != [Some(sources)] {
+        return Err("ARGV_SETTING_SOURCES");
+    }
+    if occurrences(argv, strict).is_empty() {
+        return Err("ARGV_STRICT_MCP_CONFIG");
+    }
+    if REAL_PROJECT_REFUSED_FLAGS
+        .iter()
+        .any(|flag| !occurrences(argv, flag).is_empty())
+    {
+        return Err("ARGV_REFUSED_FLAG");
+    }
+    if occurrences(argv, "--permission-mode") != [Some("acceptEdits")] {
+        return Err("ARGV_PERMISSION_MODE");
+    }
+    let tool_flags =
+        occurrences(argv, "--allowedTools").len() + occurrences(argv, "--allowed-tools").len();
+    if tool_flags != usize::from(!tools.is_empty()) {
+        return Err("ARGV_ALLOWED_TOOLS");
+    }
+    match occurrences(argv, "--settings").as_slice() {
+        [] => {}
+        [Some(path)] => {
+            let value = parse_json(&small_file(path)?).map_err(|_| "ARGV_SETTINGS")?;
+            let object = value.as_object().ok_or("ARGV_SETTINGS")?;
+            if object
+                .keys()
+                .any(|key| !REAL_PROJECT_SETTINGS_KEYS.contains(&key.as_str()))
+            {
+                return Err("ARGV_SETTINGS");
+            }
+        }
+        _ => return Err("ARGV_SETTINGS"),
+    }
+    match occurrences(argv, "--append-system-prompt-file").as_slice() {
+        [] => {}
+        // Only the approved instruction itself, byte for byte.
+        [Some(path)] if sha(&small_file(path)?) == instruction_hash => {}
+        _ => return Err("ARGV_SYSTEM_PROMPT"),
+    }
+    Ok(())
 }
 fn now_ms() -> io::Result<u64> {
     SystemTime::now()
@@ -69,10 +169,26 @@ pub struct DurableExecutionOwner {
     /// The real project policy checked at the exec boundary, kept for the
     /// collector of the same launch.
     project: Mutex<Option<FolderPolicy>>,
+    /// The exact provider argv this wrapper is about to execute (after every
+    /// hook and the instruction), recorded by the wrapper right before the
+    /// exec boundary. A real project launch refuses without it.
+    provider_argv: Mutex<Option<Vec<String>>>,
 }
 impl DurableExecutionOwner {
     pub fn instruction_hash(&self) -> &str {
         &self.ticket.binding.instruction_hash
+    }
+    /// A real project (`folder-diff` collector) launch.
+    pub fn real_project(&self) -> bool {
+        self.grant.folder_diff()
+    }
+    /// Record the final provider argv (the resolved command's arguments,
+    /// whether or not a launch shell runs it). The latest call wins; the real
+    /// project check at the exec boundary reads it.
+    pub fn observe_provider_argv(&self, argv: &[String]) {
+        if let Ok(mut slot) = self.provider_argv.lock() {
+            *slot = Some(argv.to_vec());
+        }
     }
     /// The parsed `--allowed-tools` of this wrapper launch. A real project
     /// launch refuses unless they equal its pinned policy's `allowed_tools`.
@@ -396,7 +512,7 @@ impl DurableExecutionOwner {
                 Value::Null,
             ),
         };
-        let change_count = records.as_ref().map(Vec::len);
+        let mut change_count = None;
         let mut changes_sha256 = Value::Null;
         let mut changes_bytes = Value::Null;
         if let Some(records) = &records {
@@ -415,7 +531,11 @@ impl DurableExecutionOwner {
                 );
             } else {
                 match changes_permit.create_exclusive(&bytes) {
+                    // The count is reported only together with the SHA256 of
+                    // the list that holds it; an unwritten list has neither,
+                    // and the folder reason says why.
                     Ok(()) => {
+                        change_count = Some(records.len());
                         changes_sha256 = json!(sha(&bytes));
                         changes_bytes = json!(bytes.len());
                     }
@@ -530,6 +650,7 @@ impl DurableExecutionOwner {
             trust: None,
             launch_tools: None,
             project: Mutex::new(None),
+            provider_argv: Mutex::new(None),
         })
     }
 }
@@ -577,6 +698,20 @@ impl ExecutionOwnerObserver for DurableExecutionOwner {
             if self.launch_tools.as_deref() != Some(policy.allowed_tools.as_slice()) {
                 return Err(failure());
             }
+            // The final argv: no user settings, no MCP server, no settings
+            // file with permissions or hooks, no other system prompt.
+            let argv = self
+                .provider_argv
+                .lock()
+                .map_err(|_| failure())?
+                .clone()
+                .ok_or_else(failure)?;
+            check_real_project_argv(
+                &argv,
+                &self.ticket.binding.instruction_hash,
+                &policy.allowed_tools,
+            )
+            .map_err(|_| failure())?;
             Some(policy)
         } else {
             None

@@ -239,13 +239,25 @@ pub type GrantCheck = Arc<dyn Fn(&ApprovedGrant) -> bool + Send + Sync>;
 /// stop). It must not block; it may start its own task.
 pub type LaunchSupervisor = Arc<dyn Fn(OwnerTicket, SessionBinding) + Send + Sync>;
 
-/// Optional trusted profile hooks. All `None` is the existing behavior.
+/// Optional trusted profile hooks. All `None`/`false` is the existing behavior.
 #[derive(Clone, Default)]
 pub struct DispatcherHooks {
     pub admission: Option<LaunchAdmission>,
     pub launch_tools: Option<LaunchTools>,
     pub grant_check: Option<GrantCheck>,
     pub supervisor: Option<LaunchSupervisor>,
+    /// After a registered launch fails to reach running (root not bound
+    /// within `root_timeout`, binding or journal failure, shutdown), request
+    /// a stop with [`late_stop_request_id`] and deliver it owner-bound if the
+    /// root is bound later, so the attempt never runs unwatched.
+    pub late_stop: bool,
+}
+
+/// Deterministic per binding, like the watchdog's ID, so a repeated late
+/// stop replays the same journal receipt.
+pub fn late_stop_request_id(b: &Binding) -> String {
+    let digest = crate::hub::iris_execution_owner::sha(json!(b).to_string().as_bytes());
+    format!("iris-late-stop-{}", &digest[..48])
 }
 
 struct Shared {
@@ -462,25 +474,40 @@ impl OwnedDispatcher {
         request_id: &str,
         binding: &Binding,
     ) -> Result<Value, DispatchError> {
-        let receipt = {
-            let mut journal = self
-                .shared
-                .journal
-                .lock()
-                .map_err(|_| DispatchError::Persistence)?;
-            match journal.stop(request_id, binding, now()?).map_err(|error| {
-                if error.code == "REQUEST_CONFLICT" {
-                    DispatchError::Conflict
-                } else {
-                    DispatchError::AdmissionRejected
-                }
-            })? {
-                Acceptance::New(value) => value,
-                // A receipt replay is inspection, never renewed effect authority.
-                // A pre-root intent is continued only by its existing worker.
-                Acceptance::Replay(value) => return Ok(value),
+        match self.record_stop(request_id, binding)? {
+            Acceptance::New(receipt) => {
+                self.deliver_stop(request_id, binding).await;
+                Ok(receipt)
             }
-        };
+            // A receipt replay is inspection, never renewed effect authority.
+            // A pre-root intent is continued only by its existing worker.
+            Acceptance::Replay(receipt) => Ok(receipt),
+        }
+    }
+    /// The journal half of [`Self::request_stop`]: the stop request itself.
+    /// `New` only when this request ID was accepted now; an earlier stop
+    /// request with another ID is refused (`DISPATCH_ADMISSION_REJECTED`).
+    pub fn record_stop(
+        &self,
+        request_id: &str,
+        binding: &Binding,
+    ) -> Result<Acceptance, DispatchError> {
+        let mut journal = self
+            .shared
+            .journal
+            .lock()
+            .map_err(|_| DispatchError::Persistence)?;
+        journal.stop(request_id, binding, now()?).map_err(|error| {
+            if error.code == "REQUEST_CONFLICT" {
+                DispatchError::Conflict
+            } else {
+                DispatchError::AdmissionRejected
+            }
+        })
+    }
+    /// The effect half of [`Self::request_stop`], only after the journal holds
+    /// this request: the owner-bound stop through the launch port.
+    pub async fn deliver_stop(&self, request_id: &str, binding: &Binding) {
         if let Ok(ticket) = self.shared.ticket(binding) {
             // An unbound root may reject this attempt; worker later uses this
             // same persisted ID. The launch port owns effect idempotency.
@@ -490,7 +517,6 @@ impl OwnedDispatcher {
             )
             .await;
         }
-        Ok(receipt)
     }
     pub fn query(&self, binding: &Binding) -> Result<Value, DispatchError> {
         let mut record = {
@@ -663,6 +689,77 @@ async fn process(
             return Err(DispatchError::Unavailable);
         }
     };
+    let result = await_root(shared, job, session, stopped).await;
+    if result.is_err() && shared.hooks.late_stop {
+        late_stop(&job.shared, &job.ticket, session);
+    }
+    result
+}
+/// A registered launch that did not reach running. The stop request is saved
+/// at once (so a wrapper still before its exec-boundary journal check refuses
+/// to spawn); a task then delivers the owner-bound stop as soon as the root is
+/// bound, for as long as the exact session stays current. If the journal
+/// already holds another stop request (an operator or the watchdog), that
+/// request is the one delivered. Nothing here retries or replaces the launch.
+fn late_stop(shared: &Arc<Shared>, ticket: &OwnerTicket, session: SessionBinding) {
+    let binding = &ticket.binding;
+    let id = late_stop_request_id(binding);
+    let stop_id = (|| {
+        let mut journal = shared.journal.lock().ok()?;
+        match journal.stop(&id, binding, now().ok()?) {
+            Ok(_) => Some(id.clone()),
+            Err(_) => journal.query(binding).ok()?["stop_request_id"]
+                .as_str()
+                .map(str::to_owned),
+        }
+    })();
+    let Some(stop_id) = stop_id else {
+        return;
+    };
+    let shared = shared.clone();
+    let ticket = ticket.clone();
+    let interval = shared.config.poll_interval.max(Duration::from_millis(100));
+    tokio::spawn(async move {
+        loop {
+            if !shared.port.is_current(session) {
+                return;
+            }
+            let owner = {
+                let Ok(owners) = shared.owners.lock() else {
+                    return;
+                };
+                let Ok(owner) = owners.query(&ticket.binding) else {
+                    return;
+                };
+                owner
+            };
+            if owner["ticket"] != json!(ticket) || owner["local_tree_ceased"] == true {
+                return;
+            }
+            if root_bound(&owner, session)
+                && shared.port.bind_owner(&ticket, session).is_ok()
+                && matches!(
+                    timeout(
+                        shared.config.stop_timeout,
+                        shared.port.stop_owner(&ticket, &stop_id)
+                    )
+                    .await,
+                    Ok(Ok(_))
+                )
+            {
+                return;
+            }
+            sleep(interval).await;
+        }
+    });
+}
+async fn await_root(
+    shared: &Shared,
+    job: &Job,
+    session: SessionBinding,
+    stopped: &mut watch::Receiver<bool>,
+) -> Result<(), DispatchError> {
+    let binding = &job.ticket.binding;
     let deadline = Instant::now() + shared.config.root_timeout;
     loop {
         if *stopped.borrow() {

@@ -130,6 +130,13 @@ impl ApprovalActions for SessionEngine {
                 {
                     return Err(ApprovalActionError::StaleCandidate);
                 }
+                // Same rule as the automatic approval runtime, at the send
+                // boundary: no rule ever answers an Iris real project prompt.
+                if s.iris_real_project
+                    && matches!(request.origin, NativeActionOrigin::Automatic { .. })
+                {
+                    return Err(ApprovalActionError::PolicyChanged);
+                }
                 let (input, selected_text) = match &request.selection {
                     NativeActionSelection::Exact {
                         selected_text,

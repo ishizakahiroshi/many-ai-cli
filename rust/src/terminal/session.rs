@@ -185,6 +185,7 @@ struct Session {
     usage_probe: bool,
     subscription_login: bool,
     custom_provider: bool,
+    iris_real_project: bool,
     native_tail: String,
     usage: Option<proto::Message>,
     model_revision: u64,
@@ -569,6 +570,7 @@ impl Session {
             subagents: self.subagents.clone(),
             done: self.done.clone(),
             connected: self.connected,
+            iris_real_project: self.iris_real_project,
         }
     }
     fn card_meta(&self) -> SessionCardMeta {

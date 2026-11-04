@@ -633,13 +633,20 @@ impl OwnerStore {
         Ok(Self { db })
     }
     /// Real project watchdog only: why the Hub requested an automatic stop
-    /// (`STOPPED_AWAITING_APPROVAL` or `STOPPED_RUNTIME_LIMIT`), saved before
-    /// the stop request so a watchdog stop never exists without its reason.
-    /// One row per attempt, created on first use and never replaced; an
-    /// identical row is returned as history. It proves no cessation: only the
-    /// owner's `local_tree_ceased` record confirms the stop.
+    /// (`STOPPED_AWAITING_APPROVAL` or `STOPPED_RUNTIME_LIMIT`). The watchdog
+    /// saves it only after the journal newly accepted its own stop request
+    /// (the deterministic watchdog ID, the only ID a row may name) and before
+    /// the owner-bound stop effect. A reader reports it only while the
+    /// journal's stop request is that same ID: an earlier operator stop never
+    /// carries a watchdog reason. One row per attempt, created on first use
+    /// and never replaced; an identical row is returned as history. It proves
+    /// no cessation: only the owner's `local_tree_ceased` record confirms it.
     pub fn record_auto_stop(&mut self, t: &OwnerTicket, document: &Value) -> Result<Value> {
-        if document["ticket"] != json!(t) || !auto_stop_flags(document) {
+        if document["ticket"] != json!(t)
+            || !auto_stop_flags(document)
+            || document["stop_request_id"]
+                != super::iris_execution_owned::auto_stop_request_id(&t.binding)
+        {
             return Err(fail("AUTO_STOP_RECORD"));
         }
         let tx = sql(self

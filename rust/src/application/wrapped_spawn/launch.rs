@@ -341,6 +341,23 @@ fn prepare_resolved(
         if spec.utf8_session {
             args.push("--utf8".into());
         }
+        if spec.registration_metadata.iris_real_project {
+            // An Iris real project launch: provider arguments after `--`
+            // remove the user settings and every MCP server file. The
+            // wrapper's owner refuses the exec without them.
+            if spec.provider != "claude" || spec.registration_metadata.iris_owner_context.is_empty()
+            {
+                return Err(invalid(
+                    "Iris real project launch requires the claude owner",
+                ));
+            }
+            args.push("--".into());
+            args.extend(
+                crate::wrapper::iris_owner::REAL_PROJECT_ISOLATION_ARGS
+                    .iter()
+                    .map(|v| OsString::from(*v)),
+            );
+        }
     }
     let mut environment = BTreeMap::new();
     add_environment(&mut environment, &resolved.base_environment)?;
