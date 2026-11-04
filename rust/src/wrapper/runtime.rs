@@ -56,6 +56,10 @@ pub struct WrapperOptions {
     pub input_capacity: usize,
     pub drain_timeout: Duration,
     pub execution_owner: Option<Arc<dyn ExecutionOwnerObserver>>,
+    /// Never reattach: when the Hub connection ends for any reason (write
+    /// timeout, output lag, read failure, `hub_shutdown`), stop the provider
+    /// process tree and finish. Set only for an Iris real project launch.
+    pub no_reattach: bool,
 }
 impl WrapperOptions {
     pub fn new(registration: Message, process: ProcessPlan) -> Self {
@@ -73,6 +77,7 @@ impl WrapperOptions {
             input_capacity: 64,
             drain_timeout: Duration::from_secs(2),
             execution_owner: None,
+            no_reattach: false,
         }
     }
 }
@@ -406,10 +411,14 @@ where
             }
             if socket.is_none() {
                 let recent = last_reattach.is_some_and(|at| at.elapsed() < Duration::from_secs(10));
-                if (!intentional
+                // A no-reattach launch (Iris real project) stops its provider
+                // tree on any lost connection: write timeout, output lag, read
+                // failure or an explicit `hub_shutdown`.
+                if options.no_reattach
+                    || (!intentional
                     && !transport_fault
                     && !recent
-                    && (connector.probe().await || options.auto_shutdown))
+                        && (connector.probe().await || options.auto_shutdown))
                     || options.reconnect_grace.is_zero()
                 {
                     close_session(pty.as_ref(), strict_owner);

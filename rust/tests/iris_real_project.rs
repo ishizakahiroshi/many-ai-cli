@@ -1190,10 +1190,17 @@ mod native {
             let mut env = BTreeMap::new();
             env.insert(PLAN_ENV.into(), Some(plan.to_string().into()));
             env.insert(DONE_ENV.into(), Some(self.done_path().into_os_string()));
-            env.insert(
-                "CLAUDE_CONFIG_DIR".into(),
-                Some(self.work.path().join("claude-config").into_os_string()),
-            );
+            // The wrapper's real project environment: no Claude, Anthropic or
+            // many-ai-cli name inherited from this test process.
+            let inherited = std::env::vars_os()
+                .filter_map(|(name, _)| name.into_string().ok())
+                .collect::<Vec<_>>();
+            many_ai_cli::wrapper::launch::apply_real_project_environment(
+                &mut env,
+                &inherited,
+                self.work.path().join("claude-config").to_str(),
+            )
+            .unwrap();
             ProcessPlan {
                 executable: std::env::current_exe().unwrap(),
                 args: vec![
@@ -1818,8 +1825,15 @@ mod native {
             std::fs::write(&path, body).unwrap();
             path.to_string_lossy().into_owned()
         };
+        // The wrapper's own status line (`hooks::claude_settings`), synthetic
+        // token and paths.
         let status_only = file(
             "status.json",
+            br#"{"statusLine":{"type":"command","command":"MANY_AI_CLI_HUB_TOKEN='synthetic' 'C:/synthetic/many-ai-cli.exe' usage-relay --provider claude --hub http://127.0.0.1:47951 --session 7","padding":0}}"#,
+        );
+        // C4 re-review L2: any other status line command is refused.
+        let other_status = file(
+            "other-status.json",
             br#"{"statusLine":{"type":"command","command":"x","padding":0}}"#,
         );
         let with_permissions = file(
@@ -1870,6 +1884,13 @@ mod native {
                 f.claude_argv(&["--settings", &with_hooks]),
             ),
             (
+                "settings with another status line",
+                f.claude_argv(&["--settings", &other_status]),
+            ),
+            ("no --no-chrome", without("--no-chrome")),
+            ("end of options", f.claude_argv(&["--"])),
+            ("resume", f.claude_argv(&["-r", "x"])),
+            (
                 "two settings",
                 f.claude_argv(&["--settings", &status_only, "--settings", &status_only]),
             ),
@@ -1901,9 +1922,143 @@ mod native {
             "--append-system-prompt-file",
             &approved,
         ]));
+        let kept = owner.clone();
         run_owner(&f, owner, json!([]), &factory).await.unwrap();
         assert_eq!(factory.0.load(Ordering::SeqCst), 1);
+        // C4 re-review L1: the checked files were held through the run and
+        // released when it finished, so the wrapper can remove them.
+        assert_eq!(kept.held_argv_file_count(), 0);
+        std::fs::remove_file(&status_only).unwrap();
+        std::fs::remove_file(&approved).unwrap();
         println!("C4 argv: refused={count} accepted=1");
+    }
+
+    async fn run_process(
+        f: &Native,
+        owner: Arc<DurableExecutionOwner>,
+        process: ProcessPlan,
+        factory: &CountFactory,
+    ) -> io::Result<()> {
+        let connector = Connector {
+            done: f.done_path(),
+        };
+        let mut options = WrapperOptions::new(
+            Message {
+                provider: "synthetic".into(),
+                token: "synthetic-only".into(),
+                ..Default::default()
+            },
+            process,
+        );
+        options.execution_owner = Some(owner);
+        options.reconnect_grace = Duration::ZERO;
+        options.drain_timeout = Duration::from_millis(100);
+        tokio::time::timeout(
+            Duration::from_secs(20),
+            runtime::run(
+                options,
+                &connector,
+                factory,
+                &Cancellation::default(),
+                |_, _| Ok(()),
+            ),
+        )
+        .await
+        .expect("real project wrapper deadline")
+        .map(|_| ())
+    }
+
+    /// C4 re-review L6: an instruction file in a folder above the work
+    /// folder refuses the launch before anything is claimed or spawned.
+    #[tokio::test]
+    async fn an_ancestor_instruction_file_refuses_the_launch() {
+        for name in ["CLAUDE.md", "AGENTS.md", "CLAUDE.local.md", ".claude"] {
+            let f = Native::new(seed_project, &["src"], &[]);
+            // The work fixture's folder is the parent of the work folder.
+            let target = f.work.path().join(name);
+            if name == ".claude" {
+                std::fs::create_dir(&target).unwrap();
+            } else {
+                std::fs::write(&target, b"synthetic").unwrap();
+            }
+            let (result, launches) = run(&f, json!([])).await;
+            assert!(result.is_err(), "{name}");
+            assert_eq!(launches, 0, "{name}");
+            let record = f.owners().query(&f.binding);
+            assert!(
+                record.is_err() || record.unwrap()["claimed_session"].is_null(),
+                "{name}"
+            );
+        }
+    }
+
+    /// C4 re-review M2: a planned or inherited Claude, Anthropic or
+    /// many-ai-cli name, a missing Claude folder or a launch shell payload
+    /// refuses the launch at the exec boundary.
+    #[tokio::test]
+    async fn a_provider_environment_outside_the_rule_refuses_the_launch() {
+        let cases: Vec<(&str, Box<dyn Fn(&mut ProcessPlan)>)> = vec![
+            (
+                "planned API key",
+                Box::new(|p| {
+                    p.env.insert("ANTHROPIC_API_KEY".into(), Some("x".into()));
+                }),
+            ),
+            (
+                "planned Claude switch",
+                Box::new(|p| {
+                    p.env
+                        .insert("CLAUDE_CODE_ENTRYPOINT".into(), Some("x".into()));
+                }),
+            ),
+            (
+                "planned many-ai-cli name",
+                Box::new(|p| {
+                    p.env
+                        .insert("MANY_AI_CLI_DELEGATION".into(), Some("1".into()));
+                }),
+            ),
+            (
+                "parent session marker",
+                Box::new(|p| {
+                    p.env.insert("CLAUDECODE".into(), Some("1".into()));
+                }),
+            ),
+            (
+                "no Claude folder",
+                Box::new(|p| {
+                    p.env.retain(|k, _| {
+                        !k.to_string_lossy()
+                            .eq_ignore_ascii_case("CLAUDE_CONFIG_DIR")
+                    });
+                }),
+            ),
+            (
+                "launch shell payload",
+                Box::new(|p| {
+                    p.env.insert(
+                        many_ai_cli::wrapper::launch_payload::PAYLOAD_ENV.into(),
+                        Some("x".into()),
+                    );
+                }),
+            ),
+        ];
+        for (name, change) in cases {
+            let f = Native::new(seed_project, &["src"], &[]);
+            let factory = CountFactory::default();
+            let mut process = f.process(&json!([]));
+            change(&mut process);
+            let result = run_process(&f, f.owner(), process, &factory).await;
+            assert!(result.is_err(), "{name}");
+            assert_eq!(factory.0.load(Ordering::SeqCst), 0, "{name}");
+        }
+        // The rule's own plan launches.
+        let f = Native::new(seed_project, &["src"], &[]);
+        let factory = CountFactory::default();
+        run_process(&f, f.owner(), f.process(&json!([])), &factory)
+            .await
+            .unwrap();
+        assert_eq!(factory.0.load(Ordering::SeqCst), 1);
     }
 
     /// C4 (Iris side): when the full change list cannot be written, the count

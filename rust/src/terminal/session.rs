@@ -43,6 +43,13 @@ mod ui;
 mod usage;
 
 pub const USER_TURN_MARKER: &[u8] = b"\x1b]47777;user-turn\x07";
+/// Reattach refusal reason for a live session registered from an Iris real
+/// project launch. Such a wrapper never reattaches; it stops its provider
+/// when the Hub connection ends. A reattach that still arrives is refused
+/// (and answered with `reattach_reject`), so the server-owned mark, the
+/// watchdog binding and the automatic approval exclusion are never rebuilt
+/// from wrapper-supplied fields.
+pub const IRIS_REAL_PROJECT_REATTACH_REFUSED: &str = "iris real project session cannot reattach";
 pub type LiveApprovalPolicy =
     Arc<dyn Fn(&str, &str, &proto::ApprovalSummary) -> bool + Send + Sync>;
 pub type EngineWarningHandler = Arc<dyn Fn(&str, &SessionError) + Send + Sync>;

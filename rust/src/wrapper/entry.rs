@@ -153,12 +153,14 @@ fn select_launch_shell(
     launch: &LaunchPlan,
     provider: &str,
     resolver: &CommandResolver<'_>,
+    real_project: bool,
 ) -> io::Result<Option<(String, String)>> {
     if !launch_shell_eligible(
         provider,
         launch.headless,
         launch.login_mode,
         context.environment,
+        real_project,
     ) {
         return Ok(None);
     }
@@ -173,13 +175,26 @@ fn select_launch_shell(
         )),
     }
 }
+/// An Iris real project launch never runs through a launch shell or a cmd.exe
+/// shim: the resolved provider must be a direct executable, otherwise the
+/// launch is refused (no profile script, no shell environment rewrite).
+fn real_project_direct(command: &crate::process::execpath::ResolvedCommand) -> io::Result<()> {
+    if command.shell_shim.is_some() {
+        return Err(io::Error::other(
+            "Iris real project launch requires a directly executable provider",
+        ));
+    }
+    Ok(())
+}
 fn launch_shell_eligible(
     provider: &str,
     headless: bool,
     login_mode: bool,
     environment: &[String],
+    real_project: bool,
 ) -> bool {
-    !headless
+    !real_project
+        && !headless
         && !login_mode
         && provider != "shell"
         && env(environment, "MANY_AI_CLI_USAGE_PROBE") != Some("1")
@@ -248,16 +263,19 @@ fn apply_hooks(
     port: u16,
     hooks: &mut SessionHooks,
     args: &mut Vec<String>,
+    real_project: bool,
 ) -> io::Result<()> {
     for hook in &launch.required_hooks {
         match hook {
+            // An Iris real project settings file holds the status line only:
+            // never the cross-session switch (the owner refuses any other key).
             LaunchHook::ClaudeRegistrationSettings => match hooks.claude_settings(
                 context.paths,
                 registered,
                 context.executable,
                 port,
                 &context.config.token,
-                cfg!(windows),
+                cfg!(windows) || real_project,
             ) {
                 Ok(extra) => args.extend(extra),
                 Err(_) => eprintln!("wrapper: Claude session settings setup failed"),
@@ -314,53 +332,6 @@ pub async fn run_cli(
     );
     let connector = LoopbackConnector::new(port, context.config.token.clone(), write_timeout)?;
     let resolver = CommandResolver::new(context.paths, context.environment, context.cwd);
-    let command = resolver.resolve_provider(
-        provider,
-        launch.custom_argv.as_deref(),
-        &launch.provider_args,
-    )?;
-    let selected_shell = select_launch_shell(&context, &launch, provider, &resolver)?;
-    let color = if launch.headless {
-        "off"
-    } else {
-        &context.config.hub.terminal_color
-    };
-    let child = launch::child_env(context.environment, color, &[]);
-    let mut process = ProcessPlan {
-        executable: command.executable.clone().into(),
-        args: command.args.iter().cloned().map(Into::into).collect(),
-        cwd: context.cwd.into(),
-        env: overrides(context.environment, &child),
-        stdin: vec![],
-        timeout: Duration::ZERO,
-        output_cap: 16 * 1024 * 1024,
-        pipe_drain_timeout: Duration::from_secs(2),
-    };
-    super::startup::strip_provider_environment(&mut process);
-    clear_inherited_raw_cmd_bootstrap(&mut process);
-    let internal_launch_env = [
-        super::launch_payload::RUNNER_ENV,
-        super::launch_payload::PAYLOAD_ENV,
-        super::launch_payload::CMD_RAW_BOOTSTRAP_ENV,
-    ];
-    for name in internal_launch_env {
-        process.env.insert(name.into(), None);
-    }
-    let mut prepared_payload = None;
-    if let Some((mode, shell_executable)) = &selected_shell {
-        super::launch_payload::validate_inner_cmd(&command)?;
-        let payload = super::launch_payload::PreparedLaunchPayload::create(
-            context.paths,
-            &command,
-            context.cwd,
-            launch.required_hooks.contains(&LaunchHook::Utf8Console),
-            &child,
-        )?;
-        install_shell_bootstrap(&mut process, &context, mode, shell_executable, &payload)?;
-        prepared_payload = Some(payload);
-    }
-    let session_shell = registration_shell(provider, selected_shell.as_ref(), &command);
-    let registration = registration(&context, &launch, &session_shell)?;
     let proof = env(context.environment, SPAWN_PROOF_ENV).map(str::to_owned);
     let mut owner_instruction_hash = None;
     let owner = match env(context.environment, super::iris_owner::OWNER_ENV) {
@@ -410,6 +381,70 @@ pub async fn run_cli(
             .required_hooks
             .retain(|hook| !matches!(hook, LaunchHook::DelegationPrompt { .. }));
     }
+    let command = resolver.resolve_provider(
+        provider,
+        launch.custom_argv.as_deref(),
+        &launch.provider_args,
+    )?;
+    if real_project {
+        // Never through the configured launch shell (no profile script) nor
+        // a cmd.exe shim: the provider executable itself, or no launch.
+        real_project_direct(&command)?;
+    }
+    let selected_shell = select_launch_shell(&context, &launch, provider, &resolver, real_project)?;
+    let color = if launch.headless {
+        "off"
+    } else {
+        &context.config.hub.terminal_color
+    };
+    let child = launch::child_env(context.environment, color, &[]);
+    let mut process = ProcessPlan {
+        executable: command.executable.clone().into(),
+        args: command.args.iter().cloned().map(Into::into).collect(),
+        cwd: context.cwd.into(),
+        env: overrides(context.environment, &child),
+        stdin: vec![],
+        timeout: Duration::ZERO,
+        output_cap: 16 * 1024 * 1024,
+        pipe_drain_timeout: Duration::from_secs(2),
+    };
+    super::startup::strip_provider_environment(&mut process);
+    clear_inherited_raw_cmd_bootstrap(&mut process);
+    let internal_launch_env = [
+        super::launch_payload::RUNNER_ENV,
+        super::launch_payload::PAYLOAD_ENV,
+        super::launch_payload::CMD_RAW_BOOTSTRAP_ENV,
+    ];
+    for name in internal_launch_env {
+        process.env.insert(name.into(), None);
+    }
+    if real_project {
+        // No Claude, Anthropic or many-ai-cli name from the wrapper's
+        // environment (the kept ones aside), then only the subscription's
+        // Claude folder put back.
+        let mut inherited = context.environment.to_vec();
+        inherited.extend(std::env::vars_os().filter_map(|(name, _)| name.into_string().ok()));
+        launch::apply_real_project_environment(
+            &mut process.env,
+            &inherited,
+            env(context.environment, launch::REAL_PROJECT_ENV_KEPT[0]),
+        )?;
+    }
+    let mut prepared_payload = None;
+    if let Some((mode, shell_executable)) = &selected_shell {
+        super::launch_payload::validate_inner_cmd(&command)?;
+        let payload = super::launch_payload::PreparedLaunchPayload::create(
+            context.paths,
+            &command,
+            context.cwd,
+            launch.required_hooks.contains(&LaunchHook::Utf8Console),
+            &child,
+        )?;
+        install_shell_bootstrap(&mut process, &context, mode, shell_executable, &payload)?;
+        prepared_payload = Some(payload);
+    }
+    let session_shell = registration_shell(provider, selected_shell.as_ref(), &command);
+    let registration = registration(&context, &launch, &session_shell)?;
     let argv_owner = owner.clone();
     let owner = owner.map(|owner| owner as std::sync::Arc<dyn runtime::ExecutionOwnerObserver>);
     if launch.headless {
@@ -431,6 +466,9 @@ pub async fn run_cli(
     let mut options = WrapperOptions::new(registration, process);
     options.initial_proof = proof;
     options.execution_owner = owner;
+    // An Iris real project wrapper never reattaches: a lost Hub connection
+    // (write timeout, output lag, Hub stop) stops claude's process tree.
+    options.no_reattach = real_project;
     options.login_mode = launch.login_mode;
     if context.config.log.session_enabled {
         options.raw_log = Some(RawLogPolicy {
@@ -453,7 +491,15 @@ pub async fn run_cli(
         cancel,
         |registered, process| {
             let mut args = launch.provider_args.clone();
-            apply_hooks(&context, &launch, registered, port, &mut hooks, &mut args)?;
+            apply_hooks(
+                &context,
+                &launch,
+                registered,
+                port,
+                &mut hooks,
+                &mut args,
+                real_project,
+            )?;
             if !launch.args.prompt_file.trim().is_empty() {
                 let shim = resolver.launch_shell_shim(provider, launch.custom_argv.as_deref())?;
                 let prepared = launch::prepare_launch_prompt(
@@ -480,6 +526,9 @@ pub async fn run_cli(
             }
             let command =
                 resolver.resolve_provider(provider, launch.custom_argv.as_deref(), &args)?;
+            if real_project {
+                real_project_direct(&command)?;
+            }
             if let Some(owner) = &argv_owner {
                 owner.observe_provider_argv(&command.args);
             }
@@ -502,6 +551,11 @@ pub async fn run_cli(
         },
     )
     .await;
+    // Release the files the real project owner held through the run (it
+    // normally did at `finished`) before the private files are removed.
+    if let Some(owner) = argv_owner {
+        owner.release_argv_files();
+    }
     let cleanup = hooks.finish();
     drop(prompt);
     drop(prepared_payload);
@@ -553,7 +607,16 @@ async fn run_headless(
     proof.take();
     let mut hooks = SessionHooks::default();
     let mut args = launch.provider_args.clone();
-    apply_hooks(&context, &launch, &registered, port, &mut hooks, &mut args)?;
+    // An Iris owner is never headless (refused above), so never real project.
+    apply_hooks(
+        &context,
+        &launch,
+        &registered,
+        port,
+        &mut hooks,
+        &mut args,
+        false,
+    )?;
     let prompt = launch::expand_prompt(
         &launch::take_prompt_file(context.paths, Path::new(launch.args.prompt_file.trim()))?,
         registered.session_id,
@@ -768,22 +831,46 @@ mod tests {
 
     #[test]
     fn shell_mode_bypasses_shell_headless_login_usage_and_subscription_auxiliary_flows() {
-        assert!(launch_shell_eligible("codex", false, false, &[]));
-        assert!(!launch_shell_eligible("shell", false, false, &[]));
-        assert!(!launch_shell_eligible("codex", true, false, &[]));
-        assert!(!launch_shell_eligible("codex", false, true, &[]));
+        assert!(launch_shell_eligible("codex", false, false, &[], false));
+        assert!(!launch_shell_eligible("shell", false, false, &[], false));
+        assert!(!launch_shell_eligible("codex", true, false, &[], false));
+        assert!(!launch_shell_eligible("codex", false, true, &[], false));
         assert!(!launch_shell_eligible(
             "codex",
             false,
             false,
-            &["MANY_AI_CLI_USAGE_PROBE=1".into()]
+            &["MANY_AI_CLI_USAGE_PROBE=1".into()],
+            false
         ));
         assert!(!launch_shell_eligible(
             "codex",
             false,
             false,
-            &["MANY_AI_CLI_SUBSCRIPTION_LOGIN=1".into()]
+            &["MANY_AI_CLI_SUBSCRIPTION_LOGIN=1".into()],
+            false
         ));
+    }
+
+    /// C4 re-review M2: an Iris real project launch never takes the
+    /// configured launch shell, and a provider that needs a cmd.exe shim is
+    /// refused instead of being started through it. Ordinary launches keep
+    /// both.
+    #[test]
+    fn a_real_project_launch_is_direct_or_refused() {
+        assert!(launch_shell_eligible("claude", false, false, &[], false));
+        assert!(!launch_shell_eligible("claude", false, false, &[], true));
+        let direct = ResolvedCommand {
+            executable: r"C:\synthetic\claude.exe".into(),
+            args: vec!["synthetic instruction".into()],
+            shell_shim: None,
+        };
+        real_project_direct(&direct).unwrap();
+        let shim = ResolvedCommand {
+            executable: r"C:\Windows\System32\cmd.exe".into(),
+            args: vec!["/c".into(), r"C:\synthetic\claude.cmd".into()],
+            shell_shim: Some(r"C:\synthetic\claude.cmd".into()),
+        };
+        assert!(real_project_direct(&shim).is_err());
     }
 
     #[test]

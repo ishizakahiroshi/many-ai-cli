@@ -718,7 +718,8 @@ fn reattach_rejection(requested: i64, error: &SessionError) -> Option<proto::Mes
     if !matches!(
         reason.as_str(),
         "invalid session_id" | "session dismissed" | "invalid replay_b64"
-    ) {
+    ) && reason != crate::terminal::session::IRIS_REAL_PROJECT_REATTACH_REFUSED
+    {
         return None;
     }
     Some(proto::Message {
@@ -1040,6 +1041,17 @@ mod tests {
             reattach_rejection(7, &SessionError::InvalidRequest("session dismissed".into()))
                 .unwrap();
         assert_eq!(dismissed.session_id, 7);
+        // C4 re-review H1: an Iris real project reattach is answered with a
+        // rejection, so an old wrapper stops instead of retrying.
+        let real_project = reattach_rejection(
+            7,
+            &SessionError::InvalidRequest(
+                crate::terminal::session::IRIS_REAL_PROJECT_REATTACH_REFUSED.into(),
+            ),
+        )
+        .unwrap();
+        assert_eq!(real_project.r#type, "reattach_reject");
+        assert_eq!(real_project.session_id, 7);
         assert!(
             reattach_rejection(7, &SessionError::Transport("private diagnostic".into())).is_none()
         );

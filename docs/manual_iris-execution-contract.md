@@ -375,38 +375,78 @@ Launch. After admission the dispatcher reads the pinned policy's
 (`acceptEdits`, no risk confirmation, no other grant). The spec is marked as a
 real project launch (server-owned registration metadata, set only for a
 folder-diff grant). The Hub then appends `-- --setting-sources project,local
---strict-mcp-config` to the wrap arguments: Claude loads no user settings (the
-user's `permissions`, `hooks`, `defaultMode` and `additionalDirectories` do not
-apply), only project and local settings of the work folder (which its baseline
-keeps free of `.claude`), and no MCP server from any configuration file. The
-wrapper leaves out
-the delegation prompt for this launch, so the approved instruction is the only
+--strict-mcp-config --no-chrome` to the wrap arguments: Claude loads no user
+settings (the user's `permissions`, `hooks`, `defaultMode` and
+`additionalDirectories` do not apply), only project and local settings of the
+work folder (which its baseline keeps free of `.claude`), no MCP server from
+any configuration file, and no Claude in Chrome (`--no-chrome` is listed by
+the `--help` of claude 2.1.316 and 2.1.318). The wrapper leaves out the
+delegation prompt for this launch, so the approved instruction is the only
 instruction. Hub automatic approval never answers a prompt of the session
 (checked in the approval runtime and again at the core send boundary); the
 flag lives in memory and is not restored after a Hub restart.
+
+No reattach. A real project wrapper never reattaches to the Hub. When its Hub
+connection ends for any reason (a send that exceeds the write timeout, output
+the Hub did not take in time (lag), a failed read, or an explicit
+`hub_shutdown` such as a Hub stop or restart), it stops Claude's process tree
+at once, records the local cessation and collects as usual; no replacement
+session is started. The Hub also refuses a reattach to a live session marked as
+a real project (`reattach_reject`, reason `iris real project session cannot
+reattach`), so the server-owned mark, the watchdog binding and the automatic
+approval exclusion are never rebuilt from wrapper-supplied fields. (After a Hub
+restart the mark is gone from memory; there the protection is the wrapper's own
+stop.)
+
+Direct launch and environment. The wrapper never runs a real project launch
+through `hub.ai_launch_shell` (`pwsh`/`cmd`, so no PowerShell profile) and
+refuses it when the resolved claude needs a cmd.exe shim. The provider gets no
+environment name starting with `CLAUDE_`, `ANTHROPIC_` or `MANY_AI_CLI_`, and
+no `CLAUDECODE` (letter case ignored on Windows), whether planned or inherited
+from the wrapper, except `CLAUDE_CONFIG_DIR` (put back from the subscription's
+value, required and absolute), `MANY_AI_CLI_SESSION_ID` and
+`MANY_AI_CLI_HUB_TOKEN` (set by the wrapper runtime for its provider).
+`MANY_AI_CLI=1` (no underscore suffix) stays.
 
 At the exec boundary the wrapper requires: the enabled current policy for the
 exact binding with the same SHA256 the Hub pinned (read from
 `iris-execution/verification.sqlite3` without writing it); the launch's own
 allowed tools equal to the policy's; the final provider argv (recorded by the
-wrapper after every hook and the instruction) with exactly one
-`--setting-sources project,local`, `--strict-mcp-config`, exactly one
-`--permission-mode acceptEdits`, one `--allowedTools` only when the policy has
-tools, none of `--mcp-config`, `--add-dir`, `--plugin-dir`, `--agents`,
-`--system-prompt[-file]`, `--append-system-prompt`,
-`--dangerously-skip-permissions`, `--allow-dangerously-skip-permissions`,
-`--permission-prompt-tool` or `--disallowedTools`, at most one `--settings`
-file holding only `statusLine` and `crossSessionInbound`, and at most one
-`--append-system-prompt-file` whose bytes have the approved instruction
-SHA256; and a folder snapshot with only plain single-link files and
-directories, no named stream, no `.git`/`.claude`/`.mcp.json` anywhere (also
-after dropping trailing dots and spaces), no name with a trailing dot or space
-or a Windows device name (`CON`, `PRN`, `AUX`, `NUL`, `COM0`-`COM9`,
-`LPT0`-`LPT9`, superscript digits included, with or without an extension:
-`FOLDER_UNSAFE_NAME`), and the pinned digest and entry count. It records that
-baseline, writes folder trust as for the real bounded profile (over this
-baseline instead of an empty folder), checks the baseline again, and only then
-claims the spawn. Any failure refuses the launch.
+wrapper after every hook and the instruction) passing an allow list: the first
+element may be the prompt (never starting with `-` and always containing
+whitespace, so never a sub-command name), then only `--model`, `--effort` (a
+claude effort level), `--permission-mode acceptEdits`, `--allowedTools` or
+`--allowed-tools` (followed by exactly the policy's tools; required when the
+policy has tools, absent otherwise), `--setting-sources project,local`,
+`--strict-mcp-config`, `--no-chrome`, `--session-id` (a UUID), `--settings`
+and `--append-system-prompt-file`, each at most once; `--setting-sources`,
+`--strict-mcp-config`, `--no-chrome` and `--permission-mode` are required.
+Every other element refuses: any other option, `--`, a short option, the
+`--flag=value` form, a flag value starting with `-`, or a second positional
+argument. The `--settings` file must hold only the wrapper's own status line
+(`{"statusLine":{"type":"command","command":…,"padding":0}}` with the
+`usage-relay --provider claude` command of this Hub and session); the
+`--append-system-prompt-file` bytes must have the approved instruction SHA256.
+Both files are opened without following a link and read through that same
+handle, which on Windows shares reading only: from the check until the
+provider run has finished nobody can write, replace, rename or delete them
+(Claude can still read them); they are released before the wrapper removes
+them. The process plan must also follow the environment rule above and carry
+no launch shell payload. Then the folder: no `CLAUDE.md`, `CLAUDE.local.md`,
+`.claude` or `AGENTS.md` (any entry kind) in any folder above the work folder
+up to and including the drive root (`FOLDER_ANCESTOR_INSTRUCTIONS`; the same
+names inside the work folder are its own content), and a folder snapshot with
+only plain single-link files and directories, no named stream, no
+`.git`/`.claude`/`.mcp.json` anywhere (also after dropping trailing dots and
+spaces), no name with a trailing dot or space, a Windows device name (`CON`,
+`PRN`, `AUX`, `NUL`, `COM0`-`COM9`, `LPT0`-`LPT9`, superscript digits included,
+with or without an extension) or an 8.3 short name form (a `~` followed by
+digits that end the base name, such as `GIT~1`, `CLAUDE~1`, `PROGRA~2`, which
+Windows may resolve to another entry) (`FOLDER_UNSAFE_NAME`), and the pinned
+digest and entry count. It records that baseline, writes folder trust as for
+the real bounded profile (over this baseline instead of an empty folder),
+checks the ancestors and the baseline again, and only then claims the spawn.
+Any failure refuses the launch.
 
 Instruction delivery. The instruction goes as the first argument when its
 command-line cost is at most 24,000 UTF-16 units. A longer one (Windows limits
@@ -441,7 +481,8 @@ never a link, junction or other reparse point, which are `link`), under an
 allowed path; otherwise `folder-unexpected-change` with the first reason in
 path order (`PROTECTED_NAME`, also for a name that becomes protected when
 Windows drops trailing dots and spaces such as `.git.`; `UNSAFE_NAME` for any
-other name with a trailing dot or space or a Windows device name; `STREAM`,
+other name with a trailing dot or space, a Windows device name or an 8.3 short
+name form such as `GIT~1`; `STREAM`,
 `LINK`, `NOT_PLAIN_FILE` for any other entry kind or a kind change,
 `ATTRIBUTES` for an attribute change of a file or folder, `HARD_LINK`,
 `OUT_OF_SCOPE` for any change outside every allowed path, folders included).

@@ -32,103 +32,318 @@ pub const OWNER_ENV: &str = "MANY_AI_CLI_IRIS_OWNER";
 /// Provider arguments the Hub adds to a real project launch: no user settings
 /// (`~/.claude/settings.json` permissions, hooks, default mode, additional
 /// directories), project and local settings only (the work folder has no
-/// `.claude`, which its baseline refuses), and no MCP server from any file.
-pub const REAL_PROJECT_ISOLATION_ARGS: [&str; 3] =
-    ["--setting-sources", "project,local", "--strict-mcp-config"];
-/// Claude flags a real project launch never carries: each would let something
-/// other than the pinned policy and the approved instruction shape the run.
-const REAL_PROJECT_REFUSED_FLAGS: [&str; 11] = [
-    "--mcp-config",
-    "--add-dir",
-    "--plugin-dir",
-    "--agents",
-    "--system-prompt",
-    "--system-prompt-file",
-    "--append-system-prompt",
-    "--dangerously-skip-permissions",
-    "--allow-dangerously-skip-permissions",
-    "--permission-prompt-tool",
-    "--disallowedTools",
+/// `.claude`, which its baseline refuses), no MCP server from any file, and
+/// no Claude in Chrome (`--no-chrome`, listed by the `--help` of claude
+/// 2.1.316 and 2.1.318).
+pub const REAL_PROJECT_ISOLATION_ARGS: [&str; 4] = [
+    "--setting-sources",
+    "project,local",
+    "--strict-mcp-config",
+    "--no-chrome",
 ];
-/// The only keys the wrapper's own `--settings` file may hold (the Hub's
-/// status line and cross-session switch); never permissions or hooks.
-const REAL_PROJECT_SETTINGS_KEYS: [&str; 2] = ["statusLine", "crossSessionInbound"];
+/// Flags a real project argv must carry exactly once.
+const REAL_PROJECT_REQUIRED_FLAGS: [&str; 4] = [
+    "--setting-sources",
+    "--strict-mcp-config",
+    "--no-chrome",
+    "--permission-mode",
+];
 const MAX_ARGV_FILE_BYTES: u64 = 1024 * 1024;
 
 fn failure() -> io::Error {
     io::Error::other("trusted execution owner conditions were not satisfied")
 }
 
-/// Every occurrence of `flag` (`--flag value` or `--flag=value`) with its
-/// value, if any.
-fn occurrences<'a>(argv: &'a [String], flag: &str) -> Vec<Option<&'a str>> {
-    let prefix = format!("{flag}=");
-    let mut out = Vec::new();
-    for (index, arg) in argv.iter().enumerate() {
-        if arg == flag {
-            out.push(argv.get(index + 1).map(String::as_str));
-        } else if let Some(value) = arg.strip_prefix(&prefix) {
-            out.push(Some(value));
-        }
+/// Files named by a checked real project argv (the appended instruction and
+/// the wrapper's settings file), each still open through the handle its
+/// bytes were checked from. On Windows that handle shares reading only, so
+/// nobody can write, replace, rename or delete the file while it is held;
+/// the provider can still read it. Dropping the value releases the files.
+#[derive(Debug, Default)]
+pub struct HeldArgvFiles(Vec<std::fs::File>);
+impl HeldArgvFiles {
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
-    out
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
-fn small_file(path: &str) -> Result<Vec<u8>, &'static str> {
-    let meta = std::fs::symlink_metadata(path).map_err(|_| "ARGV_FILE")?;
-    if !meta.is_file() || meta.len() > MAX_ARGV_FILE_BYTES {
+/// Open a plain file (never through a link) with a handle that refuses
+/// concurrent writing and deletion, and read at most the argv file limit
+/// through that same handle.
+fn open_held(path: &str) -> Result<(std::fs::File, Vec<u8>), &'static str> {
+    use std::io::Read;
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ,
+        };
+        options
+            .share_mode(FILE_SHARE_READ)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    let mut file = options.open(path).map_err(|_| "ARGV_FILE")?;
+    let meta = file.metadata().map_err(|_| "ARGV_FILE")?;
+    #[cfg(windows)]
+    let reparse = {
+        use std::os::windows::fs::MetadataExt;
+        meta.file_attributes()
+            & windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT
+            != 0
+    };
+    #[cfg(not(windows))]
+    let reparse = false;
+    if !meta.is_file()
+        || meta.file_type().is_symlink()
+        || reparse
+        || meta.len() > MAX_ARGV_FILE_BYTES
+    {
         return Err("ARGV_FILE");
     }
-    std::fs::read(path).map_err(|_| "ARGV_FILE")
+    let mut bytes = Vec::new();
+    (&mut file)
+        .take(MAX_ARGV_FILE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "ARGV_FILE")?;
+    if bytes.len() as u64 > MAX_ARGV_FILE_BYTES {
+        return Err("ARGV_FILE");
+    }
+    Ok((file, bytes))
+}
+
+/// The wrapper's own status line command (`hooks::claude_settings`): the Hub
+/// token, the many-ai-cli executable, `usage-relay` for claude to the local
+/// Hub, and the session number. Nothing else may run as the status line.
+fn own_status_line_command(command: &str) -> bool {
+    let Some(rest) = command.strip_prefix("MANY_AI_CLI_HUB_TOKEN='") else {
+        return false;
+    };
+    let Some((_, rest)) = rest.split_once("' '") else {
+        return false;
+    };
+    let Some((_, rest)) =
+        rest.split_once("' usage-relay --provider claude --hub http://127.0.0.1:")
+    else {
+        return false;
+    };
+    let Some((port, session)) = rest.split_once(" --session ") else {
+        return false;
+    };
+    !command.contains(['\n', '\r', ';', '&', '|', '`', '$', '<', '>'])
+        && !port.is_empty()
+        && port.bytes().all(|b| b.is_ascii_digit())
+        && !session.is_empty()
+        && session.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// A real project `--settings` file holds only the wrapper's status line:
+/// `{"statusLine":{"type":"command","command":<own>,"padding":0}}`.
+fn check_real_project_settings(bytes: &[u8]) -> Result<(), &'static str> {
+    let value = parse_json(bytes).map_err(|_| "ARGV_SETTINGS")?;
+    let object = value.as_object().ok_or("ARGV_SETTINGS")?;
+    if object.len() != 1 {
+        return Err("ARGV_SETTINGS");
+    }
+    let line = object
+        .get("statusLine")
+        .and_then(Value::as_object)
+        .ok_or("ARGV_SETTINGS")?;
+    let mut keys: Vec<&str> = line.keys().map(String::as_str).collect();
+    keys.sort_unstable();
+    if keys != ["command", "padding", "type"]
+        || line["type"] != "command"
+        || line["padding"] != 0
+        || !line["command"]
+            .as_str()
+            .is_some_and(own_status_line_command)
+    {
+        return Err("ARGV_SETTINGS");
+    }
+    Ok(())
+}
+
+fn uuid_shape(value: &str) -> bool {
+    let parts: Vec<&str> = value.split('-').collect();
+    parts.iter().map(|p| p.len()).eq([8, 4, 4, 4, 12])
+        && parts
+            .iter()
+            .all(|p| p.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+fn model_shape(value: &str) -> bool {
+    value.len() <= 128
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-._[]:/@".contains(&b))
+}
+
+/// The single value after a flag: present, not empty and not another option.
+fn flag_value<'a>(argv: &'a [String], index: &mut usize) -> Result<&'a str, &'static str> {
+    let value = argv
+        .get(*index)
+        .filter(|v| !v.is_empty() && !v.starts_with('-'))
+        .ok_or("ARGV_VALUE")?;
+    *index += 1;
+    Ok(value)
 }
 
 /// The real project rules for the final provider argv, checked immediately
-/// before the spawn claim. Returns only a fixed code.
+/// before the spawn claim. An allow list: the first element may be the
+/// prompt (never starting with `-`, always with whitespace so it can never
+/// be a claude sub-command), then only these flags, each at most once and
+/// never in the `--flag=value` form:
+/// `--model`, `--effort`, `--permission-mode acceptEdits`,
+/// `--allowedTools`/`--allowed-tools` (exactly the policy's tools),
+/// `--setting-sources project,local`, `--strict-mcp-config`, `--no-chrome`,
+/// `--session-id`, `--settings` (the wrapper's status line only) and
+/// `--append-system-prompt-file` (exactly the approved instruction bytes).
+/// Every other element, `--` included, refuses. Returns the files it read,
+/// still held, or only a fixed code.
 pub fn check_real_project_argv(
     argv: &[String],
     instruction_hash: &str,
     tools: &[String],
-) -> Result<(), &'static str> {
-    let [sources_flag, sources, strict] = REAL_PROJECT_ISOLATION_ARGS;
-    if occurrences(argv, sources_flag) != [Some(sources)] {
-        return Err("ARGV_SETTING_SOURCES");
-    }
-    if occurrences(argv, strict).is_empty() {
-        return Err("ARGV_STRICT_MCP_CONFIG");
-    }
-    if REAL_PROJECT_REFUSED_FLAGS
-        .iter()
-        .any(|flag| !occurrences(argv, flag).is_empty())
+) -> Result<HeldArgvFiles, &'static str> {
+    let mut held = HeldArgvFiles::default();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut index = 0;
+    if let Some(first) = argv.first()
+        && !first.starts_with('-')
     {
-        return Err("ARGV_REFUSED_FLAG");
+        if !first.chars().any(char::is_whitespace) {
+            return Err("ARGV_PROMPT");
+        }
+        index = 1;
     }
-    if occurrences(argv, "--permission-mode") != [Some("acceptEdits")] {
-        return Err("ARGV_PERMISSION_MODE");
+    while index < argv.len() {
+        let flag = argv[index].as_str();
+        index += 1;
+        let canonical = if flag == "--allowed-tools" {
+            "--allowedTools"
+        } else {
+            flag
+        };
+        if !seen.insert(canonical) {
+            return Err("ARGV_DUPLICATE");
+        }
+        match canonical {
+            "--strict-mcp-config" | "--no-chrome" => {}
+            "--setting-sources" => {
+                if flag_value(argv, &mut index)? != REAL_PROJECT_ISOLATION_ARGS[1] {
+                    return Err("ARGV_SETTING_SOURCES");
+                }
+            }
+            "--permission-mode" => {
+                if flag_value(argv, &mut index)? != "acceptEdits" {
+                    return Err("ARGV_PERMISSION_MODE");
+                }
+            }
+            "--model" => {
+                if !model_shape(flag_value(argv, &mut index)?) {
+                    return Err("ARGV_MODEL");
+                }
+            }
+            "--effort" => {
+                if crate::config::validate_effort("claude", flag_value(argv, &mut index)?).is_err()
+                {
+                    return Err("ARGV_EFFORT");
+                }
+            }
+            "--session-id" => {
+                if !uuid_shape(flag_value(argv, &mut index)?) {
+                    return Err("ARGV_SESSION_ID");
+                }
+            }
+            "--allowedTools" => {
+                // Claude reads every following non-option element as a tool.
+                let start = index;
+                while argv.get(index).is_some_and(|v| !v.starts_with('-')) {
+                    index += 1;
+                }
+                if tools.is_empty() || argv[start..index] != *tools {
+                    return Err("ARGV_ALLOWED_TOOLS");
+                }
+            }
+            "--settings" => {
+                let (file, bytes) = open_held(flag_value(argv, &mut index)?)?;
+                check_real_project_settings(&bytes)?;
+                held.0.push(file);
+            }
+            "--append-system-prompt-file" => {
+                let (file, bytes) = open_held(flag_value(argv, &mut index)?)?;
+                // Only the approved instruction itself, byte for byte.
+                if sha(&bytes) != instruction_hash {
+                    return Err("ARGV_SYSTEM_PROMPT");
+                }
+                held.0.push(file);
+            }
+            _ => return Err("ARGV_REFUSED_FLAG"),
+        }
     }
-    let tool_flags =
-        occurrences(argv, "--allowedTools").len() + occurrences(argv, "--allowed-tools").len();
-    if tool_flags != usize::from(!tools.is_empty()) {
+    if REAL_PROJECT_REQUIRED_FLAGS
+        .iter()
+        .any(|flag| !seen.contains(flag))
+    {
+        return Err("ARGV_REQUIRED_FLAG");
+    }
+    if !tools.is_empty() && !seen.contains("--allowedTools") {
         return Err("ARGV_ALLOWED_TOOLS");
     }
-    match occurrences(argv, "--settings").as_slice() {
-        [] => {}
-        [Some(path)] => {
-            let value = parse_json(&small_file(path)?).map_err(|_| "ARGV_SETTINGS")?;
-            let object = value.as_object().ok_or("ARGV_SETTINGS")?;
-            if object
-                .keys()
-                .any(|key| !REAL_PROJECT_SETTINGS_KEYS.contains(&key.as_str()))
-            {
-                return Err("ARGV_SETTINGS");
-            }
+    Ok(held)
+}
+
+/// The environment rule of a real project provider plan, checked at the exec
+/// boundary: no planned value and no name the wrapper process would pass on
+/// (`inherited`) under the removed names, except the kept ones; the Claude
+/// folder is planned explicitly; and no launch shell payload.
+pub fn check_real_project_environment(
+    plan: &ProcessPlan,
+    inherited: &[String],
+) -> Result<(), &'static str> {
+    use crate::wrapper::launch::{REAL_PROJECT_ENV_KEPT, real_project_env_removed};
+    let planned = |name: &str| {
+        plan.env
+            .iter()
+            .filter(|(key, _)| key.to_string_lossy().eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.is_some())
+            .collect::<Vec<_>>()
+    };
+    for (key, value) in &plan.env {
+        let name = key.to_string_lossy();
+        if value.is_some() && real_project_env_removed(&name) {
+            return Err("ENV_REMOVED_NAME");
         }
-        _ => return Err("ARGV_SETTINGS"),
     }
-    match occurrences(argv, "--append-system-prompt-file").as_slice() {
-        [] => {}
-        // Only the approved instruction itself, byte for byte.
-        [Some(path)] if sha(&small_file(path)?) == instruction_hash => {}
-        _ => return Err("ARGV_SYSTEM_PROMPT"),
+    for entry in inherited {
+        let name = entry
+            .split_once('=')
+            .map_or(entry.as_str(), |(name, _)| name);
+        // Every spelling planned for an inherited removed name is a removal.
+        let spellings = planned(name);
+        if real_project_env_removed(name) && (spellings.is_empty() || spellings.contains(&true)) {
+            return Err("ENV_INHERITED_NAME");
+        }
+    }
+    if planned(REAL_PROJECT_ENV_KEPT[0]) != [true] {
+        return Err("ENV_CLAUDE_CONFIG_DIR");
+    }
+    for name in [
+        crate::wrapper::launch_payload::RUNNER_ENV,
+        crate::wrapper::launch_payload::PAYLOAD_ENV,
+    ] {
+        if planned(name).contains(&true) {
+            return Err("ENV_LAUNCH_SHELL");
+        }
     }
     Ok(())
 }
@@ -173,8 +388,28 @@ pub struct DurableExecutionOwner {
     /// hook and the instruction), recorded by the wrapper right before the
     /// exec boundary. A real project launch refuses without it.
     provider_argv: Mutex<Option<Vec<String>>>,
+    /// The instruction and settings files the real project argv check read,
+    /// held (no shared write or delete on Windows) from that check until the
+    /// provider run has finished.
+    held_argv_files: Mutex<Option<HeldArgvFiles>>,
 }
 impl DurableExecutionOwner {
+    /// Release the files held since the real project argv check. Called when
+    /// the provider run has finished (and safe to call more than once), so
+    /// the wrapper can delete its private files afterwards.
+    pub fn release_argv_files(&self) {
+        if let Ok(mut held) = self.held_argv_files.lock() {
+            held.take();
+        }
+    }
+    /// The number of files currently held (diagnostics and tests).
+    pub fn held_argv_file_count(&self) -> usize {
+        self.held_argv_files
+            .lock()
+            .ok()
+            .and_then(|held| held.as_ref().map(HeldArgvFiles::len))
+            .unwrap_or(0)
+    }
     pub fn instruction_hash(&self) -> &str {
         &self.ticket.binding.instruction_hash
     }
@@ -651,6 +886,7 @@ impl DurableExecutionOwner {
             launch_tools: None,
             project: Mutex::new(None),
             provider_argv: Mutex::new(None),
+            held_argv_files: Mutex::new(None),
         })
     }
 }
@@ -692,26 +928,37 @@ impl ExecutionOwnerObserver for DurableExecutionOwner {
         // Real project: the enabled, current policy of this exact binding,
         // equal to the bytes the Hub pinned at admission, and exactly its
         // allowed tools on this launch (none can be added by a caller).
+        let mut held_files = None;
         let project = if self.grant.folder_diff() {
             let policy = real_project_launch_policy(&self.root, &self.ticket.binding, at)
                 .ok_or_else(failure)?;
             if self.launch_tools.as_deref() != Some(policy.allowed_tools.as_slice()) {
                 return Err(failure());
             }
-            // The final argv: no user settings, no MCP server, no settings
-            // file with permissions or hooks, no other system prompt.
+            // The final argv, an allow list: no user settings, no MCP server,
+            // no Chrome, a settings file with only the wrapper's status line,
+            // no other system prompt. The files it read stay held.
             let argv = self
                 .provider_argv
                 .lock()
                 .map_err(|_| failure())?
                 .clone()
                 .ok_or_else(failure)?;
-            check_real_project_argv(
-                &argv,
-                &self.ticket.binding.instruction_hash,
-                &policy.allowed_tools,
-            )
-            .map_err(|_| failure())?;
+            held_files = Some(
+                check_real_project_argv(
+                    &argv,
+                    &self.ticket.binding.instruction_hash,
+                    &policy.allowed_tools,
+                )
+                .map_err(|_| failure())?,
+            );
+            // The environment: no Claude, Anthropic or many-ai-cli name
+            // except the kept ones, the subscription's Claude folder, and
+            // no launch shell.
+            let inherited = std::env::vars_os()
+                .filter_map(|(name, _)| name.into_string().ok())
+                .collect::<Vec<_>>();
+            check_real_project_environment(process, &inherited).map_err(|_| failure())?;
             Some(policy)
         } else {
             None
@@ -730,7 +977,10 @@ impl ExecutionOwnerObserver for DurableExecutionOwner {
             // The whole work folder must equal the operator-pinned baseline
             // (digest and entry count): plain single-link files and folders,
             // no stream, link or protected name. Recorded before the claim.
-            let entries = folder::snapshot(&self.grant.approved_cwd)
+            // No instruction file above it either (CLAUDE.md, CLAUDE.local.md,
+            // .claude, AGENTS.md up to the drive root).
+            let entries = folder::check_no_ancestor_instructions(&self.grant.approved_cwd)
+                .and_then(|()| folder::snapshot(&self.grant.approved_cwd))
                 .and_then(|entries| {
                     folder::check_project_baseline(
                         &entries,
@@ -765,14 +1015,16 @@ impl ExecutionOwnerObserver for DurableExecutionOwner {
                 // Trust is written only over the recorded pinned baseline,
                 // and the folder must still equal it right before the claim.
                 self.trust_folder(&mut store, &ticket, process, at, Ok(()))?;
-                if !folder::snapshot(&self.grant.approved_cwd).is_ok_and(|entries| {
-                    folder::check_project_baseline(
-                        &entries,
-                        &policy.baseline_sha256,
-                        policy.baseline_entry_count,
-                    )
-                    .is_ok()
-                }) {
+                if folder::check_no_ancestor_instructions(&self.grant.approved_cwd).is_err()
+                    || !folder::snapshot(&self.grant.approved_cwd).is_ok_and(|entries| {
+                        folder::check_project_baseline(
+                            &entries,
+                            &policy.baseline_sha256,
+                            policy.baseline_entry_count,
+                        )
+                        .is_ok()
+                    })
+                {
                     return Err(failure());
                 }
             } else {
@@ -807,7 +1059,13 @@ impl ExecutionOwnerObserver for DurableExecutionOwner {
         // factory.spawn. Re-entering with the same ticket is never a retry.
         store
             .claim_spawn(&ticket, session_id, at)
-            .map_err(|_| failure())
+            .map_err(|_| failure())?;
+        // Keep the checked instruction and settings files held through the
+        // provider run; a refusal above has already released them.
+        if let Some(files) = held_files {
+            *self.held_argv_files.lock().map_err(|_| failure())? = Some(files);
+        }
+        Ok(())
     }
     fn root_started(&self, pid: u32) -> io::Result<()> {
         self.store
@@ -822,6 +1080,8 @@ impl ExecutionOwnerObserver for DurableExecutionOwner {
         exit: Option<&PtyExit>,
         cessation: Option<&LocalCessation>,
     ) -> io::Result<()> {
+        // The provider run is over: the wrapper may remove its private files.
+        self.release_argv_files();
         let mut store = self.store.lock().map_err(|_| failure())?;
         let mut ceased = false;
         if let Some(proof) = cessation {
@@ -870,5 +1130,334 @@ impl ExecutionOwnerObserver for DurableExecutionOwner {
             Err(_) => return Err(failure()),
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod real_project_argv_tests {
+    use super::*;
+
+    const SESSION: &str = "00000000-0000-4000-8000-000000000000";
+
+    fn strings(values: &[&str]) -> Vec<String> {
+        values.iter().map(|s| s.to_string()).collect()
+    }
+    /// The shape the Hub and wrapper build for a real project launch.
+    fn base() -> Vec<String> {
+        strings(&[
+            "synthetic instruction text",
+            "--session-id",
+            SESSION,
+            "--model",
+            "synthetic-model",
+            "--permission-mode",
+            "acceptEdits",
+            "--effort",
+            "high",
+            "--setting-sources",
+            "project,local",
+            "--strict-mcp-config",
+            "--no-chrome",
+        ])
+    }
+    fn with(extra: &[&str]) -> Vec<String> {
+        let mut argv = base();
+        argv.extend(strings(extra));
+        argv
+    }
+
+    /// C4 re-review M1 (reverse of the argv reproduction): the checker is an
+    /// allow list. Every form the old deny list accepted, the end of options
+    /// marker and `=` forms are refused.
+    #[test]
+    fn the_real_project_argv_check_is_an_allow_list() {
+        assert!(check_real_project_argv(&base(), "x", &[]).is_ok());
+        let cases: Vec<(&str, Vec<&str>)> = vec![
+            ("managed-settings", vec!["--managed-settings", "{}"]),
+            (
+                "project-config-root",
+                vec!["--project-config-root", "C:\\synthetic"],
+            ),
+            (
+                "plugin-dir-no-mcp",
+                vec!["--plugin-dir-no-mcp", "C:\\synthetic"],
+            ),
+            (
+                "plugin-url",
+                vec!["--plugin-url", "https://example.invalid/p.zip"],
+            ),
+            (
+                "append-subagent-system-prompt-file",
+                vec!["--append-subagent-system-prompt-file", "C:\\synthetic.md"],
+            ),
+            (
+                "plan-mode-instructions",
+                vec!["--plan-mode-instructions", "synthetic"],
+            ),
+            ("prefill", vec!["--prefill", "synthetic"]),
+            ("resume short", vec!["-r", "synthetic"]),
+            ("continue short", vec!["-c"]),
+            ("remote-control alias", vec!["--rc"]),
+            ("channels", vec!["--channels", "synthetic"]),
+            ("agent", vec!["--agent", "synthetic"]),
+            (
+                "inherit-permission-mode",
+                vec!["--inherit-permission-mode", "bypassPermissions"],
+            ),
+            ("enable-auto-mode", vec!["--enable-auto-mode"]),
+            ("tools", vec!["--tools", "Bash"]),
+            ("disallowed-tools kebab", vec!["--disallowed-tools", "Read"]),
+            ("mcp-config", vec!["--mcp-config", "{}"]),
+            ("add-dir", vec!["--add-dir", "C:\\synthetic"]),
+            ("chrome", vec!["--chrome"]),
+            ("print", vec!["-p"]),
+            ("equals form", vec!["--model=synthetic"]),
+            ("equals settings", vec!["--settings={}"]),
+            ("end of options", vec!["--"]),
+            ("lone dash", vec!["-"]),
+            ("stray positional", vec!["synthetic word"]),
+            ("duplicate flag", vec!["--strict-mcp-config"]),
+            (
+                "second permission mode",
+                vec!["--permission-mode", "acceptEdits"],
+            ),
+            ("allowedTools not in policy", vec!["--allowedTools", "Bash"]),
+            (
+                "allowed-tools not in policy",
+                vec!["--allowed-tools", "Read"],
+            ),
+        ];
+        let mut accepted = Vec::new();
+        for (label, extra) in &cases {
+            if check_real_project_argv(&with(extra), "x", &[]).is_ok() {
+                accepted.push(*label);
+            }
+        }
+        // `--` ends claude's options: the isolation flags after it would be
+        // prompt words.
+        let mut dashed = strings(&["synthetic instruction text", "--"]);
+        dashed.extend(base().into_iter().skip(1));
+        if check_real_project_argv(&dashed, "x", &[]).is_ok() {
+            accepted.push("end-of-options marker before isolation flags");
+        }
+        assert!(accepted.is_empty(), "accepted: {accepted:?}");
+    }
+
+    /// Required flags, flag values and the prompt position.
+    #[test]
+    fn the_real_project_argv_requires_the_isolation_and_exact_values() {
+        let without = |flag: &str, takes_value: bool| {
+            let mut argv = base();
+            let at = argv.iter().position(|a| a == flag).unwrap();
+            argv.drain(at..at + 1 + usize::from(takes_value));
+            argv
+        };
+        for (flag, takes_value) in [
+            ("--setting-sources", true),
+            ("--strict-mcp-config", false),
+            ("--no-chrome", false),
+            ("--permission-mode", true),
+        ] {
+            assert!(
+                check_real_project_argv(&without(flag, takes_value), "x", &[]).is_err(),
+                "{flag} is required"
+            );
+        }
+        // Optional ones may be absent.
+        for (flag, takes_value) in [
+            ("--model", true),
+            ("--effort", true),
+            ("--session-id", true),
+        ] {
+            assert!(
+                check_real_project_argv(&without(flag, takes_value), "x", &[]).is_ok(),
+                "{flag} is optional"
+            );
+        }
+        let replaced = |flag: &str, value: &str| {
+            let mut argv = base();
+            let at = argv.iter().position(|a| a == flag).unwrap();
+            argv[at + 1] = value.into();
+            argv
+        };
+        for (flag, value) in [
+            ("--setting-sources", "user,project,local"),
+            ("--permission-mode", "bypassPermissions"),
+            ("--effort", "unbounded"),
+            ("--session-id", "not-a-uuid"),
+            ("--model", "--settings"),
+            ("--model", "two words"),
+        ] {
+            assert!(
+                check_real_project_argv(&replaced(flag, value), "x", &[]).is_err(),
+                "{flag} {value}"
+            );
+        }
+        // The prompt is only the first element and always has whitespace,
+        // so it can never be a claude sub-command name.
+        let mut argv = base();
+        argv[0] = "mcp".into();
+        assert!(check_real_project_argv(&argv, "x", &[]).is_err());
+        assert!(check_real_project_argv(&base()[1..], "x", &[]).is_ok());
+        // The policy's tools: exactly once, exactly the policy values, under
+        // either spelling; none without tools.
+        let tools = strings(&["Bash(python -B -m pytest:*)"]);
+        assert!(check_real_project_argv(&base(), "x", &tools).is_err());
+        for flag in ["--allowedTools", "--allowed-tools"] {
+            assert!(
+                check_real_project_argv(&with(&[flag, "Bash(python -B -m pytest:*)"]), "x", &tools)
+                    .is_ok(),
+                "{flag}"
+            );
+            assert!(
+                check_real_project_argv(
+                    &with(&[flag, "Bash(python -B -m pytest:*)", "Read"]),
+                    "x",
+                    &tools
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            check_real_project_argv(
+                &with(&[
+                    "--allowedTools",
+                    "Bash(python -B -m pytest:*)",
+                    "--allowed-tools",
+                    "Bash(python -B -m pytest:*)"
+                ]),
+                "x",
+                &tools
+            )
+            .is_err()
+        );
+    }
+
+    fn statusline(command: &str) -> serde_json::Value {
+        json!({"statusLine":{"type":"command","command":command,"padding":0}})
+    }
+    const RELAY: &str = "MANY_AI_CLI_HUB_TOKEN='synthetic' 'C:/synthetic/many-ai-cli.exe' usage-relay --provider claude --hub http://127.0.0.1:47951 --session 12";
+
+    /// C4 re-review L2: the wrapper's settings file holds only its own status
+    /// line command; no other key, no other status line.
+    #[test]
+    fn the_real_project_settings_file_holds_only_the_status_line() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut ok = 0;
+        for (label, document, accepted) in [
+            ("status line", statusline(RELAY), true),
+            (
+                "cross session",
+                json!({"statusLine":statusline(RELAY)["statusLine"],"crossSessionInbound":"accept"}),
+                false,
+            ),
+            (
+                "permissions",
+                json!({"permissions":{"allow":["Bash"]}}),
+                false,
+            ),
+            ("hooks", json!({"hooks":{}}), false),
+            ("empty", json!({}), false),
+            ("other command", statusline("synthetic-command"), false),
+            (
+                "relay with suffix",
+                statusline(&format!("{RELAY}; synthetic-command")),
+                false,
+            ),
+            (
+                "extra status line key",
+                json!({"statusLine":{"type":"command","command":RELAY,"padding":0,"x":1}}),
+                false,
+            ),
+            (
+                "other padding",
+                json!({"statusLine":{"type":"command","command":RELAY,"padding":3}}),
+                false,
+            ),
+        ] {
+            let path = dir.path().join(format!("settings-{ok}.json"));
+            ok += 1;
+            std::fs::write(&path, serde_json::to_vec(&document).unwrap()).unwrap();
+            let argv = with(&["--settings", path.to_str().unwrap()]);
+            let result = check_real_project_argv(&argv, "x", &[]);
+            assert_eq!(result.is_ok(), accepted, "{label}");
+        }
+    }
+
+    /// C4 re-review M2 (exec boundary): an inherited removed name must be
+    /// planned as a removal under every spelling; kept names may stay.
+    #[test]
+    fn the_exec_boundary_checks_planned_and_inherited_names() {
+        let plan = |env: &[(&str, Option<&str>)]| ProcessPlan {
+            executable: "synthetic".into(),
+            args: vec![],
+            cwd: std::path::PathBuf::from("synthetic"),
+            env: env
+                .iter()
+                .map(|(k, v)| ((*k).into(), v.map(Into::into)))
+                .collect(),
+            stdin: vec![],
+            timeout: std::time::Duration::ZERO,
+            output_cap: 1,
+            pipe_drain_timeout: std::time::Duration::from_millis(1),
+        };
+        let good = plan(&[
+            ("CLAUDE_CONFIG_DIR", Some("C:\\synthetic")),
+            ("CLAUDE_PID", None),
+            ("MANY_AI_CLI_SESSION_ID", Some("1")),
+            ("MANY_AI_CLI_HUB_TOKEN", Some("synthetic")),
+        ]);
+        let inherited = strings(&["CLAUDE_PID=1", "PATH", "MANY_AI_CLI_SESSION_ID"]);
+        assert_eq!(check_real_project_environment(&good, &inherited), Ok(()));
+        // An inherited removed name the plan does not remove.
+        let more = strings(&["CLAUDE_PID", "ANTHROPIC_BASE_URL"]);
+        assert_eq!(
+            check_real_project_environment(&good, &more),
+            Err("ENV_INHERITED_NAME")
+        );
+        let missing = plan(&[("CLAUDE_PID", None)]);
+        assert_eq!(
+            check_real_project_environment(&missing, &[]),
+            Err("ENV_CLAUDE_CONFIG_DIR")
+        );
+    }
+
+    /// C4 re-review L1: the instruction file and the settings file are read
+    /// through a handle that shares neither writing nor deletion, and that
+    /// handle stays open until it is released.
+    #[cfg(windows)]
+    #[test]
+    fn the_checked_files_cannot_be_replaced_while_held() {
+        let dir = tempfile::tempdir().unwrap();
+        let instruction = dir.path().join("instruction.md");
+        std::fs::write(&instruction, b"synthetic approved instruction").unwrap();
+        let settings = dir.path().join("settings.json");
+        std::fs::write(&settings, serde_json::to_vec(&statusline(RELAY)).unwrap()).unwrap();
+        let argv = with(&[
+            "--settings",
+            settings.to_str().unwrap(),
+            "--append-system-prompt-file",
+            instruction.to_str().unwrap(),
+        ]);
+        let held =
+            check_real_project_argv(&argv, &sha(b"synthetic approved instruction"), &[]).unwrap();
+        for path in [&instruction, &settings] {
+            assert!(std::fs::read(path).is_ok(), "still readable");
+            assert!(std::fs::write(path, b"replaced").is_err(), "no write");
+            assert!(std::fs::remove_file(path).is_err(), "no delete");
+            assert!(
+                std::fs::rename(path, dir.path().join("moved")).is_err(),
+                "no rename"
+            );
+        }
+        drop(held);
+        std::fs::remove_file(&instruction).unwrap();
+        std::fs::remove_file(&settings).unwrap();
+        // A wrong instruction digest is refused.
+        std::fs::write(&instruction, b"other bytes").unwrap();
+        let argv = with(&["--append-system-prompt-file", instruction.to_str().unwrap()]);
+        assert!(
+            check_real_project_argv(&argv, &sha(b"synthetic approved instruction"), &[]).is_err()
+        );
     }
 }

@@ -563,6 +563,86 @@ pub fn child_env(base: &[String], terminal_color: &str, extra: &[String]) -> Vec
         ],
     )
 }
+/// Environment name prefixes an Iris real project provider never inherits
+/// (compared without letter case): Claude's own switches, Anthropic API
+/// settings and many-ai-cli internals.
+pub const REAL_PROJECT_ENV_REMOVED_PREFIXES: [&str; 3] = ["CLAUDE_", "ANTHROPIC_", "MANY_AI_CLI_"];
+/// Exact names removed as well (the parent Claude Code session marker).
+pub const REAL_PROJECT_ENV_REMOVED_NAMES: [&str; 1] = ["CLAUDECODE"];
+/// The only names under those prefixes a real project provider keeps: the
+/// subscription's Claude configuration folder (put back from the wrapper's
+/// own environment) and the two values the wrapper runtime itself sets for
+/// its provider after preparation (session ID and Hub token).
+pub const REAL_PROJECT_ENV_KEPT: [&str; 3] = [
+    "CLAUDE_CONFIG_DIR",
+    "MANY_AI_CLI_SESSION_ID",
+    "MANY_AI_CLI_HUB_TOKEN",
+];
+
+/// Whether a real project provider must not receive `name`.
+pub fn real_project_env_removed(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    if REAL_PROJECT_ENV_KEPT.contains(&upper.as_str()) {
+        return false;
+    }
+    REAL_PROJECT_ENV_REMOVED_NAMES.contains(&upper.as_str())
+        || REAL_PROJECT_ENV_REMOVED_PREFIXES
+            .iter()
+            .any(|prefix| upper.starts_with(prefix))
+}
+
+/// Remove every inherited or planned name `real_project_env_removed` names
+/// from a real project provider plan and put back only the subscription's
+/// `CLAUDE_CONFIG_DIR` (absolute, required). `inherited` lists every name the
+/// provider would otherwise inherit (the wrapper's environment).
+pub fn apply_real_project_environment(
+    env: &mut std::collections::BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>>,
+    inherited: &[String],
+    config_dir: Option<&str>,
+) -> io::Result<()> {
+    let config_dir = config_dir
+        .filter(|dir| Path::new(dir).is_absolute())
+        .ok_or_else(|| {
+            io::Error::other("Iris real project launch requires an absolute CLAUDE_CONFIG_DIR")
+        })?;
+    let mut names: Vec<String> = inherited
+        .iter()
+        .map(|entry| {
+            entry
+                .split_once('=')
+                .map_or(entry.as_str(), |(name, _)| name)
+        })
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .collect();
+    names.extend(env.keys().map(|key| key.to_string_lossy().into_owned()));
+    // Windows environment names compare without letter case.
+    let same = |a: &str, b: &str| {
+        if cfg!(windows) {
+            a.eq_ignore_ascii_case(b)
+        } else {
+            a == b
+        }
+    };
+    let replace = |env: &mut std::collections::BTreeMap<_, _>, name: &str, value| {
+        env.retain(|key: &std::ffi::OsString, _| !same(&key.to_string_lossy(), name));
+        env.insert(std::ffi::OsString::from(name), value);
+    };
+    let mut done: Vec<String> = Vec::new();
+    for name in names {
+        if real_project_env_removed(&name) && !done.iter().any(|seen| same(seen, &name)) {
+            replace(env, &name, None);
+            done.push(name);
+        }
+    }
+    replace(
+        env,
+        REAL_PROJECT_ENV_KEPT[0],
+        Some(std::ffi::OsString::from(config_dir)),
+    );
+    Ok(())
+}
+
 pub fn env_without(env: &[String], names: &[&str]) -> Vec<String> {
     env.iter()
         .filter(|kv| {
@@ -1259,6 +1339,116 @@ mod tests {
         std::fs::write(&source, "short\nsecond line").unwrap();
         let p = prepare_launch_prompt(&paths, &source, 42, None, 77).unwrap();
         assert!(!p.pointer && system_prompt_file_args(&p).is_err());
+    }
+    /// C4 re-review M2: the names a real project provider loses and keeps
+    /// are fixed here. Only the subscription's Claude folder is put back.
+    #[test]
+    fn real_project_environment_removes_and_keeps_fixed_names() {
+        assert_eq!(
+            REAL_PROJECT_ENV_REMOVED_PREFIXES,
+            ["CLAUDE_", "ANTHROPIC_", "MANY_AI_CLI_"]
+        );
+        assert_eq!(REAL_PROJECT_ENV_REMOVED_NAMES, ["CLAUDECODE"]);
+        assert_eq!(
+            REAL_PROJECT_ENV_KEPT,
+            [
+                "CLAUDE_CONFIG_DIR",
+                "MANY_AI_CLI_SESSION_ID",
+                "MANY_AI_CLI_HUB_TOKEN"
+            ]
+        );
+        let removed = [
+            "CLAUDECODE",
+            "claudecode",
+            "CLAUDE_CODE_ENTRYPOINT",
+            "CLAUDE_CODE_SESSION_ID",
+            "CLAUDE_CODE_CHILD_SESSION",
+            "CLAUDE_CODE_MESSAGING_SOCKET",
+            "CLAUDE_CODE_MESSAGING_TOKEN",
+            "CLAUDE_CODE_SESSION_ATTENDED",
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE",
+            "CLAUDE_PID",
+            "Claude_Code_Extra",
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_MODEL",
+            "MANY_AI_CLI_DELEGATION",
+            "MANY_AI_CLI_SUBSCRIPTION_ID",
+            "MANY_AI_CLI_HUB_PORT",
+            "MANY_AI_CLI_BIN",
+            "MANY_AI_CLI_PARENT_SHELL",
+            "MANY_AI_CLI_AUTO",
+            "MANY_AI_CLI_IRIS_OWNER",
+        ];
+        let kept = [
+            "CLAUDE_CONFIG_DIR",
+            "MANY_AI_CLI_SESSION_ID",
+            "MANY_AI_CLI_HUB_TOKEN",
+            "MANY_AI_CLI",
+            "PATH",
+            "USERPROFILE",
+            "TERM",
+            "CLAUDE",
+            "ANTHROPIC",
+        ];
+        for name in removed {
+            assert!(real_project_env_removed(name), "{name}");
+        }
+        for name in kept {
+            assert!(!real_project_env_removed(name), "{name}");
+        }
+        let config = if cfg!(windows) {
+            r"C:\synthetic\claude-config"
+        } else {
+            "/synthetic/claude-config"
+        };
+        let mut inherited: Vec<String> = removed.iter().map(|n| format!("{n}=x")).collect();
+        inherited.extend(kept.iter().map(|n| format!("{n}=x")));
+        let mut env = std::collections::BTreeMap::new();
+        env.insert("ANTHROPIC_API_KEY".into(), Some("x".into()));
+        env.insert("claude_config_dir".into(), Some("other".into()));
+        env.insert("PATH".into(), Some("x".into()));
+        apply_real_project_environment(&mut env, &inherited, Some(config)).unwrap();
+        for name in removed {
+            let spellings: Vec<_> = env
+                .iter()
+                .filter(|(k, _)| {
+                    let k = k.to_string_lossy();
+                    if cfg!(windows) {
+                        k.eq_ignore_ascii_case(name)
+                    } else {
+                        k == name
+                    }
+                })
+                .map(|(_, v)| v.clone())
+                .collect();
+            assert_eq!(spellings, vec![None], "{name} is removed");
+        }
+        let config_values: Vec<_> = env
+            .iter()
+            .filter(|(k, _)| {
+                k.to_string_lossy()
+                    .eq_ignore_ascii_case("CLAUDE_CONFIG_DIR")
+            })
+            .collect();
+        assert_eq!(config_values.len(), 1);
+        assert_eq!(
+            config_values[0],
+            (
+                &std::ffi::OsString::from("CLAUDE_CONFIG_DIR"),
+                &Some(config.into())
+            )
+        );
+        assert_eq!(
+            env.get(std::ffi::OsStr::new("PATH")),
+            Some(&Some("x".into()))
+        );
+        // The Claude folder is required and absolute.
+        let mut env = std::collections::BTreeMap::new();
+        assert!(apply_real_project_environment(&mut env, &[], None).is_err());
+        assert!(apply_real_project_environment(&mut env, &[], Some("relative")).is_err());
     }
     #[test]
     fn prompt_cost_subcommand_guard_and_shell_safety() {

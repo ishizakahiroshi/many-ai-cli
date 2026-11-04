@@ -302,6 +302,95 @@ async fn an_iris_real_project_session_is_never_approved_automatically() {
     assert!(!f.core.details(id).unwrap().iris_real_project);
     assert!(f.rules.try_apply(id, &record).await.unwrap());
 }
+/// C4 re-review H1 (reverse of the reattach reproduction): the Hub refuses a
+/// wrapper reattach to a live session marked as an Iris real project, so the
+/// server-owned mark and the old binding stay as they were, and Hub automatic
+/// approval still never answers that session's prompt.
+#[tokio::test(start_paused = true)]
+async fn an_iris_real_project_session_refuses_reattach_and_keeps_its_mark() {
+    let spawner = Arc::new(Registering::default());
+    let f = Fixture::build(true, Arc::new(Sink), spawner.clone());
+    spawner.0.set(Arc::downgrade(&f.core)).unwrap();
+    f.rules
+        .policy
+        .add_and_reload("git status", "/synthetic/project")
+        .unwrap();
+    let spec = WrappedSpawnSpec {
+        registration_metadata: SpawnRegistrationMetadata {
+            iris_owner_context: "{}".into(),
+            prompt_at_launch: true,
+            iris_real_project: true,
+            ..Default::default()
+        },
+        spawn_attempt: None,
+        registration_proof: None,
+        provider: "claude".into(),
+        cwd: "/synthetic/project".into(),
+        model: String::new(),
+        model_selection: String::new(),
+        risk_confirmed: false,
+        label: "iris-attempt".into(),
+        permission_mode: "acceptEdits".into(),
+        sandbox: String::new(),
+        ask_for_approval: String::new(),
+        route: String::new(),
+        utf8_session: false,
+        effort: String::new(),
+        execution_mode: "interactive".into(),
+        permission_preset: String::new(),
+        initial_prompt: "synthetic".into(),
+        subscription_profile_id: String::new(),
+        subscription_login: false,
+        usage_probe: false,
+        grants: InternalSpawnGrants::default(),
+        cancellation: TaskCancellation::default(),
+    };
+    let binding = match f
+        .core
+        .spawn_and_wait(
+            spec,
+            Duration::from_secs(5),
+            &HttpWaitCancellation::default(),
+        )
+        .await
+    {
+        SpawnWaitOutcome::Registered(binding) => binding,
+        _ => panic!("synthetic registration failed"),
+    };
+    assert!(f.core.details(binding.session).unwrap().iris_real_project);
+    // The same wrapper process (same pid, provider and cwd) tries to
+    // reattach on a new connection, as after a write timeout, an output
+    // lag or a Hub restart.
+    let reattached = f
+        .core
+        .reattach(
+            ReattachRequest {
+                restored_metadata: None,
+                message: proto::Message {
+                    session_id: binding.session.0,
+                    provider: "claude".into(),
+                    cwd: "/synthetic/project".into(),
+                    pid: 71,
+                    cols: 120,
+                    rows: 30,
+                    ..Default::default()
+                },
+            },
+            WrapperConnectionId(91),
+            Timestamp::now(),
+        )
+        .await;
+    assert!(
+        matches!(&reattached, Err(SessionError::InvalidRequest(reason)) if reason == crate::terminal::session::IRIS_REAL_PROJECT_REATTACH_REFUSED),
+        "a real project session must refuse reattach"
+    );
+    assert!(f.core.details(binding.session).unwrap().iris_real_project);
+    assert!(f.core.is_current(binding));
+    let (id, record, effects) = f.prompt(binding, "git status");
+    drop(effects);
+    assert!(!f.rules.try_apply(id, &record).await.unwrap());
+    assert_eq!(f.transport.0.load(Ordering::SeqCst), 0);
+}
 #[tokio::test(start_paused = true)]
 async fn disabled_setting_records_would_approve_history_without_sending_or_auditing() {
     let f = Fixture::new(false);

@@ -743,6 +743,95 @@ async fn wrapper_output_backpressure_reconnects_even_with_live_hub_auto_shutdown
     drop(first_tx);
 }
 
+/// C4 re-review H1: an Iris real project wrapper (`no_reattach`) never
+/// reattaches. An output lag, an explicit `hub_shutdown` and a failed read
+/// with the Hub gone each stop the provider and end the run; the connector
+/// is never asked for a second connection.
+#[tokio::test]
+async fn real_project_wrapper_never_reattaches_and_stops_the_provider() {
+    for case in ["output lag", "hub shutdown", "read failure"] {
+        let root = tempfile::tempdir().unwrap();
+        let chunks = if case == "output lag" {
+            vec![vec![b'x'; 4096]; 20]
+        } else {
+            vec![]
+        };
+        let pty = Arc::new(FakePty::new(chunks, false));
+        let retained = pty.clone();
+        let (first, first_tx, mut first_rx) = socket_pair();
+        let (second, _second_tx, mut second_rx) = socket_pair();
+        let proofs = Arc::new(Mutex::new(vec![]));
+        let connects = proofs.clone();
+        let connector = ScriptConnector {
+            sockets: Mutex::new(VecDeque::from([first, second])),
+            proofs,
+            // A Hub that no longer answers: an ordinary wrapper would wait
+            // for it and reattach.
+            alive: false,
+        };
+        let mut options = WrapperOptions::new(
+            Message {
+                provider: "synthetic".into(),
+                ..Default::default()
+            },
+            plan(root.path()),
+        );
+        options.no_reattach = true;
+        options.output_capacity = 1;
+        options.reconnect_interval = Duration::from_millis(1);
+        options.reconnect_grace = Duration::from_secs(2);
+        let run = tokio::spawn(async move {
+            runtime::run(
+                options,
+                &connector,
+                &FakeFactory(pty),
+                &Cancellation::default(),
+                |_, _| Ok(()),
+            )
+            .await
+        });
+        receive_type(&mut first_rx, "register").await;
+        first_tx
+            .send(Message {
+                r#type: "registered".into(),
+                session_id: 1,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        let keep = match case {
+            "hub shutdown" => {
+                first_tx
+                    .send(Message {
+                        r#type: "hub_shutdown".into(),
+                        ..Default::default()
+                    })
+                    .await
+                    .unwrap();
+                Some(first_tx)
+            }
+            "read failure" => {
+                drop(first_tx);
+                None
+            }
+            _ => Some(first_tx),
+        };
+        let result = tokio::time::timeout(Duration::from_secs(10), run)
+            .await
+            .expect("the wrapper must end")
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.reconnects, 0, "{case}");
+        assert!(
+            retained.closed.load(std::sync::atomic::Ordering::Acquire),
+            "{case}: provider stopped"
+        );
+        assert_eq!(connects.lock().unwrap().len(), 1, "{case}: no reattach");
+        assert!(second_rx.try_recv().is_err(), "{case}: no reattach frame");
+        drop(keep);
+    }
+}
+
 struct NeverFactory;
 impl PtyFactory for NeverFactory {
     fn spawn(&self, _: &ProcessPlan, _: PtySize) -> io::Result<Arc<dyn PtySession>> {

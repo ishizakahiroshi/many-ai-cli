@@ -362,13 +362,16 @@ fn iris_real_project_launch_isolates_the_provider_settings() {
         })
     };
     let args = argv(&request).unwrap();
+    // C4 re-review L5: Claude in Chrome is switched off as well (both
+    // claude 2.1.316 and 2.1.318 list `--no-chrome` in their --help).
     assert_eq!(
-        &args[args.len() - 4..],
+        &args[args.len() - 5..],
         [
             "--",
             "--setting-sources",
             "project,local",
-            "--strict-mcp-config"
+            "--strict-mcp-config",
+            "--no-chrome"
         ]
     );
     // The wrapper reads them as provider arguments, after its own flags.
@@ -381,7 +384,11 @@ fn iris_real_project_launch_isolates_the_provider_settings() {
     // Every other launch (the real bounded profile included) is unchanged.
     request.registration_metadata.iris_real_project = false;
     let args = argv(&request).unwrap();
-    assert!(!args.iter().any(|a| a == "--" || a == "--setting-sources"));
+    assert!(
+        !args
+            .iter()
+            .any(|a| a == "--" || a == "--setting-sources" || a == "--no-chrome")
+    );
     // The flag never rides on another provider.
     request.registration_metadata.iris_real_project = true;
     request.provider = "codex".into();

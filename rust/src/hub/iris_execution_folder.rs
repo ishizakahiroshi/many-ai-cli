@@ -504,11 +504,33 @@ fn has_protected_component(path: &str) -> bool {
     components(path).any(|part| protected_name(part) || protected_name(win32_name(part)))
 }
 
-/// A component Windows does not keep as written (a trailing dot or space) or
-/// a device name: never a plain file or folder name of a work folder.
+/// An 8.3 short name form: a `~` directly followed by one or more digits that
+/// end the base name (at the end or before a `.`), as in `GIT~1`, `CLAUDE~1`,
+/// `PROGRA~2` or `MCP~1.JSO`. Windows may resolve such a name to a different
+/// entry (`GIT~1` to `.git`), so it is never a work folder name. Ordinary
+/// names with a `~` not followed by digits (`a~b.py`) are not affected.
+fn short_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    bytes.iter().enumerate().any(|(index, byte)| {
+        if *byte != b'~' {
+            return false;
+        }
+        let digits = bytes[index + 1..]
+            .iter()
+            .take_while(|b| b.is_ascii_digit())
+            .count();
+        let end = index + 1 + digits;
+        index > 0 && digits > 0 && (end == bytes.len() || bytes[end] == b'.')
+    })
+}
+
+/// A component Windows does not keep as written (a trailing dot or space), a
+/// device name or an 8.3 short name form: never a plain file or folder name
+/// of a work folder.
 fn has_unsafe_component(path: &str) -> bool {
-    components(path)
-        .any(|part| !part.is_empty() && (part.ends_with(['.', ' ']) || device_name(part)))
+    components(path).any(|part| {
+        !part.is_empty() && (part.ends_with(['.', ' ']) || device_name(part) || short_name(part))
+    })
 }
 
 /// NTFS sets the archive attribute (0x20) on every write, and a copy may clear
@@ -559,8 +581,8 @@ pub fn baseline_digest(entries: &[FolderEntry]) -> Option<String> {
 /// A real project launch baseline: plain single-link files and directories
 /// only, no named stream (including on the folder itself), no protected name
 /// anywhere (also after dropping trailing dots and spaces) and no name with a
-/// trailing dot or space or a Windows device name. It must equal the
-/// operator-pinned digest and entry count.
+/// trailing dot or space, a Windows device name or an 8.3 short name form
+/// (`GIT~1`). It must equal the operator-pinned digest and entry count.
 pub fn check_project_baseline(
     entries: &[FolderEntry],
     baseline_sha256: &str,
@@ -582,6 +604,31 @@ pub fn check_project_baseline(
         || baseline_digest(entries).as_deref() != Some(baseline_sha256)
     {
         return Err(fail("FOLDER_BASELINE_MISMATCH"));
+    }
+    Ok(())
+}
+
+/// Instruction files Claude reads from the folders above its working folder.
+pub const ANCESTOR_INSTRUCTION_NAMES: [&str; 4] =
+    ["CLAUDE.md", "CLAUDE.local.md", ".claude", "AGENTS.md"];
+
+/// A real project launch refuses when any folder above the work folder, up
+/// to and including the drive root, holds one of
+/// `ANCESTOR_INSTRUCTION_NAMES` (any entry kind; Windows compares names
+/// without letter case). The work folder itself is not checked here: its
+/// content is the pinned baseline.
+pub fn check_no_ancestor_instructions(folder: &std::path::Path) -> Result<()> {
+    let mut current = folder.parent();
+    while let Some(dir) = current {
+        for name in ANCESTOR_INSTRUCTION_NAMES {
+            match std::fs::symlink_metadata(dir.join(name)) {
+                Ok(_) => return Err(fail("FOLDER_ANCESTOR_INSTRUCTIONS")),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                // An unreadable ancestor is not proven free of instructions.
+                Err(_) => return Err(fail("FOLDER_ANCESTOR_INSTRUCTIONS")),
+            }
+        }
+        current = dir.parent();
     }
     Ok(())
 }
@@ -639,7 +686,8 @@ fn in_scope(path: &str, allowed: &[String]) -> bool {
 /// point (those are `link`). Links, streams, other entry kinds, kind changes,
 /// attribute changes (of files or folders), hard links, protected names (also
 /// after Windows drops trailing dots and spaces: `PROTECTED_NAME`) and names
-/// with a trailing dot or space or a Windows device name (`UNSAFE_NAME`) are
+/// with a trailing dot or space, a Windows device name or an 8.3 short name
+/// form (`UNSAFE_NAME`) are
 /// never scoped. The archive attribute alone is not a difference (Windows).
 pub fn classify(
     before: &[FolderEntry],
@@ -1064,6 +1112,24 @@ mod tests {
             ("src/com1.py", "file", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
             ("src/LPT9", "file", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
             ("src/nul .txt", "file", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
+            // C4 re-review L3: 8.3 short names (a `~` and digits), which
+            // Windows may resolve to another entry (`GIT~1` to `.git`).
+            ("src/GIT~1", "dir", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
+            (
+                "src/git~1/config",
+                "file",
+                "UNSAFE_NAME",
+                "FOLDER_UNSAFE_NAME",
+            ),
+            ("src/CLAUDE~1", "dir", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
+            ("src/PROGRA~2", "dir", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
+            ("src/MCP~1.JSO", "file", "UNSAFE_NAME", "FOLDER_UNSAFE_NAME"),
+            (
+                "src/TEST_A~12.PY",
+                "file",
+                "UNSAFE_NAME",
+                "FOLDER_UNSAFE_NAME",
+            ),
         ] {
             let mut after = base.clone();
             after.push(entry(
@@ -1097,6 +1163,9 @@ mod tests {
             "src/.gitignore",
             "src/a.b.py",
             "src/.git-notes",
+            "src/a~b.py",
+            "src/a~.py",
+            "src/~1x.py",
         ] {
             let mut after = base.clone();
             after.push(entry(name, "file", 1, 1, Some(&"e".repeat(64))));
@@ -1107,7 +1176,49 @@ mod tests {
                 "{name}"
             );
         }
-        assert_eq!(checked, 14);
+        assert_eq!(checked, 20);
+    }
+
+    /// C4 re-review L6: instruction files Claude reads from the folders
+    /// above its working folder refuse the launch (up to the drive root);
+    /// the same names inside the work folder itself are its own content.
+    #[test]
+    fn ancestor_instruction_files_refuse_the_launch() {
+        for name in ["CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", ".claude"] {
+            let d = tempfile::tempdir().unwrap();
+            let outer = d.path().canonicalize().unwrap();
+            let work = outer.join("case").join("work");
+            std::fs::create_dir_all(&work).unwrap();
+            check_no_ancestor_instructions(&work).unwrap();
+            // Inside the work folder: not an ancestor.
+            std::fs::write(work.join("CLAUDE.md"), b"synthetic").unwrap();
+            check_no_ancestor_instructions(&work).unwrap();
+            for parent in [outer.join("case"), outer.clone()] {
+                let target = parent.join(name);
+                if name == ".claude" {
+                    std::fs::create_dir(&target).unwrap();
+                } else {
+                    std::fs::write(&target, b"synthetic").unwrap();
+                }
+                assert_eq!(
+                    check_no_ancestor_instructions(&work).unwrap_err().code,
+                    "FOLDER_ANCESTOR_INSTRUCTIONS",
+                    "{name} in {}",
+                    parent.display()
+                );
+                if name == ".claude" {
+                    std::fs::remove_dir(&target).unwrap();
+                } else {
+                    std::fs::remove_file(&target).unwrap();
+                }
+            }
+            // A different letter case is the same name on Windows.
+            #[cfg(windows)]
+            {
+                std::fs::write(outer.join(name.to_ascii_lowercase()), b"synthetic").unwrap();
+                assert!(check_no_ancestor_instructions(&work).is_err(), "{name}");
+            }
+        }
     }
 
     /// C4 R5 reversed on disk: the same names created through a verbatim path.

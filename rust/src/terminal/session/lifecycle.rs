@@ -419,6 +419,19 @@ impl SessionEngine {
             if state.dismissed.contains(&requested) {
                 return Err(SessionError::InvalidRequest("session dismissed".into()));
             }
+            // An Iris real project session is never rebuilt from a reattach:
+            // its wrapper stops the provider when the connection ends, and
+            // the server-owned mark (automatic approval exclusion, watchdog
+            // binding) must never be replaced by wrapper-supplied fields.
+            if state
+                .sessions
+                .get(&requested)
+                .is_some_and(|s| s.iris_real_project)
+            {
+                return Err(SessionError::InvalidRequest(
+                    super::IRIS_REAL_PROJECT_REATTACH_REFUSED.into(),
+                ));
+            }
             let collision = state.sessions.get(&requested).is_some_and(|s| {
                 s.connected
                     && !(m.pid > 0
