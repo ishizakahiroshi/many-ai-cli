@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "53e1b2f7f30a76c5712506c98cd18fd33e570154",
+    "commit": "78c14facf262c5b06f8b8de7627b909fbfb28472",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2074,
-    "analyzed": 1610,
+    "discovered": 2075,
+    "analyzed": 1611,
     "unresolved": 14,
     "unknown": 0,
     "unclaimed": 450,
@@ -41057,6 +41057,37 @@
       "unresolved": []
     },
     {
+      "path": "rust/tests/review2_composition.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "review2 adversarial checks for the opt-in Hub composition. Synthetic data"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "value",
+          "value": [
+            "meta"
+          ]
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/tests/runtime_ledger_contracts.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -51524,7 +51555,8 @@
       ],
       "written_by": [
         "rust/src/hub/iris_execution_journal.rs",
-        "rust/src/hub/iris_execution_verification_store.rs"
+        "rust/src/hub/iris_execution_verification_store.rs",
+        "rust/tests/review2_composition.rs"
       ],
       "in_schema_snapshot": false,
       "unresolved_in": [

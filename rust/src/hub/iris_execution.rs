@@ -324,6 +324,9 @@ impl IrisExecutionHttp {
     /// check applies unchanged. Any failure returns the unmodified
     /// inspection-only owner and a fixed code. The port factory runs only
     /// after the policy source passed the same strict checks as admission.
+    /// A Tokio runtime and a journal that supports owned dispatch are required
+    /// and are checked before `verification.sqlite3` is opened, so a rejection
+    /// never leaves a new file behind.
     pub fn compose_real_bounded<F>(self, root: &Path, port: F) -> (Self, RealBoundedComposition)
     where
         F: FnOnce(
@@ -350,6 +353,19 @@ impl IrisExecutionHttp {
         };
         if check_policy_source(root, OwnedProfileKind::RealBounded).is_err() {
             return reject(self, "REAL_BOUNDED_POLICY_SOURCE");
+        }
+        // What the dispatcher needs from this process is settled before the
+        // verification store is opened: a rejected request creates no file.
+        if tokio::runtime::Handle::try_current().is_err() {
+            return reject(self, "REAL_BOUNDED_RUNTIME");
+        }
+        let owned_dispatch = self
+            .journal
+            .lock()
+            .ok()
+            .and_then(|journal| journal.supports_owned_dispatch().ok());
+        if owned_dispatch != Some(true) {
+            return reject(self, "REAL_BOUNDED_JOURNAL");
         }
         let verifications = match super::iris_execution_verification_store::VerificationStore::open(
             &dir.join("verification.sqlite3"),

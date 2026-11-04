@@ -1,6 +1,8 @@
 //! Bounded approved-cwd snapshot for the real bounded profile. It records only
 //! relative names, entry types, sizes, link counts, native attributes and
-//! SHA256 inside one folder, including each named (alternate) data stream.
+//! SHA256 inside one folder, including the folder's own attributes (the entry
+//! with the empty relative path) and each named (alternate) data stream.
+//! Access control lists are not recorded, so an ACL-only change is not seen.
 //! Links and junctions are recorded, never followed. A comparison is a separate
 //! local record: it is not effects verification, and writes outside the folder,
 //! network use and provider-side remote jobs stay unverified.
@@ -273,6 +275,18 @@ pub fn snapshot(root: &Path) -> Result<Vec<FolderEntry>> {
     }
     let mut entries = Vec::new();
     let mut total = 0u64;
+    // The approved folder itself is the entry with the empty relative path, so
+    // a change of its own attributes (hidden, read-only, ...) is a difference.
+    // It counts toward MAX_ENTRIES like every other entry. Access control lists
+    // (of the folder or anything in it) are not recorded and so not compared.
+    entries.push(FolderEntry {
+        path: String::new(),
+        kind: "dir".into(),
+        size: 0,
+        links: 0,
+        sha256: None,
+        attributes: attributes(&meta),
+    });
     // Named streams of the folder itself are keyed ":name:$DATA".
     push_streams(root, "", &mut entries, &mut total)?;
     let mut pending = vec![(root.to_path_buf(), String::new())];
@@ -444,7 +458,12 @@ mod tests {
         std::fs::write(root.join("sub/seed.txt"), b"synthetic seed").unwrap();
         let before = snapshot(&root).unwrap();
         require_plain(&before).unwrap();
-        assert_eq!(before.len(), 2);
+        // The folder itself (empty path), the subfolder and its file.
+        assert_eq!(before.len(), 3);
+        assert_eq!(
+            (before[0].path.as_str(), before[0].kind.as_str()),
+            ("", "dir")
+        );
         std::fs::write(root.join("answer.json"), b"{}").unwrap();
         let after = snapshot(&root).unwrap();
         assert_eq!(compare(&before, &after, "answer.json").0, PAYLOAD_ONLY);
@@ -503,8 +522,9 @@ mod tests {
                 "{name}: {changes:?}"
             );
             // NTFS also flips the directory's own attributes when a stream is
-            // added to it; that is recorded as a modification of "sub".
-            let expected = if name == "dir" { 3 } else { 2 };
+            // added to it; that is recorded as a modification of "sub", or of
+            // the approved folder's own entry (empty path) for the root.
+            let expected = if name == "file" { 2 } else { 3 };
             assert_eq!(changes.len(), expected, "{name}: {changes:?}");
         }
         // Rewriting a stream with the same size is still a modification.
@@ -532,6 +552,37 @@ mod tests {
     }
 
     #[test]
+    fn the_approved_folders_own_attributes_are_part_of_the_snapshot() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().join("work");
+        std::fs::create_dir(&root).unwrap();
+        let root = root.canonicalize().unwrap();
+        let before = snapshot(&root).unwrap();
+        assert_eq!(
+            (before[0].path.as_str(), before[0].kind.as_str()),
+            ("", "dir")
+        );
+        // Creating the payload alone leaves the folder's own entry unchanged.
+        std::fs::write(root.join("answer.json"), b"{}").unwrap();
+        let created = snapshot(&root).unwrap();
+        assert_eq!(compare(&before, &created, "answer.json").0, PAYLOAD_ONLY);
+        // Any change of the folder's own attributes is a difference, with the
+        // payload created in the same window.
+        let original = std::fs::metadata(&root).unwrap().permissions();
+        let mut changed = original.clone();
+        changed.set_readonly(true);
+        std::fs::set_permissions(&root, changed).unwrap();
+        let after = snapshot(&root);
+        std::fs::set_permissions(&root, original).unwrap();
+        let (effects, changes) = compare(&before, &after.unwrap(), "answer.json");
+        assert_eq!(effects, UNEXPECTED_CHANGE);
+        assert!(
+            changes.contains(&json!({"path":"","change":"modified","kind":"dir"})),
+            "{changes:?}"
+        );
+    }
+
+    #[test]
     fn payload_digest_must_match_the_after_snapshot() {
         let d = tempfile::tempdir().unwrap();
         let root = d.path().canonicalize().unwrap();
@@ -552,7 +603,8 @@ mod tests {
     fn snapshot_refuses_more_than_bounded_entries_or_bytes() {
         let d = tempfile::tempdir().unwrap();
         let root = d.path().canonicalize().unwrap();
-        for i in 0..MAX_ENTRIES {
+        // The folder's own entry counts, so MAX_ENTRIES - 1 files still fit.
+        for i in 0..MAX_ENTRIES - 1 {
             std::fs::write(root.join(format!("f{i:04}")), b"").unwrap();
         }
         assert_eq!(snapshot(&root).unwrap().len(), MAX_ENTRIES);

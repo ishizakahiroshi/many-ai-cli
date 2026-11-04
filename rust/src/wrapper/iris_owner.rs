@@ -43,6 +43,15 @@ fn scope(mut value: Value) -> Value {
     }
     value
 }
+/// The first reason recorded for a collection stands. A later step may fail as
+/// well, but it never rewrites why the folder was already judged unexpected
+/// (for example `PAYLOAD_CHANGED`); nothing is recorded for the later failure.
+fn note_reason(reason: &mut Value, detail: &mut Value, code: &str, because: Value) {
+    if reason.is_null() {
+        *reason = json!(code);
+        *detail = because;
+    }
+}
 
 pub struct DurableExecutionOwner {
     root: PathBuf,
@@ -121,8 +130,15 @@ impl DurableExecutionOwner {
                         effects = folder::UNEXPECTED_CHANGE;
                         reason = json!("PAYLOAD_CHANGED");
                     }
+                    // From here on a reason is only added when none stands
+                    // yet: `PAYLOAD_CHANGED` is never overwritten.
                     match parse_json(artifact.bytes()) {
-                        Err(_) => reason = json!("PAYLOAD_JSON"),
+                        Err(_) => note_reason(
+                            &mut reason,
+                            &mut reason_detail,
+                            "PAYLOAD_JSON",
+                            json!(null),
+                        ),
                         Ok(answer) => {
                             let envelope = json!({"binding":t.binding,"owner_id":t.owner_id,
                                 "owner_epoch":t.owner_epoch,
@@ -133,12 +149,19 @@ impl DurableExecutionOwner {
                             match self.grant.result.create_exclusive(&bytes) {
                                 Err(error) if error.code == "ARTIFACT_EXISTS" => {
                                     effects = folder::UNEXPECTED_CHANGE;
-                                    reason = json!("RESULT_PREEXISTING");
+                                    note_reason(
+                                        &mut reason,
+                                        &mut reason_detail,
+                                        "RESULT_PREEXISTING",
+                                        json!(null),
+                                    );
                                 }
-                                Err(error) => {
-                                    reason = json!("RESULT_WRITE");
-                                    reason_detail = json!(error.code);
-                                }
+                                Err(error) => note_reason(
+                                    &mut reason,
+                                    &mut reason_detail,
+                                    "RESULT_WRITE",
+                                    json!(error.code),
+                                ),
                                 Ok(()) => {
                                     let digest = sha(&bytes);
                                     result_sha256 = json!(digest);
@@ -153,10 +176,12 @@ impl DurableExecutionOwner {
                                         Ok(receipt) => {
                                             outcome_sequence = receipt["sequence"].clone()
                                         }
-                                        Err(error) => {
-                                            reason = json!("OUTCOME_REJECTED");
-                                            reason_detail = json!(error.code);
-                                        }
+                                        Err(error) => note_reason(
+                                            &mut reason,
+                                            &mut reason_detail,
+                                            "OUTCOME_REJECTED",
+                                            json!(error.code),
+                                        ),
                                     }
                                 }
                             }

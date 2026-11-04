@@ -351,7 +351,11 @@ async fn payload_only_answer_builds_trusted_envelope_and_fixed_payload_passes() 
     assert_never_promoted(&owner, &folder);
     assert_eq!(owner["local_tree_ceased"], true);
     assert_eq!(folder["before"]["complete"], true);
-    assert_eq!(folder["before"]["entries"], json!([]));
+    // An empty approved folder still records the folder itself (empty path).
+    let before = folder["before"]["entries"].as_array().unwrap();
+    assert_eq!(before.len(), 1, "{before:?}");
+    assert_eq!(before[0]["path"], "");
+    assert_eq!(before[0]["kind"], "dir");
     assert_eq!(folder["after"]["complete"], true);
     assert_eq!(folder["collection"]["effects"], PAYLOAD_ONLY);
     assert_eq!(folder["collection"]["reason"], Value::Null);
@@ -762,4 +766,283 @@ async fn c4_real_pair_without_payload_never_adopts_a_provider_written_result() {
         receipt["reported_effects"],
         verdict
     );
+}
+
+// ---- review2 adversarial additions (synthetic data only) ----
+
+fn r2_mklink_junction(link: &Path, target: &Path) {
+    let status = std::process::Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(link)
+        .arg(target)
+        .stdout(std::process::Stdio::null())
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+/// R2-D: approved_cwd inside the runtime root must be refused however it is
+/// spelled: other letter case, verbatim `\\?\` prefix, or via a junction that
+/// lives outside the root and points inside it (or at the root itself).
+#[test]
+fn r2_collector_folder_inside_root_refused_for_every_spelling() {
+    let outside = tempfile::tempdir().unwrap();
+    let cases: Vec<(&str, Box<dyn Fn(&Path, &Path) -> String>)> = vec![
+        (
+            "upper-case",
+            Box::new(|root, _| {
+                std::fs::create_dir_all(root.join("inside")).unwrap();
+                root.canonicalize()
+                    .unwrap()
+                    .join("inside")
+                    .to_string_lossy()
+                    .to_uppercase()
+            }),
+        ),
+        (
+            "verbatim",
+            Box::new(|root, _| {
+                std::fs::create_dir_all(root.join("inside")).unwrap();
+                let c = root.canonicalize().unwrap().join("inside");
+                let s = c.to_string_lossy().to_string();
+                if s.starts_with(r"\\?\") {
+                    s
+                } else {
+                    format!(r"\\?\{s}")
+                }
+            }),
+        ),
+        (
+            "plain-non-verbatim",
+            Box::new(|root, _| {
+                std::fs::create_dir_all(root.join("inside")).unwrap();
+                let c = root.canonicalize().unwrap().join("inside");
+                c.to_string_lossy().trim_start_matches(r"\\?\").to_string()
+            }),
+        ),
+        (
+            "junction-to-inside",
+            Box::new(|root, outside| {
+                std::fs::create_dir_all(root.join("inside")).unwrap();
+                let link = outside.join("j-inside");
+                r2_mklink_junction(&link, &root.join("inside"));
+                link.to_string_lossy().to_string()
+            }),
+        ),
+        (
+            "junction-to-root",
+            Box::new(|root, outside| {
+                let link = outside.join("j-root");
+                r2_mklink_junction(&link, root);
+                link.to_string_lossy().to_string()
+            }),
+        ),
+        (
+            "junction-to-artifacts",
+            Box::new(|root, outside| {
+                let link = outside.join("j-art");
+                r2_mklink_junction(&link, &root.join("iris-execution-artifacts"));
+                link.to_string_lossy().to_string()
+            }),
+        ),
+    ];
+    let mut observed = Vec::new();
+    for (name, make) in cases {
+        let sub = outside.path().join(name);
+        std::fs::create_dir_all(&sub).unwrap();
+        let f = Fixture::with_grant(|g, root| {
+            g["approved_cwd"] = json!(make(root, &sub));
+        });
+        let mut loader = GrantLoader::open(f.root.path()).unwrap();
+        let code = loader.load_approved().err().map(|e| e.code);
+        observed.push((name, code));
+    }
+    for (name, code) in &observed {
+        assert_eq!(
+            code.as_deref(),
+            Some("APPROVED_CWD"),
+            "{name}: {observed:?}"
+        );
+    }
+}
+
+/// R2-B: only the exact pair may carry a payload; near-miss spellings of the
+/// pair with a payload are refused, and without a payload they are not the
+/// real pair (so no owned profile admits them).
+#[test]
+fn r2_payload_only_on_exact_real_pair() {
+    for (provider, profile) in [
+        ("Claude", REAL_BOUNDED_PROFILE_ID),
+        (REAL_BOUNDED_PROVIDER, "Claude-Hiroshi"),
+        (REAL_BOUNDED_PROVIDER, "claude-hiroshi-"),
+        ("codex", REAL_BOUNDED_PROFILE_ID),
+        ("synthetic", "synthetic"),
+    ] {
+        let f = Fixture::with_grant(|g, _| {
+            g["binding"]["provider"] = json!(provider);
+            g["binding"]["profile_id"] = json!(profile);
+            g.as_object_mut().unwrap().remove("launch_mode");
+        });
+        let mut loader = GrantLoader::open(f.root.path()).unwrap();
+        assert_eq!(
+            loader.load_approved().err().map(|e| e.code).as_deref(),
+            Some("MANIFEST_POLICY"),
+            "{provider}/{profile}"
+        );
+    }
+}
+
+/// R2-A1: the approved folder's own attributes are not part of the snapshot.
+/// Contract: anything other than creating the payload is unexpected.
+#[test]
+fn r2_root_folder_attribute_change_is_unexpected() {
+    use many_ai_cli::hub::iris_execution_folder::{compare, snapshot};
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("work");
+    std::fs::create_dir(&root).unwrap();
+    let root = root.canonicalize().unwrap();
+    let before = snapshot(&root).unwrap();
+    std::fs::write(root.join("answer.json"), b"{}").unwrap();
+    // `attrib` does not understand the verbatim prefix on a directory: it
+    // prints "File not found" and still exits 0. Use the plain spelling and
+    // check that the hidden bit really was set.
+    let plain = root
+        .to_string_lossy()
+        .trim_start_matches(r"\\?\")
+        .to_string();
+    let status = std::process::Command::new("attrib")
+        .arg("+H")
+        .arg(&plain)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let hidden = {
+        use std::os::windows::fs::MetadataExt;
+        std::fs::symlink_metadata(&root).unwrap().file_attributes() & 0x2 != 0
+    };
+    let after = snapshot(&root).unwrap();
+    let (effects, changes) = compare(&before, &after, "answer.json");
+    let _ = std::process::Command::new("attrib")
+        .arg("-H")
+        .arg(&plain)
+        .status();
+    assert!(hidden, "attrib did not set the hidden bit on the folder");
+    assert_eq!(effects, UNEXPECTED_CHANGE, "{changes:?}");
+    assert!(
+        changes.contains(&json!({"path":"","change":"modified","kind":"dir"})),
+        "{changes:?}"
+    );
+}
+
+/// R2-A2: an ACL change on an existing file inside the folder changes neither
+/// names, sizes, hashes, link counts, attributes nor streams.
+///
+/// Known gap, deliberately not handled in code for now: the snapshot does not
+/// record access control lists (of the folder or of anything in it), and the
+/// milestone-0 document lists them as not observed. This test states the
+/// wished-for behaviour and stays ignored; run it with `--ignored` to see that
+/// an ACL-only change is still not detected.
+#[test]
+#[ignore = "ACLs are deliberately not recorded; documented as not observed"]
+fn r2_acl_change_inside_folder_is_unexpected() {
+    use many_ai_cli::hub::iris_execution_folder::{compare, snapshot};
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().canonicalize().unwrap();
+    std::fs::write(root.join("seed.txt"), b"synthetic seed").unwrap();
+    let before = snapshot(&root).unwrap();
+    std::fs::write(root.join("answer.json"), b"{}").unwrap();
+    // Grant read to the well-known Everyone SID: harmless and synthetic.
+    let status = std::process::Command::new("icacls")
+        .arg(root.join("seed.txt"))
+        .args(["/grant", "*S-1-1-0:(R)"])
+        .stdout(std::process::Stdio::null())
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let after = snapshot(&root).unwrap();
+    let (effects, changes) = compare(&before, &after, "answer.json");
+    assert_eq!(effects, UNEXPECTED_CHANGE, "{changes:?}");
+}
+
+/// R2-A3 (control): a hard link created from outside to an inside file raises
+/// its link count and is caught.
+#[test]
+fn r2_outside_hardlink_to_inside_file_is_unexpected() {
+    use many_ai_cli::hub::iris_execution_folder::{compare, snapshot};
+    let d = tempfile::tempdir().unwrap();
+    let o = tempfile::tempdir().unwrap();
+    let root = d.path().canonicalize().unwrap();
+    std::fs::write(root.join("seed.txt"), b"synthetic seed").unwrap();
+    let before = snapshot(&root).unwrap();
+    std::fs::write(root.join("answer.json"), b"{}").unwrap();
+    std::fs::hard_link(root.join("seed.txt"), o.path().join("alias.txt")).unwrap();
+    let after = snapshot(&root).unwrap();
+    let (effects, changes) = compare(&before, &after, "answer.json");
+    assert_eq!(effects, UNEXPECTED_CHANGE, "{changes:?}");
+}
+
+/// R2-A4 (probe): stream names with separator-like characters. NTFS refuses
+/// `\`, `/` and `:` in stream names; if one is ever created it must still be a
+/// distinct compared entry.
+#[test]
+fn r2_stream_name_with_separator_like_characters() {
+    use many_ai_cli::hub::iris_execution_folder::{compare, snapshot};
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().canonicalize().unwrap();
+    std::fs::create_dir(root.join("sub")).unwrap();
+    std::fs::write(root.join("seed.txt"), b"synthetic seed").unwrap();
+    let before = snapshot(&root).unwrap();
+    let mut created = Vec::new();
+    for stream in [
+        "seed.txt:a/b",
+        "seed.txt:a\\b",
+        "sub:x/seed.txt",
+        "seed.txt:a.b c",
+    ] {
+        let mut target = root.as_os_str().to_owned();
+        target.push("\\");
+        target.push(stream);
+        if std::fs::write(Path::new(&target), b"s").is_ok() {
+            created.push(stream);
+        }
+    }
+    let after = snapshot(&root).unwrap();
+    let (effects, changes) = compare(&before, &after, "answer.json");
+    println!("r2 created={created:?} changes={changes:?}");
+    let keys: std::collections::BTreeSet<_> = after.iter().map(|e| e.path.clone()).collect();
+    assert_eq!(keys.len(), after.len(), "duplicate snapshot keys");
+    if !created.is_empty() {
+        assert_eq!(effects, UNEXPECTED_CHANGE);
+    }
+}
+
+/// R2-C: a payload that does not match the after snapshot must end as
+/// unexpected-change with reason PAYLOAD_CHANGED. Proxy: the operator spells
+/// the payload with other letter case, so the case-insensitive read succeeds
+/// while the after snapshot holds the provider's spelling. With an invalid
+/// JSON body the PAYLOAD_CHANGED code is overwritten by PAYLOAD_JSON.
+#[tokio::test]
+async fn r2_payload_changed_reason_survives_invalid_json() {
+    for (body, label) in [(ANSWER, "valid"), ("{", "invalid")] {
+        let f = Fixture::with_grant(|g, _| {
+            g["payload_path"] = json!("Answer.json");
+        });
+        f.pin();
+        run(
+            &f,
+            json!([write("answer.json", body)]),
+            &CountFactory::default(),
+        )
+        .await
+        .unwrap();
+        let (owner, folder) = f.record();
+        assert_never_promoted(&owner, &folder);
+        let c = &folder["collection"];
+        println!(
+            "r2 {label}: effects={} reason={} detail={} payload_sha={}",
+            c["effects"], c["reason"], c["reason_detail"], c["payload_sha256"]
+        );
+        assert_eq!(c["effects"], UNEXPECTED_CHANGE, "{label}");
+        assert_eq!(c["reason"], "PAYLOAD_CHANGED", "{label}: {c}");
+    }
 }
