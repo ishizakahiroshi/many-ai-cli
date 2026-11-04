@@ -38,6 +38,9 @@ pub struct ApprovedGrant {
     pub effect_scope: Vec<String>,
     pub allow_remote_jobs: bool,
     pub launch_mode: LaunchMode,
+    /// Present only for the real bounded pair: the provider writes this file in
+    /// approved_cwd and the trusted collector builds the result envelope.
+    pub payload: Option<ArtifactPermit>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -63,6 +66,8 @@ struct Entry {
     // serialized bytes and pinned digests.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     launch_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    payload_path: Option<String>,
 }
 
 fn launch_mode(e: &Entry) -> Result<LaunchMode> {
@@ -169,20 +174,35 @@ impl GrantLoader {
                 return Err(fail("MANIFEST_POLICY"));
             }
             let launch_mode = launch_mode(e)?;
-            let instruction = ArtifactPermit::approved(
-                &artifacts,
-                &e.instruction_path,
-                &e.binding,
-                e.max_artifact_bytes,
-                e.effect_scope.clone(),
-            )?;
-            let result = ArtifactPermit::approved(
-                &artifacts,
-                &e.result_path,
-                &e.binding,
-                e.max_artifact_bytes,
-                e.effect_scope.clone(),
-            )?;
+            // A collector grant is real-pair only, and automatic edits are
+            // only allowed when the trusted folder comparison will run.
+            let collected = e.payload_path.is_some();
+            if (collected && !real_bounded_binding(&e.binding))
+                || (launch_mode == LaunchMode::BoundedEdit && !collected)
+            {
+                return Err(fail("MANIFEST_POLICY"));
+            }
+            let permit = |root: &Path, path: &str| {
+                if collected {
+                    ArtifactPermit::collected(
+                        root,
+                        path,
+                        &e.binding,
+                        e.max_artifact_bytes,
+                        e.effect_scope.clone(),
+                    )
+                } else {
+                    ArtifactPermit::approved(
+                        root,
+                        path,
+                        &e.binding,
+                        e.max_artifact_bytes,
+                        e.effect_scope.clone(),
+                    )
+                }
+            };
+            let instruction = permit(&artifacts, &e.instruction_path)?;
+            let result = permit(&artifacts, &e.result_path)?;
             if !e.revoked {
                 instruction.verify(Some(&e.binding.instruction_hash))?;
             }
@@ -196,6 +216,20 @@ impl GrantLoader {
             if !cwd.is_dir() {
                 return Err(fail("APPROVED_CWD"));
             }
+            let payload = match &e.payload_path {
+                // The compared folder must not hold trusted state: not the
+                // runtime root or an ancestor, artifacts, or owner databases.
+                Some(path) => {
+                    if self.root.starts_with(&cwd)
+                        || cwd.starts_with(&artifacts)
+                        || cwd.starts_with(self.root.join("iris-execution"))
+                    {
+                        return Err(fail("APPROVED_CWD"));
+                    }
+                    Some(permit(&cwd, path)?)
+                }
+                None => None,
+            };
             approved.push(ApprovedGrant {
                 grant: Grant {
                     binding: e.binding.clone(),
@@ -208,6 +242,7 @@ impl GrantLoader {
                 effect_scope: e.effect_scope.clone(),
                 allow_remote_jobs: e.allow_remote_jobs,
                 launch_mode,
+                payload,
             });
         }
         let canonical = serde_json::to_vec(&manifest).map_err(|_| fail("MANIFEST_JSON"))?;
@@ -447,11 +482,92 @@ mod tests {
         v = manifest(d.path(), 1, 1);
         real(&mut v);
         v["grants"][0]["launch_mode"] = json!("bounded-edit");
+        // Automatic edits require the trusted folder comparison (payload).
         write(d.path(), &v);
         let mut l = GrantLoader::open(d.path()).unwrap();
-        assert_eq!(
-            l.load_approved().unwrap()[0].launch_mode,
-            LaunchMode::BoundedEdit
-        );
+        assert_eq!(l.load_approved().err().unwrap().code, "MANIFEST_POLICY");
+        collected(&mut v);
+        write(d.path(), &v);
+        let grant = l.load_approved().unwrap().pop().unwrap();
+        assert_eq!(grant.launch_mode, LaunchMode::BoundedEdit);
+        assert!(grant.payload.is_some());
+    }
+    fn collected(v: &mut Value) {
+        v["grants"][0]["payload_path"] = json!("answer.json");
+        v["grants"][0]["effect_scope"] = json!([
+            super::super::iris_execution_folder::PAYLOAD_ONLY,
+            super::super::iris_execution_folder::UNEXPECTED_CHANGE
+        ]);
+    }
+    #[test]
+    fn payload_grants_are_real_pair_only_with_exact_collected_scope() {
+        let d = tempfile::tempdir().unwrap();
+        let mut v = manifest(d.path(), 1, 1);
+        real(&mut v);
+        collected(&mut v);
+        write(d.path(), &v);
+        let mut l = GrantLoader::open(d.path()).unwrap();
+        let grant = l.load_approved().unwrap().pop().unwrap();
+        assert_eq!(grant.launch_mode, LaunchMode::Default);
+        assert!(grant.payload.is_some());
+        let mut cases = Vec::new();
+        for (provider, profile) in [("synthetic", "synthetic"), ("codex", "codex")] {
+            let mut other = v.clone();
+            other["grants"][0]["binding"]["provider"] = json!(provider);
+            other["grants"][0]["binding"]["profile_id"] = json!(profile);
+            cases.push((other, "MANIFEST_POLICY"));
+        }
+        // Existing non-collector grants cannot use the collector vocabulary.
+        let mut plain = manifest(d.path(), 1, 1);
+        plain["grants"][0]["effect_scope"] =
+            json!([super::super::iris_execution_folder::PAYLOAD_ONLY]);
+        cases.push((plain, "INVALID_PERMIT"));
+        for scope in [
+            json!(["none"]),
+            json!([super::super::iris_execution_folder::PAYLOAD_ONLY]),
+            json!([
+                super::super::iris_execution_folder::PAYLOAD_ONLY,
+                super::super::iris_execution_folder::UNEXPECTED_CHANGE,
+                "none"
+            ]),
+        ] {
+            let mut other = v.clone();
+            other["grants"][0]["effect_scope"] = scope;
+            cases.push((other, "INVALID_PERMIT"));
+        }
+        let mut artifacts_cwd = v.clone();
+        artifacts_cwd["grants"][0]["approved_cwd"] = json!("iris-execution-artifacts");
+        cases.push((artifacts_cwd, "APPROVED_CWD"));
+        let mut root_cwd = v.clone();
+        root_cwd["grants"][0]["approved_cwd"] = json!(d.path().canonicalize().unwrap());
+        cases.push((root_cwd, "APPROVED_CWD"));
+        std::fs::create_dir_all(d.path().join("iris-execution/inner")).unwrap();
+        let mut store_cwd = v.clone();
+        store_cwd["grants"][0]["approved_cwd"] = json!("iris-execution/inner");
+        cases.push((store_cwd, "APPROVED_CWD"));
+        for (index, (value, code)) in cases.into_iter().enumerate() {
+            let d = tempfile::tempdir().unwrap();
+            let fresh = manifest(d.path(), 1, 1);
+            let mut value = value;
+            // Re-anchor absolute cwd cases at this fresh root.
+            if value["grants"][0]["approved_cwd"]
+                .as_str()
+                .is_some_and(|s| Path::new(s).is_absolute())
+            {
+                value["grants"][0]["approved_cwd"] = json!(d.path().canonicalize().unwrap());
+            }
+            if value["grants"][0]["approved_cwd"] == "iris-execution/inner" {
+                std::fs::create_dir_all(d.path().join("iris-execution/inner")).unwrap();
+            }
+            value["grants"][0]["binding"]["instruction_hash"] =
+                fresh["grants"][0]["binding"]["instruction_hash"].clone();
+            write(d.path(), &value);
+            let mut l = GrantLoader::open(d.path()).unwrap();
+            assert_eq!(
+                l.load_approved().err().map(|e| e.code),
+                Some(code.to_string()),
+                "case {index}"
+            );
+        }
     }
 }

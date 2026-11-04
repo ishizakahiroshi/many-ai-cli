@@ -200,6 +200,9 @@ pub fn prepare_spec(
         }
         LaunchMode::BoundedEdit => return Err(PrepareError::UnsupportedPolicy),
     };
+    if grant.payload.is_some() && !real_bounded_binding(b) {
+        return Err(PrepareError::UnsupportedPolicy);
+    }
     let cwd = grant
         .approved_cwd
         .canonicalize()
@@ -316,6 +319,7 @@ mod tests {
             effect_scope: vec!["none".into()],
             allow_remote_jobs: false,
             launch_mode: LaunchMode::Default,
+            payload: None,
         };
         (
             root,
@@ -434,6 +438,25 @@ mod tests {
                 "{provider}/{profile}"
             );
         }
+        // A collector payload never rides on another provider's launch.
+        let (root, mut grant, ticket) = fixture(b"synthetic instruction");
+        grant.payload = Some(
+            ArtifactPermit::collected(
+                root.path(),
+                "answer.json",
+                &ticket.binding,
+                4096,
+                vec![
+                    crate::hub::iris_execution_folder::PAYLOAD_ONLY.into(),
+                    crate::hub::iris_execution_folder::UNEXPECTED_CHANGE.into(),
+                ],
+            )
+            .unwrap(),
+        );
+        assert!(matches!(
+            prepare_spec(&grant, &ticket),
+            Err(PrepareError::UnsupportedPolicy)
+        ));
         // The codex branch keeps its existing read-only/on-request defaults.
         let (_root, grant, ticket) = fixture_for(b"synthetic instruction", "codex", "codex");
         let spec = prepare_spec(&grant, &ticket).unwrap();

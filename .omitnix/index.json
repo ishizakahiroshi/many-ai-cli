@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "7d0dd6100b57000359e4c33b2c188e10f95e465a",
+    "commit": "d29c19eb014cba7b97444cba415565f7e0d912b4",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2071,
-    "analyzed": 1607,
+    "discovered": 2073,
+    "analyzed": 1609,
     "unresolved": 14,
     "unknown": 0,
     "unclaimed": 450,
@@ -30736,6 +30736,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/hub/iris_execution_folder.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Bounded approved-cwd snapshot for the real bounded profile. It records only"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/hub/iris_execution_grants.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -30911,13 +30940,16 @@
         "reads": {
           "state": "value",
           "value": [
+            "folder_records",
             "owners",
-            "receipts"
+            "receipts",
+            "sqlite_master"
           ]
         },
         "writes": {
           "state": "value",
           "value": [
+            "folder_records",
             "owners",
             "receipts"
           ]
@@ -40593,6 +40625,35 @@
         "summary": {
           "state": "value",
           "value": "Independent owner acceptance: native local fixtures, no Hub or provider."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/tests/iris_real_bounded.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Real bounded profile collector acceptance with a native synthetic stand-in."
         },
         "authentication": {
           "state": "not_configured"
@@ -51340,6 +51401,19 @@
       ]
     },
     {
+      "name": "folder_records",
+      "read_by": [
+        "rust/src/hub/iris_execution_owner.rs"
+      ],
+      "written_by": [
+        "rust/src/hub/iris_execution_owner.rs"
+      ],
+      "in_schema_snapshot": false,
+      "unresolved_in": [
+        "rust/src/hub/iris_execution_owner.rs"
+      ]
+    },
+    {
       "name": "grants",
       "read_by": [
         "rust/src/hub/iris_execution_journal.rs"
@@ -51524,12 +51598,14 @@
     {
       "name": "sqlite_master",
       "read_by": [
-        "rust/src/hub/iris_execution_journal.rs"
+        "rust/src/hub/iris_execution_journal.rs",
+        "rust/src/hub/iris_execution_owner.rs"
       ],
       "written_by": [],
       "in_schema_snapshot": false,
       "unresolved_in": [
-        "rust/src/hub/iris_execution_journal.rs"
+        "rust/src/hub/iris_execution_journal.rs",
+        "rust/src/hub/iris_execution_owner.rs"
       ]
     },
     {

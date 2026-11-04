@@ -145,6 +145,9 @@ impl ArtifactPermit {
     pub fn approved_path(&self) -> PathBuf {
         self.root.join(&self.relative)
     }
+    pub(crate) fn relative(&self) -> &Path {
+        &self.relative
+    }
     pub(crate) fn approved(
         root: &Path,
         relative: &str,
@@ -152,15 +155,42 @@ impl ArtifactPermit {
         max_bytes: u64,
         effects: Vec<String>,
     ) -> Result<Self> {
+        let known = !effects.is_empty()
+            && effects
+                .iter()
+                .all(|s| matches!(s.as_str(), "none" | "local-files" | "unknown"));
+        Self::build(root, relative, binding, max_bytes, effects, known)
+    }
+    /// Real bounded collector grants only. The scope is exactly the two
+    /// folder-comparison values the trusted collector can write; never the
+    /// provider-reported vocabulary, and never mixed with it.
+    pub(crate) fn collected(
+        root: &Path,
+        relative: &str,
+        binding: &Binding,
+        max_bytes: u64,
+        effects: Vec<String>,
+    ) -> Result<Self> {
+        let mut sorted = effects.clone();
+        sorted.sort();
+        let exact = sorted
+            == [
+                super::iris_execution_folder::PAYLOAD_ONLY,
+                super::iris_execution_folder::UNEXPECTED_CHANGE,
+            ];
+        Self::build(root, relative, binding, max_bytes, effects, exact)
+    }
+    fn build(
+        root: &Path,
+        relative: &str,
+        binding: &Binding,
+        max_bytes: u64,
+        effects: Vec<String>,
+        effects_allowed: bool,
+    ) -> Result<Self> {
         check_binding(binding)?;
         let relative = relative_path(relative)?;
-        if max_bytes == 0
-            || max_bytes > 1024 * 1024
-            || effects.is_empty()
-            || effects
-                .iter()
-                .any(|s| !matches!(s.as_str(), "none" | "local-files" | "unknown"))
-        {
+        if max_bytes == 0 || max_bytes > 1024 * 1024 || !effects_allowed {
             return Err(fail("INVALID_PERMIT"));
         }
         let root = root.canonicalize().map_err(|_| fail("ARTIFACT_ROOT"))?;
@@ -205,6 +235,48 @@ impl ArtifactPermit {
             bytes,
             sha256: actual,
         })
+    }
+    /// Trusted collector only: create the approved destination exactly once.
+    /// It never truncates, replaces or follows an existing entry, and never
+    /// creates parent directories; reads must still go through verify.
+    pub(crate) fn create_exclusive(&self, bytes: &[u8]) -> Result<()> {
+        use std::io::Write;
+        if bytes.len() as u64 > self.max_bytes {
+            return Err(fail("ARTIFACT_LIMIT"));
+        }
+        let parts = self.relative.components().collect::<Vec<_>>();
+        let mut cursor = self.root.clone();
+        for part in &parts[..parts.len().saturating_sub(1)] {
+            let Component::Normal(name) = part else {
+                return Err(fail("ARTIFACT_PATH"));
+            };
+            cursor.push(name);
+            let meta = std::fs::symlink_metadata(&cursor).map_err(|_| fail("ARTIFACT_PATH"))?;
+            if meta.file_type().is_symlink() || !meta.is_dir() {
+                return Err(fail("ARTIFACT_ALIAS"));
+            }
+            #[cfg(windows)]
+            {
+                use std::os::windows::fs::MetadataExt;
+                if meta.file_attributes() & 0x400 != 0 {
+                    return Err(fail("ARTIFACT_ALIAS"));
+                }
+            }
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(self.approved_path())
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::AlreadyExists {
+                    fail("ARTIFACT_EXISTS")
+                } else {
+                    fail("ARTIFACT_WRITE")
+                }
+            })?;
+        file.write_all(bytes)
+            .and_then(|_| file.sync_all())
+            .map_err(|_| fail("ARTIFACT_WRITE"))
     }
 }
 pub(crate) fn relative_path(raw: &str) -> Result<PathBuf> {
@@ -450,7 +522,95 @@ impl OwnerStore {
                 return Err(fail("STORAGE"));
             }
         }
+        if folder_table(&db)? {
+            let rows = sql(db.prepare("SELECT kind,document,digest FROM folder_records"))?
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(|_| fail("STORAGE"))?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(|_| fail("STORAGE"))?;
+            for (kind, raw, digest) in rows {
+                let v = checked_document(&raw, &digest)?;
+                let ticket: OwnerTicket =
+                    serde_json::from_value(v["ticket"].clone()).map_err(|_| fail("STORAGE"))?;
+                if v["phase"] != kind.as_str() || !folder_flags(&v) {
+                    return Err(fail("STORAGE"));
+                }
+                load(&db, &ticket.binding)?.ok_or_else(|| fail("STORAGE"))?;
+            }
+        }
         Ok(Self { db })
+    }
+    /// Separate, append-only folder observations for collector grants. The
+    /// table is created on first use, so stores without collector grants keep
+    /// their exact schema. Records never change owner or receipt authority.
+    pub fn record_folder(
+        &mut self,
+        t: &OwnerTicket,
+        kind: &str,
+        document: &Value,
+    ) -> Result<Value> {
+        if !matches!(kind, "before" | "after" | "collection")
+            || document["ticket"] != json!(t)
+            || document["phase"] != kind
+            || !folder_flags(document)
+        {
+            return Err(fail("FOLDER_RECORD"));
+        }
+        let tx = sql(self
+            .db
+            .transaction_with_behavior(TransactionBehavior::Immediate))?;
+        let r = bound(&tx, t)?;
+        sql(tx.execute_batch(FOLDER_TABLE))?;
+        let b = &t.binding;
+        if let Some(old) = folder_row(&tx, b, kind)? {
+            // A launch baseline may be re-observed only with identical content;
+            // every other observation is written once and never replaced.
+            if kind == "before"
+                && old["complete"] == document["complete"]
+                && old["entries"] == document["entries"]
+            {
+                return Ok(old);
+            }
+            return Err(fail("FOLDER_CONFLICT"));
+        }
+        let ordered = match kind {
+            "before" => r["claimed_session"].is_null() && document["complete"] == true,
+            "after" => r["local_tree_ceased"] == true && folder_row(&tx, b, "before")?.is_some(),
+            _ => folder_row(&tx, b, "after")?.is_some(),
+        };
+        if !ordered {
+            return Err(fail("FOLDER_ORDER"));
+        }
+        let raw = document.to_string();
+        sql(tx.execute(
+            "INSERT INTO folder_records VALUES(?,?,?,?,?,?)",
+            params![
+                b.principal_id,
+                b.workspace_id,
+                b.attempt_id,
+                kind,
+                raw,
+                sha(raw.as_bytes())
+            ],
+        ))?;
+        sql(tx.commit())?;
+        Ok(document.clone())
+    }
+    pub fn query_folder(&self, b: &Binding) -> Result<Value> {
+        check_binding(b)?;
+        let tx = sql(self.db.unchecked_transaction())?;
+        let mut value = json!({});
+        for kind in ["before", "after", "collection"] {
+            value[kind] = folder_row(&tx, b, kind)?.unwrap_or(Value::Null);
+        }
+        sql(tx.commit())?;
+        Ok(value)
     }
     /// Trusted application only: save intent before spawning the native owner.
     pub fn begin_owner(
@@ -705,6 +865,41 @@ struct OutcomeDocument {
     // separately and never changes this owner's task/effects authority flags.
     #[serde(default, rename = "payload")]
     _payload: Option<Value>,
+}
+const FOLDER_TABLE: &str = "CREATE TABLE IF NOT EXISTS folder_records(principal TEXT NOT NULL,workspace TEXT NOT NULL,attempt TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN('before','after','collection')),document TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(principal,workspace,attempt,kind),FOREIGN KEY(principal,workspace,attempt) REFERENCES owners(principal,workspace,attempt));";
+fn folder_flags(v: &Value) -> bool {
+    v["effects_verified"] == false
+        && v["task_outcome_verified"] == false
+        && v["remote_jobs_stopped"] == false
+        && v["verification_scope"] == super::iris_execution_folder::SCOPE
+}
+fn folder_table(db: &Connection) -> Result<bool> {
+    let count: i64 = sql(db.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='folder_records'",
+        [],
+        |r| r.get(0),
+    ))?;
+    Ok(count == 1)
+}
+fn folder_row(db: &Connection, b: &Binding, kind: &str) -> Result<Option<Value>> {
+    if !folder_table(db)? {
+        return Ok(None);
+    }
+    let row: Option<(String, String)> = sql(db
+        .query_row(
+            "SELECT document,digest FROM folder_records WHERE principal=? AND workspace=? AND attempt=? AND kind=?",
+            params![b.principal_id, b.workspace_id, b.attempt_id, kind],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional())?;
+    let Some((raw, digest)) = row else {
+        return Ok(None);
+    };
+    let v = checked_document(&raw, &digest)?;
+    if v["ticket"]["binding"] != json!(b) || v["phase"] != kind || !folder_flags(&v) {
+        return Err(fail("STORAGE"));
+    }
+    Ok(Some(v))
 }
 fn checked_document(raw: &str, digest: &str) -> Result<Value> {
     if sha(raw.as_bytes()) != digest {

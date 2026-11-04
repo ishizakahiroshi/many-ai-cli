@@ -167,10 +167,15 @@ pub(crate) fn evaluate(
             envelope.outcome.as_str(),
             "succeeded" | "failed" | "rejected" | "unknown"
         )
-        || !matches!(
+        || !(matches!(
             envelope.effects.as_str(),
             "none" | "local-files" | "unknown"
-        )
+        ) || (matches!(
+            envelope.effects.as_str(),
+            super::iris_execution_folder::PAYLOAD_ONLY
+                | super::iris_execution_folder::UNEXPECTED_CHANGE
+        ) && !envelope.synthetic
+            && super::iris_execution_owned::real_bounded_binding(&ticket.binding)))
         || (envelope.synthetic
             && (ticket.binding.provider != "synthetic" || ticket.binding.profile_id != "synthetic"))
     {
@@ -320,5 +325,85 @@ mod tests {
         let error = evaluate(&pinned(), &owners, &permit, &ticket, &digest, 200).unwrap_err();
         assert_eq!(error.code, "VERIFIER_ARTIFACT");
         assert!(!error.to_string().contains("provider-data"));
+    }
+    #[test]
+    fn folder_effects_are_comparable_only_for_the_real_pair_and_never_synthetic() {
+        use super::super::{
+            iris_execution_folder::{PAYLOAD_ONLY, UNEXPECTED_CHANGE},
+            iris_execution_owned::{REAL_BOUNDED_PROFILE_ID, REAL_BOUNDED_PROVIDER},
+        };
+        let collected = || vec![PAYLOAD_ONLY.to_string(), UNEXPECTED_CHANGE.to_string()];
+        let run = |provider: &str, profile: &str, effects: &str, synthetic: bool| {
+            let root = tempfile::tempdir().unwrap();
+            let mut b = binding();
+            b.provider = provider.into();
+            b.profile_id = profile.into();
+            let mut document = policy_document();
+            document["binding"] = json!(b);
+            let policy = PinnedPolicy::parse(document.to_string().as_bytes(), 100).unwrap();
+            let mut owners = OwnerStore::open(&root.path().join("owner.sqlite3")).unwrap();
+            let ticket = owners.begin_owner(&b, "owner", 1, 100).unwrap();
+            owners.claim_spawn(&ticket, 1, 100).unwrap();
+            owners.bind_root(&ticket, 123, 100).unwrap();
+            let bytes=json!({"binding":b,"owner_id":"owner","owner_epoch":1,"instruction_hash":b.instruction_hash,"outcome":"unknown","effects":effects,"synthetic":synthetic,"payload":{"answer":"operator-only-marker"}}).to_string().into_bytes();
+            std::fs::write(root.path().join("result.json"), &bytes).unwrap();
+            // Bypass the owner permit's own scope check: this isolates the
+            // verifier's independent envelope gate.
+            let permit =
+                ArtifactPermit::collected(root.path(), "result.json", &b, 65536, collected())
+                    .unwrap();
+            let digest = sha(&bytes);
+            let _ = owners.append_outcome(&ticket, 1, &permit, &digest);
+            let integrity = json!({"kind":"artifact_outcome","ticket":ticket,"sequence":1,"artifact_sha256":digest,"artifact_bytes":bytes.len(),"instruction_hash":b.instruction_hash,"reported_outcome":"unknown","reported_effects":effects,"synthetic":synthetic,"verification_scope":"artifact-integrity-only","task_outcome_verified":false,"effects_verified":false,"remote_jobs_stopped":false,"verified_task_outcome":"unknown"});
+            if owners.query(&b).unwrap()["outcome_receipt"].is_null() {
+                return Err("owner refused".to_string());
+            }
+            assert_eq!(owners.query(&b).unwrap()["outcome_receipt"], integrity);
+            evaluate(&policy, &owners, &permit, &ticket, &digest, 200)
+                .map(|r| r["verdict"].as_str().unwrap().to_string())
+                .map_err(|e| e.code)
+        };
+        assert_eq!(
+            run(
+                REAL_BOUNDED_PROVIDER,
+                REAL_BOUNDED_PROFILE_ID,
+                PAYLOAD_ONLY,
+                false
+            )
+            .unwrap(),
+            "pass"
+        );
+        assert_eq!(
+            run(
+                REAL_BOUNDED_PROVIDER,
+                REAL_BOUNDED_PROFILE_ID,
+                UNEXPECTED_CHANGE,
+                false
+            )
+            .unwrap(),
+            "pass"
+        );
+        for (provider, profile, synthetic) in [
+            ("synthetic", "synthetic", true),
+            ("synthetic", "synthetic", false),
+            ("codex", "codex", false),
+            (REAL_BOUNDED_PROVIDER, "claude-other", false),
+        ] {
+            assert_eq!(
+                run(provider, profile, PAYLOAD_ONLY, synthetic).unwrap_err(),
+                "VERIFIER_ENVELOPE",
+                "{provider}/{profile}/{synthetic}"
+            );
+        }
+        // synthetic:true is refused for the real pair by the owner receipt.
+        assert!(
+            run(
+                REAL_BOUNDED_PROVIDER,
+                REAL_BOUNDED_PROFILE_ID,
+                PAYLOAD_ONLY,
+                true
+            )
+            .is_err()
+        );
     }
 }
