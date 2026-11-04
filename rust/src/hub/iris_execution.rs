@@ -43,6 +43,20 @@ pub struct IrisExecutionHttp {
     operator_grants_loaded: bool,
 }
 
+/// Operator file whose presence alone opts a Hub into the real bounded profile.
+pub const REAL_BOUNDED_POLICY_SOURCE: &str = "owned-real-policies.json";
+
+/// Outcome of the explicit real bounded composition. Rejections carry fixed
+/// reason codes only, never paths, file contents or credentials.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RealBoundedComposition {
+    /// No policy source: the owner is returned exactly as `from_local` built it.
+    NotRequested,
+    Attached,
+    /// The owner stays inspection-only; the Hub keeps starting.
+    Rejected(&'static str),
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct LocalIdentity {
@@ -300,6 +314,65 @@ impl IrisExecutionHttp {
         }
         self.owned_profile = Some(profile);
         Ok(self)
+    }
+
+    /// Trusted Hub composition of `iris-owned-real-bounded/1` only. Selected
+    /// solely by `iris-execution/owned-real-policies.json` under the same root
+    /// that produced this owner; without it nothing is read, created or
+    /// attached (the synthetic profile is never attached here). The profile
+    /// reuses this owner's journal and owner store objects, so the `shares`
+    /// check applies unchanged. Any failure returns the unmodified
+    /// inspection-only owner and a fixed code. The port factory runs only
+    /// after the policy source passed the same strict checks as admission.
+    pub fn compose_real_bounded<F>(self, root: &Path, port: F) -> (Self, RealBoundedComposition)
+    where
+        F: FnOnce(
+            Arc<Mutex<super::iris_execution_owner::OwnerStore>>,
+        ) -> Arc<dyn crate::application::iris_execution_launch::OwnedLaunchPort>,
+    {
+        use super::iris_execution_owned::{OwnedProfile, OwnedProfileKind, check_policy_source};
+        let reject = |owner, code| (owner, RealBoundedComposition::Rejected(code));
+        let dir = root.join("iris-execution");
+        // An alias, directory or unreadable entry is a failed request, not
+        // absence; only a definite "not found" keeps the current behavior.
+        match std::fs::symlink_metadata(dir.join(REAL_BOUNDED_POLICY_SOURCE)) {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return (self, RealBoundedComposition::NotRequested);
+            }
+            Err(_) => return reject(self, "REAL_BOUNDED_POLICY_SOURCE"),
+        }
+        if self.owned_profile.is_some() {
+            return reject(self, "REAL_BOUNDED_PROFILE_PRESENT");
+        }
+        let Some(owners) = self.owner_store.clone() else {
+            return reject(self, "REAL_BOUNDED_OWNER_STORE");
+        };
+        if check_policy_source(root, OwnedProfileKind::RealBounded).is_err() {
+            return reject(self, "REAL_BOUNDED_POLICY_SOURCE");
+        }
+        let verifications = match super::iris_execution_verification_store::VerificationStore::open(
+            &dir.join("verification.sqlite3"),
+        ) {
+            Ok(store) => store,
+            Err(_) => return reject(self, "REAL_BOUNDED_VERIFIER_STORAGE"),
+        };
+        let launch = port(owners.clone());
+        let profile = match OwnedProfile::new_real_bounded(
+            self.journal.clone(),
+            owners,
+            verifications,
+            root.to_path_buf(),
+            launch,
+            crate::application::iris_execution_dispatcher::DispatcherConfig::default(),
+        ) {
+            Ok(profile) => Arc::new(profile),
+            Err(_) => return reject(self, "REAL_BOUNDED_PROFILE_BUILD"),
+        };
+        match self.clone().with_owned_profile(profile) {
+            Ok(attached) => (attached, RealBoundedComposition::Attached),
+            Err(_) => reject(self, "REAL_BOUNDED_STORE_IDENTITY"),
+        }
     }
 
     fn tools(&self) -> Vec<Value> {

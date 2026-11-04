@@ -145,6 +145,16 @@ fn read_manifest(root: &Path, kind: OwnedProfileKind) -> Result<Manifest, (Strin
     Ok(manifest)
 }
 
+/// Read-only check of a profile's fixed policy source for trusted Hub
+/// composition, with the same strictness as admission. Returns only a fixed
+/// code; neither the path nor any file content can reach the caller.
+pub fn check_policy_source(root: &Path, kind: OwnedProfileKind) -> Result<(), &'static str> {
+    let root = root.canonicalize().map_err(|_| "OWNED_RUNTIME_ROOT")?;
+    read_manifest(&root, kind)
+        .map(|_| ())
+        .map_err(|_| "OWNED_POLICY_SOURCE")
+}
+
 fn current_policy(
     root: &Path,
     kind: OwnedProfileKind,

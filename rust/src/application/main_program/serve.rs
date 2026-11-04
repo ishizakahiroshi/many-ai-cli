@@ -1345,6 +1345,27 @@ impl HubComposition {
             crate::hub::iris_execution::IrisExecutionHttp::from_local(paths.root(), bound_port)
                 .map_err(io::Error::other)?
         {
+            // Opt-in only: without iris-execution/owned-real-policies.json the
+            // owner is used exactly as before. A failed composition keeps the
+            // inspection-only owner and logs a fixed reason code only.
+            let (owner, outcome) = owner.compose_real_bounded(paths.root(), |owners| {
+                Arc::new(
+                    crate::application::iris_execution_launch::CoreLaunchPort::new(
+                        core.clone(),
+                        effects.clone(),
+                        owners,
+                    ),
+                )
+            });
+            match outcome {
+                crate::hub::iris_execution::RealBoundedComposition::NotRequested => {}
+                crate::hub::iris_execution::RealBoundedComposition::Attached => {
+                    logger.write("INFO", "iris real bounded profile attached", "")
+                }
+                crate::hub::iris_execution::RealBoundedComposition::Rejected(code) => {
+                    logger.write("WARN", "iris real bounded profile unavailable", code)
+                }
+            }
             services = services.with_iris_execution(Arc::new(owner));
         }
         let ledger = RuntimeLedger::open(&paths)?;
