@@ -4,7 +4,8 @@
 //! independently observe OwnerStore root ownership before bind_owner/running.
 use crate::{
     hub::{
-        iris_execution_grants::ApprovedGrant,
+        iris_execution_grants::{ApprovedGrant, LaunchMode},
+        iris_execution_owned::real_bounded_binding,
         iris_execution_owner::{OwnerStore, OwnerTicket},
         iris_execution_runtime::{BridgeError, SessionBridge},
     },
@@ -190,6 +191,15 @@ pub fn prepare_spec(
     {
         return Err(PrepareError::UnsupportedPolicy);
     }
+    // Edits are auto-accepted only for the real bounded pair. Command approval
+    // stays interactive: no risk confirmation, tool grant or auto-approval.
+    let permission_mode = match grant.launch_mode {
+        LaunchMode::Default => "default",
+        LaunchMode::BoundedEdit if real_bounded_binding(b) && b.provider == "claude" => {
+            "acceptEdits"
+        }
+        LaunchMode::BoundedEdit => return Err(PrepareError::UnsupportedPolicy),
+    };
     let cwd = grant
         .approved_cwd
         .canonicalize()
@@ -221,7 +231,7 @@ pub fn prepare_spec(
         model_selection: String::new(),
         risk_confirmed: false,
         label: format!("iris-{}", b.attempt_id),
-        permission_mode: "default".into(),
+        permission_mode: permission_mode.into(),
         sandbox: if b.provider == "codex" {
             "read-only".into()
         } else {
@@ -261,6 +271,13 @@ mod tests {
             .collect()
     }
     fn fixture(bytes: &[u8]) -> (tempfile::TempDir, ApprovedGrant, OwnerTicket) {
+        fixture_for(bytes, "synthetic", "synthetic")
+    }
+    fn fixture_for(
+        bytes: &[u8],
+        provider: &str,
+        profile: &str,
+    ) -> (tempfile::TempDir, ApprovedGrant, OwnerTicket) {
         let root = tempfile::tempdir().unwrap();
         let cwd = root.path().canonicalize().unwrap();
         std::fs::write(cwd.join("instruction.txt"), bytes).unwrap();
@@ -279,8 +296,8 @@ mod tests {
             executor_instance_id: "instance".into(),
             attempt_id: "attempt".into(),
             fence: 1,
-            provider: "synthetic".into(),
-            profile_id: "synthetic".into(),
+            provider: provider.into(),
+            profile_id: profile.into(),
         };
         let instruction =
             ArtifactPermit::approved(&cwd, "instruction.txt", &b, 65536, vec!["none".into()])
@@ -298,6 +315,7 @@ mod tests {
             result,
             effect_scope: vec!["none".into()],
             allow_remote_jobs: false,
+            launch_mode: LaunchMode::Default,
         };
         (
             root,
@@ -367,5 +385,65 @@ mod tests {
             prepare_spec(&grant, &ticket),
             Err(PrepareError::InvalidInstruction)
         ));
+    }
+    #[test]
+    fn bounded_edit_accepts_edits_only_for_the_real_pair_without_other_authority() {
+        use crate::hub::iris_execution_owned::{REAL_BOUNDED_PROFILE_ID, REAL_BOUNDED_PROVIDER};
+        let (_root, grant, ticket) = fixture_for(
+            b"synthetic instruction",
+            REAL_BOUNDED_PROVIDER,
+            REAL_BOUNDED_PROFILE_ID,
+        );
+        assert_eq!(
+            prepare_spec(&grant, &ticket).unwrap().permission_mode,
+            "default"
+        );
+        let (_root, mut grant, ticket) = fixture_for(
+            b"synthetic instruction",
+            REAL_BOUNDED_PROVIDER,
+            REAL_BOUNDED_PROFILE_ID,
+        );
+        grant.launch_mode = LaunchMode::BoundedEdit;
+        let spec = prepare_spec(&grant, &ticket).unwrap();
+        assert_eq!(spec.permission_mode, "acceptEdits");
+        assert_eq!(spec.provider, REAL_BOUNDED_PROVIDER);
+        assert_eq!(spec.subscription_profile_id, REAL_BOUNDED_PROFILE_ID);
+        assert!(spec.sandbox.is_empty() && spec.ask_for_approval.is_empty());
+        assert!(!spec.risk_confirmed && !spec.subscription_login && !spec.usage_probe);
+        assert_eq!(spec.grants, InternalSpawnGrants::default());
+        assert!(spec.permission_preset.is_empty());
+        assert_eq!(spec.execution_mode, "interactive");
+        for (provider, profile) in [
+            ("codex", "codex"),
+            ("codex", REAL_BOUNDED_PROFILE_ID),
+            ("synthetic", "synthetic"),
+            (REAL_BOUNDED_PROVIDER, "claude-other"),
+        ] {
+            let (_root, mut grant, ticket) =
+                fixture_for(b"synthetic instruction", provider, profile);
+            assert_ne!(
+                prepare_spec(&grant, &ticket).unwrap().permission_mode,
+                "acceptEdits"
+            );
+            grant.launch_mode = LaunchMode::BoundedEdit;
+            assert!(
+                matches!(
+                    prepare_spec(&grant, &ticket),
+                    Err(PrepareError::UnsupportedPolicy)
+                ),
+                "{provider}/{profile}"
+            );
+        }
+        // The codex branch keeps its existing read-only/on-request defaults.
+        let (_root, grant, ticket) = fixture_for(b"synthetic instruction", "codex", "codex");
+        let spec = prepare_spec(&grant, &ticket).unwrap();
+        assert_eq!(
+            (
+                spec.permission_mode.as_str(),
+                spec.sandbox.as_str(),
+                spec.ask_for_approval.as_str()
+            ),
+            ("default", "read-only", "on-request")
+        );
     }
 }

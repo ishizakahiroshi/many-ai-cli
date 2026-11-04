@@ -3,6 +3,7 @@
 use super::{
     iris_execution_journal::{Binding, Grant},
     iris_execution_mcp::parse_json,
+    iris_execution_owned::real_bounded_binding,
     iris_execution_owner::{
         ArtifactPermit, Result, check_binding, check_store_path, fail, relative_path, secure_open,
         sha, sql, static_binding,
@@ -20,6 +21,15 @@ use std::{
     time::Duration,
 };
 
+/// Launch permission shape. `Default` is the existing behavior. `BoundedEdit`
+/// exists only for the real bounded profile's single provider/profile pair.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LaunchMode {
+    Default,
+    BoundedEdit,
+}
+const BOUNDED_EDIT: &str = "bounded-edit";
+
 pub struct ApprovedGrant {
     pub grant: Grant,
     pub approved_cwd: PathBuf,
@@ -27,6 +37,7 @@ pub struct ApprovedGrant {
     pub result: ArtifactPermit,
     pub effect_scope: Vec<String>,
     pub allow_remote_jobs: bool,
+    pub launch_mode: LaunchMode,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -48,6 +59,18 @@ struct Entry {
     max_artifact_bytes: u64,
     effect_scope: Vec<String>,
     allow_remote_jobs: bool,
+    // Optional and omitted when absent, so existing entries keep their exact
+    // serialized bytes and pinned digests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    launch_mode: Option<String>,
+}
+
+fn launch_mode(e: &Entry) -> Result<LaunchMode> {
+    match e.launch_mode.as_deref() {
+        None => Ok(LaunchMode::Default),
+        Some(BOUNDED_EDIT) if real_bounded_binding(&e.binding) => Ok(LaunchMode::BoundedEdit),
+        Some(_) => Err(fail("MANIFEST_POLICY")),
+    }
 }
 
 /// Only the explicit runtime root chooses the manifest. No caller-supplied file
@@ -145,6 +168,7 @@ impl GrantLoader {
             if e.expires_at < 0 || !seen.insert(scope_key(&e.binding)) {
                 return Err(fail("MANIFEST_POLICY"));
             }
+            let launch_mode = launch_mode(e)?;
             let instruction = ArtifactPermit::approved(
                 &artifacts,
                 &e.instruction_path,
@@ -183,6 +207,7 @@ impl GrantLoader {
                 result,
                 effect_scope: e.effect_scope.clone(),
                 allow_remote_jobs: e.allow_remote_jobs,
+                launch_mode,
             });
         }
         let canonical = serde_json::to_vec(&manifest).map_err(|_| fail("MANIFEST_JSON"))?;
@@ -362,5 +387,71 @@ mod tests {
         v["grants"][0]["instruction_path"] = json!("../outside");
         write(d.path(), &v);
         assert_eq!(l.load_approved().err().unwrap().code, "ARTIFACT_PATH");
+    }
+    fn real(v: &mut Value) {
+        v["grants"][0]["binding"]["provider"] =
+            json!(super::super::iris_execution_owned::REAL_BOUNDED_PROVIDER);
+        v["grants"][0]["binding"]["profile_id"] =
+            json!(super::super::iris_execution_owned::REAL_BOUNDED_PROFILE_ID);
+    }
+    #[test]
+    fn bounded_edit_is_only_for_the_real_pair_and_absent_mode_keeps_bytes() {
+        let d = tempfile::tempdir().unwrap();
+        let mut v = manifest(d.path(), 1, 1);
+        write(d.path(), &v);
+        let mut l = GrantLoader::open(d.path()).unwrap();
+        let grants = l.load_approved().unwrap();
+        assert_eq!(grants[0].launch_mode, LaunchMode::Default);
+        let entry: Entry = serde_json::from_value(v["grants"][0].clone()).unwrap();
+        let encoded = serde_json::to_value(&entry).unwrap();
+        assert!(encoded.get("launch_mode").is_none());
+        assert_eq!(encoded, v["grants"][0]);
+        for (provider, profile, mode) in [
+            ("synthetic", "synthetic", "bounded-edit"),
+            ("codex", "codex", "bounded-edit"),
+            (
+                "codex",
+                super::super::iris_execution_owned::REAL_BOUNDED_PROFILE_ID,
+                "bounded-edit",
+            ),
+            (
+                super::super::iris_execution_owned::REAL_BOUNDED_PROVIDER,
+                "claude-other",
+                "bounded-edit",
+            ),
+            (
+                super::super::iris_execution_owned::REAL_BOUNDED_PROVIDER,
+                super::super::iris_execution_owned::REAL_BOUNDED_PROFILE_ID,
+                "acceptEdits",
+            ),
+            (
+                super::super::iris_execution_owned::REAL_BOUNDED_PROVIDER,
+                super::super::iris_execution_owned::REAL_BOUNDED_PROFILE_ID,
+                "default",
+            ),
+        ] {
+            let d = tempfile::tempdir().unwrap();
+            let mut v = manifest(d.path(), 1, 1);
+            v["grants"][0]["binding"]["provider"] = json!(provider);
+            v["grants"][0]["binding"]["profile_id"] = json!(profile);
+            v["grants"][0]["launch_mode"] = json!(mode);
+            write(d.path(), &v);
+            let mut l = GrantLoader::open(d.path()).unwrap();
+            assert_eq!(
+                l.load_approved().err().unwrap().code,
+                "MANIFEST_POLICY",
+                "{provider}/{profile}/{mode}"
+            );
+        }
+        let d = tempfile::tempdir().unwrap();
+        v = manifest(d.path(), 1, 1);
+        real(&mut v);
+        v["grants"][0]["launch_mode"] = json!("bounded-edit");
+        write(d.path(), &v);
+        let mut l = GrantLoader::open(d.path()).unwrap();
+        assert_eq!(
+            l.load_approved().unwrap()[0].launch_mode,
+            LaunchMode::BoundedEdit
+        );
     }
 }
