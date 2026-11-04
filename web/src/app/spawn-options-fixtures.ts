@@ -1,4 +1,5 @@
-// spawn-panel-fixtures.ts — spawn-panel.ts の純関数を node:test で固定する。
+// spawn-options-fixtures.ts — cwd-path.ts と spawn-provider-options.ts の純関数を node:test で固定する。
+// （以前は spawn 画面の名前で呼んでいたが、実際に検査しているのはこの 2 つなので名前を実態に合わせた。）
 //
 // ここが赤くなったら、直すのはテストではなく実装。CWD ドロップダウンの並び規則を壊す
 // 変更が入っている。

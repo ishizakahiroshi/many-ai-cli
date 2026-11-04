@@ -10,6 +10,7 @@ import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval
 import { getDoneSummary } from './done-summary.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, cardSessionActions, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
+import { executionModeKind } from './session-launch-declaration.js';
 import { pathPopupEl } from './path-links.js';
 import { TERMINAL_SCROLLBACK_LINES, attachTerminal, dismissTerminalReadOverlays, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, refreshTerminalThemes, sendResize } from './terminal.js';
 import {
@@ -3387,10 +3388,17 @@ export function renderSessionInfoChip() {
     const subName = String(s.subscription_profile_name || '') || subID;
     subBadge = ` <span class="card-subscription" data-tooltip="${escapeHtml(`${t('subs_session_badge_tooltip')}: ${subName} (${subID})`)}">${escapeHtml(subName)}</span>`;
   }
+  // 実行モード（対話 / ヘッドレス）。ヘッドレスは端末へ打ち込めず、途中でモデルも変えられない
+  // ので、対話と取り違えないよう常に出す。値は wrapper の申告（s.execution_mode）が正本で、
+  // session_update でも snapshot でも同じ場所から読む。
+  const modeKind = executionModeKind(s.execution_mode);
+  const modeLabel = t(modeKind === 'headless' ? 'session_mode_headless' : 'session_mode_interactive');
+  const modeTip = t(modeKind === 'headless' ? 'session_mode_headless_tooltip' : 'session_mode_interactive_tooltip');
+  const modeBadge = ` <span class="session-mode-chip ${modeKind}" data-tooltip="${escapeHtml(modeTip)}">${escapeHtml(modeLabel)}</span>`;
   chip.innerHTML =
     `<span class="sid">#${s.id}</span>` +
     ` ${statePill} ` +
-    `${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${effortBadge}${thinkBadge}${agentNameBadge}${subBadge}`;
+    `${providerIconHtml(s.provider)} ${providerChipHtml}${modeBadge}${modelBadge}${effortBadge}${thinkBadge}${agentNameBadge}${subBadge}`;
 }
 
 // D12: チャット件数バッジ更新

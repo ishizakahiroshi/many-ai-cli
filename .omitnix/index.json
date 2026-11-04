@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "7d0dd6100b57000359e4c33b2c188e10f95e465a",
+    "commit": "2e67574b0e6dcc61beeb156befa7201ba257a6d6",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2071,
-    "analyzed": 1607,
+    "discovered": 2073,
+    "analyzed": 1609,
     "unresolved": 14,
     "unknown": 0,
     "unclaimed": 450,
@@ -46658,6 +46658,66 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/session-launch-declaration-fixtures.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "session-launch-declaration-fixtures.ts — 起動時の申告の取り込みと、実行モードの見え方を確かめる。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/session-launch-declaration.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "session-launch-declaration.ts — wrapper が起動時に申告する値（権限モード・実行モード）を"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/session-list-tab-fixtures.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -47438,13 +47498,13 @@
       "unresolved": []
     },
     {
-      "path": "web/src/app/spawn-panel-fixtures.ts",
+      "path": "web/src/app/spawn-options-fixtures.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
-          "value": "spawn-panel-fixtures.ts — spawn-panel.ts の純関数を node:test で固定する。"
+          "value": "spawn-options-fixtures.ts — cwd-path.ts と spawn-provider-options.ts の純関数を node:test で固定する。"
         },
         "authentication": {
           "state": "not_configured"

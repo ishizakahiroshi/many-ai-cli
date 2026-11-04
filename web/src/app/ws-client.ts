@@ -9,6 +9,7 @@ import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLoca
 import { migratePinnedSessionsOnce, activateSession, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
 import { applyRemotePtyResize, ensureTerminal, forgetSentPtySize, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup, isSessionCurrentlyViewed, playNotificationSound, showDesktopTurnEndNotification } from './settings.js';
+import { mergeLaunchDeclaration } from './session-launch-declaration.js';
 import { forgetTurnEndNotify, observeStoppedMarkCandidate, observeTurnEndCandidate, shouldNotifyTurnEnd, turnEndRunningStartedAt } from './turn-end-notify-store.js';
 import { clearAllTurnEndBellMutes, isTurnEndBellOff, isTurnEndNotifyEnabled } from './user-prefs.js';
 import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed } from './approval-ui.js';
@@ -709,9 +710,10 @@ export function _connectWs() {
     if (m.jsonl_path)      cur.jsonl_path      = m.jsonl_path;
     if (m.model !== undefined) cur.model       = m.model;
     if (m.effort !== undefined) cur.effort      = m.effort;
-    // 起動時の権限モード。register 直後の announce で 1 度だけ届く値なので、
-    // ここで拾わないとカードのチップは再接続（snapshot）まで出ない。
-    if (m.permission_mode !== undefined) cur.permission_mode = m.permission_mode;
+    // 起動時の権限モードと実行モード。register 直後の announce で 1 度だけ届く値なので、
+    // ここで拾わないとカードのチップ・見出しの実行モード・入力欄の無効化が再接続
+    // （snapshot）まで効かない。取り込む項目の一覧は session-launch-declaration.ts。
+    mergeLaunchDeclaration(cur, m);
     if (m.route !== undefined) cur.route       = m.route;
     if (m.parent_session_id !== undefined) cur.parent_session_id = m.parent_session_id;
     if (m.handoff_from !== undefined) cur.handoff_from = m.handoff_from;

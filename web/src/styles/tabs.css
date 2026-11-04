@@ -269,6 +269,22 @@ body.pane-resizing .xterm { pointer-events: none; }
 .session-info-chip .effort-badge { font-size: var(--header-font-size); }
 /* 🧠 とエージェント名は文字サイズだけヘッダーに合わせる。色・最大幅は token-statusbar.css の .tsb-agent-name をそのまま使う。 */
 .session-info-chip .tsb-thinking, .session-info-chip .tsb-agent-name { font-size: var(--header-font-size); }
+/* 実行モード（対話 / ヘッドレス）。対話は普通の状態なので控えめな破線の枠、ヘッドレスは
+   端末へ入力できない印としてアクセント色にする。枠はカードの Headless チップと同じ破線で揃える。 */
+.session-info-chip .session-mode-chip {
+  font-size: var(--header-font-size);
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed color-mix(in srgb, var(--muted) 40%, transparent);
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: default;
+}
+.session-info-chip .session-mode-chip.headless {
+  color: var(--accent-text);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
 /* 表示モード系タブ。ボタン部品は quiet（面と枠なし）を使い、タブの形はここで決める:
    選択は下線で示すので下の角は丸めない。文字はセッション情報チップと同じヘッダーの大きさ。 */
 .view-tab {
