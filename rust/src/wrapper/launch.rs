@@ -572,9 +572,15 @@ pub const REAL_PROJECT_ENV_REMOVED_NAMES: [&str; 1] = ["CLAUDECODE"];
 /// The only names under those prefixes a real project provider keeps: the
 /// subscription's Claude configuration folder (put back from the wrapper's
 /// own environment) and the session number the wrapper runtime itself sets
-/// for its provider after preparation. The Hub token is never kept: with it,
-/// claude or any command it runs could call the Hub API.
-pub const REAL_PROJECT_ENV_KEPT: [&str; 2] = ["CLAUDE_CONFIG_DIR", "MANY_AI_CLI_SESSION_ID"];
+/// for its provider after preparation, and the Git Bash location (with the
+/// PowerShell tool off, claude refuses to start on Windows when Git Bash is
+/// found only through it). The Hub token is never kept: with it, claude or
+/// any command it runs could call the Hub API.
+pub const REAL_PROJECT_ENV_KEPT: [&str; 3] = [
+    "CLAUDE_CONFIG_DIR",
+    "MANY_AI_CLI_SESSION_ID",
+    "CLAUDE_CODE_GIT_BASH_PATH",
+];
 
 /// Whether a real project provider must not receive `name`.
 pub fn real_project_env_removed(name: &str) -> bool {
@@ -1369,7 +1375,11 @@ mod tests {
         assert_eq!(REAL_PROJECT_ENV_REMOVED_NAMES, ["CLAUDECODE"]);
         assert_eq!(
             REAL_PROJECT_ENV_KEPT,
-            ["CLAUDE_CONFIG_DIR", "MANY_AI_CLI_SESSION_ID"]
+            [
+                "CLAUDE_CONFIG_DIR",
+                "MANY_AI_CLI_SESSION_ID",
+                "CLAUDE_CODE_GIT_BASH_PATH"
+            ]
         );
         let removed = [
             "MANY_AI_CLI_HUB_TOKEN",
@@ -1401,6 +1411,7 @@ mod tests {
         let kept = [
             "CLAUDE_CONFIG_DIR",
             "MANY_AI_CLI_SESSION_ID",
+            "CLAUDE_CODE_GIT_BASH_PATH",
             "MANY_AI_CLI",
             "PATH",
             "USERPROFILE",

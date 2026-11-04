@@ -344,8 +344,27 @@ pub fn snapshot(root: &Path) -> Result<Vec<FolderEntry>> {
         }
     }
     entries.sort_by(|a, b| a.path.cmp(&b.path));
+    // The listing must fit one owner store row (entry count and content are
+    // bounded above, path length is not): a listing that could not be stored
+    // is an incomplete observation (a refused launch before the work, an
+    // unexpected change after it), never a row the store refuses later.
+    check_listing(&entries)?;
     Ok(entries)
 }
+
+/// `FOLDER_RECORD_LIMIT` when the serialized listing exceeds MAX_LISTING_BYTES.
+pub fn check_listing(entries: &[FolderEntry]) -> Result<()> {
+    let listing = serde_json::to_vec(entries).map_err(|_| fail("FOLDER_READ"))?;
+    if listing.len() > MAX_LISTING_BYTES {
+        return Err(fail("FOLDER_RECORD_LIMIT"));
+    }
+    Ok(())
+}
+
+/// The largest serialized entry listing one snapshot may hold: the owner
+/// store row limit less room for the rest of the snapshot document.
+pub const MAX_LISTING_BYTES: usize =
+    super::iris_execution_owner::MAX_STORED_DOCUMENT_BYTES - 64 * 1024;
 
 /// Owner-store document for one observation. A failed observation is kept as
 /// an incomplete record with its fixed reason code, never as an empty folder.
@@ -746,6 +765,61 @@ pub fn classify(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// C4 re-check M1: a listing that one owner store row could not hold
+    /// (long names, within MAX_ENTRIES) is an incomplete observation, and its
+    /// snapshot document always fits the row.
+    #[test]
+    fn a_listing_too_large_for_one_row_is_an_incomplete_observation() {
+        let long = |i: usize| {
+            entry(
+                &format!("{}/{i:04}", "d".repeat(4096)),
+                "file",
+                1,
+                1,
+                Some(&"0".repeat(64)),
+            )
+        };
+        let fits: Vec<_> = (0..900).map(long).collect();
+        assert!(check_listing(&fits).is_ok());
+        let over: Vec<_> = (0..MAX_ENTRIES).map(long).collect();
+        assert!(serde_json::to_vec(&over).unwrap().len() > MAX_LISTING_BYTES);
+        assert_eq!(
+            check_listing(&over).unwrap_err().code,
+            "FOLDER_RECORD_LIMIT"
+        );
+        // The largest accepted listing still makes a storable document.
+        let ticket = OwnerTicket {
+            binding: super::super::iris_execution_journal::Binding {
+                principal_id: "iris".into(),
+                workspace_id: "workspace".into(),
+                plan_id: "plan".into(),
+                plan_revision: 1,
+                task_id: "task".into(),
+                instruction_revision: 1,
+                instruction_hash: sha(b"instruction"),
+                approval_id: "approval".into(),
+                approval_revision: 1,
+                scope_hash: sha(b"scope"),
+                execution_host_id: "host".into(),
+                executor_instance_id: "instance".into(),
+                attempt_id: "attempt".into(),
+                fence: 1,
+                provider: "synthetic".into(),
+                profile_id: "synthetic".into(),
+            },
+            owner_id: "owner".into(),
+            owner_epoch: 1,
+        };
+        let document = snapshot_document(&ticket, "after", &Ok(fits), 1);
+        assert!(
+            document.to_string().len()
+                <= crate::hub::iris_execution_owner::MAX_STORED_DOCUMENT_BYTES
+        );
+        let failed = snapshot_document(&ticket, "after", &check_listing(&over).map(|_| over), 1);
+        assert_eq!(failed["complete"], false);
+        assert_eq!(failed["reason"], "FOLDER_RECORD_LIMIT");
+    }
 
     fn entry(path: &str, kind: &str, size: u64, links: u64, digest: Option<&str>) -> FolderEntry {
         FolderEntry {
