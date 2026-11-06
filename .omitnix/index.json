@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "2e67574b0e6dcc61beeb156befa7201ba257a6d6",
+    "commit": "c0a044e8acb63d01b8d26962d67e1004f5c777b6",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,9 +138,9 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2073,
+    "discovered": 2074,
     "analyzed": 1609,
-    "unresolved": 14,
+    "unresolved": 15,
     "unknown": 0,
     "unclaimed": 450,
     "skipped_by_config": 0
@@ -33795,6 +33795,68 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/orchestration/opencode_progress.rs",
+      "adapter": "rust",
+      "status": "unresolved",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Read-only progress snapshots of OpenCode's shared session store."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": [
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: SELECT id FROM session WHERE title = ?1 ORDER BY time_created DESC, id..."
+        },
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: SELECT id, directory, time_created FROM session \\ WHERE time_created >..."
+        },
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: SELECT id, json_extract(data, '$.time.completed') IS NULL \\ FROM messa..."
+        },
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: SELECT \\ max(COALESCE(json_extract(data, '$.state.time.start'), json_e..."
+        },
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: SELECT json_extract(data, '$.type'), \\ json_extract(data, '$.state.sta..."
+        },
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: INSERT INTO session(id, directory, title, time_created) VALUES(?1,?2,?..."
+        },
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: INSERT INTO message(id, session_id, time_created, data) VALUES(?1,?2,?..."
+        },
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: INSERT INTO part(id, message_id, session_id, time_created, time_update..."
+        }
+      ]
+    },
+    {
       "path": "rust/src/orchestration/relay.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -51613,13 +51675,14 @@
       "rust/src/hub/iris_execution_journal.rs",
       "rust/src/hub/iris_execution_owner.rs",
       "rust/src/hub/iris_execution_verification_store.rs",
+      "rust/src/orchestration/opencode_progress.rs",
       "rust/src/storage/history.rs",
       "rust/src/storage/repository.rs",
       "rust/tests/dependency_contracts.rs",
       "rust/tests/iris_independent_verification.rs",
       "rust/tests/storage_contracts.rs"
     ],
-    "unresolved_count": 42,
-    "note": "42 statements in 9 files could not be read, so the table list may be incomplete: a table mentioned only there is missing from it entirely, and a table that is listed may be touched in more places than it names."
+    "unresolved_count": 50,
+    "note": "50 statements in 10 files could not be read, so the table list may be incomplete: a table mentioned only there is missing from it entirely, and a table that is listed may be touched in more places than it names."
   }
 }
