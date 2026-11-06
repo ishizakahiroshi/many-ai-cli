@@ -12,7 +12,8 @@
 | `/cd` | Change the session's working directory. | When you want to switch directories without restarting. |
 | `/clear` | Clear the terminal and start a fresh chat. | Reset the UI and conversation together. |
 | `/compact` | Summarize the visible conversation to free tokens. | After long runs, to retain key points while reclaiming context. |
-| `/copy` | Copy the latest completed Codex output. | Grab finished responses without manual selection. |
+| `/config` | Search and change terminal preferences. | When adjusting Codex preferences interactively. |
+| `/copy` | Choose a response, code block, or quote to copy. | Grab output without manual selection. |
 | `/debug-config` | Print config layer and requirements diagnostics. | When debugging configuration precedence and policy requirements. |
 | `/delete` | Permanently delete the current session and exit Codex. | Discard a session and its files. |
 | `/diff` | Show the Git diff including untracked files. | Review edits before committing or testing. |
@@ -25,7 +26,7 @@
 | `/goal` | Set, pause, resume, view, or clear a task goal. | Give Codex a persistent target to track across turns. |
 | `/hooks` | Review lifecycle hooks. | Inspect hook configuration and manage hook trust. |
 | `/ide` | Include open files and the current IDE selection. | Pull editor context into the next prompt. |
-| `/import` | Import Claude Code setup, project files, and recent chats. | When migrating from Claude Code into Codex. |
+| `/import` | Import Claude Code or Cursor setup, project files, and recent chats. | When migrating from Claude Code or Cursor into Codex. |
 | `/init` | Generate an AGENTS.md scaffold. | Capture persistent repository instructions. |
 | `/keymap` | Remap TUI keyboard shortcuts. | Inspect and persist custom shortcut bindings. |
 | `/logout` | Sign out of Codex. | Clear credentials on shared machines. |
@@ -41,6 +42,7 @@
 | `/pets` | Choose or hide a terminal pet. | When personalizing the TUI with an ambient pet. |
 | `/plan` | Switch to plan mode and optionally send a prompt. | Request an execution plan before implementation work. |
 | `/plugins` | Browse installed and discoverable plugins. | Inspect tools, install suggested plugins, or manage availability. |
+| `/presets` | Save and run prompts or slash commands. | When you repeat the same prompt or command often. |
 | `/ps` | Show background terminals and their status. | Check long-running commands without leaving the transcript. |
 | `/pwd` | Show the working directory. | When you need to confirm where Codex is working. |
 | `/quit` | Exit the CLI. | Leave the session immediately. |
@@ -61,5 +63,6 @@
 | `/title` | Configure terminal window or tab title fields interactively. | When choosing title items for the current terminal. |
 | `/usage` | View account token usage and rate-limit reset. | Inspect quota consumption between tasks. |
 | `/vim` | Toggle Vim mode for the composer. | Switch between Vim and default editing behavior. |
+| `/voice` | Start or stop a voice conversation when available. | When you want to talk to Codex instead of typing. |
 | `/warnings` | View retained warnings and diagnostics. | When troubleshooting a session. |
 | `/worktree` | Start or continue a chat in a managed Git worktree. | When working on a branch in isolation. |

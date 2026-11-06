@@ -55,7 +55,7 @@
 | `/resume` | Resume a previous session. | When continuing earlier work. |
 | `/rewind` | Rewind to a previous turn. | When undoing recent interactions. |
 | `/session-info` | Display current session information. | When reviewing session details. |
-| `/sessions` | Switch between, rename, or close sessions. | When managing multiple conversations. |
+| `/sessions` | Open the Agent Dashboard, same as dashboard. | When managing multiple conversations. |
 | `/settings` | Open the settings modal. | When configuring application behavior. |
 | `/share` | Share the current session via URL. | When collaborating with others. |
 | `/skills` | Open the extensions modal at the Skills tab. | When managing skills. |
@@ -70,4 +70,4 @@
 | `/view-plan` | View the current plan. | When reviewing the plan. |
 | `/vim-mode` | Toggle vim-style scrollback keybindings. | When preferring vim navigation. |
 | `/workflow` | Launch, pause, resume, or stop workflows. | When controlling workflow execution. |
-| `/workflows` | Open the live workflow run dashboard. | When monitoring active workflows. |
+| `/workflows` | Open the Workflows tab of the extensions catalog. | When browsing available workflows. |

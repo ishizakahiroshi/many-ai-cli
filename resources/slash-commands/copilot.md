@@ -5,20 +5,21 @@
 | `/add-dir` | Add an allowed working directory. | Grant Copilot access to another local directory. |
 | `/agent` | Manage the active agent environment. | Switch or inspect agent setup. |
 | `/allow-all` | Allow all tool use for the session. | Temporarily run without per-tool prompts. |
-| `/app` | Manage application configuration and connectors. | Configure or inspect app-level settings. |
-| `/ask` | Ask a direct question. | Get an answer without changing task mode. |
+| `/app` | Show how to try the GitHub Copilot desktop app. | When you want to continue in the desktop app. |
+| `/ask` | Ask a side question without adding it to history, or show the last answer. | Get a quick answer without changing the main thread. |
 | `/autopilot` | Toggle autopilot behavior. | Let Copilot proceed more independently. |
 | `/changelog` | Show recent CLI changes. | Check what changed after an update. |
 | `/chronicle` | Open chronicle/session history features. | Review or manage past activity. |
-| `/clear` | Clear the terminal view. | Reset visible output without leaving the session. |
+| `/clear` | Discard this session and start a new one. | When you want a fresh conversation. |
 | `/collect-debug-logs` | Collect debug logs into a local file or a secret GitHub gist. | Gather logs to share when reporting an issue. |
 | `/compact` | Compact conversation context. | Reclaim context during long sessions. |
 | `/computer` | Show or toggle Computer Use. | Enable or check computer-use tool access. |
+| `/config` | Open the configuration screen, or one area of it. | When changing Copilot CLI settings such as MCP or the default model. |
 | `/context` | Inspect current context usage. | Understand what is loaded into the session. |
 | `/copy` | Copy current output or context. | Move session text to the clipboard. |
 | `/cwd` | Show or change the current working directory. | Confirm where tools will run. |
-| `/delegate` | Delegate work to another agent. | Split work across agents or side tasks. |
-| `/diagnose` | Run environment diagnostics. | Troubleshoot local CLI or runtime issues. |
+| `/delegate` | Send this session to GitHub so Copilot opens a pull request. | Hand off finished local work for a PR on a chosen base branch. |
+| `/diagnose` | Analyze the session log, including why permission prompts were needed. | Troubleshoot unexpected prompts or session behavior. |
 | `/diff` | Show working tree changes. | Review edits before committing or continuing. |
 | `/env` | Inspect environment information. | Debug local CLI/runtime configuration. |
 | `/exit` | Exit the CLI. | End the current session. |
@@ -31,7 +32,7 @@
 | `/ide` | Connect IDE context. | Include editor state in the session. |
 | `/init` | Initialize project guidance. | Generate or refresh repo instructions. |
 | `/instructions` | Inspect instruction sources. | See guidance currently applied to the session. |
-| `/keep-alive` | Keep the session alive. | Prevent an idle session from stopping. |
+| `/keep-alive` | Prevent the system from going to sleep. | During long unattended runs. |
 | `/limits` | Show usage limits and quotas. | Check your Copilot rate limits. |
 | `/list-dirs` | List allowed directories. | Audit what paths Copilot can access. |
 | `/login` | Sign in. | Authenticate GitHub Copilot CLI. |
@@ -58,7 +59,7 @@
 | `/rewind` | Rewind session state. | Return to an earlier point in the conversation. |
 | `/rubber-duck` | Get an independent critique of your current work. | When you want a rubber-duck style review from another agent. |
 | `/sandbox` | Manage sandbox settings, including file path and network permissions. | When tightening or relaxing what Copilot can access. |
-| `/search` | Search. | Find context or content from the CLI. |
+| `/search` | Search the conversation timeline, experimental. | Find an earlier part of the conversation. |
 | `/security-review` | Analyze pending changes for security issues. | Scan the current diff for vulnerabilities. |
 | `/session` | Show session details. | Inspect current session metadata. |
 | `/settings` | Open Copilot CLI settings. | Adjust CLI preferences. |

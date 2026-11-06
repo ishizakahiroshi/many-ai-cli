@@ -19,7 +19,7 @@
 | `/claude-api` | Load Claude API reference material or migrate API code. | When building with or upgrading Claude API code. |
 | `/claude-in-chrome` | Have Claude carry out a task in your browser. | When testing a page, filling a form, or reading console logs. |
 | `/clear` | Clear conversation history. | Start a clean thread without leaving the session. |
-| `/code-review` | Review the current diff for bugs and cleanups. | Before shipping code or when you want quality feedback. |
+| `/code-review` | Review the current diff or a pull request for correctness bugs. | Before shipping code; use simplify for cleanups. |
 | `/color` | Set the prompt bar color for the current session. | When you want visual differentiation between sessions. |
 | `/compact` | Summarize and compact the current conversation. | Reduce context usage while keeping important details. |
 | `/config` | Open CLI configuration. | Review or change project/user config values. |
@@ -82,6 +82,7 @@
 | `/remote-control` | Make this session available for remote control from claude.ai. | When controlling this session from another device. |
 | `/remote-env` | Configure the default remote environment for web sessions. | When setting up default tools for cloud sessions. |
 | `/rename` | Rename the current session. | When you want a memorable label in the session picker. |
+| `/restart` | Restart Claude Code to apply an installed update. | After an update has been downloaded. |
 | `/resume` | Resume a prior conversation. | Continue work from an earlier thread. |
 | `/review` | Review the current diff or a pull request, same as code-review. | Before shipping code or when you want quality feedback. |
 | `/rewind` | Rewind the conversation and code to a previous point. | When you want to undo changes and conversation. |
@@ -96,7 +97,7 @@
 | `/settings` | Open the settings interface to adjust preferences. | When changing theme, model, or output options. |
 | `/setup-bedrock` | Configure Amazon Bedrock authentication and model pins. | When using Bedrock as your API provider. |
 | `/setup-vertex` | Configure Google Vertex AI authentication and model pins. | When using Vertex AI as your API provider. |
-| `/share` | Share the conversation or send product feedback. | When collaborating or reporting an issue upstream. |
+| `/share` | Report a bug and share the session, same as bug. | When something breaks and you want it recorded. |
 | `/simplify` | Review code for cleanup and apply fixes. | When optimizing code without hunting for bugs. |
 | `/skill-doctor` | Show a skill and plugin usage report: cost, tokens, uses, and unused plugins. | Audit which skills and plugins are actually being used. |
 | `/skills` | List available skills. | When discovering what skills are available. |

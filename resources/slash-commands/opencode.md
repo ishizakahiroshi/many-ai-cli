@@ -14,14 +14,15 @@
 | `/export` | Save the conversation as markdown. | When you want to preserve or share the session. |
 | `/fork` | Fork the session into a new session. | When you want to try another direction. |
 | `/help` | Display the command reference. | When you need guidance on available features. |
-| `/init` | Configure agent settings. | When setting up or updating AGENTS.md. |
-| `/mcps` | List configured MCP servers. | When checking which MCP tools are connected. |
+| `/init` | Guided setup to create or update AGENTS.md. | When setting up or updating AGENTS.md. |
+| `/mcps` | Toggle configured MCP servers. | When enabling or disabling MCP tools. |
 | `/models` | Display available AI models. | When you want to see which models you can use. |
-| `/move` | Move the session. | When relocating the current session. |
+| `/move` | Move the session to another project directory. | When the work belongs to a different project. |
 | `/new` | Start a fresh conversation. | When beginning a different task or topic. |
 | `/org` | Switch organization. | When working across multiple organizations. |
 | `/redo` | Restore undone changes. | When you want to reapply a reversed action. |
 | `/rename` | Rename the current session. | When you want a memorable label. |
+| `/review` | Review changes, defaulting to uncommitted ones. | When you want a review of a commit, branch, or pull request. |
 | `/sessions` | Manage active conversations. | When switching between or resuming prior work. |
 | `/share` | Enable session access. | When collaborating or giving others view access. |
 | `/skills` | List available skills. | When checking which skills the agent can invoke. |
@@ -34,5 +35,5 @@
 | `/unshare` | Revoke session access. | When ending collaborative access to your session. |
 | `/update` | Check for and install a new version. | When you want the latest OpenCode. |
 | `/variants` | Switch model variants. | When selecting a different variant of the model. |
-| `/warp` | Jump within the session. | When navigating to another point in the conversation. |
+| `/warp` | Change the session's workspace, experimental. | When experimental workspaces are enabled. |
 | `/workspaces` | Switch workspaces. | When moving between configured workspaces. |
