@@ -1,6 +1,7 @@
 # Ollama Cloud 経由で Codex / Claude Code を使う運用手順
 
-> 最終更新: 2026-09-21(月) 11:26:00 — 別ホスト接続時の allow_private_hosts 設定要件を追記
+> 最終更新: 2026-11-06(金) 12:05:43 — Hub 起動手順の `serve` に `--open` を追記（付けないとブラウザは開かない）
+> 2026-09-21(月) 11:26:00 — 別ホスト接続時の allow_private_hosts 設定要件を追記
 
 ## 概要
 
@@ -141,7 +142,7 @@ ollama cp qwen3-coder claude-3-5-sonnet
 
 ### Codex を Ollama Cloud で起動する手順（Hub 画面）
 
-1. `many-ai-cli serve` で Hub を起動（ブラウザ自動起動）
+1. `many-ai-cli serve --open` で Hub を起動（`--open` を付けるとブラウザが自動で開く。付けないと開かない）
 2. spawn フォームを開き、provider を `codex` に設定
 3. Model 欄をクリック → `[Ollama Cloud]` グループから `gpt-oss:120b-cloud` 等を選ぶ
 4. Launch

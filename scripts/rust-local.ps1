@@ -5,7 +5,7 @@
 .DESCRIPTION
   - 通常は修正元（develop を開いている作業フォルダ。ふだん使うリポジトリのフォルダ）をそのまま使い、未commit変更を含む画面資材（Bun）と Rust（cargo +1.90.0）をビルドする。
   - -Branch を明示した候補検査だけ、リモートから別フォルダへ取得する。
-  - 起動は必ず trial モード（実際の ~/.many-ai-cli と、ポート 47777 の Go 版 Hub には触れない）。
+  - 起動は既定で trial モード（実際の ~/.many-ai-cli には触れない。ポートは 49400）。-Real は通常モードで、home を F:\build\rust-home に分け、ポートはリリース版と同じ 47777（-Port で変えられる）。
   - 既存の Go 版や実 home は変更しない。作るのは $Worktree と $TrialRoot の中だけ。
 
 .EXAMPLE
@@ -26,13 +26,13 @@ param(
     [switch]$SkipWeb,
     [switch]$NoWebDebug,     # 画面の観測 sink（web/src/debug/）を入れない。既定は debug ビルドなら入り、-Release では入らない（Rust 側の cfg(debug_assertions) と同じ扱い）
     [switch]$CopySettings,  # 実際の config.yaml を trial root へコピー（読むだけ・実物は変更しない。秘密を含む）
-    [switch]$Real,           # trial でなく通常モード。ただし home を F:\build\rust-home に向け、実際の ~/.many-ai-cli・DB・Go 版の Hub には触れない
+    [switch]$Real,           # trial でなく通常モード。ただし home を F:\build\rust-home に向け、実際の ~/.many-ai-cli・DB には触れない。ポートの既定は 47777（リリース版と同じ）なので、47777 を使う別の Hub（Go 版・インストール済みの版）が動いていると衝突する
     [switch]$CopyDb,         # -Real のとき、DB（any-ai-cli.db と -wal/-shm）のスナップショットも、コピーして持ち込む（予定の実行が二重に走る可能性があるので既定では持ち込まない）
     [string]$Branch = 'develop',
     [string]$CodexHome,      # -Real の Hub に CODEX_HOME を渡す（例: %USERPROFILE%\.codex を展開した値）。「全部更新」で、本物の Codex のインストールを更新する。省略時は実 home の .codex（あれば）を渡す
     [switch]$IsolateCodex,   # -CodexHome の既定（実 home の .codex）を使わず、Codex も仮 home の中だけで動かす。仮 home の Codex は実 home の bin と食い違うので、「全部更新」は通らない
     [string]$Source,         # 手元の worktree（rust\Cargo.toml があるフォルダ）を、取得せずそのままビルドする。push 不要。-Stop も同じ -Source を付ける
-    [int]$Port = 49400
+    [int]$Port = 0           # 0 = 既定。-Real は 47777（リリース版と同じ）、trial は 49400（trial は 47777 を使えない）
 )
 
 Set-StrictMode -Version Latest
@@ -101,7 +101,9 @@ function Native([string]$what, [scriptblock]$cmd) {
     if ($LASTEXITCODE -ne 0) { throw "$what が失敗しました（exit $LASTEXITCODE）" }
 }
 
-if ($Port -eq 47777) { throw '47777 は Go 版の既定ポートです。別のポートを指定してください。' }
+if ($Port -eq 0) { $Port = if ($Real) { 47777 } else { 49400 } }
+# trial は、コード側（RuntimePaths::trial）が 47777 を拒否する。-Real は通常モードなので、リリース版と同じ 47777 を使える。
+if ($Port -eq 47777 -and -not $Real) { throw 'trial では 47777 を使えません（リリース版の既定ポートと衝突させないため）。-Real を付けるか、別のポートを指定してください。' }
 
 $buildKind = if ($Release) { 'release' } else { 'debug' }
 $exe = Join-Path $Worktree "rust\target\$buildKind\many-ai-cli.exe"
@@ -324,9 +326,10 @@ if ($Real) {
             Write-Host "CODEX_HOME=$CodexHome を Hub に渡します。「全部更新」は、本物の Codex のインストールを書き換えます。" -ForegroundColor Yellow
             $serveCmd += "`$env:CODEX_HOME='$CodexHome'; "
         }
-        $serveCmd += "& '$exe' serve --port $Port"
+        # serve は --open を付けたときだけブラウザを開く（付けないと開かない）。利用者のショートカットも serve --open で起動する。
+        $serveCmd += "& '$exe' serve --port $Port --open"
         Start-Process -FilePath 'pwsh' -ArgumentList @('-NoExit', '-Command', $serveCmd) -WorkingDirectory $FakeHome
-        Step 'status（URL。ブラウザで開く。トークン付きなので他人に見せない）'
+        Step 'status（URL。ブラウザが自動で開く。開かないときはこの URL を開く。トークン付きなので他人に見せない）'
         $ok = $false
         for ($i = 1; $i -le 15; $i++) {
             Start-Sleep -Seconds 2
