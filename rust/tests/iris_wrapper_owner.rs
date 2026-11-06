@@ -659,14 +659,8 @@ async fn owned_stop_precedes_conpty_close_during_initialization() {
             "scheduler-dependent readiness must still be recorded"
         );
     }
-    // Preserve the evidence beyond this fixture TempDir's lifetime.
-    std::fs::write(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("owner-stop-regression.json"),
-        receipt.to_string(),
-    )
-    .unwrap();
+    // Report the receipt on stdout only. Writing it into the checkout made the
+    // tree dirty and failed the CI clean-checkout gate after every test run.
     println!("{}", receipt);
 }
 
