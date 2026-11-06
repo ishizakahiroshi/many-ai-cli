@@ -67,3 +67,12 @@ tokio = { version = "=1.53.3", features = ["test-util"] }
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
+
+# 開発ビルドのデバッグ情報は行番号だけにし、依存クレートには付けない。
+# 2026-11-06 の実測で、空からのビルドが 7.14 → 6.32 GB、cargo build が 106 → 82 秒。
+# パニック時のバックトレースの行番号は残る。デバッガで変数を見たいときだけ一時的に debug = true へ戻す。
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
