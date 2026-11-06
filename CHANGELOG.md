@@ -10,89 +10,9 @@ Release artifacts are published at
 
 ## [Unreleased]
 
-- Let the multi grid follow the sidebar tabs. A new "This tab only" scope, next
-  to "This project only" and "All", lays out just the sessions of the tab selected
-  in the sidebar; switching tabs swaps the grid, and the frame shrinks to fit the
-  number of sessions, so a tab with a single session fills the screen. Each tab
-  remembers the view it was last showing (multi or single) and returns to it when
-  you switch back; a tab you have never opened keeps the current view. The scope
-  stays one setting per device, and you can pin it to a single tab from the strip
-  above the grid. "This tab only" can also be the default for opening multi
-  (Settings, the multi layout popup, and the narrow-screen switcher).
-
-- Let the multi grid show one project at a time. The strip above the grid now
-  lists each project with its session count (plus "All"); clicking one lays out
-  only that project's sessions and opens the same project in the sidebar. When
-  you open multi from its tab it asks whether to show this project or everything,
-  with an option to remember the answer; the default (ask every time / this
-  project only / all) can also be changed from the multi button's layout popup
-  and in Settings. Pin a pane to keep it in the grid first; sessions that do not
-  fit are listed by number in the strip and swap into the focused pane when
-  clicked. An optional setting grows the grid (up to 6×3) instead. Before any
-  project has been opened, "this project only" uses the selected session's
-  project.
-
-- Add the separately selected `iris-owned-dispatch/1` HTTP profile for isolated
-  synthetic launch-port acceptance. Admission pins fixed operator policy before
-  the one-use dispatcher; lost responses retain the original request identity.
-  Native observations do not enable task success, effects proof or handoff, and
-  the normal Hub keeps live provider dispatch disabled.
-
-- Add trusted local, immutable fixed-payload verification records, pinned before
-  owner startup and bound to the exact artifact and execution. Comparisons stay
-  separate from task success, effects and live HTTP execution capabilities.
-
-- Draw the state symbol in each multi grid and detached grid pane header with
-  the same symbols and rules as the session card (including waiting for input,
-  starting, and finished-but-unread), and keep it in step with the card.
-
-- Right-click a file path or URL in the terminal to open the same menu as a
-  left click. The terminal's context menu is now installed the same way in the
-  single view, the multi grid and the detached grid. Right-clicking a selection
-  that contains the link still copies as before.
-
-- Allow editing quick commands by right-clicking their buttons.
-
-- Open the Files tab beside the terminal instead of replacing it. Clicking
-  Files while viewing a terminal now adds Files as a split pane next to the
-  CLI (drag the border to resize; close the pane to return to the full
-  terminal). A file chosen in that pane opens in the centered preview modal,
-  which can still be popped out to its own window. On narrow screens, and from
-  the chat/Git/other views, Files still switches the whole view as before.
-
-- Show a "starting" state for new in-window CLI launches until the correlated
-  terminal's first screen arrives, and no longer hold the display for saving
-  launch preferences. A launch from the single view stays in the single view
-  and opens the new session there; it no longer turns the view into a split
-  multi grid. A launch from a multi grid that is already open shows the state
-  in its own pane, and the other panes remain usable.
-  While the starting screen is up, the session card shows the green spinning
-  ring instead of a static dot.
-
-- Add a trusted internal Iris dispatch coordinator with one-use durable claims,
-  bounded startup queues and exact-session cancellation. Wrapper registration
-  and native root startup stay separate; live HTTP execution remains disabled.
-
-- Fix Windows terminal disposal during process startup: terminate the owned Job
-  and observe the root exit and an empty Job before closing ConPTY, preventing
-  startup-close initialization errors. Ctrl+C input remains a separate operation.
-
-- Persist Windows PTY-owner local-tree cessation observations and independently
-  hashed, bound artifact reports across Hub disconnects. Add one-use durable
-  spawn claims, fixed operator grant manifests with revision checks, and
-  authenticated read-only owner evidence inspection. These records keep remote
-  effects and business outcome acceptance unverified; live dispatch stays off.
-
 ## [0.10.0] - Unreleased
 
 This release replaces the Go implementation of many-ai-cli with a Rust one.
-
-- Record the current sidebar tab name on newly created work memos and show it with each memo.
-- Add an opt-in Many Iris MCP execution-contract boundary with separate bearer
-  authentication, a durable request journal, pinned grant revisions and exact
-  session-bound stop requests. Live provider execution stays disabled: existing
-  session termination does not prove process-tree cessation or task success.
-  See [the contract's current limits](docs/manual_iris-execution-contract.md).
 
 - **Same commands, same places for your data.** The command names, settings and
   data locations are unchanged: the configuration stays in
@@ -113,6 +33,9 @@ This release replaces the Go implementation of many-ai-cli with a Rust one.
   0.9 s, slowest 4.0 s). The cause has not been found.
 
 ### Fixed
+- Fix Windows terminal disposal during process startup: terminate the owned Job
+  and observe the root exit and an empty Job before closing ConPTY, preventing
+  startup-close initialization errors. Ctrl+C input remains a separate operation.
 - Shell attachment destinations can specify an SSH private key file for uploads,
   downloads, and remote file previews, including keys passed with `ssh -i` when
   connecting in the terminal.
@@ -231,6 +154,70 @@ This release replaces the Go implementation of many-ai-cli with a Rust one.
   blames a terminal redraw.
 
 ### Added
+- Record the current sidebar tab name on newly created work memos and show it with each memo.
+- Add an opt-in Many Iris MCP execution-contract boundary with separate bearer
+  authentication, a durable request journal, pinned grant revisions and exact
+  session-bound stop requests. Live provider execution stays disabled: existing
+  session termination does not prove process-tree cessation or task success.
+  See [the contract's current limits](docs/manual_iris-execution-contract.md).
+- Let the multi grid follow the sidebar tabs. A new "This tab only" scope, next
+  to "This project only" and "All", lays out just the sessions of the tab selected
+  in the sidebar; switching tabs swaps the grid, and the frame shrinks to fit the
+  number of sessions, so a tab with a single session fills the screen. Each tab
+  remembers the view it was last showing (multi or single) and returns to it when
+  you switch back; a tab you have never opened keeps the current view. The scope
+  stays one setting per device, and you can pin it to a single tab from the strip
+  above the grid. "This tab only" can also be the default for opening multi
+  (Settings, the multi layout popup, and the narrow-screen switcher).
+- Let the multi grid show one project at a time. The strip above the grid now
+  lists each project with its session count (plus "All"); clicking one lays out
+  only that project's sessions and opens the same project in the sidebar. When
+  you open multi from its tab it asks whether to show this project or everything,
+  with an option to remember the answer; the default (ask every time / this
+  project only / all) can also be changed from the multi button's layout popup
+  and in Settings. Pin a pane to keep it in the grid first; sessions that do not
+  fit are listed by number in the strip and swap into the focused pane when
+  clicked. An optional setting grows the grid (up to 6×3) instead. Before any
+  project has been opened, "this project only" uses the selected session's
+  project.
+- Add the separately selected `iris-owned-dispatch/1` HTTP profile for isolated
+  synthetic launch-port acceptance. Admission pins fixed operator policy before
+  the one-use dispatcher; lost responses retain the original request identity.
+  Native observations do not enable task success, effects proof or handoff, and
+  the normal Hub keeps live provider dispatch disabled.
+- Add trusted local, immutable fixed-payload verification records, pinned before
+  owner startup and bound to the exact artifact and execution. Comparisons stay
+  separate from task success, effects and live HTTP execution capabilities.
+- Draw the state symbol in each multi grid and detached grid pane header with
+  the same symbols and rules as the session card (including waiting for input,
+  starting, and finished-but-unread), and keep it in step with the card.
+- Right-click a file path or URL in the terminal to open the same menu as a
+  left click. The terminal's context menu is now installed the same way in the
+  single view, the multi grid and the detached grid. Right-clicking a selection
+  that contains the link still copies as before.
+- Allow editing quick commands by right-clicking their buttons.
+- Open the Files tab beside the terminal instead of replacing it. Clicking
+  Files while viewing a terminal now adds Files as a split pane next to the
+  CLI (drag the border to resize; close the pane to return to the full
+  terminal). A file chosen in that pane opens in the centered preview modal,
+  which can still be popped out to its own window. On narrow screens, and from
+  the chat/Git/other views, Files still switches the whole view as before.
+- Show a "starting" state for new in-window CLI launches until the correlated
+  terminal's first screen arrives, and no longer hold the display for saving
+  launch preferences. A launch from the single view stays in the single view
+  and opens the new session there; it no longer turns the view into a split
+  multi grid. A launch from a multi grid that is already open shows the state
+  in its own pane, and the other panes remain usable.
+  While the starting screen is up, the session card shows the green spinning
+  ring instead of a static dot.
+- Add a trusted internal Iris dispatch coordinator with one-use durable claims,
+  bounded startup queues and exact-session cancellation. Wrapper registration
+  and native root startup stay separate; live HTTP execution remains disabled.
+- Persist Windows PTY-owner local-tree cessation observations and independently
+  hashed, bound artifact reports across Hub disconnects. Add one-use durable
+  spawn claims, fixed operator grant manifests with revision checks, and
+  authenticated read-only owner evidence inspection. These records keep remote
+  effects and business outcome acceptance unverified; live dispatch stays off.
 - **Files on the ssh destination can be opened without downloading.** With a
   destination set in a shell session, clicking a path the remote AI printed
   offers "👁️ Open from <destination>" next to "⬇️ Fetch", and the "⬇ Fetch"
