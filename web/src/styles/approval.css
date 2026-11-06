@@ -811,6 +811,15 @@ body.close-left .action-collapse-btn { right: auto; left: calc(12px + var(--cont
   text-overflow: ellipsis;
   max-width: 360px;
 }
+/* .ui-button は中身を中央寄せするので、ボタン自身の省略では長い文が左右へ均等にはみ出し、
+   先頭が切れる。文言の span（approval.ts の setActionBtnText）を縮む flex 項目にして、
+   先頭から表示し末尾を … で省略する。 */
+#action-bar.collapsed .action-btn-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* 質問タブの形（単問・一括承認・複数質問。approval.ts の showSingleSectionBar /
    showBatchActionBar）と、その前後の要素も 1 行に詰める。以前は上の .action-section 系
    （今は描かれない旧形式）とボタンだけが対象で、一括承認では ⊟ を押しても高さが変わらず、

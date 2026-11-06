@@ -1063,7 +1063,7 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
     else if (isRecommendedOpt(opt)) cls += ' current';
     if (isPermanent) cls += ' permanent';
     btn.className = cls;
-    btn.textContent = `${opt.num}. ${opt.label}` + (isRecommendedOpt(opt) ? ` (${t('approval_recommended')})` : '');
+    setActionBtnText(btn, `${opt.num}. ${opt.label}` + (isRecommendedOpt(opt) ? ` (${t('approval_recommended')})` : ''));
     btn.title = `${opt.num}. ${opt.label}`;
     if (isHighRiskApprove(opt)) {
       btn.classList.add('high-risk-approval');
@@ -1078,7 +1078,7 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
   if (allowFree) {
     const fbtn = document.createElement('button');
     fbtn.className = 'ui-button ui-button--secondary ui-button--regular action-btn' + (freeActive ? ' current' : '');
-    fbtn.textContent = `N. ${t('approval_free_input')}`;
+    setActionBtnText(fbtn, `N. ${t('approval_free_input')}`);
     fbtn.title = t('approval_free_input');
     fbtn.onclick = (e) => { e.stopPropagation(); activateSingleFree(sessionId); };
     optsEl.appendChild(fbtn);
@@ -1169,12 +1169,22 @@ function captureApprovalInputIdentity(sessionId): ApprovalInputIdentity | null {
   return { candidateKey: record.candidate_key, sourceEpoch: Number(record.source_epoch) || 0 };
 }
 
+// 選択肢ボタンの文言は span 1 つに入れる。.ui-button は中身を中央寄せする inline-flex で、
+// 文字を直に入れると、コンパクト表示（1 行・はみ出しを隠す）で長い文が左右へ均等にはみ出し、
+// 先頭が見えなくなる（省略記号も出ない）。span を縮む flex 項目にして、そこで末尾を省略する。
+function setActionBtnText(btn: HTMLElement, text: string): void {
+  const span = document.createElement('span');
+  span.className = 'action-btn-text';
+  span.textContent = text;
+  btn.replaceChildren(span);
+}
+
 export function bindHighRiskApproval(btn, sessionId, targetNum, onSent?: () => void) {
   const expected = approvalSelectionToken(sessionId, targetNum);
   const current = () => !!expected && btn.isConnected && approvalSelectionToken(sessionId, targetNum) === expected;
   btn.classList.add('high-risk-approval');
   if (highRiskConfirmationMode() === 'dialog') {
-    btn.appendChild(document.createTextNode(' (confirm)'));
+    (btn.querySelector('.action-btn-text') ?? btn).appendChild(document.createTextNode(' (confirm)'));
     btn.onclick = () => { if (current()) void requestHighRiskConfirmation(sessionId, targetNum, expected, onSent); };
     return;
   }
@@ -1773,7 +1783,7 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
     if (checked) cls += ' selected';
     if (idx === multiSelectFocusIdx) cls += ' kbd-focus';
     btn.className = cls;
-    btn.textContent = `${checked ? '☑' : '☐'} ${opt.num}. ${opt.label}`;
+    setActionBtnText(btn, `${checked ? '☑' : '☐'} ${opt.num}. ${opt.label}`);
     btn.title = `${opt.num}. ${opt.label}`;
     btn.onclick = (e) => {
       e.stopPropagation();
