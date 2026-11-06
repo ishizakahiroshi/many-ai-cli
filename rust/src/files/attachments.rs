@@ -85,6 +85,18 @@ impl FilesService {
         r: &Request,
         core: &dyn SessionCore,
     ) -> Result<Response> {
+        // This GET starts ssh. A cross-site navigation carries the Lax UI
+        // cookie, so refuse it the same way require_origin treats a request
+        // without Origin: only an absent, "none" or "same-origin" fetch site.
+        if !matches!(
+            r.header("Sec-Fetch-Site")
+                .trim()
+                .to_ascii_lowercase()
+                .as_str(),
+            "" | "none" | "same-origin"
+        ) {
+            return Err(err(403, "forbidden", "cross-site remote download refused"));
+        }
         let session = r
             .query("session")
             .parse::<i64>()

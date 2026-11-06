@@ -180,7 +180,20 @@ pub fn fetch_args(target: &str, identity: &str, path: &RemotePath) -> Vec<String
 
 /// A local filename only, never SSH options or private key contents.
 pub fn validate_identity(identity: &str) -> Result<&str> {
-    if identity.len() > 4096 || identity.chars().any(char::is_control) || identity.starts_with('-')
+    // Two leading separators name a UNC share or a Win32 device namespace
+    // (`\\host\share`, `//host/share`, `\\?\`, `\\.\`). ssh would open it over
+    // SMB and could hand the user's NTLM credentials to that host.
+    let network_or_device = {
+        let mut chars = identity.chars();
+        matches!(
+            (chars.next(), chars.next()),
+            (Some('\\' | '/'), Some('\\' | '/'))
+        )
+    };
+    if identity.len() > 4096
+        || identity.chars().any(char::is_control)
+        || identity.starts_with('-')
+        || network_or_device
     {
         Err(err(
             400,
@@ -431,8 +444,25 @@ mod tests {
                 .iter()
                 .any(|a| a == "-i")
         );
-        for bad in ["-oProxyCommand=anything", "a\nb", "a\0b"] {
-            assert!(validate_identity(bad).is_err());
+        for bad in [
+            "-oProxyCommand=anything",
+            "a\nb",
+            "a\0b",
+            r"\\attacker.example\share\key",
+            "//attacker.example/share/key",
+            r"\/attacker.example/share/key",
+            r"/\attacker.example\share\key",
+            r"\\?\UNC\attacker.example\share\key",
+            r"\\.\pipe\key",
+        ] {
+            assert!(validate_identity(bad).is_err(), "{bad}");
+        }
+        for good in [
+            r"D:\synthetic keys\id_ed25519",
+            "~/.ssh/id_ed25519",
+            "/srv/synthetic-keys/key",
+        ] {
+            assert!(validate_identity(good).is_ok(), "{good}");
         }
         assert!(validate_identity(&"a".repeat(4097)).is_err());
     }

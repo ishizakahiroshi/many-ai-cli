@@ -197,9 +197,36 @@ async fn remote_download_guards_launch_nothing_and_connected_shell_uses_owned_fa
         assert_eq!(remote.local_state(), before);
         remote.assert_no_local_attachment();
     }
-    let response = remote
-        .send(download(remote.shell, "fixture-host", "/synthetic.txt"))
-        .await;
+    // A cross-site navigation carries the Lax UI cookie; it must not start ssh.
+    for site in ["cross-site", "same-site"] {
+        let mut request = download(remote.shell, "fixture-host", "/synthetic.txt");
+        request.headers.push(("Sec-Fetch-Site".into(), site.into()));
+        let response = remote.send(request).await;
+        assert_eq!(response.status, 403, "{site}");
+        assert_eq!(remote.invocation_count(), 0);
+    }
+    // A UNC identity would make ssh open the key over SMB.
+    for identity in [
+        r"\\attacker.example\share\key",
+        "//attacker.example/share/key",
+    ] {
+        let mut request = download(remote.shell, "fixture-host", "/synthetic.txt");
+        request.query = format!(
+            "{}&{}",
+            request.query,
+            url::form_urlencoded::Serializer::new(String::new())
+                .append_pair("remote_identity", identity)
+                .finish()
+        );
+        let response = remote.send(request).await;
+        assert_eq!(response.status, 400, "{identity}");
+        assert_eq!(remote.invocation_count(), 0);
+    }
+    let mut request = download(remote.shell, "fixture-host", "/synthetic.txt");
+    request
+        .headers
+        .push(("Sec-Fetch-Site".into(), "same-origin".into()));
+    let response = remote.send(request).await;
     assert_eq!(
         response.status,
         200,
