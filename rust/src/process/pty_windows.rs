@@ -929,6 +929,12 @@ mod tests {
         };
         let marker = PathBuf::from(marker);
         if std::env::var_os("MANY_AI_SYNTHETIC_CESSATION_DESCENDANT").is_none() {
+            // The descendant is intentionally left running: the caller test
+            // proves that checked cessation stops the whole owned tree.
+            #[allow(
+                clippy::zombie_processes,
+                reason = "the parent test terminates and reaps this descendant"
+            )]
             let _owned_descendant = std::process::Command::new(std::env::current_exe().unwrap())
                 .args([
                     "--exact",

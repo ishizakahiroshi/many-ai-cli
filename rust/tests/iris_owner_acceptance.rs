@@ -54,6 +54,12 @@ fn owner_fixture_helper() {
     let root = PathBuf::from(std::env::var_os(FIXTURE_ROOT).expect("synthetic fixture root"));
     let deadline = std::time::Instant::now() + Duration::from_secs(25);
     if role == "parent" || role == "exit-parent" {
+        // "exit-parent" intentionally returns without waiting so the owner
+        // test can prove it still stops the orphaned descendant.
+        #[allow(
+            clippy::zombie_processes,
+            reason = "the exit-parent role leaves the descendant to the owner under test"
+        )]
         let mut child = fixture_command("descendant", &root).spawn().unwrap();
         std::fs::write(root.join("descendant.pid"), child.id().to_string()).unwrap();
         if role == "exit-parent" {
@@ -120,10 +126,10 @@ fn plan(root: &Path, role: &str) -> ProcessPlan {
 async fn await_file(path: &Path, limit: Duration) -> Vec<u8> {
     let end = tokio::time::Instant::now() + limit;
     loop {
-        if let Ok(value) = std::fs::read(path) {
-            if !value.is_empty() {
-                return value;
-            }
+        if let Ok(value) = std::fs::read(path)
+            && !value.is_empty()
+        {
+            return value;
         }
         assert!(
             tokio::time::Instant::now() < end,

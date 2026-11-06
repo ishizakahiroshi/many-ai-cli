@@ -277,21 +277,21 @@ where
             return Err(error);
         }
     };
-    if let Some(owner) = &options.execution_owner {
-        if owner.root_started(pty.pid()).is_err() {
-            // A committed intent cannot be forgotten when PID binding fails.
-            // Stop only the exact owned PTY and never spawn a replacement.
-            let proof = pty.terminate_checked(Duration::from_secs(3)).await.ok();
-            close_session(pty.as_ref(), strict_owner);
-            let exit = tokio::time::timeout(Duration::from_secs(3), pty.wait())
-                .await
-                .ok()
-                .and_then(Result::ok);
-            let _ = owner.finished(exit.as_ref(), proof.as_ref());
-            return Err(io::Error::other(
-                "execution owner root binding failed; no replay",
-            ));
-        }
+    if let Some(owner) = &options.execution_owner
+        && owner.root_started(pty.pid()).is_err()
+    {
+        // A committed intent cannot be forgotten when PID binding fails.
+        // Stop only the exact owned PTY and never spawn a replacement.
+        let proof = pty.terminate_checked(Duration::from_secs(3)).await.ok();
+        close_session(pty.as_ref(), strict_owner);
+        let exit = tokio::time::timeout(Duration::from_secs(3), pty.wait())
+            .await
+            .ok()
+            .and_then(Result::ok);
+        let _ = owner.finished(exit.as_ref(), proof.as_ref());
+        return Err(io::Error::other(
+            "execution owner root binding failed; no replay",
+        ));
     }
     let replay = Arc::new(Mutex::new(ReplayBuffer::default()));
     let marks: SharedWatermarks = Arc::new(Mutex::new(InputWatermarks::default()));

@@ -46,12 +46,12 @@ fn terminal_child() {
 async fn wait_ready(path: &Path, pid: u32) -> Value {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if let Ok(bytes) = std::fs::read(path) {
-                if let Ok(value) = serde_json::from_slice::<Value>(&bytes) {
-                    assert_eq!(value["pid"], pid);
-                    assert_eq!(value["error_mode"].as_u64().unwrap() & 3, 3);
-                    return value;
-                }
+            if let Ok(bytes) = std::fs::read(path)
+                && let Ok(value) = serde_json::from_slice::<Value>(&bytes)
+            {
+                assert_eq!(value["pid"], pid);
+                assert_eq!(value["error_mode"].as_u64().unwrap() & 3, 3);
+                return value;
             }
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
