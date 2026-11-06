@@ -14,7 +14,8 @@ import { projectKeyForSession } from './app/sidebar-tree.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
 import { disposeAltScrollRail } from './app/alt-scroll-rail-view.js';
 import { altDragSelectionText, disposeAltDragSelect } from './app/alt-drag-select-view.js';
-import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, attachTurnEndNotifyToggle, attachMultiPanePrefsControls, getActiveTriggerPhrase, getQuickCommand, initAiLaunchShellSettings, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
+import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, attachTurnEndNotifyToggle, attachMultiPanePrefsControls, getActiveTriggerPhrase, getQuickCommand, initAiLaunchShellSettings, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, refreshQuickCommandButtons, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
+import { initQuickCommandUi } from './app/quick-command-ui.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { pendingSessionIds } from './app/approval-queue-tab.js';
@@ -1382,6 +1383,9 @@ for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
   });
 }
 
+// クイックコマンドの一覧（帯の右クリックと設定画面）。ボタンの click は上の通り。
+initQuickCommandUi();
+
 export function syncMobileLayoutState() {
   const hasSession = activeSessionId !== null && sessions.size > 0;
   document.body.classList.toggle('mobile-has-session', hasSession);
@@ -2491,12 +2495,7 @@ inputEl.addEventListener('blur', (e) => {
     if (soundFilenameEl) soundFilenameEl.textContent = '';
     if (soundFileEl) soundFileEl.value = '';
 
-    for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
-      const el = document.getElementById(`quick-cmd-${slot}`);
-      if (el) el.value = quickCommandDefault(slot);
-      const showEl = document.getElementById(`quick-cmd-${slot}-show`);
-      if (showEl) showEl.checked = true;
-    }
+    refreshQuickCommandButtons();
 
     const voiceGraceEl = document.getElementById('voice-grace-select');
     if (voiceGraceEl) {

@@ -44,12 +44,22 @@ export const STORAGE_QUICK_CMD_2_KEY          = 'ai_cli_hub_quick_cmd_2';
 export const STORAGE_QUICK_CMD_3_KEY          = 'ai_cli_hub_quick_cmd_3';
 export const STORAGE_QUICK_CMD_4_KEY          = 'ai_cli_hub_quick_cmd_4';
 export const STORAGE_QUICK_CMD_5_KEY          = 'ai_cli_hub_quick_cmd_5';
+export const STORAGE_QUICK_CMD_6_KEY          = 'ai_cli_hub_quick_cmd_6';
+export const STORAGE_QUICK_CMD_7_KEY          = 'ai_cli_hub_quick_cmd_7';
+export const STORAGE_QUICK_CMD_8_KEY          = 'ai_cli_hub_quick_cmd_8';
+export const STORAGE_QUICK_CMD_9_KEY          = 'ai_cli_hub_quick_cmd_9';
+export const STORAGE_QUICK_CMD_10_KEY         = 'ai_cli_hub_quick_cmd_10';
 // クイックコマンドボタンの表示/非表示（既定: 表示）。不要な人は個別に隠せる。
 export const STORAGE_QUICK_CMD_1_SHOW_KEY     = 'ai_cli_hub_quick_cmd_1_show';
 export const STORAGE_QUICK_CMD_2_SHOW_KEY     = 'ai_cli_hub_quick_cmd_2_show';
 export const STORAGE_QUICK_CMD_3_SHOW_KEY     = 'ai_cli_hub_quick_cmd_3_show';
 export const STORAGE_QUICK_CMD_4_SHOW_KEY     = 'ai_cli_hub_quick_cmd_4_show';
 export const STORAGE_QUICK_CMD_5_SHOW_KEY     = 'ai_cli_hub_quick_cmd_5_show';
+export const STORAGE_QUICK_CMD_6_SHOW_KEY     = 'ai_cli_hub_quick_cmd_6_show';
+export const STORAGE_QUICK_CMD_7_SHOW_KEY     = 'ai_cli_hub_quick_cmd_7_show';
+export const STORAGE_QUICK_CMD_8_SHOW_KEY     = 'ai_cli_hub_quick_cmd_8_show';
+export const STORAGE_QUICK_CMD_9_SHOW_KEY     = 'ai_cli_hub_quick_cmd_9_show';
+export const STORAGE_QUICK_CMD_10_SHOW_KEY    = 'ai_cli_hub_quick_cmd_10_show';
 export const STORAGE_TEMPLATES_KEY            = 'ai_cli_hub_prompt_templates';
 // テンプレートを選んだときの挙動: 1 = 即時送信 / 0（既定）= 入力欄へ反映のみ。
 export const STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY = 'ai_cli_hub_template_send_immediate';
@@ -263,6 +273,16 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'quick_cmds.show3':          [STORAGE_QUICK_CMD_3_SHOW_KEY,      (v) => v ? '1' : '0'],
   'quick_cmds.show4':          [STORAGE_QUICK_CMD_4_SHOW_KEY,      (v) => v ? '1' : '0'],
   'quick_cmds.show5':          [STORAGE_QUICK_CMD_5_SHOW_KEY,      (v) => v ? '1' : '0'],
+  'quick_cmds.cmd6':           [STORAGE_QUICK_CMD_6_KEY,           String],
+  'quick_cmds.cmd7':           [STORAGE_QUICK_CMD_7_KEY,           String],
+  'quick_cmds.cmd8':           [STORAGE_QUICK_CMD_8_KEY,           String],
+  'quick_cmds.cmd9':           [STORAGE_QUICK_CMD_9_KEY,           String],
+  'quick_cmds.cmd10':          [STORAGE_QUICK_CMD_10_KEY,          String],
+  'quick_cmds.show6':          [STORAGE_QUICK_CMD_6_SHOW_KEY,      (v) => v ? '1' : '0'],
+  'quick_cmds.show7':          [STORAGE_QUICK_CMD_7_SHOW_KEY,      (v) => v ? '1' : '0'],
+  'quick_cmds.show8':          [STORAGE_QUICK_CMD_8_SHOW_KEY,      (v) => v ? '1' : '0'],
+  'quick_cmds.show9':          [STORAGE_QUICK_CMD_9_SHOW_KEY,      (v) => v ? '1' : '0'],
+  'quick_cmds.show10':         [STORAGE_QUICK_CMD_10_SHOW_KEY,     (v) => v ? '1' : '0'],
   'collapsed_nodes':           [STORAGE_COLLAPSED_NODES_KEY,       JSON.stringify],
   'sidebar_pin_migrated':      [STORAGE_SIDEBAR_PIN_MIGRATED_KEY,  (v) => v ? '1' : '0'],
   // PUT はサーバー側の UserPrefs を丸ごと置き換える。この表に無いフィールドは、別の
@@ -313,8 +333,17 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'trigger.phrase',
   'notify_sound.type',
   'voice.wake_word_phrase',
+  // 数字だけの命令（例: 1）が JSON として数値に化けないよう、全スロットを文字列として扱う。
   'quick_cmds.cmd1',
   'quick_cmds.cmd2',
+  'quick_cmds.cmd3',
+  'quick_cmds.cmd4',
+  'quick_cmds.cmd5',
+  'quick_cmds.cmd6',
+  'quick_cmds.cmd7',
+  'quick_cmds.cmd8',
+  'quick_cmds.cmd9',
+  'quick_cmds.cmd10',
   'usage_links.claude',
   'usage_links.codex',
   'usage_links.copilot',
@@ -390,7 +419,7 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
 
   if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'voice.input_disabled' || path === 'approval.auto_switch' || path === 'approval.auto_approval_enabled'
       || path === 'template_send.immediate' || path === 'sidebar_pin_migrated'
-      || /^quick_cmds\.show[1-5]$/.test(path)) {
+      || /^quick_cmds\.show(?:[1-9]|10)$/.test(path)) {
     return { ok: true, value: raw === '1' || raw === 'true' || parsed === true };
   }
   if (path === 'voice.grace_seconds') {

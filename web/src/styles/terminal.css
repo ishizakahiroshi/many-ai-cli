@@ -878,6 +878,30 @@ body.pc-input-tools-off #input-tools { display: none; }
 #input-wrap .input-icon-grip[hidden] { display: none; }
 .input-icon-grip:active { cursor: grabbing; }
 .input-icon-moving { outline: 2px solid var(--accent); }
+/* 進捗帯の中での並べ替え中: 動かしているボタンは指に付き、ほかのボタンは滑って間をあける。 */
+#input-wrap .input-icon-positioned:not(.input-icon-moving) { transition: left 0.12s ease, top 0.12s ease; }
+/* 帯の中のメッセージ（左）とボタン群（右）の境目。ドラッグでボタン領域の幅を変える。
+   ダブルクリックで自動の幅へ戻す（input-icon-position.ts）。 */
+#input-wrap .input-actions-resizer {
+  position: fixed;
+  width: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  z-index: 41;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  opacity: 0.55;
+}
+#input-wrap .input-actions-resizer:hover,
+#input-wrap .input-actions-resizer:focus-visible,
+#input-wrap .input-actions-resizer.is-dragging { opacity: 1; }
+#input-wrap .input-actions-resizer[hidden] { display: none; }
 #input-tools:has(.input-icon-positioned) { overflow: visible; }
 @media (max-width: 720px) {
   body.mobile-has-session:not(.mobile-home-view) #voice-btn.input-icon-movable:not([hidden]) {
@@ -987,6 +1011,11 @@ body.pc-input-tools-off #input-tools { display: none; }
 #quick-cmd-btn-3,
 #quick-cmd-btn-4,
 #quick-cmd-btn-5,
+#quick-cmd-btn-6,
+#quick-cmd-btn-7,
+#quick-cmd-btn-8,
+#quick-cmd-btn-9,
+#quick-cmd-btn-10,
 #slash-picker-btn {
   width: auto;
   min-width: 48px;
@@ -995,7 +1024,12 @@ body.pc-input-tools-off #input-tools { display: none; }
 #quick-model-btn,
 #quick-cmd-btn-3,
 #quick-cmd-btn-4,
-#quick-cmd-btn-5 { margin-left: 6px; }
+#quick-cmd-btn-5,
+#quick-cmd-btn-6,
+#quick-cmd-btn-7,
+#quick-cmd-btn-8,
+#quick-cmd-btn-9,
+#quick-cmd-btn-10 { margin-left: 6px; }
 
 #mobile-composer-attach-btn,
 #mobile-composer-attach-menu {
@@ -1029,6 +1063,11 @@ body.pc-input-tools-off #input-tools { display: none; }
   #quick-cmd-btn-3,
   #quick-cmd-btn-4,
   #quick-cmd-btn-5,
+  #quick-cmd-btn-6,
+  #quick-cmd-btn-7,
+  #quick-cmd-btn-8,
+  #quick-cmd-btn-9,
+  #quick-cmd-btn-10,
   #slash-picker-btn {
     min-width: var(--touch-target);
     padding: 0 4px;
@@ -1037,7 +1076,12 @@ body.pc-input-tools-off #input-tools { display: none; }
   #quick-model-btn,
   #quick-cmd-btn-3,
   #quick-cmd-btn-4,
-  #quick-cmd-btn-5 { margin-left: 2px; }
+  #quick-cmd-btn-5,
+  #quick-cmd-btn-6,
+  #quick-cmd-btn-7,
+  #quick-cmd-btn-8,
+  #quick-cmd-btn-9,
+  #quick-cmd-btn-10 { margin-left: 2px; }
   #input-tools {
     overflow-x: auto;
     max-width: 42vw;
@@ -1220,6 +1264,45 @@ body.pc-input-tools-off #input-tools { display: none; }
   color: var(--muted);
 }
 .term-ctx-menu .ctx-label { flex: 1; }
+
+/* 帯の右クリックで開くクイックコマンドの一覧（quick-command-ui.ts）。.term-ctx-menu の見た目を借りる。 */
+.quick-cmd-menu { min-width: 260px; max-width: 420px; }
+.quick-cmd-menu .quick-cmd-menu-title {
+  padding: 4px 12px 6px;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+}
+.quick-cmd-menu .quick-cmd-menu-empty {
+  padding: 6px 12px;
+  color: var(--muted);
+}
+.quick-cmd-menu .quick-cmd-menu-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--line-soft);
+}
+.quick-cmd-menu .quick-cmd-menu-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 6px 0 12px;
+}
+.quick-cmd-menu .quick-cmd-menu-row .quick-cmd-menu-toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  text-align: left;
+}
+.quick-cmd-menu .quick-cmd-menu-row .quick-cmd-menu-toggle[aria-checked="false"] { opacity: 0.55; }
+.quick-cmd-menu .quick-cmd-menu-row .quick-cmd-menu-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: Consolas, "Cascadia Mono", monospace;
+}
+.quick-cmd-menu .quick-cmd-menu-row .ui-button--icon { width: auto; flex: 0 0 auto; }
 
 /* ---- 過去ログビューア (history-viewer.ts) ---- */
 #history-viewer-open-btn {

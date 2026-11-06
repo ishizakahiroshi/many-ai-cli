@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  clampIconPoint, layoutStatusControls, nextIconScale, parseIconPositions, parseIconScales,
-  INPUT_ICON_IDS, MAX_ICON_SCALE, MIN_ICON_SCALE,
+  applyVisibleOrder, clampActionsWidth, clampIconPoint, completeIconOrder, insertionIndex,
+  layoutStatusControls, moveIconInOrder, nextIconScale, orderFromPositions, parseActionsWidth,
+  parseIconOrder, parseIconPositions, parseIconScales,
+  INPUT_ICON_IDS, MAX_ICON_SCALE, MIN_ACTIONS_WIDTH, MIN_ICON_SCALE, MIN_STATUS_TEXT_WIDTH,
 } from '../src/app/input-icon-position.js';
 
 describe('independent input icon positions', () => {
@@ -76,6 +78,67 @@ describe('independent input icon positions', () => {
     expect(MAX_ICON_SCALE).toBe(4);
     // A small trackpad delta still moves the size instead of being rounded away.
     expect(nextIconScale(1, -2)).toBeGreaterThan(1);
+  });
+  test('a fixed button-area width reserves exactly that width and packs rows inside it', () => {
+    const fixed = layoutStatusControls([80, 80, 80], 600, [], 200);
+    // 200 から余白 18 を引いた 182 に 80+6+80=166 までが入り、3 個目は次の段へ回る。
+    expect(fixed.rows).toBe(2);
+    expect(fixed.reservedWidth).toBe(200);
+    expect(fixed.points[0].x).toBe(600 - 8 - 166);
+    expect(fixed.points[2]).toEqual({ x: 600 - 8 - 80, y: 43 });
+    // 幅の指定が無ければ従来どおり、先頭の段の幅 + 18。
+    expect(layoutStatusControls([80, 80, 80], 600).reservedWidth).toBe(270);
+    expect(layoutStatusControls([], 600, [], 200).reservedWidth).toBe(0);
+  });
+  test('the button-area width stays inside the band and leaves room for the status text', () => {
+    expect(clampActionsWidth(10, 800)).toBe(MIN_ACTIONS_WIDTH);
+    expect(clampActionsWidth(900, 800)).toBe(800 - MIN_STATUS_TEXT_WIDTH);
+    expect(clampActionsWidth(333.4, 800)).toBe(333);
+    expect(clampActionsWidth(500, 100)).toBe(MIN_ACTIONS_WIDTH);
+    expect(parseActionsWidth('320')).toBe(320);
+    expect(parseActionsWidth('12')).toBeNull();
+    expect(parseActionsWidth('abc')).toBeNull();
+    expect(parseActionsWidth(null)).toBeNull();
+  });
+  test('the saved band order keeps known buttons once, in order, and fills in newly added ones', () => {
+    expect(parseIconOrder('["send-btn","not-a-button","voice-btn","send-btn"]')).toEqual(['send-btn', 'voice-btn']);
+    expect(parseIconOrder('{"a":1}')).toEqual([]);
+    expect(parseIconOrder('bad json')).toEqual([]);
+    expect(parseIconOrder(null)).toEqual([]);
+    // 保存に無いボタンは、既定の並びで直前にあるボタンの後ろへ入る。
+    const full = completeIconOrder(['buf-clear-btn', 'send-btn']);
+    expect(full).toHaveLength(INPUT_ICON_IDS.length);
+    expect(new Set(full).size).toBe(INPUT_ICON_IDS.length);
+    expect(full.indexOf('buf-clear-btn')).toBeLessThan(full.indexOf('send-btn'));
+    expect(full.indexOf('voice-btn')).toBe(full.indexOf('send-btn') + 1);
+    expect(completeIconOrder([])).toEqual([...INPUT_ICON_IDS]);
+  });
+  test('the old saved coordinates become a reading order: upper row first, left to right', () => {
+    const saved = parseIconPositions(JSON.stringify({
+      'voice-btn': { x: 300, y: 8 },
+      'send-btn': { x: 100, y: 10 },
+      'slash-picker-btn': { x: 50, y: 60 },
+      'buf-clear-btn': { x: 10, y: 62 },
+    }));
+    expect(orderFromPositions(saved)).toEqual(['send-btn', 'voice-btn', 'buf-clear-btn', 'slash-picker-btn']);
+    expect(orderFromPositions({})).toEqual([]);
+  });
+  test('dropping between buttons inserts before or after the nearest one', () => {
+    const slots = [{ cx: 100, cy: 20 }, { cx: 160, cy: 20 }, { cx: 220, cy: 20 }];
+    expect(insertionIndex(slots, 90, 20)).toBe(0);
+    expect(insertionIndex(slots, 110, 20)).toBe(1);
+    expect(insertionIndex(slots, 175, 22)).toBe(2);
+    expect(insertionIndex(slots, 400, 20)).toBe(3);
+    expect(insertionIndex([], 10, 10)).toBe(0);
+    const ids = ['a', 'b', 'c', 'd'];
+    expect(moveIconInOrder(ids, 'a', 2)).toEqual(['b', 'c', 'a', 'd']);
+    expect(moveIconInOrder(ids, 'd', 0)).toEqual(['d', 'a', 'b', 'c']);
+    expect(moveIconInOrder(ids, 'b', 99)).toEqual(['a', 'c', 'd', 'b']);
+  });
+  test('reordering the visible buttons leaves the hidden ones where they were', () => {
+    const full = ['a', 'h1', 'b', 'c', 'h2'];
+    expect(applyVisibleOrder(full, ['c', 'a', 'b'])).toEqual(['c', 'h1', 'a', 'b', 'h2']);
+    expect(applyVisibleOrder(full, ['a', 'b', 'c'])).toEqual(full);
   });
   test('restores saved sizes within range and ignores malformed ones', () => {
     expect(parseIconScales('{"send-btn":2,"voice-btn":9,"slash-picker-btn":0.1,"buf-clear-btn":1}'))

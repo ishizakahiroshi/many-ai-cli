@@ -182,6 +182,27 @@ pub struct UserPrefsQuickCmds {
     pub show4: Option<bool>,
     #[serde(rename = "show5")]
     pub show5: Option<bool>,
+    // 6〜10 は Rust 版で足した枠（Go 版の golden には無い）。空のままなら出力に現れない。
+    #[serde(rename = "cmd6")]
+    pub cmd6: String,
+    #[serde(rename = "cmd7")]
+    pub cmd7: String,
+    #[serde(rename = "cmd8")]
+    pub cmd8: String,
+    #[serde(rename = "cmd9")]
+    pub cmd9: String,
+    #[serde(rename = "cmd10")]
+    pub cmd10: String,
+    #[serde(rename = "show6")]
+    pub show6: Option<bool>,
+    #[serde(rename = "show7")]
+    pub show7: Option<bool>,
+    #[serde(rename = "show8")]
+    pub show8: Option<bool>,
+    #[serde(rename = "show9")]
+    pub show9: Option<bool>,
+    #[serde(rename = "show10")]
+    pub show10: Option<bool>,
 }
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize, Debug)]
 #[serde(default)]
@@ -1128,6 +1149,76 @@ pub(super) fn schema(kind: &str) -> &'static [Field] {
             Field {
                 yaml: "show5",
                 json: "show5",
+                kind: "*bool",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "cmd6",
+                json: "cmd6",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "cmd7",
+                json: "cmd7",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "cmd8",
+                json: "cmd8",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "cmd9",
+                json: "cmd9",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "cmd10",
+                json: "cmd10",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "show6",
+                json: "show6",
+                kind: "*bool",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "show7",
+                json: "show7",
+                kind: "*bool",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "show8",
+                json: "show8",
+                kind: "*bool",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "show9",
+                json: "show9",
+                kind: "*bool",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "show10",
+                json: "show10",
                 kind: "*bool",
                 yomit: true,
                 jomit: true,

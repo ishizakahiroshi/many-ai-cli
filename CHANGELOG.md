@@ -12,6 +12,18 @@ Release artifacts are published at
 
 ### Added
 
+- **Input buttons live inside the progress band, and up to 10 quick commands.**
+  On a wide screen the buttons stay in the band that shows the working message.
+  Drag a button by its corner grip and drop it between others to reorder them
+  (the others slide aside, as on a phone home screen); they can no longer be
+  placed outside the band, and only the order is saved, so opening the sidebar
+  or resizing the window no longer leaves them behind. Drag the divider between
+  the message and the buttons to widen or narrow the button area (double-click
+  to reset). Right-click anywhere on the band to list your quick commands: tick
+  to show or hide a button (the command is kept), edit, delete, or add a new
+  one, up to 10 (hidden ones count). The same list is in Settings. Your earlier
+  free positions are converted to an order the first time, and your existing
+  five quick commands are unchanged.
 - **Progress on an MCP board (opt-in).** Put a `board.json` next to
   `config.yaml` to have sessions started in the repositories you list written
   to an MCP board (for example a Many Iris board): an item when the session

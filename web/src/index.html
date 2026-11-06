@@ -978,60 +978,11 @@
             <option value="/compact"></option>
             <option value="/config"></option>
           </datalist>
-          <div class="settings-row quick-cmd-row">
-            <span class="settings-label" data-i18n="settings_quick_cmd_1">コマンド 1</span>
-            <input type="text" id="quick-cmd-1" class="ui-input settings-input-text quick-cmd-input" list="quick-cmd-presets"
-                   maxlength="200" autocomplete="off"
-                   data-i18n-placeholder="settings_quick_cmd_placeholder"
-                   placeholder="例: bugfix 作って / スラッシュコマンド">
-            <label class="quick-cmd-show" data-i18n-tooltip="settings_quick_cmd_show_tooltip">
-              <input type="checkbox" id="quick-cmd-1-show" class="settings-checkbox">
-              <span data-i18n="settings_quick_cmd_show_short">表示</span>
-            </label>
-          </div>
-          <div class="settings-row quick-cmd-row">
-            <span class="settings-label" data-i18n="settings_quick_cmd_2">コマンド 2</span>
-            <input type="text" id="quick-cmd-2" class="ui-input settings-input-text quick-cmd-input" list="quick-cmd-presets"
-                   maxlength="200" autocomplete="off"
-                   data-i18n-placeholder="settings_quick_cmd_placeholder"
-                   placeholder="例: plan md 作って / スラッシュコマンド">
-            <label class="quick-cmd-show" data-i18n-tooltip="settings_quick_cmd_show_tooltip">
-              <input type="checkbox" id="quick-cmd-2-show" class="settings-checkbox">
-              <span data-i18n="settings_quick_cmd_show_short">表示</span>
-            </label>
-          </div>
-          <div class="settings-row quick-cmd-row">
-            <span class="settings-label" data-i18n="settings_quick_cmd_3">コマンド 3</span>
-            <input type="text" id="quick-cmd-3" class="ui-input settings-input-text quick-cmd-input" list="quick-cmd-presets"
-                   maxlength="200" autocomplete="off"
-                   data-i18n-placeholder="settings_quick_cmd_placeholder"
-                   placeholder="例: bugfix 作って / スラッシュコマンド">
-            <label class="quick-cmd-show" data-i18n-tooltip="settings_quick_cmd_show_tooltip">
-              <input type="checkbox" id="quick-cmd-3-show" class="settings-checkbox">
-              <span data-i18n="settings_quick_cmd_show_short">表示</span>
-            </label>
-          </div>
-          <div class="settings-row quick-cmd-row">
-            <span class="settings-label" data-i18n="settings_quick_cmd_4">コマンド 4</span>
-            <input type="text" id="quick-cmd-4" class="ui-input settings-input-text quick-cmd-input" list="quick-cmd-presets"
-                   maxlength="200" autocomplete="off"
-                   data-i18n-placeholder="settings_quick_cmd_placeholder"
-                   placeholder="例: bugfix 作って / スラッシュコマンド">
-            <label class="quick-cmd-show" data-i18n-tooltip="settings_quick_cmd_show_tooltip">
-              <input type="checkbox" id="quick-cmd-4-show" class="settings-checkbox">
-              <span data-i18n="settings_quick_cmd_show_short">表示</span>
-            </label>
-          </div>
-          <div class="settings-row quick-cmd-row">
-            <span class="settings-label" data-i18n="settings_quick_cmd_5">コマンド 5</span>
-            <input type="text" id="quick-cmd-5" class="ui-input settings-input-text quick-cmd-input" list="quick-cmd-presets"
-                   maxlength="200" autocomplete="off"
-                   data-i18n-placeholder="settings_quick_cmd_placeholder"
-                   placeholder="例: bugfix 作って / スラッシュコマンド">
-            <label class="quick-cmd-show" data-i18n-tooltip="settings_quick_cmd_show_tooltip">
-              <input type="checkbox" id="quick-cmd-5-show" class="settings-checkbox">
-              <span data-i18n="settings_quick_cmd_show_short">表示</span>
-            </label>
+          <!-- 一覧は quick-command-ui.ts が描く（登録済みのコマンドごとに 1 行）。帯の右クリックと同じ一覧。 -->
+          <div id="quick-cmd-list" class="quick-cmd-list"></div>
+          <div class="settings-row quick-cmd-add-row">
+            <button type="button" id="quick-cmd-add-btn" class="ui-button ui-button--secondary ui-button--compact" data-i18n="quick_cmd_add">＋ 追加</button>
+            <span id="quick-cmd-limit-note" class="quick-cmd-limit-note"></span>
           </div>
         </div>
       </details>
@@ -1967,6 +1918,11 @@
               <button id="quick-cmd-btn-3" class="ui-button ui-button--secondary ui-button--regular quick-cmd-btn quick-cmd-btn--text" hidden></button>
               <button id="quick-cmd-btn-4" class="ui-button ui-button--secondary ui-button--regular quick-cmd-btn quick-cmd-btn--text" hidden></button>
               <button id="quick-cmd-btn-5" class="ui-button ui-button--secondary ui-button--regular quick-cmd-btn quick-cmd-btn--text" hidden></button>
+              <button id="quick-cmd-btn-6" class="ui-button ui-button--secondary ui-button--regular quick-cmd-btn quick-cmd-btn--text" hidden></button>
+              <button id="quick-cmd-btn-7" class="ui-button ui-button--secondary ui-button--regular quick-cmd-btn quick-cmd-btn--text" hidden></button>
+              <button id="quick-cmd-btn-8" class="ui-button ui-button--secondary ui-button--regular quick-cmd-btn quick-cmd-btn--text" hidden></button>
+              <button id="quick-cmd-btn-9" class="ui-button ui-button--secondary ui-button--regular quick-cmd-btn quick-cmd-btn--text" hidden></button>
+              <button id="quick-cmd-btn-10" class="ui-button ui-button--secondary ui-button--regular quick-cmd-btn quick-cmd-btn--text" hidden></button>
               <button id="slash-picker-btn" class="ui-button ui-button--secondary ui-button--regular ui-button--icon quick-cmd-btn" data-i18n-tooltip="slash_picker_tooltip">/ ▾</button>
               <button id="buf-clear-btn" class="ui-button ui-button--secondary ui-button--regular ui-button--icon quick-cmd-btn" data-i18n-tooltip="buf_clear_tooltip">⌫</button>
             </div>
