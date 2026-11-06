@@ -62,12 +62,22 @@ impl IrisExecutionHttp {
         if !identity_path.exists() {
             return Ok(None);
         }
+        // Refuse a symlink, junction or hard link like the other Iris stores,
+        // so a planted alias cannot substitute another file's contents.
+        super::iris_execution_owner::check_store_path(&identity_path)
+            .map_err(|_| "Execution identity must be a regular file")?;
         let bytes = std::fs::read(&identity_path).map_err(|_| "Execution identity unavailable")?;
         let value = mcp::parse_json(&bytes).map_err(|_| "Invalid execution identity")?;
         let identity: LocalIdentity =
             serde_json::from_value(value).map_err(|_| "Invalid execution identity fields")?;
-        let token = std::fs::read_to_string(dir.join("credential"))
-            .map_err(|_| "Separate execution credential unavailable")?;
+        let credential_path = dir.join("credential");
+        super::iris_execution_owner::check_store_path(&credential_path)
+            .map_err(|_| "Separate execution credential must be a regular file")?;
+        // Editors commonly add a trailing newline; it is never part of the value.
+        let token = std::fs::read_to_string(&credential_path)
+            .map_err(|_| "Separate execution credential unavailable")?
+            .trim()
+            .to_owned();
         let mut nonce = [0u8; 32];
         getrandom::fill(&mut nonce).map_err(|_| "Execution identity random source unavailable")?;
         let instance: String = nonce.iter().map(|b| format!("{b:02x}")).collect();
@@ -806,5 +816,27 @@ mod tests {
         std::fs::write(temp.path().join("iris-execution/identity.json"), b"{}").unwrap();
         assert!(IrisExecutionHttp::from_local(temp.path(), 48765).is_err());
         assert!(!temp.path().join("iris-execution/journal.sqlite3").exists());
+    }
+    #[test]
+    fn credential_trailing_newline_is_accepted_and_aliased_credential_is_refused() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path().join("iris-execution");
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::write(
+            dir.join("identity.json"),
+            br#"{"principal_id":"iris-principal","workspace_id":"test-workspace","execution_host_id":"host-a"}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.join("credential"), format!("{}\r\n", "c".repeat(64))).unwrap();
+        assert!(
+            IrisExecutionHttp::from_local(temp.path(), 48765)
+                .unwrap()
+                .is_some()
+        );
+        let outside = temp.path().join("outside-credential");
+        std::fs::write(&outside, "d".repeat(64)).unwrap();
+        std::fs::remove_file(dir.join("credential")).unwrap();
+        std::fs::hard_link(&outside, dir.join("credential")).unwrap();
+        assert!(IrisExecutionHttp::from_local(temp.path(), 48765).is_err());
     }
 }

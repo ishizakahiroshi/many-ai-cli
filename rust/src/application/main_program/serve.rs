@@ -1341,11 +1341,16 @@ impl HubComposition {
             Arc::new(crate::hub::spawn_routes::SpawnHttp::new(ordinary.clone())),
             Arc::new(|| chrono::Local::now().offset().local_minus_utc()),
         );
-        if let Some(owner) =
-            crate::hub::iris_execution::IrisExecutionHttp::from_local(paths.root(), bound_port)
-                .map_err(io::Error::other)?
-        {
-            services = services.with_iris_execution(Arc::new(owner));
+        // An Iris configuration mistake disables only Iris; the Hub and every
+        // AI session must keep starting. The message is a fixed text or code.
+        match crate::hub::iris_execution::IrisExecutionHttp::from_local(paths.root(), bound_port) {
+            Ok(Some(owner)) => services = services.with_iris_execution(Arc::new(owner)),
+            Ok(None) => {}
+            Err(error) => logger.write(
+                "WARN",
+                "Many Iris execution is disabled: its local configuration was rejected",
+                &error,
+            ),
         }
         let ledger = RuntimeLedger::open(&paths)?;
         if options.dev {
