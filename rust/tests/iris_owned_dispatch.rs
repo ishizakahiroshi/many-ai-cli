@@ -334,7 +334,10 @@ async fn full_queue_preserves_replay_and_shutdown_never_accepts_an_unqueued_requ
             registration_timeout: Duration::from_secs(3),
             root_timeout: Duration::from_secs(1),
             poll_interval: Duration::from_millis(5),
-            stop_timeout: Duration::from_millis(100),
+            // Shutdown persists both queued jobs as unknown on the cleanup
+            // lane. 100ms was too tight for a slow CI disk (run 42162829778).
+            // The outer 5s timeout below still catches a hanging shutdown.
+            stop_timeout: Duration::from_secs(2),
         },
     )
     .unwrap();
