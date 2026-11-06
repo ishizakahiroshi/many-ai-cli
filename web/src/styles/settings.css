@@ -514,6 +514,12 @@ summary.settings-section-title::-webkit-details-marker { display: none; }
   cursor: pointer;
 }
 .quick-cmd-show .settings-checkbox { margin: 0; }
+/* 一覧: 登録済みのコマンドごとに 1 行（表示 ON/OFF・内容・削除）。番号は付けない。 */
+.quick-cmd-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.quick-cmd-list .quick-cmd-row { gap: var(--space-2); }
+.quick-cmd-list .quick-cmd-empty { color: var(--muted); padding: 4px 0; }
+.quick-cmd-add-row { gap: var(--space-3); }
+.quick-cmd-limit-note { color: var(--muted); font-size: var(--fs-xs); }
 
 /* リモート PIN ログインモーダル（remote-auth.ts / plan_hub-remote-auth.md C3） */
 #pin-login-overlay {

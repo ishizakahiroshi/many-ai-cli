@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "5c8c39b0af28a4ed09f192dd7a672203cd12a4cf",
+    "commit": "f8bfaf52d4a1a70eaea265f4e1eb1040a29c042c",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2077,
-    "analyzed": 1611,
+    "discovered": 2078,
+    "analyzed": 1612,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 451,
@@ -45142,7 +45142,7 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "Independent pointer placement and size. Only the small grip on an icon's"
+          "value": "入力欄まわりのボタン（送信・音声・テンプレート・クイックコマンドなど）の置き場所と大きさ。"
         },
         "authentication": {
           "state": "not_configured"
@@ -46493,6 +46493,36 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/quick-command-ui.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "クイックコマンドの一覧。2 か所に同じ内容を出す。"
         },
         "authentication": {
           "state": "not_configured"

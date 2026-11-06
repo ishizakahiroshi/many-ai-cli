@@ -5,7 +5,7 @@ import { confirmationLabels, type ConfirmationAction } from './confirmation-labe
 import { uiButtonClass, uiIconHtml, uiModalClass } from './ui-components.js';
 import { getNotificationVolume, setNotificationVolume, STORAGE_NOTIFY_SOUND_VOLUME_KEY } from './notification-volume.js';
 import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_6_KEY, STORAGE_QUICK_CMD_7_KEY, STORAGE_QUICK_CMD_8_KEY, STORAGE_QUICK_CMD_9_KEY, STORAGE_QUICK_CMD_10_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_QUICK_CMD_6_SHOW_KEY, STORAGE_QUICK_CMD_7_SHOW_KEY, STORAGE_QUICK_CMD_8_SHOW_KEY, STORAGE_QUICK_CMD_9_SHOW_KEY, STORAGE_QUICK_CMD_10_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, openProjectKey, sessions, terminals } from './state.js';
 import { getDoneSummary } from './done-summary.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
@@ -883,8 +883,9 @@ export function stripAnsi(str) {
 
 // 初回（未設定）は空欄にして入力欄のプレースホルダーで自由入力を誘導する。
 // 空のスロットはボタン自体を非表示にする（送るものが無いため）。
-// クイックコマンドのスロット数（1..QUICK_CMD_SLOTS）。
-export const QUICK_CMD_SLOTS = 5;
+// クイックコマンドのスロット数（1..QUICK_CMD_SLOTS）。登録できる上限でもある（非表示のものも数える）。
+// 保存の形は従来どおり「スロット番号ごとの cmd / show」。内容が空のスロットは未登録として数えない。
+export const QUICK_CMD_SLOTS = 10;
 // スロット番号 → action-bar 上のボタン要素 id。1,2 は歴史的経緯で別名のまま。
 const QUICK_CMD_BTN_IDS = {
   1: 'quick-clear-btn',
@@ -892,6 +893,11 @@ const QUICK_CMD_BTN_IDS = {
   3: 'quick-cmd-btn-3',
   4: 'quick-cmd-btn-4',
   5: 'quick-cmd-btn-5',
+  6: 'quick-cmd-btn-6',
+  7: 'quick-cmd-btn-7',
+  8: 'quick-cmd-btn-8',
+  9: 'quick-cmd-btn-9',
+  10: 'quick-cmd-btn-10',
 };
 const QUICK_CMD_KEYS = {
   1: STORAGE_QUICK_CMD_1_KEY,
@@ -899,6 +905,11 @@ const QUICK_CMD_KEYS = {
   3: STORAGE_QUICK_CMD_3_KEY,
   4: STORAGE_QUICK_CMD_4_KEY,
   5: STORAGE_QUICK_CMD_5_KEY,
+  6: STORAGE_QUICK_CMD_6_KEY,
+  7: STORAGE_QUICK_CMD_7_KEY,
+  8: STORAGE_QUICK_CMD_8_KEY,
+  9: STORAGE_QUICK_CMD_9_KEY,
+  10: STORAGE_QUICK_CMD_10_KEY,
 };
 const QUICK_CMD_SHOW_KEYS = {
   1: STORAGE_QUICK_CMD_1_SHOW_KEY,
@@ -906,6 +917,11 @@ const QUICK_CMD_SHOW_KEYS = {
   3: STORAGE_QUICK_CMD_3_SHOW_KEY,
   4: STORAGE_QUICK_CMD_4_SHOW_KEY,
   5: STORAGE_QUICK_CMD_5_SHOW_KEY,
+  6: STORAGE_QUICK_CMD_6_SHOW_KEY,
+  7: STORAGE_QUICK_CMD_7_SHOW_KEY,
+  8: STORAGE_QUICK_CMD_8_SHOW_KEY,
+  9: STORAGE_QUICK_CMD_9_SHOW_KEY,
+  10: STORAGE_QUICK_CMD_10_SHOW_KEY,
 };
 // 未設定(null)スロットの初期コマンド。スロット1だけ見本として 1 個入れておき、
 // 「便利そう」と思った人が設定で増やせるよう促す。ユーザーが空にしたら空のまま。
@@ -972,6 +988,45 @@ function quickCommandTooltip(cmd: string): string {
   return `${cmd}\n${t('settings_quick_cmd_edit_hint')}`;
 }
 
+/** 内容が入っている（登録済みの）スロット番号を、スロット順で返す。非表示のものも含む。 */
+export function registeredQuickSlots(): number[] {
+  const out: number[] = [];
+  for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
+    if (getQuickCommand(slot) !== '') out.push(slot);
+  }
+  return out;
+}
+
+/** 追加に使える最初の空きスロット。上限まで登録済みなら null。 */
+export function firstFreeQuickSlot(): number | null {
+  for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
+    if (getQuickCommand(slot) === '') return slot;
+  }
+  return null;
+}
+
+/** 表示・非表示を切り替える。内容は消さない。 */
+export function setQuickCommandVisible(slot: number, visible: boolean): void {
+  if (!quickCommandButtonId(slot)) return;
+  setUserPref(`quick_cmds.show${slot}`, visible);
+  refreshQuickCommandButtons();
+}
+
+/** 登録を消してスロットを空ける（表示の状態も初期へ戻す）。 */
+export function deleteQuickCommand(slot: number): void {
+  if (!quickCommandButtonId(slot)) return;
+  setUserPref(`quick_cmds.cmd${slot}`, '');
+  setUserPref(`quick_cmds.show${slot}`, true);
+  refreshQuickCommandButtons();
+}
+
+/** 設定画面の入力欄などからの内容変更。 */
+export function setQuickCommandText(slot: number, text: string): void {
+  if (!quickCommandButtonId(slot)) return;
+  setUserPref(`quick_cmds.cmd${slot}`, sanitizeQuickCommand(text, ''));
+  refreshQuickCommandButtons();
+}
+
 export function editQuickCommand(slot: number): void {
   if (!quickCommandButtonId(slot) || document.getElementById('quick-command-editor')) return;
   const origin = document.getElementById(quickCommandButtonId(slot));
@@ -987,7 +1042,7 @@ export function editQuickCommand(slot: number): void {
   heading.textContent = t('settings_quick_cmd_edit');
   const label = document.createElement('label');
   label.className = 'ui-modal__body quick-command-editor-label';
-  label.textContent = t(`settings_quick_cmd_${slot}`);
+  label.textContent = t('settings_quick_cmd_label');
   const field = document.createElement('input');
   field.type = 'text';
   field.className = 'ui-input quick-command-editor-input';
@@ -1013,8 +1068,8 @@ export function editQuickCommand(slot: number): void {
     event.preventDefault();
     const value = sanitizeQuickCommand(field.value, '');
     setUserPref(`quick_cmds.cmd${slot}`, value);
-    const settingsInput = document.getElementById(`quick-cmd-${slot}`) as HTMLInputElement | null;
-    if (settingsInput) settingsInput.value = value;
+    // 追加ボタンから開いた空きスロットは、保存した時点で表示状態も「表示」にそろえる。
+    if (value !== '' && !getQuickCommandVisible(slot)) setUserPref(`quick_cmds.show${slot}`, true);
     refreshQuickCommandButtons();
     dialog.close();
   });
@@ -1049,6 +1104,8 @@ export function refreshQuickCommandButtons() {
     // 表示トグル ON かつコマンドが空でないときだけボタンを出す。
     btn.hidden = !(getQuickCommandVisible(slot) && cmd !== '');
   }
+  // 右クリックの一覧と設定画面の一覧が、同じ内容に描き直せるように知らせる。
+  document.dispatchEvent(new CustomEvent('quickcommands:changed'));
 }
 
 // @attachment と先頭スラッシュコマンドを除外してカード表示用テキストを返す
@@ -2594,52 +2651,9 @@ initSettingsInformationArchitecture();
 
 // ---- クイックコマンド設定 ----
 (function () {
-  // スロット1の入力欄が無ければ設定パネル未描画とみなして何もしない。
-  if (!document.getElementById('quick-cmd-1')) return;
-
+  // 設定画面の一覧と右クリックの一覧は quick-command-ui.ts が描く（app.ts から初期化する）。
+  // ここはボタン側の初期表示だけを行う。
   refreshQuickCommandButtons();
-
-  // 入力中はボタンのラベル・表示を即時プレビュー（保存はフォーカス確定時の change）。
-  const bind = (el, btnId, prefKey, slot) => {
-    const btn = document.getElementById(btnId);
-    el.addEventListener('input', () => {
-      if (!btn) return;
-      const v = el.value.trim();
-      btn.textContent = quickCommandLabel(v);
-      btn.dataset.tooltip = quickCommandTooltip(v);
-      btn.hidden = !(getQuickCommandVisible(slot) && v !== '');
-    });
-    el.addEventListener('change', () => {
-      const value = sanitizeQuickCommand(el.value, '');
-      el.value = value;
-      setUserPref(prefKey, value);
-      refreshQuickCommandButtons();
-    });
-  };
-  const bindShow = (el, prefKey, slot) => {
-    if (!el) return;
-    el.checked = getQuickCommandVisible(slot);
-    el.addEventListener('change', () => {
-      setUserPref(prefKey, el.checked);
-      refreshQuickCommandButtons();
-    });
-  };
-
-  for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
-    const button = document.getElementById(quickCommandButtonId(slot));
-    button?.addEventListener('contextmenu', event => {
-      event.preventDefault();
-      event.stopPropagation();
-      editQuickCommand(slot);
-    });
-    const cmdEl = document.getElementById(`quick-cmd-${slot}`);
-    if (cmdEl) {
-      cmdEl.value = getQuickCommand(slot);
-      bind(cmdEl, quickCommandButtonId(slot), `quick_cmds.cmd${slot}`, slot);
-    }
-    const showEl = document.getElementById(`quick-cmd-${slot}-show`);
-    bindShow(showEl, `quick_cmds.show${slot}`, slot);
-  }
 })();
 
 // ---- アバター・表示名設定 ----

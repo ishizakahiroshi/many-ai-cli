@@ -35,6 +35,11 @@ const ITEM_IDS = [
   'quick-cmd-btn-3',
   'quick-cmd-btn-4',
   'quick-cmd-btn-5',
+  'quick-cmd-btn-6',
+  'quick-cmd-btn-7',
+  'quick-cmd-btn-8',
+  'quick-cmd-btn-9',
+  'quick-cmd-btn-10',
   'slash-picker-btn',
   'buf-clear-btn',
 ];
