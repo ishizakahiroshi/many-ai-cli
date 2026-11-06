@@ -356,6 +356,16 @@ impl HubComposition {
             &paths,
         )
         .map_err(io::Error::other)?;
+        let board = crate::application::board_sync::BoardSync::new(
+            paths.root(),
+            paths.is_trial(),
+            tasks.clone(),
+            {
+                let logger = logger.clone();
+                Arc::new(move |operation, detail| logger.write("WARN", operation, detail))
+            },
+        )
+        .map_err(io::Error::other)?;
         let security = crate::application::push::security::SecurityNotifications::new(
             notifications.clone(),
             push.clone(),
@@ -507,6 +517,7 @@ impl HubComposition {
             )
             .with_push(push.clone())
             .with_notifications(notifications.clone())
+            .with_board(board.clone())
             .with_one_tap(one_tap.clone())
             .with_approval_rules(approval_rules.clone()),
         );

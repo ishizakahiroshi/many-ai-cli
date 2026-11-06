@@ -70,6 +70,7 @@ pub struct ApplicationEventObserver {
     usage_hooks: Arc<OnceLock<Weak<crate::application::usage_hooks::UsageHooks>>>,
     tasks: HubTaskHandle,
     notifications: Option<Arc<crate::notify::Manager>>,
+    board: Option<Arc<crate::application::board_sync::BoardSync>>,
     push: Option<Arc<crate::application::push::PushManager>>,
     one_tap: Option<Arc<crate::approval::token::OneTapManager>>,
     approval_rules: Option<Arc<crate::application::approval_rules::ApprovalRules>>,
@@ -95,6 +96,7 @@ impl ApplicationEventObserver {
             usage_hooks: Arc::new(OnceLock::new()),
             tasks,
             notifications: None,
+            board: None,
             push: None,
             one_tap: None,
             approval_rules: None,
@@ -116,6 +118,16 @@ impl ApplicationEventObserver {
     pub fn with_notifications(mut self, notifications: Arc<crate::notify::Manager>) -> Self {
         self.notifications = Some(notifications);
         self
+    }
+    pub fn with_board(mut self, board: Arc<crate::application::board_sync::BoardSync>) -> Self {
+        self.board = Some(board);
+        self
+    }
+    fn board_details(&self, session: LiveSessionId) -> Option<SessionDetails> {
+        self.owners
+            .get()
+            .and_then(|owners| owners.core.upgrade())
+            .and_then(|core| core.details(session))
     }
     pub fn with_one_tap(mut self, manager: Arc<crate::approval::token::OneTapManager>) -> Self {
         self.one_tap = Some(manager);
@@ -556,7 +568,18 @@ impl OrderedEventObserver for ApplicationEventObserver {
     fn observe<'a>(&'a self, event: &'a CoreEvent) -> CoreFuture<'a, Result<(), SessionError>> {
         Box::pin(async move {
             match event {
+                CoreEvent::Registered(binding) => {
+                    if let Some(board) = &self.board
+                        && let Some(details) = self.board_details(binding.session)
+                    {
+                        board.session_started(&details);
+                    }
+                    Ok(())
+                }
                 CoreEvent::Ended { binding, end } => {
+                    if let Some(board) = &self.board {
+                        board.session_ended(binding.session, &end.declared_state);
+                    }
                     if let Some(hooks) = self.usage_hooks.get().and_then(Weak::upgrade) {
                         hooks.ended("codex");
                     }
@@ -569,6 +592,9 @@ impl OrderedEventObserver for ApplicationEventObserver {
                     Ok(())
                 }
                 CoreEvent::Dismissed(session) => {
+                    if let Some(board) = &self.board {
+                        board.session_ended(*session, "dismissed");
+                    }
                     if let Some(hooks) = self.usage_hooks.get().and_then(Weak::upgrade) {
                         hooks.ended("codex");
                     }
@@ -592,7 +618,15 @@ impl OrderedEventObserver for ApplicationEventObserver {
                 CoreEvent::RoutineCompleted { binding, summary } => {
                     self.callbacks.routine_completed(*binding, summary).await
                 }
-                CoreEvent::Completed { summary, .. } => {
+                CoreEvent::Completed {
+                    binding, summary, ..
+                } => {
+                    if !summary.fallback
+                        && let Some(board) = &self.board
+                    {
+                        let details = self.board_details(binding.session);
+                        board.turn_done(details.as_ref(), summary);
+                    }
                     if !summary.fallback
                         && let Some(manager) = &self.notifications
                     {

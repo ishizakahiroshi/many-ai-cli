@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "c0a044e8acb63d01b8d26962d67e1004f5c777b6",
+    "commit": "5c8c39b0af28a4ed09f192dd7a672203cd12a4cf",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2074,
-    "analyzed": 1609,
+    "discovered": 2077,
+    "analyzed": 1611,
     "unresolved": 15,
     "unknown": 0,
-    "unclaimed": 450,
+    "unclaimed": 451,
     "skipped_by_config": 0
   },
   "files": [
@@ -1304,6 +1304,14 @@
         }
       },
       "unresolved": []
+    },
+    {
+      "path": "docs/manual_board-sync.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
     },
     {
       "path": "docs/manual_docker-multiuser.md",
@@ -22471,6 +22479,64 @@
     },
     {
       "path": "rust/src/application/approval_rules/tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/application/board_sync.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Optional progress writes to an MCP board (for example Many Iris)."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/application/board_sync/tests.rs",
       "adapter": "rust",
       "status": "analyzed",
       "fields": {

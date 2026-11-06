@@ -19,6 +19,7 @@ pub mod wrapped_spawn;
 
 pub mod approval_patterns;
 pub mod approval_rules;
+pub mod board_sync;
 pub mod cli_updates;
 pub mod event_observer;
 pub mod grid_spawn;

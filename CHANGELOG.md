@@ -10,6 +10,16 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Added
+
+- **Progress on an MCP board (opt-in).** Put a `board.json` next to
+  `config.yaml` to have sessions started in the repositories you list written
+  to an MCP board (for example a Many Iris board): an item when the session
+  starts, each DONE summary as a note, and `done` when it ends. Nothing is sent
+  without the file, for unlisted repositories, or in trial runtimes. The writer
+  key is read from a file you name and never logged. See
+  `docs/manual_board-sync.md`.
+
 ## [0.10.0] - Unreleased
 
 This release replaces the Go implementation of many-ai-cli with a Rust one.
