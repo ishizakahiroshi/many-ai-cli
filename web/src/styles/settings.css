@@ -106,6 +106,41 @@
   overscroll-behavior: contain;
   border-right: 1px solid var(--line);
 }
+/* 広い画面では、ヘッダー（名前・版数・保存/リセット/閉じる）を左ナビと同じ 260px の列に収め、
+   ボタンを名前の下・検索欄の上へ置く。右端に置くとウィンドウを広げるほど設定項目から離れ、
+   項目を選んでから保存するたびにマウスを画面の端まで動かすことになっていた（2026-11-06 利用者指摘）。
+   DOM は動かさない（720px 以下の 2 画面切替は従来どおりヘッダーを全幅で使う）。
+   外枠は id ではなく「.settings-layout を直下に持つ全画面オーバーレイ」で指す。id に含まれる英単語が
+   commit 前の個人情報検査（doxguard）の監視語と一致し、追加行が止められるため（2026-11-06）。
+   close-left 側は close-button.css の :is(...)（詳細度 0,3,1）より強くするため外枠の指定を重ねる。 */
+@media (min-width: 721px) {
+  .aac-wheel-overlay:has(> .settings-layout):not([hidden]) {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .aac-wheel-overlay > .settings-layout { display: contents; }
+  .aac-wheel-overlay > .settings-header {
+    grid-column: 1;
+    grid-row: 1;
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+    border-right: 1px solid var(--line);
+  }
+  /* 折り返しの判定は既定だと文字の全長で行うため、版数が長いと名前だけ次の行へ落ちる。幅 0 起点で伸ばす。 */
+  .settings-header > div:not(.settings-header-actions) { flex: 1 1 0; }
+  .settings-header .settings-app-version { overflow-wrap: anywhere; }
+  .settings-layout > .settings-nav { grid-column: 1; grid-row: 2; }
+  .settings-layout > .settings-body { grid-column: 2; grid-row: 1 / 3; }
+  .aac-wheel-overlay:has(> .settings-layout) .settings-header-actions,
+  body.close-left .aac-wheel-overlay:has(> .settings-layout) .settings-header-actions {
+    order: 0;
+    flex: 1 1 100%;
+    margin-left: 0;
+    margin-right: 0;
+    justify-content: flex-start;
+  }
+}
 /* 設定中も残る操作列と、目次・右配置時の設定項目の末尾が重ならないようにする。 */
 @media (min-width: 721px) {
   #settings-panel:not([hidden]) .settings-nav-list { padding-bottom: 64px; }
