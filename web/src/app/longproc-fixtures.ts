@@ -42,6 +42,17 @@ test('longproc: a growing transcript keeps a long turn at warn, not stalled', ()
   assert.equal(s.stalledSec, 60);
 });
 
+test('longproc: an active background workflow suppresses the stall but keeps the elapsed badge', () => {
+  // 本体の transcript が 50 分伸びていなくても、背景 Workflow の完了待ちは正常。
+  const waiting = longprocStatus(60 * 60, iso(50 * 60), NOW, true);
+  assert.equal(waiting.level, 'severe');
+  assert.equal(waiting.stalledSec, 50 * 60);
+  assert.equal(longprocStatus(LONGPROC_SEC, iso(50 * 60), NOW, true).level, 'warn');
+  // Workflow が無ければ（既定）これまでどおり停滞と判定する。
+  assert.equal(longprocStatus(60 * 60, iso(50 * 60), NOW, false).level, 'stalled');
+  assert.equal(longprocStatus(60 * 60, iso(50 * 60), NOW).level, 'stalled');
+});
+
 test('longproc: an unknown transcript time never reports a stall', () => {
   // Hub がまだ transcript を特定できていないケース。停滞 0 として扱い誤報を出さない。
   assert.equal(transcriptStalledSec(undefined, NOW), 0);

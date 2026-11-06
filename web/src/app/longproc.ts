@@ -40,15 +40,20 @@ export function transcriptStalledSec(grewAt: string | undefined | null, nowMs: n
 /**
  * elapsedSec が null（running でない）なら常に 'none'。
  * transcript の停滞は経過時間より優先する（そちらのほうが強い証拠のため）。
+ *
+ * workflowActive が真（Hub が、まだ終わっていない背景 Workflow を持っている）のあいだは
+ * 'stalled' を返さない。背景 Workflow の完了待ちでは仕事が子エージェントのログ側で進み、
+ * 本体の transcript は正常でも伸びないため。経過時間による warn / severe は事実なので残す。
  */
 export function longprocStatus(
   elapsedSec: number | null,
   grewAt: string | undefined | null,
   nowMs: number,
+  workflowActive = false,
 ): LongprocStatus {
   if (elapsedSec == null) return { level: 'none', elapsedSec: 0, stalledSec: 0 };
   const stalledSec = transcriptStalledSec(grewAt, nowMs);
-  if (stalledSec >= STALL_SEC) return { level: 'stalled', elapsedSec, stalledSec };
+  if (!workflowActive && stalledSec >= STALL_SEC) return { level: 'stalled', elapsedSec, stalledSec };
   if (elapsedSec >= LONGPROC_SEVERE_SEC) return { level: 'severe', elapsedSec, stalledSec };
   if (elapsedSec >= LONGPROC_SEC) return { level: 'warn', elapsedSec, stalledSec };
   return { level: 'none', elapsedSec, stalledSec };

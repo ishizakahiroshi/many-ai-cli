@@ -18,6 +18,12 @@ pattern!(CSI, r"\x1b\[[0-9;?]*[ -/]*[@-~]");
 pattern!(OSC, r"\x1b\][^\x07]*(?:\x07|\x1b\\)");
 pattern!(TREE, r"^[\s\x{00A0}│├└─╰╭╮╯┃┣┗┏┓┛┆┊▕▏▸▹‣•·⎿]+");
 pattern!(HEADER, r"(?i)\bworkflows?\b");
+// 見出しにしてよい「workflow」は行頭（直前に状態グリフ 1 個だけ許す: `● Workflow(x)`）。
+// 散文の途中の語（`…いまは Workflow が裏で動いています`）や、`● ` で始まる発言行は見出しにしない。
+pattern!(
+    HEADER_LEAD,
+    r"(?i)^(?:[^\p{L}\p{N}\t\n\x0c\r ]\s+)?workflows?\b"
+);
 pattern!(SUMMARY, r"(?i)([0-9]{1,4})\s*/\s*([0-9]{1,4})\s+agents?\b");
 pattern!(
     WAIT,
@@ -38,7 +44,7 @@ fn compact(line: &str) -> String {
     line.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 fn header(line: &str) -> Option<String> {
-    if TIP.is_match(line.trim()) || (!line.contains('⚙') && !HEADER.is_match(line)) {
+    if TIP.is_match(line.trim()) || (!line.contains('⚙') && !HEADER_LEAD.is_match(line.trim())) {
         return None;
     }
     let name = HEADER.replace_all(&line.replace('⚙', ""), "").into_owned();
@@ -166,11 +172,18 @@ pub fn parse(lines: &[String]) -> Option<WorkflowProgress> {
     let mut pending = String::new();
     let mut percent = None;
     let mut has_summary = false;
+    let mut past_wait = false;
     for (i, raw) in lines.iter().enumerate().skip(start) {
         if i > start && BOUNDARY.is_match(&ansi(raw)) {
             break;
         }
         let line = tree(raw);
+        // 「待ち」の行より下は入力欄の上の案内（アップデート通知など）で、ツリーではない。
+        // エージェント行・フェーズ見出し・割合はここから先を読まない（集計行だけは読む）。
+        if i > start && WAIT.is_match(&line) {
+            past_wait = true;
+            continue;
+        }
         if line.is_empty() {
             continue;
         }
@@ -183,7 +196,7 @@ pub fn parse(lines: &[String]) -> Option<WorkflowProgress> {
             has_summary = true;
             continue;
         }
-        if i == start {
+        if i == start || past_wait {
             continue;
         }
         if let Some(agent) = agent(&line) {
@@ -242,4 +255,57 @@ pub fn parse(lines: &[String]) -> Option<WorkflowProgress> {
         percent.unwrap_or((progress.done + progress.failed) * 100 / progress.total)
     };
     Some(progress)
+}
+#[cfg(test)]
+mod tests {
+    use super::parse;
+    fn lines(rows: &[&str]) -> Vec<String> {
+        rows.iter().map(|row| row.to_string()).collect()
+    }
+    // 2026-11-06 の背景 Workflow 実行中の画面末尾を、スクリーンショットから起こした再構成
+    // （実物の VT ミラーではない）。散文に単語 Workflow があり、「待ち」の行の下に
+    // アップデート通知が出る。
+    #[test]
+    fn prose_and_update_notice_around_the_waiting_line_are_not_a_workflow_tree() {
+        let tail = lines(&[
+            "● C1（棚卸し）と C3（静的検査）は終わり、いまは Workflow が裏で動いています。",
+            "ソースには手を入れていません（tracked ファイルの差分は 0 件）。Workflow が終わったら、通知を受けて反証の結果を集計し、report と HTML",
+            "を仕上げます。",
+            "",
+            "* Waiting for 1 dynamic workflow to finish",
+            "                                      ✔ Update installed · Restart to update",
+            "──────────────────────────────────── ultracode ─",
+            "❯",
+        ]);
+        let progress = parse(&tail).expect("the waiting line alone is a signal");
+        assert_eq!(progress.waiting_dynamic, 1);
+        assert_eq!((progress.total, progress.done), (0, 0));
+        assert!(progress.phases.is_empty());
+    }
+    #[test]
+    fn rows_below_the_waiting_line_are_not_agents_even_under_a_real_header() {
+        let tail = lines(&[
+            "⚙ Workflow review",
+            "  ● explore-a",
+            "  ✔ explore-b",
+            "* Waiting for 1 dynamic workflow to finish",
+            "  ✔ Update installed · Restart to update",
+            "──────────────",
+            "❯",
+        ]);
+        let progress = parse(&tail).unwrap();
+        assert_eq!((progress.total, progress.done, progress.running), (2, 1, 1));
+        assert_eq!(progress.waiting_dynamic, 1);
+    }
+    #[test]
+    fn a_tool_call_line_with_a_leading_glyph_is_still_a_header() {
+        let tail = lines(&["● Workflow(review-changes)", "  ✔ agent-1", "  ● agent-2"]);
+        let progress = parse(&tail).unwrap();
+        assert_eq!((progress.total, progress.done), (2, 1));
+    }
+    #[test]
+    fn a_prose_line_that_merely_mentions_workflow_is_not_a_header() {
+        let tail = lines(&["いまは Workflow が動いています。", "  ✔ Update installed"]);
+        assert!(parse(&tail).is_none());
+    }
 }

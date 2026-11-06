@@ -190,14 +190,24 @@ pub fn compose(
     let Some(journal) = journal else {
         return Some(output);
     };
+    // 端末の件数を権威にしてよいのは「N/M agents」の集計行があるときだけ。M は
+    // まだ開始していない分も含む全体数で、journal の開始数より正しい。集計行が無い
+    // （エージェント行を数えただけ・「待ち」の行だけ）ときは、画面の誤読（通知行が
+    // 完了エージェント 1 件になる等）が journal の実数を潰さないよう journal を使う。
+    let summary_total = output.source == "vt-summary" && output.total > 0;
     output.detected = true;
     output.source = "journal".into();
-    output.done = journal.done;
-    if output.total > 0 && output.done > output.total {
-        output.done = output.total
-    }
-    if output.total == 0 {
-        output.total = journal.total.max(started)
+    if summary_total {
+        output.done = journal.done.min(output.total);
+    } else {
+        output.total = output.total.max(journal.total).max(started);
+        output.done = journal.done.min(output.total);
+        output.pending = 0;
+        output.running = if journal.settled {
+            0
+        } else {
+            (output.total - output.done - output.failed).max(0)
+        };
     }
     if output.total > 0 {
         output.percent = (output.done * 100 / output.total).min(100)
@@ -307,5 +317,100 @@ mod tests {
         assert_eq!(composed.name, "review");
         assert_eq!(composed.source, "journal");
         assert_eq!(composed.settled_by, "journal");
+    }
+    #[test]
+    fn journal_counts_replace_a_misread_terminal_count_when_there_is_no_summary_line() {
+        // 通知行を完了エージェント 1 件と誤読した端末側（1/1・100%）と、journal の実数。
+        let vt = WorkflowProgress {
+            detected: true,
+            source: "vt-tree".into(),
+            total: 1,
+            done: 1,
+            percent: 100,
+            waiting_dynamic: 1,
+            ..Default::default()
+        };
+        let journal = WorkflowProgress {
+            detected: true,
+            total: 24,
+            done: 20,
+            ..Default::default()
+        };
+        let composed = compose(Some(&vt), Some(&journal), 24).unwrap();
+        assert_eq!(
+            (
+                composed.done,
+                composed.total,
+                composed.percent,
+                composed.running
+            ),
+            (20, 24, 83, 4)
+        );
+        assert!(!composed.settled);
+        assert_eq!(composed.source, "journal");
+    }
+    #[test]
+    fn journal_counts_are_used_when_the_terminal_only_shows_the_waiting_line() {
+        let vt = WorkflowProgress {
+            detected: true,
+            source: "vt-summary".into(),
+            waiting_dynamic: 1,
+            ..Default::default()
+        };
+        let journal = WorkflowProgress {
+            detected: true,
+            total: 24,
+            done: 23,
+            ..Default::default()
+        };
+        let composed = compose(Some(&vt), Some(&journal), 24).unwrap();
+        assert_eq!(
+            (composed.done, composed.total, composed.running),
+            (23, 24, 1)
+        );
+    }
+    #[test]
+    fn a_summary_line_total_stays_authoritative_over_the_journal_started_count() {
+        // 「N/M agents」の M は未開始分を含む全体数。journal の開始数で小さくしない。
+        let vt = WorkflowProgress {
+            detected: true,
+            source: "vt-summary".into(),
+            total: 90,
+            done: 43,
+            running: 47,
+            ..Default::default()
+        };
+        let journal = WorkflowProgress {
+            detected: true,
+            total: 50,
+            done: 40,
+            ..Default::default()
+        };
+        let composed = compose(Some(&vt), Some(&journal), 50).unwrap();
+        assert_eq!((composed.done, composed.total), (40, 90));
+    }
+    #[test]
+    fn a_settled_journal_without_summary_leaves_nothing_running() {
+        let vt = WorkflowProgress {
+            detected: true,
+            source: "vt-tree".into(),
+            total: 1,
+            done: 1,
+            ..Default::default()
+        };
+        let journal = WorkflowProgress {
+            detected: true,
+            total: 24,
+            done: 24,
+            settled: true,
+            settled_by: "journal".into(),
+            ..Default::default()
+        };
+        let composed = compose(Some(&vt), Some(&journal), 24).unwrap();
+        assert_eq!(
+            (composed.done, composed.total, composed.running),
+            (24, 24, 0)
+        );
+        assert!(composed.settled);
     }
 }

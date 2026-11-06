@@ -43,6 +43,11 @@ This release replaces the Go implementation of many-ai-cli with a Rust one.
   0.9 s, slowest 4.0 s). The cause has not been found.
 
 ### Fixed
+- Fix the Workflow progress display while a background Workflow runs: it no longer
+  reads the "Update installed" notice as a finished agent (which showed 1/1 and
+  100%), shows the real count from the Workflow journal instead, and the
+  "not progressing" warning is no longer shown while a background Workflow is
+  still running.
 - Fix Windows terminal disposal during process startup: terminate the owned Job
   and observe the root exit and an empty Job before closing ConPTY, preventing
   startup-close initialization errors. Ctrl+C input remains a separate operation.

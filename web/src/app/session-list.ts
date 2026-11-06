@@ -23,7 +23,7 @@ import { doneSummaryDisplayText, doneSummaryKindSuffix, doneSummaryLine, getDone
 import { setActiveSessionForPayload } from './chat-payload.js';
 import { FilesTabManager } from './files-view.js';
 import { dirnameForPath } from './path-links.js';
-import { getHubWorkflowEntry, isHubWorkflowAuthoritative } from './workflow-store.js';
+import { getHubWorkflowEntry, hasActiveHubWorkflow, isHubWorkflowAuthoritative } from './workflow-store.js';
 import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
 import { openRelayDialog } from './relay-dialog.js';
 import { openDeriveDialog } from './derive-dialog.js';
@@ -682,7 +682,7 @@ function cardStatusRowHtml(s) {
   const sec = cardTurnElapsedSec(s.id, state);
   // 稼働経過秒（⏱ 48s 等）はユーザー要望により非表示。長時間処理の⚠バッジのみ残す。
   // バッジには経過を併記する（5 分と 38 分が同じ見た目だと区別できないため）。
-  const lp = longprocStatus(sec, s.transcript_grew_at, Date.now());
+  const lp = longprocStatus(sec, s.transcript_grew_at, Date.now(), hasActiveHubWorkflow(Number(s.id)));
   if (lp.level !== 'none') {
     const stalled = lp.level === 'stalled';
     const label = stalled

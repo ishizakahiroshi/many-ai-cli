@@ -6,6 +6,7 @@ import {
   extrapolatedWorkflowElapsedSec,
   getHubWorkflowEntry,
   getWorkflowLedger,
+  hasActiveHubWorkflow,
   recordWorkflowDoneLabels,
   removeWorkflowStore,
   resetWorkflowStoreForTest,
@@ -228,6 +229,26 @@ function hubProgress(patch: Partial<HubWorkflowProgress> = {}): HubWorkflowProgr
   };
 }
 
+test('workflow store: hasActiveHubWorkflow は未完了の新鮮な Hub Workflow だけ真', () => {
+  resetWorkflowStoreForTest();
+  const at = 1_000_000;
+  assert.equal(hasActiveHubWorkflow(9, at), false); // エントリ無し
+  setHubWorkflowProgress(9, hubProgress({ done: 20, total: 24 }), at);
+  assert.equal(hasActiveHubWorkflow(9, at + 1_000), true);
+  // 古い（権威でなくなった）未完了スナップショットは根拠にしない。
+  assert.equal(hasActiveHubWorkflow(9, at + WORKFLOW_WS_FRESH_MS + 1), false);
+  // 総数が不明でも「待ち」の行があれば実行中。
+  setHubWorkflowProgress(9, hubProgress({ done: 0, total: 0, waiting_dynamic: 1 }), at);
+  assert.equal(hasActiveHubWorkflow(9, at + 1_000), true);
+  // 完了（settled）・全件完了・未検出は偽。
+  setHubWorkflowProgress(9, hubProgress({ done: 24, total: 24, settled: true, settled_by: 'journal' }), at);
+  assert.equal(hasActiveHubWorkflow(9, at + 1_000), false);
+  setHubWorkflowProgress(9, hubProgress({ done: 3, total: 3 }), at);
+  assert.equal(hasActiveHubWorkflow(9, at + 1_000), false);
+  setHubWorkflowProgress(9, hubProgress({ detected: false }), at);
+  assert.equal(hasActiveHubWorkflow(9, at + 1_000), false);
+});
+
 test('workflow store: fresh/settled Hub data outranks local fallback', () => {
   resetWorkflowStoreForTest();
   const at = 1_000_000;
@@ -280,4 +301,52 @@ test('workflow store: session removal clears Hub snapshot and ledger', () => {
   removeWorkflowStore(3);
   assert.equal(getHubWorkflowEntry(3), null);
   assert.deepEqual(getWorkflowLedger(3, 0), { labels: [], otherCount: 0 });
+});
+
+// 2026-11-06 の背景 Workflow 実行中の画面末尾を、スクリーンショットから起こした再構成
+// （実物の VT ミラーではない）。
+test('parseWorkflowProgress: 散文の Workflow と「待ち」の行の下の通知はツリーとして読まない', () => {
+  const r = parseWorkflowProgress([
+    '● C1（棚卸し）と C3（静的検査）は終わり、いまは Workflow が裏で動いています。',
+    'ソースには手を入れていません（tracked ファイルの差分は 0 件）。Workflow が終わったら、通知を受けて反証の結果を集計し、report と HTML',
+    'を仕上げます。',
+    '',
+    '* Waiting for 1 dynamic workflow to finish',
+    '                                      ✔ Update installed · Restart to update',
+    '──────────────────────────────────── ultracode ─',
+    '❯',
+  ]);
+  assert.equal(r.waitingDynamic, 1);
+  assert.equal(r.totalCount, 0);
+  assert.equal(r.doneCount, 0);
+  assert.equal(r.phases.length, 0);
+});
+
+test('parseWorkflowProgress: 実見出しの下でも「待ち」の行より下の行はエージェントにしない', () => {
+  const r = parseWorkflowProgress([
+    '⚙ workflow review',
+    '  ● explore-a',
+    '  ✔ explore-b',
+    '* Waiting for 1 dynamic workflow to finish',
+    '  ✔ Update installed · Restart to update',
+    '──────────────',
+    '❯',
+  ]);
+  assert.equal(r.waitingDynamic, 1);
+  assert.equal(r.totalCount, 2);
+  assert.equal(r.doneCount, 1);
+  assert.equal(r.runningCount, 1);
+});
+
+test('parseWorkflowProgress: 先頭に状態グリフが付いたツール呼び出し行は見出しのまま', () => {
+  const r = parseWorkflowProgress(['● Workflow(review-changes)', '  ✔ agent-1', '  ● agent-2']);
+  assert.equal(r.detected, true);
+  assert.equal(r.totalCount, 2);
+  assert.equal(r.doneCount, 1);
+});
+
+test('parseWorkflowProgress: 散文が単語 workflow に触れるだけの行は見出しにしない', () => {
+  const r = parseWorkflowProgress(['いまは Workflow が動いています。', '  ✔ Update installed']);
+  assert.equal(r.detected, false);
+  assert.equal(r.totalCount, 0);
 });

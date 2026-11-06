@@ -49,6 +49,7 @@ import {
   type TerminalScreenSnapshot,
 } from './terminal-history-strategy.js';
 import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
+import { hasActiveHubWorkflow } from './workflow-store.js';
 // 帯の状態記号は独自に作らず、サイドバーのカード・セッション帯（タブ）と同じものを借りる。
 // 同じセッションの同じ状態が画面内で 2 通りの形・色に見えないようにするため、意味づけの
 // 正本（stateActivityDecoration）と形の正本（stateIconSvgHtml）はどちらも session-list.ts。
@@ -2198,7 +2199,7 @@ export function syncLiveStatusLongproc(): void {
   if (!since) { since = Date.now(); liveStatusRunningSince.set(id, since); }
   const now = Date.now();
   const sec = Math.max(0, Math.floor((now - since) / 1000));
-  const status = longprocStatus(sec, ses?.transcript_grew_at, now);
+  const status = longprocStatus(sec, ses?.transcript_grew_at, now, hasActiveHubWorkflow(id, now));
   let badge = lp;
   if (!badge) {
     badge = document.createElement('span');

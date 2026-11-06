@@ -74,6 +74,18 @@ export function isHubWorkflowAuthoritative(
   return entry.progress.settled || now - entry.receivedAt <= WORKFLOW_WS_FRESH_MS;
 }
 
+/**
+ * Hub が、まだ終わっていない Workflow を持っているか。背景 Workflow の完了待ちの判定に使う
+ * （本体の transcript が伸びなくても正常なので、「応答が進んでいません」を出さない根拠）。
+ */
+export function hasActiveHubWorkflow(sessionId: number, now = Date.now()): boolean {
+  const entry = getHubWorkflowEntry(sessionId);
+  if (!entry || !isHubWorkflowAuthoritative(entry, now)) return false;
+  const p = entry.progress;
+  if (!p.detected || p.settled) return false;
+  return Number(p.waiting_dynamic || 0) > 0 || Number(p.total || 0) > Number(p.done || 0);
+}
+
 export function chooseWorkflowSource(
   entry: HubWorkflowEntry | null | undefined,
   hasLocalFallback: boolean,

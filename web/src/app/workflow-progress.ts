@@ -159,10 +159,15 @@ const INPUT_BOUNDARY_RE = new RegExp('^[\\s' + NBSP_CHAR + '─━═]*[─━�
 const TIP_LINE_RE = /^tip[:：]/i;
 
 // Workflow 見出し行か（⚙ か "workflow" を含む）。name 抽出も兼ねる。
+// 見出しにしてよい「workflow」は行頭（直前に状態グリフ 1 個だけ許す: `● Workflow(x)`）。
+// 散文の途中の語や、`● ` で始まる発言行（`● …いまは Workflow が裏で…`）は見出しにしない
+// （Rust 側 `workflow.rs` の HEADER_LEAD と同じ条件）。
+const HEADER_LEAD_RE = /^(?:[^\p{L}\p{N}\s]\s+)?workflow\b/iu;
+
 function matchHeader(stripped: string): { name: string } | null {
   if (TIP_LINE_RE.test(stripped.trim())) return null;
   const hasGear = stripped.includes('⚙');
-  const hasWord = /\bworkflow\b/i.test(stripped);
+  const hasWord = HEADER_LEAD_RE.test(stripped.trim());
   if (!hasGear && !hasWord) return null;
   let name = stripped
     .replace(/⚙/g, '')
@@ -273,18 +278,23 @@ export function parseWorkflowProgress(lines: string[]): WorkflowProgress {
   // 「N/M agents done」サマリー（権威信号）。最後の値と生行（経過時間込み）を保持。
   let summary: { done: number; total: number } | null = null;
   let summaryRaw = '';
+  // 「*Waiting for N dynamic workflow to finish」の行より下は入力欄の上の案内
+  // （アップデート通知など）でツリーではない。エージェント行・フェーズ見出し・割合は
+  // ここから先を読まない（集計行だけは読む）。Rust 側 `workflow.rs` の past_wait と同じ。
+  let pastWait = false;
 
   for (let i = 0; i < block.length; i++) {
     // 見出し行より下で入力欄の区切りに達したら打ち切る（下は常時表示の UI）。
     if (i > 0 && INPUT_BOUNDARY_RE.test(block[i])) break;
     const stripped = stripTree(block[i]);
     if (!stripped) continue;
+    if (i > 0 && matchWaitingDynamic(stripped) !== null) { pastWait = true; continue; }
 
     // agents サマリーは見出し行自体でも拾う（背景実行時は起点行が summary 行のため）。
     const sum = matchAgentsSummary(stripped);
     if (sum) { summary = sum; summaryRaw = stripped; continue; }
 
-    if (i === 0) continue; // 見出し行自体はスキップ（name は採取済み）
+    if (i === 0 || pastWait) continue; // 見出し行自体はスキップ（name は採取済み）
 
     const agent = matchAgentRow(stripped);
     if (agent) {
