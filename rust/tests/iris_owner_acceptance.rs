@@ -1,5 +1,8 @@
 //! Independent owner acceptance: native local fixtures, no Hub or provider.
 //! A fixture exit or caller boolean is never treated as cessation authority.
+// The native fixtures below serve only the `cfg(windows)` tests; other
+// targets compile the shared helpers without using them.
+#![cfg_attr(not(windows), allow(dead_code, unused_imports))]
 use many_ai_cli::process::{
     ProcessPlan,
     pty::{NativePtyFactory, PtyFactory, PtySession, PtySize},
