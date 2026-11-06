@@ -73,9 +73,15 @@ export function previewPaneDrop(layout: FlexibleLayout, content: PaneContent):
   return { layout: copy, suggestedIdx, existing: false };
 }
 
-export function paneLayoutKey(scope: unknown, projectKey: unknown): string {
-  return scope === 'box' && typeof projectKey === 'string' && projectKey.length > 0
-    ? `box:${projectKey}` : 'all';
+/**
+ * The saved layout for a scope. 'tab' is namespaced like 'box' so manual placements
+ * stay separate per sidebar tab. An empty key falls back to the shared 'all' layout.
+ */
+export function paneLayoutKey(scope: unknown, key: unknown): string {
+  if (typeof key !== 'string' || key.length === 0) return 'all';
+  if (scope === 'box') return `box:${key}`;
+  if (scope === 'tab') return `tab:${key}`;
+  return 'all';
 }
 
 /** A session's related views stay separate from the cross-session overview. */
@@ -139,7 +145,8 @@ export function normalizeFlexibleLayouts(raw: unknown): FlexibleLayouts {
   const result: FlexibleLayouts = {};
   for (const [key, entry] of Object.entries(value).slice(0, 201)) {
     const sessionKey = /^session:([1-9]\d*):(.{1,256})$/.exec(key);
-    if (key !== 'all' && (!key.startsWith('box:') || key.length > 516) && !sessionKey) continue;
+    const scopeWorkspace = (key.startsWith('box:') || key.startsWith('tab:')) && key.length <= 516;
+    if (key !== 'all' && !scopeWorkspace && !sessionKey) continue;
     const layout = normalizeFlexibleLayout(entry);
     if (!layout) continue;
     if (sessionKey) {
@@ -158,7 +165,8 @@ export function normalizeFlexibleLayouts(raw: unknown): FlexibleLayouts {
 export function migrateSessionTabsToWorkspaces(layouts: FlexibleLayouts): boolean {
   let changed = false;
   for (const [key, overview] of Object.entries(layouts)) {
-    if (key !== 'all' && !key.startsWith('box:')) continue;
+    // 'tab:'（サイドバーのタブの概観）も 'box:' と同じ経路で session 付きのタブを受けるので、同じく移す。
+    if (key !== 'all' && !key.startsWith('box:') && !key.startsWith('tab:')) continue;
     overview.slots.forEach((slot, idx) => {
       if (!slot || slot.kind !== 'tab' || slot.sessionId == null || !slot.startedAt) return;
       const workspaceKey = sessionPaneLayoutKey(slot.sessionId, slot.startedAt);

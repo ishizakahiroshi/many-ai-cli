@@ -160,6 +160,10 @@
   outline-offset: -2px;
 }
 
+/* タブのチップと範囲の固定（plan_multi-tab-scope.md C4）。配置だけを持つ。
+   見た目（色・枠・角丸）は .session-strip-scope-btn の既存の宣言に従う。 */
+.session-strip-scope-pin { flex-shrink: 0; margin-left: 6px; }
+
 /* 押せない「この箱だけ」の包み。理由のツールチップはここが持つ（disabled な button は
    マウスイベントを出さないので、包みが無いと理由を読む手段が無くなる）。 */
 .session-strip-scope-hint { display: inline-flex; min-width: 0; }

@@ -17,6 +17,7 @@ import {
   MULTI_SCOPE_ALL,
   MULTI_SCOPE_BOX,
   MULTI_SCOPE_DEFAULT_ASK,
+  MULTI_SCOPE_TAB,
   autoGrowGrid,
   computeRenderPlan,
   effectiveScope,
@@ -30,7 +31,9 @@ import {
   rebuildOrder,
   reorderForScope,
   repoChipsFor,
+  resolveTabScope,
   scopeOnOpen,
+  shrinkGridToFit,
   swapIntoSlot,
   visibleIdsFor,
 } from './multi-scope.js';
@@ -45,14 +48,27 @@ const KEYS = new Map<number, string>([
 ]);
 const keyOf = (id: number) => KEYS.get(id) ?? null;
 
+// セッション ID → タブ。1/3/5 がタブ 1、2/4/6 がタブ 2（箱とは別の切り方）。
+const TABS = new Map<number, string>([
+  [1, 'tab-1'], [2, 'tab-2'], [3, 'tab-1'], [4, 'tab-2'], [5, 'tab-1'], [6, 'tab-2'],
+]);
+const tabOf = (id: number) => TABS.get(id) ?? null;
+
 /** 1 回ぶんの render。multi-pane.ts の render() が呼ぶのと同じ関数を同じ順で通す。 */
-function renderOnce(prevOrder: number[], scope: string, openKey: string | null, live: number[], capacity = 4) {
+function renderOnce(
+  prevOrder: number[],
+  scope: string,
+  openKey: string | null,
+  live: number[],
+  capacity = 4,
+  resolver: (id: number) => string | null | undefined = keyOf,
+) {
   return computeRenderPlan({
     prevOrder,
     liveSortedIds: live,
     scope,
     openProjectKey: openKey,
-    projectKeyOf: keyOf,
+    projectKeyOf: resolver,
     capacity,
   });
 }
@@ -62,10 +78,12 @@ function renderOnce(prevOrder: number[], scope: string, openKey: string | null, 
 test('知らない保存値は「全部」へ倒れる', () => {
   assert.equal(normalizeScope('box'), MULTI_SCOPE_BOX);
   assert.equal(normalizeScope('all'), MULTI_SCOPE_ALL);
+  assert.equal(normalizeScope('tab'), MULTI_SCOPE_TAB);
   assert.equal(normalizeScope(''), MULTI_SCOPE_ALL);
   assert.equal(normalizeScope(null), MULTI_SCOPE_ALL);
   assert.equal(normalizeScope(undefined), MULTI_SCOPE_ALL);
   assert.equal(normalizeScope('BOX'), MULTI_SCOPE_ALL);
+  assert.equal(normalizeScope('TAB'), MULTI_SCOPE_ALL);
   assert.equal(normalizeScope({ scope: 'box' }), MULTI_SCOPE_ALL);
 });
 
@@ -74,6 +92,12 @@ test('どの箱も開いていなければ「この箱だけ」は「全部」�
   assert.equal(effectiveScope('box', ''), MULTI_SCOPE_ALL);
   assert.equal(effectiveScope('box', BOX_A), MULTI_SCOPE_BOX);
   assert.equal(effectiveScope('all', BOX_A), MULTI_SCOPE_ALL);
+});
+
+test('タブが決まっていなければ「このタブだけ」は「全部」として効く', () => {
+  assert.equal(effectiveScope('tab', null), MULTI_SCOPE_ALL);
+  assert.equal(effectiveScope('tab', ''), MULTI_SCOPE_ALL);
+  assert.equal(effectiveScope('tab', 'tab-1'), MULTI_SCOPE_TAB);
 });
 
 // ---- 並び順の再構築 ---------------------------------------------------------
@@ -139,6 +163,21 @@ test('visibleIdsFor は order を書き換えない', () => {
   assert.deepEqual(order, [1, 2, 3, 4]);
   visible.push(99);
   assert.deepEqual(order, [1, 2, 3, 4], '戻り値はコピー');
+});
+
+test('「このタブだけ」にしても、保存する並び順には他のタブのセッションが残る', () => {
+  const live = [1, 2, 3, 4, 5, 6];
+  const plan = renderOnce([1, 2, 3, 4, 5, 6], 'tab', 'tab-1', live, 4, tabOf);
+  assert.deepEqual(plan.order, [1, 2, 3, 4, 5, 6], 'order は全件のまま');
+  assert.deepEqual(plan.visibleIds, [1, 3, 5], '表示はタブ 1 だけ');
+  assert.equal(plan.effectiveScope, MULTI_SCOPE_TAB);
+});
+
+test('「このタブだけ」の絞り込みは、箱の絞り込みとは別のキーで解決する', () => {
+  const order = [1, 2, 3, 4];
+  assert.deepEqual(visibleIdsFor(order, 'tab', 'tab-2', tabOf), [2, 4]);
+  assert.deepEqual(visibleIdsFor(order, 'tab', null, tabOf), order, 'キーが無ければ全部');
+  assert.deepEqual(visibleIdsFor(order, 'box', BOX_A, keyOf), [1, 3], '箱は従来どおり');
 });
 
 // ---- スロットとあふれ -------------------------------------------------------
@@ -239,6 +278,7 @@ test('開いたときの既定は、知らない値・未設定なら「毎回�
   assert.equal(normalizeScopeDefault('BOX'), MULTI_SCOPE_DEFAULT_ASK);
   assert.equal(normalizeScopeDefault('box'), MULTI_SCOPE_BOX);
   assert.equal(normalizeScopeDefault('all'), MULTI_SCOPE_ALL);
+  assert.equal(normalizeScopeDefault('tab'), MULTI_SCOPE_TAB);
 });
 
 test('既定が決まっていれば、前回の切り替えを持ち越さずにそれで開く', () => {
@@ -249,6 +289,57 @@ test('既定が決まっていれば、前回の切り替えを持ち越さず�
 test('「毎回聞く」は今の範囲のまま聞く。リポが無ければ聞かない', () => {
   assert.deepEqual(scopeOnOpen(null, 'box', true), { scope: MULTI_SCOPE_BOX, ask: true });
   assert.deepEqual(scopeOnOpen('ask', 'all', false), { scope: MULTI_SCOPE_ALL, ask: false });
+});
+
+test('「このタブだけ」の既定は、タブが 2 つ以上あるときだけ使う', () => {
+  assert.deepEqual(scopeOnOpen('tab', 'all', false, true), { scope: MULTI_SCOPE_TAB, ask: false });
+  assert.deepEqual(scopeOnOpen('tab', 'all', false, false), { scope: MULTI_SCOPE_ALL, ask: false });
+});
+
+test('タブが 1 つだけなら、保存値の tab は all として開く', () => {
+  assert.deepEqual(scopeOnOpen('ask', 'tab', false, false), { scope: MULTI_SCOPE_ALL, ask: false });
+  assert.deepEqual(scopeOnOpen('ask', 'tab', false, true), { scope: MULTI_SCOPE_TAB, ask: true });
+});
+
+test('タブが選べるときは、リポが無くても開くたびに聞く', () => {
+  assert.deepEqual(scopeOnOpen('ask', 'all', false, true), { scope: MULTI_SCOPE_ALL, ask: true });
+  assert.deepEqual(scopeOnOpen('ask', 'box', true, true), { scope: MULTI_SCOPE_BOX, ask: true });
+});
+
+test('選べない範囲は既定にしない（リポが無いときの box も all へ）', () => {
+  assert.deepEqual(scopeOnOpen('box', 'all', false), { scope: MULTI_SCOPE_ALL, ask: false });
+  assert.deepEqual(scopeOnOpen('tab', 'all', true, false), { scope: MULTI_SCOPE_ALL, ask: false });
+});
+
+// ---- タブに固定した範囲 -------------------------------------------------------
+
+test('固定が無ければ端末の範囲に従う', () => {
+  assert.deepEqual(resolveTabScope('box', {}, 'tab-1'), { scope: MULTI_SCOPE_BOX, pinned: false });
+  assert.deepEqual(resolveTabScope('unknown', {}, 'tab-1'), { scope: MULTI_SCOPE_ALL, pinned: false });
+});
+
+test('固定があればその範囲を使う', () => {
+  assert.deepEqual(resolveTabScope('all', { 'tab-1': 'tab' }, 'tab-1'), { scope: MULTI_SCOPE_TAB, pinned: true });
+  assert.deepEqual(resolveTabScope('tab', { 'tab-1': 'box' }, 'tab-1'), { scope: MULTI_SCOPE_BOX, pinned: true });
+  assert.deepEqual(resolveTabScope('box', { 'tab-1': 'all' }, 'tab-1'), { scope: MULTI_SCOPE_ALL, pinned: true });
+});
+
+test('壊れた値・壊れた辞書・タブなしは端末の範囲へ落とす', () => {
+  assert.deepEqual(resolveTabScope('tab', { 'tab-1': 'bogus' }, 'tab-1'), { scope: MULTI_SCOPE_TAB, pinned: false });
+  assert.deepEqual(resolveTabScope('box', { 'tab-1': null }, 'tab-1'), { scope: MULTI_SCOPE_BOX, pinned: false });
+  assert.deepEqual(resolveTabScope('box', null, 'tab-1'), { scope: MULTI_SCOPE_BOX, pinned: false });
+  assert.deepEqual(resolveTabScope('box', [], 'tab-1'), { scope: MULTI_SCOPE_BOX, pinned: false });
+  assert.deepEqual(resolveTabScope('box', { 'tab-1': 'tab' }, null), { scope: MULTI_SCOPE_BOX, pinned: false });
+  assert.deepEqual(resolveTabScope('box', { 'tab-1': 'tab' }, ''), { scope: MULTI_SCOPE_BOX, pinned: false });
+});
+
+test('プロトタイプ汚染の鍵は固定として拾わない', () => {
+  // JSON.parse は __proto__ / constructor を「辞書の値」として持つ。拾ってはいけない。
+  const polluted = JSON.parse('{"__proto__":"tab","constructor":"box","tab-1":"tab"}');
+  assert.deepEqual(resolveTabScope('all', polluted, '__proto__'), { scope: MULTI_SCOPE_ALL, pinned: false });
+  assert.deepEqual(resolveTabScope('all', polluted, 'constructor'), { scope: MULTI_SCOPE_ALL, pinned: false });
+  assert.deepEqual(resolveTabScope('all', polluted, 'prototype'), { scope: MULTI_SCOPE_ALL, pinned: false });
+  assert.deepEqual(resolveTabScope('all', polluted, 'tab-1'), { scope: MULTI_SCOPE_TAB, pinned: true });
 });
 
 // ---- ピン留め ---------------------------------------------------------------
@@ -344,6 +435,29 @@ test('列 → 行の順に 1 つずつ広げる', () => {
 test('広げるのは 6×3 まで', () => {
   assert.deepEqual(autoGrowGrid(2, 2, 100), { cols: 6, rows: 3 });
   assert.deepEqual(autoGrowGrid(6, 1, 9), { cols: 6, rows: 2 });
+});
+
+// ---- 件数に合わせて枠を縮める -------------------------------------------------
+
+test('元の寸法の中で、件数が入る最小の枠へ縮める（1〜6 件 × 1×4 / 2×2 / 3×2）', () => {
+  // [元の cols, 元の rows, 件数, 期待 cols, 期待 rows]
+  const cases: [number, number, number, number, number][] = [
+    [1, 4, 1, 1, 1], [1, 4, 2, 1, 2], [1, 4, 3, 1, 3], [1, 4, 4, 1, 4], [1, 4, 5, 1, 4], [1, 4, 6, 1, 4],
+    [2, 2, 1, 1, 1], [2, 2, 2, 2, 1], [2, 2, 3, 2, 2], [2, 2, 4, 2, 2], [2, 2, 5, 2, 2], [2, 2, 6, 2, 2],
+    [3, 2, 1, 1, 1], [3, 2, 2, 2, 1], [3, 2, 3, 3, 1], [3, 2, 4, 2, 2], [3, 2, 5, 3, 2], [3, 2, 6, 3, 2],
+  ];
+  for (const [cols, rows, count, expectedCols, expectedRows] of cases) {
+    assert.deepEqual(shrinkGridToFit(cols, rows, count), { cols: expectedCols, rows: expectedRows },
+      `${cols}×${rows} に ${count} 件`);
+  }
+});
+
+test('件数が 0 以下なら 1×1、元の寸法より大きくはならない', () => {
+  assert.deepEqual(shrinkGridToFit(3, 2, 0), { cols: 1, rows: 1 });
+  assert.deepEqual(shrinkGridToFit(3, 2, -4), { cols: 1, rows: 1 });
+  assert.deepEqual(shrinkGridToFit(3, 2, Number.NaN), { cols: 1, rows: 1 });
+  assert.deepEqual(shrinkGridToFit(2, 2, 100), { cols: 2, rows: 2 }, '入りきらないときは元の寸法');
+  assert.deepEqual(shrinkGridToFit(1, 1, 1), { cols: 1, rows: 1 });
 });
 
 // ---- 上の段のリポ名 ---------------------------------------------------------

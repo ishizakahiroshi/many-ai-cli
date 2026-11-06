@@ -1,4 +1,4 @@
-import { openSessionListMoveDialog, sessionListMoveLabel, sessionListCanMove, wireSessionListMenu, restoreSessionListFocus, sessionListCardElement } from './session-list-tabs.js';
+import { openSessionListMoveDialog, sessionListMoveLabel, sessionListCanMove, wireSessionListMenu, restoreSessionListFocus, sessionListCardElement, isRestoringSessionListView, rememberSelectedSessionListView } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { confirmationLabels, type ConfirmationAction } from './confirmation-labels.js';
@@ -41,7 +41,7 @@ import { notifySettingsViewChanged } from './settings-visibility.js';
 import { setHandoffNoteMode, setHandoffNotifyThresholdPercent } from './handoff.js';
 import { applySessionStripMetrics, setSessionStripTab } from './session-strip.js';
 import { VALID_TAB_NAME_LIST } from './project-view-memory.js';
-import { saveProjectView } from './project-view-store.js';
+import { isRestoringProjectView, saveProjectView } from './project-view-store.js';
 import { DeviceSessionViews, readViewPreference, resolveReadingMode, saveViewPreference, type ViewDevice, type ViewPreferenceStorage } from './session-view-preferences.js';
 import { captureTerminalView, restoreTerminalView, terminalViewFollows } from './session-view-position.js';
 import { detectSupport } from '../vendor/vtype-core/index.js';
@@ -3435,6 +3435,18 @@ export function rememberTabForOpenProject(name: string): void {
   saveProjectView(openProjectKey, activeSessionId, name);
 }
 
+/**
+ * いまのタブが最後に見ていた表示を覚える（C3）。
+ *
+ * setActiveTab が画面を変えた後に呼ぶ。タブの記憶を戻している最中
+ * （isRestoringSessionListView）と箱の記憶を戻している最中（isRestoringProjectView）は
+ * 書かない。復元が記憶を上書きすると、往復しただけで表示が固定されてしまう。
+ */
+function rememberViewForSelectedListTab(name: string): void {
+  if (isRestoringSessionListView() || isRestoringProjectView()) return;
+  rememberSelectedSessionListView(name as any);
+}
+
 // C2 公開 API: タブを切り替える
 export let _setActiveTabRecursion = false;
 // マルチのタブが利用者のクリックで押されている最中か（wireUnifiedTabBar が立てて戻す）。
@@ -3471,7 +3483,9 @@ export function setActiveTab(sid, name) {
     // 利用者がタブを押して新しく開いた（または作業面から全体表示へ切り替えた）ときだけ、
     // 開いたときの範囲を決める。既に multi を表示中に押し直したとき（レイアウト選択の開閉）と、
     // D&D の分割など利用者のクリック以外から開いたときは聞かない。plan_multi-repo-scope.md
-    const freshOpen = _multiOpenFromTabClick && (!multiView || multiView.hidden || !!mgr?.workspaceSession);
+    // C3: タブの記憶を戻している最中は「開いた」扱いにしない（聞くカードを出さない）。
+    const freshOpen = !isRestoringSessionListView() && _multiOpenFromTabClick &&
+      (!multiView || multiView.hidden || !!mgr?.workspaceSession);
     if (multiView && !multiView.hidden && mgr?.workspaceSession) mgr.teardown();
     mgr?.setWorkspaceSession?.(null);
     const asking = freshOpen && typeof mgr?.onMultiOpened === 'function' ? !!mgr.onMultiOpened() : false;
@@ -3492,7 +3506,8 @@ export function setActiveTab(sid, name) {
       b.classList.toggle('active', b.dataset.tab === 'multi');
     });
     // 範囲を聞いている間はレイアウト選択を重ねて開かない（どちらに答えればよいか迷わせない）。
-    if (mgr && mgr.picker && !asking) mgr.picker.toggle();
+    // タブの記憶を戻している最中も開かない（復元がレイアウト選択を開いたままにしない）。
+    if (mgr && mgr.picker && !asking && !isRestoringSessionListView()) mgr.picker.toggle();
     // C4: 最後にフォーカスしていたスロットを復元 → activeSessionId を同期
     if (mgr) {
       const restoreIdx = (mgr.focusedIdx >= 0 && mgr.focusedIdx < mgr.slots.length)
@@ -3505,6 +3520,7 @@ export function setActiveTab(sid, name) {
     setSessionStripTab('multi');
     // C3: "Detach current grid" ボタンをタブバーに挿入（初回のみ生成）
     _ensureMultiDetachBtn();
+    rememberViewForSelectedListTab('multi');
     return;
   }
 
@@ -3544,6 +3560,7 @@ export function setActiveTab(sid, name) {
     if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
     // 承認タブはセッション非依存の集約ビュー。帯は隠す。
     setSessionStripTab(name);
+    rememberViewForSelectedListTab(name);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('session-view-mode-changed', {
         detail: { sid: activeSessionId, name },
@@ -3573,6 +3590,7 @@ export function setActiveTab(sid, name) {
     if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
     // オーケストレーションもセッション非依存の集約ビュー。帯は隠す。
     setSessionStripTab('orchestration');
+    rememberViewForSelectedListTab('orchestration');
     return;
   }
 
@@ -3600,6 +3618,7 @@ export function setActiveTab(sid, name) {
     mgr.picker?.hide();
     mgr.render();
     setSessionStripTab('terminal');
+    rememberViewForSelectedListTab('terminal');
     document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b =>
       b.classList.toggle('active', b.dataset.tab === 'terminal'));
     if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
@@ -3673,6 +3692,9 @@ export function setActiveTab(sid, name) {
 
   // C5: lock 値に対応するタブに 🔒 を付け直す (DOM 更新後)
   if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+
+  // C3: タブが最後に見ていた表示を覚える（復元中は書かない）。
+  rememberViewForSelectedListTab(name);
 
   // bugfix 2026-06-04: DOM mode 確定後に view mode change event を発火する。
   // chat-history.js はこれを購読して chat 切替時の chat-pane mount を保証する。

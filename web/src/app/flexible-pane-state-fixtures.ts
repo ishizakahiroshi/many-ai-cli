@@ -27,6 +27,27 @@ test('scope keys keep all and each open box independent', () => {
   assert.equal(paneLayoutKey('box', null), 'all');
 });
 
+test('tab scope keys are namespaced and an empty tab id falls back to all', () => {
+  assert.equal(paneLayoutKey('tab', 'tab-1'), 'tab:tab-1');
+  assert.equal(paneLayoutKey('tab', 'tab-2'), 'tab:tab-2');
+  assert.equal(paneLayoutKey('tab', ''), 'all');
+  assert.equal(paneLayoutKey('tab', null), 'all');
+  assert.equal(paneLayoutKey('all', 'tab-1'), 'all');
+});
+
+test('saved layouts accept tab workspace keys the same way as box keys', () => {
+  const restored = normalizeFlexibleLayouts({
+    all: layout([session(1), null]),
+    'box:/work/alpha': layout([null, tab('approval')]),
+    'tab:tab-1': layout([session(1), null]),
+    'tab:tab-2': layout([null, tab('approval')]),
+    'other:tab-1': layout([session(1), null]),
+  });
+  assert.deepEqual(Object.keys(restored).sort(), ['all', 'box:/work/alpha', 'tab:tab-1', 'tab:tab-2']);
+  assert.deepEqual(restored['tab:tab-1']?.slots, [session(1), null]);
+  assert.deepEqual(restored['tab:tab-2']?.slots, [null, tab('approval')]);
+});
+
 test('saved layout rejects duplicate session and singleton chat placements', () => {
   const duplicateSession = normalizeFlexibleLayout(layout([session(1), session(1)]));
   assert.deepEqual(duplicateSession?.slots, [session(1), null]);
@@ -117,5 +138,18 @@ test('mixed legacy layouts move session tabs without changing overview terminal 
     [session(1), tab('files', 1)]);
   assert.deepEqual(layouts[sessionPaneLayoutKey(2, 'synthetic-start')].slots,
     [session(2), tab('git', 2)]);
+  assert.equal(migrateSessionTabsToWorkspaces(layouts), false);
+});
+
+test('mixed legacy layouts keyed by a sidebar tab are migrated like box layouts', () => {
+  const layouts = normalizeFlexibleLayouts({
+    'tab:tab-1': layout([session(1), tab('files', 1)], 2, 1),
+    'box:/work/alpha': layout([session(2), tab('git', 2)], 2, 1),
+  });
+  assert.equal(migrateSessionTabsToWorkspaces(layouts), true);
+  assert.deepEqual(layouts['tab:tab-1'].slots, [session(1), null]);
+  assert.deepEqual(layouts['box:/work/alpha'].slots, [session(2), null]);
+  assert.deepEqual(layouts[sessionPaneLayoutKey(1, 'synthetic-start')].slots,
+    [session(1), tab('files', 1)]);
   assert.equal(migrateSessionTabsToWorkspaces(layouts), false);
 });

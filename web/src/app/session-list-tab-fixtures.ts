@@ -11,7 +11,9 @@ import { SESSION_LIST_TABS_KEY, normalizeSessionListTabs as normalize, loadSessi
   saveSessionListStopped as saveStopped, noteSessionListStopped as noteStopped,
   clearSessionListStopped as clearStopped, isSessionListStoppedShown as shown,
   settleSessionListStopped as settle, rememberSessionListActive as remember,
-  sessionListTabSession as pick, sessionListCloseNeighbor } from './session-list-tab-state.js';
+  sessionListTabSession as pick, sessionListCloseNeighbor, rememberSessionListView as rememberView,
+  restoreViewFor as restoreView, pinSessionListScope as pinScope,
+  unpinSessionListScope as unpinScope } from './session-list-tab-state.js';
 const session = (id: number, extra: Partial<SessionSnapshot> = {}): SessionSnapshot =>
   ({ id, started_at: `2026-10-08T01:00:${String(id).padStart(2, '0')}Z`, cwd: '/repos/example', ...extra } as SessionSnapshot);
 const state = () => { const value = normalize(null); add(value, 'Work', 'work'); return value; };
@@ -225,6 +227,63 @@ test('project header move takes only the selected tab roots of that project, fam
   const before = JSON.stringify(s);
   assert.equal(moveProject(s, live, 'example', 'dest', 'missing'), false);
   assert.equal(JSON.stringify(s), before);
+});
+test('C2: views/scopes read known values, drop unknown tabs and values, and old saves read empty', () => {
+  const s = normalize({ tabs: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
+    views: { a: 'multi', b: 'nope', missing: 'terminal', c: 7 },
+    scopes: { a: 'tab', b: 'bogus', missing: 'box', c: null } });
+  assert.deepEqual({ ...s.views }, { a: 'multi' });
+  assert.deepEqual({ ...s.scopes }, { a: 'tab' });
+  const old = normalize({ version: 1, tabs: [{ id: 'a', name: 'A' }] });
+  assert.deepEqual({ ...old.views }, {}); assert.deepEqual({ ...old.scopes }, {});
+  assert.deepEqual(normalize(JSON.parse(JSON.stringify(s))).views, s.views);
+  assert.deepEqual(normalize(JSON.parse(JSON.stringify(s))).scopes, s.scopes);
+});
+test('C2: broken views/scopes containers are ignored without losing tabs', () => {
+  for (const bad of [[], null, 'x', 4]) {
+    const s = normalize({ tabs: [{ id: 'a', name: 'A' }], views: bad, scopes: bad });
+    assert.deepEqual({ ...s.views }, {}); assert.deepEqual({ ...s.scopes }, {});
+    assert.equal(s.tabs[0].id, 'a');
+  }
+});
+test('C2: __proto__ and constructor keys never become views or scopes', () => {
+  const raw = JSON.parse('{"tabs":[{"id":"a","name":"A"}],"views":{"__proto__":"multi","constructor":"multi","a":"multi"},"scopes":{"__proto__":"tab","constructor":"box","a":"box"}}');
+  const s = normalize(raw);
+  assert.deepEqual({ ...s.views }, { a: 'multi' });
+  assert.deepEqual({ ...s.scopes }, { a: 'box' });
+  assert.equal(Object.getPrototypeOf(s.views), null);
+  assert.equal(Object.getPrototypeOf(s.scopes), null);
+});
+test('C2: remember records only known views for existing tabs; restore is null without memory', () => {
+  const s = state();
+  assert.equal(restoreView(s, 'work'), null);
+  assert.equal(rememberView(s, 'work', 'multi'), true);
+  assert.equal(rememberView(s, 'work', 'multi'), false);
+  assert.equal(restoreView(s, 'work'), 'multi');
+  assert.equal(rememberView(s, 'work', 'nope' as never), false);
+  assert.equal(rememberView(s, 'missing', 'terminal'), false);
+  assert.equal(rememberView(s, 'tab-1', 'chat'), true);
+  assert.equal(restoreView(s, 'missing'), null);
+  assert.equal(restoreView(s, 'tab-1'), 'chat');
+});
+test('C2: pin sets/changes, unpin removes, and unchanged calls return false', () => {
+  const s = state();
+  assert.equal(pinScope(s, 'work', 'tab'), true);
+  assert.equal(pinScope(s, 'work', 'tab'), false);
+  assert.equal(pinScope(s, 'work', 'box'), true);
+  assert.equal(pinScope(s, 'work', 'nope' as never), false);
+  assert.equal(pinScope(s, 'missing', 'all'), false);
+  assert.equal(unpinScope(s, 'work'), true);
+  assert.equal(unpinScope(s, 'work'), false);
+  assert.equal(unpinScope(s, 'missing'), false);
+});
+test('C2: deleting a tab drops its view and pinned scope but leaves other tabs alone', () => {
+  const s = state(); add(s, 'Other', 'other');
+  rememberView(s, 'work', 'multi'); pinScope(s, 'work', 'tab');
+  rememberView(s, 'other', 'chat'); pinScope(s, 'other', 'box');
+  assert.equal(remove(s, 'work', s.defaultId), true);
+  assert.deepEqual({ ...s.views }, { other: 'chat' });
+  assert.deepEqual({ ...s.scopes }, { other: 'box' });
 });
 test('C2-R1: missing ancestor defers a child move and reconnect preserves the original family', () => {
   const s = state(); const root = session(1), child = session(2, { parent_session_id: 1 });

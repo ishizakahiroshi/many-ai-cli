@@ -29,6 +29,7 @@ import {
 import {
   MULTI_SCOPE_ALL,
   MULTI_SCOPE_BOX,
+  MULTI_SCOPE_TAB,
   STORAGE_MULTI_AUTO_GROW_KEY,
   STORAGE_MULTI_PINNED_KEY,
   STORAGE_MULTI_SCOPE_DEFAULT_KEY,
@@ -43,9 +44,20 @@ import {
   pinKey,
   reorderForScope,
   repoChipsFor,
+  resolveTabScope,
   scopeOnOpen,
+  shrinkGridToFit,
   swapIntoSlot,
 } from './multi-scope.js';
+import {
+  pinSessionListScopeForTab,
+  selectedSessionListTabId,
+  sessionListOwnerMap,
+  sessionListTabCount,
+  sessionListTabScopes,
+  sessionListTabSummaries,
+  unpinSessionListScopeForTab,
+} from './session-list-tabs.js';
 
 // multi-pane.js — MultiPaneManager + GridPicker (C3: xterm マルチインスタンス + WS ルーティング)
 // index.html で app.js より前に読み込む
@@ -343,7 +355,8 @@ export class MultiPaneManager {
     // 手で配置したレイアウト（D&D）と、セッション専用の作業面では、ピン留めと自動拡大を
     // 効かせない（利用者が置いた場所を動かさない）。並び順で自動に埋めるときだけ効く。
     const autoMode = !this._currentCustomLayout() && !this.workspaceSession;
-    if (this._grownBase && !(autoMode && this.autoGrow)) this._restoreGrownBase();
+    // 自動で広げた／縮めた寸法は、手で置いたレイアウトと作業面では使わない。
+    if (this._grownBase && !autoMode) this._restoreGrownBase();
 
     // 既存スロットを detach してから DOM を再構築
     this.area.querySelectorAll('.pane-slot').forEach(el => this.detachSlot(el));
@@ -359,26 +372,41 @@ export class MultiPaneManager {
     const byId = new Map(sorted.filter(s => !this.workspaceSession ||
       (s.id === this.workspaceSession.sessionId && String(s.started_at || '') === this.workspaceSession.startedAt))
       .map(s => [s.id, s]));
+    // C3: 実効の範囲（そのタブの固定 ?? 端末の範囲）。'tab' のキーは選んでいるタブ、
+    //     キーの解決はセッションの持ち主。'box' は従来どおり開いている箱。
+    //     **order は全件のまま**（computeRenderPlan が保存する列と表示する列を作り分ける）。
+    const tabScope = this._resolveTabScopeState();
+    const effectiveScopeValue = tabScope.scope;
+    const scopeKey = this._scopeKeyFor(effectiveScopeValue, allSorted);
     const planInput = {
       prevOrder: this.order,
       liveSortedIds: sorted.map(s => s.id),
-      scope: this.scope,
+      scope: effectiveScopeValue,
       // 箱が開いていなくても、選んでいるセッションのリポで絞れるようにする（B2）。
-      openProjectKey: this._scopeProjectKey(allSorted),
-      projectKeyOf: this._projectKeyResolver(allSorted),
+      openProjectKey: scopeKey,
+      projectKeyOf: this._scopeKeyResolver(effectiveScopeValue, allSorted),
       capacity: this.cols * this.rows,
       isPinned: autoMode ? this._pinPredicate(sorted) : undefined,
     };
     let plan = computeRenderPlan(planInput);
-    // 入りきらないとき枠を自動で広げる（設定がオンで、並び順で自動に埋めるときだけ）。
-    // 広げた寸法は保存しない。件数が戻ったら元の寸法へ戻す。
-    if (autoMode && this.autoGrow) {
+    // C3: 枠を件数へ合わせる。'tab' のときは元の枠に収まる範囲で縮め、収まらないときだけ
+    // 従来の autoGrow（既定オフ）に従う。広げた／縮めた寸法は保存しない（_grownBase が元を持つ）。
+    if (autoMode) {
       const base = this._grownBase || { cols: this.cols, rows: this.rows };
-      const grid = autoGrowGrid(base.cols, base.rows, plan.visibleIds.length);
-      if (grid.cols === base.cols && grid.rows === base.rows) {
+      const count = plan.visibleIds.length;
+      let target;
+      if (effectiveScopeValue === MULTI_SCOPE_TAB) {
+        const shrunk = shrinkGridToFit(base.cols, base.rows, count);
+        target = shrunk.cols * shrunk.rows >= count
+          ? shrunk
+          : (this.autoGrow ? autoGrowGrid(base.cols, base.rows, count) : base);
+      } else {
+        target = this.autoGrow ? autoGrowGrid(base.cols, base.rows, count) : base;
+      }
+      if (target.cols === base.cols && target.rows === base.rows) {
         if (this._grownBase) this._restoreGrownBase();
-      } else if (grid.cols !== this.cols || grid.rows !== this.rows) {
-        this._applyGrownGrid(grid);
+      } else if (target.cols !== this.cols || target.rows !== this.rows) {
+        this._applyGrownGrid(target);
       }
       if (this.cols * this.rows !== planInput.capacity) {
         plan = computeRenderPlan({ ...planInput, prevOrder: plan.order, capacity: this.cols * this.rows });
@@ -445,7 +473,7 @@ export class MultiPaneManager {
     });
     // 開いたときに範囲を聞く（既定が「毎回聞く」のとき）。グリッドの上に重ねるだけで、
     // スロットの並びには入らない（position: absolute）。
-    if (this.askPending && !this.workspaceSession) this.area.appendChild(this._buildAskCard(planInput.openProjectKey));
+    if (this.askPending && !this.workspaceSession) this.area.appendChild(this._buildAskCard(this._scopeProjectKey(allSorted)));
     this._applyMobileActiveSlot();
     this._notifyLayoutChanged();
 
@@ -866,8 +894,39 @@ export class MultiPaneManager {
 
   _layoutKey() {
     if (this.workspaceSession) return sessionPaneLayoutKey(this.workspaceSession.sessionId, this.workspaceSession.startedAt);
-    const key = this._scopeProjectKey();
-    return paneLayoutKey(effectiveScope(this.scope, key), key);
+    const scope = this._resolveTabScopeState().scope;
+    const key = this._scopeKeyFor(scope);
+    return paneLayoutKey(effectiveScope(scope, key), key);
+  }
+
+  /** そのタブが効かせる範囲（固定 ?? 端末の範囲）。タブが 1 本だけなら 'tab' は 'all' に寄せる。 */
+  _resolveScopeForTab(tabId: string | null) {
+    const resolved = resolveTabScope(this.scope, sessionListTabScopes(), tabId);
+    const scope = resolved.scope === MULTI_SCOPE_TAB && sessionListTabCount() <= 1
+      ? MULTI_SCOPE_ALL : resolved.scope;
+    return { scope, pinned: resolved.pinned };
+  }
+
+  /** いま選んでいるタブの範囲。表示・保存キー・問いかけの判定はすべてこれを使う。 */
+  _resolveTabScopeState() {
+    const tabId = selectedSessionListTabId();
+    return { ...this._resolveScopeForTab(tabId), tabId };
+  }
+
+  /** 範囲キー。'box' は開いている箱、'tab' は選んでいるタブ（保存キー用）。 */
+  _scopeKeyFor(scope: string, sessions?: any[]): string | null {
+    if (scope === MULTI_SCOPE_BOX) return this._scopeProjectKey(sessions);
+    if (scope === MULTI_SCOPE_TAB) return selectedSessionListTabId() || null;
+    return null;
+  }
+
+  /** セッション → 範囲キー。'tab' は持ち主のタブ、'box' は従来どおりリポ。 */
+  _scopeKeyResolver(scope: string, sessions: any[]) {
+    if (scope === MULTI_SCOPE_TAB) {
+      const owners = sessionListOwnerMap();
+      return (id: number) => owners.get(id) ?? null;
+    }
+    return this._projectKeyResolver(sessions);
   }
 
   _clearDropPreview() {
@@ -905,8 +964,9 @@ export class MultiPaneManager {
         slots: this.slots.map(slot => slot?.session ? this._contentForSession(slot.session.id) : slot?.tab || null),
       };
     } else {
-      const scopeKey = this._scopeProjectKey();
-      const overviewKey = paneLayoutKey(effectiveScope(this.scope, scopeKey), scopeKey);
+      const scope = this._resolveTabScopeState().scope;
+      const scopeKey = this._scopeKeyFor(scope);
+      const overviewKey = paneLayoutKey(effectiveScope(scope, scopeKey), scopeKey);
       base = this.customLayouts[overviewKey];
       if (!base) {
         const current = (window as any).currentFlexiblePaneView?.();
@@ -1819,6 +1879,14 @@ export class MultiPaneManager {
    */
   setScope(next) {
     const value = normalizeScope(next);
+    const tabId = selectedSessionListTabId();
+    // C3: そのタブに固定があれば、端末の範囲ではなくタブの固定を書き換える。
+    if (tabId && this._resolveTabScopeState().pinned) {
+      if (this._resolveScopeForTab(tabId).scope === value) return;
+      pinSessionListScopeForTab(tabId, value);
+      this.render();
+      return;
+    }
     if (value === normalizeScope(this.scope)) return;
     this.scope = value;
     this._saveScope();
@@ -1826,13 +1894,28 @@ export class MultiPaneManager {
   }
 
   /**
-   * 開いている箱が変わったときの追従。範囲が 'box' で multi を表示中のときだけ描き直す。
+   * 開いている箱が変わったときの追従。実効の範囲が 'box' で multi を表示中のときだけ描き直す。
    * （multi を開いていなければ、次にタブを開いたときの render() で足りる）
    */
   onOpenProjectChanged() {
-    if (normalizeScope(this.scope) !== MULTI_SCOPE_BOX) return;
+    if (this._resolveTabScopeState().scope !== MULTI_SCOPE_BOX) return;
     const view = document.getElementById('multi-view');
     if (!view || view.hidden) return;
+    this.render();
+  }
+
+  /**
+   * サイドバーのタブが変わったときの追従（C3）。範囲が 'tab' に変わる／'tab' から
+   * 変わる、またはタブごとの固定が違うときに、multi を表示中なら描き直す。
+   * 表示していなければ次に開いたときの render() で足りる（箱の追従と同じ形）。
+   */
+  onOpenTabChanged(previousTabId, nextTabId) {
+    const view = document.getElementById('multi-view');
+    if (!view || view.hidden) return;
+    const prev = this._resolveScopeForTab(previousTabId);
+    const next = this._resolveScopeForTab(nextTabId);
+    if (prev.scope !== MULTI_SCOPE_TAB && next.scope !== MULTI_SCOPE_TAB &&
+        prev.scope === next.scope) return;
     this.render();
   }
 
@@ -1841,23 +1924,74 @@ export class MultiPaneManager {
     const capacity = this.cols * this.rows;
     const visibleCount = Array.isArray(this.visibleIds) ? this.visibleIds.length : 0;
     const all = window.getSortedSessions ? window.getSortedSessions() : [];
+    const live = all.filter(Boolean);
+    const tabState = this._resolveTabScopeState();
+    const effective = effectiveScope(tabState.scope, this._scopeKeyFor(tabState.scope, all));
     const projectKey = this._scopeProjectKey(all);
+    // 上の段のリポは、タブの範囲のときだけそのタブのセッションで絞る（C4）。
+    // 箱のときは全リポを出す（チップを押して別の箱へ切り替えられるようにする）。
+    let scoped = live;
+    if (effective === MULTI_SCOPE_TAB) {
+      const owners = sessionListOwnerMap();
+      scoped = live.filter(s => owners.get(s.id) === tabState.tabId);
+    }
     return {
       scope: normalizeScope(this.scope),
-      effective: effectiveScope(this.scope, projectKey),
+      effective,
+      effectiveScope: effective,
       projectKey,
+      // C3: 上の段のタブ・固定・端末の範囲（C4 のチップが読む）。
+      tabs: sessionListTabSummaries(),
+      selectedTab: tabState.tabId,
+      deviceScope: normalizeScope(this.scope),
+      pinned: tabState.pinned,
       visibleCount,
       capacity,
       overflow: Number.isFinite(this.scopeOverflow)
         ? this.scopeOverflow
         : overflowCount(visibleCount, capacity),
       // plan_multi-repo-scope.md: 上の段に並べるリポ・あふれた番号・聞いている最中か。
-      repos: repoChipsFor(all.filter(Boolean).map(s => ({ key: projectKeyForSession(s, all) }))),
-      totalCount: all.filter(Boolean).length,
+      repos: repoChipsFor(scoped.map(s => ({ key: projectKeyForSession(s, all) }))),
+      totalCount: live.length,
       overflowIds: Array.isArray(this.overflowIds) ? this.overflowIds.slice() : [],
       askPending: !!this.askPending,
       workspace: !!this.workspaceSession,
     };
+  }
+
+  // ─── C3: タブへの範囲の固定 ───────────────────────────────────────────────
+  // 固定はタブ側（session-list-tab-state.ts）に保存する。固定が無いタブは端末の範囲に従う。
+
+  /** いま効いている範囲を、選んでいるタブの固定として覚える。 */
+  pinScopeToCurrentTab() {
+    const tabId = selectedSessionListTabId();
+    if (!tabId) return false;
+    const changed = pinSessionListScopeForTab(tabId, this._resolveScopeForTab(tabId).scope);
+    if (changed) this.render();
+    return changed;
+  }
+
+  /** 選んでいるタブの固定を外し、端末の範囲に従わせる。 */
+  unpinScopeFromCurrentTab() {
+    const tabId = selectedSessionListTabId();
+    if (!tabId) return false;
+    const changed = unpinSessionListScopeForTab(tabId);
+    if (changed) this.render();
+    return changed;
+  }
+
+  /** 固定の切り替え。戻り値は切り替えたあとの固定状態。 */
+  toggleScopePinForCurrentTab() {
+    if (this._resolveTabScopeState().pinned) {
+      this.unpinScopeFromCurrentTab();
+      return false;
+    }
+    this.pinScopeToCurrentTab();
+    return true;
+  }
+
+  isScopePinnedToCurrentTab() {
+    return this._resolveTabScopeState().pinned;
   }
 
   _saveScope() {
@@ -1907,6 +2041,13 @@ export class MultiPaneManager {
       saveOpenProjectKey(key);
       this._fallbackProjectKey = null;
     }
+    // C3: そのタブに固定があれば、端末の範囲ではなくタブの固定を「このプロジェクト」へ変える。
+    const tabId = selectedSessionListTabId();
+    if (tabId && this._resolveTabScopeState().pinned) {
+      pinSessionListScopeForTab(tabId, MULTI_SCOPE_BOX);
+      this.render();
+      return;
+    }
     this.scope = MULTI_SCOPE_BOX;
     this._saveScope();
     // サイドバーの「開いている」印を描き直す（render() の最後でも呼ぶが、範囲が同じで
@@ -1920,12 +2061,23 @@ export class MultiPaneManager {
    * 聞くカードを出す。戻り値は聞いているか（聞いている間はレイアウト選択を開かない）。
    */
   onMultiOpened() {
+    // C3: そのタブに固定があれば、端末の既定より優先し、聞かない（固定を黙って変えない）。
+    const tabState = this._resolveTabScopeState();
+    if (tabState.pinned) {
+      this.askPending = false;
+      return false;
+    }
     const all = window.getSortedSessions ? window.getSortedSessions() : [];
     const hasRepo = !!this._scopeProjectKey(all);
-    const next = scopeOnOpen(this.scopeDefault, this.scope, hasRepo);
+    // タブが 2 本以上のときだけ「このタブだけ」を候補にする。
+    const next = scopeOnOpen(this.scopeDefault, this.scope, hasRepo, sessionListTabCount() > 1);
     if (next.scope !== normalizeScope(this.scope)) {
       this.scope = next.scope;
-      this._saveScope();
+      // 既定が 'ask' のとき scopeOnOpen は fallback を返す。それを端末の既定として
+      // 保存しない（聞いた結果だけを覚える）。'tab' も選ばれ得る。
+      if (this.scopeDefault !== 'ask' && next.scope === normalizeScope(this.scopeDefault)) {
+        this._saveScope();
+      }
     }
     this.askPending = next.ask;
     return this.askPending;
@@ -1958,6 +2110,14 @@ export class MultiPaneManager {
     // 端末に重なる局所的な枠。ホイールは枠自身で受ける（背後の端末へ送らない）。
     card.setAttribute('data-wheel-native', '');
     const name = this.projectDisplayName(projectKey);
+    // C3: タブが 2 本以上あるときだけ「このタブだけ」を出す。箱が無ければ出さない。
+    const tabs = sessionListTabSummaries();
+    const tabName = tabs.find(tab => tab.id === selectedSessionListTabId())?.name || '';
+    const canTab = tabs.length > 1;
+    const canBox = !!projectKey;
+    const primary = canTab ? 'tab' : (canBox ? 'box' : 'all');
+    const button = (value: string, label: string) =>
+      `<button type="button" class="${uiButtonClass(value === primary ? 'primary' : 'secondary', 'regular')}" data-ask-scope="${value}">${label}</button>`;
     card.innerHTML =
       `<div class="ui-modal__title" id="multi-scope-ask-title">${escapeHtml(this._t('multi_scope_ask_title', 'What should multi show?'))}</div>`
       + `<div class="ui-modal__body"><p>${escapeHtml(this._t('multi_scope_ask_body', 'Choose which sessions to lay out. You can switch any time from the strip above.'))}</p>`
@@ -1965,9 +2125,9 @@ export class MultiPaneManager {
       + `<span>${escapeHtml(this._t('multi_scope_ask_remember', 'Use this from now on (do not ask again)'))}</span></label>`
       + `<p class="settings-note">${escapeHtml(this._t('multi_scope_ask_note', 'You can change this later from the multi button or in Settings.'))}</p></div>`
       + `<div class="ui-modal__actions">`
-      + `<button type="button" class="${uiButtonClass('secondary', 'regular')}" data-ask-scope="all">${escapeHtml(this._t('multi_scope_all', 'All'))}</button>`
-      + `<button type="button" class="${uiButtonClass('primary', 'regular')}" data-ask-scope="box">`
-      + `${escapeHtml(this._t('multi_scope_box', 'This project only'))} · ${escapeHtml(name)}</button>`
+      + button('all', escapeHtml(this._t('multi_scope_all', 'All')))
+      + (canTab ? button('tab', `${escapeHtml(this._t('multi_scope_tab', 'This tab only'))}${tabName ? ' · ' + escapeHtml(tabName) : ''}`) : '')
+      + (canBox ? button('box', `${escapeHtml(this._t('multi_scope_box', 'This project only'))} · ${escapeHtml(name)}`) : '')
       + `</div>`;
     // スロットの mousedown（フォーカス移動）やドラッグへ流さない。
     card.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -1984,8 +2144,8 @@ export class MultiPaneManager {
       this.dismissScopeQuestion();
     });
     requestAnimationFrame(() => {
-      const primary = card.querySelector('[data-ask-scope="box"]') as HTMLElement | null;
-      if (primary && card.isConnected) primary.focus();
+      const focusTarget = card.querySelector(`[data-ask-scope="${primary}"]`) as HTMLElement | null;
+      if (focusTarget && card.isConnected) focusTarget.focus();
     });
     return card;
   }

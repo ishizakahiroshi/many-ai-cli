@@ -10,6 +10,16 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+- Let the multi grid follow the sidebar tabs. A new "This tab only" scope, next
+  to "This project only" and "All", lays out just the sessions of the tab selected
+  in the sidebar; switching tabs swaps the grid, and the frame shrinks to fit the
+  number of sessions, so a tab with a single session fills the screen. Each tab
+  remembers the view it was last showing (multi or single) and returns to it when
+  you switch back; a tab you have never opened keeps the current view. The scope
+  stays one setting per device, and you can pin it to a single tab from the strip
+  above the grid. "This tab only" can also be the default for opening multi
+  (Settings, the multi layout popup, and the narrow-screen switcher).
+
 - Let the multi grid show one project at a time. The strip above the grid now
   lists each project with its session count (plus "All"); clicking one lays out
   only that project's sessions and opens the same project in the sidebar. When

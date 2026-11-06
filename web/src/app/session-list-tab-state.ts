@@ -1,12 +1,19 @@
 // Browser-local sidebar buckets. Never add these fields to user-prefs' full-snapshot PUT.
 // Placement/families come from buildSidebarTree; tabs only filter that authoritative tree.
 import type { SessionSnapshot } from '../types/proto.js';
+import { isValidTabName, type TabName } from './project-view-memory.js';
 import { buildSidebarTree, flattenSidebarTree, type SidebarProjectNode } from './sidebar-tree.js';
 
 export const SESSION_LIST_TABS_KEY = 'many-ai-cli-session-list-tabs-v1';
 export const SESSION_LIST_TAB_DRAG = 'application/x-many-ai-cli-session-list-tab';
 export const SESSION_LIST_CARD_DRAG = 'application/x-many-ai-cli-session-list-card';
 export const SESSION_LIST_GROUP_DRAG = 'application/x-many-ai-cli-session-list-group';
+/**
+ * Same values and order as MultiPaneScope in multi-scope.ts. Kept here as a local copy so this
+ * browser-local store never imports the multi-pane scope module (that file belongs to another change).
+ */
+export const SESSION_LIST_TAB_SCOPES = ['all', 'box', 'tab'] as const;
+export type SessionListTabScope = (typeof SESSION_LIST_TAB_SCOPES)[number];
 export interface SessionListTab { id: string; name: string; }
 export interface SessionListTabState {
   version: 1;
@@ -17,6 +24,10 @@ export interface SessionListTabState {
   scroll: Record<string, number>;
   /** Per tab, the lifecycle identity of the session last opened while it belonged to that tab. */
   active: Record<string, string>;
+  /** Per tab, the last view the user looked at. Missing means "keep the current view when switching". */
+  views: Record<string, TabName>;
+  /** Per tab, the multi scope pinned to that tab. Missing means "follow the device scope". */
+  scopes: Record<string, SessionListTabScope>;
 }
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 const own = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
@@ -24,6 +35,8 @@ const record = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const validIdentity = (key: string) => /^session:[1-9]\d*:.{1,256}$/.test(key) && Number.isSafeInteger(Number(key.split(':')[1]));
 const validTabId = (id: unknown): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(id);
+const validScope = (value: unknown): value is SessionListTabScope =>
+  typeof value === 'string' && (SESSION_LIST_TAB_SCOPES as readonly string[]).includes(value);
 
 /** Same lifecycle identity as pane placement. Missing timestamps never become durable memberships. */
 export function sessionListIdentity(session: SessionSnapshot | undefined): string | null {
@@ -66,9 +79,18 @@ export function normalizeSessionListTabs(raw: unknown, defaultName = 'Tab 1'): S
     const key = record(data.active)[tab.id];
     if (typeof key === 'string' && validIdentity(key)) active[tab.id] = key;
   }
+  // Views/scopes were added without a version bump: an older value simply has neither and reads empty.
+  const views: Record<string, TabName> = Object.create(null);
+  for (const [id, view] of Object.entries(record(data.views))) {
+    if (exists(id) && isValidTabName(view) && !own(views, id)) views[id] = view;
+  }
+  const scopes: Record<string, SessionListTabScope> = Object.create(null);
+  for (const [id, scope] of Object.entries(record(data.scopes))) {
+    if (exists(id) && validScope(scope) && !own(scopes, id)) scopes[id] = scope;
+  }
   // An older nextNumber field (a lifetime counter) is dropped here and disappears on the next save.
   return { version: 1, tabs, defaultId, selectedId: exists(data.selectedId) ? data.selectedId : defaultId,
-    memberships, scroll, active };
+    memberships, scroll, active, views, scopes };
 }
 /** Numbered after the tabs that remain, so deleted tabs never push a fourth tab to "Tab 10"; a name still in use is skipped. */
 export function nextSessionListTabName(state: SessionListTabState, format: (number: number) => string): string {
@@ -111,6 +133,30 @@ export function deleteSessionListTab(state: SessionListTabState, id: string, des
   state.tabs = state.tabs.filter(tab => tab.id !== id);
   delete state.scroll[id];
   delete state.active[id];
+  delete state.views[id];
+  delete state.scopes[id];
+  return true;
+}
+/** Remember the view a tab last showed. Unknown tab IDs and view names are ignored. */
+export function rememberSessionListView(state: SessionListTabState, tabId: string, viewName: TabName): boolean {
+  if (!isValidTabName(viewName) || !state.tabs.some(tab => tab.id === tabId) || state.views[tabId] === viewName) return false;
+  state.views[tabId] = viewName;
+  return true;
+}
+/** The view a tab last showed. null means "no memory", i.e. keep the current view instead of falling back. */
+export function restoreViewFor(state: SessionListTabState, tabId: string): TabName | null {
+  return own(state.views, tabId) && isValidTabName(state.views[tabId]) ? state.views[tabId] : null;
+}
+/** Pin a multi scope to one tab. Unknown tab IDs and scope values are ignored; false when unchanged. */
+export function pinSessionListScope(state: SessionListTabState, tabId: string, scope: SessionListTabScope): boolean {
+  if (!validScope(scope) || !state.tabs.some(tab => tab.id === tabId) || state.scopes[tabId] === scope) return false;
+  state.scopes[tabId] = scope;
+  return true;
+}
+/** Remove a tab's pinned scope, letting it follow the device scope again. False when nothing was pinned. */
+export function unpinSessionListScope(state: SessionListTabState, tabId: string): boolean {
+  if (!own(state.scopes, tabId)) return false;
+  delete state.scopes[tabId];
   return true;
 }
 export function reorderSessionListTab(state: SessionListTabState, id: string, target: string, after: boolean): boolean {

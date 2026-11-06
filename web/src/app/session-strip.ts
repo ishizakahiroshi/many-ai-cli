@@ -277,6 +277,12 @@ interface ScopeStatus {
   totalCount: number;
   /** 枠に入りきらなかったセッション。押すとフォーカス中のペインと入れ替える（B1）。 */
   overflowIds: number[];
+  /** サイドバーのタブ（タブが 2 つ以上のときだけチップと固定を出す）。C4。 */
+  tabs: { id: string; name: string; count: number }[];
+  /** サイドバーで選んでいるタブの ID（C4）。 */
+  selectedTab: string | null;
+  /** 選んでいるタブの範囲が固定されているか（C4）。 */
+  pinned: boolean;
 }
 
 function readScopeStatus(): ScopeStatus {
@@ -296,18 +302,24 @@ function readScopeStatus(): ScopeStatus {
           : [],
         totalCount: Number(s?.totalCount) || 0,
         overflowIds: Array.isArray(s?.overflowIds) ? s.overflowIds.filter((id: any) => Number.isFinite(id)) : [],
+        tabs: Array.isArray(s?.tabs)
+          ? s.tabs.filter((tab: any) => tab && typeof tab.id === 'string' && tab.id)
+            .map((tab: any) => ({ id: tab.id, name: String(tab.name || ''), count: Number(tab.count) || 0 }))
+          : [],
+        selectedTab: typeof s?.selectedTab === 'string' && s.selectedTab ? s.selectedTab : null,
+        pinned: !!s?.pinned,
       };
     } catch (_) { /* 下のフォールバックへ */ }
   }
   // MultiPaneManager がまだ居ない（起動直後など）。既定の「全部」として描く。
   return {
     scope: 'all', effective: 'all', projectKey: openProjectKey, visibleCount: 0, capacity: 0, overflow: 0,
-    repos: [], totalCount: 0, overflowIds: [],
+    repos: [], totalCount: 0, overflowIds: [], tabs: [], selectedTab: null, pinned: false,
   };
 }
 
 function scopeButtonHtml(
-  scope: 'box' | 'all',
+  scope: 'box' | 'all' | 'tab',
   label: string,
   pressed: boolean,
   tooltip: string,
@@ -329,6 +341,17 @@ function scopeButtonHtml(
  */
 function scopeToggleHtml(status: ScopeStatus): string {
   const boxPressed = status.effective === 'box';
+  // C4: タブは 2 つ以上あるときだけ出す（1 つなら 'all' と同じなので選ばせない）。
+  const showTabs = status.tabs.length >= 2;
+  const selectedTab = showTabs ? status.tabs.find(tab => tab.id === status.selectedTab) : null;
+  const tabHtml = selectedTab
+    ? scopeButtonHtml(
+      'tab', selectedTab.name, status.effective === 'tab',
+      `${selectedTab.name} · ${ti18n('multi_scope_tab_tooltip', 'Show only the sessions of the tab selected in the sidebar')}`,
+      `<span class="session-strip-scope-name">${escapeHtml(String(selectedTab.count))}</span>`,
+      false,
+    )
+    : '';
   const repoTipBase = ti18n('multi_scope_repo_tooltip', 'Show only this project\'s sessions');
   const reposHtml = status.repos.map(repo => {
     const name = projectDisplayNameFor(repo.key);
@@ -343,11 +366,24 @@ function scopeToggleHtml(status: ScopeStatus): string {
   }).join('');
   const allLabel = ti18n('multi_scope_all', 'All');
   const allHtml = scopeButtonHtml(
-    'all', allLabel, !boxPressed,
+    'all', allLabel, status.effective === 'all',
     ti18n('multi_scope_all_tooltip', 'Show every session in the grid'),
     `<span class="session-strip-scope-name">${escapeHtml(String(status.totalCount))}</span>`,
     false,
   );
+  // C4: 範囲チップの横の「このタブの範囲を固定」。固定中は押された見た目にする
+  // （固定中のタブで範囲チップを押すと、固定のほうが変わる）。
+  let pinHtml = '';
+  if (showTabs) {
+    const pinTip = status.pinned
+      ? ti18n('multi_scope_pin_tab_on_tooltip', 'Scope is pinned to this tab. Press to unpin and follow the device scope')
+      : ti18n('multi_scope_pin_tab_tooltip', 'Pin the current scope to this tab. Press again to unpin and follow the device scope');
+    pinHtml = `<button type="button" class="session-strip-scope-btn session-strip-scope-pin" data-scope-pin="1"`
+      + ` aria-pressed="${status.pinned ? 'true' : 'false'}"`
+      + ` title="${escapeHtml(pinTip)}" data-tooltip="${escapeHtml(pinTip)}">`
+      + `<span class="session-strip-scope-label">${escapeHtml(ti18n('multi_scope_pin_tab', 'Pin scope to this tab'))}</span>`
+      + `</button>`;
+  }
   let overflowHtml = '';
   if (status.overflowIds.length > 0) {
     const headTip = ti18n('multi_scope_more_tooltip', '{count} sessions do not fit in the current grid', { count: status.overflowIds.length });
@@ -363,7 +399,7 @@ function scopeToggleHtml(status: ScopeStatus): string {
           + `</button>`;
       }).join('');
   }
-  return reposHtml + allHtml + overflowHtml;
+  return tabHtml + reposHtml + allHtml + pinHtml + overflowHtml;
 }
 
 function renderScopeToggle(
@@ -529,7 +565,9 @@ export function initSessionStrip(): void {
       const mgr = (window as any).multiPaneManager;
       if (!mgr) return;
       // 範囲・リポ・並び順の正本は MultiPaneManager。ここは押されたことを渡すだけ。
-      if (btn.dataset.repo && typeof mgr.setRepo === 'function') {
+      if (btn.dataset.scopePin && typeof mgr.toggleScopePinForCurrentTab === 'function') {
+        mgr.toggleScopePinForCurrentTab();
+      } else if (btn.dataset.repo && typeof mgr.setRepo === 'function') {
         mgr.setRepo(btn.dataset.repo);
       } else if (btn.dataset.overflowSid && typeof mgr.bringIntoView === 'function') {
         mgr.bringIntoView(Number(btn.dataset.overflowSid));

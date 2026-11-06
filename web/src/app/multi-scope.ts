@@ -16,11 +16,15 @@
 // 原因に気づけない。だから「保存する列（order）」と「表示に使う列（visibleIds）」を
 // computeRenderPlan が 1 か所で作り分け、後者は決して保存しない。
 
-/** 範囲。'all' = 全セッション（既定・従来の挙動）、'box' = いま開いている箱だけ。 */
-export type MultiPaneScope = 'all' | 'box';
+/**
+ * 範囲。'all' = 全セッション（既定・従来の挙動）、'box' = いま開いている箱だけ、
+ * 'tab' = サイドバーで選んでいるタブだけ。
+ */
+export type MultiPaneScope = 'all' | 'box' | 'tab';
 
 export const MULTI_SCOPE_ALL: MultiPaneScope = 'all';
 export const MULTI_SCOPE_BOX: MultiPaneScope = 'box';
+export const MULTI_SCOPE_TAB: MultiPaneScope = 'tab';
 
 /** 範囲の保存先。行列数（multiPaneCols / multiPaneRows）と同じ端末ごとの設定。 */
 export const STORAGE_MULTI_SCOPE_KEY = 'multiPaneScope';
@@ -44,31 +48,48 @@ export const MULTI_GRID_MAX_ROWS = 3;
 
 /** 保存値・入力値を正規化する。知らない値は既定の 'all' へ倒す。 */
 export function normalizeScope(raw: unknown): MultiPaneScope {
-  return String(raw ?? '') === MULTI_SCOPE_BOX ? MULTI_SCOPE_BOX : MULTI_SCOPE_ALL;
+  const value = String(raw ?? '');
+  if (value === MULTI_SCOPE_BOX) return MULTI_SCOPE_BOX;
+  if (value === MULTI_SCOPE_TAB) return MULTI_SCOPE_TAB;
+  return MULTI_SCOPE_ALL;
 }
 
 /** 開いたときの範囲の保存値を正規化する。知らない値・未設定は 'ask'（開くたびに聞く）。 */
 export function normalizeScopeDefault(raw: unknown): MultiPaneScopeDefault {
   const value = String(raw ?? '');
-  if (value === MULTI_SCOPE_BOX || value === MULTI_SCOPE_ALL) return value;
+  if (value === MULTI_SCOPE_BOX || value === MULTI_SCOPE_ALL || value === MULTI_SCOPE_TAB) return value;
   return MULTI_SCOPE_DEFAULT_ASK;
 }
 
 /**
  * multi を開いたときに使う範囲と、利用者に聞くかどうか。
  *
- * - 既定が 'box' / 'all' なら、それを範囲にする（前回の切り替えは持ち越さない）
- * - 既定が 'ask' なら範囲は今のまま、リポが 1 つ以上あるときだけ聞く
- *   （リポが無いと「このプロジェクトだけ」を選べないので、聞いても選べない）
+ * - 既定が 'box' / 'tab' / 'all' なら、それを範囲にする（前回の切り替えは持ち越さない）
+ * - 既定が 'ask' なら範囲は今のまま、選べる範囲があるときだけ聞く
+ * - 選べない範囲は既定にしない（リポが無いときの 'box'、タブが 1 つだけのときの
+ *   'tab' は 'all' として開く。保存値は変えない）
+ *
+ * hasMultipleTabs は末尾の省略可能な引数。渡さない呼び出し（multi-pane.ts の
+ * scopeOnOpen(this.scopeDefault, this.scope, hasRepo)）は従来どおり「タブは選べない」
+ * として動く。
  */
 export function scopeOnOpen(
   defaultValue: unknown,
   currentScope: unknown,
   hasRepo: boolean,
+  hasMultipleTabs = false,
 ): { scope: MultiPaneScope; ask: boolean } {
   const def = normalizeScopeDefault(defaultValue);
-  if (def === MULTI_SCOPE_DEFAULT_ASK) return { scope: normalizeScope(currentScope), ask: !!hasRepo };
-  return { scope: normalizeScope(def), ask: false };
+  const canUseTab = !!hasMultipleTabs;
+  if (def === MULTI_SCOPE_DEFAULT_ASK) {
+    const current = normalizeScope(currentScope);
+    const scope = current === MULTI_SCOPE_TAB && !canUseTab ? MULTI_SCOPE_ALL : current;
+    return { scope, ask: !!hasRepo || canUseTab };
+  }
+  const fixed = normalizeScope(def);
+  if (fixed === MULTI_SCOPE_BOX && !hasRepo) return { scope: MULTI_SCOPE_ALL, ask: false };
+  if (fixed === MULTI_SCOPE_TAB && !canUseTab) return { scope: MULTI_SCOPE_ALL, ask: false };
+  return { scope: fixed, ask: false };
 }
 
 /**
@@ -117,6 +138,80 @@ export function autoGrowGrid(cols: number, rows: number, count: number): { cols:
     growCol = !growCol;
   }
   return { cols: c, rows: r };
+}
+
+/**
+ * 件数に合わせて枠を縮めた寸法。元の寸法（cols × rows）の中で、count 件が入る最小の枠。
+ *
+ * 面積が最小のもの、同じ面積なら縦横の差が小さいもの、それも同じなら横に広いほうを選ぶ
+ * （2 件なら 2×1。1 本なら 1×1 で全画面）。元の寸法より大きくはしない。count が 0 以下
+ * のときは 1×1。
+ *
+ * 縮めた寸法は保存しない（multi-pane.ts の _grownBase と同じ扱い）。
+ */
+export function shrinkGridToFit(cols: number, rows: number, count: number): { cols: number; rows: number } {
+  const maxCols = Math.max(1, Math.floor(Number(cols) || 1));
+  const maxRows = Math.max(1, Math.floor(Number(rows) || 1));
+  const need = Math.max(0, Math.floor(Number(count) || 0));
+  if (need <= 1) return { cols: 1, rows: 1 };
+  let bestCols = maxCols;
+  let bestRows = maxRows;
+  let bestArea = maxCols * maxRows;
+  let bestDiff = Math.abs(maxCols - maxRows);
+  let found = false;
+  for (let c = 1; c <= maxCols; c++) {
+    for (let r = 1; r <= maxRows; r++) {
+      if (c * r < need) continue;
+      const area = c * r;
+      const diff = Math.abs(c - r);
+      if (!found || area < bestArea ||
+          (area === bestArea && (diff < bestDiff || (diff === bestDiff && c > bestCols)))) {
+        bestCols = c;
+        bestRows = r;
+        bestArea = area;
+        bestDiff = diff;
+        found = true;
+      }
+    }
+  }
+  return { cols: bestCols, rows: bestRows };
+}
+
+/** タブ ID → そのタブに固定した範囲。壊れた値は resolveTabScope が無視する。 */
+export interface TabScopeMap {
+  [tabId: string]: unknown;
+}
+
+/** プロトタイプ汚染の鍵。辞書の値として拾わない。 */
+const TAB_SCOPE_BLOCKED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * そのタブに固定した範囲があればそれ、無ければ端末の範囲。
+ *
+ * 戻り値の pinned は固定が効いたときだけ true。tabId が無い・辞書が壊れている・
+ * 値が知らない範囲のときは端末の範囲へ落とす（pinned=false）。端末の範囲も知らない
+ * 値なら 'all'。__proto__ などのプロトタイプ汚染の鍵は固定として拾わない。
+ */
+export function resolveTabScope(
+  deviceScope: unknown,
+  tabScopes: unknown,
+  tabId: string | null | undefined,
+): { scope: MultiPaneScope; pinned: boolean } {
+  const fallback = normalizeScope(deviceScope);
+  if (typeof tabId !== 'string' || !tabId || TAB_SCOPE_BLOCKED_KEYS.has(tabId)) {
+    return { scope: fallback, pinned: false };
+  }
+  if (!tabScopes || typeof tabScopes !== 'object' || Array.isArray(tabScopes)) {
+    return { scope: fallback, pinned: false };
+  }
+  if (!Object.prototype.hasOwnProperty.call(tabScopes, tabId)) {
+    return { scope: fallback, pinned: false };
+  }
+  const raw = (tabScopes as Record<string, unknown>)[tabId];
+  if (raw !== MULTI_SCOPE_ALL && raw !== MULTI_SCOPE_BOX && raw !== MULTI_SCOPE_TAB) {
+    return { scope: fallback, pinned: false };
+  }
+  return { scope: raw as MultiPaneScope, pinned: true };
 }
 
 /**
@@ -190,12 +285,13 @@ export function repoChipsFor(entries: Iterable<{ key: string | null | undefined 
 /**
  * 実際に効く範囲。
  *
- * どの箱も開いていないときに 'box' が選ばれていたら 'all' として扱う（保存値は変えない）。
+ * 'box' / 'tab' のどちらも、キーが無ければ 'all' として扱う（保存値は変えない）。
  * 起動直後はどの箱も開いていない状態からはじまるので、この分岐が無いと multi が空になる。
+ * タブも、選んでいるタブが決まる前（タブが 1 つだけのときを含む）は同じ扱いにする。
  */
 export function effectiveScope(scope: unknown, openProjectKey: unknown): MultiPaneScope {
   const normalized = normalizeScope(scope);
-  if (normalized === MULTI_SCOPE_BOX && !openProjectKey) return MULTI_SCOPE_ALL;
+  if (normalized !== MULTI_SCOPE_ALL && !openProjectKey) return MULTI_SCOPE_ALL;
   return normalized;
 }
 
@@ -221,7 +317,8 @@ export function rebuildOrder(prevOrder: readonly number[], liveSortedIds: readon
 /**
  * 表示に使う ID の列。**戻り値を保存しない。**
  *
- * 'all' なら order のコピー、'box' なら order の順のまま開いている箱のものだけを残す。
+ * 'all' なら order のコピー、'box' / 'tab' なら order の順のままキーに一致するものだけを
+ * 残す（呼ぶ側が範囲に合ったキーと解決関数を渡す）。
  */
 export function visibleIdsFor(
   order: readonly number[],
@@ -261,9 +358,9 @@ export interface RenderPlanInput {
   liveSortedIds: readonly number[];
   /** 利用者が選んでいる範囲（保存値そのまま）。 */
   scope: unknown;
-  /** いま開いている箱のキー。null ならどの箱も開いていない。 */
+  /** 範囲のキー。'box' なら開いている箱、'tab' なら選んでいるタブ。無ければ 'all' 扱い。 */
   openProjectKey: string | null | undefined;
-  /** セッション ID → 箱のキー。'box' のときだけ呼ばれる（'all' では 1 度も呼ばれない）。 */
+  /** セッション ID → 範囲のキー。'box' / 'tab' のときだけ呼ばれる（'all' では 1 度も呼ばれない）。 */
   projectKeyOf: (id: number) => string | null | undefined;
   /** 枠の数（cols × rows）。 */
   capacity: number;

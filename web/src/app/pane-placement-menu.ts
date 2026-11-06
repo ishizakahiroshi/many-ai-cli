@@ -191,11 +191,23 @@ function renderCompactPaneSwitcher(): void {
   }
   select.value = String(active);
   const scope = mgr.getScopeStatus?.();
+  // C4: 「このタブだけ」はタブが 2 つ以上あるときだけ選べる（box が箱の有無で無効になるのと同じ形）。
+  const multipleTabs = Array.isArray(scope?.tabs) && scope.tabs.length >= 2;
   switcher.querySelectorAll<HTMLButtonElement>('[data-pane-scope]').forEach(button => {
     const value = button.dataset.paneScope;
     button.setAttribute('aria-pressed', String(scope?.effective === value));
     if (value === 'box') button.disabled = !scope?.projectKey;
+    else if (value === 'tab') button.disabled = !multipleTabs;
   });
+  const pin = switcher.querySelector<HTMLButtonElement>('[data-pane-scope-pin]');
+  if (pin) {
+    const pinned = !!scope?.pinned;
+    pin.setAttribute('aria-pressed', String(pinned));
+    pin.disabled = !multipleTabs;
+    pin.title = pinned
+      ? label('multi_scope_pin_tab_on_tooltip', 'Scope is pinned to this tab. Press to unpin and follow the device scope')
+      : label('multi_scope_pin_tab_tooltip', 'Pin the current scope to this tab. Press again to unpin and follow the device scope');
+  }
 }
 
 function initPanePlacementMenu(): void {
@@ -216,18 +228,36 @@ function initPanePlacementMenu(): void {
   scope.className = 'compact-pane-scope';
   scope.setAttribute('role', 'group');
   scope.setAttribute('aria-label', label('multi_scope_label', '表示範囲'));
-  for (const [value, fallback] of [['box', 'この箱'], ['all', '全部']]) {
+  // C4: 狭い画面でも範囲に「このタブだけ」を選べるようにする（タブが 1 つなら無効）。
+  const scopeChoices: [string, string, string][] = [
+    ['tab', 'multi_scope_tab', 'このタブだけ'],
+    ['box', 'multi_scope_box', 'この箱'],
+    ['all', 'multi_scope_all', '全部'],
+  ];
+  for (const [value, key, fallback] of scopeChoices) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'ui-button ui-button--secondary ui-button--compact';
     button.dataset.paneScope = value;
-    button.textContent = label(value === 'box' ? 'multi_scope_box' : 'multi_scope_all', fallback);
+    button.textContent = label(key, fallback);
+    if (value === 'tab') button.title = label('multi_scope_tab_tooltip', 'Show only the sessions of the tab selected in the sidebar');
     button.addEventListener('click', () => {
       manager()?.setScope?.(value);
       renderCompactPaneSwitcher();
     });
     scope.appendChild(button);
   }
+  // C4: 範囲の固定。押すと、いま効いている範囲をこのタブの固定として覚える／外す。
+  const pin = document.createElement('button');
+  pin.type = 'button';
+  pin.className = 'ui-button ui-button--secondary ui-button--compact';
+  pin.dataset.paneScopePin = '1';
+  pin.textContent = label('multi_scope_pin_tab', 'このタブの範囲を固定');
+  pin.addEventListener('click', () => {
+    manager()?.toggleScopePinForCurrentTab?.();
+    renderCompactPaneSwitcher();
+  });
+  scope.appendChild(pin);
   const selectLabel = document.createElement('label');
   selectLabel.className = 'compact-pane-label';
   selectLabel.textContent = label('pane_placement_visible_pane', '表示する画面');

@@ -9,7 +9,10 @@ import { SESSION_LIST_TAB_DRAG, SESSION_LIST_CARD_DRAG, SESSION_LIST_GROUP_DRAG,
   moveSessionListProject,
   filterSessionListTree, sessionListWaitingCounts, loadSessionListStopped, saveSessionListStopped,
   noteSessionListStopped, clearSessionListStopped, isSessionListStoppedShown, settleSessionListStopped,
-  rememberSessionListActive, sessionListTabSession, type SessionListTabState } from './session-list-tab-state.js';
+  rememberSessionListActive, sessionListTabSession, rememberSessionListView, restoreViewFor,
+  pinSessionListScope, unpinSessionListScope, type SessionListTabScope,
+  type SessionListTabState } from './session-list-tab-state.js';
+import { VALID_TAB_NAME_LIST, type TabName } from './project-view-memory.js';
 
 interface Callbacks {
   sessions: () => SessionSnapshot[];
@@ -43,6 +46,17 @@ let touch: { x: number; y: number; pointerId: number; origin: HTMLElement; ident
 let storageFailed = false;
 let preserveSelectionDepth = 0;
 let stopped: Set<string> | null = null;
+// タブの「最後に見ていた表示」を適用している最中か。復元がその記憶を書き戻さないよう、
+// この間の書き込みを止める（project-view-store.ts の runWithProjectViewRestore と同じ形）。
+let sessionListViewRestoreDepth = 0;
+
+export function isRestoringSessionListView(): boolean {
+  return sessionListViewRestoreDepth > 0;
+}
+export function runWithSessionListViewRestore<T>(fn: () => T): T {
+  sessionListViewRestoreDepth++;
+  try { return fn(); } finally { sessionListViewRestoreDepth = Math.max(0, sessionListViewRestoreDepth - 1); }
+}
 
 function tx(key: string, fallback: string, vars?: Record<string, unknown>): string {
   const translated = t(key, vars);
@@ -142,15 +156,76 @@ function showSelected(): void {
   const id = sessionListTabSession(state(), sessions, selected, callbacks.order());
   if (id !== null) callbacks.activate(id);
 }
+/** いま画面に出ている表示名。記憶の無いタブへ移ったとき「今の表示のまま」にするために読む。 */
+function currentViewName(): TabName | null {
+  const multiView = document.getElementById('multi-view');
+  if (multiView && !multiView.hidden) {
+    return multiView.dataset.paneMode === 'workspace' ? 'terminal' : 'multi';
+  }
+  const area = document.getElementById('display-area');
+  if (!area || area.hidden) return null;
+  for (const name of VALID_TAB_NAME_LIST) {
+    if (name !== 'multi' && area.classList.contains('mode-' + name)) return name;
+  }
+  return null;
+}
+
+/**
+ * 行き先のタブの記憶へ表示を戻す。プログラムによる復元なので、記録とレイアウト選択は止める。
+ * record=true のときは「今の表示のまま」を新しいタブの記憶として書き込む（復元ではない）。
+ */
+function applySessionListView(viewName: TabName, record = false): void {
+  if (!callbacks) return;
+  const sessions = all(), selected = state().selectedId;
+  const owners = sessionListOwners(state(), sessions);
+  const active = callbacks.activeId();
+  // 表示中のセッションが行き先のタブのものならそれを使う。違う（モバイルで activate が
+  // 動かない等）なら、そのタブの代表セッションへ記憶だけ戻す。
+  const sessionId = active !== null && active !== undefined && owners.get(active) === selected
+    ? active
+    : sessionListTabSession(state(), sessions, selected, callbacks.order());
+  const sessionIndependent = viewName === 'multi' || viewName === 'approval' || viewName === 'orchestration';
+  // セッション依存の表示を、そのタブに居ないセッションへ当てない（setActiveTab は sid が
+  // null のとき今のセッションへ落とすため）。
+  if (sessionId === null && !sessionIndependent) return;
+  const apply = () => {
+    const setActiveTab = (window as any).setActiveTab;
+    if (typeof setActiveTab === 'function') setActiveTab(sessionId, viewName);
+  };
+  if (record) apply();
+  else runWithSessionListViewRestore(apply);
+}
 function select(id: string, focus = false, show = false): void {
   if (!state().tabs.some(tab => tab.id === id)) return;
+  // 行き先の記憶は、showSelected が activate 経由で今の表示を書き換える前に読む。
+  // 手でタブを切り替えたとき（show=true）だけ戻す。記憶が無ければ今の表示のまま。
+  const previousId = state().selectedId;
+  const restoreView = show ? restoreViewFor(state(), id) : null;
+  // 記憶の無いタブへ移るときは、activate が行き先セッションの表示へ変えるので、
+  // 移る前の表示を控えて後で戻す（箱と同じ「今の表示のまま」）。
+  const keepView = show && !restoreView ? currentViewName() : null;
   rememberScroll();
   state().selectedId = id;
   restoreScroll = true;
   refresh();
   persist();
+  // multi を表示中なら、showSelected の activate より前にグリッドを新しいタブへ入れ替える
+  // （描き直しが先でないと、activate が新しいスロットを見つけられずフォーカスが動かない）。
+  const manager = (window as any).multiPaneManager;
+  if (manager && typeof manager.onOpenTabChanged === 'function') manager.onOpenTabChanged(previousId, id);
   // Before focusing: opening a session focuses the input, and the tab keeps arrow-key navigation.
-  if (show) showSelected();
+  if (show) {
+    if (restoreView) runWithSessionListViewRestore(() => showSelected());
+    else showSelected();
+  }
+  // 単独表示の activate の後ろで箱の記憶（openProjectBox）が別の表示へ動かすことがある。
+  // タブの記憶を最後に適用して優先する。
+  if (show && restoreView) applySessionListView(restoreView);
+  else if (show && keepView) {
+    // 表示が既に同じなら書き換えない（multi のときレイアウト選択を開閉しない）。
+    if (currentViewName() === keepView) rememberSelectedSessionListView(keepView);
+    else applySessionListView(keepView, true);
+  }
   if (focus) focusSelected();
 }
 
@@ -174,6 +249,61 @@ export function assignCorrelatedSessionListSpawn(id: number, startedAt: string, 
 
 export function isSessionInSelectedListTab(id: number): boolean {
   return sessionListOwners(state(), all()).get(id) === state().selectedId;
+}
+
+// ---- multi の範囲（plan_multi-tab-scope.md C3）----------------------------
+// multi-pane.ts が「タブ」を範囲として扱うための窓口。状態の正本はこのファイルの
+// state() で、multi-pane 側には複製を持たせない。
+
+/** サイドバーで選んでいるタブの ID。 */
+export function selectedSessionListTabId(): string {
+  return state().selectedId;
+}
+/** タブの数（「このタブだけ」を選べるかの判定に使う）。 */
+export function sessionListTabCount(): number {
+  return state().tabs.length;
+}
+/** タブ ID → 固定した範囲（multi-scope.ts の resolveTabScope にそのまま渡せる形）。 */
+export function sessionListTabScopes(): Record<string, SessionListTabScope> {
+  return { ...state().scopes };
+}
+/** セッション ID → その持ち主のタブ ID（家族単位。sessionListOwners と同じ決まり）。 */
+export function sessionListOwnerMap(): Map<number, string> {
+  return sessionListOwners(state(), all());
+}
+export function sessionListTabOwnerOf(id: number): string | null {
+  return sessionListOwnerMap().get(id) ?? null;
+}
+export interface SessionListTabSummary { id: string; name: string; count: number; }
+/** 上の段に並べるタブ。count はそのタブが持つセッション数（家族の子も 1 本ずつ数える）。 */
+export function sessionListTabSummaries(): SessionListTabSummary[] {
+  const owners = sessionListOwnerMap();
+  const counts = new Map<string, number>(state().tabs.map(tab => [tab.id, 0]));
+  for (const owner of owners.values()) counts.set(owner, (counts.get(owner) || 0) + 1);
+  return state().tabs.map(tab => ({ id: tab.id, name: tab.name, count: counts.get(tab.id) || 0 }));
+}
+/** タブに範囲を固定する（保存まで行う）。multi-pane の範囲チップ・固定の切り替えから呼ぶ。 */
+export function pinSessionListScopeForTab(tabId: string, scope: SessionListTabScope): boolean {
+  if (!pinSessionListScope(state(), tabId, scope)) return false;
+  persist();
+  return true;
+}
+/** タブの固定を外して端末の範囲へ戻す（保存まで行う）。 */
+export function unpinSessionListScopeForTab(tabId: string): boolean {
+  if (!unpinSessionListScope(state(), tabId)) return false;
+  persist();
+  return true;
+}
+/** そのタブが最後に見ていた表示。null は「記憶が無い＝今の表示のまま」。 */
+export function restoreSessionListViewFor(tabId: string): TabName | null {
+  return restoreViewFor(state(), tabId);
+}
+/** いまのタブが最後に見ていた表示を更新する（保存まで行う）。復元中は書かない。 */
+export function rememberSelectedSessionListView(viewName: TabName): boolean {
+  if (isRestoringSessionListView()) return false;
+  if (!rememberSessionListView(state(), state().selectedId, viewName)) return false;
+  persist();
+  return true;
 }
 export function sessionListTapSuppressed(): boolean { return Date.now() < suppressTapUntil || heldPointerId !== null; }
 export function visibleSessionListTree(tree: SidebarProjectNode[], sessions: SessionSnapshot[]): SidebarProjectNode[] {
