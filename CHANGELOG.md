@@ -59,6 +59,17 @@ Release artifacts are published at
   the copy is removed once the save is complete. If a save is interrupted the
   copy stays there for 7 days. The file is still written in place, so its
   links and permissions are unchanged.
+- **A child started again after a timeout keeps its depth.** With
+  `orchestration.max_depth` above 1 and `timeout_respawn` on, a child that
+  timed out at depth 2 was started again at depth 1, so it could start
+  children deeper than `max_depth` allows. The replacement now has the depth
+  of the child it replaces.
+- **`setup` and `uninstall --purge` handle typographic apostrophes in paths
+  on Windows.** A path containing ‘ ’ ‚ or ‛ (in a user name, or in a
+  OneDrive folder named after an organization) ended the PowerShell string
+  early, so the shortcuts were not created and `uninstall --purge` reported
+  success without removing the program. These quotes are now doubled like
+  the ASCII one.
 
 ### Security
 
@@ -260,6 +271,13 @@ Release artifacts are published at
   still runs the read-only forms of `git status`, `git diff` and `git log`,
   and Copilot asks you about anything else. Claude's file tools stay in the
   working folders everywhere.
+- **A crafted skill can no longer keep the Hub busy while it reads YAML.**
+  The decoder counted each expansion of a YAML merge as one step whatever it
+  copied, so a SKILL.md front matter with a long key merged many times took
+  seconds to minutes of CPU time each time the slash commands were listed.
+  A mapping that merges name is now resolved once, and the budget counts the
+  bytes each step copies, so such a file decodes quickly or stops at the
+  limit.
 
 ## [0.10.0] - Unreleased
 

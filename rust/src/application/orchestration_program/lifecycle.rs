@@ -157,6 +157,13 @@ impl OrchestrationProgram {
         let (mut spec, parent, role, preparation, initial, retries) = request;
         let restart = spec.clone();
         let core = self.core()?;
+        // The replacement takes the timed-out child's place below the same
+        // parent, so it keeps that child's depth and `max_depth` still limits
+        // what it starts (U26).
+        let depth = core
+            .details(parent.session)
+            .map(|details| details.snapshot.depth + 1)
+            .ok_or_else(|| SessionError::Transport("respawn parent session not found".into()))?;
         let cfg = self.config()?.orchestration;
         let now = Timestamp::now();
         let admission = core
@@ -211,7 +218,7 @@ impl OrchestrationProgram {
             parent: parent.session,
             role: role.clone(),
             auto: true,
-            depth: 1,
+            depth,
             orchestration: preparation.orchestration.clone(),
             board_path: preparation.board_path.to_string_lossy().into_owned(),
             worktree_branch: preparation.branch.clone(),

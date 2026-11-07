@@ -156,6 +156,15 @@ pub fn decode_yaml_schema(
     root_kind: &str,
     schemas: &'static [YamlSchema],
 ) -> Result<Value, YamlDecodeError> {
+    decode_counted(text, root_kind, schemas).map(|(value, _)| value)
+}
+
+/// Also returns the work the expansion budget counted.
+fn decode_counted(
+    text: &str,
+    root_kind: &str,
+    schemas: &'static [YamlSchema],
+) -> Result<(Value, usize), YamlDecodeError> {
     if text.len() > MAX_BYTES {
         return Err(YamlDecodeError::ResourceLimit);
     }
@@ -166,7 +175,7 @@ pub fn decode_yaml_schema(
     let root = loop {
         match next_event(&mut events)? {
             Some(Event::StreamStart | Event::DocumentStart(..)) => {}
-            Some(Event::StreamEnd) | None => return Ok(Value::Null),
+            Some(Event::StreamEnd) | None => return Ok((Value::Null, 0)),
             Some(event) => break document.parse_node(event, &mut events, 0)?,
         }
     };
@@ -174,18 +183,23 @@ pub fn decode_yaml_schema(
     if !matches!(next_event(&mut events)?, Some(Event::DocumentEnd)) {
         return Err(YamlDecodeError::Syntax);
     }
-    Decoder {
+    let mut decoder = Decoder {
         document: &document,
         steps: 0,
         schemas,
-    }
-    .project(root, root_kind, 0)
+        merged: BTreeMap::new(),
+    };
+    let value = decoder.project(root, root_kind, 0)?;
+    Ok((value, decoder.steps))
 }
 
 struct Decoder<'a> {
     document: &'a Document,
     steps: usize,
     schemas: &'static [YamlSchema],
+    /// The entries of each mapping a merge names, resolved once however many
+    /// merges name it (U50).
+    merged: BTreeMap<usize, Option<Vec<(String, usize)>>>,
 }
 impl Decoder<'_> {
     fn fields(&self, kind: &str) -> Vec<(&'static str, &'static str)> {
@@ -203,7 +217,13 @@ impl Decoder<'_> {
         }
     }
     fn charge(&mut self, depth: usize) -> Result<(), YamlDecodeError> {
-        self.steps += 1;
+        self.charge_text(depth, 0)
+    }
+    /// One step, plus one for every 64 bytes of key text the step copies,
+    /// compares or reads, so the budget follows the work: a long key that
+    /// many merges repeat would otherwise cost one step each time (U50).
+    fn charge_text(&mut self, depth: usize, len: usize) -> Result<(), YamlDecodeError> {
+        self.steps = self.steps.saturating_add(1 + len / 64);
         if depth > MAX_DEPTH || self.steps > MAX_EXPANSION_STEPS {
             Err(YamlDecodeError::ResourceLimit)
         } else {
@@ -242,6 +262,7 @@ impl Decoder<'_> {
             let Node::Scalar(scalar) = &self.document.nodes[key] else {
                 return Ok(None);
             };
+            self.charge_text(depth, scalar.text.len())?;
             // yaml.v3 duplicate checks compare node kind/value, even when tags differ.
             if !seen.insert(scalar.text.clone()) {
                 return Ok(None);
@@ -267,10 +288,11 @@ impl Decoder<'_> {
             };
             let mut names: BTreeSet<String> = result.iter().map(|(name, _)| name.clone()).collect();
             for merge in merge_ids {
-                let Some(pairs) = self.pairs(merge, depth + 1)? else {
+                let Some(pairs) = self.merged_pairs(merge, depth + 1)? else {
                     return Ok(None);
                 };
                 for (name, value) in pairs {
+                    self.charge_text(depth, name.len())?;
                     if names.insert(name.clone()) {
                         result.push((name, value));
                     }
@@ -278,6 +300,21 @@ impl Decoder<'_> {
             }
         }
         Ok(Some(result))
+    }
+    /// `pairs` of a mapping a merge names. The document does not change, so
+    /// the first result serves every later merge of the same mapping (U50).
+    fn merged_pairs(
+        &mut self,
+        id: usize,
+        depth: usize,
+    ) -> Result<Option<Vec<(String, usize)>>, YamlDecodeError> {
+        let id = self.resolve_alias(id, depth)?;
+        if let Some(found) = self.merged.get(&id) {
+            return Ok(found.clone());
+        }
+        let found = self.pairs(id, depth)?;
+        self.merged.insert(id, found.clone());
+        Ok(found)
     }
     // SessionOrderIDs first decodes []any in Go. A bad generic descendant
     // invalidates that entire optional list, even if the item itself would be
@@ -305,6 +342,7 @@ impl Decoder<'_> {
                     let Node::Scalar(scalar) = &self.document.nodes[key] else {
                         return Ok(false);
                     };
+                    self.charge_text(depth, scalar.text.len())?;
                     if !seen.insert(scalar.text.clone())
                         || !self.valid_generic(key, depth + 1)?
                         || !self.valid_generic(value, depth + 1)?
@@ -670,4 +708,38 @@ fn valid_timestamp(text: &str) -> bool {
         return false;
     };
     hour < 24 && minute < 60 && second < 60
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The report's shape: a mapping with one long explicit key, merged 50
+    /// times at each of three levels, and the last level merged into the
+    /// root. The key is shorter than the report's so the old decoder's run
+    /// stays short.
+    fn repeated_merges(key_len: usize) -> String {
+        let key = "7".repeat(key_len);
+        let mut yaml = format!("x0: &k0\n  ? {key}\n  : v\n");
+        for level in 1..=3 {
+            let names = vec![format!("*k{}", level - 1); 50].join(", ");
+            yaml.push_str(&format!("x{level}: &k{level} {{<<: [{names}]}}\n"));
+        }
+        yaml.push_str("<<: *k3\n");
+        yaml
+    }
+
+    #[test]
+    fn audit_u50_repeated_merges_resolve_once_and_count_their_size() {
+        let (value, steps) = decode_counted(&repeated_merges(6_000), "Config", &[]).unwrap();
+        assert!(value.is_object());
+        // Before: 512,771 steps, one for each of 127,552 resolutions of the
+        // same mappings, each copying the key. Now each mapping is resolved
+        // once and every copy of the key is counted by its length.
+        assert!(steps < 50_000, "{steps}");
+        // The count follows the key's size, so a longer key cannot stay cheap.
+        let (_, longer) = decode_counted(&repeated_merges(60_000), "Config", &[]).unwrap();
+        assert!(longer > steps * 5, "{steps} {longer}");
+        assert!(longer < MAX_EXPANSION_STEPS, "{longer}");
+    }
 }

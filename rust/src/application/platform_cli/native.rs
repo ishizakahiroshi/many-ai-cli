@@ -10,11 +10,27 @@ use std::{
 pub struct NativePlatformIo {
     pub actor: NativeDiagnosticIo,
 }
+/// A PowerShell single-quoted string. PowerShell ends one at any of five
+/// quote characters, not only the ASCII one, so each is doubled, as its own
+/// `EscapeSingleQuotedStringContent` does; a path such as `D:\Team’s tools`
+/// stays one string (U51).
 pub fn quote(value: &str) -> io::Result<String> {
     if value.contains(['\0', '\r', '\n']) {
         return Err(io::Error::other("invalid Windows shortcut value"));
     }
-    Ok(format!("'{}'", value.replace('\'', "''")))
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('\'');
+    for character in value.chars() {
+        if matches!(
+            character,
+            '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}'
+        ) {
+            quoted.push(character);
+        }
+        quoted.push(character);
+    }
+    quoted.push('\'');
+    Ok(quoted)
 }
 impl NativePlatformIo {
     fn checked(&self, path: &Path) -> io::Result<()> {

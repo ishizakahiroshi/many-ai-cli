@@ -306,6 +306,32 @@ async fn uninstall_entry_prepare_error_preserves_error_and_prevents_deletion() {
     );
 }
 #[test]
+fn audit_u51_unicode_single_quotes_stay_inside_the_powershell_string() {
+    let path = "D:\\Team\u{2019}s tools \u{2018}x\u{201A}y\u{201B}' -Recurse #\u{2019}";
+    let quoted = native::quote(path).unwrap();
+    assert_eq!(
+        quoted,
+        "'D:\\Team\u{2019}\u{2019}s tools \u{2018}\u{2018}x\u{201A}\u{201A}y\u{201B}\u{201B}'' -Recurse #\u{2019}\u{2019}'"
+    );
+    // PowerShell's own parser reads it back as the one original string. The
+    // values travel in the environment, which keeps them UTF-16.
+    #[cfg(windows)]
+    {
+        let check = "$e=$null; $t=$null; \
+            $a=[System.Management.Automation.Language.Parser]::ParseInput($env:AAC_U51_QUOTED,[ref]$t,[ref]$e); \
+            $x=$a.EndBlock.Statements[0].PipelineElements[0].Expression; \
+            if ($e.Count -eq 0 -and $x.Value -ceq $env:AAC_U51_PATH) { 'same' } else { 'different' }";
+        let output = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", check])
+            .env("AAC_U51_QUOTED", &quoted)
+            .env("AAC_U51_PATH", path)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "same");
+    }
+}
+#[test]
 fn batch_and_powershell_values_are_not_interpreted_as_code() {
     assert_eq!(native::quote("a'$()b").unwrap(), "'a''$()b'");
     assert!(native::quote("bad\r\n").is_err());

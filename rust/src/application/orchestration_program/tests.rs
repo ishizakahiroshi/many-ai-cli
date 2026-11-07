@@ -501,12 +501,22 @@ async fn role_prompt_and_subscription_come_from_validated_same_orchestration_map
 }
 
 async fn child(f: &Fixture, role: &str, at: Timestamp) -> SessionBinding {
+    child_under(f, f.binding, 1, role, at, "").await
+}
+async fn child_under(
+    f: &Fixture,
+    parent: SessionBinding,
+    depth: i64,
+    role: &str,
+    at: Timestamp,
+    execution_mode: &str,
+) -> SessionBinding {
     let spec = WrappedSpawnSpec {
         registration_metadata: SpawnRegistrationMetadata {
-            parent: f.binding.session,
+            parent: parent.session,
             role: role.into(),
             auto: true,
-            depth: 1,
+            depth,
             orchestration: f.id.clone(),
             board_path: f.path.to_string_lossy().into_owned(),
             spawned_at: Some(at),
@@ -527,7 +537,7 @@ async fn child(f: &Fixture, role: &str, at: Timestamp) -> SessionBinding {
         route: String::new(),
         utf8_session: false,
         effort: String::new(),
-        execution_mode: String::new(),
+        execution_mode: execution_mode.into(),
         permission_preset: String::new(),
         initial_prompt: String::new(),
         subscription_profile_id: String::new(),
@@ -552,7 +562,7 @@ async fn child(f: &Fixture, role: &str, at: Timestamp) -> SessionBinding {
         .child_registered(
             RegisteredChild {
                 binding,
-                parent: f.binding,
+                parent,
                 role: role.into(),
                 preparation: child_launch::ChildPreparation {
                     orchestration: f.id.clone(),
@@ -822,6 +832,43 @@ async fn progress_and_new_pty_activity_prevent_timeout_but_elapsed_inactivity_fi
         .await
         .unwrap();
     assert_eq!(lock(&f.owner.state).boards[&f.id].events.len(), queued);
+}
+#[tokio::test]
+async fn audit_u26_timeout_respawn_keeps_the_depth_of_the_child_it_replaces() {
+    let f = fixture().await;
+    configure(&f, |cfg| {
+        cfg.orchestration.child_startup_fail = Some(false);
+        cfg.orchestration.child_timeout_seconds = 10;
+        cfg.orchestration.idle_done_threshold_sec = 0;
+        cfg.orchestration.timeout_respawn = true;
+        cfg.orchestration.max_timeout_respawns = 1;
+        cfg.orchestration.max_depth = 2;
+    });
+    let at = Timestamp::now();
+    // A child at depth 1 started one at depth 2. Headless, so starting it
+    // again needs no provider on this machine.
+    let middle = child_under(&f, f.binding, 1, "impl", at, "headless").await;
+    let deep = child_under(&f, middle, 2, "review", at, "headless").await;
+    lifecycle::poll(&f.owner, at + Duration::from_secs(30))
+        .await
+        .unwrap();
+    // The respawn runs as a task; wait for the review child's replacement.
+    let mut replacement = None;
+    for _ in 0..300 {
+        replacement = lock(&f.owner.state).boards[&f.id]
+            .children
+            .iter()
+            .find(|(id, child)| **id != deep.session && child.registration.role == "review")
+            .map(|(id, _)| *id);
+        if replacement.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let replacement = replacement.expect("the timed-out review child starts again");
+    let snapshot = f.core.snapshot(replacement).unwrap();
+    assert_eq!(snapshot.depth, 2);
+    assert_eq!(snapshot.parent_session_id, middle.session);
 }
 #[tokio::test]
 async fn dismissal_records_unfinished_work_and_latches_child_done() {
