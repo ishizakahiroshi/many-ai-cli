@@ -76,6 +76,7 @@ impl InstructionRootResolver for NativeInstructionRootResolver {
                 timeout: Duration::from_millis(250),
                 output_cap: 64 * 1024,
                 pipe_drain_timeout: Duration::from_millis(100),
+                user_action: false,
             })
             .plan() else {
                 return fallback;

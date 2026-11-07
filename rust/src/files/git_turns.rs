@@ -517,11 +517,12 @@ impl Git<'_> {
                 },
                 env.clone(),
                 false,
+                false,
             )
             .await?;
-            self.env(root, &["add", "-A", "--", "."], env.clone(), false)
+            self.env(root, &["add", "-A", "--", "."], env.clone(), false, false)
                 .await?;
-            let out = self.env(root, &["write-tree"], env, false).await?;
+            let out = self.env(root, &["write-tree"], env, false, false).await?;
             let tree = out.trim();
             if !valid_revision(tree) {
                 return Err("git write-tree returned an invalid object id".into());

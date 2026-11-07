@@ -32,6 +32,14 @@ Release artifacts are published at
   key is read from a file you name and never logged. See
   `docs/manual_board-sync.md`.
 
+### Fixed
+
+- **Review and commit details show each file's own diff.** A file name was
+  passed to Git as a pattern, so the diff for `a[b].txt` also carried the
+  changes of `ab.txt`, and a name Git quotes (one with a control character)
+  showed "(no diff)". Each file is now matched by its exact name, and file
+  names and line counts are read in Git's NUL-separated form.
+
 ### Security
 
 - **CI and release builds use Bun 1.4.4.** Bun 1.3.14 was affected by three
@@ -63,6 +71,18 @@ Release artifacts are published at
   its Enter stops the Enter. Time spent waiting on an approval no longer counts
   toward the reminder or the child timeout. A held relay instruction is kept in
   the relay record, so it survives a Hub restart.
+- **Opening a folder no longer runs programs its `.git` names.** A folder you
+  open may hold a `.git` someone else wrote (an unpacked archive, a shared
+  folder). The Git that many-ai-cli runs on its own there (the branch and
+  change count, turn snapshots, the Review and Git tabs, `doctor`) followed
+  that repository's config, so its fsmonitor hook, hooks such as
+  `post-index-change`, and diff or textconv drivers could run as you, without
+  any action. It now runs with the fsmonitor and hooks off, without external
+  diff or textconv, and without signature checks in `log`. Worktrees that
+  many-ai-cli creates for a session no longer run the repository's
+  `post-checkout` hook either. Commit, fetch, pull and push from the Git tab are
+  your own actions and still run the repository's hooks, such as pre-commit.
+  Filter drivers (`filter.<name>.clean`) are not covered yet.
 
 ## [0.10.0] - Unreleased
 

@@ -538,6 +538,7 @@ impl ApplicationEventObserver {
             timeout: Duration::from_secs(5),
             output_cap: 1024 * 1024,
             pipe_drain_timeout: Duration::from_secs(2),
+            user_action: false,
         })
         .plan() else {
             return Default::default();

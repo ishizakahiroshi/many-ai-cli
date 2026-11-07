@@ -70,6 +70,7 @@ impl WorktreeGit {
             timeout,
             output_cap: usize::MAX,
             pipe_drain_timeout: Duration::from_secs(1),
+            user_action: false,
         }
         .plan()
     }

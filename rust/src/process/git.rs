@@ -11,12 +11,104 @@
 //! observing plan therefore refuses it; compare with the work tree through
 //! plumbing `diff-index`, which never writes.
 //!
+//! A folder the user opens may hold a `.git` someone else wrote (an unpacked
+//! archive, a shared folder). Unless the user asked for the action in the Git
+//! tab ([`GitCommand::user_action`]), a plan therefore runs none of the
+//! programs that repository's config can name (audit U13): the fsmonitor
+//! hook, hooks such as `post-index-change`, `gpg.program` for `log`, and diff
+//! drivers. Command-scope settings outrank the repository's own config.
+//!
 //! `git_processes_are_planned_only_here` fails when production code builds a
 //! Git `ProcessPlan` directly instead of coming through [`GitCommand::plan`].
 use super::ProcessPlan;
-use std::{collections::BTreeMap, ffi::OsString, fmt, path::PathBuf, time::Duration};
+use std::{
+    collections::BTreeMap,
+    ffi::{OsStr, OsString},
+    fmt,
+    path::PathBuf,
+    sync::LazyLock,
+    time::Duration,
+};
 
 pub const OPTIONAL_LOCKS: &str = "GIT_OPTIONAL_LOCKS";
+pub const CONFIG_COUNT: &str = "GIT_CONFIG_COUNT";
+
+/// `core.hooksPath` for a Hub Git: a path below this program's own file. A
+/// file has no entries, so Git finds no hook there (neither `.git/hooks` nor a
+/// directory the repository's config names), and nothing has to be created,
+/// kept empty or removed.
+pub fn no_hooks_path() -> &'static OsStr {
+    static PATH: LazyLock<OsString> = LazyLock::new(|| {
+        std::env::current_exe()
+            .unwrap_or_else(|_| PathBuf::from(if cfg!(windows) { "NUL" } else { "/dev/null" }))
+            .join("no-hooks")
+            .into_os_string()
+    });
+    &PATH
+}
+
+/// Settings forced on a Hub Git that is not the user's own action.
+fn forced_config() -> [(&'static str, &'static OsStr); 3] {
+    [
+        ("core.fsmonitor", OsStr::new("false")),
+        ("core.hooksPath", no_hooks_path()),
+        ("log.showSignature", OsStr::new("false")),
+    ]
+}
+
+/// Appends the forced settings after any the caller, or the Hub's own
+/// environment, already passes through `GIT_CONFIG_COUNT`, so those still apply.
+fn force_config(env: &mut BTreeMap<OsString, Option<OsString>>) {
+    let passed = match env.get(OsStr::new(CONFIG_COUNT)) {
+        Some(value) => value.clone(),
+        None => std::env::var_os(CONFIG_COUNT),
+    };
+    let base = passed
+        .and_then(|value| value.to_str().and_then(|v| v.trim().parse::<usize>().ok()))
+        .unwrap_or(0);
+    let forced = forced_config();
+    for (offset, (key, value)) in forced.iter().enumerate() {
+        let index = base + offset;
+        env.insert(
+            format!("GIT_CONFIG_KEY_{index}").into(),
+            Some((*key).into()),
+        );
+        env.insert(
+            format!("GIT_CONFIG_VALUE_{index}").into(),
+            Some((*value).to_owned()),
+        );
+    }
+    env.insert(
+        CONFIG_COUNT.into(),
+        Some((base + forced.len()).to_string().into()),
+    );
+}
+
+/// Subcommands that can show a diff. They get `--no-ext-diff --no-textconv`
+/// right after the subcommand, so a `diff.<driver>.command` or
+/// `diff.<driver>.textconv` the repository names never runs.
+const DIFFING: &[&str] = &[
+    "diff",
+    "diff-files",
+    "diff-index",
+    "diff-tree",
+    "log",
+    "show",
+];
+
+fn no_external_diff(args: &mut Vec<OsString>) {
+    if let Some((index, name)) = subcommand(args)
+        && DIFFING.contains(&name.as_str())
+    {
+        args.splice(
+            index + 1..index + 1,
+            [
+                OsString::from("--no-ext-diff"),
+                OsString::from("--no-textconv"),
+            ],
+        );
+    }
+}
 
 /// Whether a command may lock or rewrite the index, work tree, refs or config.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -146,6 +238,10 @@ pub struct GitCommand {
     pub timeout: Duration,
     pub output_cap: usize,
     pub pipe_drain_timeout: Duration,
+    /// The user's own action from the Git tab (commit, fetch, pull, push). It
+    /// runs with the repository's settings and hooks, as `git` itself would,
+    /// so the user's pre-commit checks still run. Everything else is `false`.
+    pub user_action: bool,
 }
 
 impl GitCommand {
@@ -159,11 +255,16 @@ impl GitCommand {
                 "porcelain git diff against the work tree rewrites the index; use diff-index",
             ));
         }
+        let mut args = self.args;
         let mut env = self.env;
         env.insert(OPTIONAL_LOCKS.into(), Some("0".into()));
+        if !self.user_action {
+            force_config(&mut env);
+            no_external_diff(&mut args);
+        }
         Ok(ProcessPlan {
             executable: self.executable,
-            args: self.args,
+            args,
             cwd: self.cwd,
             env,
             stdin: self.stdin,
@@ -285,7 +386,109 @@ mod tests {
             timeout: Duration::from_secs(1),
             output_cap: 1024,
             pipe_drain_timeout: Duration::from_millis(10),
+            user_action: false,
         }
+    }
+
+    fn forced(plan: &ProcessPlan) -> BTreeMap<OsString, OsString> {
+        let value = |key: String| {
+            plan.env
+                .get(OsStr::new(&key))
+                .cloned()
+                .flatten()
+                .unwrap_or_else(|| panic!("{key} is missing"))
+        };
+        let count: usize = value(CONFIG_COUNT.into())
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        (0..count)
+            .map(|index| {
+                (
+                    value(format!("GIT_CONFIG_KEY_{index}")),
+                    value(format!("GIT_CONFIG_VALUE_{index}")),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn hub_git_runs_no_program_the_repository_names() {
+        // Audit U13. The caller's own GIT_CONFIG_COUNT entries stay in front.
+        let mut diff = command(&["-C", "repo", "diff-index", "--numstat", "HEAD", "--"]);
+        diff.env.extend([
+            (CONFIG_COUNT.into(), Some("1".into())),
+            ("GIT_CONFIG_KEY_0".into(), Some("core.quotePath".into())),
+            ("GIT_CONFIG_VALUE_0".into(), Some("false".into())),
+        ]);
+        let plan = diff.plan().unwrap();
+        let config = forced(&plan);
+        assert_eq!(config.len(), 4);
+        assert_eq!(config[OsStr::new("core.quotePath")], "false");
+        assert_eq!(config[OsStr::new("core.fsmonitor")], "false");
+        assert_eq!(config[OsStr::new("log.showSignature")], "false");
+        assert_eq!(config[OsStr::new("core.hooksPath")], no_hooks_path());
+        assert_eq!(
+            plan.args,
+            argv(&[
+                "-C",
+                "repo",
+                "diff-index",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--numstat",
+                "HEAD",
+                "--"
+            ])
+        );
+        // A removed count starts the forced entries at 0; non-diff argv stays.
+        let mut status = command(&["-C", "repo", "-c", "a=b", "status", "--porcelain"]);
+        status.env.insert(CONFIG_COUNT.into(), None);
+        let plan = status.plan().unwrap();
+        assert_eq!(forced(&plan).len(), 3);
+        assert_eq!(
+            plan.args,
+            argv(&["-C", "repo", "-c", "a=b", "status", "--porcelain"])
+        );
+        for args in [
+            &["log", "-1"][..],
+            &["show", "-s", "HEAD"],
+            &["diff", "a..b"],
+        ] {
+            let plan = command(args).plan().unwrap();
+            assert_eq!(
+                &plan.args[1..3],
+                &argv(&["--no-ext-diff", "--no-textconv"])[..]
+            );
+        }
+        // No hook can exist below a regular file.
+        assert!(
+            std::path::Path::new(no_hooks_path())
+                .parent()
+                .unwrap()
+                .is_file()
+        );
+    }
+
+    #[test]
+    fn the_users_own_git_tab_action_keeps_the_repositorys_settings() {
+        let mut commit = command(&["-C", "repo", "commit", "-m", "x"]);
+        commit.user_action = true;
+        let plan = commit.plan().unwrap();
+        assert!(
+            !plan
+                .env
+                .keys()
+                .any(|key| key.to_string_lossy().starts_with("GIT_CONFIG"))
+        );
+        assert_eq!(plan.args, argv(&["-C", "repo", "commit", "-m", "x"]));
+        let mut diff = command(&["diff", "--cached", "--quiet"]);
+        diff.user_action = true;
+        assert_eq!(
+            diff.plan().unwrap().args,
+            argv(&["diff", "--cached", "--quiet"])
+        );
     }
 
     #[test]

@@ -308,6 +308,7 @@ impl<'a> Lookup<'a> {
             timeout,
             output_cap: OUTPUT_CAP,
             pipe_drain_timeout: LOOKUP_TIMEOUT,
+            user_action: false,
         }
         .plan()
         .map_err(|_| LookupError::Start)
@@ -980,6 +981,25 @@ mod tests {
         assert_eq!(first.cwd, fixture.service.hub_cwd);
         let mut expected_env = fixture.service.git_environment.clone();
         expected_env.insert("GIT_OPTIONAL_LOCKS".into(), Some("0".into()));
+        // Audit U13: the forced settings follow the fixture's own three.
+        for (offset, (key, value)) in [
+            ("core.fsmonitor", std::ffi::OsStr::new("false")),
+            ("core.hooksPath", crate::process::git::no_hooks_path()),
+            ("log.showSignature", std::ffi::OsStr::new("false")),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            expected_env.insert(
+                format!("GIT_CONFIG_KEY_{}", 3 + offset).into(),
+                Some(key.into()),
+            );
+            expected_env.insert(
+                format!("GIT_CONFIG_VALUE_{}", 3 + offset).into(),
+                Some(value.into()),
+            );
+        }
+        expected_env.insert("GIT_CONFIG_COUNT".into(), Some("6".into()));
         assert_eq!(first.env, expected_env);
         assert_eq!(first.output_cap, OUTPUT_CAP);
         assert_eq!(first.pipe_drain_timeout, LOOKUP_TIMEOUT);

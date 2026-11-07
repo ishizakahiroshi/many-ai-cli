@@ -99,7 +99,12 @@ impl<'a> Git<'a> {
     /// `git diff` rewrites the index for stat-only changes regardless, and the
     /// entry refuses it.
     async fn run(&self, cwd: &Path, args: &[&str]) -> std::result::Result<String, String> {
-        self.env(cwd, args, BTreeMap::new(), false).await
+        self.env(cwd, args, BTreeMap::new(), false, false).await
+    }
+    /// The user's own commit from the Git tab: the repository's hooks run, as
+    /// they would for `git commit` (see `GitCommand::user_action`).
+    async fn run_user(&self, cwd: &Path, args: &[&str]) -> std::result::Result<String, String> {
+        self.env(cwd, args, BTreeMap::new(), false, true).await
     }
     /// Commit-message context: stat, patch and unrenamed numstat against HEAD.
     async fn message_inputs(&self, cwd: &Path) -> (String, String, String) {
@@ -123,6 +128,7 @@ impl<'a> Git<'a> {
         args: &[&str],
         env: BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>>,
         combined: bool,
+        user_action: bool,
     ) -> std::result::Result<String, String> {
         let timeout = self.remaining();
         if timeout.is_zero() {
@@ -146,6 +152,7 @@ impl<'a> Git<'a> {
             timeout,
             output_cap: 16 * 1024 * 1024,
             pipe_drain_timeout: Duration::from_millis(250),
+            user_action,
         }
         .plan()
         .map_err(|e| format!("git {}: {e}", args.join(" ")))?;
@@ -392,7 +399,8 @@ impl FilesService {
                     ("GIT_TERMINAL_PROMPT".into(), Some("0".into())),
                     ("GIT_ASKPASS".into(), Some("echo".into())),
                 ]);
-                let out = git.env(&cwd, &args, env, true).await.map_err(|e| {
+                // The user's own fetch, pull or push: the repository's hooks run.
+                let out = git.env(&cwd, &args, env, true, true).await.map_err(|e| {
                     let (status, code) = classify_error(command, &e);
                     err(status, code, &sanitize_error(&e))
                 })?;
@@ -584,9 +592,9 @@ impl Git<'_> {
             .await
             .map_err(command_error)?;
         let mut files = parse_status(&out);
-        let stats = parse_numstat(
+        let stats = parse_numstat_z(
             &self
-                .run(cwd, &["diff-index", "-M", "--numstat", "HEAD", "--"])
+                .run(cwd, &["diff-index", "-M", "--numstat", "-z", "HEAD", "--"])
                 .await
                 .unwrap_or_default(),
         );
@@ -650,14 +658,24 @@ impl Git<'_> {
         let out = self
             .run(
                 cwd,
-                &["show", "--name-status", "--pretty=format:", hash, "--"],
+                &[
+                    "show",
+                    "--name-status",
+                    "-z",
+                    "--pretty=format:",
+                    hash,
+                    "--",
+                ],
             )
             .await
             .map_err(command_error)?;
-        let mut files = parse_names(&out);
-        let stats = parse_numstat(
+        let mut files = parse_names_z(&out);
+        let stats = parse_numstat_z(
             &self
-                .run(cwd, &["show", "--numstat", "--pretty=format:", hash, "--"])
+                .run(
+                    cwd,
+                    &["show", "--numstat", "-z", "--pretty=format:", hash, "--"],
+                )
                 .await
                 .unwrap_or_default(),
         );
@@ -666,8 +684,9 @@ impl Git<'_> {
                 f.added = *a;
                 f.removed = *b;
             }
+            let path = literal_pathspec(&f.path);
             if let Ok(d) = self
-                .run(root, &["show", "--pretty=format:", hash, "--", &f.path])
+                .run(root, &["show", "--pretty=format:", hash, "--", &path])
                 .await
             {
                 f.diff = cap_diff(d);
@@ -688,9 +707,9 @@ impl Git<'_> {
             None => self.head(cwd).await,
         };
         let mut files = if let Some((a, b)) = trees {
-            parse_names(
+            parse_names_z(
                 &self
-                    .run(root, &["diff", "--name-status", a, b, "--"])
+                    .run(root, &["diff", "--name-status", "-z", a, b, "--"])
                     .await
                     .map_err(command_error)?,
             )
@@ -721,16 +740,16 @@ impl Git<'_> {
             .collect()
         };
         let stats = if let Some((a, b)) = trees {
-            parse_numstat(
+            parse_numstat_z(
                 &self
-                    .run(root, &["diff", "--numstat", a, b, "--"])
+                    .run(root, &["diff", "--numstat", "-z", a, b, "--"])
                     .await
                     .unwrap_or_default(),
             )
         } else if !head.is_empty() {
-            parse_numstat(
+            parse_numstat_z(
                 &self
-                    .run(cwd, &["diff-index", "-M", "--numstat", "HEAD", "--"])
+                    .run(cwd, &["diff-index", "-M", "--numstat", "-z", "HEAD", "--"])
                     .await
                     .unwrap_or_default(),
             )
@@ -748,10 +767,11 @@ impl Git<'_> {
                     f.added = *a;
                     f.removed = *b;
                 }
+                let path = literal_pathspec(&f.path);
                 let args = if let Some((a, b)) = trees {
-                    vec!["diff", a, b, "--", &f.path]
+                    vec!["diff", a, b, "--", &path]
                 } else {
-                    vec!["diff-index", "-p", "-M", "HEAD", "--", &f.path]
+                    vec!["diff-index", "-p", "-M", "HEAD", "--", &path]
                 };
                 if let Ok(out) = self.run(root, &args).await {
                     f.diff = cap_diff(out);
@@ -776,9 +796,11 @@ impl Git<'_> {
         if changed == 0 {
             return Err(err(400, "no_changes", "working tree has no changes"));
         }
-        self.run(root, &["add", "-A"]).await.map_err(commit_error)?;
+        self.run_user(root, &["add", "-A"])
+            .await
+            .map_err(commit_error)?;
         if self
-            .run(root, &["diff", "--cached", "--quiet"])
+            .run_user(root, &["diff", "--cached", "--quiet"])
             .await
             .is_ok()
         {
@@ -788,7 +810,7 @@ impl Git<'_> {
         if !body.is_empty() {
             args.extend(["-m", &body]);
         }
-        self.run(root, &args).await.map_err(commit_error)?;
+        self.run_user(root, &args).await.map_err(commit_error)?;
         Ok(
             json!({"ok":true,"hash":self.head(root).await,"short_hash":self.run(root,&["rev-parse","--short","HEAD"]).await.unwrap_or_default().trim(),"subject":subject,"files_changed":changed}),
         )
@@ -936,28 +958,65 @@ fn parse_decorate(s: &str) -> Option<Vec<Ref>> {
     }
     Some(refs)
 }
-fn parse_names(s: &str) -> Vec<DiffFile> {
-    s.lines()
-        .filter_map(|l| {
-            let p: Vec<_> = l.trim_end_matches('\r').split('\t').collect();
-            if p.len() < 2 {
-                return None;
-            }
-            let status = &p[0][..p[0].len().min(1)];
-            let path = if matches!(status, "R" | "C") && p.len() >= 3 {
-                p[2]
-            } else {
-                p[1]
+/// A file named by one per-file `show` / `diff` / `diff-index`: matched as
+/// itself, never as a glob or pathspec magic (`a[b].txt` must not take in
+/// `ab.txt`, nor `:x` mean something else). Audit U16.
+fn literal_pathspec(path: &str) -> String {
+    format!(":(literal){path}")
+}
+/// `--name-status -z`: `<status>\0<path>\0`, or `R<score>\0<from>\0<to>\0`
+/// (and `C`). Names come raw, as `status -z` reports them, never C-quoted.
+fn parse_names_z(s: &str) -> Vec<DiffFile> {
+    let mut fields = s.split('\0');
+    let mut files = Vec::new();
+    while let Some(code) = fields.next() {
+        let Some(status) = code.chars().next() else {
+            continue;
+        };
+        let Some(mut path) = fields.next() else {
+            break;
+        };
+        if matches!(status, 'R' | 'C') {
+            let Some(to) = fields.next() else {
+                break;
             };
-            Some(DiffFile {
-                status: status.into(),
-                path: path.into(),
-                added: 0,
-                removed: 0,
-                diff: String::new(),
-            })
-        })
-        .collect()
+            path = to;
+        }
+        files.push(DiffFile {
+            status: status.to_string(),
+            path: path.into(),
+            added: 0,
+            removed: 0,
+            diff: String::new(),
+        });
+    }
+    files
+}
+/// `--numstat -z`: `<added>\t<removed>\t<path>\0`. A rename or copy leaves the
+/// path empty and follows with `<from>\0<to>\0`. Binary files (`-`) count 0.
+fn parse_numstat_z(s: &str) -> BTreeMap<String, (i64, i64)> {
+    let mut fields = s.split('\0');
+    let mut stats = BTreeMap::new();
+    while let Some(record) = fields.next() {
+        let mut parts = record.splitn(3, '\t');
+        let (Some(added), Some(removed), Some(path)) = (parts.next(), parts.next(), parts.next())
+        else {
+            continue;
+        };
+        let path = if path.is_empty() {
+            let (Some(_from), Some(to)) = (fields.next(), fields.next()) else {
+                break;
+            };
+            to
+        } else {
+            path
+        };
+        stats.insert(
+            path.to_owned(),
+            (added.parse().unwrap_or(0), removed.parse().unwrap_or(0)),
+        );
+    }
+    stats
 }
 fn rename_path(s: &str) -> String {
     if let (Some(l), Some(r)) = (s.find('{'), s.find('}'))

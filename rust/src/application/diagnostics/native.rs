@@ -110,6 +110,7 @@ impl DiagnosticIo for NativeDiagnosticIo {
                 timeout,
                 output_cap: 1024 * 1024,
                 pipe_drain_timeout: Duration::from_secs(2),
+                user_action: false,
             }
             .plan()
             .map_err(io::Error::other)?;

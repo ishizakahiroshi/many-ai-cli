@@ -219,6 +219,8 @@ async fn a_commit_stopped_at_its_limit_leaves_a_lock_that_is_listed_and_removed(
         timeout: Duration::from_secs(4),
         output_cap: 64 * 1024,
         pipe_drain_timeout: Duration::from_millis(250),
+        // The user's own commit: its pre-commit hook holds the lock here.
+        user_action: true,
     }
     .plan()
     .unwrap();
@@ -550,7 +552,7 @@ async fn fake_network_command_receives_fixed_args_and_noninteractive_environment
         ("GIT_ASKPASS".into(), Some("echo".into())),
     ]);
     let out = Git::new(&service, 5)
-        .env(&root, &["push"], env, true)
+        .env(&root, &["push"], env, true, true)
         .await
         .unwrap();
     assert!(out.starts_with("0\necho\n"));
@@ -633,4 +635,155 @@ fn git_turn_timestamps_preserve_source_local_offset() {
         String::from_utf8_lossy(&result.stderr)
     );
     assert!(String::from_utf8_lossy(&result.stdout).contains("1 passed"));
+}
+
+/// A shell script at `path` that appends a line to `marker` each time it runs.
+/// Returned with forward slashes, which Git's shell accepts on every OS.
+fn recorder(path: &Path, marker: &Path) -> String {
+    let marker = marker.to_string_lossy().replace('\\', "/");
+    fs::write(path, format!("#!/bin/sh\necho ran >> '{marker}'\nexit 0\n")).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    path.to_string_lossy().replace('\\', "/")
+}
+#[tokio::test]
+async fn hub_git_runs_no_program_the_repository_config_names() {
+    // Audit U13: a folder's own .git (an unpacked archive, a shared folder)
+    // can name programs. Hub Git that only looks or captures a turn runs none
+    // of them; plain Git in the same repository does (the controls below).
+    let (dir, service, root) = repo().await;
+    let git = Git::new(&service, 20);
+    let user = |subject: &str| GitRequest {
+        subject: subject.into(),
+        ..Default::default()
+    };
+    fs::write(root.join(".gitattributes"), "*.txt diff=record\n").unwrap();
+    fs::write(root.join("a.txt"), "one\n").unwrap();
+    git.commit(&root, &root, &user("base")).await.unwrap();
+    let marker = |name: &str| dir.path().join(format!("ran-{name}.txt"));
+    let fsmonitor = recorder(&dir.path().join("fsmonitor.sh"), &marker("fsmonitor"));
+    let differ = recorder(&dir.path().join("differ.sh"), &marker("diff"));
+    for (key, value) in [
+        ("core.fsmonitor", fsmonitor.as_str()),
+        ("diff.record.command", differ.as_str()),
+        ("diff.record.textconv", differ.as_str()),
+    ] {
+        git.run(&root, &["config", key, value]).await.unwrap();
+    }
+    let hooks = root.join(".git").join("hooks");
+    fs::create_dir_all(&hooks).unwrap();
+    recorder(&hooks.join("post-index-change"), &marker("hook"));
+    fs::write(root.join("a.txt"), "two\n").unwrap();
+    git.status(&root, &root).await.unwrap();
+    git.diff(&root, &root, None).await.unwrap();
+    let tree = git.worktree_tree(&root).await.unwrap();
+    let head = git.head(&root).await;
+    git.show(&head, &root, &root).await.unwrap();
+    let turn = git.diff(&root, &root, Some(("HEAD", &tree))).await.unwrap();
+    assert!(turn["files"][0]["diff"].as_str().unwrap().contains("+two"));
+    for name in ["fsmonitor", "diff", "hook"] {
+        assert!(
+            !marker(name).exists(),
+            "Hub Git ran the repository's {name}"
+        );
+    }
+    // Controls: plain Git runs each of them here.
+    porcelain(&service, &root, &["status", "--porcelain"]);
+    assert!(marker("fsmonitor").exists(), "fsmonitor control");
+    porcelain(&service, &root, &["show", "HEAD"]);
+    assert!(marker("diff").exists(), "textconv control");
+    porcelain(&service, &root, &["add", "-A"]);
+    assert!(marker("hook").exists(), "post-index-change control");
+    // The user's own commit from the Git tab keeps the repository's hooks.
+    recorder(&hooks.join("pre-commit"), &marker("pre-commit"));
+    git.commit(&root, &root, &user("second")).await.unwrap();
+    assert!(
+        marker("pre-commit").exists(),
+        "the user's commit runs pre-commit"
+    );
+}
+#[tokio::test]
+async fn per_file_diffs_match_each_name_literally() {
+    // Audit U16: `a[b].txt` is not a glob that takes in `ab.txt`, and a name
+    // Git would C-quote keeps its raw path, its own diff and its counts.
+    let (_dir, service, root) = repo().await;
+    let git = Git::new(&service, 20);
+    let mut names = vec!["ab.txt", "a[b].txt", "hidden\u{7f}.js"];
+    if cfg!(unix) {
+        names.extend([":foo", "star*.txt", "q\"uote.txt", "x => y.txt", "a\tb.txt"]);
+    }
+    for name in &names {
+        fs::write(root.join(name), "one\n").unwrap();
+    }
+    let user = |subject: &str| GitRequest {
+        subject: subject.into(),
+        ..Default::default()
+    };
+    git.commit(&root, &root, &user("base")).await.unwrap();
+    for name in &names {
+        fs::write(root.join(name), "one\ntwo\n").unwrap();
+    }
+    let check = |view: &str, value: &Value| {
+        let files = value["files"].as_array().unwrap();
+        assert_eq!(files.len(), names.len(), "{view}: {value}");
+        for file in files {
+            let path = file["path"].as_str().unwrap();
+            assert!(
+                names.contains(&path),
+                "{view}: raw name expected, got {path:?}"
+            );
+            let diff = file["diff"].as_str().unwrap();
+            assert_eq!(
+                diff.matches("diff --git").count(),
+                1,
+                "{view} {path:?}: {diff}"
+            );
+            assert!(diff.contains("+two"), "{view} {path:?}: {diff}");
+            assert_eq!(file["added"], 1, "{view} {path:?}");
+        }
+    };
+    check("work tree", &git.diff(&root, &root, None).await.unwrap());
+    let status = git.status(&root, &root).await.unwrap();
+    for file in status["files"].as_array().unwrap() {
+        assert_eq!(file["added"], 1, "status {file}");
+    }
+    git.commit(&root, &root, &user("second")).await.unwrap();
+    let head = git.head(&root).await;
+    check("commit", &git.show(&head, &root, &root).await.unwrap());
+    let base = git.run(&root, &["rev-parse", "HEAD~1"]).await.unwrap();
+    check(
+        "trees",
+        &git.diff(&root, &root, Some((base.trim(), &head)))
+            .await
+            .unwrap(),
+    );
+}
+#[test]
+fn z_parsers_read_renames_copies_and_binary_counts() {
+    let names = parse_names_z("M\0a[b].txt\0R100\0old.txt\0new.txt\0C075\0src\0copy\0A\0x\ty\0");
+    let got: Vec<_> = names
+        .iter()
+        .map(|f| (f.status.as_str(), f.path.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("M", "a[b].txt"),
+            ("R", "new.txt"),
+            ("C", "copy"),
+            ("A", "x\ty")
+        ]
+    );
+    let stats = parse_numstat_z(
+        "1\t1\ta[b].txt\x000\t0\t\x00old.txt\x00new.txt\x00-\t-\tbin.png\x002\t0\tx => y.txt\x00",
+    );
+    assert_eq!(stats["a[b].txt"], (1, 1));
+    assert_eq!(stats["new.txt"], (0, 0));
+    assert!(!stats.contains_key("old.txt"));
+    assert_eq!(stats["bin.png"], (0, 0));
+    assert_eq!(stats["x => y.txt"], (2, 0));
+    assert_eq!(literal_pathspec("a[b].txt"), ":(literal)a[b].txt");
 }
