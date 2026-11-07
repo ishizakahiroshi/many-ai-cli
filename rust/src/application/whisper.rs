@@ -115,6 +115,8 @@ pub struct ProcessExit {
 pub struct WhisperProcess {
     pub cancellation: Cancellation,
     pub done: tokio::sync::watch::Receiver<Option<ProcessExit>>,
+    /// The started server's PID, which must own its port (U31).
+    pub pid: u32,
 }
 impl WhisperProcess {
     pub async fn wait(&self) {
@@ -146,6 +148,10 @@ pub trait WhisperIo: Send + Sync {
         port: u16,
         cancel: &'a Cancellation,
     ) -> CoreFuture<'a, Result<(), WhisperError>>;
+    /// Whether `process` is still running and is the one listening on `port`.
+    /// A successful connection alone may reach another program that bound
+    /// the port first, which would then receive the recorded audio (U31).
+    fn serves(&self, port: u16, process: &WhisperProcess) -> bool;
 }
 pub struct WhisperDependencies {
     pub paths: RuntimePaths,
@@ -162,6 +168,7 @@ struct Running {
     id: u64,
     process: WhisperProcess,
     url: String,
+    port: u16,
 }
 #[derive(Default)]
 struct State {
@@ -639,6 +646,21 @@ impl WhisperManager {
         base: Arc<Dir>,
         cancel: &Cancellation,
     ) -> Result<String, WhisperError> {
+        let reuse = self.state.lock().unwrap().running.as_ref().map(|running| {
+            (
+                running.id,
+                running.port,
+                running.process.clone(),
+                running.url.clone(),
+            )
+        });
+        if let Some((id, port, process, url)) = reuse {
+            if self.deps.io.serves(port, &process) {
+                return Ok(url);
+            }
+            // It ended, or its port is no longer its own: start afresh.
+            self.stop_exact(id).await;
+        }
         let id = {
             let mut state = self.state.lock().unwrap();
             if let Some(running) = &state.running {
@@ -728,6 +750,7 @@ impl WhisperManager {
                 id,
                 process: process.clone(),
                 url: url.clone(),
+                port,
             });
         }
         let permit = match self.deps.tasks.effect_permit() {
@@ -774,6 +797,24 @@ impl WhisperManager {
         if let Err(error) = self.deps.io.ready(port, cancel).await {
             self.stop_exact(id).await;
             return Err(error);
+        }
+        // The port is free between choosing it and the server binding it, so
+        // the listener that answered must be the server's own; otherwise the
+        // address is neither returned nor saved.
+        let current = self
+            .state
+            .lock()
+            .unwrap()
+            .running
+            .as_ref()
+            .is_some_and(|running| running.id == id);
+        if !current || !self.deps.io.serves(port, &process) {
+            self.stop_exact(id).await;
+            return Err(WhisperError::new(
+                500,
+                "whisper_start_failed",
+                "the Whisper server is not the process listening on its port",
+            ));
         }
         if self.state.lock().unwrap().closed {
             self.stop_exact(id).await;

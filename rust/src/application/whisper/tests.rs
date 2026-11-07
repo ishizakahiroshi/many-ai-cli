@@ -8,6 +8,8 @@ struct FakeIo {
     entered: tokio::sync::Notify,
     release: tokio::sync::Notify,
     gate: std::sync::atomic::AtomicBool,
+    /// Another process holds the server's port (U31).
+    foreign: std::sync::atomic::AtomicBool,
 }
 impl WhisperIo for FakeIo {
     fn download<'a>(
@@ -52,6 +54,7 @@ impl WhisperIo for FakeIo {
             Ok(WhisperProcess {
                 cancellation: cancel,
                 done,
+                pid: 0,
             })
         })
     }
@@ -61,6 +64,9 @@ impl WhisperIo for FakeIo {
         _: &'a Cancellation,
     ) -> CoreFuture<'a, Result<(), WhisperError>> {
         Box::pin(async { Ok(()) })
+    }
+    fn serves(&self, _: u16, process: &WhisperProcess) -> bool {
+        process.done.borrow().is_none() && !self.foreign.load(Ordering::SeqCst)
     }
 }
 struct Fixture {
@@ -352,6 +358,71 @@ async fn native_readiness_observes_owned_loopback_and_cancel_without_starting_pr
     let cancel = Cancellation::default();
     cancel.cancel();
     assert!(io.ready(port, &cancel).await.is_err());
+}
+#[tokio::test]
+async fn audit_u31_a_port_held_by_another_process_is_neither_used_nor_saved() {
+    let fixture = Fixture::new(true);
+    fixture.manager.install("small").unwrap();
+    fixture.owner.drain_effects().await;
+    let cfg = fixture.manager.configuration().unwrap();
+    let cancel = Cancellation::default();
+    fixture.io.foreign.store(true, Ordering::SeqCst);
+    let error = fixture.manager.ensure(&cfg, &cancel).await.unwrap_err();
+    assert_eq!(error.status, 502);
+    assert_eq!(error.code, "whisper_start_failed");
+    let saved = fixture.manager.configuration().unwrap();
+    assert_eq!(
+        (saved.server_url.as_str(), saved.server_port),
+        (cfg.server_url.as_str(), cfg.server_port)
+    );
+    // A server that owns its port is used, and replaced once it no longer does.
+    fixture.io.foreign.store(false, Ordering::SeqCst);
+    assert!(
+        !fixture
+            .manager
+            .ensure(&cfg, &cancel)
+            .await
+            .unwrap()
+            .server_url
+            .is_empty()
+    );
+    assert_eq!(fixture.io.starts.load(Ordering::SeqCst), 2);
+    fixture.io.foreign.store(true, Ordering::SeqCst);
+    assert!(fixture.manager.ensure(&cfg, &cancel).await.is_err());
+    assert_eq!(fixture.io.starts.load(Ordering::SeqCst), 3);
+    fixture.manager.shutdown().await;
+    fixture.owner.drain_effects().await;
+}
+#[cfg(any(windows, target_os = "linux"))]
+#[tokio::test]
+async fn audit_u31_native_server_check_needs_the_live_process_that_owns_the_port() {
+    use crate::process::wrapper_startup::recovery_identity::test_support::Bystander;
+    let fixture = Fixture::new(false);
+    let io = native::NativeWhisperIo {
+        paths: fixture.manager.deps.paths.clone(),
+    };
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (_running, done) = tokio::sync::watch::channel(None);
+    let process = |pid| WhisperProcess {
+        cancellation: Cancellation::default(),
+        done: done.clone(),
+        pid,
+    };
+    assert!(io.serves(port, &process(std::process::id())));
+    let bystander = Bystander::spawn();
+    assert!(!io.serves(port, &process(bystander.pid())));
+    let (_ended, exited) = tokio::sync::watch::channel(Some(ProcessExit { failed: false }));
+    let ended = WhisperProcess {
+        cancellation: Cancellation::default(),
+        done: exited,
+        pid: std::process::id(),
+    };
+    assert!(!io.serves(port, &ended));
+    drop(listener);
+    assert!(!io.serves(port, &process(std::process::id())));
 }
 
 // All archive fixtures are inert bytes: no runtime, model, or provider executes.

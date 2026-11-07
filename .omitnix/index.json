@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "3a6405f1f3ca387ac35288b0cf31591462a019aa",
+    "commit": "c325df8d947ee772d5b6a458ec80a76b59a836b2",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2081,
-    "analyzed": 1615,
+    "discovered": 2082,
+    "analyzed": 1616,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 451,
@@ -34307,6 +34307,35 @@
         "summary": {
           "state": "value",
           "value": "The one place a Hub-launched Git process is planned."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/process/listener.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Which process owns a loopback TCP listener. A connection that succeeds"
         },
         "authentication": {
           "state": "not_configured"

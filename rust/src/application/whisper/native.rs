@@ -167,12 +167,16 @@ impl WhisperIo for NativeWhisperIo {
             let owner_cancel = permit.cancellation();
             let (sender, mut done) = tokio::sync::watch::channel(None);
             drop(permit.start(async move{let outcome=tokio::select!{result=process.wait()=>result,_=owner_cancel.token().cancelled()=>{process.close();process.wait().await},_=process_cancel.cancelled()=>{process.close();process.wait().await}};let failed=!matches!(outcome,Ok(crate::process::ProcessOutput{outcome:ExitOutcome::Exited{code:Some(0),..}|ExitOutcome::Cancelled,..}));let _=sender.send(Some(ProcessExit{failed}));}));
-            tokio::select! {
-                event=events.recv()=>if !matches!(event,Ok(crate::process::ProcessEvent::Started{..})){return Err(error("Whisper server failed to start"));},
+            let pid = tokio::select! {
+                event=events.recv()=>match event{Ok(crate::process::ProcessEvent::Started{pid})=>pid,_=>return Err(error("Whisper server failed to start"))},
                 _=done.changed()=>return Err(error("Whisper server failed to start")),
-            }
+            };
             pending.0 = None;
-            Ok(WhisperProcess { cancellation, done })
+            Ok(WhisperProcess {
+                cancellation,
+                done,
+                pid,
+            })
         })
     }
     fn ready<'a>(
@@ -194,6 +198,18 @@ impl WhisperIo for NativeWhisperIo {
                 tokio::select! {_=cancel.cancelled()=>return Err(error("Whisper startup cancelled")),_=tokio::time::sleep(Duration::from_millis(150))=>{}}
             }
         })
+    }
+    fn serves(&self, port: u16, process: &WhisperProcess) -> bool {
+        if process.done.borrow().is_some() {
+            return false;
+        }
+        match crate::process::listener::loopback_listeners_owned_by(port, process.pid) {
+            Ok(owned) => owned,
+            // Where the system gives no listener owners (macOS), only the
+            // server being alive is checked, as before.
+            Err(error) if error.kind() == io::ErrorKind::Unsupported => true,
+            Err(_) => false,
+        }
     }
 }
 #[cfg(windows)]

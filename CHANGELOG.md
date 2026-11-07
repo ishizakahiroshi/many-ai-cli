@@ -199,6 +199,16 @@ Release artifacts are published at
   now has read access only, keeps no credential, and stops unless the tag
   points to the commit given with it; a separate job that runs no upstream code
   uploads the result.
+- **Voice input is sent only to the Whisper server the Hub started.** The Hub
+  picked a free port, let it go, then started the managed Whisper server on
+  it, and took any successful connection as the server being ready. A program
+  of another user on the same machine that bound the port in between received
+  the recorded audio, and its reply was put into the input box. The Hub now
+  checks with the system that the server it started is alive and owns every
+  listener on that port (on Windows and Linux) before it uses or saves the
+  address, and checks again each time it reuses a running server; otherwise it
+  stops the server and reports that it could not start. On macOS only the
+  server being alive is checked.
 
 ## [0.10.0] - Unreleased
 
