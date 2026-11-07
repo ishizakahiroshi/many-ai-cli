@@ -231,6 +231,13 @@ Release artifacts are published at
   user placed there was used as is. Before SQLite opens them, the database,
   `-wal` and `-shm` now get the same user-only permissions as the database,
   and a file that belongs to another user stops the history from opening.
+- **Claude's per-session settings no longer go to the shared temporary
+  folder.** The wrapper wrote the status line and delegation files under a
+  predictable name in the system temporary folder, so on Linux another user
+  could take that name first, or leave any file whose name is not UTF-8, and
+  Claude then started without them. They are now written to
+  `~/.many-ai-cli/tmp` (user-only) under a name with a random part, and a
+  failed look for old files no longer stops the new one.
 
 ## [0.10.0] - Unreleased
 

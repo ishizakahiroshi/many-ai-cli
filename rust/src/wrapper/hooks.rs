@@ -1,7 +1,12 @@
 //! Session-owned files. Persistent shell profiles and shared Claude settings are
 //! never changed. OpenCode's required project overlay retains rollback evidence.
 pub mod codex;
-use crate::{config::RuntimePaths, files::safe_fs::Dir, process::pid_alive, proto::Message};
+use crate::{
+    config::{Resource, RuntimePaths},
+    files::safe_fs::Dir,
+    process::pid_alive,
+    proto::Message,
+};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -45,14 +50,11 @@ impl SessionHooks {
         extension: &str,
         bytes: &[u8],
     ) -> io::Result<PathBuf> {
-        let root = paths.usage_hook_temporary_dir(&std::env::temp_dir());
-        // Never restrict the shared system temporary directory. Only the
-        // selected trial-owned directory is created/restricted here.
-        let directory = if paths.is_trial() {
-            Dir::open_or_create_private(&root)?
-        } else {
-            Dir::open(&root)?
-        };
+        // The user's own folder, never the shared system temporary folder,
+        // where another user could take the name first or leave a name that
+        // stops the scan, so the session started without these files (U60).
+        let root = paths.resource(Resource::UsageHooks);
+        let directory = Dir::open_or_create_private(&root)?;
         let home = if paths.is_trial() {
             paths.root()
         } else {
@@ -65,7 +67,9 @@ impl SessionHooks {
         let owner = &owner[..16];
         let prefix = format!("aac-{kind}-u{owner}-s");
         let suffix = format!(".{extension}");
-        for name in directory.entries()? {
+        // Removing stale files is housekeeping: a scan that fails does not
+        // stop the new file.
+        for name in directory.entries().unwrap_or_default() {
             let Some(body) = name
                 .strip_prefix(&prefix)
                 .and_then(|v| v.strip_suffix(&suffix))
@@ -78,6 +82,8 @@ impl SessionHooks {
             if session.parse::<u64>().is_err() {
                 continue;
             }
+            // The PID, followed by the random part of newer names.
+            let pid = pid.split_once('-').map_or(pid, |(pid, _)| pid);
             let Some(pid) = pid.parse::<i64>().ok().filter(|pid| *pid > 0) else {
                 continue;
             };
@@ -97,11 +103,24 @@ impl SessionHooks {
                 let _ = directory.remove_file(&name);
             }
         }
-        let name = format!(
-            "aac-{kind}-u{owner}-s{session_id}-p{}.{extension}",
-            std::process::id()
-        );
-        directory.create_new(&name, bytes, 0o600)?;
+        // A random part keeps the name unpredictable; a name already taken is
+        // retried with a new one.
+        let mut attempts = 0;
+        let name = loop {
+            let random = crate::process::random_token()?;
+            let name = format!(
+                "aac-{kind}-u{owner}-s{session_id}-p{}-{}.{extension}",
+                std::process::id(),
+                &random[..16]
+            );
+            match directory.create_new(&name, bytes, 0o600) {
+                Ok(()) => break name,
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists && attempts < 8 => {
+                    attempts += 1;
+                }
+                Err(error) => return Err(error),
+            }
+        };
         let path = root.join(&name);
         self.files.push(OwnedFile { directory, name });
         Ok(path)
@@ -417,6 +436,50 @@ mod tests {
         hooks.finish().unwrap();
         assert!(!file.exists());
         assert!(!Path::new(&delegation[1]).exists());
+    }
+    #[test]
+    fn audit_u60_production_files_stay_in_the_users_folder_under_unpredictable_names() {
+        let home = tempfile::tempdir().unwrap();
+        let paths = RuntimePaths::production(home.path()).unwrap();
+        let folder = paths.resource(Resource::UsageHooks);
+        let mut hooks = SessionHooks::default();
+        let reg = Message {
+            session_id: 7,
+            token_statusbar: true,
+            ..Default::default()
+        };
+        let mut settings = || {
+            hooks
+                .claude_settings(
+                    &paths,
+                    &reg,
+                    Path::new("/synthetic/many-ai-cli"),
+                    49011,
+                    false,
+                )
+                .unwrap()[1]
+                .clone()
+        };
+        let first = settings();
+        // The same session and process get a different name each time.
+        let second = settings();
+        assert_ne!(first, second);
+        for file in [&first, &second] {
+            assert!(Path::new(file).starts_with(&folder), "{file}");
+        }
+        // A name that is not UTF-8 in the folder does not stop the next file.
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            std::fs::write(
+                folder.join(std::ffi::OsStr::from_bytes(b"synthetic-\xff")),
+                b"",
+            )
+            .unwrap();
+            assert!(hooks.delegation(&paths, "claude", 7).is_ok());
+        }
+        hooks.finish().unwrap();
+        assert!(!Path::new(&first).exists() && !Path::new(&second).exists());
     }
     #[test]
     fn opencode_overlay_restores_original_and_preserves_concurrent_edit() {
