@@ -29,7 +29,7 @@ cutover acceptance remains pending.
 
 ## Validation
 
-Use Rust 1.90.0 and Bun 1.3.14. The original dependency snapshot and official input
+Use Rust 1.90.0 and Bun 1.4.4. The original dependency snapshot and official input
 checksums are in `inventory/dependencies.json`; the current `Cargo.lock` fixes
 resolved inputs. Final dependency license/SBOM distribution acceptance is pending.
 

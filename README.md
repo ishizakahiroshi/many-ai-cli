@@ -290,7 +290,7 @@ Rust and Bun below are only needed to build from source, and Go only for a few h
 | Item | Requirement |
 |---|---|
 | Rust | 1.90.0, including Cargo (source builds; pinned in `rust/rust-toolchain.toml`) |
-| Bun | 1.3.14 (generate and check the Web UI before Cargo) |
+| Bun | 1.4.4 (generate and check the Web UI before Cargo) |
 | Go | Optional. 1.26.8, only for the historical compatibility tests and fixture tooling that expect a pinned Go. Not needed to build or run `many-ai-cli`; the frozen Go application under `go/` is never built |
 | OS | Windows 10/11, macOS, Linux |
 | Browser | Chrome / Edge / Firefox / Safari |
@@ -1634,7 +1634,7 @@ The only supported configuration is localhost reachability, as described above. 
 ## Build from Source
 
 The `develop` mainline builds the Rust application. Use Rust 1.90.0 (pinned in
-`rust/rust-toolchain.toml`), Bun 1.3.14, and your platform's native compiler/linker
+`rust/rust-toolchain.toml`), Bun 1.4.4, and your platform's native compiler/linker
 for Cargo's native dependencies. Go is not needed: the frozen application under
 `go/` is not built, and Go 1.26.8 is only for the historical compatibility tests
 and fixture tooling that expect a pinned Go.

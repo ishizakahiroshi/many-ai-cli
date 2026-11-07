@@ -167,7 +167,7 @@ class CandidateReceiptTests(unittest.TestCase):
             if args == ['go', 'version']:
                 return 'go version go1.26.8 synthetic'
             if args == ['bun', '--version']:
-                return '1.3.14'
+                return '1.4.4'
             if args == ['node', '--version']:
                 return 'v22.23.4'
             if args[:2] == ['go', 'env']:

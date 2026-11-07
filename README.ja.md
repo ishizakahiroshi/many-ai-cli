@@ -252,7 +252,7 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 | 項目 | 要件 |
 |---|---|
 | Rust | 1.90.0、Cargo を含む（ソースビルド時。`rust/rust-toolchain.toml` で固定） |
-| Bun | 1.3.14（Cargo より先に Web UI を生成・検査する） |
+| Bun | 1.4.4（Cargo より先に Web UI を生成・検査する） |
 | Go | 任意。1.26.8（固定した Go を前提とする過去の互換性テストと fixture 用ツールだけで使う）。many-ai-cli のビルドにも実行にも不要。`go/` に凍結した Go アプリはビルドしない |
 | OS | Windows 10/11、macOS、Linux |
 | ブラウザ | Chrome / Edge / Firefox / Safari |
@@ -1569,7 +1569,7 @@ Hub UI には「ログフォルダを OS のファイルマネージャで開く
 ## ソースからビルド
 
 `develop` の本線は Rust 版です。Rust 1.90.0（`rust/rust-toolchain.toml` で固定）、
-Bun 1.3.14 と、Cargo の native 依存に必要な各 OS のコンパイラ・リンカーを用意します。
+Bun 1.4.4 と、Cargo の native 依存に必要な各 OS のコンパイラ・リンカーを用意します。
 Go は不要です。`go/` に凍結したアプリはビルドせず、Go 1.26.8 は固定した Go を前提と
 する過去の互換性テストと fixture 用ツールだけで使います。
 

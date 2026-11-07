@@ -32,6 +32,15 @@ Release artifacts are published at
   key is read from a file you name and never logged. See
   `docs/manual_board-sync.md`.
 
+### Security
+
+- **CI and release builds use Bun 1.4.4.** Bun 1.3.14 was affected by three
+  advisories fixed in 1.4.4, including the brotli decoder flaw that CISA lists
+  as known exploited (CVE-2026-111497). The release jobs run `bun install` with
+  Bun before building the web assets embedded in every binary, so the pinned
+  version, the toolchain checks and the README toolchain table move to 1.4.4.
+  `web/bun.lock` is unchanged.
+
 ## [0.10.0] - Unreleased
 
 This release replaces the Go implementation of many-ai-cli with a Rust one.

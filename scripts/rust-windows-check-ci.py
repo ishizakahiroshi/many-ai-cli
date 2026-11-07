@@ -94,7 +94,7 @@ def toolchain_gate(versions: dict[str, str]) -> None:
     if (not versions["rustc"].startswith("rustc 1.90.0 ")
             or candidate.host_from_verbose(versions["rustc"]) != TARGET):
         raise ValueError("native host or pinned Rust 1.90.0 mismatch")
-    if versions["go"] != "go version go1.26.8 windows/amd64" or versions["bun"] != "1.3.14":
+    if versions["go"] != "go version go1.26.8 windows/amd64" or versions["bun"] != "1.4.4":
         raise ValueError("pinned native Go/Bun toolchain mismatch")
 
 

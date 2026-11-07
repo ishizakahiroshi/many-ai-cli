@@ -35,7 +35,7 @@ GoReleaser と `GOOS` による旧アプリのビルドは現在の手順では�
 
 ### native から canonical 公開まで
 
-native runner の固定ツールは Rust 1.90.0、Go 1.26.8、Bun 1.3.14、Python 3.12 です。
+native runner の固定ツールは Rust 1.90.0、Go 1.26.8、Bun 1.4.4、Python 3.12 です。
 Go は互換データ・合成 fixture のためのツールで、Go 製品のビルドを行いません。
 Web 資材を先に生成し、packaging checks、Web check、Rust fmt / Clippy / all-target tests / doc tests
 を実行した後、各 target で本体とランチャーの 2 本を一度ずつ release build します。

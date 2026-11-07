@@ -18,7 +18,7 @@
 # --- pinned toolchain stages ---
 # These are Docker Hub manifest-list digests retrieved from the official image
 # repositories on 2026-09-05. Tags remain visible for operator readability.
-FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun-runtime
+FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS bun-runtime
 FROM node:22-bookworm@sha256:8a34c4ab3ea2c5cd194f07e317b2a8f09461d3c8b05c4e34c8ccd56d56024c4d AS node-runtime
 
 # --- web build stage: TypeScript フロントを web/dist に生成 ---

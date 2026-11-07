@@ -396,7 +396,7 @@ def main() -> None:
     bun = capture(["bun", "--version"])
     node = capture(["node", "--version"])
     require_node_version(node)
-    if not go.startswith("go version go1.26.8 ") or bun != "1.3.14":
+    if not go.startswith("go version go1.26.8 ") or bun != "1.4.4":
         raise SystemExit("pinned Go/Bun toolchain mismatch")
     if capture(["git", "rev-parse", "HEAD"]) != source:
         raise SystemExit("source changed during toolchain validation")

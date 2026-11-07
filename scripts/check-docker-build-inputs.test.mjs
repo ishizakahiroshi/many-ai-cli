@@ -32,7 +32,7 @@ test('digest-less FROM is rejected', () => {
 });
 
 test('digest-less external COPY source is rejected', () => {
-  const fixture = dockerfile.replace('COPY --from=bun-runtime /usr/local/bin/bun', 'COPY --from=oven/bun:1.3.14 /usr/local/bin/bun');
+  const fixture = dockerfile.replace('COPY --from=bun-runtime /usr/local/bin/bun', 'COPY --from=oven/bun:1.4.4 /usr/local/bin/bun');
   assert.ok(hasError(checkDockerfileInputs(fixture), 'COPY external image'));
 });
 
