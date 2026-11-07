@@ -3,6 +3,7 @@ pub mod detect;
 pub mod identity;
 pub mod marker;
 pub mod record;
+pub mod shell_authority;
 pub mod summary;
 pub mod token;
 pub mod transcript;

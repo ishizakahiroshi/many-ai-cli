@@ -48,7 +48,7 @@ pub fn command_from_line(line: &str) -> Option<String> {
         .iter()
         .find_map(|p| p.captures(line.trim()).map(|c| c[1].to_owned()))
 }
-fn command_heading(line: &str) -> bool {
+pub(crate) fn command_heading(line: &str) -> bool {
     matches!(
         line.trim_end_matches(':').trim().to_lowercase().as_str(),
         "bash command" | "shell command"
@@ -176,7 +176,14 @@ pub fn classify_risk(command: &str) -> &'static str {
         if s.is_empty() {
             continue;
         }
-        if low.iter().any(|p| s == p.trim() || s.starts_with(p)) {
+        // A low prefix must end at a word boundary: "git diff" is low, but
+        // "git difftool -x ./tool", "lsof" and "dirname" are not (audit U24).
+        if low.iter().any(|p| {
+            let p = p.trim();
+            s == p
+                || s.strip_prefix(p)
+                    .is_some_and(|rest| rest.starts_with(|c: char| c.is_whitespace()))
+        }) {
             saw_low = true;
         } else {
             return "mid";
@@ -354,4 +361,35 @@ pub fn mask_secrets(text: &str) -> String {
     KNOWN_TOKEN
         .replace_all(&text, "[REDACTED_TOKEN]")
         .into_owned()
+}
+
+#[cfg(test)]
+mod word_boundary_tests {
+    use super::classify_risk;
+
+    #[test]
+    fn low_prefixes_end_at_a_word_boundary() {
+        // Audit U24: "git diff" as a prefix used to make difftool low.
+        for command in [
+            "git difftool -y -x 'bash /tmp/p.sh' HEAD~1 HEAD",
+            "git difftool --extcmd=sh",
+            "git difftool -x sh",
+            "lsof -i",
+            "dirname ./a",
+            "git diff-tree HEAD",
+        ] {
+            assert_eq!(classify_risk(command), "mid", "{command}");
+        }
+        for command in [
+            "git diff",
+            "git diff HEAD~1",
+            "ls",
+            "ls -la",
+            "pwd",
+            "cat ./a.txt",
+            "git status --short",
+        ] {
+            assert_eq!(classify_risk(command), "low", "{command}");
+        }
+    }
 }

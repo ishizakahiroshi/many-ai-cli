@@ -206,6 +206,11 @@ fn source_hard_blocks_are_checked_before_risk_and_matching() {
         "shred file",
         "rm path -r",
         "chmod --recursive 777 path",
+        // Audit U24: difftool runs an external program even with a broad diff rule.
+        "git difftool -y -x 'bash /tmp/p.sh' HEAD~1 HEAD",
+        "git difftool --extcmd=sh",
+        "git difftool -x sh",
+        "git difftool --tool=vimdiff",
     ]) {
         for risk in ["low", "mid", "high", ""] {
             let decision = policy.evaluate(command, ".", risk);

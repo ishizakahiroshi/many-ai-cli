@@ -1,7 +1,10 @@
 //! Source automatic approval runtime, sharing the persisted policy with batch HTTP.
 use super::event_observer::EventWarning;
 use crate::{
-    approval::policy::{Decision, PolicyStore},
+    approval::{
+        policy::{Decision, PolicyStore},
+        shell_authority::CommandAuthority,
+    },
     config::{ConfigStore, RuntimePaths},
     hub::task_owner::HubTaskHandle,
     proto::{
@@ -119,11 +122,26 @@ impl ApprovalRules {
             let Some(details) = core.details(session) else {
                 return Ok(false);
             };
-            let decision = self.policy.evaluate_policy(
-                &data.summary.command,
-                &details.snapshot.cwd,
-                &data.summary.risk,
-            );
+            // Audit U23: a heading prompt is decided on its whole command, which
+            // Claude writes to the transcript just before drawing the prompt.
+            let (summary, authority) = authorized_summary(
+                &core,
+                session,
+                &details.snapshot.provider,
+                &data.question,
+                &data.context,
+            )
+            .await;
+            let decision = if authority == CommandAuthority::Unverified {
+                Decision {
+                    allowed: false,
+                    rule_id: String::new(),
+                    reason: "コマンドの全文を確かめられないため手動確認が必要です".into(),
+                }
+            } else {
+                self.policy
+                    .evaluate_policy(&summary.command, &details.snapshot.cwd, &summary.risk)
+            };
             {
                 let mut history = self.history.lock().unwrap_or_else(|p| p.into_inner());
                 history.push_back(Candidate {
@@ -136,7 +154,7 @@ impl ApprovalRules {
                     session_id: session.0,
                     provider: details.snapshot.provider.clone(),
                     cwd: details.snapshot.cwd.clone(),
-                    summary: data.summary.clone(),
+                    summary: summary.clone(),
                     decision: decision.clone(),
                 });
                 while history.len() > 100 {
@@ -190,15 +208,15 @@ impl ApprovalRules {
                 session_id: session.0,
                 provider: details.snapshot.provider.clone(),
                 rule_id: decision.rule_id.clone(),
-                command: mask_secrets(&data.summary.command),
-                risk: data.summary.risk.clone(),
+                command: mask_secrets(&summary.command),
+                risk: summary.risk.clone(),
             };
             let notification = proto::Message {
                 r#type: "auto_approval_applied".into(),
                 session_id: session.0,
                 provider: details.snapshot.provider,
                 approval_sig: data.sig.clone(),
-                approval_summary: Some(data.summary.clone()),
+                approval_summary: Some(summary.clone()),
                 text: decision.rule_id,
                 ..Default::default()
             };
@@ -244,4 +262,31 @@ impl ApprovalRules {
             Ok(true)
         })
     }
+}
+
+/// The record's terminal-text summary checked against the transcript. Claude
+/// writes the tool call before drawing the prompt, so a miss is retried a few
+/// times for a line still being written; other providers have no source.
+async fn authorized_summary(
+    core: &SessionEngine,
+    session: LiveSessionId,
+    provider: &str,
+    question: &str,
+    context: &str,
+) -> (proto::ApprovalSummary, CommandAuthority) {
+    let mut result = core.authorize_approval(session, question, context);
+    if provider != "claude" {
+        return result;
+    }
+    for attempt in 0..3 {
+        if result.1 != CommandAuthority::Unverified {
+            break;
+        }
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        core.refresh_pending_shell(session).await;
+        result = core.authorize_approval(session, question, context);
+    }
+    result
 }

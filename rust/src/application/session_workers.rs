@@ -37,6 +37,7 @@ use std::{
 mod branch_refresh;
 mod handoff_hooks;
 mod observations;
+pub(crate) mod pending_shell;
 #[cfg(test)]
 mod recovery_core_prompt_tests;
 mod subagent_activity;

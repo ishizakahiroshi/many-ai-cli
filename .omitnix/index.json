@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "f8bfaf52d4a1a70eaea265f4e1eb1040a29c042c",
-    "dirty": true,
+    "commit": "cc42380dcdf5489677d8a20f9fbdfa9d27477f65",
+    "dirty": false,
     "tool": "omitnix 0.1.4",
     "partial": false,
     "adapters": [
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2078,
-    "analyzed": 1612,
+    "discovered": 2080,
+    "analyzed": 1614,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 451,
@@ -26647,6 +26647,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/application/session_workers/pending_shell.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Reads the unanswered shell calls of a Claude transcript for approval"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/application/session_workers/recovery_core_prompt_tests.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -28463,6 +28492,35 @@
         "summary": {
           "state": "value",
           "value": "One-shot action selection from auto_approval.go / approval_action.go."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/approval/shell_authority.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "The whole shell command behind a heading-style approval prompt (audit U23)."
         },
         "authentication": {
           "state": "not_configured"

@@ -290,7 +290,9 @@ impl PushManager {
         } else {
             format!("{}#{}", data.sig, data.candidate.source_epoch.0)
         };
-        let summary = crate::approval::summary::summarize(&data.question, &data.context);
+        // Audit U23: the risk shown and the one-tap approve link follow the whole
+        // command of a heading prompt; an unconfirmed command gets no approve link.
+        let (summary, authority) = core.authorize_approval(session, &data.question, &data.context);
         let mut payload = ApprovalPayload {
             id,
             session_id: session.0,
@@ -321,7 +323,9 @@ impl PushManager {
                     Timestamp::now(),
                 )
                 .unwrap_or_default();
-            if summary.risk != "high" {
+            if summary.risk != "high"
+                && authority != crate::approval::shell_authority::CommandAuthority::Unverified
+            {
                 payload.approve_token = tokens
                     .issue(
                         details.binding,

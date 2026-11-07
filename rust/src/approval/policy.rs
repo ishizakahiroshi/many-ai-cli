@@ -504,6 +504,8 @@ static HARD_BLOCKS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)\b(?:curl|wget|scp|rsync|ftp|nc|ssh|aws|gcloud|az)\b",
         r"(?i)\bfind\b[^\n]*\s-(?:exec|execdir|ok|okdir|delete)\b",
         r"\$\(|`",
+        // Audit U24: difftool starts an external program (-x/--extcmd/--tool).
+        r"(?i)\bgit\s+difftool\b",
     ]
     .into_iter()
     .map(|pattern| go_regex(pattern).expect("fixed Go hard-block regex"))

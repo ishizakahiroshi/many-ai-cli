@@ -223,7 +223,9 @@ impl ApplicationEventObserver {
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
-        let summary = crate::approval::summary::summarize(&record.question, &record.context);
+        // Audit U23: same authority as the Web push above (transcript read first).
+        let (summary, authority) =
+            core.authorize_approval(session, &record.question, &record.context);
         let external = config
             .hub
             .allowed_hosts
@@ -257,7 +259,11 @@ impl ApplicationEventObserver {
                 (OneTapAction::Reject, &mut payload.reject_url),
                 (OneTapAction::Approve, &mut payload.approve_url),
             ] {
-                if action == OneTapAction::Approve && summary.risk == "high" {
+                if action == OneTapAction::Approve
+                    && (summary.risk == "high"
+                        || authority
+                            == crate::approval::shell_authority::CommandAuthority::Unverified)
+                {
                     continue;
                 }
                 if let Ok(token) = tokens.issue(
@@ -604,6 +610,13 @@ impl OrderedEventObserver for ApplicationEventObserver {
                     Ok(())
                 }
                 CoreEvent::ApprovalPublished { session, record } => {
+                    // Audit U23: both notification paths authorize the command
+                    // against a fresh transcript read.
+                    if record.data().origin == "native"
+                        && let Some(core) = self.owners.get().and_then(|o| o.core.upgrade())
+                    {
+                        core.refresh_pending_shell(*session).await;
+                    }
                     self.approval_notification(*session, record)
                 }
                 CoreEvent::CompletionRecord { binding, summary } => {

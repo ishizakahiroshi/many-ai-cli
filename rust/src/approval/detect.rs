@@ -465,6 +465,17 @@ fn notice(provider: &str, question: &str) -> NativeApproval {
     .key;
     a
 }
+/// The masked terminal-text summary of a native prompt. Callers that re-check a
+/// recorded prompt start from this, never from an already authorized summary.
+pub fn native_summary(question: &str, context: &str) -> ApprovalSummary {
+    let mut summary = summarize(&mask_secrets(question), &mask_secrets(context));
+    summary.command = mask_secrets(&summary.command);
+    summary.raw = mask_secrets(&summary.raw);
+    for p in &mut summary.paths {
+        *p = mask_secrets(p);
+    }
+    summary
+}
 pub fn detect_native(
     provider: &str,
     lines: &[String],
@@ -588,12 +599,7 @@ pub fn detect_native(
     } else {
         "native"
     };
-    let mut summary = summarize(&mask_secrets(&question), &mask_secrets(&context));
-    summary.command = mask_secrets(&summary.command);
-    summary.raw = mask_secrets(&summary.raw);
-    for p in &mut summary.paths {
-        *p = mask_secrets(p);
-    }
+    let summary = native_summary(&question, &context);
     let sig = candidate(
         provider,
         kind,

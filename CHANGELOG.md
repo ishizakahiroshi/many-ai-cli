@@ -40,6 +40,19 @@ Release artifacts are published at
   Bun before building the web assets embedded in every binary, so the pinned
   version, the toolchain checks and the README toolchain table move to 1.4.4.
   `web/bun.lock` is unchanged.
+- **Approvals are decided on the whole Bash command.** Claude shows a Bash
+  permission as a heading, the command and its description, and many-ai-cli
+  read only the first line under the heading. A second line was never
+  classified, so an automatic rule written for the first line, "Approve all"
+  or a one-tap link could approve it. The Hub now takes the exact command from
+  Claude's transcript, which Claude writes before showing the prompt, and
+  classifies and matches all of it. When the command cannot be confirmed, its
+  risk shows at least as medium and only an answer on the prompt itself
+  approves it.
+- **`git difftool` is never low risk.** Treating `git diff` as a prefix also
+  rated `git difftool -x <program>` as low; low-risk prefixes now end at a word
+  boundary (so `lsof` and `dirname` are no longer low either), and
+  `git difftool` always needs a person's confirmation.
 
 ## [0.10.0] - Unreleased
 

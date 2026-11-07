@@ -158,6 +158,10 @@ impl ApprovalActionHttp {
             OneTapAction::Approve => NativeActionSelection::ApproveOnce,
             OneTapAction::Reject => NativeActionSelection::RejectOnce,
         };
+        // Audit U23: confirm a heading prompt's whole command before approving.
+        self.core
+            .refresh_pending_shell(binding.session.session)
+            .await;
         let action = match self
             .core
             .prepare_and_send(
@@ -214,6 +218,13 @@ impl ApprovalActionHttp {
         };
         if request.signature.trim().is_empty() && request.action != "deny_session" {
             return Response::error(400, "invalid_batch_request", "signature is required");
+        }
+        // Audit U23: batch matching and approval classify the whole command of a
+        // heading prompt, so read each pending session's transcript first.
+        for item in self.core.pending_native_approval_actions() {
+            self.core
+                .refresh_pending_shell(item.binding.session.session)
+                .await;
         }
         let matched: Vec<_> = self
             .core
@@ -394,6 +405,11 @@ fn action_error(error: ApprovalActionError) -> Response {
             403,
             "high_risk_requires_in_app_confirmation",
             "open Hub to confirm this high-risk approval",
+        ),
+        ApprovalActionError::UnverifiedCommand => Response::error(
+            403,
+            "command_requires_in_app_confirmation",
+            "open Hub to confirm this command",
         ),
         _ => action_not_applied(),
     }

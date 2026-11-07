@@ -1756,6 +1756,9 @@ pub enum ApprovalActionError {
     StaleWrapper,
     Reserved,
     HighRisk,
+    /// A heading prompt whose whole command the transcript did not confirm
+    /// (audit U23); only a person on the prompt may approve it.
+    UnverifiedCommand,
     PersistentOption,
     PolicyChanged,
     Transport(String),
@@ -1794,6 +1797,12 @@ pub trait ApprovalActions: Send + Sync {
         now: Timestamp,
     ) -> Result<CoreEffects, ApprovalActionError>;
     fn release(&self, action: ReservedApprovalAction);
+    /// Re-reads transcript evidence for heading-style shell prompts before a
+    /// decision that does not come from a person on the prompt (audit U23).
+    /// Without a transcript source such prompts stay unverified.
+    fn refresh_pending_shell<'a>(&'a self, _session: LiveSessionId) -> CoreFuture<'a, ()> {
+        Box::pin(async {})
+    }
 }
 
 pub enum PersistenceEffect {

@@ -104,6 +104,9 @@ impl SessionEngine {
                 let phrases = self.approval_phrases_for(&s.snapshot.provider);
                 if let Some(native) = detect::detect_native(&s.snapshot.provider, &lines, &phrases)
                 {
+                    // The record shows the whole command when the transcript
+                    // confirms it, and never a low risk for an unconfirmed one.
+                    let (native, _) = s.authorize_native(native);
                     let candidate = identity::candidate(
                         &s.snapshot.provider,
                         &native.kind,

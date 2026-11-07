@@ -6,7 +6,7 @@ use crate::{
     terminal::{
         events::CoreEventBus,
         journal::{JournalOptions, SessionJournal},
-        session::EngineOptions,
+        session::{EngineOptions, PendingShellLookup},
     },
 };
 use std::{
@@ -72,6 +72,13 @@ impl Fixture {
         Self::with_sink(enabled, Arc::new(Sink))
     }
     fn with_sink(enabled: bool, effects: Arc<dyn CoreEffectSink>) -> Self {
+        Self::build(enabled, effects, None)
+    }
+    fn build(
+        enabled: bool,
+        effects: Arc<dyn CoreEffectSink>,
+        pending_shell: Option<PendingShellLookup>,
+    ) -> Self {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir(root.path().join("runtime")).unwrap();
         std::fs::create_dir(root.path().join("installed")).unwrap();
@@ -104,6 +111,7 @@ impl Fixture {
         let core = Arc::new(SessionEngine::new(
             EngineOptions {
                 approval_policy: Some(rules.policy.live_callback()),
+                pending_shell,
                 ..Default::default()
             },
             Arc::new(SessionJournal::new(paths, None, JournalOptions::default())),
@@ -131,9 +139,31 @@ impl Fixture {
         drop(effects);
         (id, record)
     }
+    /// Claude's Bash prompt: heading, command lines and description in one indent.
+    async fn heading_candidate(&self, lines: &[&str]) -> (LiveSessionId, ImmutableApprovalRecord) {
+        let block = lines
+            .iter()
+            .map(|line| format!("   {line}\r\n"))
+            .collect::<String>();
+        let screen = format!(
+            "\x1b[2J\x1b[H Bash command\r\n\r\n{block}   Synthetic description\r\n\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No"
+        );
+        let (id, record, effects) = self.observe_candidate(screen).await;
+        drop(effects);
+        (id, record)
+    }
     async fn candidate_with_effects(
         &self,
         command: &str,
+    ) -> (LiveSessionId, ImmutableApprovalRecord, CoreEffects) {
+        self.observe_candidate(format!(
+            "\x1b[2J\x1b[HRun: {command}\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No"
+        ))
+        .await
+    }
+    async fn observe_candidate(
+        &self,
+        screen: String,
     ) -> (LiveSessionId, ImmutableApprovalRecord, CoreEffects) {
         let registered = self
             .core
@@ -154,10 +184,7 @@ impl Fixture {
             )
             .await
             .unwrap();
-        let bytes = format!(
-            "\x1b[2J\x1b[HRun: {command}\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No"
-        )
-        .into_bytes();
+        let bytes = screen.into_bytes();
         let effects = self
             .core
             .observe_output(
@@ -270,4 +297,56 @@ async fn live_setting_disable_after_detection_prevents_runtime_action() {
     assert!(!f.rules.try_apply(id, &record).await.unwrap());
     assert_eq!(f.transport.0.load(Ordering::SeqCst), 0);
     assert!(f.audit.lock().unwrap().is_empty());
+}
+
+fn transcript(commands: &[&str]) -> Option<PendingShellLookup> {
+    let commands: Vec<String> = commands.iter().map(|c| (*c).to_owned()).collect();
+    Some(Arc::new(move |_| {
+        let commands = commands.clone();
+        Box::pin(async move { Some(commands) })
+    }))
+}
+
+#[tokio::test(start_paused = true)]
+async fn heading_prompt_without_transcript_evidence_is_never_auto_approved() {
+    // Audit U23: only the first line under the heading was classified, so a rule
+    // for `ls -la` approved a second line that removes files.
+    let f = Fixture::build(true, Arc::new(Sink), None);
+    let (id, record) = f.heading_candidate(&["ls -la", "rm -rf ./x"]).await;
+    f.rules
+        .policy
+        .add_and_reload("ls -la", "/synthetic/project")
+        .unwrap();
+    assert_ne!(record.data().summary.risk, "low");
+    assert!(!f.rules.try_apply(id, &record).await.unwrap());
+    assert_eq!(f.transport.0.load(Ordering::SeqCst), 0);
+    assert!(f.audit.lock().unwrap().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn heading_prompt_is_decided_on_the_whole_transcript_command() {
+    let f = Fixture::build(true, Arc::new(Sink), transcript(&["ls -la\nrm -rf ./x"]));
+    let (id, record) = f.heading_candidate(&["ls -la", "rm -rf ./x"]).await;
+    f.rules
+        .policy
+        .add_and_reload("ls -la", "/synthetic/project")
+        .unwrap();
+    assert!(!f.rules.try_apply(id, &record).await.unwrap());
+    assert_eq!(f.transport.0.load(Ordering::SeqCst), 0);
+    let last = f.rules.history().pop().unwrap();
+    assert_eq!(last.summary.command, "ls -la\nrm -rf ./x");
+    assert_eq!(last.summary.risk, "high");
+    assert!(!last.decision.allowed);
+}
+
+#[tokio::test(start_paused = true)]
+async fn heading_prompt_confirmed_by_transcript_is_still_auto_approved() {
+    let f = Fixture::build(true, Arc::new(Sink), transcript(&["ls -la"]));
+    let (id, record) = f.heading_candidate(&["ls -la"]).await;
+    f.rules
+        .policy
+        .add_and_reload("ls -la", "/synthetic/project")
+        .unwrap();
+    assert!(f.rules.try_apply(id, &record).await.unwrap());
+    assert!(f.transport.0.load(Ordering::SeqCst) > 0);
 }

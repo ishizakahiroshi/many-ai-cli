@@ -49,6 +49,11 @@ pub type EngineWarningHandler = Arc<dyn Fn(&str, &SessionError) + Send + Sync>;
 pub type DetectedModelRoute = Arc<dyn Fn(&str, &str) -> String + Send + Sync>;
 pub type SubscriptionName = Arc<dyn Fn(&str, &str) -> String + Send + Sync>;
 pub type BranchLookup = Arc<dyn Fn(String) -> CoreFuture<'static, String> + Send + Sync>;
+/// Reads the unanswered shell calls of a session's provider transcript. `None`
+/// means the transcript could not be read. Called outside the state lock.
+pub type PendingShellLookup = Arc<
+    dyn Fn(TranscriptSessionIdentity) -> CoreFuture<'static, Option<Vec<String>>> + Send + Sync,
+>;
 pub struct EngineOptions {
     pub hub_instance: String,
     pub token_statusbar: bool,
@@ -64,6 +69,9 @@ pub struct EngineOptions {
     pub custom_providers: BTreeSet<String>,
     /// Live policy lookup; absence means automatic approvals are disabled.
     pub approval_policy: Option<LiveApprovalPolicy>,
+    /// Transcript evidence for heading-style shell prompts (audit U23). Absence
+    /// leaves such prompts unverified: only a person may approve them.
+    pub pending_shell: Option<PendingShellLookup>,
     /// Required for confirmation disclosure and actual child/refusal dispatch.
     /// Absence leaves the capability explicitly unavailable.
     pub confirmation_executor: Option<Arc<dyn confirmations::ConfirmationExecutor>>,
@@ -98,6 +106,7 @@ impl Default for EngineOptions {
             approval_phrases: BTreeMap::new(),
             custom_providers: BTreeSet::new(),
             approval_policy: None,
+            pending_shell: None,
             confirmation_executor: None,
             warning: Arc::new(|operation, error| eprintln!("session core {operation}: {error:?}")),
         }
@@ -186,6 +195,9 @@ struct Session {
     subscription_login: bool,
     custom_provider: bool,
     native_tail: String,
+    /// Last transcript read of unanswered shell calls (`None`: not read or
+    /// unreadable). Filled outside the lock by `refresh_pending_shell`.
+    pending_shell: Option<Arc<[String]>>,
     usage: Option<proto::Message>,
     model_revision: u64,
     initial_model_scan_bytes: usize,

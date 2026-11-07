@@ -598,6 +598,9 @@ impl HubComposition {
                 .collect(),
                 warning: warning.clone(),
                 approval_policy: Some(approval_rules.policy.live_callback()),
+                pending_shell: Some(crate::application::session_workers::pending_shell::lookup(
+                    paths.clone(),
+                )),
                 confirmation_executor: Some(child_executor.clone()),
                 ..Default::default()
             },

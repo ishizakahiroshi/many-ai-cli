@@ -360,6 +360,7 @@ impl SessionEngine {
             subscription_login: m.subscription_login,
             custom_provider: self.options.custom_providers.contains(&m.provider),
             native_tail: String::new(),
+            pending_shell: None,
             usage: None,
             model_revision: 0,
             initial_model_scan_bytes: 0,

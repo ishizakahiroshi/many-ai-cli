@@ -643,14 +643,21 @@ impl WebSocketService {
                 incoming = receive(reader, &self.shutdown) => match incoming? { Some(message) => message, None => return Ok(()) },
             };
             let effects = match message.r#type.as_str() {
-                "pty_data" => self.core.observe_output(
-                    binding,
-                    OutputChunk {
-                        bytes: message.data,
-                        total_pty_bytes: message.pty_bytes,
-                    },
-                    Timestamp::now(),
-                )?,
+                "pty_data" => {
+                    // Audit U23: Claude writes the call before drawing the prompt;
+                    // read it now so the record carries the whole command.
+                    if crate::approval::shell_authority::mentions_command_heading(&message.data) {
+                        self.core.refresh_pending_shell(binding.session).await;
+                    }
+                    self.core.observe_output(
+                        binding,
+                        OutputChunk {
+                            bytes: message.data,
+                            total_pty_bytes: message.pty_bytes,
+                        },
+                        Timestamp::now(),
+                    )?
+                }
                 "pty_input_ack" => {
                     self.core.acknowledge(binding, InputSeq(message.input_seq));
                     continue;

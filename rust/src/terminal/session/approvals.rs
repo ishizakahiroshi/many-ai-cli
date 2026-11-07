@@ -1,6 +1,23 @@
 use super::*;
-use crate::approval::{detect, identity, selection};
+use crate::approval::{
+    detect, identity, selection,
+    shell_authority::{self, CommandAuthority},
+};
 impl Session {
+    /// Applies the last transcript read to a freshly detected native prompt
+    /// (audit U23). Pure: the transcript was read outside the lock.
+    pub(super) fn authorize_native(
+        &self,
+        native: detect::NativeApproval,
+    ) -> (detect::NativeApproval, CommandAuthority) {
+        let (summary, authority) = shell_authority::authorize(
+            native.summary.clone(),
+            &native.question,
+            &native.context,
+            self.pending_shell.as_deref(),
+        );
+        (detect::NativeApproval { summary, ..native }, authority)
+    }
     pub(super) fn approval_action_matches(&self, binding: &ApprovalActionBinding) -> bool {
         self.connected
             && self.binding == binding.session
@@ -44,11 +61,11 @@ impl ApprovalActions for SessionEngine {
                     return None;
                 }
                 let phrases = self.approval_phrases_for(&session.snapshot.provider);
-                let live = detect::detect_native(
+                let (live, _) = session.authorize_native(detect::detect_native(
                     &session.snapshot.provider,
                     &session.vt.lines(),
                     &phrases,
-                )?;
+                )?);
                 if live.sig != record.sig {
                     return None;
                 }
@@ -114,8 +131,10 @@ impl ApprovalActions for SessionEngine {
                 // A record can outlive a repaint. Re-detect under the input lane
                 // immediately before reserving; never send against stale UI text.
                 let phrases = self.approval_phrases_for(&s.snapshot.provider);
-                let live = detect::detect_native(&s.snapshot.provider, &s.vt.lines(), &phrases)
-                    .ok_or(ApprovalActionError::StaleCandidate)?;
+                let (live, authority) = s.authorize_native(
+                    detect::detect_native(&s.snapshot.provider, &s.vt.lines(), &phrases)
+                        .ok_or(ApprovalActionError::StaleCandidate)?,
+                );
                 let candidate = identity::candidate(
                     &s.snapshot.provider,
                     &live.kind,
@@ -153,6 +172,13 @@ impl ApprovalActions for SessionEngine {
                     NativeActionSelection::ApproveOnce => {
                         if live.summary.risk == "high" {
                             return Err(ApprovalActionError::HighRisk);
+                        }
+                        // Audit U23: rules, batches and one-tap links never approve
+                        // a heading prompt whose whole command is not confirmed.
+                        if authority == CommandAuthority::Unverified
+                            && !matches!(request.origin, NativeActionOrigin::User)
+                        {
+                            return Err(ApprovalActionError::UnverifiedCommand);
                         }
                         if matches!(
                             request.origin,
@@ -282,6 +308,9 @@ impl ApprovalActions for SessionEngine {
             s.approval_reservation = None;
         }
     }
+    fn refresh_pending_shell<'a>(&'a self, session: LiveSessionId) -> CoreFuture<'a, ()> {
+        Box::pin(self.reload_pending_shell(session))
+    }
 }
 
 fn keep_queued_after_automatic_approval(
@@ -302,6 +331,49 @@ fn keep_queued_after_automatic_approval(
                     }))
         }
         UiFrame::GitTurn(_) | UiFrame::SpawnCorrelation(_) => true,
+    }
+}
+impl SessionEngine {
+    /// Re-reads the unanswered shell calls of a Claude session's transcript
+    /// (audit U23). The read runs through `EngineOptions::pending_shell` with the
+    /// state lock released; only the result is stored.
+    async fn reload_pending_shell(&self, session: LiveSessionId) {
+        let Some(lookup) = self.options.pending_shell.clone() else {
+            return;
+        };
+        let (binding, identity) = {
+            let state = lock(&self.state);
+            match state.sessions.get(&session) {
+                Some(s) if s.snapshot.provider == "claude" => (s.binding, s.transcript.clone()),
+                _ => return,
+            }
+        };
+        let pending = lookup(identity).await;
+        let mut state = lock(&self.state);
+        if let Some(s) = state.sessions.get_mut(&session)
+            && s.binding == binding
+        {
+            s.pending_shell = pending.map(Arc::from);
+        }
+    }
+    /// Authority of a recorded prompt against the last transcript read. Pass the
+    /// terminal-text summary (`detect::native_summary`), not a stored one.
+    pub fn authorize_approval(
+        &self,
+        session: LiveSessionId,
+        question: &str,
+        context: &str,
+    ) -> (proto::ApprovalSummary, CommandAuthority) {
+        let pending = lock(&self.state)
+            .sessions
+            .get(&session)
+            .and_then(|s| s.pending_shell.clone());
+        shell_authority::authorize(
+            detect::native_summary(question, context),
+            question,
+            context,
+            pending.as_deref(),
+        )
     }
 }
 #[cfg(test)]
