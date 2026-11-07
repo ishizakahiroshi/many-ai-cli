@@ -39,6 +39,18 @@ Release artifacts are published at
   changes of `ab.txt`, and a name Git quotes (one with a control character)
   showed "(no diff)". Each file is now matched by its exact name, and file
   names and line counts are read in Git's NUL-separated form.
+- **`many-ai-cli stop` no longer ends a program that was given the Hub's old
+  PID.** A Hub that ended without cleaning up (its console closed, a sign-out,
+  a crash) left its PID in `hub-runtime.json`. Once the system gave that PID to
+  another program, `stop` force-ended that program, and a new Hub refused to
+  start while it ran. The record now also keeps the Hub process's identity
+  (its creation time, plus the boot on Linux). `stop` checks it on the same
+  process handle it ends, leaves a program that only holds the PID running and
+  removes the stale record, and startup no longer counts that program as a
+  Hub. Records written by earlier versions are judged by whether the process
+  already existed when the record was written. On macOS, where a process
+  cannot be identified this way, a Hub that does not answer the stop request
+  is no longer force-ended: `stop` says so and leaves it to you.
 
 ### Security
 

@@ -4,11 +4,12 @@ use crate::proto::time::Timestamp;
 use crate::{
     config::RuntimePaths,
     files::safe_fs::Dir,
+    process::wrapper_startup::recovery_identity,
     proto::wire::{Field, GoWire, Schema},
 };
 use serde::{Deserialize, Serialize};
 use std::{fs::File, io, sync::Arc, time::Duration};
-const FILE: &str = "hub-runtime.json";
+pub const FILE: &str = "hub-runtime.json";
 const LOCK: &str = "hub-runtime.json.lock";
 const MAX_BYTES: usize = 1024 * 1024;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -18,6 +19,13 @@ pub struct RuntimeData {
     pub pid: i64,
     pub port: i64,
     pub started_at: String,
+    /// The Hub process's identity (creation time, plus boot on Linux). A Hub
+    /// that ends without removing this record leaves its PID to whatever
+    /// process the OS starts next, so the PID alone never names it (U11).
+    /// Empty in records written before identities were kept, or where the
+    /// platform has none.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub process: String,
 }
 impl Default for RuntimeData {
     fn default() -> Self {
@@ -26,8 +34,56 @@ impl Default for RuntimeData {
             pid: 0,
             port: 0,
             started_at: "0001-01-01T00:00:00Z".into(),
+            process: String::new(),
         }
     }
+}
+/// What holds the ledger's PID now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Owner {
+    /// No process has that PID.
+    Gone,
+    /// The Hub that wrote the record.
+    Recorded,
+    /// Another process, given the PID after the Hub ended.
+    Other,
+    /// A live process that cannot be identified here (macOS, or a failed
+    /// read). Startup treats it as the Hub, as before; stop does not end it.
+    Unverified,
+}
+pub fn owner(data: &RuntimeData) -> Owner {
+    if !crate::process::pid_alive(data.pid) {
+        return Owner::Gone;
+    }
+    let Ok(pid) = u32::try_from(data.pid) else {
+        return Owner::Gone;
+    };
+    match recovery_identity::of_pid(pid) {
+        Ok(Some(identity)) => match same_process(data, &identity) {
+            Some(true) => Owner::Recorded,
+            Some(false) => Owner::Other,
+            None => Owner::Unverified,
+        },
+        Ok(None) => Owner::Gone,
+        Err(_) => Owner::Unverified,
+    }
+}
+/// Whether the process with `identity` is the Hub that wrote `data`. With a
+/// recorded identity the two must match. A record written before identities
+/// were kept has only its time: the Hub already existed then, while a process
+/// that was given its PID later was created after the Hub ended. None when
+/// neither can be judged.
+pub fn same_process(data: &RuntimeData, identity: &str) -> Option<bool> {
+    if !data.process.is_empty() {
+        return Some(identity == data.process);
+    }
+    let started = crate::proto::time::parse_rfc3339(&data.started_at)
+        .ok()
+        .map(Timestamp::unix_nanos)
+        .filter(|started| *started > 0)?;
+    let created = recovery_identity::created_unix_nanos(identity)?;
+    // Slack for Linux, whose creation times are whole boot seconds plus ticks.
+    Some(created <= started + 2_000_000_000)
 }
 impl GoWire for RuntimeData {
     const GO_TYPE: &'static str = "HubRuntimeData";
@@ -49,6 +105,10 @@ impl GoWire for RuntimeData {
             Field {
                 name: "started_at",
                 kind: "time.Time",
+            },
+            Field {
+                name: "process",
+                kind: "string",
             },
         ],
     }];
@@ -103,6 +163,10 @@ impl RuntimeLedger {
             pid,
             port: i64::from(port),
             started_at: crate::proto::time::format_rfc3339_nano(now).map_err(io::Error::other)?,
+            process: u32::try_from(pid)
+                .ok()
+                .and_then(|pid| recovery_identity::of_pid(pid).ok().flatten())
+                .unwrap_or_default(),
         };
         self.dir.replace(
             FILE,
@@ -158,7 +222,7 @@ impl RuntimeLedger {
             return Some(port);
         }
         let data = self.read().ok()??;
-        if !crate::process::pid_alive(data.pid) {
+        if matches!(owner(&data), Owner::Gone | Owner::Other) {
             let _ = self.remove_if_pid(data.pid);
             return None;
         }
@@ -192,4 +256,92 @@ pub async fn probe_hub_info(port: u16, token: &str) -> bool {
         .send()
         .await
         .is_ok_and(|response| response.status() == reqwest::StatusCode::OK)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A Windows-form identity of a process created at `unix_seconds`.
+    fn created_at(unix_seconds: u64) -> String {
+        format!(
+            "windows:{:016x}",
+            unix_seconds * 10_000_000 + 116_444_736_000_000_000
+        )
+    }
+    fn record(started_at: &str, process: &str) -> RuntimeData {
+        RuntimeData {
+            version: 1,
+            pid: 42,
+            port: 48888,
+            started_at: started_at.into(),
+            process: process.into(),
+        }
+    }
+
+    #[test]
+    fn audit_u11_same_process_needs_the_recorded_identity_or_an_earlier_creation() {
+        // 2026-01-01T00:00:00Z
+        let hub = created_at(1_767_225_600);
+        let later = created_at(1_767_225_601);
+        assert_eq!(
+            same_process(&record("2026-01-01T00:00:05Z", &hub), &hub),
+            Some(true)
+        );
+        assert_eq!(
+            same_process(&record("2026-01-01T00:00:05Z", &hub), &later),
+            Some(false)
+        );
+        // Records written before identities were kept go by creation time.
+        assert_eq!(
+            same_process(&record("2026-01-01T00:00:05Z", ""), &hub),
+            Some(true)
+        );
+        assert_eq!(
+            same_process(&record("2025-12-31T23:59:00Z", ""), &hub),
+            Some(false)
+        );
+        // Nothing to judge by.
+        assert_eq!(
+            same_process(&record("0001-01-01T00:00:00Z", ""), &hub),
+            None
+        );
+        assert_eq!(
+            same_process(&record("2026-01-01T00:00:05Z", ""), "synthetic:unknown"),
+            None
+        );
+    }
+
+    #[test]
+    fn audit_u11_the_identity_survives_the_go_wire_and_is_omitted_when_empty() {
+        let data = record("2026-01-01T00:00:05Z", &created_at(1_767_225_600));
+        let bytes = serde_json::to_vec(&data).unwrap();
+        assert_eq!(
+            crate::proto::decode_wire::<RuntimeData>(&bytes).unwrap(),
+            data
+        );
+        let old = serde_json::to_value(record("2026-01-01T00:00:05Z", "")).unwrap();
+        assert!(old.get("process").is_none());
+    }
+
+    #[cfg(any(windows, target_os = "linux"))]
+    #[tokio::test]
+    async fn audit_u11_running_port_drops_a_record_whose_pid_another_process_holds() {
+        use crate::process::wrapper_startup::recovery_identity::test_support::Bystander;
+        let home = tempfile::tempdir().unwrap();
+        let ledger = RuntimeLedger::open(&RuntimePaths::production(home.path()).unwrap()).unwrap();
+        let bystander = Bystander::spawn();
+        let stale = record("2026-01-01T00:00:00Z", "synthetic:another-process");
+        let stale = RuntimeData {
+            pid: i64::from(bystander.pid()),
+            ..stale
+        };
+        ledger
+            .dir
+            .replace(FILE, &serde_json::to_vec(&stale).unwrap(), 0o600)
+            .unwrap();
+        // Port 0 skips the configured probe, so only the record is consulted.
+        assert_eq!(ledger.running_port(0, "synthetic-token").await, None);
+        assert!(ledger.read().unwrap().is_none());
+    }
 }

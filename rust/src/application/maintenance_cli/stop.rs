@@ -1,20 +1,24 @@
 //! Go Stop graceful request/poll/forced stop, adapted to the actual RuntimeLedger.
 use crate::{
-    application::hub_runtime::RuntimeLedger,
+    application::hub_runtime::{self, Owner, RuntimeData, RuntimeLedger},
     config::{ConfigStore, RuntimePaths},
     process::Cancellation,
     proto::core::CoreFuture,
 };
 use std::{io, sync::Arc, time::Duration};
 pub trait StopIo: Send + Sync {
-    fn alive(&self, pid: i64) -> bool;
+    /// Whether the Hub that wrote `data` is still running.
+    fn alive(&self, data: &RuntimeData) -> bool;
     fn request<'a>(
         &'a self,
         port: u16,
         token: &'a str,
         cancel: &'a Cancellation,
     ) -> CoreFuture<'a, io::Result<bool>>;
-    fn kill(&self, pid: i64) -> io::Result<()>;
+    /// Ends the Hub that wrote `data`. Ok(true): ended, or already gone.
+    /// Ok(false): another process now holds the PID and was left running.
+    /// Err: not ended, including when the process could not be identified.
+    fn kill(&self, data: &RuntimeData) -> io::Result<bool>;
 }
 pub type StopLog = Arc<dyn Fn(&str, i64, u16) -> io::Result<()> + Send + Sync>;
 pub struct StopCommand {
@@ -46,7 +50,7 @@ impl StopCommand {
         if self.io.request(port, &token, cancel).await.unwrap_or(false) {
             let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
             loop {
-                if !self.io.alive(data.pid) {
+                if !self.io.alive(&data) {
                     self.ledger.remove_if_pid(data.pid)?;
                     return Ok(());
                 }
@@ -63,17 +67,43 @@ impl StopCommand {
             return Err(io::Error::other("hub runtime owner changed during stop"));
         }
         let _ = (self.log)("MANY-AI-CLI stopping: cli_stop", data.pid, port);
-        let result = self.io.kill(data.pid);
-        let cleanup = self.ledger.remove_if_pid(data.pid);
-        result.and(cleanup)
+        // The record is removed only once its Hub is known to be gone; a
+        // failed or refused kill keeps it for the next stop (U11).
+        if self.io.kill(&data)? {
+            return self.ledger.remove_if_pid(data.pid);
+        }
+        let _ = (self.log)(
+            "stale hub runtime record removed; its PID belongs to another process, left running",
+            data.pid,
+            port,
+        );
+        self.ledger.remove_if_pid(data.pid)?;
+        Err(io::Error::other(format!(
+            "the Hub was not running: PID {} from its runtime record now belongs to another process, which was left running; the stale record was removed",
+            data.pid
+        )))
     }
 }
 pub struct NativeStopIo {
     pub paths: RuntimePaths,
 }
+impl NativeStopIo {
+    fn unconfirmed(&self, pid: i64) -> io::Error {
+        io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!(
+                "could not confirm that PID {pid} is the Hub, so it was not force-stopped; if that process is many-ai-cli, end it yourself, otherwise the Hub has already ended and {} is a stale record you can delete",
+                self.paths.root().join(hub_runtime::FILE).display()
+            ),
+        )
+    }
+}
 impl StopIo for NativeStopIo {
-    fn alive(&self, pid: i64) -> bool {
-        crate::process::pid_alive(pid)
+    fn alive(&self, data: &RuntimeData) -> bool {
+        matches!(
+            hub_runtime::owner(data),
+            Owner::Recorded | Owner::Unverified
+        )
     }
     fn request<'a>(
         &'a self,
@@ -98,48 +128,46 @@ impl StopIo for NativeStopIo {
             tokio::select! {_=cancel.cancelled()=>Err(io::Error::new(io::ErrorKind::Interrupted,"stop cancelled")),reply=client.post(url).query(&[("token",token)]).header(reqwest::header::CONTENT_TYPE,"application/json").header(crate::hub::lifecycle::STOP_SOURCE_HEADER,"stop_command").send()=>reply.map(|response|response.status()==200).map_err(|_|io::Error::other("shutdown request failed"))}
         })
     }
-    fn kill(&self, pid: i64) -> io::Result<()> {
+    fn kill(&self, data: &RuntimeData) -> io::Result<bool> {
+        let pid = data.pid;
         if self.paths.is_trial() || pid <= 0 || pid == i64::from(std::process::id()) {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 "unowned shutdown process refused",
             ));
         }
-        #[cfg(unix)]
+        #[cfg(any(windows, target_os = "linux"))]
         {
-            let pid =
-                libc::pid_t::try_from(pid).map_err(|_| io::Error::other("invalid hub pid"))?;
-            if unsafe { libc::kill(pid, libc::SIGKILL) } != 0 {
-                return Err(io::Error::last_os_error());
+            let native = u32::try_from(pid).map_err(|_| io::Error::other("invalid hub pid"))?;
+            // The process is judged and ended through one retained handle or
+            // pidfd, so another process cannot take the PID in between.
+            let judged = std::cell::Cell::new(None);
+            let ended = crate::process::wrapper_startup::recovery_identity::terminate_if(
+                native,
+                |identity| {
+                    let same = hub_runtime::same_process(data, identity);
+                    judged.set(same);
+                    same == Some(true)
+                },
+            );
+            match (ended, judged.get()) {
+                (Ok(true), _) => Ok(true),
+                (Ok(false), Some(false)) => Ok(false),
+                // The Hub was identified but could not be ended.
+                (Err(error), Some(true)) => Err(error),
+                // The process could not be opened or identified.
+                _ => Err(self.unconfirmed(pid)),
             }
-            Ok(())
         }
-        #[cfg(windows)]
+        #[cfg(not(any(windows, target_os = "linux")))]
         {
-            use windows_sys::Win32::{
-                Foundation::CloseHandle,
-                System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess},
-            };
-            let pid = u32::try_from(pid).map_err(|_| io::Error::other("invalid hub pid"))?;
-            let handle = unsafe { OpenProcess(PROCESS_TERMINATE, 0, pid) };
-            if handle.is_null() {
-                return Err(io::Error::last_os_error());
-            }
-            let killed = unsafe { TerminateProcess(handle, 1) };
-            let error = if killed == 0 {
-                Some(io::Error::last_os_error())
+            // No process identity here: a PID alone may name an unrelated
+            // process, so only a PID that is gone counts as stopped.
+            if crate::process::pid_alive(pid) {
+                Err(self.unconfirmed(pid))
             } else {
-                None
-            };
-            unsafe { CloseHandle(handle) };
-            error.map_or(Ok(()), Err)
-        }
-        #[cfg(not(any(unix, windows)))]
-        {
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "native hub stop unavailable",
-            ))
+                Ok(true)
+            }
         }
     }
 }
