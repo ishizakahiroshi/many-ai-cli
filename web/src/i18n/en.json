@@ -1256,6 +1256,7 @@
   "link_delete_dir_failed": "Failed to delete folder",
   "link_open_error": "Failed to open.",
   "link_open_default_error": "Failed to open. Check your OS default app settings.",
+  "link_open_revealed": "For safety, this file type is not opened directly. Its location is shown in the folder instead.",
   "files_group_btn_tooltip": "Open files for this project",
   "files_tab_session_label": "Session",
   "files_tab_close_tooltip": "Close files tab",

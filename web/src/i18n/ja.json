@@ -1256,6 +1256,7 @@
   "link_delete_dir_failed": "フォルダの削除に失敗しました",
   "link_open_error": "開けませんでした。",
   "link_open_default_error": "開けませんでした。OS の既定アプリ設定を確認してください。",
+  "link_open_revealed": "この種類のファイルは安全のため直接は開かず、フォルダで場所を表示しました。",
   "files_group_btn_tooltip": "このプロジェクトのファイルを開く",
   "files_tab_session_label": "Session",
   "files_tab_close_tooltip": "ファイルタブを閉じる",

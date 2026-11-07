@@ -148,32 +148,48 @@ impl HostHttp {
                 if body.path.is_empty() {
                     return Response::error(400, "bad_request", "path is required");
                 }
-                let kind = match path {
-                    "/api/open-default-file" => OpenKind::File,
-                    "/api/open-folder" => OpenKind::Directory,
-                    _ => OpenKind::Terminal,
-                };
-                if let Err(response) = self.allowed(r, &body.path, kind != OpenKind::Terminal) {
-                    return response;
-                }
-                if kind == OpenKind::File && denied_extension(&body.path) {
-                    return Response::error(403, "forbidden", "executable file type not allowed");
-                }
-                let mut target = PathBuf::from(&body.path);
-                if kind == OpenKind::Directory && !target.is_dir() {
-                    target = scope::clean(target.parent().unwrap_or(Path::new(".")));
-                }
-                let app = if kind == OpenKind::Terminal {
-                    match self.config.snapshot() {
+                if path == "/api/open-terminal" {
+                    if let Err(response) = self.allowed(r, &body.path, false) {
+                        return response;
+                    }
+                    let app = match self.config.snapshot() {
                         Ok(cfg) => cfg.config.terminal_app,
                         Err(_) => {
                             return Response::error(500, "internal", "configuration unavailable");
                         }
-                    }
+                    };
+                    return match self
+                        .dispatch
+                        .open(OpenKind::Terminal, Path::new(&body.path), &app)
+                    {
+                        Ok(()) => Response::json(200, &serde_json::json!({"ok":true})),
+                        Err(error) => Response::error(500, "open_failed", &error.to_string()),
+                    };
+                }
+                // Both routes take any local absolute path, so what the OS
+                // receives is fixed once: a plain spelling is resolved to its
+                // canonical path, the type is judged on that name, and that
+                // same path is what is opened (U15).
+                let raw = without_verbatim_disk(&body.path);
+                if !plain_local_spelling(raw) {
+                    return Response::error(403, "forbidden", "path spelling not allowed");
+                }
+                if let Err(response) = self.allowed(r, raw, true) {
+                    return response;
+                }
+                let target = if path == "/api/open-default-file" {
+                    default_app_target(Path::new(raw))
                 } else {
-                    String::new()
+                    folder_target(Path::new(raw))
                 };
-                match self.dispatch.open(kind, &target, &app) {
+                let (kind, target) = match target {
+                    Ok(target) => target,
+                    Err(response) => return response,
+                };
+                match self.dispatch.open(kind, &target, "") {
+                    Ok(()) if kind == OpenKind::Reveal => {
+                        Response::json(200, &serde_json::json!({"ok":true,"revealed":true}))
+                    }
                     Ok(()) => Response::json(200, &serde_json::json!({"ok":true})),
                     Err(error) => Response::error(500, "open_failed", &error.to_string()),
                 }
@@ -405,20 +421,191 @@ fn remote_host(remote: &str) -> Option<&str> {
         }
     }
 }
-fn denied_extension(path: &str) -> bool {
-    let name = Path::new(path)
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy();
-    let extension = name
-        .rfind('.')
-        .map(|i| crate::proto::unicode::simple_lower(&name[i..]))
-        .unwrap_or_default();
-    [
-        ".bat", ".cmd", ".com", ".exe", ".scr", ".pif", ".hta", ".cpl", ".msc", ".msi", ".reg",
-        ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".lnk", ".scf", ".url",
-    ]
-    .contains(&extension.as_str())
+/// `\\?\C:\…` is how Windows and Rust spell a canonical local path, so it is
+/// read as `C:\…`. Any other path that starts with two separators still
+/// names another machine or a device and is refused below.
+fn without_verbatim_disk(raw: &str) -> &str {
+    if cfg!(windows)
+        && let Some(rest) = raw.strip_prefix(r"\\?\")
+    {
+        let bytes = rest.as_bytes();
+        if bytes.len() >= 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && bytes[2] == b'\\'
+        {
+            return rest;
+        }
+    }
+    raw
+}
+/// Win32 rewrites some spellings before it opens a file: it drops a trailing
+/// dot or space from each name, reads `name:stream` as an alternate data
+/// stream and resolves a final `.` or `..`. A path that starts with two
+/// separators names another machine or a device. These are refused before
+/// anything touches the file system, so the name judged is the name the OS
+/// opens and no request leaves the machine (U15).
+fn plain_local_spelling(raw: &str) -> bool {
+    let windows = cfg!(windows);
+    let separator = |c: char| c == '/' || (windows && c == '\\');
+    let names: Vec<&str> = raw.split(separator).filter(|n| !n.is_empty()).collect();
+    if matches!(names.last(), Some(&".") | Some(&"..")) {
+        return false;
+    }
+    if !windows {
+        return true;
+    }
+    let mut lead = raw.chars();
+    if lead.next().is_some_and(separator) && lead.next().is_some_and(separator) {
+        return false;
+    }
+    let bytes = raw.as_bytes();
+    let drive = bytes.first().is_some_and(u8::is_ascii_alphabetic) && bytes.get(1) == Some(&b':');
+    raw.char_indices()
+        .all(|(i, c)| c != ':' || (i == 1 && drive))
+        && names
+            .iter()
+            .all(|n| matches!(*n, "." | "..") || !(n.ends_with('.') || n.ends_with(' ')))
+}
+/// The canonical form of an existing path, spelled the way the OS takes it
+/// (without the `\\?\` prefix `canonicalize` adds on Windows).
+fn existing(path: &Path) -> std::io::Result<PathBuf> {
+    std::fs::canonicalize(scope::clean(path))
+        .map(|path| crate::config::paths::equivalent_root_prefix(&path))
+}
+/// "Open with default app": a folder opens as a folder, a file of a type in
+/// `DEFAULT_APP_TYPES` opens in its app, and any other file is selected in
+/// its folder instead.
+fn default_app_target(raw: &Path) -> Result<(OpenKind, PathBuf), Response> {
+    let missing = || Response::error(404, "not_found", "path not found");
+    let target = existing(raw).map_err(|_| missing())?;
+    let metadata = std::fs::metadata(&target).map_err(|_| missing())?;
+    if metadata.is_dir() {
+        return Ok((OpenKind::Directory, target));
+    }
+    if !metadata.is_file() {
+        return Err(Response::error(403, "forbidden", "not a regular file"));
+    }
+    let kind = if opens_in_default_app(&target) {
+        OpenKind::File
+    } else {
+        OpenKind::Reveal
+    };
+    Ok((kind, target))
+}
+/// "Open folder": a folder itself, or the folder holding a file or a missing
+/// name. Only an existing folder is handed to the OS, which would open a
+/// file it is given as a document.
+fn folder_target(raw: &Path) -> Result<(OpenKind, PathBuf), Response> {
+    let clean = scope::clean(raw);
+    let target = match existing(&clean) {
+        Ok(target) if target.is_dir() => target,
+        Ok(target) => target.parent().map(Path::to_path_buf).unwrap_or_default(),
+        Err(_) => clean
+            .parent()
+            .and_then(|parent| existing(parent).ok())
+            .unwrap_or_default(),
+    };
+    if !target.as_os_str().is_empty() && target.is_dir() {
+        Ok((OpenKind::Directory, target))
+    } else {
+        Err(Response::error(404, "not_found", "folder not found"))
+    }
+}
+/// Types whose usual app only shows the content: Office documents that
+/// cannot hold macros, PDF, images, audio, video, and the text and source
+/// the Hub previews, without the scripts a machine may run when they are
+/// "opened" (`.js`, `.py`, `.sh`, `.ps1`, `.bat` and the like). A list of
+/// allowed types leaves every type it does not name closed, which a list of
+/// executable types never could, since associations differ per machine.
+const DEFAULT_APP_TYPES: &[&str] = &[
+    "pdf",
+    "docx",
+    "xlsx",
+    "pptx",
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "webp",
+    "bmp",
+    "svg",
+    "ico",
+    "tif",
+    "tiff",
+    "heic",
+    "avif",
+    "mp4",
+    "webm",
+    "ogv",
+    "mov",
+    "m4v",
+    "mkv",
+    "avi",
+    "wmv",
+    "mp3",
+    "wav",
+    "ogg",
+    "m4a",
+    "flac",
+    "aac",
+    "txt",
+    "md",
+    "markdown",
+    "rst",
+    "log",
+    "json",
+    "jsonl",
+    "yaml",
+    "yml",
+    "toml",
+    "ini",
+    "cfg",
+    "conf",
+    "env",
+    "csv",
+    "tsv",
+    "xml",
+    "html",
+    "htm",
+    "css",
+    "scss",
+    "sass",
+    "less",
+    "ts",
+    "tsx",
+    "vue",
+    "go",
+    "rs",
+    "java",
+    "kt",
+    "c",
+    "cc",
+    "cpp",
+    "cxx",
+    "h",
+    "hh",
+    "hpp",
+    "cs",
+    "sql",
+    "graphql",
+    "gql",
+    "proto",
+    "diff",
+    "patch",
+    "gitignore",
+    "gitattributes",
+    "editorconfig",
+];
+fn opens_in_default_app(path: &Path) -> bool {
+    // A name without an extension has no type to judge, so it is shown in
+    // its folder as well. Only an ASCII extension can match the list.
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| name.rsplit_once('.'))
+        .is_some_and(|(_, extension)| {
+            DEFAULT_APP_TYPES.contains(&extension.to_ascii_lowercase().as_str())
+        })
 }
 fn ancestor(parent: &Path, child: &Path) -> bool {
     let clean =

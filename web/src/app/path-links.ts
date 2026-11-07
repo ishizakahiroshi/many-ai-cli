@@ -411,6 +411,9 @@ export async function callOpenApi(endpoint, path, errorKey = 'link_open_error', 
       if (!data.ok) {
         const msg = data.detail || data.error;
         showToast(msg ? `${t(errorKey)}: ${msg}` : t(errorKey));
+      } else if (data.revealed) {
+        // Hub は許可した種類のファイルだけを既定のアプリで開き、それ以外はフォルダで選択して見せる。
+        showToast(t('link_open_revealed'));
       }
     } else {
       const data = await res.json().catch(() => ({}));

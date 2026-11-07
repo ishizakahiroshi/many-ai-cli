@@ -83,6 +83,24 @@ Release artifacts are published at
   `post-checkout` hook either. Commit, fetch, pull and push from the Git tab are
   your own actions and still run the repository's hooks, such as pre-commit.
   Filter drivers (`filter.<name>.clean`) are not covered yet.
+- **"Open with default app" opens documents, media and text only.** A path in
+  an AI's output or in a Markdown link could name a script, written so that it
+  passed the check of executable types (`notes.bat\x\..`) or of a type that
+  check did not list (`.sh`, `.jar`, `.chm`), and the operating system ran it
+  through the file's association. The path is now resolved once and the type
+  is judged on the resolved name, which is also what is opened: PDF, Office
+  documents that cannot hold macros, images, audio, video, and the text and
+  source files the Hub can preview open in their app; any other file is
+  selected in its folder instead, with a notice. Spellings that Windows
+  rewrites before opening (a trailing dot or space, `name:stream`, a final `.`
+  or `..`) and network or device paths (`\\server\share`) are refused. "Open
+  folder" hands the system an existing folder only, and on macOS a folder that
+  can be an application (`Name.app`) is only selected in Finder.
+- **"Open in terminal" keeps a `;` in the folder name.** Windows Terminal reads
+  a `;` as the start of another command even inside the folder argument, so a
+  folder named `build;<command>` could start that command in a new tab. Each
+  `;` is now escaped as Windows Terminal expects. Explorer's command line uses
+  commas as separators, so folder paths are now passed to it in quotes.
 
 ## [0.10.0] - Unreleased
 

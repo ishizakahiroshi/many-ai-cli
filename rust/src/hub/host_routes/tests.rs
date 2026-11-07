@@ -100,6 +100,17 @@ fn request(path: &str, body: serde_json::Value) -> Request {
 fn value(r: Response) -> serde_json::Value {
     serde_json::from_slice(&r.body).unwrap()
 }
+fn canonical(path: &Path) -> PathBuf {
+    crate::config::paths::equivalent_root_prefix(&std::fs::canonicalize(path).unwrap())
+}
+async fn open(f: &Fixture, route: &str, path: impl serde::Serialize) -> (u16, serde_json::Value) {
+    let response = f
+        .http
+        .handle_authenticated(&request(route, serde_json::json!({ "path": path })))
+        .await
+        .unwrap();
+    (response.status, value(response))
+}
 #[tokio::test]
 async fn completion_preserves_raw_exists_keys_sorted_hidden_filter_and_remote_boundaries() {
     let f = fixture();
@@ -170,14 +181,17 @@ async fn host_calls_validate_peer_before_body_and_exact_scopes_before_dispatch()
         403
     );
     assert!(f.dispatch.opened.lock().unwrap().is_empty());
+    // Spelled as text: joining `..` onto a `\\?\` path resolves it at once.
+    let sep = std::path::MAIN_SEPARATOR;
     let denied = request(
         "/api/open-default-file",
-        serde_json::json!({"path":root.join("payload.Ps1")}),
+        serde_json::json!({"path":format!("{}{sep}x{sep}..", root.join("payload.Ps1").display())}),
     );
     assert_eq!(
         f.http.handle_authenticated(&denied).await.unwrap().status,
         403
     );
+    assert!(f.dispatch.opened.lock().unwrap().is_empty());
     let outside = request(
         "/api/open-terminal",
         serde_json::json!({"path":f._installed.path()}),
@@ -197,7 +211,7 @@ async fn host_calls_validate_peer_before_body_and_exact_scopes_before_dispatch()
             .status,
         200
     );
-    assert_eq!(f.dispatch.opened.lock().unwrap()[0].1, root);
+    assert_eq!(f.dispatch.opened.lock().unwrap()[0].1, canonical(root));
     assert_eq!(
         f.http
             .handle_authenticated(&request(
@@ -211,7 +225,7 @@ async fn host_calls_validate_peer_before_body_and_exact_scopes_before_dispatch()
     );
     assert_eq!(
         f.dispatch.opened.lock().unwrap()[1],
-        (OpenKind::File, document, String::new())
+        (OpenKind::File, canonical(&document), String::new())
     );
     let mut malformed = request(
         "/api/open-dir",
@@ -492,6 +506,155 @@ async fn logical_remote_pin_scope_and_physical_open_guards_stay_distinct() {
         before
     );
     assert!(dispatch.picked.lock().unwrap().is_empty());
+}
+#[tokio::test]
+async fn default_open_judges_the_canonical_name_and_shows_other_types_in_their_folder() {
+    let f = fixture();
+    let root = f.http.paths.root().to_path_buf();
+    let opened = |kind, path: &Path| (kind, canonical(path), String::new());
+    let last = || f.dispatch.opened.lock().unwrap().pop().unwrap();
+    for name in [
+        "notes.txt",
+        "photo.PNG",
+        "report.pdf",
+        "payload.Ps1",
+        "payload.sh",
+        "payload.jar",
+        "payload.chm",
+        "payload.py",
+        "payload.appref-ms",
+        "payload.bat",
+        "README",
+    ] {
+        std::fs::write(root.join(name), b"synthetic").unwrap();
+    }
+    for name in ["docs", "Bundle.app"] {
+        std::fs::create_dir(root.join(name)).unwrap();
+    }
+    // Spellings the OS rewrites before opening, and paths naming another
+    // machine or a device, are refused before anything touches them. They
+    // are written as text: joining `..` onto a `\\?\` path resolves it.
+    let sep = std::path::MAIN_SEPARATOR;
+    let payload = root.join("payload.bat").display().to_string();
+    #[allow(unused_mut)]
+    let mut refused = vec![
+        format!("{}{sep}x{sep}..", root.join("payload.Ps1").display()),
+        format!("{}{sep}.", root.join("docs").display()),
+    ];
+    #[cfg(windows)]
+    refused.extend([
+        format!("{payload}."),
+        format!("{payload} "),
+        format!("{payload}::$DATA"),
+        r"\\synthetic.invalid\share\report.pdf".to_owned(),
+        "//synthetic.invalid/share/report.pdf".to_owned(),
+        r"\\?\UNC\synthetic.invalid\share\report.pdf".to_owned(),
+        r"\\.\C:\synthetic\report.pdf".to_owned(),
+    ]);
+    for raw in &refused {
+        for route in ["/api/open-default-file", "/api/open-folder"] {
+            assert_eq!(open(&f, route, raw).await.0, 403, "{route} {raw}");
+        }
+    }
+    assert!(f.dispatch.opened.lock().unwrap().is_empty());
+    // A file of an allowed type opens, and the OS gets its canonical path.
+    for name in ["notes.txt", "photo.PNG", "report.pdf"] {
+        let path = root.join(name);
+        assert_eq!(
+            open(&f, "/api/open-default-file", &path).await,
+            (200, serde_json::json!({"ok":true}))
+        );
+        assert_eq!(last(), opened(OpenKind::File, &path));
+    }
+    // Any other file, whatever this machine runs for it, is only selected in
+    // its folder.
+    for name in [
+        "payload.Ps1",
+        "payload.sh",
+        "payload.jar",
+        "payload.chm",
+        "payload.py",
+        "payload.appref-ms",
+        "payload.bat",
+        "README",
+    ] {
+        let path = root.join(name);
+        assert_eq!(
+            open(&f, "/api/open-default-file", &path).await,
+            (200, serde_json::json!({"ok":true,"revealed":true}))
+        );
+        assert_eq!(last(), opened(OpenKind::Reveal, &path));
+    }
+    // The canonical `\\?\C:\` spelling of a local file is the same file.
+    #[cfg(windows)]
+    {
+        let plain = crate::config::paths::equivalent_root_prefix(Path::new(&payload));
+        for spelling in [
+            plain.display().to_string(),
+            format!(r"\\?\{}", plain.display()),
+        ] {
+            assert_eq!(
+                open(&f, "/api/open-default-file", &spelling).await.1["revealed"],
+                true,
+                "{spelling}"
+            );
+            assert_eq!(last(), opened(OpenKind::Reveal, Path::new(&payload)));
+        }
+    }
+    // The name is judged after `..` and links are resolved.
+    let roundabout = format!("{}{sep}..{sep}payload.bat", root.join("docs").display());
+    assert_eq!(
+        open(&f, "/api/open-default-file", &roundabout).await.1["revealed"],
+        true
+    );
+    assert_eq!(last(), opened(OpenKind::Reveal, Path::new(&payload)));
+    let link = root.join("innocent.txt");
+    #[cfg(windows)]
+    let linked = std::os::windows::fs::symlink_file(&payload, &link).is_ok();
+    #[cfg(unix)]
+    let linked = std::os::unix::fs::symlink(&payload, &link).is_ok();
+    if linked {
+        assert_eq!(
+            open(&f, "/api/open-default-file", &link).await.1["revealed"],
+            true
+        );
+        assert_eq!(last(), opened(OpenKind::Reveal, Path::new(&payload)));
+    }
+    // A folder opens as a folder; the macOS dispatch only selects a bundle.
+    for name in ["docs", "Bundle.app"] {
+        let path = root.join(name);
+        assert_eq!(open(&f, "/api/open-default-file", &path).await.0, 200);
+        assert_eq!(last(), opened(OpenKind::Directory, &path));
+    }
+    assert_eq!(
+        open(&f, "/api/open-default-file", root.join("missing.txt"))
+            .await
+            .0,
+        404
+    );
+    // "Open folder" hands the OS an existing folder only: the folder of a
+    // file or of a missing name, never the file itself.
+    assert_eq!(open(&f, "/api/open-folder", &payload).await.0, 200);
+    assert_eq!(last(), opened(OpenKind::Directory, &root));
+    let missing = root.join("docs").join("missing.txt");
+    assert_eq!(open(&f, "/api/open-folder", &missing).await.0, 200);
+    assert_eq!(last(), opened(OpenKind::Directory, &root.join("docs")));
+    let under_file = root.join("payload.bat").join("missing");
+    assert_eq!(open(&f, "/api/open-folder", &under_file).await.0, 404);
+    assert!(f.dispatch.opened.lock().unwrap().is_empty());
+}
+#[tokio::test]
+async fn terminal_route_hands_a_folder_name_with_semicolons_to_the_dispatch_as_is() {
+    // The native dispatch escapes `;` for Windows Terminal (U12); the route
+    // must not alter the folder it was asked for.
+    let f = fixture();
+    let folder = f.http.paths.root().join("build;new-tab");
+    std::fs::create_dir(&folder).unwrap();
+    assert_eq!(open(&f, "/api/open-terminal", &folder).await.0, 200);
+    assert_eq!(
+        f.dispatch.opened.lock().unwrap().pop().unwrap(),
+        (OpenKind::Terminal, folder, String::new())
+    );
 }
 #[test]
 fn source_path_casefold_uses_unicode_classes_and_component_boundary() {

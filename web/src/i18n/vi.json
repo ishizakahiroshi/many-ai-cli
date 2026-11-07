@@ -1256,6 +1256,7 @@
   "link_delete_dir_failed": "Xóa thư mục thất bại",
   "link_open_error": "Mở thất bại.",
   "link_open_default_error": "Mở thất bại. Kiểm tra cài đặt app mặc định của OS.",
+  "link_open_revealed": "Vì lý do an toàn, loại file này không được mở trực tiếp. Đã hiển thị vị trí của file trong thư mục.",
   "files_group_btn_tooltip": "Mở file của project này",
   "files_tab_session_label": "Session",
   "files_tab_close_tooltip": "Đóng tab files",

@@ -103,6 +103,24 @@ impl NativeHostDispatch {
         args: Vec<OsString>,
         extra: Option<(&str, &std::ffi::OsStr)>,
     ) -> io::Result<()> {
+        self.start_detached(name, Argv::Quoted(args), extra)
+    }
+    /// Explorer splits its own command line at commas, so the path goes
+    /// inside quotes, which a Windows path cannot contain.
+    #[cfg(windows)]
+    fn explorer(&self, select: bool, path: &Path) -> io::Result<()> {
+        self.start_detached(
+            "explorer.exe",
+            Argv::Raw(explorer_argument(select, path)),
+            None,
+        )
+    }
+    fn start_detached(
+        &self,
+        name: &str,
+        args: Argv,
+        extra: Option<(&str, &std::ffi::OsStr)>,
+    ) -> io::Result<()> {
         let executable = self.lookup(name)?;
         #[cfg(windows)]
         {
@@ -122,8 +140,17 @@ impl NativeHostDispatch {
                 }
             })?;
         let mut cmd = Command::new(executable);
-        cmd.args(args)
-            .current_dir(&self.cwd)
+        match args {
+            Argv::Quoted(args) => {
+                cmd.args(args);
+            }
+            #[cfg(windows)]
+            Argv::Raw(raw) => {
+                use std::os::windows::process::CommandExt;
+                cmd.raw_arg(raw);
+            }
+        }
+        cmd.current_dir(&self.cwd)
             .env_clear()
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -237,17 +264,12 @@ impl HostDispatch for NativeHostDispatch {
         #[cfg(windows)]
         {
             let clean = crate::files::scope::clean(path);
-            let value = clean.as_os_str().to_owned();
             match kind {
                 OpenKind::File => shell_open(&clean),
-                OpenKind::Directory => self.detached("explorer.exe", vec![value]),
-                OpenKind::Reveal => {
-                    let mut arg = OsString::from("/select,");
-                    arg.push(value);
-                    self.detached("explorer.exe", vec![arg])
-                }
+                OpenKind::Directory => self.explorer(false, &clean),
+                OpenKind::Reveal => self.explorer(true, &clean),
                 OpenKind::Terminal => self
-                    .detached("wt.exe", vec!["-d".into(), path.as_os_str().to_owned()])
+                    .detached("wt.exe", vec!["-d".into(), wt_directory(path)])
                     .or_else(|_| {
                         // -Command joins following argv into PowerShell source.
                         // Keep the path in a child-only environment value so
@@ -268,13 +290,7 @@ impl HostDispatch for NativeHostDispatch {
         #[cfg(not(windows))]
         {
             if cfg!(target_os = "macos") {
-                let mut args = match kind {
-                    OpenKind::Reveal => vec!["-R".into()],
-                    OpenKind::Terminal => vec!["-a".into(), "Terminal".into()],
-                    _ => vec![],
-                };
-                args.push(path.as_os_str().to_owned());
-                return self.detached("open", args);
+                return self.detached("open", macos_open_args(kind, path));
             }
             match kind {
                 OpenKind::Terminal => {
@@ -342,6 +358,56 @@ fn shell_open(path: &Path) -> io::Result<()> {
     } else {
         Ok(())
     }
+}
+enum Argv {
+    Quoted(Vec<OsString>),
+    /// Appended verbatim; the caller owns its quoting.
+    #[cfg(windows)]
+    Raw(OsString),
+}
+/// `/select,"<path>"` or `"<path>"`. A closing quote right after a backslash
+/// would read as an escaped quote, so a trailing backslash (a drive root) is
+/// doubled, as Rust does for an argument it quotes itself.
+#[cfg(windows)]
+fn explorer_argument(select: bool, path: &Path) -> OsString {
+    use std::os::windows::ffi::OsStrExt;
+    let mut value = OsString::from(if select { "/select,\"" } else { "\"" });
+    value.push(path.as_os_str());
+    if path.as_os_str().encode_wide().last() == Some(u16::from(b'\\')) {
+        value.push("\\");
+    }
+    value.push("\"");
+    value
+}
+/// Windows Terminal splits its own command line at every `;` that is not
+/// written as `\;`, even inside one argument, and reads the rest as another
+/// command (U12). Each `;` is escaped, which Windows Terminal turns back into
+/// `;`, so a folder name stays a folder name.
+#[cfg(windows)]
+fn wt_directory(path: &Path) -> OsString {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    let mut wide = Vec::new();
+    for unit in path.as_os_str().encode_wide() {
+        if unit == u16::from(b';') {
+            wide.push(u16::from(b'\\'));
+        }
+        wide.push(unit);
+    }
+    OsString::from_wide(&wide)
+}
+/// `open` launches an application bundle it is given as a folder, so a
+/// folder whose name has an extension (`Name.app`) is only selected in
+/// Finder, like a file of a type that is not opened.
+#[cfg(any(test, not(windows)))]
+fn macos_open_args(kind: OpenKind, path: &Path) -> Vec<OsString> {
+    let mut args: Vec<OsString> = match kind {
+        OpenKind::Reveal => vec!["-R".into()],
+        OpenKind::Directory if path.extension().is_some() => vec!["-R".into()],
+        OpenKind::Terminal => vec!["-a".into(), "Terminal".into()],
+        OpenKind::File | OpenKind::Directory => vec![],
+    };
+    args.push(path.as_os_str().to_owned());
+    args
 }
 pub fn terminal_description(app: &str) -> String {
     if !app.is_empty() {

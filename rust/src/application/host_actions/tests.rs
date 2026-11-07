@@ -149,6 +149,70 @@ fn fixed_windows_picker_scripts_preserve_owner_dialog_and_exact_executable_filte
     );
 }
 
+/// Windows Terminal starts another command at every `;` that matches
+/// `^;|[^\\];` and turns each remaining `\;` into `;` (its documented
+/// command-line rules; the same pattern is in TerminalApp.dll).
+#[cfg(windows)]
+fn windows_terminal_reading(argument: &std::ffi::OsStr) -> (bool, String) {
+    let text = argument.to_str().unwrap();
+    let bytes = text.as_bytes();
+    let splits = bytes
+        .iter()
+        .enumerate()
+        .any(|(i, b)| *b == b';' && (i == 0 || bytes[i - 1] != b'\\'));
+    (splits, text.replace("\\;", ";"))
+}
+#[cfg(windows)]
+#[test]
+fn windows_terminal_and_explorer_take_the_folder_name_as_data() {
+    for folder in [
+        r"C:\work\build;powershell -enc AAAA\x",
+        r"C:\work\;name;;",
+        r"C:\work\plain folder",
+    ] {
+        let argument = wt_directory(Path::new(folder));
+        assert_eq!(
+            windows_terminal_reading(&argument),
+            (false, folder.to_owned()),
+            "{folder}"
+        );
+    }
+    assert_eq!(
+        wt_directory(Path::new(r"C:\work\build;new-tab")),
+        OsString::from(r"C:\work\build\;new-tab")
+    );
+    assert_eq!(
+        explorer_argument(true, Path::new(r"C:\a,b\report.sh")),
+        OsString::from(r#"/select,"C:\a,b\report.sh""#)
+    );
+    assert_eq!(
+        explorer_argument(false, Path::new(r"C:\")),
+        OsString::from(r#""C:\\""#)
+    );
+}
+#[test]
+fn macos_open_only_selects_a_folder_that_can_be_an_app_bundle() {
+    let args = |kind, path: &str| -> Vec<String> {
+        macos_open_args(kind, Path::new(path))
+            .into_iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect()
+    };
+    assert_eq!(
+        args(OpenKind::Directory, "/w/Payload.app"),
+        ["-R", "/w/Payload.app"]
+    );
+    assert_eq!(args(OpenKind::Directory, "/w/docs"), ["/w/docs"]);
+    assert_eq!(
+        args(OpenKind::Reveal, "/w/run.command"),
+        ["-R", "/w/run.command"]
+    );
+    assert_eq!(args(OpenKind::File, "/w/notes.txt"), ["/w/notes.txt"]);
+    assert_eq!(
+        args(OpenKind::Terminal, "/w/docs"),
+        ["-a", "Terminal", "/w/docs"]
+    );
+}
 #[tokio::test]
 async fn synthetic_detached_child_survives_hub_effect_shutdown() {
     let root = tempfile::tempdir().unwrap();
