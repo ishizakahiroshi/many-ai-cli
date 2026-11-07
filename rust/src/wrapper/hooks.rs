@@ -112,7 +112,6 @@ impl SessionHooks {
         registered: &Message,
         executable: &Path,
         hub_port: u16,
-        hub_token: &str,
         native_windows: bool,
     ) -> io::Result<Vec<String>> {
         let cross = !native_windows && registered.auto && !registered.orchestration_id.is_empty();
@@ -121,9 +120,12 @@ impl SessionHooks {
         }
         let mut doc = serde_json::Map::new();
         if registered.token_statusbar {
+            // No token here: Claude runs this through a shell, whose command
+            // line other users of the machine can read. The relay reads
+            // MANY_AI_CLI_HUB_TOKEN from the environment Claude inherits from
+            // this wrapper (U03).
             let command = format!(
-                "MANY_AI_CLI_HUB_TOKEN={} {} usage-relay --provider claude --hub http://127.0.0.1:{hub_port} --session {}",
-                quote(hub_token),
+                "{} usage-relay --provider claude --hub http://127.0.0.1:{hub_port} --session {}",
                 quote(&executable.to_string_lossy().replace('\\', "/")),
                 registered.session_id
             );
@@ -387,7 +389,6 @@ mod tests {
                 &reg,
                 Path::new("/synthetic/space dir/many-ai-cli"),
                 49011,
-                "synthetic-token",
                 false,
             )
             .unwrap();
@@ -395,11 +396,10 @@ mod tests {
         assert!(file.starts_with(paths.root()));
         let body: Value = serde_json::from_slice(&std::fs::read(file).unwrap()).unwrap();
         assert_eq!(body["crossSessionInbound"], "accept");
-        assert!(
-            body["statusLine"]["command"]
-                .as_str()
-                .unwrap()
-                .contains("'/synthetic/space dir/many-ai-cli'")
+        // The token stays in the environment Claude inherits (U03).
+        assert_eq!(
+            body["statusLine"]["command"],
+            "'/synthetic/space dir/many-ai-cli' usage-relay --provider claude --hub http://127.0.0.1:49011 --session 7"
         );
         #[cfg(unix)]
         {

@@ -77,7 +77,6 @@ impl UsageHooks {
                     .codex
                     .inject(&HookParams {
                         hub_url: &url,
-                        token: &config.token,
                         session: snapshot.id.0,
                         executable: &self.executable,
                     })

@@ -13,14 +13,17 @@ const OLD_END: &str = "# any-ai-cli:usage-hook-end";
 static CONFIG: Mutex<()> = Mutex::new(());
 pub struct HookParams<'a> {
     pub hub_url: &'a str,
-    pub token: &'a str,
     pub session: i64,
     pub executable: &'a Path,
 }
+/// The hook carries no token: Codex runs it through a shell, whose command
+/// line other users of the machine can read. The relay reads
+/// MANY_AI_CLI_HUB_TOKEN from the environment a wrapped Codex inherits; a
+/// Codex started outside many-ai-cli has none, and the relay posts nothing
+/// (U03). Go wrote the token in front of the command.
 pub fn block(p: &HookParams<'_>) -> String {
     let command = format!(
-        "MANY_AI_CLI_HUB_TOKEN={} {} usage-relay --provider codex --hub {} --session {}",
-        p.token,
+        "{} usage-relay --provider codex --hub {} --session {}",
         super::quote(&p.executable.to_string_lossy().replace('\\', "/")),
         p.hub_url,
         p.session

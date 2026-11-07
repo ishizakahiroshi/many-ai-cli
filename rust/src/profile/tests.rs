@@ -104,6 +104,24 @@ fn profile_sync_off_existing_is_unchanged_and_absent_is_safe() {
     assert!(!new.text.contains("MANY_AI_CLI_HUB_TOKEN"));
 }
 #[test]
+fn profile_omits_the_owned_hook_in_its_current_form_without_a_token() {
+    // The hook no longer carries the token (U03); it is still the Hub's own
+    // temporary hook and is not copied into a profile.
+    let text = "[[hooks.Stop]]\ncommand = \"echo user-hook\"\n[[hooks.Stop]]\ncommand = \"'/synthetic/many ai cli' usage-relay --provider codex --hub http://127.0.0.1:48888 --session 1\"\n";
+    let result = merge_codex(text, None, &SyncOptions::default()).unwrap();
+    assert_eq!(result.removed_temporary_hooks, 1);
+    assert!(result.text.contains("user-hook"));
+    assert!(!result.text.contains("usage-relay"));
+    // A user's own command that only resembles it is kept.
+    let user = "[[hooks.Stop]]\ncommand = \"/usr/bin/many-ai-cli usage-relay --provider codex --hub http://127.0.0.1:48888 --session 1\"\n";
+    assert_eq!(
+        merge_codex(user, None, &SyncOptions::default())
+            .unwrap()
+            .removed_temporary_hooks,
+        0
+    );
+}
+#[test]
 fn profile_similar_user_commands_are_not_discarded() {
     let text = "[[hooks.Stop]]\ncommand = \"echo MANY_AI_CLI_HUB_TOKEN=user usage-relay --provider codex\"\n";
     let result = merge_codex(text, None, &SyncOptions::default()).unwrap();

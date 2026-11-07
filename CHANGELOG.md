@@ -109,6 +109,15 @@ Release artifacts are published at
   cannot be found is now an error on every OS, including custom providers and
   `copilot` when neither `copilot` nor `gh` is found: the session ends with
   "not found in PATH" as before, and nothing from the folder starts.
+- **The Hub token is no longer written into the status line and usage hook
+  commands.** The Claude Code status line and the Codex Stop hook that
+  many-ai-cli sets up started with `MANY_AI_CLI_HUB_TOKEN=<token>`, and the AI
+  CLI runs them through a shell, whose command line other users of the same
+  Linux or macOS machine may read in the process list. The token now stays in
+  the environment the AI CLI inherits from many-ai-cli, which the usage relay
+  already read first. A Codex started outside many-ai-cli while the hook is in
+  place no longer reports its usage to a many-ai-cli session. Hooks written by
+  earlier versions are still recognized and replaced.
 
 ## [0.10.0] - Unreleased
 

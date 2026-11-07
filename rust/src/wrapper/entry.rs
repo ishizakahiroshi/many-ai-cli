@@ -274,7 +274,6 @@ fn apply_hooks(
                 registered,
                 context.executable,
                 port,
-                &context.config.token,
                 cfg!(windows),
             ) {
                 Ok(extra) => args.extend(extra),

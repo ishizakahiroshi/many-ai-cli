@@ -82,15 +82,23 @@ fn owned_command(command: &str) -> bool {
     {
         return false;
     }
-    let Some((environment, executable)) = prefix.split_once(' ') else {
-        return false;
+    // The current form starts with the quoted executable; the token stays in
+    // the environment (U03). Earlier versions wrote the token in front, and
+    // copies of that form are still recognized so they are not carried on.
+    let executable = if prefix.starts_with('\'') {
+        prefix
+    } else {
+        let Some((environment, executable)) = prefix.split_once(' ') else {
+            return false;
+        };
+        let token = environment
+            .strip_prefix("MANY_AI_CLI_HUB_TOKEN=")
+            .or_else(|| environment.strip_prefix("ANY_AI_CLI_HUB_TOKEN="));
+        if !token.is_some_and(|v| !v.is_empty() && !v.chars().any(char::is_whitespace)) {
+            return false;
+        }
+        executable
     };
-    let token = environment
-        .strip_prefix("MANY_AI_CLI_HUB_TOKEN=")
-        .or_else(|| environment.strip_prefix("ANY_AI_CLI_HUB_TOKEN="));
-    if !token.is_some_and(|v| !v.is_empty() && !v.chars().any(char::is_whitespace)) {
-        return false;
-    }
     let Some(inner) = executable
         .strip_prefix('\'')
         .and_then(|v| v.strip_suffix('\''))

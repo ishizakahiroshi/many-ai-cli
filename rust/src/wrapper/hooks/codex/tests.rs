@@ -20,12 +20,20 @@ fn pinned_go_27_quote_and_marker_transform_cases() {
     let golden: Vec<Golden> = serde_json::from_str(include_str!("golden.json")).unwrap();
     assert_eq!(cases.len(), 27);
     assert_eq!(cases.len(), golden.len());
-    for (case, expected) in cases.iter().zip(golden) {
+    // The one intended difference from the pinned Go output: Go wrote the
+    // token in front of the command, which a shell's command line exposes
+    // (U03). Everything else, quoting and marker handling, stays exact.
+    const GO_TOKEN: &str = "MANY_AI_CLI_HUB_TOKEN=synthetic_test_token ";
+    for (case, mut expected) in cases.iter().zip(golden) {
         assert_eq!(case.name, expected.name);
+        assert!(expected.block.contains(GO_TOKEN), "{} golden", case.name);
+        expected.block = expected.block.replace(GO_TOKEN, "");
+        expected.injected = expected.injected.replace(GO_TOKEN, "");
         let p = HookParams {
             executable: Path::new(&case.exe),
             ..params()
         };
+        assert!(!block(&p).contains("TOKEN"), "{} token", case.name);
         assert_eq!(block(&p), expected.block, "{} block", case.name);
         assert_eq!(
             inject_content(&case.content, &p),
@@ -64,7 +72,6 @@ fn fixture() -> (tempfile::TempDir, CodexStopHooks) {
 fn params() -> HookParams<'static> {
     HookParams {
         hub_url: "http://127.0.0.1:49686",
-        token: "synthetic_test_token",
         session: 7,
         executable: Path::new("C:/trial/$portable/ai's app/many-ai-cli.exe"),
     }
