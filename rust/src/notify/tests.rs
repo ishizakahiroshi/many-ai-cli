@@ -105,13 +105,88 @@ async fn actual_ntfy_delivery_deduplicates_pending_and_sent_and_preserves_safe_a
     {
         let bodies = lock(&state.bodies);
         assert_eq!(bodies[0].1.len(), 198);
-        assert_eq!(
-            bodies[0].0["actions"],
-            "http, Reject, https://synthetic.example/reject, method=POST"
-        );
+        // The fixture's ntfy server is plain http: no one-tap Reject link, and
+        // the Open URL is dropped for its userinfo, so no Actions header (U32).
+        assert!(bodies[0].0.get("actions").is_none());
     }
     cancel.cancel();
     server.await.unwrap();
+}
+#[test]
+fn audit_u32_one_tap_links_go_only_to_an_https_ntfy_server() {
+    let payload = ApprovalPayload {
+        id: "synthetic".into(),
+        session_id: 4,
+        title: "approval".into(),
+        body: "npm install".into(),
+        risk: "MID".into(),
+        approve_url: "https://synthetic.example/approve".into(),
+        reject_url: "https://synthetic.example/reject".into(),
+        open_url: "https://synthetic.example/open".into(),
+    };
+    assert_eq!(
+        approval_actions(&payload, true),
+        "http, Approve, https://synthetic.example/approve, method=POST; \
+         http, Reject, https://synthetic.example/reject, method=POST; \
+         view, Open, https://synthetic.example/open"
+    );
+    assert_eq!(
+        approval_actions(&payload, false),
+        "view, Open, https://synthetic.example/open"
+    );
+    let high = ApprovalPayload {
+        risk: "HIGH".into(),
+        ..payload
+    };
+    assert_eq!(
+        approval_actions(&high, true),
+        "http, Reject, https://synthetic.example/reject, method=POST; \
+         view, Open, https://synthetic.example/open"
+    );
+}
+#[tokio::test]
+async fn audit_u32_notifications_do_not_follow_redirects() {
+    let followed = Arc::new(AtomicUsize::new(0));
+    let counter = followed.clone();
+    let app = axum::Router::new()
+        .route(
+            "/hook",
+            axum::routing::post(|| async {
+                (
+                    axum::http::StatusCode::TEMPORARY_REDIRECT,
+                    [(axum::http::header::LOCATION, "/elsewhere")],
+                )
+            }),
+        )
+        .route(
+            "/elsewhere",
+            axum::routing::post(move || {
+                counter.fetch_add(1, Ordering::SeqCst);
+                async { axum::http::StatusCode::NO_CONTENT }
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let owner = HubTaskOwner::new(tokio::runtime::Handle::current());
+    let manager =
+        Manager::new(NotifyConfig::default(), owner.handle(), Arc::new(|_, _| {})).unwrap();
+    let delivered = manager
+        .send_test(
+            NotifyBackendConfig {
+                r#type: "webhook".into(),
+                url: format!("http://{address}/hook"),
+                topic: String::new(),
+            },
+            "title".into(),
+            "body".into(),
+        )
+        .await;
+    assert!(!delivered);
+    assert_eq!(followed.load(Ordering::SeqCst), 0);
+    server.abort();
 }
 #[tokio::test]
 async fn total_failure_is_retryable_and_done_webhook_carries_kind() {

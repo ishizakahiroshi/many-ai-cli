@@ -197,6 +197,7 @@ fn list(r: &Request, s: &Scope, remote: bool) -> Result<Response> {
     let root = if raw.is_empty() {
         s.cwd.join("docs").join("local")
     } else {
+        scope::local_spelling(&raw)?;
         let p = Path::new(&raw);
         if !p.is_absolute() {
             return Err(err(400, "bad_request", "root must be an absolute path"));

@@ -939,6 +939,8 @@ Web Push requires a live browser subscription, which drops with the tunnel. **nt
 
 The Hub token is **never included** in the ntfy payload. The topic name itself is the only shared secret — use a long random string (the Generate button produces one).
 
+With the **Approval** event, a notification carries one-tap **Approve** and **Reject** buttons. Their links answer that prompt without the Hub token or PIN for 120 seconds, so anyone who reads the notification in that time can use them (high-risk prompts get no Approve button). The buttons are attached only when the ntfy server URL is `https`; with an `http` server the notification carries only **Open**. Notifications do not follow redirects.
+
 **Setup (generic webhook)**
 
 Click **+ Add webhook** and enter any URL that accepts a `POST` request with JSON body `{"title":"...", "body":"..."}`. Examples: Discord webhooks, Slack incoming webhooks, custom relay servers.

@@ -98,8 +98,11 @@ impl Manager {
             config: Mutex::new(config),
             delivery,
             state: Mutex::default(),
+            // A redirect would hand the notification, and an ntfy message's
+            // one-tap approval links, to a host the user never configured (U32).
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(10))
+                .redirect(reqwest::redirect::Policy::none())
                 .build()?,
             tasks,
             warning,
@@ -285,7 +288,9 @@ impl Manager {
                     .header("Content-Type", "text/plain; charset=utf-8")
                     .body(body);
                 if let Some(payload) = approval {
-                    let actions = approval_actions(&payload);
+                    let secure = reqwest::Url::parse(backend.url.trim())
+                        .is_ok_and(|url| url.scheme() == "https");
+                    let actions = approval_actions(&payload, secure);
                     if !actions.is_empty() {
                         request = request.header("Actions", actions);
                     }
@@ -365,15 +370,22 @@ fn safe_action(value: &str) -> bool {
                 && url.fragment().is_none_or(str::is_empty)
         })
 }
-pub fn approval_actions(payload: &ApprovalPayload) -> String {
+/// The Approve and Reject buttons carry one-tap links that answer without the
+/// Hub token or PIN for 120 seconds. They go only to an https ntfy server:
+/// over plain http anyone on the path could read or swap them (U32). The Open
+/// button stays, since it only opens the dashboard.
+pub fn approval_actions(payload: &ApprovalPayload, secure_backend: bool) -> String {
     let mut actions = Vec::new();
-    if safe_action(&payload.approve_url) && !payload.risk.trim().eq_ignore_ascii_case("high") {
+    if secure_backend
+        && safe_action(&payload.approve_url)
+        && !payload.risk.trim().eq_ignore_ascii_case("high")
+    {
         actions.push(format!(
             "http, Approve, {}, method=POST",
             payload.approve_url
         ));
     }
-    if safe_action(&payload.reject_url) {
+    if secure_backend && safe_action(&payload.reject_url) {
         actions.push(format!("http, Reject, {}, method=POST", payload.reject_url));
     }
     if safe_action(&payload.open_url) {

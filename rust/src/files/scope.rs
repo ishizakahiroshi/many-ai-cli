@@ -112,6 +112,7 @@ impl Scope {
         if raw.is_empty() {
             return Err(err(400, "bad_request", "path parameter is required"));
         }
+        local_spelling(&raw)?;
         let input = Path::new(&raw);
         if !input.is_absolute() {
             return Err(err(400, "bad_request", "path must be an absolute path"));
@@ -174,6 +175,32 @@ impl Scope {
             ))
         }
     }
+}
+/// Two leading separators name a UNC share or a Win32 device namespace
+/// (`\\host\share`, `//host/share`, `\\?\UNC\...`, `\\.\pipe\...`). Even
+/// canonicalizing one makes Windows contact that host over SMB and can hand it
+/// the user's NTLM credentials, and a page or a previewed Markdown image can
+/// send a GET here, so such a path is refused before any file system call
+/// (U14). The verbatim spelling of a local disk path (`\\?\C:\...`) is that
+/// disk path and stays accepted.
+pub fn local_spelling(raw: &str) -> Result<()> {
+    let mut chars = raw.chars();
+    let network_or_device = matches!(
+        (chars.next(), chars.next()),
+        (Some('\\' | '/'), Some('\\' | '/'))
+    );
+    let verbatim_disk = raw.strip_prefix(r"\\?\").is_some_and(|rest| {
+        let rest = rest.as_bytes();
+        rest.len() >= 3 && rest[0].is_ascii_alphabetic() && rest[1] == b':' && rest[2] == b'\\'
+    });
+    if network_or_device && !verbatim_disk {
+        return Err(err(
+            400,
+            "bad_request",
+            "network share and device paths are not opened",
+        ));
+    }
+    Ok(())
 }
 pub fn clean(path: &Path) -> PathBuf {
     let mut p = PathBuf::new();

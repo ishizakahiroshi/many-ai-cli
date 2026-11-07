@@ -138,6 +138,20 @@ Release artifacts are published at
   before, now naming what it found. A platform package supplied through
   `NODE_PATH` or a `node_modules` folder above the installation is no longer
   used.
+- **The file view no longer reaches out to network shares.** The file
+  content, image, download and list requests resolved any absolute path before
+  checking where it was, including `\\server\share` and `//server/share`, and
+  on Windows resolving such a path makes the system sign in to that server with
+  your account. A web page you visited, or an image in Markdown you previewed in
+  the Hub, could send that request. Network share and device paths are now
+  refused before anything is opened; local paths, including the `\\?\C:\`
+  spelling, work as before.
+- **ntfy approval buttons are sent only to an https ntfy server.** The
+  Approve and Reject buttons in an ntfy notification answer the prompt without
+  the Hub token or PIN for 120 seconds, and they were sent to `http` ntfy
+  servers too, where anyone on the network path could read or swap them. With
+  an `http` server the notification now carries only Open. Notifications no
+  longer follow redirects, which could hand them to another host.
 - **Sockets without a token can no longer keep sessions from connecting.**
   Anyone who could reach the Hub's port, including another user of the same
   machine, could hold all 64 places for WebSocket connections that have not

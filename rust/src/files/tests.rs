@@ -463,6 +463,93 @@ fn list_never_summarizes_secrets_and_skips_symlinks_heavy_subtrees() {
     );
 }
 
+fn list_request(root: &str) -> Request {
+    Request {
+        method: "GET".into(),
+        path: "/api/files-list".into(),
+        query: url::form_urlencoded::Serializer::new(String::new())
+            .append_pair("root", root)
+            .finish(),
+        ..Default::default()
+    }
+}
+/// Every files GET that takes a path refuses `raw` with 400, local or remote.
+fn assert_refused_everywhere(service: &FilesService, s: &scope::Scope, raw: &str) {
+    let ws = Workspace(vec![]);
+    for remote in [false, true] {
+        for route in [
+            "/api/files-content",
+            "/api/files-asset",
+            "/api/files-download",
+        ] {
+            let r = read_request(route, Path::new(raw));
+            assert_eq!(
+                response(service.read_handle(&r, s, None, remote, &ws)).status,
+                400,
+                "{route} {raw} remote={remote}"
+            );
+        }
+        assert_eq!(
+            response(service.read_handle(&list_request(raw), s, None, remote, &ws)).status,
+            400,
+            "files-list {raw} remote={remote}"
+        );
+    }
+}
+#[test]
+fn audit_u14_device_namespace_paths_are_refused_before_any_file_system_call() {
+    // Local device names only: none of them names a host.
+    let (_dir, service, s) = setup();
+    for raw in [
+        r"\\.\pipe\many-ai-cli-synthetic",
+        r"\\?\GLOBALROOT\Device\Null",
+        "//./pipe/many-ai-cli-synthetic",
+    ] {
+        assert_refused_everywhere(&service, &s, raw);
+    }
+}
+#[test]
+fn audit_u14_network_share_paths_are_refused_and_local_spellings_still_open() {
+    let (_dir, service, s) = setup();
+    for raw in [
+        r"\\attacker.invalid\share\x.png",
+        "//attacker.invalid/share/x.png",
+        r"\\?\UNC\attacker.invalid\share\x.png",
+        r"/\attacker.invalid\share\x.png",
+    ] {
+        assert_refused_everywhere(&service, &s, raw);
+    }
+    let ws = Workspace(vec![]);
+    let file = s.cwd.join("notes.md");
+    fs::write(&file, b"hello").unwrap();
+    let read = |path: &Path| {
+        response(service.read_handle(
+            &read_request("/api/files-content", path),
+            &s,
+            None,
+            false,
+            &ws,
+        ))
+        .status
+    };
+    assert_eq!(read(&file), 200);
+    #[cfg(windows)]
+    {
+        // The verbatim spelling of a local disk path names that disk path.
+        let verbatim = fs::canonicalize(&file).unwrap();
+        assert!(verbatim.to_string_lossy().starts_with(r"\\?\"));
+        assert_eq!(read(&verbatim), 200);
+        let listed = response(service.read_handle(
+            &list_request(&fs::canonicalize(&s.cwd).unwrap().to_string_lossy()),
+            &s,
+            None,
+            false,
+            &ws,
+        ));
+        assert_eq!(listed.status, 200);
+    }
+}
+
 #[test]
 fn save_timestamp_duplicates_validate_each_occurrence_and_null_keeps_prior() {
     let (_dir, _service, s) = setup();
