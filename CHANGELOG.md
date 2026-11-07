@@ -118,6 +118,13 @@ Release artifacts are published at
   already read first. A Codex started outside many-ai-cli while the hook is in
   place no longer reports its usage to a many-ai-cli session. Hooks written by
   earlier versions are still recognized and replaced.
+- **Another HTTPS port of the Hub's machine name is no longer trusted.** With
+  remote access on (the machine name in `allowed_hosts`, as the mobile
+  connection wizard sets it up), the Hub took any `https://` page on that name
+  as its own dashboard, whatever its port. A script on another HTTPS service of
+  the same machine could then open the dashboard's WebSocket with your cookies
+  and type into sessions. An https origin must now match the host and port the
+  request was sent to; `tailscale serve` keeps working as before.
 
 ## [0.10.0] - Unreleased
 

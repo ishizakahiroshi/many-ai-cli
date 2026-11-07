@@ -774,6 +774,7 @@ impl ServiceRouter {
                         request.header("Origin").trim(),
                         i64::from(self.bound_port),
                         &config.hub.allowed_hosts,
+                        auth::request_authority(request),
                     );
                 epoch
                     .filter(|_| bound)

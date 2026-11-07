@@ -91,7 +91,11 @@ pub fn allowed_host(raw: &str, port: i64, hosts: &[String]) -> bool {
     }
     port <= 0 || got_port.is_empty() || got_port.parse::<i64>().is_ok_and(|p| p == port)
 }
-pub fn allowed_origin(raw: &str, port: i64, hosts: &[String]) -> bool {
+/// `addressed` is the authority the request addressed (`request_authority`).
+/// An https origin must name exactly that host and port: a page on the same
+/// machine name at another port is a different origin, and the browser sends
+/// the Hub's cookies to it all the same (U06).
+pub fn allowed_origin(raw: &str, port: i64, hosts: &[String], addressed: &str) -> bool {
     // URL normalizes some illegal Go URL inputs; reject whitespace/control and
     // backslashes before parsing so they cannot be silently repaired.
     if raw.chars().any(|c| c.is_control() || c == '\\' || c == ' ') {
@@ -133,9 +137,44 @@ pub fn allowed_origin(raw: &str, port: i64, hosts: &[String]) -> bool {
             };
             allowed_host(&authority, port, hosts)
         }
-        "https" => configured_host(host, hosts),
+        "https" => {
+            let origin_port = if explicit_port.is_empty() {
+                "443"
+            } else {
+                explicit_port
+            };
+            configured_host(host, hosts) && same_https_authority(host, origin_port, addressed)
+        }
         _ => false,
     }
+}
+/// The authority the browser addressed: X-Forwarded-Host when a loopback
+/// proxy (`tailscale serve`) sets it, otherwise Host. A browser page cannot
+/// set either header on a WebSocket or a CORS-free request.
+pub fn request_authority(request: &Request) -> &str {
+    let forwarded = request.header("X-Forwarded-Host").trim();
+    if !forwarded.is_empty() && is_loopback(&request.remote_addr) {
+        forwarded.split(',').next().unwrap_or("").trim()
+    } else {
+        request.host.trim()
+    }
+}
+fn same_https_authority(host: &str, port: &str, authority: &str) -> bool {
+    let (authority_host, authority_port) =
+        split_host_port(authority).unwrap_or((authority.trim_matches(['[', ']']), ""));
+    let authority_host = authority_host.to_lowercase();
+    let authority_host = authority_host.strip_suffix('.').unwrap_or(&authority_host);
+    let authority_port = if authority_port.is_empty() {
+        "443"
+    } else {
+        authority_port
+    };
+    !authority_host.is_empty()
+        && authority_host == host
+        && matches!(
+            (authority_port.parse::<u16>(), port.parse::<u16>()),
+            (Ok(addressed), Ok(origin)) if addressed == origin
+        )
 }
 pub fn logically_remote(request: &Request) -> bool {
     if !is_loopback(&request.remote_addr) {
@@ -208,7 +247,12 @@ pub fn require_host(request: &Request, config: &Config, port: i64) -> Result<(),
 pub fn require_origin(request: &Request, config: &Config, port: i64) -> Result<(), Response> {
     let origin = request.header("Origin").trim();
     let allowed = if !origin.is_empty() {
-        allowed_origin(origin, port, &config.hub.allowed_hosts)
+        allowed_origin(
+            origin,
+            port,
+            &config.hub.allowed_hosts,
+            request_authority(request),
+        )
     } else {
         matches!(
             request
@@ -255,7 +299,12 @@ pub fn websocket_origin(request: &Request, config: &Config, port: i64) -> Result
         } else {
             Ok(())
         }
-    } else if allowed_origin(origin, port, &config.hub.allowed_hosts) {
+    } else if allowed_origin(
+        origin,
+        port,
+        &config.hub.allowed_hosts,
+        request_authority(request),
+    ) {
         Ok(())
     } else {
         Err(Response::error(403, "forbidden", "origin not allowed"))

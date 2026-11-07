@@ -91,23 +91,65 @@ fn service_host_portless_and_ipv6_compatibility() {
 }
 #[test]
 fn service_origin_http_default_port_and_configured_https() {
-    assert!(!allowed_origin("http://localhost", 48888, &[]));
-    assert!(allowed_origin("http://localhost", 80, &[]));
-    assert!(allowed_origin("http://[::1]:48888", 48888, &[]));
-    assert!(!allowed_origin("https://localhost", 48888, &[]));
+    let local = "127.0.0.1:48888";
+    assert!(!allowed_origin("http://localhost", 48888, &[], local));
+    assert!(allowed_origin("http://localhost", 80, &[], local));
+    assert!(allowed_origin("http://[::1]:48888", 48888, &[], local));
+    assert!(!allowed_origin("https://localhost", 48888, &[], local));
+    let hosts = ["example.test".to_owned()];
+    // An https origin must be the authority the request addressed, port
+    // included: another HTTPS service on the same name is a different origin
+    // that still receives the Hub's cookies (U06).
+    assert!(!allowed_origin(
+        "https://example.test:8443",
+        48888,
+        &hosts,
+        "example.test"
+    ));
     assert!(allowed_origin(
         "https://example.test:8443",
         48888,
-        &["example.test".into()]
+        &hosts,
+        "example.test:8443"
+    ));
+    assert!(allowed_origin(
+        "https://example.test",
+        48888,
+        &hosts,
+        "Example.Test."
+    ));
+    assert!(allowed_origin(
+        "https://example.test:443",
+        48888,
+        &hosts,
+        "example.test"
+    ));
+    assert!(!allowed_origin(
+        "https://example.test",
+        48888,
+        &hosts,
+        "example.test:8443"
+    ));
+    assert!(!allowed_origin(
+        "https://example.test",
+        48888,
+        &hosts,
+        local
     ));
     assert!(!allowed_origin(
         "https://example.test.evil",
         48888,
-        &["example.test".into()]
+        &hosts,
+        "example.test.evil"
     ));
-    assert!(!allowed_origin("null", 48888, &[]));
-    assert!(!allowed_origin("http://127.1:48888", 48888, &[]));
-    assert!(!allowed_origin("http://0x7f000001:48888", 48888, &[]));
+    assert!(!allowed_origin("null", 48888, &[], local));
+    assert!(!allowed_origin("http://127.1:48888", 48888, &[], local));
+    assert!(!allowed_origin(
+        "http://0x7f000001:48888",
+        48888,
+        &[],
+        local
+    ));
 }
 #[test]
 fn service_token_precedence_and_bearer_case_are_go_compatible() {
@@ -188,6 +230,21 @@ fn service_websocket_requires_origin_for_proxied_clients() {
     r.headers
         .push(("Origin".into(), "https://machine.example".into()));
     assert!(websocket_origin(&r, &cfg, 48888).is_ok());
+    // A page served by another HTTPS port of the same machine name (U06).
+    r.headers.last_mut().unwrap().1 = "https://machine.example:8443".into();
+    assert_eq!(websocket_origin(&r, &cfg, 48888).unwrap_err().status, 403);
+    // A loopback proxy's X-Forwarded-Host is the authority the browser used.
+    r.host = "127.0.0.1:48888".into();
+    r.headers
+        .push(("X-Forwarded-Host".into(), "machine.example:8443".into()));
+    assert!(websocket_origin(&r, &cfg, 48888).is_ok());
+    r.headers.last_mut().unwrap().1 = "machine.example".into();
+    assert_eq!(websocket_origin(&r, &cfg, 48888).unwrap_err().status, 403);
+    // POST requests use the same origin check.
+    r.method = "POST".into();
+    assert_eq!(require_origin(&r, &cfg, 48888).unwrap_err().status, 403);
+    r.headers.last_mut().unwrap().1 = "machine.example:8443".into();
+    assert!(require_origin(&r, &cfg, 48888).is_ok());
 }
 #[test]
 fn service_route_coverage_does_not_hide_unresolved_entries() {
