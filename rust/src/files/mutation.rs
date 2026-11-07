@@ -126,7 +126,76 @@ fn safe_name(name: &str, detail: &str) -> Result<()> {
 fn save_file(q: Mutation, s: &Scope) -> Result<Response> {
     save_file_after_check(q, s, || {})
 }
+/// Writes `content` over the open file from its start.
+fn overwrite(file: &mut std::fs::File, content: &[u8]) -> std::io::Result<()> {
+    file.seek(SeekFrom::Start(0))?;
+    file.write_all(content)?;
+    file.set_len(content.len() as u64)?;
+    file.sync_all()
+}
+/// A copy of a file's bytes from before a save, in the Hub's own folder,
+/// kept until the new content is on disk (U18). The file itself is written in
+/// place, so its identity, links and permissions stay as they were.
+struct SaveBackup {
+    dir: Dir,
+    name: String,
+    file: std::fs::File,
+}
+impl SaveBackup {
+    /// A copy left by a save that was interrupted is kept this long for the
+    /// user, then removed by a later save.
+    const KEEP: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 3600);
+    fn take(original: &mut std::fs::File, s: &Scope) -> std::io::Result<Self> {
+        let folder = s
+            .paths
+            .resource(crate::config::Resource::Temporary)
+            .join("save-backups");
+        let dir = Dir::open_or_create_private_components(&folder)?;
+        for name in dir.entries().unwrap_or_default() {
+            let old = dir
+                .metadata(&name)
+                .ok()
+                .and_then(|meta| meta.modified().ok())
+                .and_then(|at| std::time::SystemTime::now().duration_since(at).ok())
+                .is_some_and(|age| age > Self::KEEP);
+            if name.ends_with(".bak") && old {
+                let _ = dir.remove_file(&name);
+            }
+        }
+        let name = format!("{}.bak", &crate::process::random_token()?[..24]);
+        dir.create_new(&name, &[], 0o600)?;
+        let mut file = dir.open_file(&name, true)?;
+        original.seek(SeekFrom::Start(0))?;
+        std::io::copy(original, &mut file)?;
+        file.sync_all()?;
+        Ok(Self { dir, name, file })
+    }
+    fn restore(&mut self, original: &mut std::fs::File) -> std::io::Result<()> {
+        self.file.seek(SeekFrom::Start(0))?;
+        original.seek(SeekFrom::Start(0))?;
+        let length = std::io::copy(&mut self.file, original)?;
+        original.set_len(length)?;
+        original.sync_all()
+    }
+    fn path(&self) -> PathBuf {
+        self.dir.path().join(&self.name)
+    }
+    fn discard(self) {
+        let Self { dir, name, file } = self;
+        // Closed first: Windows does not remove an open file.
+        drop(file);
+        let _ = dir.remove_file(&name);
+    }
+}
 fn save_file_after_check(q: Mutation, s: &Scope, after_check: impl FnOnce()) -> Result<Response> {
+    save_file_with(q, s, after_check, overwrite)
+}
+fn save_file_with(
+    q: Mutation,
+    s: &Scope,
+    after_check: impl FnOnce(),
+    write: impl FnOnce(&mut std::fs::File, &[u8]) -> std::io::Result<()>,
+) -> Result<Response> {
     let base = if q.base_mtime == "0001-01-01T00:00:00Z" {
         None
     } else {
@@ -180,11 +249,25 @@ fn save_file_after_check(q: Mutation, s: &Scope, after_check: impl FnOnce()) -> 
         ));
     }
     after_check();
-    file.seek(SeekFrom::Start(0))
-        .and_then(|_| file.write_all(q.content.as_bytes()))
-        .and_then(|_| file.set_len(q.content.len() as u64))
-        .and_then(|_| file.sync_all())
-        .map_err(|e| super::io_error(e, "write_failed"))?;
+    // A write cut short (a full disk, an I/O error) must not leave the file
+    // half old and half new: the earlier bytes are put back from the copy.
+    let mut backup =
+        SaveBackup::take(&mut file, s).map_err(|e| super::io_error(e, "backup_failed"))?;
+    if let Err(error) = write(&mut file, q.content.as_bytes()) {
+        if backup.restore(&mut file).is_ok() {
+            backup.discard();
+            return Err(super::io_error(error, "write_failed"));
+        }
+        return Err(err(
+            500,
+            "write_failed",
+            &format!(
+                "write_failed: {error}; the file could not be put back, and its earlier content is kept at {}",
+                backup.path().display()
+            ),
+        ));
+    }
+    backup.discard();
     let meta = file
         .metadata()
         .map_err(|e| super::io_error(e, "stat_after_write_failed"))?;
@@ -542,5 +625,51 @@ mod save_audit_tests {
         assert_eq!(worker.join().unwrap().unwrap().status, 200);
         assert_eq!(competing.status, 409, "both saves accepted one base mtime");
         assert_eq!(std::fs::read(&path).unwrap(), b"first synthetic writer");
+    }
+    #[test]
+    fn audit_u18_a_save_cut_short_leaves_the_earlier_content_and_no_copy() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("project");
+        let runtime = temp.path().join("runtime");
+        std::fs::create_dir(&project).unwrap();
+        std::fs::create_dir(&runtime).unwrap();
+        let paths = crate::config::paths::RuntimePaths::trial(
+            &runtime,
+            49123,
+            &temp.path().join("installed"),
+        )
+        .unwrap();
+        let backups = paths
+            .resource(crate::config::Resource::Temporary)
+            .join("save-backups");
+        let scope = Scope::new(project.clone(), paths);
+        let path = project.join("fixture.txt");
+        let original = b"earlier synthetic content, longer than what the cut writes";
+        std::fs::write(&path, original).unwrap();
+        let change = |content: &str| Mutation {
+            path: path.to_string_lossy().into_owned(),
+            base_mtime: "0001-01-01T00:00:00Z".into(),
+            content: content.into(),
+            ..Default::default()
+        };
+        // A full disk stops the write halfway.
+        let failed = save_file_with(
+            change("replacement synthetic content"),
+            &scope,
+            || {},
+            |file, content| {
+                file.seek(SeekFrom::Start(0))?;
+                file.write_all(&content[..content.len() / 2])?;
+                Err(std::io::Error::other("synthetic: no space left"))
+            },
+        )
+        .unwrap_err();
+        assert_eq!(failed.status, 500);
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        assert_eq!(std::fs::read_dir(&backups).unwrap().count(), 0);
+        let saved = save_file(change("saved synthetic content"), &scope).unwrap();
+        assert_eq!(saved.status, 200);
+        assert_eq!(std::fs::read(&path).unwrap(), b"saved synthetic content");
+        assert_eq!(std::fs::read_dir(&backups).unwrap().count(), 0);
     }
 }

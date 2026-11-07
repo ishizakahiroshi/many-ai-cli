@@ -51,6 +51,14 @@ Release artifacts are published at
   already existed when the record was written. On macOS, where a process
   cannot be identified this way, a Hub that does not answer the stop request
   is no longer force-ended: `stop` says so and leaves it to you.
+- **Saving a file from the Hub no longer leaves it half written.** The editor
+  wrote the new text over the file in place, so a full disk, an I/O error or
+  the Hub stopping partway could leave the start of the new text followed by
+  the end of the old one. The earlier content is now copied to
+  `~/.many-ai-cli/tmp/save-backups` first and put back if the write fails;
+  the copy is removed once the save is complete. If a save is interrupted the
+  copy stays there for 7 days. The file is still written in place, so its
+  links and permissions are unchanged.
 
 ### Security
 
