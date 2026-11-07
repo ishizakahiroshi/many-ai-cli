@@ -312,6 +312,69 @@ async fn missing_key_file_sends_nothing_and_warns() {
     f.cancel.cancel();
 }
 
+/// A board that answers one request with `head` and `body` as raw bytes.
+async fn raw_board(head: &str, body: Vec<u8>) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let head = head.to_owned();
+    tokio::spawn(async move {
+        let Ok((mut socket, _)) = listener.accept().await else {
+            return;
+        };
+        let mut request = [0; 8192];
+        let _ = socket.read(&mut request).await;
+        let _ = socket.write_all(head.as_bytes()).await;
+        let _ = socket.write_all(&body).await;
+        let _ = socket.shutdown().await;
+        // Hold the socket until the client lets go.
+        while matches!(socket.read(&mut request).await, Ok(read) if read > 0) {}
+    });
+    format!("http://{address}/board/mcp")
+}
+
+#[tokio::test]
+async fn audit_u29_a_reply_past_the_size_limit_is_refused_without_reading_it() {
+    let reply = br#"{"jsonrpc":"2.0","id":1,"result":{"structuredContent":{"ok":true}}}"#;
+    let streamed = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n";
+    let declared = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+        1u64 << 30
+    );
+    // Padding past the limit before a reply that would otherwise be accepted.
+    let mut padded = vec![b' '; RESPONSE_MAX + 1];
+    padded.extend_from_slice(reply);
+    let cases = [
+        (declared.as_str(), Vec::new(), false),
+        (streamed, padded, false),
+        (streamed, reply.to_vec(), true),
+    ];
+    for (head, body, accepted) in cases {
+        let f = fixture(false).await;
+        let target = Target {
+            url: raw_board(head, body).await,
+            key_file: f.root.path().join("writer.key"),
+            project: "demo".into(),
+            item_id: "synthetic".into(),
+        };
+        let result = tokio::time::timeout(
+            Duration::from_secs(10),
+            f.sync
+                .call(&target, "board_upsert_item", serde_json::json!({})),
+        )
+        .await
+        .expect("an oversized reply must not be waited for");
+        assert_eq!(result.is_some(), accepted);
+        let expected: &[&str] = if accepted {
+            &[]
+        } else {
+            &["board sync: board reply too large"]
+        };
+        assert_eq!(*lock(&f.warnings), expected);
+        f.cancel.cancel();
+    }
+}
+
 #[test]
 fn paths_match_by_prefix_on_whole_names_only() {
     let root = Path::new(if cfg!(windows) {

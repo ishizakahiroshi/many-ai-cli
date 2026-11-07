@@ -217,6 +217,12 @@ Release artifacts are published at
   below the repository, a link or junction at any of those levels stops the
   worktree, and a repository that tracks `.git-worktrees` gets none. Links
   above the repository folder still work.
+- **The board sync reads at most 1 MiB of a reply.** Writing to an MCP board
+  read the whole reply into memory, so a board that answered with gigabytes
+  (a compromised server, or another program on a loopback port the board was
+  not yet using) could exhaust the Hub's memory at each session start, turn
+  and end. A reply declared or found to be longer than 1 MiB is now dropped
+  with a warning.
 
 ## [0.10.0] - Unreleased
 

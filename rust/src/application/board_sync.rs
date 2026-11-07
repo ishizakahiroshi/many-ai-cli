@@ -40,6 +40,9 @@ const TITLE_MAX: usize = 200;
 const TEXT_MAX: usize = 2000;
 const PROJECT_MAX: usize = 80;
 const QUEUE_MAX: usize = 256;
+/// A tools/call reply is a few KiB. A longer one is refused rather than read,
+/// so a wrong or hostile board cannot exhaust the Hub's memory (U29).
+const RESPONSE_MAX: usize = 1024 * 1024;
 
 pub type Warning = dyn Fn(&str, &str) + Send + Sync;
 
@@ -455,7 +458,7 @@ impl BoardSync {
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": tool, "arguments": arguments},
         });
-        let response = match self
+        let mut response = match self
             .client
             .post(&target.url)
             .bearer_auth(key)
@@ -474,7 +477,22 @@ impl BoardSync {
             self.warn_once("board refused the write (HTTP status)");
             return None;
         }
-        let value: serde_json::Value = response.json().await.ok()?;
+        if response
+            .content_length()
+            .is_some_and(|length| length > RESPONSE_MAX as u64)
+        {
+            self.warn_once("board reply too large");
+            return None;
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.ok()? {
+            if bytes.len() + chunk.len() > RESPONSE_MAX {
+                self.warn_once("board reply too large");
+                return None;
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
         let result = value.get("result")?.get("structuredContent")?.clone();
         if result.get("ok").and_then(|v| v.as_bool()) == Some(false) {
             self.warn_once("board refused the write");
