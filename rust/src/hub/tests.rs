@@ -1242,9 +1242,10 @@ fn audit_u08_unidentified_remote_pin_attempts_share_a_staged_lock() {
     }
     // A Tailscale user keeps a lock of their own.
     let mut named = r.clone();
-    named
-        .headers
-        .push(("Tailscale-User-Login".into(), "synthetic-tailnet-user".into()));
+    named.headers.push((
+        "Tailscale-User-Login".into(),
+        "synthetic-tailnet-user".into(),
+    ));
     assert_eq!(auth.login_at(&named, &cfg, at).status, 401);
 }
 
