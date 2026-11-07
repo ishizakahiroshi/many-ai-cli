@@ -936,13 +936,17 @@ impl ChildLaunchServices for OrchestrationProgram {
             &self.deps.hub_cwd,
             &fs,
         );
-        let command = resolver.resolve_provider(
-            provider,
-            (!argv[0].is_empty()).then_some(argv.as_slice()),
-            &[],
-        );
+        // A provider that is not found has no shim; its launch reports that.
+        let shim = resolver
+            .resolve_provider(
+                provider,
+                (!argv[0].is_empty()).then_some(argv.as_slice()),
+                &[],
+            )
+            .ok()
+            .and_then(|command| command.shell_shim);
         Ok(crate::wrapper::launch::launch_prompt_arg_usable(
-            command.shell_shim.as_deref(),
+            shim.as_deref(),
             &self.deps.paths.resource(Resource::Temporary),
         )
         .is_ok())

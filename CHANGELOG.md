@@ -101,6 +101,14 @@ Release artifacts are published at
   folder named `build;<command>` could start that command in a new tab. Each
   `;` is now escaped as Windows Terminal expects. Explorer's command line uses
   commas as separators, so folder paths are now passed to it in quotes.
+- **A provider that is not installed no longer runs a file of its name from the
+  project folder.** When a provider's command was not found on PATH, its bare
+  name was passed on, and Windows looks for such a name in the session's
+  folder first, so a repository carrying a file named `claude` (no extension
+  needed) ran it as you when you started that provider there. A command that
+  cannot be found is now an error on every OS, including custom providers and
+  `copilot` when neither `copilot` nor `gh` is found: the session ends with
+  "not found in PATH" as before, and nothing from the folder starts.
 
 ## [0.10.0] - Unreleased
 

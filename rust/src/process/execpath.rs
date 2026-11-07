@@ -450,50 +450,48 @@ impl<'a> Resolver<'a> {
             )),
         }
     }
-    /// Wrapper-specific compatibility route. Go intentionally retains the raw
-    /// command on lookup failure so the process-start diagnostic owns the error.
+    /// The provider command to start. A command that is not found is an error,
+    /// never its bare name: Windows `CreateProcessW` completes a bare name from
+    /// the session's folder (with no extension needed) and a Unix PATH search
+    /// can reach it through a relative entry, so a file a repository carries
+    /// under the provider's name would run instead (U19). Go reports the same
+    /// lookup error when the process starts.
     pub fn resolve_provider(
         &self,
         provider: &str,
         custom_argv: Option<&[String]>,
         args: &[String],
-    ) -> ResolvedCommand {
+    ) -> io::Result<ResolvedCommand> {
         if let Some(custom) = custom_argv.filter(|v| !v.is_empty()) {
             let mut combined = custom[1..].to_vec();
             combined.extend_from_slice(args);
-            return match self.look_path(&custom[0]) {
-                Ok(path) => self.resolve(&path, &combined),
-                Err(_) => direct(&custom[0], &combined),
-            };
+            return Ok(self.resolve(&self.look_path(&custom[0])?, &combined));
         }
         if provider == "shell" {
-            return direct(&self.default_shell(), args);
+            return Ok(direct(&self.default_shell(), args));
         }
         if provider == "copilot" {
             if let Ok(path) = self.look_path("copilot") {
-                return self.resolve(&path, args);
+                return Ok(self.resolve(&path, args));
             }
-            if let Ok(path) = self.look_path("gh") {
-                let mut gh_args = vec!["copilot".into()];
-                if !args.is_empty() {
-                    gh_args.push("--".into());
-                    gh_args.extend_from_slice(args);
-                }
-                return self.resolve(&path, &gh_args);
+            let path = self.look_path("gh")?;
+            let mut gh_args = vec!["copilot".into()];
+            if !args.is_empty() {
+                gh_args.push("--".into());
+                gh_args.extend_from_slice(args);
             }
-            return direct(provider, args);
+            return Ok(self.resolve(&path, &gh_args));
         }
-        match self.look_path(provider) {
-            Ok(path) => self.resolve(&path, args),
-            Err(_) => direct(provider, args),
-        }
+        Ok(self.resolve(&self.look_path(provider)?, args))
     }
     pub fn launch_shell_shim(
         &self,
         provider: &str,
         custom_argv: Option<&[String]>,
     ) -> Option<String> {
-        let resolved = self.resolve_provider(provider, custom_argv, &["probe".into()]);
+        let resolved = self
+            .resolve_provider(provider, custom_argv, &["probe".into()])
+            .ok()?;
         if self.platform == Platform::Windows
             && basename(&resolved.executable, self.platform).eq_ignore_ascii_case("cmd.exe")
             && resolved
@@ -842,24 +840,37 @@ mod tests {
         }
         let env = strings(&["PATH=/bin"]);
         let resolver = Resolver::new(Platform::Unix, &env, Path::new("/work"), &fs);
-        let got = resolver.resolve_provider("copilot", None, &strings(&["--model", "m"]));
+        let got = resolver
+            .resolve_provider("copilot", None, &strings(&["--model", "m"]))
+            .unwrap();
         assert_eq!(got.executable, "/bin/gh");
         assert_eq!(got.args, strings(&["copilot", "--", "--model", "m"]));
         assert_eq!(
-            resolver.resolve_provider("copilot", None, &[]).args,
+            resolver
+                .resolve_provider("copilot", None, &[])
+                .unwrap()
+                .args,
             strings(&["copilot"])
         );
         let custom = strings(&["custom", "base"]);
-        let got = resolver.resolve_provider("copilot", Some(&custom), &strings(&["tail"]));
+        let got = resolver
+            .resolve_provider("copilot", Some(&custom), &strings(&["tail"]))
+            .unwrap();
         assert_eq!(got.executable, "/bin/custom");
         assert_eq!(got.args, strings(&["base", "tail"]));
         assert_eq!(
-            resolver.resolve_provider("shell", None, &[]).executable,
+            resolver
+                .resolve_provider("shell", None, &[])
+                .unwrap()
+                .executable,
             "/bin/sh"
         );
         assert_eq!(
-            resolver.resolve_provider("missing", None, &[]).executable,
-            "missing"
+            resolver
+                .resolve_provider("missing", None, &[])
+                .err()
+                .map(|error| error.kind()),
+            Some(io::ErrorKind::NotFound)
         );
         assert!(resolver.resolve_command("update-missing", &[]).is_err());
         assert_eq!(
@@ -869,6 +880,42 @@ mod tests {
                 .executable,
             "/bin/custom"
         );
+    }
+    #[test]
+    fn a_provider_that_is_not_found_is_an_error_never_its_bare_name() {
+        // A repository carries a file under the provider's name. A bare name
+        // handed to CreateProcessW runs `<cwd>\claude` with no extension
+        // needed, so nothing that could become one may come back (U19).
+        let mut fs = SyntheticFs::default();
+        fs.put(r"C:\repo\claude", "planted");
+        fs.put(r"C:\repo\codex.exe", "planted");
+        fs.put(r"C:\tools\codex.exe", "installed");
+        let env = strings(&[r"PATH=C:\tools", r"PATHEXT=.COM;.EXE;.BAT;.CMD"]);
+        let resolver = Resolver::new(Platform::Windows, &env, Path::new(r"C:\repo"), &fs);
+        // ResolvedCommand has no Debug (its arguments can hold credentials).
+        let kind = |provider: &str, custom: Option<&[String]>| {
+            resolver
+                .resolve_provider(provider, custom, &[])
+                .err()
+                .map(|error| error.kind())
+        };
+        assert_eq!(kind("claude", None), Some(io::ErrorKind::NotFound));
+        assert_eq!(kind("copilot", None), Some(io::ErrorKind::NotFound));
+        let custom = strings(&["claude", "--flag"]);
+        assert_eq!(
+            kind("synthetic", Some(&custom)),
+            Some(io::ErrorKind::NotFound)
+        );
+        // A copy in the folder that differs from the one on PATH stays refused.
+        assert_eq!(kind("codex", None), Some(io::ErrorKind::PermissionDenied));
+        assert_eq!(resolver.launch_shell_shim("claude", None), None);
+        // A relative PATH entry is how a Unix search would reach the folder.
+        let mut fs = SyntheticFs::default();
+        fs.put("/repo/tool", "planted");
+        let env = strings(&["PATH=:/other"]);
+        let resolver = Resolver::new(Platform::Unix, &env, Path::new("/repo"), &fs);
+        assert!(resolver.resolve_provider("tool", None, &[]).is_err());
+        assert!(resolver.resolve_provider("missing", None, &[]).is_err());
     }
     #[test]
     fn windows_path_extensions_quotes_and_relative_lookup_guard() {

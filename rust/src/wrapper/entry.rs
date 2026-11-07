@@ -185,14 +185,32 @@ fn launch_shell_eligible(
         && env(environment, "MANY_AI_CLI_USAGE_PROBE") != Some("1")
         && env(environment, "MANY_AI_CLI_SUBSCRIPTION_LOGIN") != Some("1")
 }
+/// The frame a headless session ends with when its provider cannot start; a
+/// command that is not found shows as "not found in PATH".
+fn start_failed(session_id: i64, error: &io::Error) -> Message {
+    Message {
+        r#type: "session_end".into(),
+        session_id,
+        state: "error".into(),
+        exit_code: 1,
+        reason: if error.kind() == io::ErrorKind::NotFound {
+            "exec_not_found".into()
+        } else {
+            String::new()
+        },
+        ..Default::default()
+    }
+}
 fn registration_shell(
     provider: &str,
     selected_shell: Option<&(String, String)>,
-    command: &crate::process::execpath::ResolvedCommand,
+    command: Option<&crate::process::execpath::ResolvedCommand>,
 ) -> String {
     if let Some((_, path)) = selected_shell {
         path.clone()
-    } else if provider == "shell" || command.shell_shim.is_some() {
+    } else if let Some(command) =
+        command.filter(|command| provider == "shell" || command.shell_shim.is_some())
+    {
         command.executable.clone()
     } else {
         "direct".into()
@@ -314,7 +332,9 @@ pub async fn run_cli(
     );
     let connector = LoopbackConnector::new(port, context.config.token.clone(), write_timeout)?;
     let resolver = CommandResolver::new(context.paths, context.environment, context.cwd);
-    let command = resolver.resolve_provider(
+    // Only describes the launch until registration: `prepare` below resolves
+    // the provider again and starts nothing when it cannot be found (U19).
+    let command = resolver.describe_provider(
         provider,
         launch.custom_argv.as_deref(),
         &launch.provider_args,
@@ -327,8 +347,15 @@ pub async fn run_cli(
     };
     let child = launch::child_env(context.environment, color, &[]);
     let mut process = ProcessPlan {
-        executable: command.executable.clone().into(),
-        args: command.args.iter().cloned().map(Into::into).collect(),
+        executable: command
+            .as_ref()
+            .map(|command| command.executable.clone())
+            .unwrap_or_default()
+            .into(),
+        args: command
+            .iter()
+            .flat_map(|command| command.args.iter().cloned().map(Into::into))
+            .collect(),
         cwd: context.cwd.into(),
         env: overrides(context.environment, &child),
         stdin: vec![],
@@ -347,11 +374,11 @@ pub async fn run_cli(
         process.env.insert(name.into(), None);
     }
     let mut prepared_payload = None;
-    if let Some((mode, shell_executable)) = &selected_shell {
-        super::launch_payload::validate_inner_cmd(&command)?;
+    if let (Some((mode, shell_executable)), Some(command)) = (&selected_shell, &command) {
+        super::launch_payload::validate_inner_cmd(command)?;
         let payload = super::launch_payload::PreparedLaunchPayload::create(
             context.paths,
-            &command,
+            command,
             context.cwd,
             launch.required_hooks.contains(&LaunchHook::Utf8Console),
             &child,
@@ -359,7 +386,7 @@ pub async fn run_cli(
         install_shell_bootstrap(&mut process, &context, mode, shell_executable, &payload)?;
         prepared_payload = Some(payload);
     }
-    let session_shell = registration_shell(provider, selected_shell.as_ref(), &command);
+    let session_shell = registration_shell(provider, selected_shell.as_ref(), command.as_ref());
     let registration = registration(&context, &launch, &session_shell)?;
     let proof = env(context.environment, SPAWN_PROOF_ENV).map(str::to_owned);
     let mut owner_instruction_hash = None;
@@ -515,7 +542,7 @@ async fn run_headless(
     {
         return Err(unsafe_prompt_transport());
     }
-    let (socket, registered) =
+    let (mut socket, registered) =
         register(connector, &registration, proof.as_deref(), timeout, cancel).await?;
     proof.take();
     let mut hooks = SessionHooks::default();
@@ -527,7 +554,16 @@ async fn run_headless(
     );
     args = headless::build_argv(def, &args, &prompt);
     let command =
-        resolver.resolve_provider(&launch.provider, launch.custom_argv.as_deref(), &args)?;
+        match resolver.resolve_provider(&launch.provider, launch.custom_argv.as_deref(), &args) {
+            Ok(command) => command,
+            Err(error) => {
+                // A provider that cannot be found ends the session the same
+                // way as one that fails to start below (U19).
+                let frame = start_failed(registered.session_id, &error);
+                let _ = tokio::time::timeout(timeout, socket.send(&frame)).await;
+                return Err(error);
+            }
+        };
     // Recheck the actual resolved command in case the shim changed while the
     // registration/prompt preparation above was awaiting work.
     if argument_prompt && command.shell_shim.is_some() {
@@ -595,18 +631,7 @@ async fn run_headless(
                 Ok(result) => break result,
                 Err(error) => {
                     if let Some(socket) = socket.as_mut() {
-                        let frame = Message {
-                            r#type: "session_end".into(),
-                            session_id: registered.session_id,
-                            state: "error".into(),
-                            exit_code: 1,
-                            reason: if error.kind() == io::ErrorKind::NotFound {
-                                "exec_not_found".into()
-                            } else {
-                                String::new()
-                            },
-                            ..Default::default()
-                        };
+                        let frame = start_failed(registered.session_id, &error);
                         let _ = tokio::time::timeout(timeout, socket.send(&frame)).await;
                     }
                     return Err(error);
@@ -712,10 +737,10 @@ mod tests {
             args: vec![],
             shell_shim: None,
         };
-        assert_eq!(registration_shell("codex", None, &direct), "direct");
+        assert_eq!(registration_shell("codex", None, Some(&direct)), "direct");
         let explicit = ("pwsh".into(), r"C:\PowerShell\pwsh.exe".into());
         assert_eq!(
-            registration_shell("codex", Some(&explicit), &direct),
+            registration_shell("codex", Some(&explicit), Some(&direct)),
             r"C:\PowerShell\pwsh.exe"
         );
         let shim = ResolvedCommand {
@@ -724,12 +749,19 @@ mod tests {
             shell_shim: Some(r"C:\synthetic\codex.cmd".into()),
         };
         assert_eq!(
-            registration_shell("codex", None, &shim),
+            registration_shell("codex", None, Some(&shim)),
             r"C:\Windows\System32\cmd.exe"
         );
         assert_eq!(
-            registration_shell("shell", None, &direct),
+            registration_shell("shell", None, Some(&direct)),
             r"C:\synthetic\codex.exe"
+        );
+        // A provider that is not found registers as a direct launch, which
+        // then ends as "not found in PATH" instead of starting anything.
+        assert_eq!(registration_shell("codex", None, None), "direct");
+        assert_eq!(
+            registration_shell("codex", Some(&explicit), None),
+            r"C:\PowerShell\pwsh.exe"
         );
     }
 

@@ -62,13 +62,32 @@ fn trial_provider_resolution_confines_path_custom_and_cwd_without_production_cha
     let resolver = CommandResolver::new(&production, &environment, fixture.paths.root());
     let resolved = resolver.resolve_provider(name, None, &[]).unwrap();
     assert_eq!(Path::new(&resolved.executable), outside);
+    // A provider that is not found is never handed on as its bare name, which
+    // Windows would look for in the session's folder, where a repository can
+    // carry a file of that name (U19). Before registration it describes
+    // nothing, so the session still registers and ends as "not found in PATH".
+    fixture.file(fixture.paths.root(), "missing-synthetic", b"planted");
+    assert!(matches!(
+        resolver.resolve_provider("missing-synthetic", None, &[]),
+        Err(error) if error.kind() == io::ErrorKind::NotFound
+    ));
+    assert!(
+        resolver
+            .describe_provider("missing-synthetic", None, &[])
+            .unwrap()
+            .is_none()
+    );
     assert_eq!(
         resolver
-            .resolve_provider("missing-synthetic", None, &[])
-            .unwrap()
-            .executable,
-        "missing-synthetic"
+            .launch_shell_shim("missing-synthetic", None)
+            .unwrap(),
+        None
     );
+    assert!(matches!(
+        CommandResolver::new(&fixture.paths, &environment, fixture.paths.root())
+            .describe_provider("missing-synthetic", None, &[]),
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied
+    ));
 
     let inside = fixture.file(fixture.paths.root(), name, b"synthetic only");
     let custom = vec![inside.to_string_lossy().into_owned(), "base".into()];

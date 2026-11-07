@@ -116,6 +116,9 @@ impl<'a> CommandResolver<'a> {
             .ok_or_else(boundary)?
             .into())
     }
+    /// The command that is started. A provider that cannot be found is an
+    /// error (`NotFound` reaches the session as "not found in PATH"); in
+    /// trial it is the boundary error, as for any name outside the root.
     pub(super) fn resolve_provider(
         &self,
         provider: &str,
@@ -124,7 +127,35 @@ impl<'a> CommandResolver<'a> {
     ) -> io::Result<ResolvedCommand> {
         let fs = ScopedFs(self.paths);
         let resolver = Resolver::new(Platform::native(), self.environment, self.cwd, &fs);
-        self.check(resolver.resolve_provider(provider, custom, args))
+        let command = resolver
+            .resolve_provider(provider, custom, args)
+            .map_err(|error| {
+                if self.paths.is_trial() {
+                    boundary()
+                } else {
+                    error
+                }
+            })?;
+        self.check(command)
+    }
+    /// Before registration the command only describes the launch (the shell
+    /// the session reports and the payload layout). A provider that cannot be
+    /// found still registers, so the session can show why it did not start:
+    /// the launch resolves it again with `resolve_provider`. `None` is never
+    /// started.
+    pub(super) fn describe_provider(
+        &self,
+        provider: &str,
+        custom: Option<&[String]>,
+        args: &[String],
+    ) -> io::Result<Option<ResolvedCommand>> {
+        let fs = ScopedFs(self.paths);
+        let resolver = Resolver::new(Platform::native(), self.environment, self.cwd, &fs);
+        match resolver.resolve_provider(provider, custom, args) {
+            Ok(command) => self.check(command).map(Some),
+            Err(_) if !self.paths.is_trial() => Ok(None),
+            Err(_) => Err(boundary()),
+        }
     }
     pub(super) fn resolve_ai_launch_shell(&self, shell: &str) -> io::Result<String> {
         let fs = ScopedFs(self.paths);
@@ -144,7 +175,14 @@ impl<'a> CommandResolver<'a> {
         let fs = ScopedFs(self.paths);
         let resolver = Resolver::new(Platform::native(), self.environment, self.cwd, &fs);
         // Preserve the source's probe argument and direct cmd.exe /c detection.
-        self.check(resolver.resolve_provider(provider, custom, &["probe".into()]))?;
+        // A provider that cannot be found has no shim; nothing starts from
+        // here, and the launch reports it through `resolve_provider`.
+        if self
+            .describe_provider(provider, custom, &["probe".into()])?
+            .is_none()
+        {
+            return Ok(None);
+        }
         resolver
             .launch_shell_shim(provider, custom)
             .map(|shim| {
