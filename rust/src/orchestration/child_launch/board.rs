@@ -139,6 +139,74 @@ pub(super) fn private_dirs(path: &Path) -> io::Result<()> {
     }
     builder.create(path)
 }
+/// Creates the folders of `relative` below `base` one level at a time and
+/// refuses any that is a link or junction, so a link committed to a
+/// repository cannot move a worktree outside it (U28). Links above `base`,
+/// such as a home folder on another drive, are the user's own and still
+/// resolve. Returns `base` joined with `relative`.
+pub(crate) fn plain_dirs_below(base: &Path, relative: &Path) -> io::Result<PathBuf> {
+    let refused = |path: &Path, reason: &str| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{}: {reason}", path.display()),
+        )
+    };
+    let mut path = base.to_path_buf();
+    let mut below = PathBuf::new();
+    for component in relative.components() {
+        match component {
+            std::path::Component::CurDir => continue,
+            std::path::Component::Normal(name) => {
+                path.push(name);
+                below.push(name);
+            }
+            _ => return Err(refused(relative, "not a plain relative folder")),
+        }
+        #[cfg(unix)]
+        let created = {
+            use std::os::unix::fs::DirBuilderExt;
+            fs::DirBuilder::new().mode(0o700).create(&path)
+        };
+        #[cfg(not(unix))]
+        let created = fs::create_dir(&path);
+        match created {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error),
+        }
+        // Not followed: a link (or a junction on Windows) is refused here.
+        let metadata = fs::symlink_metadata(&path)?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(refused(&path, "a link or not a folder"));
+        }
+    }
+    if fs::canonicalize(&path)? != fs::canonicalize(base)?.join(&below) {
+        return Err(refused(&path, "resolves outside the folder it was made in"));
+    }
+    Ok(path)
+}
+/// A folder link for tests: a symlink, or on Windows a junction, which needs
+/// no privilege.
+#[cfg(test)]
+pub(crate) fn link_dir_for_test(target: &Path, link: &Path) {
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(target, link).unwrap();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let status = std::process::Command::new("cmd.exe")
+            .args(["/d", "/c", "mklink", "/J"])
+            .arg(link)
+            .arg(target)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW)
+            .status()
+            .unwrap();
+        assert!(status.success(), "synthetic junction creation failed");
+    }
+}
 fn private_options() -> OpenOptions {
     let options = OpenOptions::new();
     #[cfg(unix)]

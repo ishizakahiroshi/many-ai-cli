@@ -209,6 +209,14 @@ Release artifacts are published at
   address, and checks again each time it reuses a running server; otherwise it
   stops the server and reports that it could not start. On macOS only the
   server being alive is checked.
+- **A worktree is never created through a link in the repository.** A
+  repository could commit `.git-worktrees` or `.many-ai-cli` as a link to a
+  folder elsewhere; a session started with its own worktree, or a child
+  started by a conductor, then checked the repository's files out there,
+  without an approval. The worktree folders are now made one level at a time
+  below the repository, a link or junction at any of those levels stops the
+  worktree, and a repository that tracks `.git-worktrees` gets none. Links
+  above the repository folder still work.
 
 ## [0.10.0] - Unreleased
 

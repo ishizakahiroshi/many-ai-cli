@@ -402,6 +402,44 @@ async fn missing_existing_worktree_identity_is_rejected_and_cancel_is_not_a_skip
     );
 }
 
+#[test]
+fn audit_u28_plain_dirs_below_refuses_links_and_paths_that_leave_the_folder() {
+    let root = tempfile::tempdir().unwrap();
+    let base = root.path().join("repo");
+    fs::create_dir(&base).unwrap();
+    let made = board::plain_dirs_below(&base, Path::new(".many-ai-cli/worktrees/id")).unwrap();
+    assert_eq!(made, base.join(".many-ai-cli").join("worktrees").join("id"));
+    assert!(made.is_dir());
+    let outside = root.path().join("outside");
+    fs::create_dir(&outside).unwrap();
+    board::link_dir_for_test(&outside, &base.join("linked"));
+    assert!(board::plain_dirs_below(&base, Path::new("linked/worktrees")).is_err());
+    assert!(board::plain_dirs_below(&base, Path::new("../escape")).is_err());
+    assert_eq!(fs::read_dir(&outside).unwrap().count(), 0);
+}
+#[tokio::test]
+async fn audit_u28_a_linked_child_worktree_root_is_skipped_without_writing_outside() {
+    let (root, _) = roots();
+    let env = git_env(root.path());
+    let repo = repo(root.path(), "linked-child", &env);
+    let outside = root.path().join("outside-target");
+    fs::create_dir(&outside).unwrap();
+    board::link_dir_for_test(&outside, &repo.join(".many-ai-cli"));
+    let out = git(root.path())
+        .prepare(
+            &repo,
+            "id",
+            "review",
+            &worktree_config(),
+            &TaskCancellation::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.cwd, repo);
+    assert!(out.note.starts_with("worktree skip"), "{}", out.note);
+    assert_eq!(fs::read_dir(&outside).unwrap().count(), 0);
+}
+
 #[derive(Default)]
 struct TestServices {
     children: Mutex<Vec<RegisteredChild>>,

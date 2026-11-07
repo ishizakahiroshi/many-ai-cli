@@ -552,6 +552,38 @@ async fn linked_parent_uses_shared_info_exclude_and_relative_cwd_uses_process_cw
 }
 
 #[tokio::test]
+async fn audit_u28_a_linked_or_tracked_worktree_root_is_refused_and_nothing_lands_outside() {
+    let f = Fixture::new();
+    let repo = f.repo("linked-root").await;
+    let outside = f.root.join("outside-target");
+    fs::create_dir(&outside).unwrap();
+    crate::orchestration::child_launch::board::link_dir_for_test(
+        &outside,
+        &repo.join(".git-worktrees"),
+    );
+    assert_eq!(
+        prefix(f.lifecycle.prepare(&repo, "worker", now(), 0).await),
+        "create worktree root"
+    );
+    assert_eq!(fs::read_dir(&outside).unwrap().count(), 0);
+    // A repository that commits a folder of that name is refused too.
+    let tracked = f.repo("tracked-root").await;
+    fs::create_dir(tracked.join(".git-worktrees")).unwrap();
+    fs::write(
+        tracked.join(".git-worktrees").join("keep.txt"),
+        "synthetic\n",
+    )
+    .unwrap();
+    f.git(&tracked, &["add", ".git-worktrees/keep.txt"]).await;
+    f.git(&tracked, &["commit", "-qm", "synthetic tracked root"])
+        .await;
+    assert_eq!(
+        prefix(f.lifecycle.prepare(&tracked, "worker", now(), 0).await),
+        "create worktree root"
+    );
+}
+
+#[tokio::test]
 async fn root_create_failure_and_invalid_git_token_preserve_error_prefixes() {
     let f = Fixture::new();
     let blocked = f.repo("blocked").await;

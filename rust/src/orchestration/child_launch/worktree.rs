@@ -1,6 +1,9 @@
 //! Actual argv-only Git preparation, ported from orchestration.go and
 //! worktree_identity.go. Existing worktrees are checked read-only, never repaired.
-use super::{board::private_dirs, clean_path, safe_token};
+use super::{
+    board::{plain_dirs_below, private_dirs},
+    clean_path, safe_token,
+};
 use crate::{
     config::OrchestrationConfig,
     process::{
@@ -13,7 +16,7 @@ use std::{
     collections::BTreeMap,
     ffi::OsString,
     fs, io,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     time::Duration,
 };
 use tokio::time::Instant;
@@ -157,7 +160,19 @@ impl WorktreeGit {
             cwd.join(configured_root)
         };
         let child = clean_path(&root.join(safe_token(orchestration)).join(safe_token(role)));
-        if let Err(error) = private_dirs(child.parent().expect("child worktree has parent")) {
+        // Below the session folder no link is followed, so one committed to the
+        // repository cannot move the checkout outside it (U28). A root the
+        // user set to an absolute path, or above the folder, is their choice.
+        let inside = !configured_root.is_absolute()
+            && configured_root
+                .components()
+                .all(|part| matches!(part, Component::Normal(_) | Component::CurDir));
+        let created = if inside {
+            plain_dirs_below(cwd, &configured_root.join(safe_token(orchestration))).map(|_| ())
+        } else {
+            private_dirs(child.parent().expect("child worktree has parent"))
+        };
+        if let Err(error) = created {
             return Ok(skip(format!("worktree skip: {error}")));
         }
         if fs::metadata(&child).is_ok() {

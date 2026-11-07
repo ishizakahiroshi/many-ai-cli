@@ -10,7 +10,7 @@
 //! first) contains it, and worktrees still unmerged when their session closed
 //! are remembered (`retained`) and judged again when the Hub starts. A squash
 //! or rebase merge rewrites the commits, so it is never seen as merged.
-use super::child_launch::{safe_token, worktree::WorktreeGit};
+use super::child_launch::{board::plain_dirs_below, safe_token, worktree::WorktreeGit};
 use crate::{
     process::{Cancellation, ExitOutcome, ManagedProcess, SpawnOptions},
     proto::{
@@ -107,14 +107,29 @@ impl NormalWorktreeLifecycle {
         let parent = Path::new(parent);
         let name = safe_token(label);
         let stamp = minute_stamp(now, offset_seconds)?;
-        let root = parent.join(".git-worktrees");
-        create_dirs(&root, 0o700).map_err(|error| format!("create worktree root: {error}"))?;
+        // A repository that tracks this folder, or a link at its place, would
+        // put the new checkout where its author chose (U28).
+        let tracked = self
+            .run(
+                parent,
+                &args(&["ls-files", "-s", "--", ".git-worktrees"]),
+                inspection,
+                GitOutput::Stdout,
+            )
+            .await
+            .map_err(|error| format!("check worktree root: {}", error.detail))?;
+        if !tracked.trim().is_empty() {
+            return Err("create worktree root: the repository tracks .git-worktrees".into());
+        }
+        let root = plain_dirs_below(parent, Path::new(".git-worktrees"))
+            .map_err(|error| format!("create worktree root: {error}"))?;
         self.exclude_git_path(parent, ".git-worktrees/", inspection)
             .await;
         let mut path = root.join(format!("{name}-{stamp}"));
         let mut suffix = 2;
         loop {
-            match fs::metadata(&path) {
+            // Not followed, so an existing link also counts as taken.
+            match fs::symlink_metadata(&path) {
                 Err(error) if error.kind() == io::ErrorKind::NotFound => break,
                 Err(error) => return Err(format!("check worktree path: {error}")),
                 Ok(_) => {
