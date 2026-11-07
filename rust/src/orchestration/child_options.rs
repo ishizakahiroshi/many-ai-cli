@@ -424,14 +424,31 @@ mod tests {
             actual.ask_for_approval.clone_from(&body.ask_for_approval);
             actual.risk_confirmed = body.risk_confirmed;
             actual.allowed_tools = prepared.grants().allowed_tools().to_vec();
+            // U49 changed the built-in bounded lists on purpose for Copilot and
+            // where Claude Code has no sandbox (config's tests pin them). Where
+            // it has one, Claude's list is still the Go version's.
+            let mut expected = case["approval"].clone();
+            if input["tools"].is_null()
+                && input["existing_tools"].as_array().is_none_or(Vec::is_empty)
+                && expected["allowed_tools"].is_array()
+            {
+                let built_in = serde_json::to_value(
+                    cfg.orchestration.bounded_allowed_tools_for(&body.provider),
+                )
+                .unwrap();
+                if body.provider == "claude" && config::CLAUDE_SANDBOX {
+                    assert_eq!(expected["allowed_tools"], built_in, "unchanged {name}");
+                }
+                expected["allowed_tools"] = built_in;
+            }
             assert_eq!(
                 serde_json::to_value(&actual).unwrap(),
-                case["approval"],
+                expected,
                 "prepared {name}"
             );
             assert_eq!(
                 serde_json::to_value(&preview[&body.provider][""]).unwrap(),
-                case["approval"],
+                expected,
                 "disclosed {name}"
             );
         }
@@ -493,11 +510,12 @@ mod tests {
             let prepared = prepare(confirmed, &Config::default()).unwrap();
             assert!(prepared.grants().grant_folder_trust());
             if tools.is_empty() {
+                // In the built-in list with or without Claude Code's sandbox.
                 assert!(
                     prepared
                         .grants()
                         .allowed_tools()
-                        .contains(&"Bash(git status)".into())
+                        .contains(&"Bash(git commit *)".into())
                 );
             } else {
                 assert_eq!(prepared.grants().allowed_tools(), tools);

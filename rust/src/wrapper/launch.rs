@@ -140,7 +140,14 @@ pub enum LaunchHook {
     },
     /// Inspect register_ack token_statusbar, orchestration_id and auto, then
     /// create one private --settings file if either Claude setting is enabled.
-    ClaudeRegistrationSettings,
+    /// A bounded session always gets one, also headless: it keeps Claude's
+    /// file tools in the working folders and, where Claude Code has a
+    /// sandbox, runs its shell commands there (U49). Failing to write it then
+    /// stops the launch.
+    ClaudeRegistrationSettings { bounded: bool },
+    /// Turn the repository's Git hooks off for a bounded child that has no
+    /// sandbox, so an allowed `git commit` cannot run a hook it edited (U49).
+    NoGitHooks,
     /// Evaluate MANY_AI_CLI_DELEGATION's 1/0 override before the config default.
     DelegationPrompt { config_default: bool },
     /// Windows-only console encoding side effect; Unix explicitly needs no work.
@@ -152,15 +159,23 @@ impl LaunchHook {
             Self::OpenCodePermissions { .. } => {
                 "OpenCode temporary permission configuration and restoration"
             }
-            Self::ClaudeRegistrationSettings => {
-                "Claude registration-dependent private statusline/cross-session settings"
+            Self::ClaudeRegistrationSettings { .. } => {
+                "Claude registration-dependent private statusline/cross-session and bounded settings"
             }
+            Self::NoGitHooks => "Git hooks turned off for a bounded child without a sandbox",
             Self::DelegationPrompt { .. } => {
                 "delegation environment gate and provider prompt preparation"
             }
             Self::Utf8Console => "Windows session UTF-8 console encoding",
         }
     }
+}
+
+/// A Claude session in the bounded tier: the Hub passes `--allowed-tools`, an
+/// internal grant a launch request cannot make, only for that tier, together
+/// with `--permission-mode dontAsk`.
+pub fn claude_bounded(args: &WrapperArgs) -> bool {
+    args.permission_mode == "dontAsk" && !parse_allowed_tool_values(&args.allowed_tools).is_empty()
 }
 
 /// Provider arguments exclude the prompt body and later session-owned hooks.
@@ -381,10 +396,18 @@ pub fn prepare_launch_with_definition(
                 bash_deny,
             });
         }
+        let bounded_claude = provider == "claude" && claude_bounded(&args);
+        if provider == "claude" && (!args.headless || bounded_claude) {
+            required_hooks.push(LaunchHook::ClaudeRegistrationSettings {
+                bounded: bounded_claude,
+            });
+        }
+        if (bounded_claude && !config::CLAUDE_SANDBOX)
+            || (provider == "copilot" && args.permission_mode == config::PERMISSION_MODE_BOUNDED)
+        {
+            required_hooks.push(LaunchHook::NoGitHooks);
+        }
         if !args.headless {
-            if provider == "claude" {
-                required_hooks.push(LaunchHook::ClaudeRegistrationSettings);
-            }
             // Go's argument hook currently supports these two providers. Other
             // providers' project-file delegation injection belongs to the Hub.
             if matches!(provider, "claude" | "grok") {
@@ -1053,6 +1076,55 @@ mod tests {
                 permission: "allow".into(),
                 bash_deny: argv(&["git push*", "git reset*", "git clean*", "rm*", "sudo*"])
             }]
+        );
+    }
+    #[test]
+    fn audit_u49_bounded_launches_get_their_settings_and_unsandboxed_ones_no_git_hooks() {
+        let hooks = |provider: &str, args: &[&str]| {
+            prepare_launch(&Config::default(), provider, parse(args))
+                .unwrap()
+                .required_hooks
+        };
+        let settings = |bounded| LaunchHook::ClaudeRegistrationSettings { bounded };
+        let tier = [
+            "--permission-mode=dontAsk",
+            "--allowed-tools=Read,Bash(git commit *)",
+        ];
+        // Interactive and headless bounded Claude sessions both get them.
+        for headless in [false, true] {
+            let mut args = tier.to_vec();
+            if headless {
+                args.push("--headless");
+            }
+            let required = hooks("claude", &args);
+            assert!(required.contains(&settings(true)), "{required:?}");
+            assert_eq!(
+                required.contains(&LaunchHook::NoGitHooks),
+                !config::CLAUDE_SANDBOX
+            );
+        }
+        // The user's own dontAsk, without the tier's list, is not bounded.
+        let required = hooks("claude", &["--permission-mode=dontAsk"]);
+        assert!(required.contains(&settings(false)));
+        assert!(!required.contains(&LaunchHook::NoGitHooks));
+        // A headless session outside the tier still gets no settings file.
+        let required = hooks("claude", &["--headless"]);
+        assert!(
+            !required
+                .iter()
+                .any(|hook| matches!(hook, LaunchHook::ClaudeRegistrationSettings { .. }))
+        );
+        // Copilot has no sandbox in any tier.
+        assert!(
+            hooks(
+                "copilot",
+                &["--permission-mode=bounded", "--allowed-tools=write"]
+            )
+            .contains(&LaunchHook::NoGitHooks)
+        );
+        assert!(
+            !hooks("copilot", &["--permission-mode=bypassPermissions"])
+                .contains(&LaunchHook::NoGitHooks)
         );
     }
     #[test]

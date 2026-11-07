@@ -4545,48 +4545,74 @@ fn execution_mode_default(mode: &str) -> String {
     }
 }
 
-const DEFAULT_BOUNDED_ALLOWED_TOOLS: &[(&str, &[&str])] = &[
-    (
-        "claude",
-        &[
-            "Read",
-            "Glob",
-            "Grep",
-            "Edit",
-            "Write",
-            "NotebookEdit",
-            "TodoWrite",
-            "Bash(git status)",
-            "Bash(git status *)",
-            "Bash(git diff)",
-            "Bash(git diff *)",
-            "Bash(git log)",
-            "Bash(git log *)",
-            "Bash(git add *)",
-            "Bash(git commit *)",
-            "Bash(go test *)",
-            "Bash(go vet *)",
-            "Bash(gofmt *)",
-            "Bash(bun run check)",
-            "Bash(bun run check *)",
-        ],
-    ),
-    (
-        "copilot",
-        &[
-            "write",
-            "shell(git status:*)",
-            "shell(git diff:*)",
-            "shell(git log:*)",
-            "shell(git add:*)",
-            "shell(git commit:*)",
-            "shell(go test:*)",
-            "shell(go vet:*)",
-            "shell(gofmt:*)",
-            "shell(bun run check:*)",
-        ],
-    ),
+/// Whether Claude Code runs a bounded Claude session's shell commands in its
+/// sandbox here (macOS, Linux and WSL2). On native Windows it has none.
+pub const CLAUDE_SANDBOX: bool = cfg!(not(windows));
+
+/// Claude's built-in bounded list where its sandbox runs the shell commands.
+/// What an allowed command runs, such as a test or a script the child can
+/// edit, or a Git hook, then writes only in the working folder and reaches no
+/// network (U49).
+const CLAUDE_SANDBOXED_BOUNDED_TOOLS: &[&str] = &[
+    "Read",
+    "Glob",
+    "Grep",
+    "Edit",
+    "Write",
+    "NotebookEdit",
+    "TodoWrite",
+    "Bash(git status)",
+    "Bash(git status *)",
+    "Bash(git diff)",
+    "Bash(git diff *)",
+    "Bash(git log)",
+    "Bash(git log *)",
+    "Bash(git add *)",
+    "Bash(git commit *)",
+    "Bash(go test *)",
+    "Bash(go vet *)",
+    "Bash(gofmt *)",
+    "Bash(bun run check)",
+    "Bash(bun run check *)",
 ];
+
+/// Without that sandbox, a command that runs the repository's code (`go test`,
+/// `go vet -vettool`, `bun run check`) or writes where its flags say (`git log`
+/// and `git diff --output`, `gofmt -w`) would do so with the user's full
+/// rights, so the list keeps reads, edits, `git add` and `git commit` (the
+/// wrapper turns the repository's Git hooks off for it). Claude Code still
+/// runs the read-only forms of `git status`, `git diff` and `git log` without
+/// a rule, and asks for, so in this tier refuses, a form that writes (U49).
+const CLAUDE_UNSANDBOXED_BOUNDED_TOOLS: &[&str] = &[
+    "Read",
+    "Glob",
+    "Grep",
+    "Edit",
+    "Write",
+    "NotebookEdit",
+    "TodoWrite",
+    "Bash(git add *)",
+    "Bash(git commit *)",
+];
+
+/// Copilot has no sandbox either. A tool outside its list waits for the user's
+/// answer in the Hub rather than being refused, so tests, checks and Git's
+/// reading commands stay possible with that answer (U49).
+const COPILOT_BOUNDED_TOOLS: &[&str] = &[
+    "write",
+    "shell(git status:*)",
+    "shell(git add:*)",
+    "shell(git commit:*)",
+];
+
+fn default_bounded_allowed_tools(provider: &str) -> &'static [&'static str] {
+    match provider {
+        "claude" if CLAUDE_SANDBOX => CLAUDE_SANDBOXED_BOUNDED_TOOLS,
+        "claude" => CLAUDE_UNSANDBOXED_BOUNDED_TOOLS,
+        "copilot" => COPILOT_BOUNDED_TOOLS,
+        _ => &[],
+    }
+}
 
 pub fn valid_allowed_tool_value(value: &str) -> bool {
     !value.is_empty()
@@ -4622,11 +4648,7 @@ impl OrchestrationConfig {
         }
         let source: Vec<&str> = match self.bounded_allowed_tools.get(provider) {
             Some(values) => values.iter().map(String::as_str).collect(),
-            None => DEFAULT_BOUNDED_ALLOWED_TOOLS
-                .iter()
-                .find(|(name, _)| *name == provider)
-                .map(|(_, values)| values.to_vec())
-                .unwrap_or_default(),
+            None => default_bounded_allowed_tools(provider).to_vec(),
         };
         source
             .into_iter()
@@ -5203,10 +5225,39 @@ mod launch_helper_tests {
     }
 
     #[test]
+    fn audit_u49_unsandboxed_bounded_lists_allow_nothing_that_runs_repository_code() {
+        // Without Claude Code's sandbox, and for Copilot, nothing in the
+        // built-in list may run code the child can change, or write where a
+        // flag says: tests and checks, `go vet -vettool`, `git log` and
+        // `git diff --output`, `gofmt -w`.
+        let runs_or_writes = |tool: &str| {
+            ["go ", "gofmt", "bun ", "git diff", "git log"]
+                .iter()
+                .any(|command| tool.contains(command))
+        };
+        for list in [CLAUDE_UNSANDBOXED_BOUNDED_TOOLS, COPILOT_BOUNDED_TOOLS] {
+            assert!(!list.iter().any(|tool| runs_or_writes(tool)), "{list:?}");
+            // Committing stays possible; the wrapper turns the hooks off.
+            assert!(list.iter().any(|tool| tool.contains("git commit")));
+        }
+        // In the sandbox, Claude keeps the list the Go version had.
+        assert!(CLAUDE_SANDBOXED_BOUNDED_TOOLS.contains(&"Bash(go test *)"));
+        let expected = if CLAUDE_SANDBOX {
+            CLAUDE_SANDBOXED_BOUNDED_TOOLS
+        } else {
+            CLAUDE_UNSANDBOXED_BOUNDED_TOOLS
+        };
+        assert_eq!(
+            OrchestrationConfig::default().bounded_allowed_tools_for("claude"),
+            expected
+        );
+    }
+
+    #[test]
     fn bounded_tools_keep_narrow_defaults_and_explicit_empty_overrides() {
         let mut config = OrchestrationConfig::default();
         let default = config.bounded_allowed_tools_for(" claude ");
-        assert_eq!(default.len(), 20);
+        assert_eq!(default.len(), if CLAUDE_SANDBOX { 20 } else { 9 });
         assert_eq!(default[0], "Read");
         for forbidden in [
             "Bash(git push *)",
@@ -5216,7 +5267,7 @@ mod launch_helper_tests {
         ] {
             assert!(!default.iter().any(|tool| tool == forbidden));
         }
-        assert_eq!(config.bounded_allowed_tools_for("copilot").len(), 10);
+        assert_eq!(config.bounded_allowed_tools_for("copilot").len(), 4);
         for provider in ["codex", "opencode", "grok", "CLAUDE", ""] {
             assert!(config.bounded_allowed_tools_for(provider).is_empty());
         }

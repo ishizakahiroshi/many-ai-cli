@@ -246,6 +246,20 @@ Release artifacts are published at
   Claude then started without them. They are now written to
   `~/.many-ai-cli/tmp` (user-only) under a name with a random part, and a
   failed look for old files no longer stops the new one.
+- **The bounded tier now limits what an allowed command runs.** A bounded
+  child could edit a test or a package script and then run it through
+  `go test` or `bun run check` from the built-in list, so code the child wrote
+  ran with your rights and could do what the list leaves out. On macOS, Linux
+  and WSL2 a bounded Claude child now runs its shell commands in Claude Code's
+  sandbox: they write only in its working folder and cannot reach the
+  network, and Go builds use a build cache of the session's own. On Linux and
+  WSL2 the sandbox needs bubblewrap and socat; without them Claude Code
+  refuses to start the child. Without a sandbox (Claude on native Windows,
+  and Copilot) the built-in list keeps reading, editing, `git add` and
+  `git commit`, and the child's Git commands run no repository hooks; Claude
+  still runs the read-only forms of `git status`, `git diff` and `git log`,
+  and Copilot asks you about anything else. Claude's file tools stay in the
+  working folders everywhere.
 
 ## [0.10.0] - Unreleased
 

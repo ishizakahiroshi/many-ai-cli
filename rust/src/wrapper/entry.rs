@@ -266,19 +266,31 @@ fn apply_hooks(
     port: u16,
     hooks: &mut SessionHooks,
     args: &mut Vec<String>,
+    env: &mut BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>>,
 ) -> io::Result<()> {
     for hook in &launch.required_hooks {
         match hook {
-            LaunchHook::ClaudeRegistrationSettings => match hooks.claude_settings(
+            LaunchHook::ClaudeRegistrationSettings { bounded } => match hooks.claude_settings(
                 context.paths,
                 registered,
                 context.executable,
                 port,
                 cfg!(windows),
+                launch.headless,
+                *bounded,
             ) {
-                Ok(extra) => args.extend(extra),
+                Ok(extra) => {
+                    args.extend(extra.args);
+                    for (name, value) in extra.env {
+                        env.insert(name.into(), Some(value));
+                    }
+                }
+                // The bounded tier never starts without the settings that
+                // keep it bounded (U49).
+                Err(error) if *bounded => return Err(error),
                 Err(_) => eprintln!("wrapper: Claude session settings setup failed"),
             },
+            LaunchHook::NoGitHooks => crate::process::git::disable_hooks(env),
             LaunchHook::DelegationPrompt { config_default } => {
                 if launch::delegation_prompt_enabled(*config_default, context.environment) {
                     match hooks.delegation(context.paths, &launch.provider, registered.session_id) {
@@ -456,7 +468,15 @@ pub async fn run_cli(
         cancel,
         |registered, process| {
             let mut args = launch.provider_args.clone();
-            apply_hooks(&context, &launch, registered, port, &mut hooks, &mut args)?;
+            apply_hooks(
+                &context,
+                &launch,
+                registered,
+                port,
+                &mut hooks,
+                &mut args,
+                &mut process.env,
+            )?;
             if !launch.args.prompt_file.trim().is_empty() {
                 let shim = resolver.launch_shell_shim(provider, launch.custom_argv.as_deref())?;
                 let prepared = launch::prepare_launch_prompt(
@@ -546,7 +566,15 @@ async fn run_headless(
     proof.take();
     let mut hooks = SessionHooks::default();
     let mut args = launch.provider_args.clone();
-    apply_hooks(&context, &launch, &registered, port, &mut hooks, &mut args)?;
+    apply_hooks(
+        &context,
+        &launch,
+        &registered,
+        port,
+        &mut hooks,
+        &mut args,
+        &mut process.env,
+    )?;
     let prompt = launch::expand_prompt(
         &launch::take_prompt_file(context.paths, Path::new(launch.args.prompt_file.trim()))?,
         registered.session_id,

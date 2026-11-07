@@ -28,10 +28,29 @@ impl Drop for OwnedFile {
         let _ = self.directory.remove_file(&self.name);
     }
 }
+/// A session's own folder, removed with what is in it, without following a
+/// link placed there.
+struct OwnedFolder {
+    directory: Dir,
+    name: String,
+}
+impl Drop for OwnedFolder {
+    fn drop(&mut self) {
+        let _ = self.directory.remove_tree(&self.name);
+    }
+}
 #[derive(Default)]
 pub struct SessionHooks {
     files: Vec<OwnedFile>,
+    folders: Vec<OwnedFolder>,
     opencode: Option<OpenCodeOverlay>,
+}
+/// What `claude_settings` adds to Claude's launch: its arguments, and the
+/// variables its process gets.
+#[derive(Default)]
+pub struct ClaudeLaunch {
+    pub args: Vec<String>,
+    pub env: Vec<(String, std::ffi::OsString)>,
 }
 fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
@@ -41,18 +60,62 @@ fn read(dir: &Dir, name: &str) -> io::Result<Vec<u8>> {
     dir.open_file(name, false)?.read_to_end(&mut bytes)?;
     Ok(bytes)
 }
+/// Removes the files and folders a session of this user left under `prefix`
+/// when its process is gone and a day has passed. This is housekeeping: a
+/// scan that fails does not stop the new file.
+fn remove_stale(directory: &Dir, prefix: &str, suffix: &str) {
+    for name in directory.entries().unwrap_or_default() {
+        let Some(body) = name
+            .strip_prefix(prefix)
+            .and_then(|v| v.strip_suffix(suffix))
+        else {
+            continue;
+        };
+        let Some((session, pid)) = body.split_once("-p") else {
+            continue;
+        };
+        if session.parse::<u64>().is_err() {
+            continue;
+        }
+        // The PID, followed by the random part of newer names.
+        let pid = pid.split_once('-').map_or(pid, |(pid, _)| pid);
+        let Some(pid) = pid.parse::<i64>().ok().filter(|pid| *pid > 0) else {
+            continue;
+        };
+        if pid_alive(pid) {
+            continue;
+        }
+        let old = |modified: io::Result<SystemTime>| {
+            modified
+                .ok()
+                .and_then(|mtime| SystemTime::now().duration_since(mtime).ok())
+                .is_some_and(|age| age > Duration::from_secs(24 * 3600))
+        };
+        // Opened without following a link, so only a real folder is emptied.
+        if let Ok(folder) = directory.child_dir(&name, false) {
+            if folder
+                .own_metadata()
+                .is_ok_and(|metadata| old(metadata.modified()))
+            {
+                drop(folder);
+                let _ = directory.remove_tree(&name);
+            }
+            continue;
+        }
+        if directory
+            .metadata(&name)
+            .is_ok_and(|metadata| metadata.is_file() && old(metadata.modified()))
+        {
+            let _ = directory.remove_file(&name);
+        }
+    }
+}
 impl SessionHooks {
-    fn write(
-        &mut self,
-        paths: &RuntimePaths,
-        kind: &str,
-        session_id: i64,
-        extension: &str,
-        bytes: &[u8],
-    ) -> io::Result<PathBuf> {
-        // The user's own folder, never the shared system temporary folder,
-        // where another user could take the name first or leave a name that
-        // stops the scan, so the session started without these files (U60).
+    /// The user's own folder, never the shared system temporary folder, where
+    /// another user could take the name first or leave a name that stops the
+    /// scan, so the session started without these files (U60). Also returns
+    /// the start of this user's names there.
+    fn own_folder(paths: &RuntimePaths, kind: &str) -> io::Result<(PathBuf, Dir, String)> {
         let root = paths.resource(Resource::UsageHooks);
         let directory = Dir::open_or_create_private(&root)?;
         let home = if paths.is_trial() {
@@ -64,67 +127,64 @@ impl SessionHooks {
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>();
-        let owner = &owner[..16];
-        let prefix = format!("aac-{kind}-u{owner}-s");
-        let suffix = format!(".{extension}");
-        // Removing stale files is housekeeping: a scan that fails does not
-        // stop the new file.
-        for name in directory.entries().unwrap_or_default() {
-            let Some(body) = name
-                .strip_prefix(&prefix)
-                .and_then(|v| v.strip_suffix(&suffix))
-            else {
-                continue;
-            };
-            let Some((session, pid)) = body.split_once("-p") else {
-                continue;
-            };
-            if session.parse::<u64>().is_err() {
-                continue;
-            }
-            // The PID, followed by the random part of newer names.
-            let pid = pid.split_once('-').map_or(pid, |(pid, _)| pid);
-            let Some(pid) = pid.parse::<i64>().ok().filter(|pid| *pid > 0) else {
-                continue;
-            };
-            if pid_alive(pid) {
-                continue;
-            }
-            let Ok(metadata) = directory.metadata(&name) else {
-                continue;
-            };
-            if metadata.is_file()
-                && metadata
-                    .modified()
-                    .ok()
-                    .and_then(|mtime| SystemTime::now().duration_since(mtime).ok())
-                    .is_some_and(|age| age > Duration::from_secs(24 * 3600))
-            {
-                let _ = directory.remove_file(&name);
-            }
-        }
-        // A random part keeps the name unpredictable; a name already taken is
-        // retried with a new one.
+        Ok((root, directory, format!("aac-{kind}-u{}-s", &owner[..16])))
+    }
+    /// A name with a random part, so it cannot be predicted; `create` is
+    /// retried with a new one when the name is taken.
+    fn fresh_name(
+        prefix: &str,
+        session_id: i64,
+        suffix: &str,
+        mut create: impl FnMut(&str) -> io::Result<()>,
+    ) -> io::Result<String> {
         let mut attempts = 0;
-        let name = loop {
+        loop {
             let random = crate::process::random_token()?;
             let name = format!(
-                "aac-{kind}-u{owner}-s{session_id}-p{}-{}.{extension}",
+                "{prefix}{session_id}-p{}-{}{suffix}",
                 std::process::id(),
                 &random[..16]
             );
-            match directory.create_new(&name, bytes, 0o600) {
-                Ok(()) => break name,
+            match create(&name) {
+                Ok(()) => return Ok(name),
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists && attempts < 8 => {
                     attempts += 1;
                 }
                 Err(error) => return Err(error),
             }
-        };
+        }
+    }
+    fn write(
+        &mut self,
+        paths: &RuntimePaths,
+        kind: &str,
+        session_id: i64,
+        extension: &str,
+        bytes: &[u8],
+    ) -> io::Result<PathBuf> {
+        let (root, directory, prefix) = Self::own_folder(paths, kind)?;
+        let suffix = format!(".{extension}");
+        remove_stale(&directory, &prefix, &suffix);
+        let name = Self::fresh_name(&prefix, session_id, &suffix, |name| {
+            directory.create_new(name, bytes, 0o600)
+        })?;
         let path = root.join(&name);
         self.files.push(OwnedFile { directory, name });
         Ok(path)
     }
+    /// A private folder for this session, removed with its contents when the
+    /// session ends.
+    fn folder(&mut self, paths: &RuntimePaths, kind: &str, session_id: i64) -> io::Result<PathBuf> {
+        let (root, directory, prefix) = Self::own_folder(paths, kind)?;
+        remove_stale(&directory, &prefix, "");
+        let name = Self::fresh_name(&prefix, session_id, "", |name| directory.mkdir_new(name))?;
+        let path = root.join(&name);
+        self.folders.push(OwnedFolder { directory, name });
+        Ok(path)
+    }
+    /// A headless session gets only the bounded settings; the status line and
+    /// cross-session messages are for an interactive one.
+    #[allow(clippy::too_many_arguments)]
     pub fn claude_settings(
         &mut self,
         paths: &RuntimePaths,
@@ -132,13 +192,20 @@ impl SessionHooks {
         executable: &Path,
         hub_port: u16,
         native_windows: bool,
-    ) -> io::Result<Vec<String>> {
-        let cross = !native_windows && registered.auto && !registered.orchestration_id.is_empty();
-        if !registered.token_statusbar && !cross {
-            return Ok(vec![]);
+        headless: bool,
+        bounded: bool,
+    ) -> io::Result<ClaudeLaunch> {
+        let statusbar = !headless && registered.token_statusbar;
+        let cross = !headless
+            && !native_windows
+            && registered.auto
+            && !registered.orchestration_id.is_empty();
+        if !statusbar && !cross && !bounded {
+            return Ok(ClaudeLaunch::default());
         }
         let mut doc = serde_json::Map::new();
-        if registered.token_statusbar {
+        let mut env = Vec::new();
+        if statusbar {
             // No token here: Claude runs this through a shell, whose command
             // line other users of the machine can read. The relay reads
             // MANY_AI_CLI_HUB_TOKEN from the environment Claude inherits from
@@ -156,6 +223,38 @@ impl SessionHooks {
         if cross {
             doc.insert("crossSessionInbound".into(), Value::String("accept".into()));
         }
+        if bounded {
+            // The bounded tier allows editing and a list of commands. Claude's
+            // file tools then stay in the working folders, and where Claude
+            // Code has a sandbox, what an allowed command runs (a test or a
+            // hook the child edited) writes only there and reaches no network
+            // (U49). Without the sandbox, Claude Code refuses to start rather
+            // than run unsandboxed; a command is never retried outside it; and
+            // a sandboxed command still needs a rule, so the tier's list stays
+            // the limit. Claude Code versions that predate a key ignore it.
+            doc.insert(
+                "permissions".into(),
+                json!({"blockWritesOutsideWorkingDirectories": true}),
+            );
+            if !native_windows {
+                // Go's build cache outside the working folder is not
+                // writable in the sandbox, and must not be shared: a cached
+                // result the child wrote would be used by the user's own
+                // builds. This session gets its own, removed at its end.
+                let cache = self.folder(paths, "gocache", registered.session_id)?;
+                doc.insert(
+                    "sandbox".into(),
+                    json!({
+                        "enabled": true,
+                        "failIfUnavailable": true,
+                        "allowUnsandboxedCommands": false,
+                        "autoAllowBashIfSandboxed": false,
+                        "filesystem": {"allowWrite": [cache.to_string_lossy()]},
+                    }),
+                );
+                env.push(("GOCACHE".into(), cache.into_os_string()));
+            }
+        }
         let mut bytes = serde_json::to_vec_pretty(&doc).map_err(io::Error::other)?;
         bytes.push(b'\n');
         let path = self.write(
@@ -165,10 +264,10 @@ impl SessionHooks {
             "json",
             &bytes,
         )?;
-        Ok(vec![
-            "--settings".into(),
-            path.to_string_lossy().into_owned(),
-        ])
+        Ok(ClaudeLaunch {
+            args: vec!["--settings".into(), path.to_string_lossy().into_owned()],
+            env,
+        })
     }
     pub fn delegation(
         &mut self,
@@ -209,6 +308,7 @@ impl SessionHooks {
             overlay.restore()?;
         }
         self.files.clear();
+        self.folders.clear();
         Ok(())
     }
 }
@@ -402,15 +502,19 @@ mod tests {
             orchestration_id: "synthetic".into(),
             ..Default::default()
         };
-        let args = hooks
+        let launch = hooks
             .claude_settings(
                 &paths,
                 &reg,
                 Path::new("/synthetic/space dir/many-ai-cli"),
                 49011,
                 false,
+                false,
+                false,
             )
             .unwrap();
+        assert!(launch.env.is_empty());
+        let args = launch.args;
         let file = Path::new(&args[1]);
         assert!(file.starts_with(paths.root()));
         let body: Value = serde_json::from_slice(&std::fs::read(file).unwrap()).unwrap();
@@ -456,8 +560,11 @@ mod tests {
                     Path::new("/synthetic/many-ai-cli"),
                     49011,
                     false,
+                    false,
+                    false,
                 )
-                .unwrap()[1]
+                .unwrap()
+                .args[1]
                 .clone()
         };
         let first = settings();
@@ -480,6 +587,130 @@ mod tests {
         }
         hooks.finish().unwrap();
         assert!(!Path::new(&first).exists() && !Path::new(&second).exists());
+    }
+    #[test]
+    fn audit_u49_bounded_settings_confine_file_tools_and_sandbox_commands() {
+        let home = tempfile::tempdir().unwrap();
+        let paths = RuntimePaths::production(home.path()).unwrap();
+        let reg = Message {
+            session_id: 7,
+            token_statusbar: true,
+            ..Default::default()
+        };
+        let exe = Path::new("/synthetic/many-ai-cli");
+        let body = |launch: &ClaudeLaunch| -> Value {
+            serde_json::from_slice(&std::fs::read(&launch.args[1]).unwrap()).unwrap()
+        };
+        // A headless bounded session where Claude Code has its sandbox.
+        let mut hooks = SessionHooks::default();
+        let launch = hooks
+            .claude_settings(&paths, &reg, exe, 49011, false, true, true)
+            .unwrap();
+        let settings = body(&launch);
+        assert!(settings.get("statusLine").is_none());
+        assert_eq!(
+            settings["permissions"]["blockWritesOutsideWorkingDirectories"],
+            true
+        );
+        let sandbox = &settings["sandbox"];
+        assert_eq!(sandbox["enabled"], true);
+        assert_eq!(sandbox["failIfUnavailable"], true);
+        assert_eq!(sandbox["allowUnsandboxedCommands"], false);
+        assert_eq!(sandbox["autoAllowBashIfSandboxed"], false);
+        // Go's build cache is the session's own folder, the one place
+        // outside the working folder its commands may write.
+        let [(name, cache)] = launch.env.as_slice() else {
+            panic!("{:?}", launch.env)
+        };
+        assert_eq!(name, "GOCACHE");
+        let cache = Path::new(cache);
+        assert_eq!(
+            sandbox["filesystem"]["allowWrite"],
+            json!([cache.to_string_lossy()])
+        );
+        assert!(cache.is_dir());
+        assert!(cache.starts_with(paths.resource(Resource::UsageHooks)));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(cache).unwrap().permissions().mode() & 0o777,
+                0o700
+            );
+        }
+        std::fs::create_dir(cache.join("00")).unwrap();
+        std::fs::write(cache.join("00").join("synthetic-d"), b"synthetic").unwrap();
+        hooks.finish().unwrap();
+        assert!(!cache.exists());
+        assert!(!Path::new(&launch.args[1]).exists());
+        // Without the sandbox (native Windows) the file tools are still kept
+        // in the working folders.
+        let mut hooks = SessionHooks::default();
+        let launch = hooks
+            .claude_settings(&paths, &reg, exe, 49011, true, false, true)
+            .unwrap();
+        let settings = body(&launch);
+        assert!(settings.get("sandbox").is_none());
+        assert!(launch.env.is_empty());
+        assert_eq!(
+            settings["permissions"]["blockWritesOutsideWorkingDirectories"],
+            true
+        );
+        assert!(settings["statusLine"].is_object());
+        hooks.finish().unwrap();
+        // A headless session outside the bounded tier gets no file at all,
+        // and an interactive one only its status line.
+        let mut hooks = SessionHooks::default();
+        let none = hooks
+            .claude_settings(&paths, &reg, exe, 49011, false, true, false)
+            .unwrap();
+        assert!(none.args.is_empty() && none.env.is_empty());
+        let plain = hooks
+            .claude_settings(&paths, &reg, exe, 49011, false, false, false)
+            .unwrap();
+        let settings = body(&plain);
+        assert!(settings.get("permissions").is_none() && settings.get("sandbox").is_none());
+        hooks.finish().unwrap();
+    }
+    #[cfg(unix)]
+    #[test]
+    fn audit_u49_stale_session_folders_are_removed_without_following_links() {
+        let home = tempfile::tempdir().unwrap();
+        let paths = RuntimePaths::production(home.path()).unwrap();
+        let (root, _, prefix) = SessionHooks::own_folder(&paths, "gocache").unwrap();
+        // A process number no system gives out, so the owner is gone.
+        let stale = root.join(format!("{prefix}9-p3000000000-0123456789abcdef"));
+        std::fs::create_dir_all(stale.join("ff")).unwrap();
+        std::fs::write(stale.join("ff").join("synthetic-a"), b"synthetic").unwrap();
+        let outside = home.path().join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::write(outside.join("keep"), b"synthetic").unwrap();
+        let link = root.join(format!("{prefix}9-p3000000000-fedcba9876543210"));
+        std::os::unix::fs::symlink(&outside, &link).unwrap();
+        let two_days_ago = SystemTime::now() - Duration::from_secs(48 * 3600);
+        std::fs::File::open(&stale)
+            .unwrap()
+            .set_modified(two_days_ago)
+            .unwrap();
+        let mut hooks = SessionHooks::default();
+        let reg = Message {
+            session_id: 7,
+            ..Default::default()
+        };
+        hooks
+            .claude_settings(
+                &paths,
+                &reg,
+                Path::new("/synthetic/many-ai-cli"),
+                49011,
+                false,
+                true,
+                true,
+            )
+            .unwrap();
+        assert!(!stale.exists());
+        assert_eq!(std::fs::read(outside.join("keep")).unwrap(), b"synthetic");
+        hooks.finish().unwrap();
     }
     #[test]
     fn opencode_overlay_restores_original_and_preserves_concurrent_edit() {

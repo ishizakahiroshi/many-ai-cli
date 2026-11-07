@@ -59,6 +59,22 @@ fn forced_config() -> [(&'static str, &'static OsStr); 3] {
 /// Appends the forced settings after any the caller, or the Hub's own
 /// environment, already passes through `GIT_CONFIG_COUNT`, so those still apply.
 fn force_config(env: &mut BTreeMap<OsString, Option<OsString>>) {
+    append_config(env, &forced_config());
+}
+
+/// Turns the repository's Git hooks off for the programs a process starts:
+/// its Git commands look for hooks in `no_hooks_path`, after the settings the
+/// process would otherwise get through `GIT_CONFIG_COUNT`. A bounded child
+/// without a sandbox gets this, so `git commit` cannot run a hook it edited
+/// (U49).
+pub fn disable_hooks(env: &mut BTreeMap<OsString, Option<OsString>>) {
+    append_config(env, &[("core.hooksPath", no_hooks_path())]);
+}
+
+fn append_config(
+    env: &mut BTreeMap<OsString, Option<OsString>>,
+    forced: &[(&'static str, &'static OsStr)],
+) {
     let passed = match env.get(OsStr::new(CONFIG_COUNT)) {
         Some(value) => value.clone(),
         None => std::env::var_os(CONFIG_COUNT),
@@ -66,7 +82,6 @@ fn force_config(env: &mut BTreeMap<OsString, Option<OsString>>) {
     let base = passed
         .and_then(|value| value.to_str().and_then(|v| v.trim().parse::<usize>().ok()))
         .unwrap_or(0);
-    let forced = forced_config();
     for (offset, (key, value)) in forced.iter().enumerate() {
         let index = base + offset;
         env.insert(
@@ -411,6 +426,33 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    #[test]
+    fn audit_u49_disabled_hooks_follow_the_settings_a_child_inherits() {
+        let mut env = BTreeMap::from([
+            (OsString::from(CONFIG_COUNT), Some(OsString::from("1"))),
+            ("GIT_CONFIG_KEY_0".into(), Some("core.quotePath".into())),
+            ("GIT_CONFIG_VALUE_0".into(), Some("false".into())),
+        ]);
+        disable_hooks(&mut env);
+        assert_eq!(env[OsStr::new(CONFIG_COUNT)], Some("2".into()));
+        assert_eq!(
+            env[OsStr::new("GIT_CONFIG_KEY_1")],
+            Some("core.hooksPath".into())
+        );
+        assert_eq!(
+            env[OsStr::new("GIT_CONFIG_VALUE_1")].as_deref(),
+            Some(no_hooks_path())
+        );
+        // A count the child does not get starts the entry at 0.
+        let mut env = BTreeMap::from([(OsString::from(CONFIG_COUNT), None)]);
+        disable_hooks(&mut env);
+        assert_eq!(
+            env[OsStr::new("GIT_CONFIG_KEY_0")],
+            Some("core.hooksPath".into())
+        );
+        assert_eq!(env[OsStr::new(CONFIG_COUNT)], Some("1".into()));
     }
 
     #[test]
