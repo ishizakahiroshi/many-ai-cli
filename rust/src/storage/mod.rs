@@ -699,4 +699,136 @@ API_KEY=synthetic-value {secret}"), format!(r#"[{{"num":1,"label":"Yes"}},{{"num
             .unwrap();
         assert!(ended);
     }
+
+    /// The DACL of `path` in SDDL.
+    #[cfg(windows)]
+    fn dacl(path: &Path) -> String {
+        use std::{os::windows::ffi::OsStrExt, ptr};
+        use windows_sys::Win32::{
+            Foundation::LocalFree,
+            Security::{Authorization::*, DACL_SECURITY_INFORMATION},
+        };
+        let path: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+        let mut descriptor = ptr::null_mut();
+        // SAFETY: a synthetic path and output pointers outlive each call.
+        let status = unsafe {
+            GetNamedSecurityInfoW(
+                path.as_ptr(),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                &mut descriptor,
+            )
+        };
+        assert_eq!(status, 0);
+        let mut text = ptr::null_mut();
+        let mut length = 0;
+        // SAFETY: the descriptor is live until freed below.
+        let converted = unsafe {
+            ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                descriptor,
+                SDDL_REVISION_1,
+                DACL_SECURITY_INFORMATION,
+                &mut text,
+                &mut length,
+            )
+        };
+        unsafe {
+            LocalFree(descriptor);
+        }
+        assert_ne!(converted, 0);
+        // SAFETY: a successful conversion returns `length` UTF-16 code units.
+        let value =
+            String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(text, length as usize) });
+        unsafe {
+            LocalFree(text.cast());
+        }
+        value.trim_end_matches('\0').to_owned()
+    }
+
+    /// Gives a folder an inheritable ACL that also lets every signed-in user
+    /// change, and guests read, what is created inside it.
+    #[cfg(windows)]
+    fn share(path: &Path) {
+        use std::{os::windows::ffi::OsStrExt, ptr};
+        use windows_sys::Win32::{
+            Foundation::LocalFree,
+            Security::{
+                Authorization::*, DACL_SECURITY_INFORMATION, GetSecurityDescriptorDacl,
+                PROTECTED_DACL_SECURITY_INFORMATION,
+            },
+        };
+        let sddl: Vec<u16> = "D:P(A;OICI;FA;;;AU)(A;OICI;FR;;;BG)(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
+            .encode_utf16()
+            .chain([0])
+            .collect();
+        let path: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+        // SAFETY: fixed SDDL; the descriptor is freed after the ACL is applied.
+        unsafe {
+            let mut descriptor = ptr::null_mut();
+            assert_ne!(
+                ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                    sddl.as_ptr(),
+                    SDDL_REVISION_1,
+                    &mut descriptor,
+                    ptr::null_mut(),
+                ),
+                0
+            );
+            let (mut present, mut defaulted, mut acl) = (0, 0, ptr::null_mut());
+            assert_ne!(
+                GetSecurityDescriptorDacl(descriptor, &mut present, &mut acl, &mut defaulted),
+                0
+            );
+            let status = SetNamedSecurityInfoW(
+                path.as_ptr(),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                acl,
+                ptr::null_mut(),
+            );
+            LocalFree(descriptor);
+            assert_eq!(status, 0);
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn audit_u54_database_and_sidecars_are_private_in_a_shared_log_folder() {
+        let root = tempfile::tempdir().unwrap();
+        // A log folder of the user's choosing, which only production allows.
+        let paths = RuntimePaths::production(root.path()).unwrap();
+        // The database sits beside the log folder, here in a folder shared
+        // like a new folder at the root of a data drive.
+        let shared = root.path().join("shared");
+        std::fs::create_dir(&shared).unwrap();
+        share(&shared);
+        let logs = shared.join("logs");
+        // A database and a WAL left with the folder's shared ACL.
+        std::fs::write(shared.join("any-ai-cli.db"), b"").unwrap();
+        std::fs::write(shared.join("any-ai-cli.db-wal"), b"").unwrap();
+        assert!(dacl(&shared.join("any-ai-cli.db-wal")).contains(";BG)"));
+        let store = SqliteSessionStorage::open(&paths, StorageOptions::baseline(logs)).unwrap();
+        store
+            .start_session(SessionStart {
+                live_session_id: LiveSessionId(1),
+                provider: "copilot".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        for name in ["any-ai-cli.db", "any-ai-cli.db-wal", "any-ai-cli.db-shm"] {
+            let dacl = dacl(&shared.join(name));
+            assert!(dacl.starts_with("D:P"), "{name}: {dacl}");
+            assert!(
+                !dacl.contains(";BG)") && !dacl.contains(";AU)"),
+                "{name}: {dacl}"
+            );
+        }
+        drop(store);
+    }
 }

@@ -223,6 +223,14 @@ Release artifacts are published at
   not yet using) could exhaust the Hub's memory at each session start, turn
   and end. A reply declared or found to be longer than 1 MiB is now dropped
   with a warning.
+- **On Windows the history database stays private in any log folder.** With
+  `hub.log_dir` in a folder other users can change (a new folder at the root
+  of a data drive gives every signed-in user that right), SQLite created the
+  database's `-wal` and `-shm` files with the folder's permissions, so another
+  user could read recent history or alter it, and a database file another
+  user placed there was used as is. Before SQLite opens them, the database,
+  `-wal` and `-shm` now get the same user-only permissions as the database,
+  and a file that belongs to another user stops the history from opening.
 
 ## [0.10.0] - Unreleased
 

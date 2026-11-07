@@ -26,6 +26,46 @@ pub(super) fn open(path: &Path) -> StorageResult<Dir> {
     })
 }
 
+/// Keeps the database and SQLite's sidecars the user's own wherever the log
+/// folder is, before SQLite opens them. On Unix SQLite gives the sidecars the
+/// database's mode, so the database alone is set to 0600; a file of another
+/// user fails there. On Windows SQLite creates the sidecars with the folder's
+/// inherited ACL, so they are created first with the private ACL and an
+/// existing one, like the database, must belong to the user and is given that
+/// ACL (U54). SQLite removes the sidecars when its last connection closes, so
+/// this runs on every open.
+pub(super) fn secure_database_files(directory: &Dir) -> StorageResult<()> {
+    let insecure = || {
+        error(
+            StorageErrorKind::Open,
+            "database permissions could not be secured",
+        )
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        // Change only the opened inode, and release this setup handle before
+        // SQLite acquires POSIX locks on its own database descriptor.
+        let file = directory.open_file(DATABASE, true).map_err(|_| {
+            error(
+                StorageErrorKind::Open,
+                "database file could not be held safely",
+            )
+        })?;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))
+            .map_err(|_| insecure())?;
+    }
+    #[cfg(windows)]
+    for (name, create) in [(DATABASE, false), (WAL, true), (SHM, true)] {
+        directory
+            .claim_private_file(name, create)
+            .map_err(|_| insecure())?;
+    }
+    #[cfg(not(any(unix, windows)))]
+    let _ = (directory, insecure);
+    Ok(())
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;

@@ -806,6 +806,52 @@ mod platform {
             security.restrict_file(&file)?;
             Ok(file)
         }
+        /// Gives `name` the private ACL, creating it with that ACL when
+        /// `create` and it is missing. An existing file must be a plain file
+        /// owned by this user, the administrators or the system; one another
+        /// user placed in a shared folder is refused (U54).
+        pub fn claim_private_file(&self, name: &str, create: bool) -> io::Result<()> {
+            use windows_sys::Win32::Storage::FileSystem::{
+                FILE_READ_ATTRIBUTES, OPEN_ALWAYS, OPEN_EXISTING, READ_CONTROL, WRITE_DAC,
+            };
+            basename(name)?;
+            let security = crate::config::private_io::PrivateSecurity::for_current_user(false)?;
+            let attributes = security.attributes();
+            let path = wide(&self.path.join(name))?;
+            // SAFETY: descriptor and path outlive the call; no data access is
+            // requested, and a final reparse object is opened itself.
+            let handle = unsafe {
+                CreateFileW(
+                    path.as_ptr(),
+                    READ_CONTROL | WRITE_DAC | FILE_READ_ATTRIBUTES,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    &attributes,
+                    if create { OPEN_ALWAYS } else { OPEN_EXISTING },
+                    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
+                    std::ptr::null_mut(),
+                )
+            };
+            if handle == INVALID_HANDLE_VALUE {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: this successful call returned one newly owned handle.
+            let file = unsafe { File::from_raw_handle(handle) };
+            let metadata = file.metadata()?;
+            if !metadata.is_file() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not a plain file",
+                ));
+            }
+            if !crate::config::private_io::PrivateSecurity::trusted_owner(&file)? {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "the file belongs to another user",
+                ));
+            }
+            security.restrict_file(&file)
+        }
         pub fn metadata(&self, name: &str) -> io::Result<Metadata> {
             self.open_file(name, false)?.metadata()
         }

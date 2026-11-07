@@ -62,27 +62,7 @@ impl SessionStorage for SqliteSessionStorage {
                 ));
             }
         }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            // Change only the opened inode, and release this setup handle before
-            // SQLite acquires POSIX locks on its own database descriptor.
-            let file = directory
-                .open_file(directory::DATABASE, true)
-                .map_err(|_| {
-                    error(
-                        StorageErrorKind::Open,
-                        "database file could not be held safely",
-                    )
-                })?;
-            file.set_permissions(std::fs::Permissions::from_mode(0o600))
-                .map_err(|_| {
-                    error(
-                        StorageErrorKind::Open,
-                        "database permissions could not be secured",
-                    )
-                })?;
-        }
+        directory::secure_database_files(&directory)?;
         let (connection, fts) =
             schema::open_connection(&path, options.init_timeout, paths.is_trial())?;
         let (sender, receiver) = mpsc::sync_channel(options.queue_capacity);
