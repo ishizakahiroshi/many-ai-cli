@@ -373,7 +373,7 @@ Smart App Control と組織ポリシーへの根本対策は、将来のコー�
 
 ### 構成
 
-- `npm/many-ai-cli/`: root shim package。`bin/many-ai-cli.mjs` が `process.platform`/`process.arch` から platform package を解決して同梱バイナリを exec（argv/stdio/exit code 透過）。`optionalDependencies` に4 つの platform package を **exact version** で pin。
+- `npm/many-ai-cli/`: root shim package。`bin/many-ai-cli.mjs` が `process.platform`/`process.arch` から platform package を解決して同梱バイナリを exec（argv/stdio/exit code 透過）。`optionalDependencies` に4 つの platform package を **exact version** で pin。探すのは shim が入っているインストール先の中だけ（自分の `node_modules` から、パス上で一番外側の `node_modules` を持つフォルダまで）で、`package.json` の名前と版がこの pin と一致するものだけを起動する。`require.resolve` は使わない（ドライブ直下の `node_modules`・`NODE_PATH` まで探し、Windows では別の利用者が置いた exe を起動しうる。監査 U38・`scripts/npm-shim.test.mjs`）。
 - `npm/many-ai-cli-<os>-<arch>/`: `os`/`cpu` 指定。`bin/` のバイナリは gitignore（release 時にステージング）。
 - platform package 名は非スコープ（npm org 作成不要）。
 

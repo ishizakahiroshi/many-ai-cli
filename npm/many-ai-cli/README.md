@@ -18,7 +18,10 @@ many-ai-cli setup
 You can also install the same version from the npm registry with
 `npm install -g many-ai-cli@<version>` or `bun install -g many-ai-cli@<version>`.
 Keep optional dependencies enabled: the matching platform package contains the
-native executable. Use a maintained Node.js release for the npm command shim.
+native executable. The command looks for that package only inside its own
+installation and checks that its version matches; it does not use `NODE_PATH`
+or a `node_modules` folder outside the installation. Use a maintained Node.js
+release for the npm command shim.
 If the command is not found after installation, open a terminal with your package
 manager's global bin directory on `PATH` before running `setup`.
 

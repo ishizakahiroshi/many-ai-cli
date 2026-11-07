@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "cc42380dcdf5489677d8a20f9fbdfa9d27477f65",
-    "dirty": false,
+    "commit": "3a6405f1f3ca387ac35288b0cf31591462a019aa",
+    "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
     "adapters": [
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2080,
-    "analyzed": 1614,
+    "discovered": 2081,
+    "analyzed": 1615,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 451,
@@ -42489,6 +42489,36 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "scripts/npm-shim.test.mjs",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "The npm command shim must start the platform executable only from inside"
         },
         "authentication": {
           "state": "not_configured"

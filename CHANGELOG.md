@@ -125,6 +125,19 @@ Release artifacts are published at
   the same machine could then open the dashboard's WebSocket with your cookies
   and type into sessions. An https origin must now match the host and port the
   request was sent to; `tailscale serve` keeps working as before.
+- **The npm command starts the platform executable only from its own
+  installation.** The `many-ai-cli` command installed with npm, pnpm or bun
+  found the platform package the way Node finds modules, which goes on to every
+  `node_modules` folder up to the drive root and to `NODE_PATH`. When the
+  platform package was missing or incomplete (optional dependencies turned off,
+  a failed download, an antivirus quarantine), it started a
+  `C:\node_modules\many-ai-cli-windows-x64\bin\many-ai-cli.exe` that another
+  user of the same Windows machine can create. It now looks only inside the
+  installation that holds the command, checks that the package's name and
+  version match, and otherwise stops with the "not installed" message as
+  before, now naming what it found. A platform package supplied through
+  `NODE_PATH` or a `node_modules` folder above the installation is no longer
+  used.
 
 ## [0.10.0] - Unreleased
 

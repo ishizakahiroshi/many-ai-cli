@@ -69,6 +69,13 @@ jobs:
           node --test scripts/npm-release.test.mjs
           python3 scripts/test-npm-packer-integration.py
 
+      # npm の起動 shim は platform package をインストール先の中だけで探す。
+      # Node の require.resolve に任せると、入っていないときにドライブ直下の
+      # node_modules（Windows では別の利用者も作れる）や NODE_PATH の exe を
+      # 起動してしまう（監査 U38）。探す範囲が広がった瞬間にここで落とす。
+      - name: Test npm launcher shim resolution
+        run: node --test scripts/npm-shim.test.mjs
+
       # 全画面オーバーレイに wheel 除外クラスを付け忘れると、そのモーダルは
       # 「自分はスクロールせず背後の端末が動く」という壊れ方をする。原因も直し方も
       # 毎回同じなのに 3 回踏んだ（#workflow-modal / .bug-report-overlay / #usage-dropdown）。

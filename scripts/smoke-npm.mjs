@@ -98,9 +98,10 @@ if (!CURRENT) {
   // host could execute an old binary left over from a previous candidate.
   console.log('  NOT RUN  correct the package content failures before executing the shim.');
 } else {
-  // The shim resolves the platform package with createRequire(import.meta.url),
-  // which walks up from the shim's own location. Mirror only the packaged files
-  // in a fresh owned directory; never replace a developer's node_modules.
+  // The shim looks for the platform package only inside its own installation
+  // and checks its package.json name and version against the root's pin. Mirror
+  // only the packaged files (a nested global-install layout) in a fresh owned
+  // directory; never replace a developer's node_modules.
   let ownedTemp;
   try {
     ownedTemp = mkdtempSync(join(tmpdir(), 'many-ai-cli-npm-smoke-'));
