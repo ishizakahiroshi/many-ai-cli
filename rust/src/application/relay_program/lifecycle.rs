@@ -596,9 +596,42 @@ impl RelayProgram {
                     .await;
                     continue;
                 }
+                // Audit U27: relay text the child could not take is typed once it
+                // can. Until then it gets no reminder (see the nudge below).
+                if let Some(rest) = run.file.held_input.get(role).cloned() {
+                    match self
+                        .deliver(LiveSessionId(child), rest.into_bytes(), &cancel, now)
+                        .await
+                    {
+                        Ok(None) => {
+                            run.file.held_input.remove(role);
+                            let timer = run.timers.entry(child).or_default();
+                            timer.assigned_at = Some(now);
+                            timer.last_write_at = Some(now);
+                            self.board(
+                                &run,
+                                &format!("held instruction typed: {role} #{child}"),
+                                now,
+                            );
+                            self.save(&run).await;
+                        }
+                        Ok(Some(left)) => {
+                            let left = held_text(left);
+                            if run.file.held_input.get(role) != Some(&left) {
+                                run.file.held_input.insert(role.to_owned(), left);
+                                self.save(&run).await;
+                            }
+                        }
+                        Err(error) => self.warn("relay held instruction", error),
+                    }
+                }
                 if child != run.file.awaited() {
                     continue;
                 }
+                let reminder_possible = cfg.idle_done_threshold_sec > 0
+                    && !run.file.headless(role)
+                    && !run.nudged.contains(&child)
+                    && !run.file.held_input.contains_key(role);
                 let timer = run.timers.entry(child).or_default();
                 if details.snapshot.state == "standby" {
                     timer.standby_since.get_or_insert(now);
@@ -668,6 +701,33 @@ impl RelayProgram {
                     .chain(details.last_output_at)
                     .max()
                     .unwrap_or(now);
+                // Audit U27: while the child waits on an approval (or on the user's
+                // answer) nothing is typed into it, and the wait counts neither as
+                // idle nor toward a timeout. The board hears once if a reminder
+                // falls due meanwhile.
+                if details.approval.record.is_some()
+                    || details.snapshot.activity.awaiting_approval
+                    || details.snapshot.activity.awaiting_user
+                {
+                    timer.approval_wait = true;
+                    let due = reminder_possible
+                        && now.duration_since(activity).is_ok_and(|age| {
+                            age > Duration::from_secs(cfg.idle_done_threshold_sec as u64)
+                        });
+                    if due && !timer.approval_wait_notified {
+                        timer.approval_wait_notified = true;
+                        self.board(&run,&format!("reminder not typed: {role} #{child} is waiting on an approval; the user answers it on the prompt"),now);
+                    }
+                    continue;
+                }
+                let activity = if timer.approval_wait {
+                    timer.approval_wait = false;
+                    timer.approval_wait_notified = false;
+                    timer.last_write_at = Some(now);
+                    now
+                } else {
+                    activity
+                };
                 let waiting = self
                     .deps
                     .orchestration
@@ -688,9 +748,7 @@ impl RelayProgram {
                     .await;
                     continue;
                 }
-                if cfg.idle_done_threshold_sec > 0
-                    && !run.file.headless(role)
-                    && !run.nudged.contains(&child)
+                if reminder_possible
                     && now.duration_since(activity).is_ok_and(|age| {
                         age > Duration::from_secs(cfg.idle_done_threshold_sec as u64)
                     })
@@ -703,13 +761,21 @@ impl RelayProgram {
                         continue;
                     }
                     let prompt = run.file.prompts().nudge_text(role);
-                    run.nudged.insert(child);
-                    if let Err(error) = self
-                        .deliver(LiveSessionId(child), format!("\n{prompt}\n"), &cancel, now)
+                    let bytes = relay_frame(&format!("\n{prompt}\n"));
+                    let whole = bytes.len();
+                    match self
+                        .deliver(LiveSessionId(child), bytes, &cancel, now)
                         .await
                     {
-                        self.warn("relay reminder delivery", error)
+                        Ok(None) => {}
+                        // Nothing typed (an approval opened after the check above,
+                        // or a reconnect): the idle check runs again later.
+                        Ok(Some(rest)) if rest.len() == whole => continue,
+                        // Pasted but not entered: only the rest is typed later.
+                        Ok(Some(rest)) => self.hold(&mut run, role, child, rest, now),
+                        Err(error) => self.warn("relay reminder delivery", error),
                     }
+                    run.nudged.insert(child);
                     run.file.event("nudge", format!("{role} #{child}"), now);
                     self.save(&run).await;
                 }
@@ -811,6 +877,8 @@ impl RelayProgram {
                         standby_since: timer.standby_since,
                         startup_wait_notified: timer.startup_wait_notified,
                         nudge_wait_notified: timer.nudge_wait_notified,
+                        approval_wait: timer.approval_wait,
+                        approval_wait_notified: timer.approval_wait_notified,
                         exit_handled: timer.exit_handled,
                         pending_done_at: timer.pending_done_at,
                     },

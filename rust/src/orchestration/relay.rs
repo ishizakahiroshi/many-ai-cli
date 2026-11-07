@@ -109,6 +109,15 @@ pub struct RelayFile {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub revoked_child_labels: Vec<String>,
+    /// Relay text a child could not take yet (an open approval, startup or a
+    /// reconnect), by role: exactly the part not typed. Poll types it once the
+    /// child can take it (audit U27). Additive like the field above.
+    #[serde(
+        default,
+        deserialize_with = "wire::null_default",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub held_input: BTreeMap<String, String>,
     pub child_cwd: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub implementation_label: String,
@@ -348,6 +357,11 @@ pub struct ChildTimer {
     pub standby_since: Option<Timestamp>,
     pub startup_wait_notified: bool,
     pub nudge_wait_notified: bool,
+    /// The child waits on an approval or on the user's answer. That time is
+    /// neither idle nor toward a timeout (audit U27).
+    pub approval_wait: bool,
+    /// The board heard once that a reminder fell due during that wait.
+    pub approval_wait_notified: bool,
     pub exit_handled: bool,
     pub pending_done_at: Option<Timestamp>,
 }

@@ -98,7 +98,12 @@ struct State {
     relay_boards: BTreeSet<OrchestrationId>,
     boards: BTreeMap<OrchestrationId, Board>,
     roles: BTreeMap<OrchestrationId, BTreeMap<String, RoleSettings>>,
+    /// Injected text a parent could not take yet (an open approval, startup or a
+    /// reconnect), in order: exactly the parts not typed (audit U27).
+    held: BTreeMap<LiveSessionId, VecDeque<Vec<u8>>>,
 }
+/// Held injections per parent. The oldest is dropped beyond this, with a warning.
+const HELD_INJECT_LIMIT: usize = 16;
 pub struct OrchestrationDependencies {
     pub core: Weak<SessionEngine>,
     pub effects: Weak<dyn CoreEffectSink>,
@@ -668,30 +673,119 @@ impl OrchestrationProgram {
             _ => self.pending_flag(parent, true).await,
         }
     }
+    /// Types orchestration text into a parent through the guarded input (audit
+    /// U27). Text the parent cannot take now (an open approval, startup or a
+    /// reconnect) is held behind any earlier held text and typed by a later poll.
     async fn inject(
         &self,
         parent: LiveSessionId,
         text: String,
         cancel: TaskCancellation,
     ) -> Result<(), SessionError> {
+        let bytes = framed(&text);
+        {
+            let mut state = lock(&self.state);
+            if let Some(queue) = state.held.get_mut(&parent).filter(|q| !q.is_empty()) {
+                let dropped = hold_bounded(queue, bytes);
+                drop(state);
+                self.warn_dropped_held(dropped);
+                return Ok(());
+            }
+        }
+        if let Some(rest) = self.write_guarded(parent, bytes, &cancel).await? {
+            let dropped = hold_bounded(lock(&self.state).held.entry(parent).or_default(), rest);
+            self.warn_dropped_held(dropped);
+        }
+        Ok(())
+    }
+    /// `Ok(None)` once written; `Ok(Some(rest))` with exactly the unwritten
+    /// part when the parent cannot take it now.
+    async fn write_guarded(
+        &self,
+        parent: LiveSessionId,
+        bytes: Vec<u8>,
+        cancel: &TaskCancellation,
+    ) -> Result<Option<Vec<u8>>, SessionError> {
         let core = self.core()?;
         let details = core.details(parent).ok_or(SessionError::NotFound(parent))?;
         let receipt = core
             .submit(
                 details.binding,
                 InputRequest {
-                    bytes: framed(&text),
-                    authority: InputAuthority::Internal,
+                    bytes,
+                    authority: InputAuthority::GuardedInternal,
                 },
                 Timestamp::now(),
-                &cancel,
+                cancel,
             )
             .await;
         match receipt.disposition {
-            InputDisposition::TransportWritten { .. } | InputDisposition::Deferred { .. } => Ok(()),
+            InputDisposition::TransportWritten { .. } | InputDisposition::Deferred { .. } => {
+                Ok(None)
+            }
+            InputDisposition::Failed {
+                unsent_remainder,
+                detail,
+            } if guarded_input_held(&detail) => Ok(Some(unsent_remainder)),
             _ => Err(SessionError::Transport(
                 "orchestration injection failed".into(),
             )),
+        }
+    }
+    fn warn_dropped_held(&self, dropped: bool) {
+        if dropped {
+            (self.deps.warning)(
+                "orchestration held text",
+                &SessionError::Transport(format!(
+                    "more than {HELD_INJECT_LIMIT} held injections for one session; the oldest was dropped"
+                )),
+            );
+        }
+    }
+    /// Types held injections in order, stopping at the first a parent still
+    /// cannot take. A parent that is gone loses its held text.
+    async fn flush_held(&self) {
+        let parents = lock(&self.state).held.keys().copied().collect::<Vec<_>>();
+        for parent in parents {
+            loop {
+                let Some(bytes) = lock(&self.state)
+                    .held
+                    .get(&parent)
+                    .and_then(|queue| queue.front().cloned())
+                else {
+                    break;
+                };
+                match self
+                    .write_guarded(parent, bytes, &TaskCancellation::default())
+                    .await
+                {
+                    Ok(None) => {
+                        let mut state = lock(&self.state);
+                        if let Some(queue) = state.held.get_mut(&parent) {
+                            queue.pop_front();
+                        }
+                    }
+                    Ok(Some(rest)) => {
+                        if let Some(front) = lock(&self.state)
+                            .held
+                            .get_mut(&parent)
+                            .and_then(|queue| queue.front_mut())
+                        {
+                            *front = rest;
+                        }
+                        break;
+                    }
+                    Err(SessionError::NotFound(_)) => {
+                        lock(&self.state).held.remove(&parent);
+                        break;
+                    }
+                    Err(_) => break,
+                }
+            }
+            let mut state = lock(&self.state);
+            if state.held.get(&parent).is_some_and(VecDeque::is_empty) {
+                state.held.remove(&parent);
+            }
         }
     }
     async fn flush_events(&self) -> Result<(), SessionError> {
@@ -816,6 +910,7 @@ impl OrchestrationProgram {
     async fn poll(&self) -> Result<(), SessionError> {
         progress::poll(self).await?;
         lifecycle::poll(self, Timestamp::now()).await?;
+        self.flush_held().await;
         self.flush_events().await
     }
 }
@@ -1082,4 +1177,13 @@ fn framed(text: &str) -> Vec<u8> {
         text.trim_end_matches(['\r', '\n'])
     )
     .into_bytes()
+}
+/// Appends held text; `true` when the oldest had to be dropped.
+fn hold_bounded(queue: &mut VecDeque<Vec<u8>>, bytes: Vec<u8>) -> bool {
+    queue.push_back(bytes);
+    let dropped = queue.len() > HELD_INJECT_LIMIT;
+    if dropped {
+        queue.pop_front();
+    }
+    dropped
 }

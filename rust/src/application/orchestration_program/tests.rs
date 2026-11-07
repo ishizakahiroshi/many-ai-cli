@@ -30,6 +30,24 @@ impl WrapperTransport for Io {
             Ok(())
         })
     }
+    // Same boundary as the Hub socket: the guard runs right before dispatch.
+    fn send_guarded<'a>(
+        &'a self,
+        _: SessionBinding,
+        message: crate::proto::Message,
+        guard: InputSendGuard<'a>,
+    ) -> CoreFuture<'a, Result<(), SessionError>> {
+        Box::pin(async move {
+            if self.fail.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err(SessionError::Transport("synthetic frame rejected".into()));
+            }
+            let mut dispatch = || {
+                lock(&self.sent).push(message.data.clone());
+                Ok(())
+            };
+            guard(&mut dispatch)
+        })
+    }
 }
 impl CoreEffectSink for Io {
     fn apply<'a>(&'a self, effects: CoreEffects) -> CoreFuture<'a, Result<(), CoreEffectFailure>> {
@@ -575,6 +593,71 @@ fn configure(f: &Fixture, apply: impl FnOnce(&mut Config)) {
         .config
         .publish_then_persist_legacy(snapshot.revision, snapshot.config)
         .unwrap();
+}
+#[tokio::test]
+async fn interrupt_notice_is_held_while_the_conductor_waits_on_an_approval() {
+    // Audit U27: a notice's Enter must not answer the conductor's own prompt.
+    let f = fixture().await;
+    configure(&f, |config| {
+        config.orchestration.board_notify_mode = "interrupt".into()
+    });
+    let record = |f: &Fixture| {
+        f.core
+            .details(f.binding.session)
+            .unwrap()
+            .approval
+            .record
+            .is_some()
+    };
+    output(
+        &f,
+        f.binding,
+        "\x1b[2J\x1b[HRun: git push\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No",
+        Timestamp::now(),
+    );
+    assert!(record(&f));
+    f.owner
+        .notify_relay_parent(f.binding.session, &f.id, "relay stopped\n".into())
+        .await
+        .unwrap();
+    f.owner
+        .notify_relay_parent(f.binding.session, &f.id, "second notice\n".into())
+        .await
+        .unwrap();
+    f.owner.flush_held().await;
+    assert!(lock(&f.io.sent).is_empty(), "nothing may reach the prompt");
+    assert!(record(&f), "the approval stays for the user");
+    // A native record vanishes after three changed screens without the prompt.
+    for step in 0..8 {
+        if !record(&f) {
+            break;
+        }
+        output(
+            &f,
+            f.binding,
+            &format!("\x1b[2J\x1b[Hidle {step}"),
+            Timestamp::now(),
+        );
+    }
+    assert!(!record(&f), "the synthetic approval must close");
+    f.owner.flush_held().await;
+    // Each notice is pasted, then entered (the ordinary submit path).
+    let sent = lock(&f.io.sent).clone();
+    let body = |text: &str| {
+        let mut bytes = framed(&sanitize_notice(text));
+        assert_eq!(bytes.pop(), Some(b'\r'));
+        bytes
+    };
+    assert_eq!(
+        sent.iter()
+            .filter(|frame| frame.starts_with(b"\x1b[200~"))
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec![body("relay stopped\n"), body("second notice\n")],
+        "held notices are typed in order once the parent can take them"
+    );
+    assert_eq!(sent.last().map(Vec::as_slice), Some(b"\r".as_slice()));
+    assert!(lock(&f.owner.state).held.is_empty());
 }
 #[tokio::test]
 async fn initial_gate_and_failed_transport_keep_fifo_out_of_reconnect_input() {

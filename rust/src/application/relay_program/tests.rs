@@ -368,6 +368,21 @@ impl WrapperTransport for Io {
             Ok(())
         })
     }
+    // Same boundary as the Hub socket: the guard runs right before dispatch.
+    fn send_guarded<'a>(
+        &'a self,
+        binding: SessionBinding,
+        message: proto::Message,
+        guard: InputSendGuard<'a>,
+    ) -> CoreFuture<'a, Result<(), SessionError>> {
+        Box::pin(async move {
+            let mut dispatch = || {
+                lock(&self.sent).push((binding.session, message.data.clone()));
+                Ok(())
+            };
+            guard(&mut dispatch)
+        })
+    }
 }
 impl CoreEffectSink for Io {
     fn apply<'a>(&'a self, effects: CoreEffects) -> CoreFuture<'a, Result<(), CoreEffectFailure>> {
@@ -2280,4 +2295,180 @@ async fn relay_finish_without_parent_retains_state_but_omits_completion_callback
     assert!(effects.iter().any(|effect| {
         matches!(effect, CoreEffect::SendUiBestEffort { message, .. } if message.r#type == "done_summary")
     }));
+}
+
+// Audit U27: with an attended child, relay text must never answer the child's
+// pending approval. Synthetic screens only; no provider runs.
+const APPROVAL_SCREEN: &str =
+    "\x1b[2J\x1b[HRun: git push\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No";
+const WORK_SCREEN: &str = "\x1b[2J\x1b[Hworking on the synthetic plan";
+fn paint(f: &Fixture, id: i64, total: &mut i64, text: &str) {
+    let binding = f.core.details(LiveSessionId(id)).unwrap().binding;
+    *total += text.len() as i64;
+    f.core
+        .observe_output(
+            binding,
+            OutputChunk {
+                bytes: text.as_bytes().to_vec(),
+                total_pty_bytes: *total,
+            },
+            Timestamp::now(),
+        )
+        .unwrap();
+}
+fn approval_open(f: &Fixture, id: i64) -> bool {
+    f.core
+        .details(LiveSessionId(id))
+        .unwrap()
+        .approval
+        .record
+        .is_some()
+}
+fn close_approval(f: &Fixture, id: i64, total: &mut i64) {
+    // A native record vanishes after three changed screens without the prompt.
+    for step in 0..8 {
+        if !approval_open(f, id) {
+            return;
+        }
+        paint(f, id, total, &format!("{WORK_SCREEN} {step}"));
+    }
+    assert!(!approval_open(f, id), "the synthetic approval must close");
+}
+fn typed(f: &Fixture, id: i64, needle: &str) -> usize {
+    lock(&f.io.sent)
+        .iter()
+        .filter(|(session, data)| session.0 == id && String::from_utf8_lossy(data).contains(needle))
+        .count()
+}
+fn board_text(f: &Fixture, status: &proto::RelayStatus) -> String {
+    std::fs::read_to_string(f.program.boards.path(&status.orchestration_id)).unwrap()
+}
+fn ready(f: &Fixture, id: i64, at: Timestamp) {
+    delivered(f, id, at);
+    let binding = f.core.details(LiveSessionId(id)).unwrap().binding;
+    f.core.clear_initial_gate_scoped(binding);
+}
+
+#[tokio::test]
+async fn relay_reminder_is_never_typed_into_an_open_approval_and_waits_it_out() {
+    let f = fixture(4).await;
+    let mut cfg = f.config.snapshot().unwrap();
+    cfg.config.orchestration.idle_done_threshold_sec = 2;
+    cfg.config.orchestration.child_timeout_seconds = 5;
+    f.config
+        .publish_then_persist_legacy(cfg.revision, cfg.config)
+        .unwrap();
+    let initial = start(&f, "approval-reminder", false, false).await;
+    let child = initial.implementation_session_id;
+    let now = Timestamp::now();
+    ready(&f, child, now);
+    let mut total = 0;
+    paint(&f, child, &mut total, APPROVAL_SCREEN);
+    assert!(approval_open(&f, child));
+    let reminder = "no update to your progress file";
+    // Far past both the idle threshold and the child timeout.
+    for seconds in [3, 8, 20] {
+        f.program
+            .poll(
+                now + Duration::from_secs(seconds),
+                TaskCancellation::default(),
+            )
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        typed(&f, child, reminder),
+        0,
+        "nothing may reach the prompt"
+    );
+    assert!(approval_open(&f, child), "the approval stays for the user");
+    assert_eq!(
+        status(&f, &initial.orchestration_id).state,
+        "implementing",
+        "waiting on the approval is not a timeout"
+    );
+    assert_eq!(
+        board_text(&f, &initial)
+            .matches("is waiting on an approval")
+            .count(),
+        1
+    );
+    close_approval(&f, child, &mut total);
+    // The idle clock restarts when the approval closes.
+    f.program
+        .poll(now + Duration::from_secs(21), TaskCancellation::default())
+        .await
+        .unwrap();
+    assert_eq!(typed(&f, child, reminder), 0);
+    f.program
+        .poll(now + Duration::from_secs(24), TaskCancellation::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        typed(&f, child, reminder),
+        1,
+        "typed once after the approval"
+    );
+    f.program
+        .poll(now + Duration::from_secs(25), TaskCancellation::default())
+        .await
+        .unwrap();
+    assert_eq!(typed(&f, child, reminder), 1);
+}
+
+#[tokio::test]
+async fn relay_instruction_is_held_while_the_child_waits_on_an_approval() {
+    let f = fixture(6).await;
+    let initial = start(&f, "approval-proceed", false, false).await;
+    let implementer = initial.implementation_session_id;
+    ready(&f, implementer, Timestamp::now());
+    advance(&f, &initial, implementer, "## DONE implementation\n").await;
+    let reviewing = status(&f, &initial.orchestration_id);
+    assert_eq!(reviewing.state, "reviewing");
+    let mut total = 0;
+    paint(&f, implementer, &mut total, APPROVAL_SCREEN);
+    assert!(approval_open(&f, implementer));
+    advance(
+        &f,
+        &reviewing,
+        reviewing.review_session_id,
+        "verdict: pass\n## DONE review\n",
+    )
+    .await;
+    assert_eq!(status(&f, &initial.orchestration_id).state, "implementing");
+    let proceed = "passed. Continue with the next C";
+    let held = |f: &Fixture| {
+        f.program
+            .store
+            .load()
+            .unwrap()
+            .0
+            .into_iter()
+            .find(|file| file.orchestration_id == initial.orchestration_id)
+            .unwrap()
+            .held_input
+    };
+    assert_eq!(
+        typed(&f, implementer, proceed),
+        0,
+        "nothing may reach the prompt"
+    );
+    assert!(
+        held(&f).contains_key(IMPLEMENTATION),
+        "kept in the relay record, so a Hub restart does not lose it"
+    );
+    f.program
+        .poll(Timestamp::now(), TaskCancellation::default())
+        .await
+        .unwrap();
+    assert_eq!(typed(&f, implementer, proceed), 0);
+    assert!(approval_open(&f, implementer));
+    close_approval(&f, implementer, &mut total);
+    f.program
+        .poll(Timestamp::now(), TaskCancellation::default())
+        .await
+        .unwrap();
+    assert_eq!(typed(&f, implementer, proceed), 1, "typed once it can be");
+    assert!(held(&f).is_empty());
+    assert!(board_text(&f, &initial).contains("held instruction typed"));
 }

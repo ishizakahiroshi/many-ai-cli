@@ -1540,6 +1540,10 @@ pub enum InputAuthority {
         answer: String,
     },
     Internal,
+    /// Orchestration text (relay instructions and reminders, conductor
+    /// interrupts). Never written while the session waits on an approval, where
+    /// its Enter could answer the prompt for the user (audit U27).
+    GuardedInternal,
     /// Only the initial prompt may bypass older gated user input.
     InitialPrompt,
     NativeApproval(ApprovalActionBinding),
@@ -1551,6 +1555,21 @@ impl InputAuthority {
             _ => None,
         }
     }
+}
+/// `InputDisposition::Failed` detail for `GuardedInternal` input that was not
+/// written because the session waits on an approval. Callers retry later.
+pub const INPUT_BLOCKED_BY_APPROVAL: &str = "blocked: the session is waiting on an approval";
+/// `InputDisposition::Failed` detail for `GuardedInternal` input that was not
+/// written because the session is starting, reconnecting or has queued input.
+/// Guarded input never enters the reconnect queue, which cannot recheck an
+/// approval when it replays. Callers retry later.
+pub const INPUT_NOT_READY: &str =
+    "blocked: the session is starting, reconnecting or has queued input";
+/// A `GuardedInternal` failure that the caller keeps and retries. Its
+/// `unsent_remainder` is exactly what was not written, so a retry never types
+/// an already pasted text twice.
+pub fn guarded_input_held(detail: &str) -> bool {
+    detail == INPUT_BLOCKED_BY_APPROVAL || detail == INPUT_NOT_READY
 }
 #[derive(Clone)]
 pub struct InputRequest {

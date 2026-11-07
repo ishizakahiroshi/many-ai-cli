@@ -53,6 +53,16 @@ Release artifacts are published at
   rated `git difftool -x <program>` as low; low-risk prefixes now end at a word
   boundary (so `lsof` and `dirname` are no longer low either), and
   `git difftool` always needs a person's confirmation.
+- **Relay and orchestration text never answers a waiting prompt.** With a relay
+  role set to Attended, a child that waited on an approval with no output for
+  the idle threshold could get the relay reminder, whose Enter selects the
+  focused "Yes"; relay instructions and notices to the session that started a
+  relay or to a conductor were typed the same way. These texts are now typed
+  only while the session waits on nothing. Otherwise they are held and typed
+  once it can take them, and an approval opening between the pasted text and
+  its Enter stops the Enter. Time spent waiting on an approval no longer counts
+  toward the reminder or the child timeout. A held relay instruction is kept in
+  the relay record, so it survives a Hub restart.
 
 ## [0.10.0] - Unreleased
 

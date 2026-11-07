@@ -798,3 +798,144 @@ async fn captured_batch_match_remains_counted_when_connection_disappears_before_
     assert!(sent(&f).is_empty());
     assert!(f.engine.pending_native_approval_actions().is_empty());
 }
+
+// Audit U27: relay and orchestration text goes through GuardedInternal. Its
+// Enter must never answer a pending prompt, and it never waits in the
+// reconnect queue, which would replay it without that check.
+const RELAY_TEXT: &[u8] = b"\x1b[200~relay reminder\x1b[201~\r";
+async fn plain_session(f: &Fixture) -> SessionBinding {
+    let registered = f
+        .engine
+        .register(
+            RegisterRequest {
+                message: proto::Message {
+                    provider: "claude".into(),
+                    cwd: "/fixture/project".into(),
+                    pid: 7,
+                    cols: 120,
+                    rows: 30,
+                    ..Default::default()
+                },
+                spawn_proof: None,
+            },
+            WrapperConnectionId(1),
+            now(),
+        )
+        .await
+        .unwrap();
+    f.sink.apply(registered.after_registered).await.unwrap();
+    registered.binding
+}
+async fn guarded(f: &Fixture, session: SessionBinding) -> InputReceipt {
+    f.engine
+        .submit(
+            session,
+            InputRequest {
+                bytes: RELAY_TEXT.to_vec(),
+                authority: InputAuthority::GuardedInternal,
+            },
+            now(),
+            &TaskCancellation::default(),
+        )
+        .await
+}
+
+#[tokio::test]
+async fn guarded_internal_text_is_held_while_an_approval_is_open() {
+    let f = fixture();
+    let session = native_session(&f, "git push", "Yes", true).await;
+    let receipt = guarded(&f, session).await;
+    let InputDisposition::Failed {
+        unsent_remainder,
+        detail,
+    } = receipt.disposition
+    else {
+        panic!("guarded text must be held while an approval is open");
+    };
+    assert_eq!(detail, INPUT_BLOCKED_BY_APPROVAL);
+    assert_eq!(unsent_remainder, RELAY_TEXT);
+    assert!(sent(&f).is_empty(), "nothing may reach the prompt");
+    assert!(pending(&f, session), "the approval stays for the user");
+}
+
+#[tokio::test]
+async fn guarded_enter_is_not_written_when_an_approval_opens_after_the_paste() {
+    let f = fixture();
+    let session = plain_session(&f).await;
+    let engine = f.engine.clone();
+    let sink = f.sink.clone();
+    // The prompt appears right after the pasted body reaches the wrapper.
+    *f.transport.on_send.lock().unwrap() = Some(Arc::new(move |binding, message| {
+        let engine = engine.clone();
+        let sink = sink.clone();
+        Box::pin(async move {
+            if message.data.starts_with(b"\x1b[200~") {
+                let text =
+                    "\x1b[2J\x1b[HRun: git push\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No";
+                let effects = engine
+                    .observe_output(
+                        binding,
+                        OutputChunk {
+                            total_pty_bytes: text.len() as i64,
+                            bytes: text.as_bytes().to_vec(),
+                        },
+                        now(),
+                    )
+                    .unwrap();
+                sink.apply(effects).await.unwrap();
+            }
+        })
+    }));
+    let receipt = guarded(&f, session).await;
+    let InputDisposition::Failed {
+        unsent_remainder,
+        detail,
+    } = receipt.disposition
+    else {
+        panic!("the Enter must be held once the approval opened");
+    };
+    assert_eq!(detail, INPUT_BLOCKED_BY_APPROVAL);
+    assert_eq!(unsent_remainder, b"\r", "only the Enter is left to type");
+    assert_eq!(sent(&f), vec![b"\x1b[200~relay reminder\x1b[201~".to_vec()]);
+    assert!(pending(&f, session));
+}
+
+#[tokio::test]
+async fn guarded_internal_text_never_waits_in_the_reconnect_queue() {
+    let f = fixture();
+    let session = plain_session(&f).await;
+    f.engine.set_initial_gate(session, now()).unwrap();
+    let receipt = guarded(&f, session).await;
+    assert!(matches!(
+        receipt.disposition,
+        InputDisposition::Failed { ref detail, ref unsent_remainder }
+            if detail == INPUT_NOT_READY && unsent_remainder == RELAY_TEXT
+    ));
+    let cancel = TaskCancellation::default();
+    let typed = f
+        .engine
+        .submit(
+            session,
+            InputRequest {
+                bytes: b"typed\r".to_vec(),
+                authority: InputAuthority::Internal,
+            },
+            now(),
+            &cancel,
+        )
+        .await;
+    assert!(matches!(
+        typed.disposition,
+        InputDisposition::Deferred { .. }
+    ));
+    f.engine.clear_initial_gate_scoped(session);
+    f.sink
+        .apply(f.engine.flush(session, &cancel).await)
+        .await
+        .unwrap();
+    assert_eq!(
+        sent(&f),
+        vec![b"typed\r".to_vec()],
+        "only ordinary input was queued and replayed"
+    );
+}

@@ -24,6 +24,26 @@ impl Session {
                 .consumed()
                 .is_some_and(|answered| answered.same_candidate(identity))
     }
+    /// Why `GuardedInternal` input (relay and orchestration text) cannot be
+    /// written now, if it cannot (audit U27). An open approval would take its
+    /// Enter as the answer. During startup, queued input or a reconnect it would
+    /// have to wait in the reconnect queue, which replays without this check.
+    fn guarded_input_block(&self) -> Option<&'static str> {
+        if self.approval.record().is_some()
+            || self.snapshot.activity.awaiting_approval
+            || self.snapshot.activity.awaiting_user
+        {
+            Some(INPUT_BLOCKED_BY_APPROVAL)
+        } else if !self.connected
+            || self.input.initial_prompt_phase()
+            || self.input.pending_len() != 0
+            || self.input.resend_len() != 0
+        {
+            Some(INPUT_NOT_READY)
+        } else {
+            None
+        }
+    }
 }
 impl Drop for FrameReservationGuard<'_> {
     fn drop(&mut self) {
@@ -69,7 +89,28 @@ impl SessionEngine {
         {
             return Err(SessionError::StaleBinding);
         }
+        if matches!(authority, InputAuthority::GuardedInternal)
+            && let Some(detail) = s.guarded_input_block()
+        {
+            return Err(SessionError::InvalidRequest(detail.into()));
+        }
         Ok(())
+    }
+    /// Re-checks under the state lock through the synchronous dispatch, so an
+    /// approval recorded meanwhile stops the frame (paste, Enter or its resend).
+    fn dispatch_guarded_internal(
+        &self,
+        binding: SessionBinding,
+        dispatch: &mut dyn FnMut() -> Result<(), SessionError>,
+    ) -> Result<(), SessionError> {
+        let mut state = lock(&self.state);
+        let session = state.session(binding)?;
+        if let Some(detail) = session.guarded_input_block() {
+            return Err(SessionError::InvalidRequest(detail.into()));
+        }
+        let result = dispatch();
+        drop(state);
+        result
     }
     fn dispatch_ui_approval(
         &self,
@@ -158,6 +199,14 @@ impl SessionEngine {
                     Box::new(move |dispatch| {
                         self.dispatch_ui_approval(binding, authority, dispatch)
                     }),
+                )
+                .await
+        } else if matches!(authority, InputAuthority::GuardedInternal) {
+            self.transport
+                .send_guarded(
+                    binding,
+                    message,
+                    Box::new(move |dispatch| self.dispatch_guarded_internal(binding, dispatch)),
                 )
                 .await
         } else {
@@ -377,6 +426,13 @@ impl SessionEngine {
     ) -> Result<(CoreEffects, CoreEffects), SessionError> {
         let mut state = lock(&self.state);
         let s = state.session(binding)?;
+        // Checked under the same lock that would close an open approval as a new
+        // turn below: orchestration text must neither answer nor dismiss it.
+        if matches!(request.authority, InputAuthority::GuardedInternal)
+            && let Some(detail) = s.guarded_input_block()
+        {
+            return Err(SessionError::InvalidRequest(detail.into()));
+        }
         let mut effects = CoreEffects::default();
         let mut post = CoreEffects::default();
         let mut summary_update = None;
@@ -625,6 +681,13 @@ impl InputQueue for SessionEngine {
                     receipt.disposition = InputDisposition::AuthenticationExpired;
                     return receipt;
                 }
+                Err(SessionError::InvalidRequest(detail)) if guarded_input_held(&detail) => {
+                    receipt.disposition = InputDisposition::Failed {
+                        unsent_remainder: request.bytes,
+                        detail,
+                    };
+                    return receipt;
+                }
                 Err(_) => return receipt,
             };
             if let Err(error) = self.apply_effects(effects).await {
@@ -643,6 +706,14 @@ impl InputQueue for SessionEngine {
                 let bypass = matches!(request.authority, InputAuthority::InitialPrompt);
                 if (!bypass && (s.input.gated(now) || s.input.pending_len() > 0)) || !s.connected {
                     if matches!(request.authority, InputAuthority::UiApproval { .. }) {
+                        return receipt;
+                    }
+                    // Checked above; a reconnect since then must not queue it.
+                    if matches!(request.authority, InputAuthority::GuardedInternal) {
+                        receipt.disposition = InputDisposition::Failed {
+                            unsent_remainder: request.bytes.clone(),
+                            detail: INPUT_NOT_READY.into(),
+                        };
                         return receipt;
                     }
                     let reason = if s.input.initial_prompt_phase() {
@@ -695,13 +766,16 @@ impl InputQueue for SessionEngine {
                 session.awaiting_submit_enter = false;
             }
             if !result.remainder.is_empty() {
-                // Revoked/cancelled work is never silently resurrected on reconnect.
-                if !matches!(request.authority, InputAuthority::UiApproval { .. })
-                    && !matches!(
-                        result.error,
-                        Some(SessionError::AuthenticationExpired | SessionError::Cancelled)
-                    )
-                {
+                // Revoked/cancelled work is never silently resurrected on reconnect,
+                // and orchestration text stopped by an approval is never replayed
+                // later without that check (the caller retries instead).
+                if !matches!(
+                    request.authority,
+                    InputAuthority::UiApproval { .. } | InputAuthority::GuardedInternal
+                ) && !matches!(
+                    result.error,
+                    Some(SessionError::AuthenticationExpired | SessionError::Cancelled)
+                ) {
                     let mut state = lock(&self.state);
                     if let Some(s) = state
                         .sessions
@@ -715,14 +789,23 @@ impl InputQueue for SessionEngine {
                         }
                     }
                 }
+                let held = match &result.error {
+                    Some(SessionError::InvalidRequest(detail)) if guarded_input_held(detail) => {
+                        Some(detail.clone())
+                    }
+                    _ => None,
+                };
                 receipt.disposition = InputDisposition::Failed {
                     unsent_remainder: result.remainder,
-                    detail: format!("{:?}", result.error),
+                    detail: held.unwrap_or_else(|| format!("{:?}", result.error)),
                 };
-                let effects =
-                    self.broadcast_ui(deferred_message(binding.session, DeferredReason::Wrapper));
-                if let Err(e) = self.apply_effects(effects).await {
-                    self.warn("deferred input notice", &e);
+                // Guarded text is never queued, so there is no "deferred" notice.
+                if !matches!(request.authority, InputAuthority::GuardedInternal) {
+                    let effects = self
+                        .broadcast_ui(deferred_message(binding.session, DeferredReason::Wrapper));
+                    if let Err(e) = self.apply_effects(effects).await {
+                        self.warn("deferred input notice", &e);
+                    }
                 }
             } else {
                 receipt.disposition = InputDisposition::TransportWritten {

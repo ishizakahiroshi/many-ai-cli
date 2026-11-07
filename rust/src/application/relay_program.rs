@@ -63,6 +63,21 @@ pub struct RelayItem {
     #[serde(serialize_with = "crate::orchestration::relay::wire::serialize_events")]
     pub events: Vec<proto::RelayEvent>,
 }
+/// Held relay input as stored in the relay record. Framed relay text is UTF-8
+/// and the guarded input only stops between whole frames.
+fn held_text(rest: Vec<u8>) -> String {
+    String::from_utf8(rest)
+        .unwrap_or_else(|error| String::from_utf8_lossy(error.as_bytes()).into_owned())
+}
+/// Bracketed paste of the sanitized relay text followed by one Enter.
+fn relay_frame(text: &str) -> Vec<u8> {
+    format!(
+        "\x1b[200~{}\x1b[201~\r",
+        crate::orchestration::child_launch::prompt::sanitize_inject_text(text)
+            .trim_end_matches(['\r', '\n'])
+    )
+    .into_bytes()
+}
 #[derive(Clone, Debug)]
 pub struct RelayError {
     pub status: u16,
@@ -1001,6 +1016,8 @@ impl RelayProgram {
     }
     async fn finish(&self, run: &mut Run, state: &str, reason: &str, detail: &str, now: Timestamp) {
         run.file.state = state.into();
+        // Held text belongs to these children; a resume starts new ones.
+        run.file.held_input.clear();
         run.file.reason = if reason == "blocked" && !detail.is_empty() {
             format!("blocked: {detail}")
         } else {
@@ -1268,36 +1285,51 @@ impl RelayProgram {
         timer.assigned_at = Some(now);
         timer.last_write_at = Some(now);
         timer.exit_handled = false;
-        self.deliver(LiveSessionId(id), format!("\n{safe}\n"), cancel, now)
-            .await
+        // A newer instruction replaces one that was never typed.
+        run.file.held_input.remove(role);
+        let bytes = relay_frame(&format!("\n{safe}\n"));
+        if let Some(rest) = self.deliver(LiveSessionId(id), bytes, cancel, now).await? {
+            self.hold(run, role, id, rest, now);
+        }
+        Ok(())
     }
+    /// Keeps relay text the child could not take yet. Poll types it later.
+    fn hold(&self, run: &mut Run, role: &str, id: i64, rest: Vec<u8>, now: Timestamp) {
+        run.file.held_input.insert(role.to_owned(), held_text(rest));
+        self.board(run,&format!("instruction held: {role} #{id} cannot take it yet (an open approval, startup or a reconnect); it is typed once it can"),now);
+    }
+    /// Types relay text through the guarded input (audit U27). `Ok(None)` once
+    /// written. `Ok(Some(rest))` when the child cannot take it now (an open
+    /// approval, startup, queued input or a reconnect): `rest` is exactly the
+    /// part not written, so typing it later never pastes the text twice.
     async fn deliver(
         &self,
         id: LiveSessionId,
-        text: String,
+        bytes: Vec<u8>,
         cancel: &TaskCancellation,
         now: Timestamp,
-    ) -> Result<(), RelayError> {
+    ) -> Result<Option<Vec<u8>>, RelayError> {
         let core = self.core()?;
         let details = core.details(id).ok_or(SessionError::NotFound(id))?;
-        let framed = format!(
-            "\x1b[200~{}\x1b[201~\r",
-            crate::orchestration::child_launch::prompt::sanitize_inject_text(&text)
-                .trim_end_matches(['\r', '\n'])
-        );
         let receipt = core
             .submit(
                 details.binding,
                 InputRequest {
-                    bytes: framed.into_bytes(),
-                    authority: InputAuthority::Internal,
+                    bytes,
+                    authority: InputAuthority::GuardedInternal,
                 },
                 now,
                 cancel,
             )
             .await;
         match receipt.disposition {
-            InputDisposition::TransportWritten { .. } | InputDisposition::Deferred { .. } => Ok(()),
+            InputDisposition::TransportWritten { .. } | InputDisposition::Deferred { .. } => {
+                Ok(None)
+            }
+            InputDisposition::Failed {
+                unsent_remainder,
+                detail,
+            } if guarded_input_held(&detail) => Ok(Some(unsent_remainder)),
             other => Err(RelayError::new(
                 500,
                 "spawn_error",

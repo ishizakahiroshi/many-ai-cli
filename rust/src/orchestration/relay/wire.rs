@@ -107,6 +107,10 @@ const RELAY_SCHEMAS: &[Schema] = &[
                 kind: "[]string",
             },
             Field {
+                name: "held_input",
+                kind: "map[string]string",
+            },
+            Field {
                 name: "child_cwd",
                 kind: "string",
             },
