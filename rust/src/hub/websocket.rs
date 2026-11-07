@@ -54,6 +54,12 @@ pub const PREAUTH_TIMEOUT: Duration = Duration::from_secs(10);
 /// A shared bound on upgraded or upgrading sockets still awaiting authentication.
 /// HTTP connections and authenticated UI/wrapper sockets do not hold a permit.
 pub const MAX_PREAUTH_SOCKETS: usize = 64;
+/// Upgrades whose request is already fully authorized (the wrapper's Bearer
+/// token, the dashboard's token cookie, plus the PIN cookie where a PIN applies)
+/// wait for their first frame in this separate pool. Anyone who can reach the
+/// port can fill the shared pool without a credential; they cannot fill this
+/// one, so registration, reattach and dashboard reconnects still get in (U07).
+pub const MAX_AUTHORIZED_PREAUTH_SOCKETS: usize = 256;
 type Warning = dyn Fn(&str, &SessionError) + Send + Sync;
 
 /// Preparation which the fixed registration caller completes before allowing
@@ -85,6 +91,7 @@ pub struct WebSocketService {
     runs: Arc<RunOwner>,
     ordinary: Option<Arc<crate::application::ordinary_spawn::OrdinarySpawnService>>,
     preauth: Arc<tokio::sync::Semaphore>,
+    authorized_preauth: Arc<tokio::sync::Semaphore>,
 }
 impl WebSocketService {
     pub fn new(
@@ -108,6 +115,9 @@ impl WebSocketService {
             runs: Arc::default(),
             ordinary: None,
             preauth: Arc::new(tokio::sync::Semaphore::new(MAX_PREAUTH_SOCKETS)),
+            authorized_preauth: Arc::new(tokio::sync::Semaphore::new(
+                MAX_AUTHORIZED_PREAUTH_SOCKETS,
+            )),
         }
     }
     pub fn with_startup_owner(
@@ -118,7 +128,8 @@ impl WebSocketService {
         self
     }
     /// Called before upgrade. Unlike HTTP guards, WebSocket token authentication
-    /// occurs only after receiving the first complete JSON frame.
+    /// occurs only after receiving the first complete JSON frame; the request's
+    /// own credentials only choose which pool the socket waits in until then.
     pub fn handshake(
         &self,
         request: &Request,
@@ -133,7 +144,16 @@ impl WebSocketService {
             &snapshot.config,
             i64::from(self.services.bound_port()),
         )?;
-        reserve_preauth(&self.preauth)
+        if authorized_upgrade(
+            request,
+            &self.services.auth,
+            &snapshot.config,
+            Timestamp::now(),
+        ) {
+            reserve_preauth(&self.authorized_preauth)
+        } else {
+            reserve_preauth(&self.preauth)
+        }
     }
     pub async fn run(
         self: Arc<Self>,
@@ -745,6 +765,20 @@ fn size(message: &proto::Message) -> Option<TerminalSize> {
         rows: message.rows,
     })
 }
+fn pin_satisfied(
+    request: &Request,
+    auth_service: &super::pin::AuthService,
+    config: &Config,
+    now: Timestamp,
+) -> bool {
+    let pin_required = auth::logically_remote(request) && !config.remote_pin_hash.trim().is_empty();
+    !pin_required
+        || auth_service.has_valid_pin(
+            request,
+            config,
+            now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64,
+        )
+}
 fn authorize_first(
     request: &Request,
     auth_service: &super::pin::AuthService,
@@ -752,16 +786,18 @@ fn authorize_first(
     first: &proto::Message,
     now: Timestamp,
 ) -> bool {
-    let authenticated =
-        auth::valid_token(&first.token, &config.token) || auth::token_or_trusted(request, config);
-    let pin_required = auth::logically_remote(request) && !config.remote_pin_hash.trim().is_empty();
-    authenticated
-        && (!pin_required
-            || auth_service.has_valid_pin(
-                request,
-                config,
-                now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64,
-            ))
+    (auth::valid_token(&first.token, &config.token) || auth::token_or_trusted(request, config))
+        && pin_satisfied(request, auth_service, config, now)
+}
+/// The upgrade request alone would pass `authorize_first`. Such a socket waits
+/// in the authorized pool; the first frame is still checked as before.
+fn authorized_upgrade(
+    request: &Request,
+    auth_service: &super::pin::AuthService,
+    config: &Config,
+    now: Timestamp,
+) -> bool {
+    auth::token_or_trusted(request, config) && pin_satisfied(request, auth_service, config, now)
 }
 struct WsWriter(SplitSink<WebSocket, WsMessage>);
 struct PinUiWriter {
@@ -973,6 +1009,35 @@ mod tests {
             remote_addr: "127.0.0.1:54321".into(),
             ..Default::default()
         }
+    }
+    #[test]
+    fn audit_u07_only_a_fully_authorized_upgrade_leaves_the_shared_pool() {
+        let config = Config {
+            token: "synthetic-hub-token".into(),
+            ..Default::default()
+        };
+        let auth = AuthService::default();
+        let mut request = request();
+        assert!(!authorized_upgrade(&request, &auth, &config, UNIX_EPOCH));
+        request.headers = vec![("Authorization".into(), "Bearer stale-token".into())];
+        assert!(!authorized_upgrade(&request, &auth, &config, UNIX_EPOCH));
+        request.headers = vec![("Authorization".into(), format!("Bearer {}", config.token))];
+        assert!(authorized_upgrade(&request, &auth, &config, UNIX_EPOCH));
+        request.headers = vec![(
+            "Cookie".into(),
+            format!("{}={}", auth::TOKEN_COOKIE, config.token),
+        )];
+        assert!(authorized_upgrade(&request, &auth, &config, UNIX_EPOCH));
+        // A remote token holder without the PIN still waits in the shared pool.
+        request
+            .headers
+            .push(("X-Forwarded-For".into(), "203.0.113.9".into()));
+        assert!(authorized_upgrade(&request, &auth, &config, UNIX_EPOCH));
+        let pinned = Config {
+            remote_pin_hash: "synthetic-nonempty-hash".into(),
+            ..config.clone()
+        };
+        assert!(!authorized_upgrade(&request, &auth, &pinned, UNIX_EPOCH));
     }
     #[test]
     fn first_message_token_or_http_cookie_fallback() {

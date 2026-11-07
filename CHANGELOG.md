@@ -138,6 +138,22 @@ Release artifacts are published at
   before, now naming what it found. A platform package supplied through
   `NODE_PATH` or a `node_modules` folder above the installation is no longer
   used.
+- **Sockets without a token can no longer keep sessions from connecting.**
+  Anyone who could reach the Hub's port, including another user of the same
+  machine, could hold all 64 places for WebSocket connections that have not
+  yet authenticated, reopening each within its 10 seconds, without the token.
+  New AI CLI sessions then failed to register, the dashboard could not
+  reconnect, and after a Hub restart running sessions could not reattach.
+  Connections that present the Hub token when they open (the wrapper now sends
+  it in a header; the dashboard sends its token cookie) wait in a separate
+  pool that such sockets cannot fill. The token is still checked in the first
+  message as before.
+- **PIN guessing through a proxy that does not name the user is slowed down.**
+  Remote PIN attempts that came through a proxy without a Tailscale user name
+  met only the global limit (30 failures, then 60 seconds), about 40,000
+  guesses a day. They now share one lock that grows from 60 seconds to 5 and
+  30 minutes, the global lock grows the same way, and both start over after an
+  hour without attempts.
 - **Release signing no longer covers bytes the SBOM tool could change.** Syft
   ran in the job that also wrote the checksum file the release signs, after the
   payload had been checked, so a replaced Syft or installer could swap a ZIP or

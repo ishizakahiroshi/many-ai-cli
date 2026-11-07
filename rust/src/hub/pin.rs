@@ -86,7 +86,10 @@ fn rate_key(request: &Request) -> String {
     if is_loopback(&request.remote_addr) && logically_remote(request) {
         let login = request.header("Tailscale-User-Login").trim().to_lowercase();
         if login.is_empty() {
-            return String::new();
+            // Behind a proxy that names no Tailscale user, every remote client
+            // arrives from the same loopback address. They share one staged
+            // lock (60, 300, 1800 s) instead of only the global one (U08).
+            return "remote:anon".into();
         }
         return format!(
             "ts:{}",
@@ -98,6 +101,10 @@ fn rate_key(request: &Request) -> String {
         .unwrap_or_else(|| request.remote_addr.trim().into())
 }
 const SECOND_NANOS: i128 = 1_000_000_000;
+/// Each further lock of the same key, and of the global counter, lasts longer.
+/// A key or the global counter starts again from the first step after an hour
+/// without attempts.
+const LOCK_SECONDS: [i128; 3] = [60, 300, 1800];
 fn unix_nanos(at: crate::proto::time::Timestamp) -> i128 {
     match at.duration_since(crate::proto::time::UNIX_EPOCH) {
         Ok(d) => d.as_nanos() as i128,
@@ -115,6 +122,7 @@ struct Attempt {
 pub struct Limiter {
     ips: BTreeMap<String, Attempt>,
     global_fails: u32,
+    global_level: usize,
     global_until: Option<i128>,
     global_seen: Option<i128>,
 }
@@ -155,21 +163,25 @@ impl Limiter {
             a.last = now;
             a.fails += 1;
             if a.fails >= 5 {
-                a.until = Some(now + [60, 300, 1800][a.level.min(2)] * SECOND_NANOS);
+                a.until = Some(now + LOCK_SECONDS[a.level.min(2)] * SECOND_NANOS);
                 a.level = (a.level + 1).min(2);
                 a.fails = 0;
             }
         }
+        // The global counter covers clients that each present a new key (a
+        // proxy can forward any Tailscale-User-Login), so it is staged too.
         if self
             .global_seen
             .is_none_or(|seen| now - seen > 3600 * SECOND_NANOS)
         {
             self.global_fails = 0;
+            self.global_level = 0;
         }
         self.global_seen = Some(now);
         self.global_fails += 1;
         if self.global_fails >= 30 {
-            self.global_until = Some(now + 60 * SECOND_NANOS);
+            self.global_until = Some(now + LOCK_SECONDS[self.global_level] * SECOND_NANOS);
+            self.global_level = (self.global_level + 1).min(2);
             self.global_fails = 0;
         }
         0

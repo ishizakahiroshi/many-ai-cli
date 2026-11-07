@@ -398,6 +398,7 @@ async fn wrapper_loopback_websocket_transmits_initial_proof_only_in_header() {
     #[derive(Clone)]
     struct StateData {
         proof: Arc<Mutex<Option<String>>>,
+        authorization: Arc<Mutex<Option<String>>>,
     }
     async fn upgrade(
         State(state): State<StateData>,
@@ -406,6 +407,10 @@ async fn wrapper_loopback_websocket_transmits_initial_proof_only_in_header() {
     ) -> impl IntoResponse {
         *state.proof.lock().unwrap() = headers
             .get("x-many-ai-internal-spawn-proof")
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned);
+        *state.authorization.lock().unwrap() = headers
+            .get("authorization")
             .and_then(|v| v.to_str().ok())
             .map(str::to_owned);
         ws.on_upgrade(move |mut socket| async move {
@@ -431,10 +436,12 @@ async fn wrapper_loopback_websocket_transmits_initial_proof_only_in_header() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let proof = Arc::new(Mutex::new(None));
+    let authorization = Arc::new(Mutex::new(None));
     let app = Router::new()
         .route("/ws", get(upgrade))
         .with_state(StateData {
             proof: proof.clone(),
+            authorization: authorization.clone(),
         });
     let server = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
@@ -452,6 +459,12 @@ async fn wrapper_loopback_websocket_transmits_initial_proof_only_in_header() {
         .unwrap();
     assert_eq!(socket.receive().await.unwrap().session_id, 12);
     assert_eq!(*proof.lock().unwrap(), Some("only-in-header".into()));
+    // The upgrade presents the token so the Hub keeps it out of the shared
+    // pool that sockets without a credential can fill (U07).
+    assert_eq!(
+        *authorization.lock().unwrap(),
+        Some("Bearer fixture-token".into())
+    );
     server.abort();
 }
 

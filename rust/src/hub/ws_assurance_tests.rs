@@ -103,6 +103,53 @@ async fn complete_json_without_token_and_real_preauth_capacity_never_register_se
     f.stop().await;
 }
 
+#[tokio::test]
+async fn audit_u07_sockets_without_a_credential_cannot_crowd_out_authorized_upgrades() {
+    let f = fixture().await;
+    let mut peers = Vec::new();
+    for _ in 0..MAX_PREAUTH_SOCKETS {
+        let (peer, status) = Client::connect(f.port, "").await;
+        assert!(status.starts_with("HTTP/1.1 101"));
+        peers.push(peer);
+    }
+    assert_eq!(f.websocket.preauth.available_permits(), 0);
+    let (_, status) = Client::connect(f.port, "Authorization: Bearer stale-token\r\n").await;
+    assert!(status.starts_with("HTTP/1.1 429"), "{status}");
+    // The wrapper's Bearer upgrade registers while the shared pool is full.
+    let (mut wrapper, status) = Client::connect(
+        f.port,
+        "Authorization: Bearer synthetic-websocket-token\r\n",
+    )
+    .await;
+    assert!(status.starts_with("HTTP/1.1 101"), "{status}");
+    wrapper
+        .json(serde_json::json!({"type":"register","provider":"shell",
+            "cwd":f._root.path(),"pid":404,"token":"synthetic-websocket-token"}))
+        .await;
+    wrapper.until("registered").await;
+    assert_eq!(f.core.snapshots().len(), 1);
+    // So does the dashboard, which presents its token cookie.
+    let (mut ui, status) = Client::connect(
+        f.port,
+        "Cookie: MANY_AI_CLI_token=synthetic-websocket-token\r\n",
+    )
+    .await;
+    assert!(status.starts_with("HTTP/1.1 101"), "{status}");
+    ui.json(serde_json::json!({"role":"ui","token":"synthetic-websocket-token"}))
+        .await;
+    ui.until("approval_snapshot").await;
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while f.websocket.authorized_preauth.available_permits() != MAX_AUTHORIZED_PREAUTH_SOCKETS {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    drop(peers);
+    wait_for_permits(&f, MAX_PREAUTH_SOCKETS).await;
+    f.stop().await;
+}
+
 async fn control_only_until_closed(peer: Client, send_ping: bool) -> (usize, usize) {
     let (mut reader, mut writer) = peer.0.into_split();
     let incoming = async {

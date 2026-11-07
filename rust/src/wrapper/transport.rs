@@ -118,6 +118,17 @@ impl HubConnector for LoopbackConnector {
                     })?,
                 );
             }
+            // Presenting the token on the upgrade lets the Hub keep this socket
+            // out of the pool that sockets without a credential can fill (U07).
+            // The first frame still carries the token as before.
+            if !self.token.is_empty() {
+                let mut value: tokio_tungstenite::tungstenite::http::HeaderValue =
+                    format!("Bearer {}", self.token)
+                        .parse()
+                        .map_err(|_| connection_error())?;
+                value.set_sensitive(true);
+                request.headers_mut().insert("Authorization", value);
+            }
             let socket = tokio::time::timeout(self.timeout, async {
                 let stream = TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, self.port)).await?;
                 let config = tokio_tungstenite::tungstenite::protocol::WebSocketConfig::default()
@@ -176,5 +187,46 @@ pub async fn register(
     tokio::select! {
         _=cancel.cancelled()=>Err(io::Error::new(io::ErrorKind::Interrupted,"wrapper cancelled before registration")),
         result=tokio::time::timeout(timeout,handshake)=>result.map_err(|_|io::Error::new(io::ErrorKind::TimedOut,"wrapper registration timed out"))?,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::AsyncReadExt;
+
+    /// The raw upgrade request the connector sends. The listener never
+    /// answers, so the dial fails once the request has been read.
+    async fn upgrade_request(token: &str) -> String {
+        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0; 1024];
+            while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                let read = stream.read(&mut buffer).await.unwrap();
+                if read == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buffer[..read]);
+            }
+            String::from_utf8(request).unwrap()
+        });
+        let connector = LoopbackConnector::new(port, token.into(), Duration::from_secs(2)).unwrap();
+        assert!(connector.connect(None).await.is_err());
+        server.await.unwrap().to_ascii_lowercase()
+    }
+
+    #[tokio::test]
+    async fn audit_u07_upgrade_presents_the_token_when_there_is_one() {
+        let request = upgrade_request("fixture-token").await;
+        assert!(
+            request.contains("\r\nauthorization: bearer fixture-token\r\n"),
+            "{request}"
+        );
+        assert!(!upgrade_request("").await.contains("authorization:"));
     }
 }

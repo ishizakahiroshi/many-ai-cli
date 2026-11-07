@@ -1213,3 +1213,73 @@ fn service_pin_fractional_lockout_does_not_unlock_or_round_early() {
         401
     );
 }
+
+#[test]
+fn audit_u08_unidentified_remote_pin_attempts_share_a_staged_lock() {
+    use std::time::Duration;
+    let auth = super::pin::AuthService::default();
+    let mut cfg = config();
+    cfg.remote_pin_hash = bcrypt::hash("123456", 4).unwrap();
+    cfg.auth_cookie_secret = "synthetic-secret".into();
+    // A proxy that forwards for the client but names no Tailscale user.
+    let mut r = request();
+    r.headers
+        .push(("X-Forwarded-For".into(), "198.51.100.7".into()));
+    r.body = br#"{"pin":"654321"}"#.to_vec();
+    let mut other = r.clone();
+    other.headers = vec![("X-Forwarded-For".into(), "198.51.100.8".into())];
+    let mut at = UNIX_EPOCH + Duration::from_secs(1_000);
+    for lock in [60, 300, 1800] {
+        for _ in 0..4 {
+            assert_eq!(auth.login_at(&r, &cfg, at).status, 401);
+        }
+        assert_eq!(auth.login_at(&r, &cfg, at).status, 429);
+        let status = json_response(&auth.status_at(&r, &cfg, at + Duration::from_secs(1)));
+        assert_eq!(status["retry_after"], lock);
+        // Another unidentified client is behind the same lock.
+        assert_eq!(auth.login_at(&other, &cfg, at).status, 429);
+        at = at + Duration::from_secs(lock);
+    }
+    // A Tailscale user keeps a lock of their own.
+    let mut named = r.clone();
+    named
+        .headers
+        .push(("Tailscale-User-Login".into(), "synthetic-tailnet-user".into()));
+    assert_eq!(auth.login_at(&named, &cfg, at).status, 401);
+}
+
+#[test]
+fn audit_u08_pin_attempts_per_day_stay_low_for_one_key_and_for_new_keys() {
+    // One unidentified key, tried whenever it is not locked for 24 hours.
+    let mut limiter = super::pin::Limiter::default();
+    let mut tries = 0;
+    for now in 0..86_400 {
+        if limiter.retry_after("remote:anon", now) == 0 && limiter.begin("remote:anon", now) == 0 {
+            tries += 1;
+        }
+    }
+    assert!(tries <= 330, "{tries} attempts in a day");
+    // A new key for every attempt only meets the global counter, which is
+    // staged as well: 30 attempts, then 60, 300 and 1800 seconds.
+    let mut limiter = super::pin::Limiter::default();
+    let mut lock_lengths = Vec::new();
+    let mut now = 0;
+    let mut key = 0;
+    while lock_lengths.len() < 4 {
+        key += 1;
+        assert_eq!(limiter.begin(&format!("key-{key}"), now), 0);
+        let retry = limiter.retry_after("", now);
+        if retry > 0 {
+            lock_lengths.push(retry - 1);
+            now += retry - 1;
+        }
+    }
+    assert_eq!(lock_lengths, [60, 300, 1800, 1800]);
+    // An hour without attempts starts the global steps again.
+    for _ in 0..29 {
+        key += 1;
+        assert_eq!(limiter.begin(&format!("key-{key}"), now + 3_601), 0);
+    }
+    assert_eq!(limiter.begin("key-last", now + 3_601), 0);
+    assert_eq!(limiter.retry_after("", now + 3_601), 61);
+}
