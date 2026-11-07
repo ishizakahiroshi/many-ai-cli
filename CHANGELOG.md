@@ -138,6 +138,25 @@ Release artifacts are published at
   before, now naming what it found. A platform package supplied through
   `NODE_PATH` or a `node_modules` folder above the installation is no longer
   used.
+- **Release signing no longer covers bytes the SBOM tool could change.** Syft
+  ran in the job that also wrote the checksum file the release signs, after the
+  payload had been checked, so a replaced Syft or installer could swap a ZIP or
+  package and still get it signed. Syft now comes from its release tarball
+  checked against a pinned SHA-256 and runs in a job of its own; the payload
+  digests are recorded before it runs, and the checksum file is written and
+  signed only for the recorded payload.
+- **The release gate counts only pushes to this repository.** The check that
+  validation and scans passed for the tag commit also took pull-request runs,
+  which anyone can open at that commit: a fork's run could block a release or
+  hide a failed push run. It now judges push runs on `main`, `develop`,
+  `release/*`, `hotfix/*` and the tag, and a branch push run must pass as well
+  as the tag's own.
+- **The whisper-server build workflow cannot write to the repository.** It
+  built a whisper.cpp tag with a token that could push and edit releases, left
+  in the checkout's Git configuration while upstream CMake code ran. The build
+  now has read access only, keeps no credential, and stops unless the tag
+  points to the commit given with it; a separate job that runs no upstream code
+  uploads the result.
 
 ## [0.10.0] - Unreleased
 

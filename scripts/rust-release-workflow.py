@@ -96,9 +96,9 @@ def digest(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def load_sums(directory: Path) -> dict[str, str]:
+def parse_sums(text: str) -> dict[str, str]:
     sums = {}
-    for line in regular(directory / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_.-]+)", line)
         if not match or match.group(2) in sums:
             raise ValueError("unsafe or duplicate checksum entry")
@@ -106,6 +106,10 @@ def load_sums(directory: Path) -> dict[str, str]:
     if not sums:
         raise ValueError("empty checksums")
     return sums
+
+
+def load_sums(directory: Path) -> dict[str, str]:
+    return parse_sums(regular(directory / "SHA256SUMS.txt").read_text(encoding="utf-8"))
 
 
 def verify_archives(directory: Path, tag: str, source: str | None = None) -> list[Path]:
@@ -209,6 +213,22 @@ def complete_sbom(asset: Path, document: Path, tag: str) -> None:
     document.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def verify_payload(directory: Path, sums: Path, tag: str) -> None:
+    """Compare the payload handed between jobs with the package job's record.
+
+    The package job writes these digests to a job output before any SBOM tool
+    runs. Any later job of the same run can replace an artifact, but not that
+    output, so a tool in the SBOM job cannot change what is signed (U41).
+    """
+    checked_tag(tag)
+    expected = parse_sums(regular(sums).read_text(encoding="utf-8"))
+    if {p.name for p in directory.iterdir()} != set(expected) or len(expected) != (4 if "-" in tag else 6):
+        raise ValueError("payload differs from the set the package job recorded")
+    for name, value in expected.items():
+        if digest(directory / name) != value:
+            raise ValueError(f"payload changed after the package job: {name}")
+
+
 def checksum_assets(directory: Path, tag: str) -> None:
     checked_tag(tag)
     files = sorted(directory.iterdir(), key=lambda p: p.name)
@@ -277,16 +297,29 @@ class SourceCiPending(ValueError):
     """The latest exact-source CI result has not completed yet."""
 
 
-def check_source_ci(runs: list[dict], source: str) -> None:
-    matching = [r for r in runs if r.get("head_sha") == source and r.get("event") in ("push", "pull_request")]
-    latest = max(matching, key=lambda r: (r.get("run_number", 0), r.get("run_attempt", 1)), default=None)
-    if not latest or latest.get("status") != "completed":
-        raise SourceCiPending("latest exact-source CI is not visible or still running")
-    if latest.get("conclusion") != "success":
-        raise ValueError("latest completed source CI was unsuccessful for the exact tag commit")
+RELEASE_BRANCH = re.compile(r"(?:main|develop|release/.+|hotfix/.+)\Z")
 
 
-def wait_source_ci(fetch, source: str, *, timeout=600, interval=15,
+def check_source_ci(runs: list[dict], source: str, repository: str, tag: str) -> None:
+    """Judge only pushes to this repository's release branches or the tag.
+
+    Anyone can open a pull request whose head is the tag commit; its runs must
+    neither block the release nor stand in for a failed push run (U42). The
+    tag's own push run is accepted, but a branch push run must also be green:
+    a tag push can scan no new commits.
+    """
+    trusted = [r for r in runs if r.get("head_sha") == source and r.get("event") == "push"
+               and str((r.get("head_repository") or {}).get("full_name", "")).lower() == repository.lower()
+               and (RELEASE_BRANCH.fullmatch(r.get("head_branch") or "") or r.get("head_branch") == tag)]
+    for selection in (trusted, [r for r in trusted if r.get("head_branch") != tag]):
+        latest = max(selection, key=lambda r: (r.get("run_number", 0), r.get("run_attempt", 1)), default=None)
+        if not latest or latest.get("status") != "completed":
+            raise SourceCiPending("latest exact-source CI is not visible or still running")
+        if latest.get("conclusion") != "success":
+            raise ValueError("latest completed source CI was unsuccessful for the exact tag commit")
+
+
+def wait_source_ci(fetch, source: str, repository: str, tag: str, *, timeout=600, interval=15,
                    clock=time.monotonic, sleep=time.sleep) -> None:
     """Wait for the newest source runs, never substituting an older green run.
 
@@ -306,7 +339,7 @@ def wait_source_ci(fetch, source: str, *, timeout=600, interval=15,
             if clock() >= deadline:
                 raise ValueError("timed out waiting for latest exact-source CI")
             try:
-                check_source_ci(fetch(workflow), source)
+                check_source_ci(fetch(workflow), source, repository, tag)
             except SourceCiPending:
                 pending.append(workflow)
         if not pending:
@@ -408,6 +441,10 @@ def main() -> None:
     sbom.add_argument("--asset", type=Path, required=True)
     sbom.add_argument("--document", type=Path, required=True)
     sbom.add_argument("--tag", required=True)
+    payload = subs.add_parser("verify-payload")
+    payload.add_argument("--directory", type=Path, required=True)
+    payload.add_argument("--sums", type=Path, required=True)
+    payload.add_argument("--tag", required=True)
     notes = subs.add_parser("notes")
     notes.add_argument("--tag", required=True)
     notes.add_argument("--output", type=Path, required=True)
@@ -417,6 +454,7 @@ def main() -> None:
     ci = subs.add_parser("check-source-ci")
     ci.add_argument("--repository", required=True)
     ci.add_argument("--source", required=True)
+    ci.add_argument("--tag", required=True)
     publisher = subs.add_parser("publish-pointer")
     publisher.add_argument("--channel", choices=("homebrew", "winget"), required=True)
     publisher.add_argument("--directory", type=Path, required=True)
@@ -444,6 +482,8 @@ def main() -> None:
         verify_linux_payloads(args.expected, args.deb, args.rpm)
     elif args.command == "complete-sbom":
         complete_sbom(args.asset, args.document, args.tag)
+    elif args.command == "verify-payload":
+        verify_payload(args.directory, args.sums, args.tag)
     elif args.command == "verify-assets":
         verify_assets(args.directory, args.tag)
     elif args.command == "check-native-artifacts":
@@ -453,12 +493,13 @@ def main() -> None:
         check_native_artifacts(response["artifacts"], args.source, args.run_id, args.attempt)
     elif args.command == "check-source-ci":
         checked_repo(args.repository)
+        checked_tag(args.tag)
         if not SHA.fullmatch(args.source):
             raise ValueError("invalid CI source identity")
         def fetch(workflow):
-            response = GitHub().api(f"repos/{args.repository}/actions/workflows/{workflow}/runs?head_sha={args.source}&per_page=100")
+            response = GitHub().api(f"repos/{args.repository}/actions/workflows/{workflow}/runs?head_sha={args.source}&event=push&per_page=100")
             return response["workflow_runs"]
-        wait_source_ci(fetch, args.source)
+        wait_source_ci(fetch, args.source, args.repository, args.tag)
     elif args.command == "publish-pointer":
         {"homebrew": publish_homebrew, "winget": publish_winget}[args.channel](args.directory, args.tag, GitHub())
 

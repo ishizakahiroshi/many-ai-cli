@@ -19,6 +19,10 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 SOURCE = "a" * 40
 OTHER = "b" * 40
+REPO = "owner/repo"
+TAG = "v1.0.0"
+# A push run of this repository's main branch: the runs the source CI gate judges.
+TRUSTED = dict(head_repository={"full_name": REPO}, head_branch="main")
 
 
 class ReleaseWorkflowTests(unittest.TestCase):
@@ -124,18 +128,49 @@ class ReleaseWorkflowTests(unittest.TestCase):
             MODULE.check_native_artifacts(artifacts + artifacts[:1], SOURCE, "19", "2")
 
     def test_exact_source_ci_latest_failure_is_not_hidden(self):
-        passed = dict(head_sha=SOURCE, event="push", status="completed", conclusion="success", run_number=1, run_attempt=1)
-        MODULE.check_source_ci([passed], SOURCE)
+        passed = dict(head_sha=SOURCE, event="push", status="completed", conclusion="success", run_number=1, run_attempt=1, **TRUSTED)
+        MODULE.check_source_ci([passed], SOURCE, REPO, TAG)
         for latest in (dict(passed, run_attempt=2, conclusion="failure"), dict(passed, run_number=2, status="in_progress")):
             with self.subTest(latest=latest), self.assertRaises(ValueError):
-                MODULE.check_source_ci([passed, latest], SOURCE)
+                MODULE.check_source_ci([passed, latest], SOURCE, REPO, TAG)
         with self.assertRaises(ValueError):
-            MODULE.check_source_ci([dict(passed, head_sha=OTHER)], SOURCE)
+            MODULE.check_source_ci([dict(passed, head_sha=OTHER)], SOURCE, REPO, TAG)
+
+    def test_source_ci_ignores_pull_request_runs_anyone_can_open_at_the_tag_commit(self):
+        passed = dict(head_sha=SOURCE, event="push", status="completed", conclusion="success", run_number=1, run_attempt=1, **TRUSTED)
+        fork = dict(passed, event="pull_request", head_repository={"full_name": "someone/fork"}, head_branch="topic", run_number=2)
+        # A later fork run, whatever its state, neither blocks the release nor replaces the push result.
+        for state in (dict(status="completed", conclusion="action_required"), dict(status="queued", conclusion=None),
+                      dict(status="completed", conclusion="failure")):
+            with self.subTest(state=state):
+                MODULE.check_source_ci([passed, dict(fork, **state)], SOURCE, REPO, TAG)
+        failed = dict(passed, conclusion="failure")
+        for mask in (dict(fork, conclusion="success"), dict(fork, head_repository={"full_name": REPO}, conclusion="success")):
+            with self.subTest(mask=mask), self.assertRaisesRegex(ValueError, "unsuccessful"):
+                MODULE.check_source_ci([failed, mask], SOURCE, REPO, TAG)
+        # Pushes outside the release branches or from another repository do not count either.
+        for other in (dict(passed, head_branch="topic"), dict(passed, head_repository={"full_name": "someone/fork"})):
+            with self.subTest(other=other), self.assertRaises(MODULE.SourceCiPending):
+                MODULE.check_source_ci([other], SOURCE, REPO, TAG)
+        for branch in ("develop", "release/1.0", "hotfix/1.0.1"):
+            MODULE.check_source_ci([dict(passed, head_branch=branch)], SOURCE, REPO, TAG)
+        MODULE.check_source_ci([dict(passed, head_repository={"full_name": "Owner/Repo"})], SOURCE, REPO, TAG)
+
+    def test_tag_push_run_cannot_stand_in_for_a_branch_push_run(self):
+        branch = dict(head_sha=SOURCE, event="push", status="completed", conclusion="success", run_number=1, run_attempt=1, **TRUSTED)
+        tag_run = dict(branch, head_branch=TAG, run_number=2)
+        MODULE.check_source_ci([branch, tag_run], SOURCE, REPO, TAG)
+        with self.assertRaisesRegex(ValueError, "unsuccessful"):
+            MODULE.check_source_ci([dict(branch, conclusion="failure"), tag_run], SOURCE, REPO, TAG)
+        with self.assertRaises(MODULE.SourceCiPending):
+            MODULE.check_source_ci([tag_run], SOURCE, REPO, TAG)
+        with self.assertRaisesRegex(ValueError, "unsuccessful"):
+            MODULE.check_source_ci([branch, dict(tag_run, conclusion="failure")], SOURCE, REPO, TAG)
 
     def test_tag_triggered_scan_pending_is_polled_until_latest_result(self):
         now, sleeps, calls = [0], [], []
-        passed = dict(head_sha=SOURCE, event="push", status="completed", conclusion="success", run_number=10, run_attempt=1)
-        pending = dict(passed, status="in_progress", conclusion=None, run_number=11)
+        passed = dict(head_sha=SOURCE, event="push", status="completed", conclusion="success", run_number=10, run_attempt=1, **TRUSTED)
+        pending = dict(passed, status="in_progress", conclusion=None, run_number=11, head_branch=TAG)
         def fetch(workflow):
             calls.append(workflow)
             if workflow == "secret-scan.yml":
@@ -144,23 +179,23 @@ class ReleaseWorkflowTests(unittest.TestCase):
         def sleep(seconds):
             sleeps.append(seconds)
             now[0] += seconds
-        MODULE.wait_source_ci(fetch, SOURCE, timeout=60, interval=15, clock=lambda: now[0], sleep=sleep)
+        MODULE.wait_source_ci(fetch, SOURCE, REPO, TAG, timeout=60, interval=15, clock=lambda: now[0], sleep=sleep)
         self.assertEqual(sleeps, [15])
         self.assertEqual(calls.count("secret-scan.yml"), 2)
 
     def test_ci_polling_never_reuses_old_green_or_retries_completed_failure(self):
         now, sleeps = [0], []
-        passed = dict(head_sha=SOURCE, event="push", status="completed", conclusion="success", run_number=10, run_attempt=1)
+        passed = dict(head_sha=SOURCE, event="push", status="completed", conclusion="success", run_number=10, run_attempt=1, **TRUSTED)
         failed = dict(passed, conclusion="failure", run_number=11)
         def sleep(seconds):
             sleeps.append(seconds)
             now[0] += seconds
         with self.assertRaisesRegex(ValueError, "unsuccessful"):
-            MODULE.wait_source_ci(lambda _: [passed, failed], SOURCE, clock=lambda: now[0], sleep=sleep)
+            MODULE.wait_source_ci(lambda _: [passed, failed], SOURCE, REPO, TAG, clock=lambda: now[0], sleep=sleep)
         self.assertEqual(sleeps, [])
         pending = dict(failed, status="queued", conclusion=None)
         with self.assertRaisesRegex(ValueError, "timed out"):
-            MODULE.wait_source_ci(lambda _: [passed, pending], SOURCE, timeout=30, interval=10, clock=lambda: now[0], sleep=sleep)
+            MODULE.wait_source_ci(lambda _: [passed, pending], SOURCE, REPO, TAG, timeout=30, interval=10, clock=lambda: now[0], sleep=sleep)
         self.assertEqual(sleeps, [10, 10, 10])
 
     def test_ci_polling_timeout_includes_api_time_and_transport_failure_is_final(self):
@@ -171,11 +206,11 @@ class ReleaseWorkflowTests(unittest.TestCase):
         def never_sleep(_):
             self.fail("deadline expired during API calls; no further sleep is allowed")
         with self.assertRaisesRegex(ValueError, "timed out"):
-            MODULE.wait_source_ci(fetch, SOURCE, timeout=30, clock=lambda: now[0], sleep=never_sleep)
+            MODULE.wait_source_ci(fetch, SOURCE, REPO, TAG, timeout=30, clock=lambda: now[0], sleep=never_sleep)
         def transport_failure(_):
             raise ValueError("transport failed")
         with self.assertRaisesRegex(ValueError, "transport failed"):
-            MODULE.wait_source_ci(transport_failure, SOURCE, sleep=never_sleep)
+            MODULE.wait_source_ci(transport_failure, SOURCE, REPO, TAG, sleep=never_sleep)
 
     def test_asset_preflight_has_no_output_on_partial_or_candidate(self):
         bundle = self.archives()
@@ -248,6 +283,30 @@ class ReleaseWorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not bind"):
             MODULE.checksum_assets(assets, "v1.0.0-rc.1")
         self.assertFalse((assets / "SHA256SUMS.txt").exists())
+
+    def test_payload_must_match_the_digests_recorded_before_the_sbom_job(self):
+        tag = "v1.0.0-rc.1"
+        payload = self.archives(tag=tag)
+        (payload / "SHA256SUMS.txt").unlink()
+        record = self.root / "payload-sums.txt"
+        record.write_text("".join(f"{MODULE.digest(p)}  {p.name}\n" for p in sorted(payload.iterdir())), encoding="utf-8")
+        MODULE.verify_payload(payload, record, tag)
+        self.cli("verify-payload", "--directory", payload, "--sums", record, "--tag", tag)
+        changed = next(payload.glob("*linux-x64.zip"))
+        original = changed.read_bytes()
+        changed.write_bytes(original + b"syft")
+        with self.assertRaisesRegex(ValueError, "changed after the package job"):
+            MODULE.verify_payload(payload, record, tag)
+        self.cli("verify-payload", "--directory", payload, "--sums", record, "--tag", tag, ok=False)
+        changed.write_bytes(original)
+        extra = payload / "many-ai-cli-extra.zip"
+        extra.write_bytes(b"extra")
+        with self.assertRaisesRegex(ValueError, "differs from the set"):
+            MODULE.verify_payload(payload, record, tag)
+        extra.unlink()
+        changed.unlink()
+        with self.assertRaisesRegex(ValueError, "differs from the set"):
+            MODULE.verify_payload(payload, record, tag)
 
     def test_real_shallow_tagless_checkout_cannot_feed_the_formal_packer(self):
         # Git fixtures live only in our temporary directory. They never change
@@ -386,9 +445,30 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("--release-tag", jobs["native"])
         self.assertEqual(jobs["native"].count("scripts/rust-candidate-ci.py"), 2)  # mutually exclusive native shells
         self.assertEqual(jobs["native"].count("target:"), 4)
-        for name in ("native", "package"):
+        for name in ("native", "package", "sbom", "assemble"):
             self.assertNotRegex(jobs[name], r"secrets\.(?:NPM_TOKEN|PUBLISH_GITHUB_TOKEN)")
             self.assertNotIn("id-token: write", jobs[name])
+        # Syft runs only in the sbom job, from a tarball checked against a pinned
+        # SHA-256; the signed bytes are bound to the package job's output (U41).
+        self.assertNotIn("sbom-action", text)
+        for name, body in jobs.items():
+            if name != "sbom":
+                self.assertNotRegex(body, r"syft (?:scan|version)|\$RUNNER_TEMP/syft", name)
+        self.assertRegex(jobs["sbom"], r"SYFT_SHA256: [0-9a-f]{64}\n")
+        self.assertIn('| sha256sum --check --strict', jobs["sbom"])
+        self.assertNotIn("secrets.", jobs["sbom"])
+        self.assertIn("payload_sums: ${{ steps.payload.outputs.sums }}", jobs["package"])
+        self.assertIn("rust-release-payload-", jobs["package"])
+        self.assertNotIn("rust-release-unsigned-", jobs["package"])
+        self.assertIn("needs: [plan, package, sbom]", jobs["assemble"])
+        self.assertIn("verify-payload", jobs["assemble"])
+        self.assertIn("rust-release-workflow.py checksums", jobs["assemble"])
+        self.assertIn("rust-release-unsigned-", jobs["assemble"])
+        self.assertIn("needs: [plan, package, assemble]", jobs["sign"])
+        self.assertIn("PAYLOAD_SUMS: ${{ needs.package.outputs.payload_sums }}", jobs["sign"])
+        self.assertLess(jobs["sign"].index('grep -Fqx -- "$line" SHA256SUMS.txt'), jobs["sign"].index("cosign sign-blob"))
+        # The source CI gate judges push runs of this repository only (U42).
+        self.assertIn('check-source-ci --repository "$GITHUB_REPOSITORY" --source "$SOURCE_SHA" --tag "$RELEASE_TAG"', jobs["plan"])
         for name in ("sign", "publish", "canonical", "npm", "pointers"):
             self.assertNotRegex(jobs[name], r"cargo\s+(?:build|run)|rust-candidate-ci\.py|package-rust-candidates\.py")
         self.assertIn("cosign verify-blob", jobs["canonical"])
@@ -399,6 +479,30 @@ class ReleaseWorkflowTests(unittest.TestCase):
         for step in text.split("      - ")[1:]:
             if "NODE_AUTH_TOKEN:" in step or "GH_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}" in step:
                 self.assertNotRegex(step, r"bun (?:install|run)|npm install|cargo |apt-get|uses:")
+
+    def test_whisper_build_runs_upstream_code_without_write_access_and_at_the_pinned_commit(self):
+        # whisper-binaries.yml builds a third-party tag with CMake, which can run
+        # any command. That job must hold no write token, leave no credential in
+        # .git/config and build only the commit the tag was reviewed at (U39).
+        text = (ROOT / ".github/workflows/whisper-binaries.yml").read_text(encoding="utf-8")
+        jobs = dict(re.findall(r"^  ([a-z]+):\n(.*?)(?=^  [a-z]+:|\Z)", text.split("jobs:\n", 1)[1], re.M | re.S))
+        self.assertEqual(set(jobs), {"build", "publish"})
+        build, publish = jobs["build"], jobs["publish"]
+        self.assertIn("permissions:\n      contents: read\n", build)
+        self.assertNotRegex(build, r"contents: write|GH_TOKEN|secrets\.|gh release")
+        self.assertIn("ref: refs/tags/${{ inputs.whisper_tag }}", build)
+        self.assertIn("persist-credentials: false", build)
+        verify = build.index('if [ "$actual" != "$WHISPER_COMMIT" ]')
+        self.assertLess(build.index('actual="$(git rev-parse HEAD)"'), verify)
+        self.assertLess(verify, build.index("cmake -B build"))
+        self.assertIn("needs: build", publish)
+        self.assertIn("permissions:\n      contents: write\n", publish)
+        self.assertNotRegex(publish, r"ggml-org|cmake|actions/checkout")
+        # The default tag and commit move together with the Docker image's pin.
+        docker = (ROOT / "deploy/docker/Dockerfile").read_text(encoding="utf-8")
+        defaults = re.findall(r'default: "([^"]+)"', text.split("jobs:\n", 1)[0])
+        self.assertEqual(defaults[:2], [re.search(r"ARG WHISPER_CPP_TAG=(\S+)", docker).group(1),
+                                        re.search(r"ARG WHISPER_CPP_COMMIT=(\S+)", docker).group(1)])
 
 
 if __name__ == "__main__":

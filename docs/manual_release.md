@@ -28,7 +28,7 @@ GoReleaser と `GOOS` による旧アプリのビルドは現在の手順では�
 2. `node scripts/check-instrumentation.mjs --release` が登録された一時観測の残存を拒否します。debug でしか記録しない観測でも、台帳の撤去条件は別途満たします。検査を通すために調査完了や原因修正を捏造しません。
 3. 公開済み tag の full 再ビルドは拒否します。チャネルの失敗は下の選択再実行で扱い、公開済み ZIP・checksum・tag を置き換える復旧はしません。
 4. `CHANGELOG.md` に tag の版と一致する `## [<version>]` 節がちょうど一つあり、見出し・コメント以外の本文が必要です。Unreleased や私的ドラフトだけでは通りません。版の節と実際の公開日はレビュー後に確定します。
-5. 同一 source SHA の最新 `Validate` / `doxguard` / `secret-scan` が成功している必要があります。未出現・実行中は最大 10 分待ち、completed failure と API 失敗は拒否します。古い green は代用しません。plan job は 15 分、各 API request は 60 秒で区切ります。
+5. 同一 source SHA の最新 `Validate` / `doxguard` / `secret-scan` が成功している必要があります。未出現・実行中は最大 10 分待ち、completed failure と API 失敗は拒否します。古い green は代用しません。plan job は 15 分、各 API request は 60 秒で区切ります。数えるのは、このリポジトリへの push（`main`・`develop`・`release/*`・`hotfix/*` の branch か、その tag）で動いた run だけです。誰でも tag の commit を head にした PR を開けるので、PR の run は止める理由にも、失敗した push の run の代わりにもなりません（監査 U42）。tag の push の run とは別に、branch の push の run も成功している必要があります。PR で確かめた commit も、main へ取り込んで main の push の run が green になってから tag を打ちます。
 
 これは tag 作成・push・workflow dispatch の実行許可を与えるチェックリストではありません。
 各操作はその版のレビューと公開承認の範囲で行います。
@@ -57,13 +57,18 @@ Cargo build-input 証拠を同梱し、後続チャネルへ同じ bytes を渡�
 
 安定版の deb / rpm は canonical Linux ZIP の内容からパッケージだけを作り、
 再展開して本体・ランチャー・notices・証拠の bytes を比較します。
-四 ZIP と deb / rpm ごとに pinned Syft の SPDX を作り、checksum inventory に結び付けます。
+四 ZIP と deb / rpm ごとに Syft の SPDX を作り、checksum inventory に結び付けます。
+Syft は署名する bytes を持つ job では動かしません（監査 U41）。package job は payload の digest を
+job output に記録して payload を渡し、`sbom` job が SHA-256 を固定した Syft の release tarball を
+照合してから SPDX を作り、`assemble` job が payload を記録と照合し、SPDX の root が payload に
+結び付くものだけを組にして checksum を作ります。`sign` job も署名の前に payload の行を同じ記録と照合します。
+Syft の版を上げるときは、`release.yml` の `SYFT_VERSION` と `SYFT_SHA256`（上流 release asset の SHA-256）を一緒に変えます。
 Cargo build-input SPDX と配布資材の SPDX は別の証拠です。いずれも完全な runtime 分類や
 ライセンス確認完了を自動的に証明するものではありません。
 
 権限の境界は次のとおりです。
 
-- native / package は npm token、別リポジトリの PAT、署名用 OIDC 権限を持ちません。checkout credential は保存しません。package の GitHub token は artifact metadata の読み取り用です。
+- native / package / sbom / assemble は npm token、別リポジトリの PAT、署名用 OIDC 権限を持ちません。checkout credential は保存しません。package の GitHub token は artifact metadata の読み取り用です。
 - `sign` job だけが checksum 署名用の `id-token: write` を持ち、cosign keyless で `SHA256SUMS.txt` に署名し、tag ref に結び付く workflow identity を検証します。
 - `publish` job は署名と全 asset を再検証してから、公開 step だけに GitHub token を渡し、human notes と canonical asset を GitHub Release へ公開します。ここで native build は行いません。
 - canonical 公開の後で四 ZIP と署名済み checksum を再取得・検証して npm / pointer へ渡します。optional channel が skipped / failed なら、その状態を残し、canonical 公開の完了と区別します。
@@ -143,7 +148,7 @@ v0.1.0 は試験リリース扱いとし、初回正式リリースは v0.1.1 �
   - `go test` の OS 依存失敗（`open_browser_test.go` の WSL 判定、`whisper_manage_test.go` の platform 分岐）
   - `go mod tidy` 差分 → 連鎖で `THIRD_PARTY_NOTICES.md` も古くなる
 - 対策（いずれか必須）:
-  - リリース commit を **PR で main へ出し、`Validate`（ubuntu/windows/macOS）green を確認**してからタグ。これが本筋。
+  - リリース commit を **PR で main へ出し、`Validate`（ubuntu/windows/macOS）green を確認**してからタグ。これが本筋。（現行の Rust 版の gate が証拠にするのは main などへの push の run だけで、PR の run は数えない。冒頭の「正式ビルド前の gate」5 を参照）
   - 最低でもローカルで `GOOS=linux go build/vet ./...`（unix build tag のファイルをコンパイル）。可能なら WSL/Linux で `go test ./...` ＋ `staticcheck` ＋ `gosec` を**全 OS 分**。Windows ローカルだけでは unix 側が一切検証されない。
   - `go run github.com/rhysd/actionlint/cmd/actionlint@latest .github/workflows/*.yml` ＋ `goreleaser check` ＋ `goreleaser release --snapshot --clean`（before hook 込みでビルド段階まで）をタグ前に通す。
 

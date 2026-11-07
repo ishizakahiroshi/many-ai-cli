@@ -73,7 +73,11 @@ CHANGELOG section. An already published tag cannot
 be rebuilt by the full-release path. Pending or not-yet-visible latest CI runs
 are polled for up to ten minutes inside a fifteen-minute planning job (each
 request has a sixty-second bound). A completed failed run is rejected
-immediately; an older green run cannot replace the latest result.
+immediately; an older green run cannot replace the latest result. Only push
+runs of this repository on `main`, `develop`, `release/*`, `hotfix/*` or the tag
+itself count, and a branch push run must be green as well as the tag's own run:
+pull-request runs, which anyone can open at the tag commit, neither block nor
+stand in for them.
 
 The four native jobs reuse the existing candidate runner and target/toolchain
 contract with `--release-tag`. Each target compiles its two binaries once. The
@@ -86,13 +90,18 @@ partial matrix rerun.
 No npm token, cross-repository PAT or signing permission is supplied to native
 build or package jobs. Stable releases prepare deb/rpm payloads from the Linux
 canonical ZIP, build only the package containers, extract them, and compare both
-binaries, notices and evidence with their canonical inputs. Syft is pinned to
-the existing version and generates a separate SPDX document for each shipped
-ZIP/deb/rpm. A hash-bound distribution root describes the opaque payload even
-when binary metadata does not reveal dependencies. Syft observations and
-embedded Cargo build-input SPDX are distinct evidence; neither asserts complete
-runtime classification or license clearance. Artifact instrumentation checks
-run before signing or publication.
+binaries, notices and evidence with their canonical inputs. The package job
+records the payload digests as a job output and hands the payload on without
+running Syft. A separate `sbom` job installs Syft from its release tarball after
+checking a pinned SHA-256 and generates a separate SPDX document for each
+shipped ZIP/deb/rpm. The `assemble` job requires the payload to match the
+recorded digests, accepts each SPDX document only when its root binds to its
+payload, and writes the checksum inventory; the signing job checks the payload
+lines against the same record before signing. A hash-bound distribution root
+describes the opaque payload even when binary metadata does not reveal
+dependencies. Syft observations and embedded Cargo build-input SPDX are distinct
+evidence; neither asserts complete runtime classification or license clearance.
+Artifact instrumentation checks run before signing or publication.
 
 One signing job signs the complete checksums with the existing pinned cosign
 version and tag-bound GitHub OIDC identity. A separate publisher verifies the
