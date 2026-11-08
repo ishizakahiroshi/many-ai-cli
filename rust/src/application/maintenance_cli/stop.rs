@@ -118,6 +118,8 @@ impl StopIo for NativeStopIo {
                     "trial shutdown port refused",
                 ));
             }
+            // The token goes only to a listener this OS user holds (U01).
+            crate::process::listener::require_own_loopback_listener(port)?;
             let url = format!("http://127.0.0.1:{port}/api/shutdown");
             let client = reqwest::Client::builder()
                 .no_proxy()

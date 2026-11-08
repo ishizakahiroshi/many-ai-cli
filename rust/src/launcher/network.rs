@@ -26,10 +26,22 @@ pub fn hub_endpoint(hub_url: &str, path: &str) -> Result<url::Url, String> {
     url.set_fragment(None);
     Ok(url)
 }
+/// The token goes only to a port this OS user holds: the launcher's own SSH
+/// forward or Hub (U01).
+fn own_port(port: i64) -> bool {
+    u16::try_from(port)
+        .is_ok_and(|port| crate::process::listener::loopback_listener_is_own(port).unwrap_or(false))
+}
+fn own_endpoint(url: &url::Url) -> bool {
+    url.port().is_some_and(|port| own_port(i64::from(port)))
+}
 pub async fn probe_hub(hub_url: &str, timeout: Duration) -> bool {
     let Ok(url) = hub_endpoint(hub_url, "/api/info") else {
         return false;
     };
+    if !own_endpoint(&url) {
+        return false;
+    }
     let Ok(client) = client(timeout) else {
         return false;
     };
@@ -45,6 +57,11 @@ pub async fn post_hub_endpoint(
     cancel: &Cancellation,
 ) -> Result<(), String> {
     let url = hub_endpoint(hub_url, path).map_err(|error| format!("{path}: {error}"))?;
+    if !own_endpoint(&url) {
+        return Err(format!(
+            "{path}: the forwarded port is not held by this OS user; the token was not sent"
+        ));
+    }
     let client =
         client(Duration::from_secs(3)).map_err(|_| format!("{path}: HTTP client unavailable"))?;
     let result = tokio::select! {
@@ -71,9 +88,12 @@ pub async fn poll_until_ready(
     );
     let client = client(interval).map_err(|_| "HTTP client unavailable")?;
     for _ in 0..tries {
-        tokio::select! { _=cancel.cancelled()=>return Err("cancelled".into()), response=client.get(&url).send()=>{
-            if response.is_ok_and(|r|r.status()==reqwest::StatusCode::OK) { return Ok(()); }
-        }}
+        // Until this user's listener is up, nothing is sent (U01).
+        if own_port(port) {
+            tokio::select! { _=cancel.cancelled()=>return Err("cancelled".into()), response=client.get(&url).send()=>{
+                if response.is_ok_and(|r|r.status()==reqwest::StatusCode::OK) { return Ok(()); }
+            }}
+        }
         tokio::select! { _=cancel.cancelled()=>return Err("cancelled".into()), _=tokio::time::sleep(interval)=>{} }
     }
     Err(format!("timed out after {tries} polls"))
@@ -86,6 +106,9 @@ pub async fn post_net_hint(port: i64, token: &str, host: &str, cancel: &Cancella
         "http://127.0.0.1:{port}/api/net-hint?token={}",
         query_escape(token)
     );
+    if !own_port(port) {
+        return;
+    }
     let body = serde_json::json!({"ssh":true,"host_label":host,"env_kind":"remote-tunnel"});
     tokio::select! { _=cancel.cancelled()=>{}, _=client.post(url).json(&body).send()=>{} }
 }

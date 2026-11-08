@@ -240,6 +240,20 @@ impl RelayIo for NativeRelayIo {
     ) -> CoreFuture<'a, io::Result<()>> {
         Box::pin(async move {
             self.validate_target(hub)?;
+            // The token goes only to a Hub this OS user runs (U02). The Hub
+            // writes 127.0.0.1 into the hooks; another spelling cannot be
+            // checked, so nothing is sent there.
+            let url = url::Url::parse(hub).map_err(io::Error::other)?;
+            let port = url
+                .port_or_known_default()
+                .filter(|_| url.host_str() == Some("127.0.0.1"))
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "the Hub URL is not 127.0.0.1; the token was not sent",
+                    )
+                })?;
+            crate::process::listener::require_own_loopback_listener(port)?;
             let bytes = crate::proto::provider::to_go_json(payload).map_err(io::Error::other)?;
             let client = reqwest::Client::builder()
                 .no_proxy()

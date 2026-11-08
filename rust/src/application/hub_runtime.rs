@@ -235,8 +235,9 @@ impl RuntimeLedger {
 }
 /// Credentials are sent only to the explicit numeric loopback URL. Redirects
 /// and environment proxy discovery are disabled, a deliberate confinement guard.
+/// The token goes only to a listener this OS user holds (U01).
 pub async fn probe_hub_info(port: u16, token: &str) -> bool {
-    if port == 0 {
+    if port == 0 || !crate::process::listener::loopback_listener_is_own(port).unwrap_or(false) {
         return false;
     }
     let Ok(client) = reqwest::Client::builder()

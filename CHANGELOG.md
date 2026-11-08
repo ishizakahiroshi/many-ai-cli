@@ -108,6 +108,14 @@ Release artifacts are published at
 
 ### Security
 
+- **The CLI sends the Hub token only to a Hub that runs as you.** Before
+  `status`, `stop`, a wrapped session, the usage relay, `orchestrate`, the
+  tray and the launcher send the token to a 127.0.0.1 port, they ask the
+  system whether that port's listener (for a wrapped session: the far end of
+  the connection itself) belongs to your OS user. On a shared machine another
+  user who took the port first no longer receives the token, the terminal
+  output or a way to type into your session. The Hub's own startup check also
+  reads its `/api/info` answer only up to 1 MiB.
 - **You are told when wrong PINs lock PIN entry.** When five wrong PINs in a
   row lock one source, or many wrong PINs lock PIN entry for everyone, the
   security notification (ntfy and push) says where the attempts came from and

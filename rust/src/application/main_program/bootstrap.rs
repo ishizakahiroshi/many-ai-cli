@@ -165,6 +165,10 @@ async fn restart_stale(
     cancel: &Cancellation,
 ) -> io::Result<bool> {
     let config = context.config.snapshot().map_err(io::Error::other)?.config;
+    // The token goes only to a listener this OS user holds (U01).
+    if !crate::process::listener::loopback_listener_is_own(port).unwrap_or(false) {
+        return Ok(false);
+    }
     let client = reqwest::Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
@@ -177,13 +181,24 @@ async fn restart_stale(
         url.query_pairs_mut().append_pair("token", &config.token);
         Ok(url)
     };
-    let Ok(response) = client.get(endpoint("/api/info")?).send().await else {
+    let Ok(mut response) = client.get(endpoint("/api/info")?).send().await else {
         return Ok(false);
     };
     if !response.status().is_success() {
         return Ok(false);
     }
-    let Ok(info) = response.json::<serde_json::Value>().await else {
+    // The answer is read up to 1 MiB, as `status` does, not to its end.
+    let mut body = Vec::new();
+    loop {
+        match response.chunk().await {
+            Ok(Some(chunk)) if body.len().saturating_add(chunk.len()) <= 1024 * 1024 => {
+                body.extend_from_slice(&chunk)
+            }
+            Ok(None) => break,
+            _ => return Ok(false),
+        }
+    }
+    let Ok(info) = serde_json::from_slice::<serde_json::Value>(&body) else {
         return Ok(false);
     };
     if info["binary_stale"] != true {

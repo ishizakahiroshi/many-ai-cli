@@ -20,6 +20,10 @@ impl OrchestrateIo for NativeOrchestrateIo {
             if url.host_str() != Some("127.0.0.1") || !request.path.starts_with("/api/sessions/") {
                 return Err(RequestError::Transport);
             }
+            // The token goes only to a Hub this OS user runs (U02).
+            if !crate::process::listener::loopback_listener_is_own(request.port).unwrap_or(false) {
+                return Err(RequestError::Transport);
+            }
             let headers_received = AtomicBool::new(false);
             let operation = async {
                 let client = reqwest::Client::builder()

@@ -95,6 +95,18 @@ impl HubSocket for Socket {
         })
     }
 }
+/// Whether the Hub's end of the connection from `ours` to `port` runs as this
+/// OS user. On macOS that end shows under the Hub's process only once its
+/// accept loop has taken it, so a missing end is looked for again briefly.
+async fn hub_end_is_own(port: u16, ours: u16) -> io::Result<bool> {
+    for _ in 0..25 {
+        if crate::process::listener::loopback_peer_is_own(port, ours)? {
+            return Ok(true);
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    Ok(false)
+}
 impl HubConnector for LoopbackConnector {
     fn connect<'a>(
         &'a self,
@@ -131,6 +143,19 @@ impl HubConnector for LoopbackConnector {
             }
             let socket = tokio::time::timeout(self.timeout, async {
                 let stream = TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, self.port)).await?;
+                // The token, the terminal output and the input go only to a
+                // Hub this OS user runs: the far end of this very connection
+                // must be theirs (U01).
+                let ours = stream.local_addr()?.port();
+                if !hub_end_is_own(self.port, ours).await? {
+                    return Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        format!(
+                            "127.0.0.1:{} is not held by this OS user's Hub; the token was not sent",
+                            self.port
+                        ),
+                    ));
+                }
                 let config = tokio_tungstenite::tungstenite::protocol::WebSocketConfig::default()
                     .max_message_size(Some(4 * 1024 * 1024))
                     .max_frame_size(Some(4 * 1024 * 1024));
@@ -147,6 +172,9 @@ impl HubConnector for LoopbackConnector {
     }
     fn probe(&self) -> CoreFuture<'_, bool> {
         Box::pin(async move {
+            if !crate::process::listener::loopback_listener_is_own(self.port).unwrap_or(false) {
+                return false;
+            }
             let Ok(client) = reqwest::Client::builder()
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())

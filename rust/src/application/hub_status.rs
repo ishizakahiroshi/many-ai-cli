@@ -13,6 +13,11 @@ pub async fn write(
             "status runtime port mismatch",
         ));
     }
+    // The token goes only to a listener this OS user holds (U01). A port
+    // nobody of this user holds has no Hub of theirs on it.
+    if !crate::process::listener::loopback_listener_is_own(port)? {
+        return writeln!(output, "stopped");
+    }
     let mut address =
         url::Url::parse(&format!("http://127.0.0.1:{port}/")).map_err(io::Error::other)?;
     address

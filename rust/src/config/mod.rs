@@ -5,6 +5,8 @@ pub use paths::{Resource, RuntimePaths};
 
 #[cfg(windows)]
 mod private_windows;
+#[cfg(windows)]
+pub(crate) use private_windows::process_runs_as_current_user;
 
 pub mod model;
 pub use model::*;

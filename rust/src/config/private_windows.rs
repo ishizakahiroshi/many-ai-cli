@@ -44,10 +44,54 @@ unsafe fn sid_string(sid: PSID) -> io::Result<String> {
 }
 /// The SID of the user this process runs as.
 fn current_user_sid() -> io::Result<String> {
+    // SAFETY: the pseudo handle of the current process needs no closing.
+    unsafe { process_user_sid(GetCurrentProcess()) }
+}
+/// Whether the process `pid` runs as the same user as this one. A process
+/// this user may not query is another user's, so that is `false` (U01).
+pub(crate) fn process_runs_as_current_user(pid: u32) -> io::Result<bool> {
+    use windows_sys::Win32::{
+        Foundation::{ERROR_ACCESS_DENIED, ERROR_INVALID_PARAMETER},
+        System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
+    };
+    if pid == std::process::id() {
+        return Ok(true);
+    }
+    if pid == 0 {
+        return Ok(false);
+    }
+    // SAFETY: the handle is closed by its guard; the token query reads only
+    // through it.
+    let owner = unsafe {
+        let raw = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if raw.is_null() {
+            let error = io::Error::last_os_error();
+            return match error.raw_os_error().map(|code| code as u32) {
+                // Another user's (or a protected) process, or one that ended.
+                Some(ERROR_ACCESS_DENIED | ERROR_INVALID_PARAMETER) => Ok(false),
+                _ => Err(error),
+            };
+        }
+        let process = Handle(raw);
+        match process_user_sid(process.0) {
+            Ok(owner) => owner,
+            Err(error) if error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32) => {
+                return Ok(false);
+            }
+            Err(error) => return Err(error),
+        }
+    };
+    Ok(owner == current_user_sid()?)
+}
+/// The SID of the user `process` runs as.
+///
+/// # Safety
+/// `process` must be a live process handle with query access.
+unsafe fn process_user_sid(process: HANDLE) -> io::Result<String> {
     // SAFETY: Win32 allocations/handles are guarded and TOKEN_USER is aligned.
     unsafe {
         let mut raw = ptr::null_mut();
-        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut raw) == 0 {
+        if OpenProcessToken(process, TOKEN_QUERY, &mut raw) == 0 {
             return Err(io::Error::last_os_error());
         }
         let token = Handle(raw);
