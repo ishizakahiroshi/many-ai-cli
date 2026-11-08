@@ -34,6 +34,11 @@ Release artifacts are published at
 
 ### Fixed
 
+- **Saving a file no longer fails for a moment while the Hub starts a
+  process.** A child process can briefly hold the lock of a file a save just
+  closed, and a save in that moment was refused as "being saved by another
+  process".
+  The save now tries the lock again for up to about 40 ms before refusing.
 - **Review and commit details show each file's own diff.** A file name was
   passed to Git as a pattern, so the diff for `a[b].txt` also carried the
   changes of `ab.txt`, and a name Git quotes (one with a control character)

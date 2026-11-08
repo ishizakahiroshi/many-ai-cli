@@ -637,15 +637,14 @@ mod tests {
             assert!(Path::new(file).starts_with(&folder), "{file}");
         }
         // A name that is not UTF-8 in the folder does not stop the next file.
+        // APFS refuses such a name (EILSEQ), so on it the case cannot arise.
         #[cfg(unix)]
         {
             use std::os::unix::ffi::OsStrExt;
-            std::fs::write(
-                folder.join(std::ffi::OsStr::from_bytes(b"synthetic-\xff")),
-                b"",
-            )
-            .unwrap();
-            assert!(hooks.delegation(&paths, "claude", 7).is_ok());
+            let odd = folder.join(std::ffi::OsStr::from_bytes(b"synthetic-\xff"));
+            if std::fs::write(&odd, b"").is_ok() {
+                assert!(hooks.delegation(&paths, "claude", 7).is_ok());
+            }
         }
         hooks.finish().unwrap();
         assert!(!Path::new(&first).exists() && !Path::new(&second).exists());

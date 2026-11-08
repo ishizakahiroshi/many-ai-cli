@@ -187,6 +187,26 @@ impl SaveBackup {
         let _ = dir.remove_file(&name);
     }
 }
+fn lock_for_save(file: &std::fs::File) -> Result<()> {
+    const TRIES: u32 = 5;
+    for attempt in 1..=TRIES {
+        match file.try_lock() {
+            Ok(()) => return Ok(()),
+            Err(std::fs::TryLockError::WouldBlock) if attempt < TRIES => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(std::fs::TryLockError::WouldBlock) => break,
+            Err(std::fs::TryLockError::Error(error)) => {
+                return Err(super::io_error(error, "lock_failed"));
+            }
+        }
+    }
+    Err(err(
+        409,
+        "conflict",
+        "file is currently being saved by another process",
+    ))
+}
 fn save_file_after_check(q: Mutation, s: &Scope, after_check: impl FnOnce()) -> Result<Response> {
     save_file_with(q, s, after_check, overwrite)
 }
@@ -224,16 +244,12 @@ fn save_file_with(
         }
     })?;
     // Lock the already validated handle, including aliases to the same file.
-    // Never block a Hub worker waiting for another save or an external lock.
+    // A Hub worker waits at most about 40 ms for another save or an external
+    // lock. The short wait covers a child process the Hub is starting at the
+    // same moment: between fork and exec it shares this handle, and so the
+    // lock, of the save that just finished.
     // Dropping this handle releases the lock on every return path.
-    file.try_lock().map_err(|error| match error {
-        std::fs::TryLockError::WouldBlock => err(
-            409,
-            "conflict",
-            "file is currently being saved by another process",
-        ),
-        std::fs::TryLockError::Error(error) => super::io_error(error, "lock_failed"),
-    })?;
+    lock_for_save(&file)?;
     let meta = file
         .metadata()
         .map_err(|e| super::io_error(e, "internal_error"))?;
