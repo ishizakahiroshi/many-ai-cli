@@ -28,7 +28,16 @@ pub(super) struct CompletionState {
     text_question: Option<crate::approval::text_question::TextQuestion>,
     note: Option<NoteAwait>,
     note_seq: u64,
+    /// The last DONE summaries published (as sent), so a redraw that shows an
+    /// earlier block again does not publish it twice.
+    recent_done: std::collections::VecDeque<String>,
 }
+/// How many published DONE summaries a redraw is checked against.
+const RECENT_DONE: usize = 8;
+/// The tail every closing marker ends with. The ANSI-stripped stream of a
+/// diff-rendering TUI can drop characters of a marker, so the stream is only
+/// asked whether a block may have been closed; the text is read from the screen.
+const DONE_TAIL: &str = "DONE]";
 struct NoteAwait {
     seq: u64,
     path: PathBuf,
@@ -708,10 +717,27 @@ impl Session {
             }
         }
         append_bounded(&mut self.completion.buffer, clean, 16 * 1024);
-        if self.completion.buffer.contains(DONE_OPEN) && self.completion.buffer.contains(DONE_CLOSE)
-        {
+        let closed = self.completion.buffer.find(DONE_OPEN).is_some_and(|open| {
+            self.completion.buffer[open + DONE_OPEN.len()..].contains(DONE_TAIL)
+        });
+        if closed {
             let buffer = std::mem::take(&mut self.completion.buffer);
-            let texts = extract_blocks(&buffer, DONE_OPEN, DONE_CLOSE);
+            // The text comes from the rendered screen, where the terminal has
+            // applied every cursor move; the stream is the fallback only when
+            // no complete block is on screen (it scrolled away, for example).
+            let screen = extract_blocks(&join_screen(&self.vt.lines()), DONE_OPEN, DONE_CLOSE);
+            let texts: Vec<String> = match screen.last() {
+                Some(text) => vec![text.clone()],
+                None => extract_blocks(&buffer, DONE_OPEN, DONE_CLOSE),
+            }
+            .into_iter()
+            .filter(|text| {
+                !self
+                    .completion
+                    .recent_done
+                    .contains(&truncate(&mask_secrets(text)))
+            })
+            .collect();
             if !texts.is_empty() && self.ai_provider() {
                 self.completion.marker_seen = true;
                 if self.completion.last_notify.is_none_or(|at| {
@@ -720,6 +746,12 @@ impl Session {
                 }) {
                     self.completion.last_notify = Some(now);
                     for text in texts {
+                        if self.completion.recent_done.len() == RECENT_DONE {
+                            self.completion.recent_done.pop_front();
+                        }
+                        self.completion
+                            .recent_done
+                            .push_back(truncate(&mask_secrets(&text)));
                         let summary = proto::DoneSummary {
                             session_id: self.binding.session.0,
                             provider: self.snapshot.provider.clone(),
@@ -822,6 +854,27 @@ fn append_bounded(buffer: &mut String, text: &str, max: usize) {
         buffer.drain(..start);
     }
 }
+/// The rendered screen as one string. A line that continues the one above
+/// joins it without a space when both sides are wide characters (wrapped
+/// Japanese), and with one space otherwise.
+fn join_screen(lines: &[String]) -> String {
+    let mut out = String::new();
+    for line in lines {
+        let line = line.trim();
+        if line.is_empty() {
+            out.push('\n');
+            continue;
+        }
+        let glue = match (out.chars().last(), line.chars().next()) {
+            (Some(a), Some(b)) if !a.is_ascii() && !a.is_whitespace() && !b.is_ascii() => "",
+            (Some(a), _) if !a.is_whitespace() => " ",
+            _ => "",
+        };
+        out.push_str(glue);
+        out.push_str(line);
+    }
+    out
+}
 pub fn extract_blocks(mut text: &str, open: &str, close: &str) -> Vec<String> {
     let mut result = Vec::new();
     while let Some(start) = text.find(open) {
@@ -829,7 +882,12 @@ pub fn extract_blocks(mut text: &str, open: &str, close: &str) -> Vec<String> {
         let Some(end) = text.find(close) else {
             break;
         };
-        let block = text[..end].trim();
+        // A block never spans another opening marker: when the closing marker
+        // of an earlier block was lost, only the last block before this close
+        // is kept, so the screen in between is never taken for a summary.
+        let body = &text[..end];
+        let body = body.rfind(open).map_or(body, |i| &body[i + open.len()..]);
+        let block = body.trim();
         if !block.is_empty() {
             result.push(block.split_whitespace().collect::<Vec<_>>().join(" "));
         }

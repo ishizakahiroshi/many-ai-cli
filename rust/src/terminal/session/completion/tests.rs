@@ -839,3 +839,75 @@ async fn marker_with_numbered_choices_keeps_the_marker_record_and_bad_start_is_s
             .is_none()
     );
 }
+
+/// 2026-11-08: a diff-rendered TUI dropped one character of a closing marker
+/// in the ANSI-stripped stream ("[/MANY-AI-LI-DONE]"). The block must not run
+/// on into the screen that follows and into the next turn's summary.
+#[test]
+fn a_broken_closing_marker_does_not_swallow_the_next_turn() {
+    let stream = "[MANY-AI-CLI-DONE] first turn done. [/MANY-AI-LI-DONE] \
+        ✻ Cogitated for 53s · done 11:06 ❯ next prompt from the user \
+        [MANY-AI-CLI-DONE] second turn done. [/MANY-AI-CLI-DONE]";
+    assert_eq!(
+        extract_blocks(stream, DONE_OPEN, DONE_CLOSE),
+        vec!["second turn done.".to_string()]
+    );
+}
+
+fn completed(effects: &CoreEffects) -> usize {
+    effects
+        .0
+        .iter()
+        .filter(|e| matches!(e, CoreEffect::Notify(CoreEvent::Completed { .. })))
+        .count()
+}
+
+/// The stripped stream reads "[/MANY-AI-CXI-DONE]L", but after the cursor move
+/// the screen shows the intact closing marker: the summary is the screen's.
+#[tokio::test]
+async fn the_summary_is_read_from_the_screen_when_the_stream_is_garbled() {
+    let (_root, engine, binding, at) = fixture("claude").await;
+    let effects = output(
+        &engine,
+        binding,
+        "\x1b[1;1H[MANY-AI-CLI-DONE] first turn [/MANY-AI-CXI-DONE]\x1b[1;42HL",
+        at,
+    );
+    assert_eq!(completed(&effects), 1);
+    assert_eq!(
+        engine.details(binding.session).unwrap().done.unwrap().text,
+        "first turn"
+    );
+}
+
+/// A redraw that shows an earlier block again (scrolling back to the bottom,
+/// for example) publishes nothing; the next turn's block still is published.
+#[tokio::test]
+async fn a_redrawn_summary_is_not_published_twice() {
+    let (_root, engine, binding, at) = fixture("claude").await;
+    let first = "\x1b[1;1H[MANY-AI-CLI-DONE] first turn [/MANY-AI-CLI-DONE]";
+    assert_eq!(completed(&output(&engine, binding, first, at)), 1);
+    let later = at + Duration::from_secs(120);
+    assert_eq!(completed(&output(&engine, binding, first, later)), 0);
+    let next = "\x1b[2J\x1b[1;1H[MANY-AI-CLI-DONE] second turn [/MANY-AI-CLI-DONE]";
+    let after = at + Duration::from_secs(240);
+    assert_eq!(completed(&output(&engine, binding, next, after)), 1);
+    assert_eq!(
+        engine.details(binding.session).unwrap().done.unwrap().text,
+        "second turn"
+    );
+}
+
+/// Wrapped Japanese joins without a space; other wrapped text with one.
+#[test]
+fn the_screen_joins_wrapped_lines_like_the_text_they_hold() {
+    let lines = vec![
+        "  [MANY-AI-CLI-DONE] 看板に載ったことを確か".to_string(),
+        "  めました。Checked on the".to_string(),
+        "  board. [/MANY-AI-CLI-DONE]".to_string(),
+    ];
+    assert_eq!(
+        extract_blocks(&join_screen(&lines), DONE_OPEN, DONE_CLOSE),
+        vec!["看板に載ったことを確かめました。Checked on the board.".to_string()]
+    );
+}
