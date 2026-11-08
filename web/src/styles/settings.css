@@ -11,6 +11,9 @@
   background: var(--bg-elev);
   z-index: 1000;
   overflow: hidden;
+}
+/* 既定の縦並び。詳細度を 0 にしておく（強い指定だと、下の 721px 以上の左右 2 列表示が負けて、左ナビと右ペインが縦に積まれる） */
+:where(.aac-wheel-overlay:has(> .settings-layout)) {
   display: flex;
   flex-direction: column;
 }
