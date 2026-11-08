@@ -170,6 +170,12 @@ impl ServiceRouter {
             auth::require_host(request, config, port)?;
             return auth::require_origin(request, config, port);
         }
+        if request.path == "/api/auth/launch" {
+            // The launch code stands in for the token here (U04).
+            super::http::require_method(request, &["POST"])?;
+            auth::require_host(request, config, port)?;
+            return auth::require_origin(request, config, port);
+        }
         let base = matches!(
             request.path.as_str(),
             "/api/auth/status" | "/api/auth/login" | "/api/auth/logout"
@@ -1376,6 +1382,14 @@ impl ServiceRouter {
                 "migration_unimplemented",
                 "one-tap approval service is not implemented",
             )
+        } else if request.path == "/api/auth/launch" {
+            let guard = super::http::require_method(request, &["POST"])
+                .and_then(|_| auth::require_host(request, config, port))
+                .and_then(|_| auth::require_origin(request, config, port));
+            match guard {
+                Ok(()) => self.auth.launch(request, config, self.bound_port, now),
+                Err(error) => error,
+            }
         } else {
             let base = matches!(
                 request.path.as_str(),
@@ -1542,6 +1556,7 @@ impl ServiceRouter {
                     response
                 }
                 "/api/auth/logout" => self.auth.logout(request, config),
+                "/api/auth/launch-code" => self.auth.launch_code(request, now),
                 "/api/auth/set-pin" => self.auth.set_pin(request, &self.config, now),
                 "/api/auth/revoke-all" => {
                     let Some(core) = &self.core else {
@@ -1820,6 +1835,8 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
         "/api/auth/status" => &["GET"],
         "/api/auth/login"
         | "/api/auth/logout"
+        | "/api/auth/launch"
+        | "/api/auth/launch-code"
         | "/api/auth/set-pin"
         | "/api/auth/revoke-all"
         | "/api/notify-generate-topic" => &["POST"],

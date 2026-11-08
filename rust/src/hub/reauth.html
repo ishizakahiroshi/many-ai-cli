@@ -29,6 +29,42 @@ code{background:#1b1d22;padding:.1em .35em;border-radius:.25em}
     working.className = 'hide';
     failed.className = '';
   }
+  function safePath(path) {
+    // 先頭が // や /\ だと、location.replace が別サイトへの URL として解釈する。
+    return (path.charAt(0) !== '/' || path.charAt(1) === '/' || path.charAt(1) === '\\') ? '/' : path;
+  }
+  function signIn(token, back) {
+    return fetch('/', {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: { 'Authorization': 'Bearer ' + token }
+    }).then(function (res) {
+      if (res.ok) { location.replace(back); return; }
+      giveUp();
+    });
+  }
+  // Hub が開いたときは、token の代わりに一度だけ使える起動の番号が付く。
+  var params = new URLSearchParams(location.search);
+  var launch = params.get('launch');
+  if (launch) {
+    params.delete('launch');
+    var rest = params.toString();
+    var back = safePath(location.pathname + (rest ? '?' + rest : '') + location.hash);
+    try { history.replaceState(null, '', back); } catch (e) { /* 失敗しても番号は一度で使い切る */ }
+    fetch('/api/auth/launch', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: launch })
+    }).then(function (res) {
+      return res.ok ? res.json() : null;
+    }).then(function (data) {
+      if (!data || typeof data.token !== 'string' || !data.token) { giveUp(); return; }
+      try { localStorage.setItem('__TOKEN_KEY__', data.token); } catch (e) { /* private mode 等 */ }
+      return signIn(data.token, back);
+    }).catch(function () { giveUp(); });
+    return;
+  }
   var stored = null;
   try { stored = localStorage.getItem('__TOKEN_KEY__'); } catch (e) { /* private mode 等 */ }
   if (!stored) { giveUp(); return; }
@@ -36,17 +72,8 @@ code{background:#1b1d22;padding:.1em .35em;border-radius:.25em}
   try { tried = sessionStorage.getItem('__GUARD_KEY__'); } catch (e) { /* private mode 等 */ }
   if (tried) { giveUp(); return; }
   try { sessionStorage.setItem('__GUARD_KEY__', '1'); } catch (e) { /* private mode 等 */ }
-  var here = location.pathname + location.search + location.hash;
-  // 先頭が // や /\ だと、location.replace が別サイトへの URL として解釈する。
-  if (here.charAt(0) !== '/' || here.charAt(1) === '/' || here.charAt(1) === '\\') { here = '/'; }
-  fetch('/', {
-    method: 'GET',
-    credentials: 'same-origin',
-    headers: { 'Authorization': 'Bearer ' + stored }
-  }).then(function (res) {
-    if (res.ok) { location.replace(here); return; }
-    giveUp();
-  }).catch(function () { giveUp(); });
+  signIn(stored, safePath(location.pathname + location.search + location.hash))
+    .catch(function () { giveUp(); });
 })();
 </script>
 </body>

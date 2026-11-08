@@ -51,6 +51,44 @@ pub async fn probe_hub(hub_url: &str, timeout: Duration) -> bool {
         .await
         .is_ok_and(|r| r.status() == reqwest::StatusCode::OK)
 }
+/// The address to open in a browser for `hub_url`. Its token is traded
+/// through the forwarded port for a one-time launch code, because a browser's
+/// command line can be read by other users of this machine (U04). The other
+/// parameters stay. If no code can be had, the token is left out.
+pub async fn browser_url(hub_url: &str) -> String {
+    let Ok(mut url) = url::Url::parse(hub_url) else {
+        return hub_url.into();
+    };
+    let pairs: Vec<(String, String)> = url
+        .query_pairs()
+        .map(|(key, value)| (key.into_owned(), value.into_owned()))
+        .collect();
+    let Some(token) = pairs
+        .iter()
+        .find(|(key, _)| key == "token")
+        .map(|(_, value)| value.clone())
+    else {
+        return hub_url.into();
+    };
+    let code = match url.port() {
+        Some(port) => crate::application::hub_runtime::request_launch_code(port, &token).await,
+        None => None,
+    };
+    {
+        let mut query = url.query_pairs_mut();
+        query.clear();
+        if let Some(code) = &code {
+            query.append_pair("launch", code);
+        }
+        for (key, value) in pairs.iter().filter(|(key, _)| key != "token") {
+            query.append_pair(key, value);
+        }
+    }
+    if url.query() == Some("") {
+        url.set_query(None);
+    }
+    url.into()
+}
 pub async fn post_hub_endpoint(
     hub_url: &str,
     path: &str,
@@ -133,4 +171,52 @@ pub async fn pick_port(base: u16) -> u16 {
         }
     }
     base
+}
+
+#[cfg(test)]
+mod launch_tests {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test]
+    async fn audit_u04_the_launcher_opens_a_launch_code_instead_of_the_token() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 4096];
+            let read = socket.read(&mut request).await.unwrap();
+            let request = String::from_utf8_lossy(&request[..read]).into_owned();
+            let body = r#"{"code":"abcd1234","expires_in":60}"#;
+            socket
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+            request
+        });
+        let opened = super::browser_url(&format!(
+            "http://127.0.0.1:{port}/?token=synthetic-remote&via=ssh&host_label=box&env_kind=remote-tunnel"
+        ))
+        .await;
+        assert_eq!(
+            opened,
+            format!(
+                "http://127.0.0.1:{port}/?launch=abcd1234&via=ssh&host_label=box&env_kind=remote-tunnel"
+            )
+        );
+        let request = server.await.unwrap();
+        assert!(request.starts_with("POST /api/auth/launch-code "));
+        assert!(request.contains("authorization: Bearer synthetic-remote"));
+        // Nobody listens any more: the token is left out, not opened.
+        let opened = super::browser_url(&format!(
+            "http://127.0.0.1:{port}/?token=synthetic-remote&via=ssh"
+        ))
+        .await;
+        assert_eq!(opened, format!("http://127.0.0.1:{port}/?via=ssh"));
+    }
 }

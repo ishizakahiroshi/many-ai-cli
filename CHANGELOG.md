@@ -108,6 +108,13 @@ Release artifacts are published at
 
 ### Security
 
+- **The browser is opened with a one-time code, not the token.** When the
+  Hub, the CLI, the tray or the launcher opens the dashboard, the browser's
+  command line (which other users of a Linux or macOS machine can read)
+  carries a code that works once, for one minute, and only for a connection
+  opened by the Hub's own OS user. The dashboard trades it for the token on
+  the sign-in page and removes it from the address bar. The launcher's own
+  settings screen still opens with its own token.
 - **Release keys wait for the owner's approval.** The npm and Homebrew/winget
   publishing jobs use the `release` environment, so the keys they need are
   handed over only after the owner approves the run (one approval covers

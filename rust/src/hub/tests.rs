@@ -1070,7 +1070,9 @@ fn service_reauth_page_cookie_and_public_assets_policy() {
     assert!(html.contains("many-ai-cli-token"));
     assert!(!html.contains("__NONCE__"));
     // 戻り先が //evil や /\evil のとき、別サイトへ飛ばさず / に戻すガード（実行はできないので文面で固定する）。
-    assert!(html.contains("here.charAt(1) === '/'") && html.contains("here.charAt(1) === '\\\\'"));
+    assert!(html.contains("path.charAt(1) === '/'") && html.contains("path.charAt(1) === '\\\\'"));
+    // The launch code is traded once and taken out of the address bar first.
+    assert!(html.contains("'/api/auth/launch'") && html.contains("params.delete('launch')"));
     assert!(response.headers["Content-Security-Policy"].contains("nonce-"));
     r.path = "/app.js".into();
     r.host = "evil.invalid".into();
@@ -1291,6 +1293,86 @@ fn audit_u08_a_pin_lock_that_starts_is_reported_once() {
     right.body = br#"{"pin":"123456"}"#.to_vec();
     assert_eq!(fresh.login_at(&right, &cfg, at).status, 200);
     assert!(fresh.take_lockout_alerts().is_empty());
+}
+
+#[test]
+fn audit_u04_a_launch_code_opens_the_dashboard_once_for_this_user_only() {
+    let (_dir, router) = router();
+    let mut cfg = config();
+    cfg.token = "synthetic-launch-token".into();
+    let launch = |code: &str, remote: &str, own: bool, now: i64| {
+        let mut r = request();
+        r.path = "/api/auth/launch".into();
+        r.remote_addr = remote.into();
+        r.body = format!(r#"{{"code":"{code}"}}"#).into_bytes();
+        router.auth.launch_for_test(&r, &cfg, now, own)
+    };
+    let code = router.auth.mint_launch_code(1000).unwrap();
+    assert_eq!(code.len(), 32);
+    // Another OS user's connection spends the code and gets nothing.
+    assert_eq!(launch(&code, "127.0.0.1:50000", false, 1000).status, 401);
+    assert_eq!(launch(&code, "127.0.0.1:50000", true, 1000).status, 401);
+    // This user's connection gets the token, once.
+    let code = router.auth.mint_launch_code(1000).unwrap();
+    let response = launch(&code, "127.0.0.1:50001", true, 1010);
+    assert_eq!(response.status, 200);
+    assert_eq!(json_response(&response)["token"], "synthetic-launch-token");
+    assert!(response.cookies.is_empty());
+    assert_eq!(launch(&code, "127.0.0.1:50001", true, 1010).status, 401);
+    // A minute later the code is gone.
+    let code = router.auth.mint_launch_code(1000).unwrap();
+    assert_eq!(launch(&code, "127.0.0.1:50002", true, 1060).status, 401);
+    // From another machine, or addressed by another name, it is refused.
+    let code = router.auth.mint_launch_code(1000).unwrap();
+    assert_eq!(launch(&code, "203.0.113.5:50003", true, 1000).status, 401);
+    let code = router.auth.mint_launch_code(1000).unwrap();
+    assert_eq!(launch("wrong", "127.0.0.1:50004", true, 1000).status, 401);
+    assert_eq!(launch(&code, "127.0.0.1:50004", true, 1000).status, 200);
+
+    // Codes are issued only to a local client that holds the token.
+    let mut r = request();
+    r.path = "/api/auth/launch-code".into();
+    let response = router.handle(&r, 1000).response;
+    assert_eq!(response.status, 200);
+    assert_eq!(json_response(&response)["expires_in"], 60);
+    r.remote_addr = "203.0.113.5:4000".into();
+    assert_ne!(router.handle(&r, 1000).response.status, 200);
+    let mut r = request();
+    r.path = "/api/auth/launch-code".into();
+    r.query.clear();
+    assert_eq!(router.handle(&r, 1000).response.status, 401);
+}
+
+#[test]
+fn audit_u04_the_dashboard_trades_a_launch_code_on_the_sign_in_page() {
+    let (_dir, router) = router();
+    let mut r = request();
+    r.path = "/".into();
+    r.method = "GET".into();
+    r.headers.push(("Accept".into(), "text/html".into()));
+    // Even a signed-in browser trades the code, so the token it keeps is
+    // the one the code stands for.
+    r.query = "token=synthetic&launch=0123".into();
+    let response = router.handle(&r, 1000).response;
+    assert_eq!(response.status, 401);
+    assert!(
+        String::from_utf8(response.body)
+            .unwrap()
+            .contains("/api/auth/launch")
+    );
+    // The launch route itself needs no token, but still the Host and Origin.
+    let mut r = request();
+    r.path = "/api/auth/launch".into();
+    r.query.clear();
+    r.body = br#"{"code":"0123"}"#.to_vec();
+    assert_eq!(router.handle(&r, 1000).response.status, 401);
+    r.host = "evil.invalid".into();
+    assert_eq!(router.handle(&r, 1000).response.status, 403);
+    let mut r = request();
+    r.path = "/api/auth/launch".into();
+    r.headers
+        .push(("Origin".into(), "http://evil.invalid".into()));
+    assert_eq!(router.handle(&r, 1000).response.status, 403);
 }
 
 #[test]

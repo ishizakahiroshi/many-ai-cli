@@ -259,6 +259,51 @@ pub async fn probe_hub_info(port: u16, token: &str) -> bool {
         .is_ok_and(|response| response.status() == reqwest::StatusCode::OK)
 }
 
+/// Asks the Hub this OS user runs on `port` for a one-time code to open the
+/// dashboard with, so the browser's command line carries the code and not the
+/// token (U04). `None` when the Hub is not this user's or predates codes.
+pub async fn request_launch_code(port: u16, token: &str) -> Option<String> {
+    if port == 0 || !crate::process::listener::loopback_listener_is_own(port).unwrap_or(false) {
+        return None;
+    }
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .build()
+        .ok()?;
+    let mut response = client
+        .post(format!("http://127.0.0.1:{port}/api/auth/launch-code"))
+        .bearer_auth(token)
+        .header("Origin", format!("http://127.0.0.1:{port}"))
+        .send()
+        .await
+        .ok()?;
+    if response.status() != reqwest::StatusCode::OK {
+        return None;
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await.ok()? {
+        if body.len() + chunk.len() > 4096 {
+            return None;
+        }
+        body.extend_from_slice(&chunk);
+    }
+    let value: serde_json::Value = serde_json::from_slice(&body).ok()?;
+    let code = value["code"].as_str()?;
+    (!code.is_empty() && code.bytes().all(|b| b.is_ascii_hexdigit())).then(|| code.to_owned())
+}
+/// The dashboard URL to open: with a launch code when there is one, and with
+/// nothing secret otherwise (the dashboard then uses the token it keeps).
+pub fn dashboard_url(port: u16, code: Option<&str>) -> String {
+    let mut url = format!("http://127.0.0.1:{port}/");
+    if let Some(code) = code {
+        url.push_str("?launch=");
+        url.push_str(code);
+    }
+    url
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

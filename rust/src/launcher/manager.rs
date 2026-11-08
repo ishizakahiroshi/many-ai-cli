@@ -399,7 +399,7 @@ pub async fn connect_cli(
                 record.hub_url
             ),
         );
-        cli_browser(config, browser, &record.hub_url);
+        cli_browser(config, browser, &record.hub_url).await;
         return Ok(());
     }
     let lock_store = store.clone();
@@ -430,7 +430,7 @@ pub async fn connect_cli(
                     record.hub_url
                 ),
             );
-            cli_browser(config, browser, &record.hub_url);
+            cli_browser(config, browser, &record.hub_url).await;
         } else if !cancel.is_cancelled() {
             cli_output(
                 config,
@@ -453,7 +453,7 @@ pub async fn connect_cli(
     let ready = tokio::select! {result=connection.ready()=>result,_=cancel.cancelled()=>{connection.cancel();let _=connection.wait().await;return Ok(());}};
     match ready {
         Ok(url) => {
-            cli_browser(config, browser, &url);
+            cli_browser(config, browser, &url).await;
             let record_store = store.clone();
             let name = profile.name.clone();
             let _ = tokio::task::spawn_blocking(move || record_store.register_active(&name, &url))
@@ -484,11 +484,13 @@ fn cli_output(config: &ConnectorConfig, stream: crate::process::OutputStream, va
         sink(stream, value.as_bytes());
     }
 }
-fn cli_browser(
+async fn cli_browser(
     config: &ConnectorConfig,
     browser: &(dyn Fn(&str) -> std::io::Result<()> + Send + Sync),
     url: &str,
 ) {
+    // The browser's command line gets a launch code, not the token (U04).
+    let url = &super::network::browser_url(url).await;
     if let Err(error) = browser(url) {
         cli_output(
             config,

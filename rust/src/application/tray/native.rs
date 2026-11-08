@@ -68,14 +68,17 @@ impl TrayHooks for NativeTrayHooks {
                     ),
                 ));
             }
-            port.map(|port| {
-                let mut url = url::Url::parse(&format!("http://127.0.0.1:{port}/"))
-                    .map_err(io::Error::other)?;
-                url.query_pairs_mut()
-                    .append_pair("token", &snapshot.config.token);
-                Ok(url.into())
-            })
-            .transpose()
+            // The browser gets a one-time launch code, not the token (U04).
+            let Some(port) = port else {
+                return Ok(None);
+            };
+            let code =
+                crate::application::hub_runtime::request_launch_code(port, &snapshot.config.token)
+                    .await;
+            Ok(Some(crate::application::hub_runtime::dashboard_url(
+                port,
+                code.as_deref(),
+            )))
         })
     }
     fn start_hub(&self) -> CoreFuture<'_, io::Result<()>> {

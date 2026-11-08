@@ -99,7 +99,9 @@ pub fn index_with_source(
     if let Err(e) = require_host(request, config, port) {
         return e;
     }
-    if !authed {
+    // A launch code is always traded on the sign-in page, so the token it
+    // stands for is the one the dashboard keeps (U04).
+    if !authed || !request.query("launch").is_empty() {
         return reauth();
     }
     let bytes = source.map_or_else(

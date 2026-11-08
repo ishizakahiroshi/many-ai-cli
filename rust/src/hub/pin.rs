@@ -253,9 +253,14 @@ struct State {
     remote_uis: BTreeMap<crate::proto::core::UiConnectionId, ui::RemoteUi>,
     limiter: Limiter,
     alerts: Vec<LockoutAlert>,
+    /// One-time launch codes and when each expires (U04).
+    launch_codes: BTreeMap<String, i64>,
     ui_secret: String,
     sequence: u64,
 }
+/// How long a launch code in a browser's command line stays usable.
+const LAUNCH_CODE_TTL: i64 = 60;
+const MAX_LAUNCH_CODES: usize = 16;
 #[derive(Default)]
 pub struct AuthService {
     state: Mutex<State>,
@@ -270,6 +275,21 @@ struct PinRequest {
 #[serde(default)]
 struct LoginRequest {
     pin: String,
+}
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct LaunchRequest {
+    code: String,
+}
+impl GoWire for LaunchRequest {
+    const GO_TYPE: &'static str = "LaunchRequest";
+    const SCHEMAS: &'static [Schema] = &[Schema {
+        name: "LaunchRequest",
+        fields: &[Field {
+            name: "code",
+            kind: "string",
+        }],
+    }];
 }
 impl GoWire for LoginRequest {
     const GO_TYPE: &'static str = "LoginRequest";
@@ -517,6 +537,89 @@ impl AuthService {
             }
         }
         result.no_store()
+    }
+    /// A code for opening the dashboard. It goes into the browser's command
+    /// line instead of the token, which other users can read there on Linux
+    /// and macOS; it works once, for a minute, and only for a connection this
+    /// OS user opens (U04).
+    pub fn mint_launch_code(&self, now: i64) -> Option<String> {
+        let code = random_hex(16).ok()?;
+        let mut s = self.state.lock().ok()?;
+        s.launch_codes.retain(|_, expiry| *expiry > now);
+        while s.launch_codes.len() >= MAX_LAUNCH_CODES {
+            let oldest = s
+                .launch_codes
+                .iter()
+                .min_by_key(|(_, expiry)| **expiry)
+                .map(|(code, _)| code.clone())?;
+            s.launch_codes.remove(&oldest);
+        }
+        s.launch_codes.insert(code.clone(), now + LAUNCH_CODE_TTL);
+        Some(code)
+    }
+    /// `POST /api/auth/launch-code`: a client that holds the token and runs on
+    /// this machine (the CLI, the tray, the launcher through its tunnel) asks
+    /// for a code to open the dashboard with.
+    pub fn launch_code(&self, request: &Request, now: i64) -> Response {
+        if logically_remote(request) {
+            return Response::error(403, "forbidden", "launch codes are issued only locally")
+                .no_store();
+        }
+        match self.mint_launch_code(now) {
+            Some(code) => {
+                Response::json(200, &json!({"code": code, "expires_in": LAUNCH_CODE_TTL}))
+                    .no_store()
+            }
+            None => Response::error(500, "internal", "launch code unavailable").no_store(),
+        }
+    }
+    /// `POST /api/auth/launch`: the dashboard trades a launch code for the
+    /// token. The code is spent on the first try, right or wrong. The
+    /// connection must come from this machine, addressed as itself, and be
+    /// opened by the Hub's own OS user, so another user who read the code in
+    /// a process list cannot use it.
+    pub fn launch(&self, request: &Request, config: &Config, port: u16, now: i64) -> Response {
+        self.launch_with(request, config, now, |peer| {
+            crate::process::listener::loopback_peer_is_own(peer, port).unwrap_or(false)
+        })
+    }
+    /// `launch` with the OS's answer about the connection given.
+    #[cfg(test)]
+    pub fn launch_for_test(
+        &self,
+        request: &Request,
+        config: &Config,
+        now: i64,
+        own_peer: bool,
+    ) -> Response {
+        self.launch_with(request, config, now, |_| own_peer)
+    }
+    fn launch_with(
+        &self,
+        request: &Request,
+        config: &Config,
+        now: i64,
+        own_peer: impl FnOnce(u16) -> bool,
+    ) -> Response {
+        let refused = || Response::error(401, "launch_refused", "launch code refused").no_store();
+        let body = match decode_json::<LaunchRequest>(request) {
+            Ok(body) => body,
+            Err(error) => return error.no_store(),
+        };
+        let valid = self.state.lock().is_ok_and(|mut s| {
+            s.launch_codes.retain(|_, expiry| *expiry > now);
+            s.launch_codes.remove(body.code.trim()).is_some()
+        });
+        if !valid || logically_remote(request) || config.token.is_empty() {
+            return refused();
+        }
+        let Ok(peer) = request.remote_addr.trim().parse::<std::net::SocketAddr>() else {
+            return refused();
+        };
+        if !is_loopback(&request.remote_addr) || !own_peer(peer.port()) {
+            return refused();
+        }
+        Response::json(200, &json!({"token": config.token})).no_store()
     }
     /// PIN locks started since the last call, for the security notification.
     pub fn take_lockout_alerts(&self) -> Vec<LockoutAlert> {

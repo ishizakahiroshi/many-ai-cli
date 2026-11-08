@@ -1551,15 +1551,18 @@ impl HubComposition {
             self.logger
                 .write("WARN", "runtime ledger could not be written", "");
         }
-        if self.open
-            && self.paths.automatic_external_actions_allowed()
-            && let Ok(snapshot) = self.dependencies.config.snapshot()
-            && let Ok(mut url) =
-                url::Url::parse(&format!("http://127.0.0.1:{}/", services.bound_port()))
-        {
-            url.query_pairs_mut()
-                .append_pair("token", &snapshot.config.token);
-            if crate::launcher::open_browser(url.as_str()).is_err() {
+        if self.open && self.paths.automatic_external_actions_allowed() {
+            // The browser's command line gets a one-time launch code, not the
+            // token (U04).
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |elapsed| elapsed.as_secs() as i64);
+            let code = services.auth.mint_launch_code(now);
+            let url = crate::application::hub_runtime::dashboard_url(
+                services.bound_port(),
+                code.as_deref(),
+            );
+            if crate::launcher::open_browser(&url).is_err() {
                 self.logger.write("WARN", "browser could not be opened", "");
             }
         }

@@ -137,10 +137,12 @@ async fn run() -> Result<(), String> {
                     .map_err(|error| error.to_string())?
                     .config
                     .token;
+                let code =
+                    many_ai_cli::application::hub_runtime::request_launch_code(port, &token).await;
                 main_program::open_existing_hub(
                     &context.paths,
                     port,
-                    &token,
+                    code.as_deref(),
                     launcher::open_browser,
                 )
                 .map_err(|error| error.to_string())?;
