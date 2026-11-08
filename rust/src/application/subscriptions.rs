@@ -152,7 +152,7 @@ impl SubscriptionService {
    if !profile.plan.is_empty(){row["plan"]=profile.plan.clone().into();}
     let issue=if let Err(error)=config::validate_subscription_provider(&provider){Some(error.to_string())}else if let Err(error)=config::validate_subscription_id(&id){row["id"]=profile.id.clone().into();Some(error.to_string())}else if !seen.insert(id.clone()){Some(format!("duplicate profile id {}",crate::proto::go_quote::quote(&id)))}else{match config::resolve_subscription_profile_dir(&self.paths,&provider,profile,Some(&self.home)){Ok(path)=>{row["profile_dir"]=path.to_string_lossy().into_owned().into();row["exists"]=path.is_dir().into();None},Err(error)=>Some(error.to_string())}};
     if let Some(issue)=issue{row["issue"]=issue.into();}entries.push(row);
-   }section["profiles"]=entries.into();section}).collect()
+   }self.usage.mark_same_account(&provider,&mut entries);section["profiles"]=entries.into();section}).collect()
     }
     pub fn add(&self, provider: &str, raw_id: &str, name: &str) -> Result<Value, ServiceError> {
         let provider = provider.trim();
@@ -373,6 +373,7 @@ impl SubscriptionService {
             }
         };
         self.persist_current()?;
+        self.usage.set_account(provider, &id, None);
         let deleted = if delete_credentials && removed.profile_dir.trim().is_empty() {
             match config::resolve_subscription_profile_dir(
                 &self.paths,
@@ -444,6 +445,8 @@ impl SubscriptionService {
             },
             Timestamp::now(),
         );
+        self.usage
+            .set_account(provider, &resolved.id, status.account);
         if status.logged_in && !status.plan.trim().is_empty() {
             loop {
                 let Ok(mut snapshot) = self.config.snapshot() else {
@@ -542,6 +545,9 @@ impl SubscriptionService {
         {
             SpawnWaitOutcome::Registered(binding) => {
                 self.usage.invalidate_auth(provider, &resolved.id);
+                // A new login can land on another account; forget the old one so a
+                // stale "same account" warning does not outlive it.
+                self.usage.set_account(provider, &resolved.id, None);
                 Ok(json!({"ok":true,"session_id":binding.session.0}))
             }
             _ => Err(ServiceError::new(

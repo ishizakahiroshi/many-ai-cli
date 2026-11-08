@@ -65,6 +65,8 @@ interface UsageProfile {
   observed_at?: string;
   auth_status?: 'ready' | 'login_required' | 'status_unknown' | string;
   auth_checking?: boolean;
+  /** 同じアカウントでログインしている他の契約の表示名（アカウントの値は来ない）。 */
+  same_account_as?: string[];
   probe_available?: boolean;
   probe_state?: string;
   claude?: ClaudeUsage;
@@ -252,6 +254,17 @@ function settingsAction(provider: string, id: string): string {
   return actionButton('usage-auth-action', tx('usage_auth_settings', 'Open subscription settings'), `data-open-subscription-settings="${escapeHtml(provider)}" data-subscription-id="${escapeHtml(id)}"`);
 }
 
+function sameAccountNames(profile: UsageProfile): string {
+  return Array.isArray(profile.same_account_as) ? profile.same_account_as.join(', ') : '';
+}
+
+/** 別の契約として並べたのに実際は同じアカウント、という取り違えの警告。 */
+function sameAccountNotice(profile: UsageProfile): string {
+  const names = sameAccountNames(profile);
+  if (!names) return '';
+  return `<div class="usage-auth usage-auth--same" role="alert"><strong>${escapeHtml(tx('usage_same_account', 'Same account as another profile'))}</strong><span>${escapeHtml(tx('usage_same_account_detail', 'Signed in as the same account as {names}. Usage limits are shared.', { names }))}</span></div>`;
+}
+
 function authNotice(provider: string, profile: UsageProfile): string {
   const state = profile.auth_status;
   if (profile.auth_checking) {
@@ -316,7 +329,7 @@ function claudeBody(provider: string, profile: UsageProfile): string {
   const busy = running.has(key) || profile.probe_state === 'running';
   const failure = failures.has(key) && !usage;
   const freshness = profileFreshness(provider, profile);
-  let body = authNotice(provider, profile);
+  let body = authNotice(provider, profile) + sameAccountNotice(profile);
   if (hasUsage && usage) {
     body += metersGroup([
       meter(tx('usage_window_5h', '5h'), usage.five_hour),
@@ -464,12 +477,19 @@ function renderInlineUsage(): void {
   const staleBadge = stale
     ? `<span class="inline-usage-stale-badge" role="status" aria-label="${escapeHtml(staleText)}" title="${escapeHtml(staleText)}">${escapeHtml(tx('usage_stale_badge', 'Old'))}</span>`
     : '';
+  const sameNames = profile ? sameAccountNames(profile) : '';
+  const sameText = sameNames
+    ? tx('usage_same_account_detail', 'Signed in as the same account as {names}. Usage limits are shared.', { names: sameNames })
+    : '';
+  const sameBadge = sameNames
+    ? `<span class="inline-usage-same-account" role="status" aria-label="${escapeHtml(sameText)}" title="${escapeHtml(sameText)}">⚠</span>`
+    : '';
   const errorText = tx('usage_probe_failed', 'Could not retrieve usage');
   const errorBadge = inlineRefreshError && windows.length > 0
     ? `<span class="inline-usage-refresh-error" role="status" aria-label="${escapeHtml(errorText)}" title="${escapeHtml(errorText)}">!</span>`
     : '';
   const refreshLabel = tx('usage_inline_refresh', 'Refresh usage');
-  inlineRoot.innerHTML = `${identity}${center}${side}${staleBadge}${errorBadge}<button class="ui-button ui-button--quiet ui-button--compact inline-usage-refresh" type="button" aria-label="${escapeHtml(refreshLabel)}" title="${escapeHtml(refreshLabel)}"${!target || !hasProviderCapability(provider, 'usage') || busy ? ' disabled' : ''}>${busy ? '…' : '↻'}</button>`;
+  inlineRoot.innerHTML = `${identity}${center}${side}${staleBadge}${sameBadge}${errorBadge}<button class="ui-button ui-button--quiet ui-button--compact inline-usage-refresh" type="button" aria-label="${escapeHtml(refreshLabel)}" title="${escapeHtml(refreshLabel)}"${!target || !hasProviderCapability(provider, 'usage') || busy ? ' disabled' : ''}>${busy ? '…' : '↻'}</button>`;
   inlineRoot.querySelector<HTMLButtonElement>('.inline-usage-refresh')?.addEventListener('click', () => { void refreshInlineUsage(); });
 }
 

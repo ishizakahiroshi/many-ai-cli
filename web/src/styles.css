@@ -2025,6 +2025,8 @@ color: var(--warn);
 .inline-usage-refresh:focus-visible { outline: 2px solid var(--accent); }
 .inline-usage-refresh:disabled { opacity: 0.5; cursor: wait; }
 .inline-usage-refresh-error { flex: 0 0 auto; margin-left: 4px; color: var(--danger); font-weight: 700; cursor: help; }
+/* 別の契約と同じアカウントで入っている印。狭い幅でも残るよう side の外に置く。 */
+.inline-usage-same-account { flex: 0 0 auto; margin-left: 4px; color: var(--warn); font-weight: 700; cursor: help; }
 /* 旧値の印。side（880px 以下で非表示）の外に置くので狭い幅でも残る。更新失敗の "!" とは色と形を分ける。 */
 .inline-usage-stale-badge {
   flex: 0 0 auto;

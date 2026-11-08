@@ -37,6 +37,32 @@ fn pinned_go_status_corpus_preserves_secret_free_shapes_and_typed_json_failures(
     }
 }
 #[test]
+fn claude_account_fingerprint_tells_same_account_apart_without_exposing_it() {
+    let output = |email: &str, org: &str| {
+        format!(
+            r#"{{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"max","email":"{email}","orgId":"{org}"}}"#
+        )
+    };
+    let a = parse_status("claude", &output("Synthetic@Example.com", "org-1"), 0).unwrap();
+    let b = parse_status("claude", &output("synthetic@example.com", "org-1"), 0).unwrap();
+    let c = parse_status("claude", &output("synthetic@example.com", "org-2"), 0).unwrap();
+    assert!(a.account.is_some());
+    assert_eq!(a.account, b.account, "case differences are one account");
+    assert_ne!(
+        a.account, c.account,
+        "another organization is another account"
+    );
+    let encoded = serde_json::to_string(&a).unwrap();
+    assert!(!encoded.contains("synthetic") && !encoded.contains("account"));
+}
+#[test]
+fn claude_status_without_identity_fields_has_no_fingerprint() {
+    let status =
+        parse_status("claude", r#"{"loggedIn":true,"authMethod":"claude.ai"}"#, 0).unwrap();
+    assert!(status.logged_in);
+    assert!(status.account.is_none());
+}
+#[test]
 fn vendor_status_command_has_fixed_read_args_and_profile_environment() {
     let root = tempfile::tempdir().unwrap();
     let installed = tempfile::tempdir().unwrap();

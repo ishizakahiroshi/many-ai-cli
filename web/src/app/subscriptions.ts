@@ -19,6 +19,8 @@ export interface SubscriptionProfileEntry {
   profile_dir?: string;
   exists: boolean;
   issue?: string;
+  /** 同じアカウントでログインしている他の契約の表示名。アカウントの値そのものは来ない。 */
+  same_account_as?: string[];
 }
 
 export interface SubscriptionProviderEntry {
@@ -128,11 +130,18 @@ function setError(message: string): void {
   el.hidden = !message;
 }
 
+function sameAccountNames(p: SubscriptionProfileEntry): string {
+  return Array.isArray(p.same_account_as) ? p.same_account_as.join(', ') : '';
+}
+
 function statusText(p: SubscriptionProfileEntry): string {
   if (p.issue) return p.issue;
   if (!p.enabled) return t('subs_status_disabled');
   if (!p.exists) return t('subs_status_needs_login');
-  return p.plan ? t('subs_status_ready_plan', { plan: p.plan }) : t('subs_status_ready');
+  const base = p.plan ? t('subs_status_ready_plan', { plan: p.plan }) : t('subs_status_ready');
+  const names = sameAccountNames(p);
+  // 別の契約として並べたのに実際は同じアカウント、という取り違えを見えるようにする。
+  return names ? `${base} ${t('subs_status_same_account', { names })}` : base;
 }
 
 function renderList(): void {
@@ -159,7 +168,7 @@ function renderList(): void {
         `<span class="subs-id" data-tooltip="${escapeHtml(t('subs_id_tooltip'))}">` +
         `<span class="subs-id-label">${escapeHtml(t('subs_id_label'))}</span>` +
         `<span class="subs-id-value">${escapeHtml(p.id)}</span></span>` +
-        `<span class="subs-status">${escapeHtml(statusText(p))}</span>` +
+        `<span class="subs-status${sameAccountNames(p) ? ' subs-status--warn' : ''}">${escapeHtml(statusText(p))}</span>` +
         `<div class="subs-actions">` +
         `<button type="button" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn subs-login">${escapeHtml(t('subs_login'))}</button>` +
         `<button type="button" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn subs-test">${escapeHtml(t('subs_test'))}</button>` +

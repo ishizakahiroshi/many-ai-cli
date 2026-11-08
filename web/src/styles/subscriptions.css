@@ -38,6 +38,7 @@
 .subs-row:first-of-type { border-top: none; }
 .subs-row--off { opacity: 0.55; }
 .subs-row--issue .subs-status { color: var(--warn-text); }
+.subs-status--warn { color: var(--warn-text); }
 
 .subs-row .subs-name { flex: 1 1 160px; width: auto; min-width: 0; }
 .subs-id {

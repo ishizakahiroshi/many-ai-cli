@@ -9,6 +9,7 @@ use serde::Serialize;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
+    hash::{Hash, Hasher},
     io,
     path::{Path, PathBuf},
     time::Duration,
@@ -20,6 +21,11 @@ pub struct Status {
     pub plan: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub method: String,
+    /// Process-local fingerprint of the signed-in account (Claude only). It exists
+    /// only so two profiles that landed on the same account can be told apart from
+    /// two different ones. It is never serialized, persisted, logged or shown.
+    #[serde(skip)]
+    pub account: Option<u64>,
 }
 pub const PROVIDERS: &[&str] = &["claude", "codex", "grok", "opencode"];
 pub fn env_key(provider: &str) -> Option<&'static str> {
@@ -218,6 +224,28 @@ pub(super) fn vendor_command(
         (path, args)
     }
 }
+/// Hash of the account identity in `claude auth status` (email + organization id),
+/// used only to detect two profiles that share one account. Returns `None` when
+/// the output carries neither field. The hash is kept in memory and never leaves
+/// the process, so the identity itself is not exposed anywhere.
+fn account_fingerprint(out: &str) -> Option<u64> {
+    let value: serde_json::Value = serde_json::from_str(out.trim()).ok()?;
+    let field = |name: &str| {
+        value
+            .get(name)
+            .and_then(serde_json::Value::as_str)
+            .map(|v| v.trim().to_lowercase())
+            .unwrap_or_default()
+    };
+    let (email, org) = (field("email"), field("orgId"));
+    if email.is_empty() && org.is_empty() {
+        return None;
+    }
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    email.hash(&mut hasher);
+    org.hash(&mut hasher);
+    Some(hasher.finish())
+}
 pub fn parse_status(provider: &str, out: &str, code: i32) -> io::Result<Status> {
     let lower = crate::proto::unicode::simple_lower(out);
     match provider {
@@ -260,6 +288,7 @@ pub fn parse_status(provider: &str, out: &str, code: i32) -> io::Result<Status> 
                     logged_in: true,
                     plan: parsed.plan,
                     method: parsed.method,
+                    account: account_fingerprint(out),
                 })
             } else {
                 Ok(Status::default())

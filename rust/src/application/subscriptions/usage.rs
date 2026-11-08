@@ -27,6 +27,8 @@ pub struct UsageStore {
 struct State {
     entries: BTreeMap<(String, String), Entry>,
     auth: BTreeMap<(String, String), Auth>,
+    /// In-memory account fingerprints (see `cli::Status::account`). Never persisted.
+    account: BTreeMap<(String, String), u64>,
     checking: BTreeSet<(String, String)>,
     refreshing: BTreeSet<String>,
 }
@@ -45,6 +47,37 @@ struct Auth {
     state: &'static str,
     checked: Timestamp,
 }
+fn mark_same_account(
+    account: &BTreeMap<(String, String), u64>,
+    provider: &str,
+    rows: &mut [Value],
+) {
+    let keyed: Vec<(Option<u64>, String)> = rows
+        .iter()
+        .map(|row| {
+            let id = row["id"].as_str().unwrap_or_default();
+            let name = row["name"].as_str().filter(|n| !n.trim().is_empty());
+            (
+                account.get(&(provider.to_owned(), id.to_owned())).copied(),
+                name.unwrap_or(id).to_owned(),
+            )
+        })
+        .collect();
+    for (index, row) in rows.iter_mut().enumerate() {
+        let Some(mine) = keyed[index].0 else {
+            continue;
+        };
+        let others: Vec<&str> = keyed
+            .iter()
+            .enumerate()
+            .filter(|(other, (theirs, _))| *other != index && *theirs == Some(mine))
+            .map(|(_, (_, name))| name.as_str())
+            .collect();
+        if !others.is_empty() {
+            row["same_account_as"] = json!(others);
+        }
+    }
+}
 struct Observation {
     at: Option<Timestamp>,
     display: String,
@@ -61,6 +94,25 @@ impl UsageStore {
                 (provider.into(), config::normalize_subscription_id(id)),
                 Auth { state, checked: at },
             );
+    }
+    /// Remember (or, with `None`, forget) which account a profile is signed in as.
+    pub fn set_account(&self, provider: &str, id: &str, account: Option<u64>) {
+        let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        let key = (provider.into(), config::normalize_subscription_id(id));
+        match account {
+            Some(account) => {
+                state.account.insert(key, account);
+            }
+            None => {
+                state.account.remove(&key);
+            }
+        }
+    }
+    /// Add `same_account_as` (names of the other profiles on the same account) to
+    /// each profile row of one provider. Rows need `id` and may carry `name`.
+    pub fn mark_same_account(&self, provider: &str, rows: &mut [Value]) {
+        let state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        mark_same_account(&state.account, provider, rows);
     }
     pub fn invalidate_auth(&self, provider: &str, id: &str) {
         self.state
@@ -323,6 +375,7 @@ impl SubscriptionService {
                     }
                     profiles.push(row);
                 }
+                mark_same_account(&state.account, provider, &mut profiles);
                 if !profiles.is_empty() {
                     sections.push(json!({"provider":provider,"profiles":profiles}));
                 }
@@ -411,6 +464,7 @@ impl SubscriptionService {
                         && let Ok(path) = config::resolve_subscription_profile_dir(&service.paths, &key.0, &profile, Some(&service.home))
                         && let Ok(status) = service.cli.status(&key.0, &path, Duration::from_secs(2), &cancel).await {
                         state = if status.logged_in { "ready" } else { "login_required" };
+                        service.usage.set_account(&key.0, &key.1, status.account);
                     }
                     service.usage.set_auth(&key.0, &key.1, state, Timestamp::now());
                 }
@@ -586,5 +640,37 @@ impl crate::application::session_usage::UsageSubscription for SubscriptionServic
         record_at: Timestamp,
     ) -> CoreFuture<'a, Result<(), SessionError>> {
         SubscriptionService::record_session_usage(self, binding, stat, record_at)
+    }
+}
+
+#[cfg(test)]
+mod account_tests {
+    use super::*;
+    #[test]
+    fn profiles_on_one_account_name_each_other_and_others_stay_clean() {
+        let store = UsageStore::default();
+        store.set_account("claude", "a", Some(7));
+        store.set_account("claude", "b", Some(7));
+        store.set_account("claude", "c", Some(9));
+        let mut rows = vec![
+            json!({"id":"a","name":"Pro x1"}),
+            json!({"id":"b"}),
+            json!({"id":"c","name":"Other"}),
+            json!({"id":"d"}),
+        ];
+        store.mark_same_account("claude", &mut rows);
+        assert_eq!(rows[0]["same_account_as"], json!(["b"]));
+        assert_eq!(rows[1]["same_account_as"], json!(["Pro x1"]));
+        assert!(rows[2].get("same_account_as").is_none());
+        assert!(rows[3].get("same_account_as").is_none());
+        // Another provider's identical ids are never compared.
+        let mut other = vec![json!({"id":"a"}), json!({"id":"b"})];
+        store.mark_same_account("codex", &mut other);
+        assert!(other.iter().all(|row| row.get("same_account_as").is_none()));
+        // Forgetting one side (new login, removal) clears the warning on both.
+        store.set_account("claude", "b", None);
+        let mut rows = vec![json!({"id":"a"}), json!({"id":"b"})];
+        store.mark_same_account("claude", &mut rows);
+        assert!(rows.iter().all(|row| row.get("same_account_as").is_none()));
     }
 }

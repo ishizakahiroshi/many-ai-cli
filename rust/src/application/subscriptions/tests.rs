@@ -60,6 +60,7 @@ impl cli::SubscriptionCli for Cli {
                 logged_in: true,
                 plan: "plus".into(),
                 method: "chatgpt".into(),
+                ..Default::default()
             })
         })
     }
