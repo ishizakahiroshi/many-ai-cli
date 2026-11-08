@@ -442,6 +442,131 @@ fn fixed_go_record_decoder_corpus_preserves_historical_values() {
     }
 }
 
+fn ended(id: &str, routine: &str) -> Run {
+    Run {
+        id: id.into(),
+        routine_id: routine.into(),
+        status: "finished".into(),
+        ..Default::default()
+    }
+}
+#[test]
+fn audit_u59_history_keeps_active_runs_and_the_newest_ended_runs_per_routine() {
+    let (root, store, _) = setup();
+    let original = saved(root.path(), &store);
+    {
+        let mut state = store.state.lock().unwrap();
+        let mut other = original.clone();
+        other.id = "other".into();
+        state.data.routines.push(other);
+        state.data.runs.push(Run {
+            status: "running".into(),
+            ..ended("active-old", "other")
+        });
+        for n in 0..250 {
+            state
+                .data
+                .runs
+                .push(ended(&format!("run-{n}"), &original.id));
+            state
+                .data
+                .requests
+                .insert(format!("{}|req-{n}", original.id), format!("run-{n}"));
+        }
+    }
+    let admitted = store.admit(&original.id, "fresh", "manual", now()).unwrap();
+    assert!(!admitted.existing);
+    let state = store.state.lock().unwrap();
+    let ids: Vec<&str> = state.data.runs.iter().map(|r| r.id.as_str()).collect();
+    assert_eq!(ids.len(), 202);
+    assert_eq!(ids[0], "active-old");
+    assert_eq!(ids[1], "run-50");
+    assert_eq!(*ids.last().unwrap(), admitted.run.id.as_str());
+    assert!(!ids.contains(&"run-49"));
+    assert!(!state.data.requests.values().any(|run| run == "run-49"));
+    assert_eq!(
+        state.data.requests.get(&format!("{}|req-50", original.id)),
+        Some(&"run-50".to_string())
+    );
+    assert_eq!(
+        state.data.requests.get(&format!("{}|fresh", original.id)),
+        Some(&admitted.run.id)
+    );
+    drop(state);
+    let saved: RoutineFile =
+        serde_json::from_slice(&std::fs::read(root.path().join("routines.json")).unwrap()).unwrap();
+    assert_eq!(saved.runs.len(), 202);
+}
+#[test]
+fn audit_u59_an_older_long_history_is_trimmed_when_loaded() {
+    let root = tempfile::tempdir().unwrap();
+    let file = RoutineFile {
+        runs: (0..230).map(|n| ended(&format!("run-{n}"), "r")).collect(),
+        ..Default::default()
+    };
+    std::fs::write(
+        root.path().join("routines.json"),
+        serde_json::to_vec(&file).unwrap(),
+    )
+    .unwrap();
+    let store = RoutineStore::open(Arc::new(Dir::open(root.path()).unwrap()));
+    assert!(store.ready());
+    assert_eq!(store.run("run-29").unwrap(), None);
+    assert!(store.run("run-30").unwrap().is_some());
+    assert_eq!(store.state.lock().unwrap().data.runs.len(), 200);
+}
+#[test]
+fn audit_u59_refresh_writes_only_on_change_and_keeps_the_old_run_when_the_write_fails() {
+    let root = tempfile::tempdir().unwrap();
+    let writes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let fail = Arc::new(AtomicBool::new(false));
+    let (count, flag) = (writes.clone(), fail.clone());
+    let store = RoutineStore::with_writer(
+        Arc::new(Dir::open(root.path()).unwrap()),
+        Arc::new(move |dir, bytes| {
+            count.fetch_add(1, Ordering::SeqCst);
+            if flag.load(Ordering::SeqCst) {
+                Err(io::Error::other("synthetic disk failure"))
+            } else {
+                dir.replace("routines.json", bytes, 0o600)
+            }
+        }),
+    );
+    let definition = saved(root.path(), &store);
+    let run = store
+        .admit(&definition.id, "once", "manual", now())
+        .unwrap()
+        .run;
+    store
+        .state
+        .lock()
+        .unwrap()
+        .data
+        .runs
+        .extend((0..50).map(|n| ended(&format!("old-{n}"), &definition.id)));
+    let before = writes.load(Ordering::SeqCst);
+    store
+        .refresh(&[obs(&run, "running", None)], "hub", now())
+        .unwrap();
+    let after_running = writes.load(Ordering::SeqCst);
+    assert_eq!(after_running, before + 1);
+    store
+        .refresh(&[obs(&run, "running", None)], "hub", now())
+        .unwrap();
+    assert_eq!(writes.load(Ordering::SeqCst), after_running);
+    fail.store(true, Ordering::SeqCst);
+    assert_eq!(
+        store.refresh(&[obs(&run, "completed", None)], "hub", now()),
+        Err(Error::Operation)
+    );
+    assert_eq!(store.run(&run.id).unwrap().unwrap().status, "running");
+    fail.store(false, Ordering::SeqCst);
+    store
+        .refresh(&[obs(&run, "completed", None)], "hub", now())
+        .unwrap();
+    assert_eq!(store.run(&run.id).unwrap().unwrap().status, "finished");
+    assert_eq!(store.run("old-49").unwrap().unwrap().status, "finished");
+}
 #[test]
 fn definition_limit_and_history_window_are_independent() {
     let (root, store, _) = setup();

@@ -103,6 +103,13 @@ pub fn classify(root: &Path, processes: &[GitProcess]) -> Using {
     }
 }
 
+/// The UTF-16 units a Windows UNICODE_STRING of `length` bytes holds. `None`
+/// for an odd length, which a real string never has (U56).
+#[cfg(any(windows, test))]
+fn unicode_units(length: usize) -> Option<usize> {
+    length.is_multiple_of(2).then_some(length / 2)
+}
+
 #[cfg(windows)]
 mod platform {
     use super::GitProcess;
@@ -166,22 +173,28 @@ mod platform {
     fn read_unicode(process: HANDLE, address: usize) -> Option<String> {
         let length = read::<u16>(process, address)? as usize;
         let buffer = read::<usize>(process, address + 8)?;
-        if length == 0 || length > 64 * 1024 || buffer == 0 {
-            return (length == 0).then(String::new);
+        if length == 0 {
+            return Some(String::new());
         }
-        let mut units = vec![0u16; length / 2];
+        if buffer == 0 {
+            return None;
+        }
+        // The other process writes its own length: an odd one reads as
+        // unreadable, so a lock is never removed on its word (U56).
+        let mut units = vec![0u16; super::unicode_units(length)?];
+        let bytes = units.len() * size_of::<u16>();
         let mut read = 0usize;
-        // SAFETY: `units` holds `length` bytes.
+        // SAFETY: `units` holds exactly `bytes` bytes.
         let ok = unsafe {
             ReadProcessMemory(
                 process,
                 buffer as *const c_void,
                 units.as_mut_ptr().cast(),
-                length,
+                bytes,
                 &mut read,
             )
         } != 0;
-        (ok && read == length).then(|| {
+        (ok && read == bytes).then(|| {
             std::ffi::OsString::from_wide(&units)
                 .to_string_lossy()
                 .into_owned()
@@ -475,5 +488,110 @@ mod tests {
         child.wait().unwrap();
         // `child` still holds its handle, so the id names the exited process.
         assert_eq!(platform::inspect(pid), None);
+    }
+
+    #[test]
+    fn audit_u56_unicode_lengths_read_whole_units_only() {
+        assert_eq!(unicode_units(0), Some(0));
+        assert_eq!(unicode_units(2), Some(1));
+        assert_eq!(unicode_units(65534), Some(32767));
+        for odd in [1, 9, 25, 65535] {
+            assert_eq!(unicode_units(odd), None, "{odd}");
+        }
+    }
+
+    /// A Git whose own command-line length was made odd reads as unreadable,
+    /// and the lookup neither crashes nor reports the text (U56).
+    #[cfg(windows)]
+    #[test]
+    fn audit_u56_an_odd_command_line_length_reads_as_unreadable() {
+        use std::{ffi::c_void, mem::size_of};
+        use windows_sys::{
+            Wdk::System::Threading::{NtQueryInformationProcess, ProcessBasicInformation},
+            Win32::{
+                Foundation::CloseHandle,
+                System::{
+                    Diagnostics::Debug::{ReadProcessMemory, WriteProcessMemory},
+                    Threading::{
+                        OpenProcess, PROCESS_BASIC_INFORMATION, PROCESS_QUERY_INFORMATION,
+                        PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
+                    },
+                },
+            },
+        };
+        let mut child = std::process::Command::new("git")
+            .args(["hash-object", "--stdin"])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("tests require Git on PATH");
+        let pid = child.id();
+        let before = platform::inspect(pid).expect("the started git is alive");
+        assert!(before.command_line.is_some());
+        // SAFETY: test-only reads and one 2-byte write of the child's own
+        // CommandLine.Length; every buffer matches the size passed.
+        unsafe {
+            let process = OpenProcess(
+                PROCESS_QUERY_INFORMATION
+                    | PROCESS_VM_READ
+                    | PROCESS_VM_WRITE
+                    | PROCESS_VM_OPERATION,
+                0,
+                pid,
+            );
+            assert!(!process.is_null());
+            let mut basic: PROCESS_BASIC_INFORMATION = std::mem::zeroed();
+            let mut got = 0u32;
+            assert!(
+                NtQueryInformationProcess(
+                    process,
+                    ProcessBasicInformation,
+                    (&mut basic as *mut PROCESS_BASIC_INFORMATION).cast(),
+                    size_of::<PROCESS_BASIC_INFORMATION>() as u32,
+                    &mut got,
+                ) >= 0
+            );
+            let mut parameters = 0usize;
+            let mut read = 0usize;
+            assert!(
+                ReadProcessMemory(
+                    process,
+                    (basic.PebBaseAddress as usize + 0x20) as *const c_void,
+                    (&mut parameters as *mut usize).cast(),
+                    size_of::<usize>(),
+                    &mut read,
+                ) != 0
+            );
+            let field = parameters + 0x70;
+            let mut length = 0u16;
+            assert!(
+                ReadProcessMemory(
+                    process,
+                    field as *const c_void,
+                    (&mut length as *mut u16).cast(),
+                    2,
+                    &mut read,
+                ) != 0
+            );
+            assert!(length >= 4);
+            let odd = length - 1;
+            let mut written = 0usize;
+            assert!(
+                WriteProcessMemory(
+                    process,
+                    field as *const c_void,
+                    (&odd as *const u16).cast(),
+                    2,
+                    &mut written,
+                ) != 0
+            );
+            CloseHandle(process);
+        }
+        let after = platform::inspect(pid);
+        child.kill().ok();
+        child.wait().ok();
+        let after = after.expect("the child was still running");
+        assert_eq!(after.command_line, None);
     }
 }

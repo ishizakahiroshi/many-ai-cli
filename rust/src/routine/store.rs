@@ -12,7 +12,7 @@ use crate::{
     },
 };
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     io,
     path::Path,
     sync::{Arc, Mutex},
@@ -46,6 +46,32 @@ pub struct Observation {
     pub last_output: Option<Timestamp>,
 }
 type Writer = dyn Fn(&Dir, &[u8]) -> io::Result<()> + Send + Sync;
+/// Ended runs kept for each routine: the run list never shows more (U59).
+const KEPT_RUNS: usize = 200;
+/// Keep every active run and the newest `KEPT_RUNS` ended runs of each
+/// routine; drop older ones and the request aliases that named them (U59).
+fn prune(file: &mut RoutineFile) {
+    let mut ended: BTreeMap<&str, usize> = BTreeMap::new();
+    let keep: Vec<bool> = {
+        let mut keep = vec![true; file.runs.len()];
+        for (index, run) in file.runs.iter().enumerate().rev() {
+            if active(&run.status) {
+                continue;
+            }
+            let count = ended.entry(run.routine_id.as_str()).or_default();
+            keep[index] = *count < KEPT_RUNS;
+            *count += 1;
+        }
+        keep
+    };
+    if keep.iter().all(|k| *k) {
+        return;
+    }
+    let mut kept = keep.into_iter();
+    file.runs.retain(|_| kept.next().unwrap_or(true));
+    let ids: BTreeSet<&str> = file.runs.iter().map(|r| r.id.as_str()).collect();
+    file.requests.retain(|_, run| ids.contains(run.as_str()));
+}
 struct State {
     data: RoutineFile,
     unavailable: bool,
@@ -71,11 +97,16 @@ impl RoutineStore {
             Err(_) => Err(()),
         };
         let unavailable = loaded.as_ref().is_err() || loaded.as_ref().is_ok_and(|d| d.version != 1);
+        let mut data = loaded.unwrap_or_default();
+        // An older file's long history is trimmed in memory; the next write keeps it so.
+        if !unavailable {
+            prune(&mut data);
+        }
         Self {
             root,
             write,
             state: Mutex::new(State {
-                data: loaded.unwrap_or_default(),
+                data,
                 unavailable,
                 missing_since: BTreeMap::new(),
                 pending_results: BTreeMap::new(),
@@ -97,6 +128,26 @@ impl RoutineStore {
         (self.write)(&self.root, &bytes).map_err(|_| Error::Operation)?;
         state.data = next;
         Ok(())
+    }
+    /// Write replacements for a few runs without copying the whole history:
+    /// swap them in, write, and put the old ones back if the write fails (U59).
+    fn commit_runs(&self, state: &mut State, updates: Vec<(usize, Run)>) -> Result<(), Error> {
+        if state.unavailable {
+            return Err(Error::Unavailable);
+        }
+        let previous: Vec<(usize, Run)> = updates
+            .into_iter()
+            .map(|(index, run)| (index, std::mem::replace(&mut state.data.runs[index], run)))
+            .collect();
+        let written = serde_json::to_vec_pretty(&state.data)
+            .map_err(|_| Error::Operation)
+            .and_then(|bytes| (self.write)(&self.root, &bytes).map_err(|_| Error::Operation));
+        if written.is_err() {
+            for (index, run) in previous {
+                state.data.runs[index] = run;
+            }
+        }
+        written
     }
     pub fn definitions(&self) -> Result<Vec<Definition>, Error> {
         let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -254,6 +305,7 @@ impl RoutineStore {
         if !request_id.is_empty() {
             next.requests.insert(request_key, run.id.clone());
         }
+        prune(&mut next);
         self.commit(&mut state, next)?;
         Ok(Admission {
             run,
@@ -316,6 +368,7 @@ impl RoutineStore {
         run.finished_at = run.started_at.clone();
         item.next_run_at = due.map(model::time).transpose()?.unwrap_or_default();
         next.runs.push(run);
+        prune(&mut next);
         self.commit(&mut state, next)
     }
     /// Observation snapshots are obtained before acquiring this store's mutex.
@@ -330,16 +383,25 @@ impl RoutineStore {
             .map(|o| (o.launch_label.as_str(), o))
             .collect();
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        let mut next = state.data.clone();
-        let mut changed = false;
-        for run in &mut next.runs {
-            if active(&run.status)
-                && let Some(pending) = state.pending_results.get(&run.id)
-            {
-                *run = pending.clone();
+        // Only active runs can change: copy those alone, and nothing while idle (U59).
+        let candidates: Vec<usize> = state
+            .data
+            .runs
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| active(&r.status))
+            .map(|(index, _)| index)
+            .collect();
+        let mut updates = Vec::new();
+        for index in candidates {
+            let mut run = state.data.runs[index].clone();
+            let mut changed = false;
+            if let Some(pending) = state.pending_results.get(&run.id) {
+                run = pending.clone();
                 changed = true;
             }
             if !active(&run.status) {
+                updates.push((index, run));
                 continue;
             }
             let before = run.clone();
@@ -392,13 +454,16 @@ impl RoutineStore {
                             .into();
                 }
             }
-            if *run != before {
+            if run != before {
                 run.updated_at = model::time(now)?;
                 changed = true;
             }
+            if changed {
+                updates.push((index, run));
+            }
         }
-        if changed {
-            self.commit(&mut state, next)?;
+        if !updates.is_empty() {
+            self.commit_runs(&mut state, updates)?;
             state.pending_results.clear();
         }
         Ok(())

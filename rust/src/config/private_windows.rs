@@ -107,6 +107,77 @@ impl PrivateSecurity {
         // Builtin Administrators and Local System.
         Ok(owner == current_user_sid()? || owner == "S-1-5-32-544" || owner == "S-1-5-18")
     }
+    /// Whether the open `file` (READ_CONTROL access) lets in anyone beyond this
+    /// user, the administrators and the system — the three the private ACL
+    /// names — or keeps an unprotected DACL that a parent can widen later.
+    /// A missing (null) DACL grants everyone (U53).
+    pub fn grants_others(file: &std::fs::File) -> io::Result<bool> {
+        use std::os::windows::io::AsRawHandle;
+        // ACE types and flags the Windows headers define in winnt.h.
+        const ALLOWED: u8 = 0;
+        const DENIED: u8 = 1;
+        const INHERIT_ONLY: u8 = 0x08;
+        let me = current_user_sid()?;
+        // SAFETY: the handle is live; the DACL points into the descriptor, which
+        // its guard frees only after every ACE has been read; GetAce returns
+        // pointers inside that DACL and each SID is read before the next call.
+        unsafe {
+            let mut dacl: *mut ACL = ptr::null_mut();
+            let mut descriptor = ptr::null_mut();
+            let status = GetSecurityInfo(
+                file.as_raw_handle(),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                &mut dacl,
+                ptr::null_mut(),
+                &mut descriptor,
+            );
+            if status != 0 {
+                return Err(io::Error::from_raw_os_error(status as i32));
+            }
+            let _descriptor = Local(descriptor);
+            let (mut control, mut revision) = (0u16, 0u32);
+            if GetSecurityDescriptorControl(descriptor, &mut control, &mut revision) == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if dacl.is_null() || control & SE_DACL_PROTECTED == 0 {
+                return Ok(true);
+            }
+            let mut size: ACL_SIZE_INFORMATION = std::mem::zeroed();
+            if GetAclInformation(
+                dacl,
+                (&mut size as *mut ACL_SIZE_INFORMATION).cast(),
+                std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+                AclSizeInformation,
+            ) == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            for index in 0..size.AceCount {
+                let mut ace = ptr::null_mut();
+                if GetAce(dacl, index, &mut ace) == 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                let header = &*(ace as *const ACE_HEADER);
+                if header.AceType == DENIED || header.AceFlags & INHERIT_ONLY != 0 {
+                    continue;
+                }
+                // Object and callback allow types are not read: count them as wide.
+                if header.AceType != ALLOWED {
+                    return Ok(true);
+                }
+                let allowed = &*(ace as *const ACCESS_ALLOWED_ACE);
+                let sid = sid_string((&allowed.SidStart as *const u32).cast_mut().cast())?;
+                // This user, Local System and Builtin Administrators.
+                if sid != me && sid != "S-1-5-18" && sid != "S-1-5-32-544" {
+                    return Ok(true);
+                }
+            }
+            Ok(false)
+        }
+    }
     pub fn for_current_user(is_dir: bool) -> io::Result<Self> {
         let sid = current_user_sid()?;
         // SAFETY: the descriptor allocation is guarded.

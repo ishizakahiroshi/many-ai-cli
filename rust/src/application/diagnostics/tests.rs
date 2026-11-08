@@ -482,3 +482,61 @@ async fn authenticated_diagnostic_routes_keep_method_and_json_guards_before_acto
         .await;
     assert!(unknown.is_none());
 }
+#[test]
+fn audit_u52_log_size_counts_files_in_subdirectories_without_following_links() {
+    let f = fixture();
+    let cfg = f.config.snapshot().unwrap().config;
+    let logs = f
+        .paths
+        .clone()
+        .with_log_dir(Path::new(&cfg.hub.log_dir))
+        .unwrap()
+        .resource(crate::config::Resource::Logs);
+    for (dir, file) in [(".", "hub.log"), ("sessions", "a.log"), ("spawn", "b.log")] {
+        std::fs::create_dir_all(logs.join(dir)).unwrap();
+        std::fs::write(logs.join(dir).join(file), b"0123456789").unwrap();
+    }
+    #[cfg(unix)]
+    {
+        // A link to a directory outside the logs is neither followed nor counted.
+        let outside = f._temp.path().join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::write(outside.join("big.log"), vec![b'x'; 4096]).unwrap();
+        std::os::unix::fs::symlink(&outside, logs.join("linked")).unwrap();
+        std::os::unix::fs::symlink(outside.join("big.log"), logs.join("linked.log")).unwrap();
+    }
+    let check = local::logs(&f.doctor, &cfg);
+    assert_eq!(check.level, "OK", "{}", check.message);
+    assert!(check.message.contains("3 files"), "{}", check.message);
+}
+#[cfg(windows)]
+#[test]
+fn audit_u53_windows_doctor_reads_the_configuration_dacl() {
+    let f = fixture();
+    let cfg = f.config.snapshot().unwrap().config;
+    let file = f.paths.resource(crate::config::Resource::Config);
+    if !file.exists() {
+        let snapshot = f.config.snapshot().unwrap();
+        f.config
+            .persist(snapshot.revision, snapshot.config)
+            .unwrap();
+    }
+    assert!(file.exists());
+    let check = local::token(&f.doctor, &cfg);
+    assert_eq!(check.level, "OK", "{}", check.message);
+    // An explicit read grant for the Users group, as icacls /grant leaves it.
+    let granted = std::process::Command::new("icacls")
+        .arg(&file)
+        .arg("/grant")
+        .arg("*S-1-5-32-545:(R)")
+        .output()
+        .unwrap();
+    assert!(granted.status.success());
+    let check = local::token(&f.doctor, &cfg);
+    assert_eq!(check.level, "WARN", "{}", check.message);
+    assert!(
+        check.message.contains("権限が広すぎます"),
+        "{}",
+        check.message
+    );
+}

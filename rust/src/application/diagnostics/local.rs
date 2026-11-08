@@ -12,21 +12,53 @@ pub(super) fn port(cfg: &Config) -> Check {
         ),
     }
 }
-fn wide_permissions(metadata: &std::fs::Metadata, platform: &str) -> bool {
-    if platform == "windows" {
-        return false;
+/// Whether others than the owner can reach the object: the Unix mode bits, or
+/// on Windows the DACL read through `open`, which only Windows calls (U53).
+/// A test's injected "windows" platform skips the mode bits elsewhere.
+fn wide_permissions(
+    metadata: &std::fs::Metadata,
+    platform: &str,
+    open: impl FnOnce() -> io::Result<std::fs::File>,
+) -> io::Result<bool> {
+    #[cfg(windows)]
+    {
+        let _ = (metadata, platform);
+        crate::config::private_io::PrivateSecurity::grants_others(&open()?)
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        metadata.permissions().mode() & 0o077 != 0
+        let _ = open;
+        Ok(platform != "windows" && metadata.permissions().mode() & 0o077 != 0)
     }
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
-        let _ = metadata;
-        false
+        let _ = (metadata, platform, open);
+        Ok(false)
     }
 }
+/// The configuration directory opened for its security information only.
+fn open_security(path: &Path) -> io::Result<std::fs::File> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES,
+            FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, READ_CONTROL,
+        };
+        std::fs::OpenOptions::new()
+            .access_mode(READ_CONTROL | FILE_READ_ATTRIBUTES)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(path)
+    }
+    #[cfg(not(windows))]
+    {
+        std::fs::File::open(path)
+    }
+}
+const WINDOWS_WIDE: &str =
+    "本人・SYSTEM・Administrators 以外への許可か、親フォルダーからの権限の引き継ぎがあります";
 pub(super) fn token(owner: &Diagnostics, cfg: &Config) -> Check {
     if cfg.token.trim().is_empty() {
         return Check::new(
@@ -37,26 +69,41 @@ pub(super) fn token(owner: &Diagnostics, cfg: &Config) -> Check {
         );
     }
     let file = owner.deps.paths.resource(Resource::Config);
-    let metadata = file
+    let wide = file
         .file_name()
         .and_then(|n| n.to_str())
         .ok_or_else(|| io::Error::other("configuration basename missing"))
-        .and_then(|n| Dir::open(file.parent().unwrap_or(Path::new("")))?.metadata(n));
-    let Ok(metadata) = metadata else {
+        .and_then(|n| {
+            let dir = Dir::open(file.parent().unwrap_or(Path::new("")))?;
+            let metadata = dir.metadata(n)?;
+            wide_permissions(&metadata, &owner.deps.platform, || dir.open_file(n, false))
+        });
+    let Ok(wide) = wide else {
         return Check::new(
             "token",
             "WARN",
-            "Hub トークンは設定済みですが、設定ファイルを確認できません",
+            "Hub トークンは設定済みですが、設定ファイルの権限を確認できません",
             "~/.many-ai-cli/config.yaml の読み取り権限を確認してください",
         );
     };
-    if wide_permissions(&metadata, &owner.deps.platform) {
-        return Check::new(
-            "token",
-            "WARN",
-            "Hub トークンは設定済みですが、設定ファイルの権限が広すぎます",
-            "chmod 600 ~/.many-ai-cli/config.yaml を実行してください",
-        );
+    if wide {
+        return if owner.deps.platform == "windows" {
+            Check::new(
+                "token",
+                "WARN",
+                format!(
+                    "Hub トークンは設定済みですが、設定ファイルの権限が広すぎます（{WINDOWS_WIDE}）"
+                ),
+                "エクスプローラーで ~/.many-ai-cli/config.yaml のプロパティの［セキュリティ］を開き、本人・SYSTEM・Administrators 以外の許可を外してください（意図して共有している場合はそのままで構いません）",
+            )
+        } else {
+            Check::new(
+                "token",
+                "WARN",
+                "Hub トークンは設定済みですが、設定ファイルの権限が広すぎます",
+                "chmod 600 ~/.many-ai-cli/config.yaml を実行してください",
+            )
+        };
     }
     Check::new(
         "token",
@@ -66,7 +113,11 @@ pub(super) fn token(owner: &Diagnostics, cfg: &Config) -> Check {
     )
 }
 pub(super) fn acl(owner: &Diagnostics) -> Check {
-    match Dir::open(owner.deps.paths.root()).and_then(|d| d.own_metadata()) {
+    let root = owner.deps.paths.root();
+    let wide = Dir::open(root)
+        .and_then(|d| d.own_metadata())
+        .and_then(|m| wide_permissions(&m, &owner.deps.platform, || open_security(root)));
+    match wide {
         Err(e) if e.kind() == io::ErrorKind::NotFound => Check::new(
             "ACL",
             "WARN",
@@ -79,13 +130,19 @@ pub(super) fn acl(owner: &Diagnostics) -> Check {
             "設定ディレクトリを確認できません",
             "ディレクトリの読み書き権限を確認してください",
         ),
-        Ok(m) if wide_permissions(&m, &owner.deps.platform) => Check::new(
+        Ok(true) if owner.deps.platform == "windows" => Check::new(
+            "ACL",
+            "WARN",
+            format!("設定ディレクトリの権限が広すぎます（{WINDOWS_WIDE}）"),
+            "many-ai-cli を一度起動すると、本人・SYSTEM・Administrators だけの権限に直します。直らない場合は、~/.many-ai-cli のプロパティの［セキュリティ］を確認してください",
+        ),
+        Ok(true) => Check::new(
             "ACL",
             "WARN",
             "設定ディレクトリの権限が広すぎます",
             "chmod 700 ~/.many-ai-cli を実行してください",
         ),
-        Ok(_) => Check::new("ACL", "OK", "設定ディレクトリへアクセスできます", ""),
+        Ok(false) => Check::new("ACL", "OK", "設定ディレクトリへアクセスできます", ""),
     }
 }
 fn log_dir(owner: &Diagnostics, cfg: &Config) -> io::Result<PathBuf> {
@@ -124,7 +181,7 @@ pub(super) fn logs(owner: &Diagnostics, cfg: &Config) -> Check {
             );
         }
     };
-    match walk(&dir) {
+    match walk(&dir, LOG_WALK_DEPTH) {
         Ok((count, size)) => Check::new(
             "log",
             "OK",
@@ -142,15 +199,38 @@ pub(super) fn logs(owner: &Diagnostics, cfg: &Config) -> Check {
         ),
     }
 }
-fn walk(dir: &Dir) -> io::Result<(usize, u64)> {
+/// Subdirectory levels below the log directory that the size walk descends.
+const LOG_WALK_DEPTH: usize = 8;
+/// Count the regular files under `dir` and their size (U52). The entry type is
+/// read without following links: links and other special entries are not
+/// counted, an entry that disappears mid-walk (log cleanup) is skipped, and a
+/// directory that cannot be opened fails the walk, as the Go doctor did.
+fn walk(dir: &Dir, depth: usize) -> io::Result<(usize, u64)> {
     let (mut count, mut size) = (0, 0);
     for name in dir.entries()? {
-        let info = dir.metadata(&name)?;
-        if info.is_dir() {
-            let (c, s) = walk(&dir.child_dir(&name, false)?)?;
+        let kind = match std::fs::symlink_metadata(dir.path().join(&name)) {
+            Ok(m) => m.file_type(),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e),
+        };
+        if kind.is_symlink() {
+            continue;
+        }
+        if kind.is_dir() {
+            if depth == 0 {
+                return Err(io::Error::other("log directory nests too deeply"));
+            }
+            let child = match dir.child_dir(&name, false) {
+                Ok(d) => d,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(e),
+            };
+            let (c, s) = walk(&child, depth - 1)?;
             count += c;
             size += s;
-        } else {
+        } else if kind.is_file()
+            && let Ok(info) = dir.metadata(&name)
+        {
             count += 1;
             size += info.len();
         }

@@ -70,6 +70,27 @@ Release artifacts are published at
   early, so the shortcuts were not created and `uninstall --purge` reported
   success without removing the program. These quotes are now doubled like
   the ASCII one.
+- **`doctor` reports the size of the log directory again.** Once the Hub had
+  started a session, the log directory held subdirectories (`spawn/`,
+  `sessions/`), and `doctor` always warned that it could not check the size
+  and told you to check the read permission. Subdirectories are now counted;
+  links are still not followed.
+- **`doctor` checks the permissions of `config.yaml` and `~/.many-ai-cli` on
+  Windows.** It said it had checked them without reading them. It now warns
+  when anyone other than you, SYSTEM and Administrators is allowed in, or when
+  the file takes its permissions from the parent folder.
+- **The Hub no longer writes past a buffer when it reads a Git process's
+  command line on Windows.** A process named `git.exe` that set an odd length
+  on its own command line made the Hub write one byte beyond the buffer. Such
+  a process is now treated as unreadable, so a lock it may hold is not
+  removed.
+- **Routine history stays bounded.** Every run was kept forever, the whole
+  history was copied every 2 seconds and rewritten on every change, so a
+  routine used for months made the Hub slower. Each routine now keeps its
+  newest 200 ended runs (the most the run list shows) plus any run in
+  progress; older runs and their request records are removed, and an older
+  file is trimmed when the Hub starts. The 2-second check now copies only the
+  runs in progress.
 
 ### Security
 
