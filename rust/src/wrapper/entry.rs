@@ -353,7 +353,8 @@ pub async fn run_cli(
             .filter(|v| *v > 0)
             .unwrap_or(5),
     );
-    let connector = LoopbackConnector::new(port, context.config.token.clone(), write_timeout)?;
+    let connector = LoopbackConnector::new(port, context.config.token.clone(), write_timeout)?
+        .with_local_proof(crate::hub::pin::cli_local_proof(context.config));
     let resolver = CommandResolver::new(context.paths, context.environment, context.cwd);
     // Only describes the launch until registration: `prepare` below resolves
     // the provider again and starts nothing when it cannot be found (U19).
@@ -396,6 +397,13 @@ pub async fn run_cli(
     for name in internal_launch_env {
         process.env.insert(name.into(), None);
     }
+    // The usage relay and `orchestrate` inside the session send this next to
+    // the token, so a Hub with a PIN set counts them as on this machine (U09).
+    // Without a PIN there is no proof, and an inherited one is removed.
+    process.env.insert(
+        crate::hub::pin::LOCAL_PROOF_ENV.into(),
+        crate::hub::pin::cli_local_proof(context.config).map(Into::into),
+    );
     let mut prepared_payload = None;
     if let (Some((mode, shell_executable)), Some(command)) = (&selected_shell, &command) {
         super::launch_payload::validate_inner_cmd(command)?;

@@ -261,7 +261,17 @@ impl WebSocketService {
                 connection: self.sockets.next_ui()?,
                 auth_epoch: epoch,
             };
-            let pin = if auth::logically_remote(&request) {
+            // A UI the PIN applies to is bound so a PIN change closes it (U09:
+            // with a PIN set, an unproven local UI counts as remote too).
+            let now_seconds = Timestamp::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |elapsed| elapsed.as_secs() as i64);
+            let pin_applies = self.services.config.snapshot().map_or(true, |snapshot| {
+                self.services
+                    .auth
+                    .treated_remote(&request, &snapshot.config, now_seconds)
+            });
+            let pin = if pin_applies {
                 Some(self.services.auth.bind_remote_ui(
                     &request,
                     &self.services.config,
@@ -771,7 +781,9 @@ fn pin_satisfied(
     config: &Config,
     now: Timestamp,
 ) -> bool {
-    let pin_required = auth::logically_remote(request) && !config.remote_pin_hash.trim().is_empty();
+    let seconds = now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+    let pin_required = !config.remote_pin_hash.trim().is_empty()
+        && auth_service.treated_remote(request, config, seconds);
     !pin_required
         || auth_service.has_valid_pin(
             request,
@@ -1087,6 +1099,7 @@ mod tests {
         let config = Config {
             token: "synthetic-hub-token".into(),
             remote_pin_hash: "synthetic-nonempty-hash".into(),
+            auth_cookie_secret: "synthetic-cookie-secret".into(),
             ..Default::default()
         };
         let auth = AuthService::default();
@@ -1095,9 +1108,18 @@ mod tests {
             ..Default::default()
         };
         let mut request = request();
+        // A loopback socket must prove it is on this machine (U09).
+        assert!(!authorize_first(
+            &request, &auth, &config, &first, UNIX_EPOCH
+        ));
+        request.headers.push((
+            super::super::pin::LOCAL_PROOF_HEADER.into(),
+            super::super::pin::cli_local_proof(&config).unwrap(),
+        ));
         assert!(authorize_first(
             &request, &auth, &config, &first, UNIX_EPOCH
         ));
+        // The proof does not make a proxied request local.
         request
             .headers
             .push(("X-Forwarded-Proto".into(), "https".into()));

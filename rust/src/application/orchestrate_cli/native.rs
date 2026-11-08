@@ -37,18 +37,22 @@ impl OrchestrateIo for NativeOrchestrateIo {
                 } else {
                     client.get(url)
                 };
-                let mut response =
-                    builder
-                        .bearer_auth(request.token)
-                        .send()
-                        .await
-                        .map_err(|error| {
-                            if error.is_timeout() {
-                                RequestError::Timeout
-                            } else {
-                                RequestError::Transport
-                            }
-                        })?;
+                // The wrapper hands the CLI's local proof down with the token (U09).
+                let proof = std::env::var(crate::hub::pin::LOCAL_PROOF_ENV).ok();
+                let mut response = builder
+                    .bearer_auth(request.token)
+                    .headers(crate::application::hub_runtime::local_proof_headers(
+                        proof.as_deref().filter(|proof| !proof.is_empty()),
+                    ))
+                    .send()
+                    .await
+                    .map_err(|error| {
+                        if error.is_timeout() {
+                            RequestError::Timeout
+                        } else {
+                            RequestError::Transport
+                        }
+                    })?;
                 headers_received.store(true, Ordering::Relaxed);
                 let status = response.status().as_u16();
                 let mut body = vec![];

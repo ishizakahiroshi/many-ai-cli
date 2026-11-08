@@ -72,7 +72,10 @@ pub enum Command {
     Doctor(Vec<String>),
     Issue(Vec<String>),
     Provider(Vec<String>),
-    Wrap { provider: String, args: Vec<String> },
+    Wrap {
+        provider: String,
+        args: Vec<String>,
+    },
     ShellInit,
     Stop,
     Status,
@@ -81,6 +84,9 @@ pub enum Command {
     LogClean(Vec<String>),
     Uninstall(Vec<String>),
     UsageRelay(Vec<String>),
+    /// Prints this machine's local proof for a Hub with a PIN set, for the
+    /// launcher to fetch over SSH (U09). Not shown in the help.
+    LocalProof,
     Orchestrate(Vec<String>),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -169,6 +175,7 @@ pub fn parse(args: &[String], custom_providers: &[String]) -> Result<Invocation,
         "log-clean" => Command::LogClean(rest),
         "uninstall" => Command::Uninstall(rest),
         "usage-relay" => Command::UsageRelay(rest),
+        "local-proof" => Command::LocalProof,
         "orchestrate" if rest.is_empty() => return Err("orchestrate <spawn|send>".into()),
         "orchestrate" => Command::Orchestrate(rest),
         "wrap" if rest.is_empty() => return Err("wrap <provider>".into()),

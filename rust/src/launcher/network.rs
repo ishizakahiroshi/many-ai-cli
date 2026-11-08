@@ -32,6 +32,34 @@ fn own_port(port: i64) -> bool {
     u16::try_from(port)
         .is_ok_and(|port| crate::process::listener::loopback_listener_is_own(port).unwrap_or(false))
 }
+/// The remote local proof the launcher keeps in the fragment of a stored Hub
+/// URL. A fragment never goes over HTTP; the launcher sends the proof as a
+/// header so a remote Hub with a PIN set lets its calls through (U09).
+const PROOF_FRAGMENT: &str = "local=";
+pub fn local_proof_of(hub_url: &str) -> Option<String> {
+    let fragment = url::Url::parse(hub_url).ok()?.fragment()?.to_owned();
+    let proof = fragment.strip_prefix(PROOF_FRAGMENT)?;
+    (!proof.is_empty() && proof.bytes().all(|b| b.is_ascii_hexdigit())).then(|| proof.to_owned())
+}
+/// `hub_url` with `proof` kept in its fragment (or none).
+pub fn with_local_proof(hub_url: &str, proof: Option<&str>) -> String {
+    let Ok(mut url) = url::Url::parse(hub_url) else {
+        return hub_url.into();
+    };
+    url.set_fragment(
+        proof
+            .map(|proof| format!("{PROOF_FRAGMENT}{proof}"))
+            .as_deref(),
+    );
+    url.into()
+}
+/// `hub_url` without the proof, for display and for a browser.
+pub fn without_local_proof(hub_url: &str) -> String {
+    with_local_proof(hub_url, None)
+}
+fn proof_headers(proof: Option<&str>) -> reqwest::header::HeaderMap {
+    crate::application::hub_runtime::local_proof_headers(proof)
+}
 fn own_endpoint(url: &url::Url) -> bool {
     url.port().is_some_and(|port| own_port(i64::from(port)))
 }
@@ -47,6 +75,7 @@ pub async fn probe_hub(hub_url: &str, timeout: Duration) -> bool {
     };
     client
         .get(url)
+        .headers(proof_headers(local_proof_of(hub_url).as_deref()))
         .send()
         .await
         .is_ok_and(|r| r.status() == reqwest::StatusCode::OK)
@@ -56,9 +85,11 @@ pub async fn probe_hub(hub_url: &str, timeout: Duration) -> bool {
 /// command line can be read by other users of this machine (U04). The other
 /// parameters stay. If no code can be had, the token is left out.
 pub async fn browser_url(hub_url: &str) -> String {
+    let proof = local_proof_of(hub_url);
     let Ok(mut url) = url::Url::parse(hub_url) else {
         return hub_url.into();
     };
+    url.set_fragment(None);
     let pairs: Vec<(String, String)> = url
         .query_pairs()
         .map(|(key, value)| (key.into_owned(), value.into_owned()))
@@ -71,7 +102,10 @@ pub async fn browser_url(hub_url: &str) -> String {
         return hub_url.into();
     };
     let code = match url.port() {
-        Some(port) => crate::application::hub_runtime::request_launch_code(port, &token).await,
+        Some(port) => {
+            crate::application::hub_runtime::request_launch_code(port, &token, proof.as_deref())
+                .await
+        }
         None => None,
     };
     {
@@ -104,7 +138,7 @@ pub async fn post_hub_endpoint(
         client(Duration::from_secs(3)).map_err(|_| format!("{path}: HTTP client unavailable"))?;
     let result = tokio::select! {
         _=cancel.cancelled()=>return Err(format!("{path}: cancelled")),
-        result=client.post(url).header(crate::hub::lifecycle::STOP_SOURCE_HEADER,"launcher").send()=>result,
+        result=client.post(url).headers(proof_headers(local_proof_of(hub_url).as_deref())).header(crate::hub::lifecycle::STOP_SOURCE_HEADER,"launcher").send()=>result,
     };
     let response = result.map_err(|error| format!("{path}: {}", error.without_url()))?;
     if !response.status().is_success() {
@@ -115,6 +149,7 @@ pub async fn post_hub_endpoint(
 pub async fn poll_until_ready(
     port: i64,
     token: &str,
+    proof: Option<&str>,
     cancel: &Cancellation,
     interval: Duration,
     tries: usize,
@@ -128,7 +163,7 @@ pub async fn poll_until_ready(
     for _ in 0..tries {
         // Until this user's listener is up, nothing is sent (U01).
         if own_port(port) {
-            tokio::select! { _=cancel.cancelled()=>return Err("cancelled".into()), response=client.get(&url).send()=>{
+            tokio::select! { _=cancel.cancelled()=>return Err("cancelled".into()), response=client.get(&url).headers(proof_headers(proof)).send()=>{
                 if response.is_ok_and(|r|r.status()==reqwest::StatusCode::OK) { return Ok(()); }
             }}
         }
@@ -136,7 +171,13 @@ pub async fn poll_until_ready(
     }
     Err(format!("timed out after {tries} polls"))
 }
-pub async fn post_net_hint(port: i64, token: &str, host: &str, cancel: &Cancellation) {
+pub async fn post_net_hint(
+    port: i64,
+    token: &str,
+    proof: Option<&str>,
+    host: &str,
+    cancel: &Cancellation,
+) {
     let Ok(client) = client(Duration::from_secs(5)) else {
         return;
     };
@@ -148,7 +189,7 @@ pub async fn post_net_hint(port: i64, token: &str, host: &str, cancel: &Cancella
         return;
     }
     let body = serde_json::json!({"ssh":true,"host_label":host,"env_kind":"remote-tunnel"});
-    tokio::select! { _=cancel.cancelled()=>{}, _=client.post(url).json(&body).send()=>{} }
+    tokio::select! { _=cancel.cancelled()=>{}, _=client.post(url).headers(proof_headers(proof)).json(&body).send()=>{} }
 }
 pub async fn port_in_use(port: u16) -> bool {
     match tokio::time::timeout(
@@ -200,7 +241,7 @@ mod launch_tests {
             request
         });
         let opened = super::browser_url(&format!(
-            "http://127.0.0.1:{port}/?token=synthetic-remote&via=ssh&host_label=box&env_kind=remote-tunnel"
+            "http://127.0.0.1:{port}/?token=synthetic-remote&via=ssh&host_label=box&env_kind=remote-tunnel#local=fe9876"
         ))
         .await;
         assert_eq!(
@@ -212,6 +253,25 @@ mod launch_tests {
         let request = server.await.unwrap();
         assert!(request.starts_with("POST /api/auth/launch-code "));
         assert!(request.contains("authorization: Bearer synthetic-remote"));
+        // The remote proof kept in the fragment goes as a header (U09), and
+        // neither it nor the token reaches the opened address.
+        assert!(request.contains("x-many-ai-cli-local: fe9876"));
+        assert!(!opened.contains("fe9876") && !opened.contains('#'));
+        assert_eq!(
+            super::local_proof_of(&super::with_local_proof(
+                "http://127.0.0.1:1/?token=t",
+                Some("ab12")
+            )),
+            Some("ab12".into())
+        );
+        assert_eq!(
+            super::without_local_proof("http://127.0.0.1:1/?token=t#local=ab12"),
+            "http://127.0.0.1:1/?token=t"
+        );
+        assert_eq!(
+            super::local_proof_of("http://127.0.0.1:1/#local=not-hex"),
+            None
+        );
         // Nobody listens any more: the token is left out, not opened.
         let opened = super::browser_url(&format!(
             "http://127.0.0.1:{port}/?token=synthetic-remote&via=ssh"

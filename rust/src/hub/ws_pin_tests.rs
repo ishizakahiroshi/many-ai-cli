@@ -14,6 +14,10 @@ fn configure_pin(f: &Fixture) {
         .persist(snapshot.revision, snapshot.config)
         .unwrap();
 }
+/// What a CLI on this machine sends with a PIN set (U09); none without one.
+fn local_proof(f: &Fixture) -> Option<String> {
+    crate::hub::pin::cli_local_proof(&f.services.config.snapshot().unwrap().config)
+}
 async fn post(
     f: &Fixture,
     path: &str,
@@ -31,6 +35,8 @@ async fn post(
         .json(&body);
     if remote {
         request = request.header("X-Forwarded-For", "203.0.113.9");
+    } else if let Some(proof) = local_proof(f) {
+        request = request.header(crate::hub::pin::LOCAL_PROOF_HEADER, proof);
     }
     if let Some(cookie) = cookie {
         request = request.header("Cookie", cookie);
@@ -60,12 +66,20 @@ async fn login(f: &Fixture, pin: &str) -> String {
         .into()
 }
 async fn ui(f: &Fixture, cookie: Option<&str>, remote: bool) -> Client {
+    ui_with(f, cookie, remote, true).await
+}
+async fn ui_with(f: &Fixture, cookie: Option<&str>, remote: bool, proven: bool) -> Client {
     let mut headers = format!(
         "Origin: http://127.0.0.1:{}\r\nUser-Agent: {UA}\r\n",
         f.port
     );
     if remote {
         headers.push_str("X-Forwarded-For: 203.0.113.9\r\n");
+    } else if let Some(proof) = local_proof(f).filter(|_| proven) {
+        headers.push_str(&format!(
+            "{}: {proof}\r\n",
+            crate::hub::pin::LOCAL_PROOF_HEADER
+        ));
     }
     if let Some(cookie) = cookie {
         headers.push_str(&format!("Cookie: {cookie}\r\n"));
@@ -83,7 +97,10 @@ async fn attached(f: &Fixture, cookie: Option<&str>, remote: bool) -> Client {
     client
 }
 async fn wrapper(f: &Fixture) -> (Client, i64) {
-    let (mut client, _) = Client::connect(f.port, "").await;
+    let headers = local_proof(f)
+        .map(|proof| format!("{}: {proof}\r\n", crate::hub::pin::LOCAL_PROOF_HEADER))
+        .unwrap_or_default();
+    let (mut client, _) = Client::connect(f.port, &headers).await;
     client.json(serde_json::json!({"type":"register","provider":"shell","cwd":f._root.path(),"pid":123,"token":TOKEN})).await;
     let id = client.until("registered").await["session_id"]
         .as_i64()
@@ -129,6 +146,15 @@ async fn remote_pin_logout_revokes_its_cookie_ui_and_keeps_other_cookie_local_ui
         "logged-out UI remained attached"
     );
     assert!(ui(&f, Some(&first), true).await.frame().await.is_none());
+    // A loopback UI that proves nothing is held to the PIN like a remote one:
+    // a relay passes Host and proxy headers through unchanged (U09).
+    assert!(
+        ui_with(&f, None, false, false)
+            .await
+            .frame()
+            .await
+            .is_none()
+    );
     input(&mut wrapper, &mut other, id, "other nonce survives").await;
     input(&mut wrapper, &mut local, id, "local survives").await;
     assert!(f.core.details(LiveSessionId(id)).unwrap().connected);

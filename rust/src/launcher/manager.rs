@@ -191,7 +191,9 @@ impl ConnectionManager {
             (None, _) => json!({"ok":true,"status":"idle"}),
             (Some(name), None) => json!({"ok":true,"status":"connecting","name":name}),
             (_, Some(Err(error))) => json!({"ok":false,"status":"error","error":error}),
-            (_, Some(Ok(url))) => json!({"ok":true,"status":"connected","hub_url":url}),
+            (_, Some(Ok(url))) => {
+                json!({"ok":true,"status":"connected","hub_url":super::network::without_local_proof(url)})
+            }
         }
     }
     async fn run_connection(self: Arc<Self>, profile: Profile, id: u64, cancel: Cancellation) {
@@ -396,7 +398,7 @@ pub async fn connect_cli(
             &format!(
                 "Profile {} is already connected — reusing {}\n",
                 super::quote(&profile.name),
-                record.hub_url
+                super::network::without_local_proof(&record.hub_url)
             ),
         );
         cli_browser(config, browser, &record.hub_url).await;
@@ -427,7 +429,7 @@ pub async fn connect_cli(
                 &format!(
                     "Profile {} is connected — reusing {}\n",
                     super::quote(&profile.name),
-                    record.hub_url
+                    super::network::without_local_proof(&record.hub_url)
                 ),
             );
             cli_browser(config, browser, &record.hub_url).await;

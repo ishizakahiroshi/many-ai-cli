@@ -174,7 +174,14 @@ impl ConnectorConfig {
             .await;
             match ready {
                 Ok(url) if url.contains(&format!("127.0.0.1:{port}/")) => {
-                    send_ready(sender, url);
+                    let proof = self
+                        .fetch_local_proof(
+                            &self.ssh_executable,
+                            ssh_local_proof_args(p, port, self.remote_trial.as_ref()),
+                            cancel,
+                        )
+                        .await;
+                    send_ready(sender, network::with_local_proof(&url, proof.as_deref()));
                     // Go SSH regards a process exit after ready as normal end.
                     let result = watch_child(
                         &mut child,
@@ -241,7 +248,14 @@ impl ConnectorConfig {
         .await
         {
             Ok(url) => {
-                send_ready(sender, url);
+                let proof = self
+                    .fetch_local_proof(
+                        &self.wsl_executable,
+                        wsl_local_proof_args(p, port, self.remote_trial.as_ref()),
+                        cancel,
+                    )
+                    .await;
+                send_ready(sender, network::with_local_proof(&url, proof.as_deref()));
                 watch_child(
                     &mut child,
                     &mut events,
@@ -323,10 +337,18 @@ impl ConnectorConfig {
                 cancel,
             )
             .await?;
+            let proof = self
+                .fetch_local_proof(
+                    &self.ssh_executable,
+                    ssh_local_proof_args(p, p.hub_port, self.remote_trial.as_ref()),
+                    cancel,
+                )
+                .await;
             tunnel_phase(
                 network::poll_until_ready(
                     p.hub_port,
                     &token,
+                    proof.as_deref(),
                     cancel,
                     self.poll_interval,
                     self.poll_tries,
@@ -338,11 +360,17 @@ impl ConnectorConfig {
             )
             .await
             .map_err(|e| format!("hub not ready: {e}"))?;
-            network::post_net_hint(p.hub_port, &token, &p.host, cancel).await;
+            network::post_net_hint(p.hub_port, &token, proof.as_deref(), &p.host, cancel).await;
             if cancel.is_cancelled() {
                 return Ok(());
             }
-            send_ready(sender, tunnel_hub_url(p.hub_port, &token, &p.host));
+            send_ready(
+                sender,
+                network::with_local_proof(
+                    &tunnel_hub_url(p.hub_port, &token, &p.host),
+                    proof.as_deref(),
+                ),
+            );
             let mut scans = Scanners {
                 raw_stderr: true,
                 ..Scanners::default()
@@ -384,6 +412,24 @@ impl ConnectorConfig {
         normalize_hub_token(&token)
             .map_err(|error| format!("token_command returned invalid token: {error}"))?;
         Ok(token)
+    }
+    /// The remote local proof (U09), or `None` when the remote has no PIN set,
+    /// predates the command, or cannot be reached; the launcher goes on
+    /// without it either way.
+    async fn fetch_local_proof(
+        &self,
+        executable: &std::path::Path,
+        args: Vec<String>,
+        cancel: &Cancellation,
+    ) -> Option<String> {
+        let plan = self.plan(executable, args, Duration::from_secs(10));
+        let output = self.run_short(plan, cancel).await.ok()?;
+        if exit_success(&output, "local-proof").is_err() || output.stdout_truncated {
+            return None;
+        }
+        let proof = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        (!proof.is_empty() && proof.len() <= 128 && proof.bytes().all(|b| b.is_ascii_hexdigit()))
+            .then_some(proof)
     }
     pub(crate) async fn run_short(
         &self,

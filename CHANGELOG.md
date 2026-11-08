@@ -108,6 +108,15 @@ Release artifacts are published at
 
 ### Security
 
+- **A relay can no longer skip the PIN.** With a PIN set, a connection counts
+  as local only when it proves it: the dashboard the Hub opened itself carries
+  a cookie it got with its launch code, and the many-ai-cli commands on this
+  machine (and the usage relay and `orchestrate` inside sessions) send a proof
+  made from the private config. The launcher fetches the remote proof over
+  SSH. Everything else, including a hand-typed `127.0.0.1` address and
+  connections through socat, a reverse proxy or `ssh -L`, is asked for the PIN.
+  Before, the Hub judged by the Host and proxy headers, which a relay passes
+  through unchanged.
 - **The token is no longer kept in a cookie.** A browser sends a 127.0.0.1
   cookie to every port on 127.0.0.1, so another program listening there could
   receive it. The dashboard now sends the token in a header and in the first

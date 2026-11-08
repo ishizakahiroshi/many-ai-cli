@@ -1045,7 +1045,21 @@ fn service_remote_pin_bootstrap_and_gate_do_not_restrict_loopback() {
     assert_eq!(router.handle(&r, 1000).response.status, 200);
     r.path = "/api/input-config".into();
     r.method = "GET".into();
+    // With a PIN set, a loopback request must also prove it is on this
+    // machine: Host and proxy headers pass through a relay unchanged (U09).
+    assert_eq!(
+        json_response(&router.handle(&r, 1000).response)["error"],
+        "pin_required"
+    );
+    let config = router.config.snapshot().unwrap().config;
+    let proof = super::pin::cli_local_proof(&config).unwrap();
+    r.headers
+        .push((super::pin::LOCAL_PROOF_HEADER.into(), proof.clone()));
     assert_eq!(router.handle(&r, 1000).response.status, 200);
+    // A wrong proof proves nothing.
+    r.headers.last_mut().unwrap().1 = "0".repeat(proof.len());
+    assert_eq!(router.handle(&r, 1000).response.status, 401);
+    r.headers.last_mut().unwrap().1 = proof;
     r.remote_addr = "203.0.113.1:1234".into();
     assert_eq!(
         json_response(&router.handle(&r, 1000).response)["error"],
@@ -1369,6 +1383,60 @@ fn audit_u04_a_launch_code_opens_the_dashboard_once_for_this_user_only() {
     r.path = "/api/auth/launch-code".into();
     r.query.clear();
     assert_eq!(router.handle(&r, 1000).response.status, 401);
+}
+
+#[test]
+fn audit_u09_a_browser_the_hub_opened_counts_as_local_for_the_pin() {
+    let mut cfg = config();
+    cfg.remote_pin_hash = bcrypt::hash("123456", 4).unwrap();
+    cfg.auth_cookie_secret = "synthetic-secret".into();
+    let auth = super::pin::AuthService::default();
+    let mut page = request();
+    page.path = "/api/input-config".into();
+    page.method = "GET".into();
+    // A loopback request that proves nothing needs the PIN.
+    assert!(auth.treated_remote(&page, &cfg, 1000));
+    assert_eq!(
+        auth.guard(&page, &cfg, 48888, &["GET"], 1000)
+            .unwrap_err()
+            .status,
+        401
+    );
+    // The browser that redeems a launch code gets the local cookie.
+    let code = auth.mint_launch_code(1000).unwrap();
+    let mut launch = request();
+    launch.path = "/api/auth/launch".into();
+    launch.body = format!(r#"{{"code":"{code}"}}"#).into_bytes();
+    let response = auth.launch_for_test(&launch, &cfg, 1000, true);
+    assert_eq!(response.status, 200);
+    let cookie = response
+        .cookies
+        .iter()
+        .find(|cookie| cookie.starts_with(&format!("{}=", super::pin::LOCAL_COOKIE)))
+        .unwrap();
+    assert!(cookie.contains("HttpOnly") && cookie.contains("SameSite=Strict"));
+    let pair = cookie.split(';').next().unwrap().to_owned();
+    page.headers.push(("Cookie".into(), pair.clone()));
+    assert!(!auth.treated_remote(&page, &cfg, 1000));
+    assert!(auth.guard(&page, &cfg, 48888, &["GET"], 1000).is_ok());
+    // It does not make a proxied request local, nor outlive its 30 days,
+    // nor survive a new cookie secret (revoking all access).
+    let mut proxied = page.clone();
+    proxied
+        .headers
+        .push(("X-Forwarded-For".into(), "203.0.113.9".into()));
+    assert!(auth.treated_remote(&proxied, &cfg, 1000));
+    assert!(auth.treated_remote(&page, &cfg, 1000 + 30 * 24 * 60 * 60));
+    let rotated = Config {
+        auth_cookie_secret: "rotated-secret".into(),
+        ..cfg.clone()
+    };
+    assert!(auth.treated_remote(&page, &rotated, 1000));
+    // Without a PIN nothing changes for loopback.
+    let open = config();
+    let mut plain = request();
+    plain.path = "/api/input-config".into();
+    assert!(!auth.treated_remote(&plain, &open, 1000));
 }
 
 #[test]

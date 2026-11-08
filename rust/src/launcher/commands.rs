@@ -226,6 +226,31 @@ pub fn wsl_serve_args(p: &Profile, port: i64, scope: Option<&RemoteTrial>) -> Ve
     args.extend(["--".into(), "bash".into(), "-ilc".into(), script]);
     args
 }
+/// Asks the remote `many-ai-cli` for its local proof, which a Hub with a PIN
+/// set needs from the launcher's calls (U09). It prints nothing without a PIN.
+pub fn ssh_local_proof_args(p: &Profile, port: i64, scope: Option<&RemoteTrial>) -> Vec<String> {
+    let mut args = ssh_base_args(p);
+    args.push(ssh_target(p));
+    let script = format!("{} local-proof", remote_command_prefix(p, port, scope));
+    args.extend([
+        "--".into(),
+        "bash".into(),
+        "-lc".into(),
+        shell_quote(&script),
+    ]);
+    args
+}
+/// `ssh_local_proof_args` for a Hub in WSL.
+pub fn wsl_local_proof_args(p: &Profile, port: i64, scope: Option<&RemoteTrial>) -> Vec<String> {
+    let mut args = Vec::new();
+    if !p.distro.is_empty() {
+        args.extend(["-d".into(), p.distro.clone()]);
+    }
+    let script = format!("{} local-proof", remote_command_prefix(p, port, scope));
+    // WSL passes argv directly: do not apply SSH's extra shell-join quotation.
+    args.extend(["--".into(), "bash".into(), "-lc".into(), script]);
+    args
+}
 pub fn wsl_cleanup_args(p: &Profile, port: i64, scope: Option<&RemoteTrial>) -> Vec<String> {
     let mut args = Vec::new();
     if !p.distro.is_empty() {

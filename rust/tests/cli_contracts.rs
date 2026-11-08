@@ -44,6 +44,7 @@ fn route(command: Command) -> (&'static str, String, Vec<String>) {
         Command::Uninstall(args) => delegated("uninstall", args),
         Command::UsageRelay(args) => delegated("usage-relay", args),
         Command::Orchestrate(args) => delegated("orchestrate", args),
+        Command::LocalProof => no_args("local-proof"),
     }
 }
 

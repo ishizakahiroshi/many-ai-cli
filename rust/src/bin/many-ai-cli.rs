@@ -99,6 +99,7 @@ async fn run() -> Result<(), String> {
                     | "log-clean"
                     | "uninstall"
                     | "usage-relay"
+                    | "local-proof"
                     | "orchestrate"
             )
     }) {
@@ -131,14 +132,18 @@ async fn run() -> Result<(), String> {
                 .await
                 .map_err(|error| error.to_string())?
             {
-                let token = context
+                let config = context
                     .config
                     .snapshot()
                     .map_err(|error| error.to_string())?
-                    .config
-                    .token;
-                let code =
-                    many_ai_cli::application::hub_runtime::request_launch_code(port, &token).await;
+                    .config;
+                let proof = many_ai_cli::hub::pin::cli_local_proof(&config);
+                let code = many_ai_cli::application::hub_runtime::request_launch_code(
+                    port,
+                    &config.token,
+                    proof.as_deref(),
+                )
+                .await;
                 main_program::open_existing_hub(
                     &context.paths,
                     port,
@@ -238,6 +243,20 @@ async fn run() -> Result<(), String> {
                 &mut std::io::stdout(),
                 &mut std::io::stderr(),
             )?;
+        }
+        Command::LocalProof => {
+            // Printed only to the SSH session that asked; nothing when no PIN is set.
+            let context = main_program::MainContext::load(invocation.trial.as_ref())
+                .map_err(|error| error.to_string())?;
+            let config = context
+                .config
+                .snapshot()
+                .map_err(|error| error.to_string())?
+                .config;
+            println!(
+                "{}",
+                many_ai_cli::hub::pin::cli_local_proof(&config).unwrap_or_default()
+            );
         }
         Command::Status => {
             let context = main_program::MainContext::load(invocation.trial.as_ref())

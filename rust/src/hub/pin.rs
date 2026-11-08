@@ -18,6 +18,21 @@ mod ui;
 pub(super) use ui::RemotePinUi;
 
 pub const UI_ORIGIN_COOKIE: &str = "MANY_AI_CLI_ui_origin";
+/// The cookie of a browser the Hub opened itself (U09).
+pub const LOCAL_COOKIE: &str = "MANY_AI_CLI_local";
+const LOCAL_COOKIE_TTL: i64 = 30 * 24 * 60 * 60;
+/// The header a CLI on this machine sends to show it read the private config.
+pub const LOCAL_PROOF_HEADER: &str = "X-Many-AI-CLI-Local";
+/// The environment variable that hands the CLI proof to the usage relay and
+/// `orchestrate`, next to `MANY_AI_CLI_HUB_TOKEN`.
+pub const LOCAL_PROOF_ENV: &str = "MANY_AI_CLI_LOCAL_PROOF";
+/// The proof a CLI on this machine presents with a PIN set. It is made from
+/// the cookie secret in the private config, which a token holder elsewhere
+/// does not have; revoking all access renews the secret and so the proof.
+pub fn cli_local_proof(config: &Config) -> Option<String> {
+    (!config.auth_cookie_secret.is_empty())
+        .then(|| sign(&config.auth_cookie_secret, "local-cli-v1"))
+}
 const PIN_TTL: i64 = 12 * 60 * 60;
 fn hex(bytes: impl AsRef<[u8]>) -> String {
     bytes.as_ref().iter().map(|b| format!("{b:02x}")).collect()
@@ -353,6 +368,50 @@ impl AuthService {
         });
         valid.then(|| (parts[1].to_owned(), expiry))
     }
+    /// Whether a request counts as remote for the PIN. With a PIN set, a
+    /// request from this machine must also prove it: Host and proxy headers
+    /// alone are what a relay (socat, nginx, a port forward) passes through
+    /// unchanged, so they cannot tell a relayed stranger from the user (U09).
+    /// The proof is the cookie the Hub gives a browser it opened itself, or the
+    /// header the CLI makes from the private config.
+    pub fn treated_remote(&self, request: &Request, config: &Config, now: i64) -> bool {
+        logically_remote(request)
+            || (!config.remote_pin_hash.trim().is_empty()
+                && !self.proven_local(request, config, now))
+    }
+    fn proven_local(&self, request: &Request, config: &Config, now: i64) -> bool {
+        if let Some(proof) = cli_local_proof(config) {
+            let sent = request.header(LOCAL_PROOF_HEADER).trim();
+            if !sent.is_empty() && valid_token(sent, &proof) {
+                return true;
+            }
+        }
+        let Some(value) = request.cookie(LOCAL_COOKIE) else {
+            return false;
+        };
+        let Some(payload) = verify_signed(&config.auth_cookie_secret, value.trim(), "local-v1:")
+        else {
+            return false;
+        };
+        payload.split_once('.').is_some_and(|(expiry, nonce)| {
+            !nonce.is_empty() && expiry.parse::<i64>().is_ok_and(|expiry| now < expiry)
+        })
+    }
+    /// The cookie that marks a browser the Hub opened itself (through a
+    /// launch code) as on this machine. It proves nothing without the token.
+    fn local_cookie(&self, request: &Request, config: &Config, now: i64) -> Option<String> {
+        if config.auth_cookie_secret.is_empty() {
+            return None;
+        }
+        let payload = format!("{}.{}", now + LOCAL_COOKIE_TTL, random_hex(16).ok()?);
+        Some(cookie(
+            LOCAL_COOKIE,
+            &signed(&config.auth_cookie_secret, &payload, "local-v1:"),
+            true,
+            LOCAL_COOKIE_TTL,
+            request,
+        ))
+    }
     pub fn guard(
         &self,
         request: &Request,
@@ -362,7 +421,7 @@ impl AuthService {
         now: i64,
     ) -> Result<(), Response> {
         guard_base(request, config, port, methods)?;
-        if logically_remote(request)
+        if self.treated_remote(request, config, now)
             && !config.remote_pin_hash.trim().is_empty()
             && !self.has_valid_pin(request, config, now)
         {
@@ -427,7 +486,7 @@ impl AuthService {
     }
     fn status_nanos(&self, request: &Request, config: &Config, now: i64, nanos: i128) -> Response {
         let enabled = !config.remote_pin_hash.trim().is_empty();
-        let remote = logically_remote(request);
+        let remote = self.treated_remote(request, config, now);
         let authed = !enabled || !remote || self.has_valid_pin(request, config, now);
         let retry = if enabled && remote {
             self.state
@@ -619,7 +678,12 @@ impl AuthService {
         if !is_loopback(&request.remote_addr) || !own_peer(peer.port()) {
             return refused();
         }
-        Response::json(200, &json!({"token": config.token})).no_store()
+        let mut response = Response::json(200, &json!({"token": config.token})).no_store();
+        // The browser the Hub opened counts as on this machine for the PIN (U09).
+        if let Some(cookie) = self.local_cookie(request, config, now) {
+            response.cookies.push(cookie);
+        }
+        response
     }
     /// PIN locks started since the last call, for the security notification.
     pub fn take_lockout_alerts(&self) -> Vec<LockoutAlert> {
@@ -651,7 +715,9 @@ impl AuthService {
                 Ok(s) => s,
                 Err(_) => return Response::error(500, "internal", "configuration unavailable"),
             };
-            if logically_remote(request) && !self.has_valid_pin(request, &snapshot.config, now) {
+            if self.treated_remote(request, &snapshot.config, now)
+                && !self.has_valid_pin(request, &snapshot.config, now)
+            {
                 return Response::error(
                     403,
                     "forbidden",
@@ -722,7 +788,9 @@ impl AuthService {
         let mut snap = store
             .snapshot()
             .map_err(|_| Response::error(500, "internal", "configuration unavailable"))?;
-        if logically_remote(request) && !self.has_valid_pin(request, &snap.config, now) {
+        if self.treated_remote(request, &snap.config, now)
+            && !self.has_valid_pin(request, &snap.config, now)
+        {
             return Err(Response::error(403,"forbidden","revoke-all from a remote address requires existing PIN authentication or a local (loopback) session").no_store());
         }
         let token = random_hex(32)

@@ -50,12 +50,14 @@ impl TrayHooks for NativeTrayHooks {
     fn running_url(&self) -> CoreFuture<'_, io::Result<Option<String>>> {
         Box::pin(async move {
             let snapshot = self.config.snapshot().map_err(io::Error::other)?;
+            let proof = crate::hub::pin::cli_local_proof(&snapshot.config);
             let port = RuntimeLedger::open(&self.paths)?
                 .running_port(
                     self.preferred_port
                         .map(i64::from)
                         .unwrap_or(snapshot.config.hub.port),
                     &snapshot.config.token,
+                    proof.as_deref(),
                 )
                 .await;
             if let (Some(expected), Some(actual)) = (self.preferred_port, port)
@@ -72,9 +74,12 @@ impl TrayHooks for NativeTrayHooks {
             let Some(port) = port else {
                 return Ok(None);
             };
-            let code =
-                crate::application::hub_runtime::request_launch_code(port, &snapshot.config.token)
-                    .await;
+            let code = crate::application::hub_runtime::request_launch_code(
+                port,
+                &snapshot.config.token,
+                proof.as_deref(),
+            )
+            .await;
             Ok(Some(crate::application::hub_runtime::dashboard_url(
                 port,
                 code.as_deref(),

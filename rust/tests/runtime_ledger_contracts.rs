@@ -155,7 +155,7 @@ async fn authenticated_loopback_probe_does_not_follow_redirects() {
         );
         socket.write_all(format!("HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:{other}/must-not-receive\r\nContent-Length: 0\r\n\r\n").as_bytes()).await.unwrap();
     });
-    assert!(!probe_hub_info(port, "synthetic runtime token").await);
+    assert!(!probe_hub_info(port, "synthetic runtime token", None).await);
     server.await.unwrap();
     assert!(
         tokio::time::timeout(Duration::from_millis(40), foreign.accept())

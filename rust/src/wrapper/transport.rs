@@ -27,6 +27,8 @@ pub struct LoopbackConnector {
     port: u16,
     token: String,
     timeout: Duration,
+    /// The CLI's local proof, for a Hub with a PIN set (U09).
+    local_proof: Option<String>,
 }
 impl LoopbackConnector {
     pub fn new(port: u16, token: String, timeout: Duration) -> io::Result<Self> {
@@ -40,7 +42,12 @@ impl LoopbackConnector {
             port,
             token,
             timeout,
+            local_proof: None,
         })
+    }
+    pub fn with_local_proof(mut self, proof: Option<String>) -> Self {
+        self.local_proof = proof;
+        self
     }
 }
 struct Socket(WebSocketStream<TcpStream>);
@@ -141,6 +148,14 @@ impl HubConnector for LoopbackConnector {
                 value.set_sensitive(true);
                 request.headers_mut().insert("Authorization", value);
             }
+            if let Some(proof) = &self.local_proof {
+                let mut value: tokio_tungstenite::tungstenite::http::HeaderValue =
+                    proof.parse().map_err(|_| connection_error())?;
+                value.set_sensitive(true);
+                request
+                    .headers_mut()
+                    .insert(crate::hub::pin::LOCAL_PROOF_HEADER, value);
+            }
             let socket = tokio::time::timeout(self.timeout, async {
                 let stream = TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, self.port)).await?;
                 // The token, the terminal output and the input go only to a
@@ -186,6 +201,9 @@ impl HubConnector for LoopbackConnector {
             client
                 .get(format!("http://127.0.0.1:{}/", self.port))
                 .query(&[("token", &self.token)])
+                .headers(crate::application::hub_runtime::local_proof_headers(
+                    self.local_proof.as_deref(),
+                ))
                 .send()
                 .await
                 .is_ok_and(|response| response.status() == reqwest::StatusCode::OK)

@@ -13,6 +13,8 @@ pub trait StopIo: Send + Sync {
         &'a self,
         port: u16,
         token: &'a str,
+        // The CLI's local proof, so a Hub with a PIN set lets stop through (U09).
+        proof: Option<&'a str>,
         cancel: &'a Cancellation,
     ) -> CoreFuture<'a, io::Result<bool>>;
     /// Ends the Hub that wrote `data`. Ok(true): ended, or already gone.
@@ -40,14 +42,16 @@ impl StopCommand {
             .ok()
             .filter(|port| *port > 0)
             .ok_or_else(|| io::Error::other("invalid hub runtime port"))?;
-        let token = self
-            .config
-            .snapshot()
-            .map_err(io::Error::other)?
-            .config
-            .token;
+        let config = self.config.snapshot().map_err(io::Error::other)?.config;
+        let token = config.token.clone();
+        let proof = crate::hub::pin::cli_local_proof(&config);
         let _ = (self.log)("graceful shutdown requested", data.pid, port);
-        if self.io.request(port, &token, cancel).await.unwrap_or(false) {
+        if self
+            .io
+            .request(port, &token, proof.as_deref(), cancel)
+            .await
+            .unwrap_or(false)
+        {
             let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
             loop {
                 if !self.io.alive(&data) {
@@ -109,6 +113,7 @@ impl StopIo for NativeStopIo {
         &'a self,
         port: u16,
         token: &'a str,
+        proof: Option<&'a str>,
         cancel: &'a Cancellation,
     ) -> CoreFuture<'a, io::Result<bool>> {
         Box::pin(async move {
@@ -127,7 +132,7 @@ impl StopIo for NativeStopIo {
                 .timeout(Duration::from_secs(2))
                 .build()
                 .map_err(io::Error::other)?;
-            tokio::select! {_=cancel.cancelled()=>Err(io::Error::new(io::ErrorKind::Interrupted,"stop cancelled")),reply=client.post(url).query(&[("token",token)]).header(reqwest::header::CONTENT_TYPE,"application/json").header(crate::hub::lifecycle::STOP_SOURCE_HEADER,"stop_command").send()=>reply.map(|response|response.status()==200).map_err(|_|io::Error::other("shutdown request failed"))}
+            tokio::select! {_=cancel.cancelled()=>Err(io::Error::new(io::ErrorKind::Interrupted,"stop cancelled")),reply=client.post(url).query(&[("token",token)]).headers(crate::application::hub_runtime::local_proof_headers(proof)).header(reqwest::header::CONTENT_TYPE,"application/json").header(crate::hub::lifecycle::STOP_SOURCE_HEADER,"stop_command").send()=>reply.map(|response|response.status()==200).map_err(|_|io::Error::other("shutdown request failed"))}
         })
     }
     fn kill(&self, data: &RuntimeData) -> io::Result<bool> {

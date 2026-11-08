@@ -29,8 +29,12 @@ pub async fn write(
         .timeout(Duration::from_secs(3))
         .build()
         .map_err(io::Error::other)?;
+    let proof = crate::application::hub_runtime::local_proof_headers(
+        crate::hub::pin::cli_local_proof(config).as_deref(),
+    );
     let running = client
         .get(address.clone())
+        .headers(proof.clone())
         .send()
         .await
         .is_ok_and(|response| response.status() == reqwest::StatusCode::OK);
@@ -40,7 +44,7 @@ pub async fn write(
     writeln!(output, "running {address}")?;
     address.set_path("/api/info");
     let stale = async {
-        let mut response = client.get(address).send().await.ok()?;
+        let mut response = client.get(address).headers(proof).send().await.ok()?;
         if response.status() != reqwest::StatusCode::OK {
             return None;
         }

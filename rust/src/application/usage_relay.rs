@@ -263,8 +263,13 @@ impl RelayIo for NativeRelayIo {
                 .timeout(std::time::Duration::from_secs(5))
                 .build()
                 .map_err(io::Error::other)?;
+            // The wrapper hands the CLI's local proof down with the token (U09).
+            let proof = std::env::var(crate::hub::pin::LOCAL_PROOF_ENV).ok();
             let mut request = client
                 .post(format!("{hub}/api/session-usage"))
+                .headers(crate::application::hub_runtime::local_proof_headers(
+                    proof.as_deref().filter(|proof| !proof.is_empty()),
+                ))
                 .header("Content-Type", "application/json")
                 .body(bytes);
             if !token.is_empty() {

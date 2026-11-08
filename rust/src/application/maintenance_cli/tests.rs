@@ -71,6 +71,7 @@ impl stop::StopIo for StopFixture {
         &'a self,
         port: u16,
         _: &'a str,
+        _proof: Option<&'a str>,
         _: &'a crate::process::Cancellation,
     ) -> crate::proto::core::CoreFuture<'a, io::Result<bool>> {
         Box::pin(async move {
@@ -146,6 +147,7 @@ impl stop::StopIo for ForceOutcome {
         &'a self,
         _: u16,
         _: &'a str,
+        _proof: Option<&'a str>,
         _: &'a crate::process::Cancellation,
     ) -> crate::proto::core::CoreFuture<'a, io::Result<bool>> {
         Box::pin(async { Err(io::Error::other("synthetic: nothing listens")) })
@@ -351,6 +353,7 @@ impl stop::StopIo for HeldStop {
         &'a self,
         _: u16,
         _: &'a str,
+        _proof: Option<&'a str>,
         _: &'a crate::process::Cancellation,
     ) -> crate::proto::core::CoreFuture<'a, io::Result<bool>> {
         Box::pin(async move {

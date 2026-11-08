@@ -15,7 +15,11 @@ use std::{
 pub async fn running_port(context: &MainContext) -> io::Result<Option<u16>> {
     let config = context.config.snapshot().map_err(io::Error::other)?.config;
     Ok(RuntimeLedger::open(&context.paths)?
-        .running_port(config.hub.port, &config.token)
+        .running_port(
+            config.hub.port,
+            &config.token,
+            crate::hub::pin::cli_local_proof(&config).as_deref(),
+        )
         .await)
 }
 fn set_port(context: &mut MainContext, port: u16) -> io::Result<()> {
@@ -145,7 +149,13 @@ pub async fn ensure_hub(context: &mut MainContext, cancel: &Cancellation) -> io:
                 "Hub startup cancelled",
             ));
         }
-        if probe_hub_info(port, &config.token).await {
+        if probe_hub_info(
+            port,
+            &config.token,
+            crate::hub::pin::cli_local_proof(&config).as_deref(),
+        )
+        .await
+        {
             return startup.release();
         }
         if startup.0.as_mut().unwrap().try_wait()?.is_some() {
@@ -181,7 +191,14 @@ async fn restart_stale(
         url.query_pairs_mut().append_pair("token", &config.token);
         Ok(url)
     };
-    let Ok(mut response) = client.get(endpoint("/api/info")?).send().await else {
+    let proof = crate::hub::pin::cli_local_proof(&config);
+    let proof_headers = super::super::hub_runtime::local_proof_headers(proof.as_deref());
+    let Ok(mut response) = client
+        .get(endpoint("/api/info")?)
+        .headers(proof_headers.clone())
+        .send()
+        .await
+    else {
         return Ok(false);
     };
     if !response.status().is_success() {
@@ -213,6 +230,7 @@ async fn restart_stale(
     }
     if client
         .post(endpoint("/api/shutdown")?)
+        .headers(proof_headers)
         .header(
             crate::hub::lifecycle::STOP_SOURCE_HEADER,
             "stale_binary_restart",
@@ -231,7 +249,13 @@ async fn restart_stale(
                 "Hub restart cancelled",
             ));
         }
-        if !probe_hub_info(port, &config.token).await {
+        if !probe_hub_info(
+            port,
+            &config.token,
+            crate::hub::pin::cli_local_proof(&config).as_deref(),
+        )
+        .await
+        {
             return Ok(true);
         }
         tokio::select! { _ = cancel.cancelled() => {}, _ = tokio::time::sleep(Duration::from_millis(100)) => {} }

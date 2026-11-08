@@ -210,14 +210,21 @@ impl RuntimeLedger {
         }
         Some(port)
     }
-    pub async fn running_port(&self, configured: i64, token: &str) -> Option<u16> {
+    /// `proof` is the CLI's local proof (`hub::pin::cli_local_proof`), sent so a
+    /// Hub with a PIN set counts this CLI as on this machine (U09).
+    pub async fn running_port(
+        &self,
+        configured: i64,
+        token: &str,
+        proof: Option<&str>,
+    ) -> Option<u16> {
         let allowed = |port: i64| {
             u16::try_from(port)
                 .ok()
                 .filter(|p| *p > 0 && self.trial_port.is_none_or(|t| t == *p))
         };
         if let Some(port) = allowed(configured)
-            && probe_hub_info(port, token).await
+            && probe_hub_info(port, token, proof).await
         {
             return Some(port);
         }
@@ -227,7 +234,7 @@ impl RuntimeLedger {
             return None;
         }
         let port = allowed(data.port)?;
-        if data.port == configured || !probe_hub_info(port, token).await {
+        if data.port == configured || !probe_hub_info(port, token, proof).await {
             return None;
         }
         Some(port)
@@ -236,7 +243,7 @@ impl RuntimeLedger {
 /// Credentials are sent only to the explicit numeric loopback URL. Redirects
 /// and environment proxy discovery are disabled, a deliberate confinement guard.
 /// The token goes only to a listener this OS user holds (U01).
-pub async fn probe_hub_info(port: u16, token: &str) -> bool {
+pub async fn probe_hub_info(port: u16, token: &str, proof: Option<&str>) -> bool {
     if port == 0 || !crate::process::listener::loopback_listener_is_own(port).unwrap_or(false) {
         return false;
     }
@@ -254,15 +261,25 @@ pub async fn probe_hub_info(port: u16, token: &str) -> bool {
     url.query_pairs_mut().append_pair("token", token);
     client
         .get(url)
+        .headers(local_proof_headers(proof))
         .send()
         .await
         .is_ok_and(|response| response.status() == reqwest::StatusCode::OK)
 }
 
+/// The header that carries the CLI's local proof, when there is one.
+pub fn local_proof_headers(proof: Option<&str>) -> reqwest::header::HeaderMap {
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Some(Ok(mut value)) = proof.map(reqwest::header::HeaderValue::from_str) {
+        value.set_sensitive(true);
+        headers.insert(crate::hub::pin::LOCAL_PROOF_HEADER, value);
+    }
+    headers
+}
 /// Asks the Hub this OS user runs on `port` for a one-time code to open the
 /// dashboard with, so the browser's command line carries the code and not the
 /// token (U04). `None` when the Hub is not this user's or predates codes.
-pub async fn request_launch_code(port: u16, token: &str) -> Option<String> {
+pub async fn request_launch_code(port: u16, token: &str, proof: Option<&str>) -> Option<String> {
     if port == 0 || !crate::process::listener::loopback_listener_is_own(port).unwrap_or(false) {
         return None;
     }
@@ -275,6 +292,7 @@ pub async fn request_launch_code(port: u16, token: &str) -> Option<String> {
     let mut response = client
         .post(format!("http://127.0.0.1:{port}/api/auth/launch-code"))
         .bearer_auth(token)
+        .headers(local_proof_headers(proof))
         .header("Origin", format!("http://127.0.0.1:{port}"))
         .send()
         .await
@@ -387,7 +405,7 @@ mod tests {
             .replace(FILE, &serde_json::to_vec(&stale).unwrap(), 0o600)
             .unwrap();
         // Port 0 skips the configured probe, so only the record is consulted.
-        assert_eq!(ledger.running_port(0, "synthetic-token").await, None);
+        assert_eq!(ledger.running_port(0, "synthetic-token", None).await, None);
         assert!(ledger.read().unwrap().is_none());
     }
 }
