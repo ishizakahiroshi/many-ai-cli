@@ -81,27 +81,17 @@ pub fn index_with_source(
     now: i64,
     source: Option<&dyn AssetSource>,
 ) -> Response {
-    let authed = token_or_trusted(request, config);
-    let wants_document = request
-        .header("Sec-Fetch-Dest")
-        .trim()
-        .eq_ignore_ascii_case("document")
-        || request
-            .header("Accept")
-            .to_lowercase()
-            .contains("text/html");
-    if !authed && !wants_document {
-        return Response::error(401, "unauthorized", "unauthorized");
-    }
+    // The page holds nothing secret and is served without the token: the
+    // dashboard presents the token it keeps in a header and in the first
+    // WebSocket message, never in a cookie (U05).
     if let Err(e) = require_method(request, &["GET"]) {
         return e;
     }
     if let Err(e) = require_host(request, config, port) {
         return e;
     }
-    // A launch code is always traded on the sign-in page, so the token it
-    // stands for is the one the dashboard keeps (U04).
-    if !authed || !request.query("launch").is_empty() {
+    // A launch code is traded on the sign-in page (U04).
+    if !request.query("launch").is_empty() {
         return reauth();
     }
     let bytes = source.map_or_else(
@@ -127,14 +117,11 @@ pub fn index_with_source(
         "Content-Security-Policy".into(),
         content_security_policy(&config.hub.allowed_hosts),
     );
-    if valid_token(&request_token(request), &config.token) {
-        response.cookies.push(super::pin::cookie(
-            TOKEN_COOKIE,
-            &config.token,
-            false,
-            86400,
-            request,
-        ));
+    // A token cookie an earlier version left behind is deleted.
+    if request.cookie(TOKEN_COOKIE).is_some() {
+        response
+            .cookies
+            .push(super::pin::cookie(TOKEN_COOKIE, "", false, 0, request));
     }
     if let Some(cookie) = auth.issue_ui_cookie(request, config, now) {
         response.cookies.push(cookie);

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "63c1d35e15b117f3170c993d919f2b83c00077bd",
+    "commit": "4622d691c69dfe1c2831879ad11081f7320c532a",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -31800,7 +31800,6 @@
         "screen_to_api": {
           "state": "value",
           "value": [
-            "/",
             "/api/auth/launch"
           ]
         }
@@ -48697,8 +48696,10 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "none_observed",
-          "value": []
+          "state": "value",
+          "value": [
+            "/api/auth/status"
+          ]
         }
       },
       "unresolved": [

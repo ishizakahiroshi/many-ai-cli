@@ -13,6 +13,9 @@ pub fn valid_token(got: &str, want: &str) -> bool {
     }
     bool::from(got.as_bytes().ct_eq(want.as_bytes()))
 }
+/// The token a request presents: in the query or a Bearer header. The token is
+/// no longer kept in a cookie: a browser sends a cookie for 127.0.0.1 to every
+/// port there, including another user's server (U05).
 pub fn request_token(request: &Request) -> String {
     let query = request.query("token");
     if !query.is_empty() {
@@ -22,11 +25,64 @@ pub fn request_token(request: &Request) -> String {
     if let Some(value) = auth.strip_prefix("Bearer ") {
         return value.trim().into();
     }
-    request
-        .cookie(TOKEN_COOKIE)
-        .unwrap_or_default()
-        .trim()
-        .into()
+    String::new()
+}
+
+/// How long an asset ticket lasts. The dashboard renews it every hour.
+pub const ASSET_TICKET_TTL: i64 = 12 * 60 * 60;
+/// Routes an `<img>`, `<video>`, `<audio>` or download link loads. They cannot
+/// send a header, so they may present an asset ticket instead of the token.
+pub fn is_asset_route(path: &str) -> bool {
+    matches!(
+        path,
+        "/api/files-asset"
+            | "/api/files-download"
+            | "/api/avatar"
+            | "/api/user-prefs/notify-sound-custom"
+    ) || path.starts_with("/api/memo-images/")
+        || path.starts_with("/api/provider-icons/")
+}
+fn asset_signature(token: &str, expiry: i64) -> String {
+    use hmac::{Hmac, KeyInit, Mac};
+    let mut mac =
+        Hmac::<sha2::Sha256>::new_from_slice(token.as_bytes()).expect("HMAC arbitrary key length");
+    mac.update(format!("asset-ticket-v1:{expiry}").as_bytes());
+    mac.finalize()
+        .into_bytes()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+/// A read-only ticket for the asset routes, bound to the token: rotating the
+/// token ends every ticket made from it.
+pub fn asset_ticket(token: &str, now: i64) -> String {
+    let expiry = now + ASSET_TICKET_TTL;
+    format!("{expiry}.{}", asset_signature(token, expiry))
+}
+pub fn valid_asset_ticket(ticket: &str, token: &str, now: i64) -> bool {
+    let Some((expiry, signature)) = ticket.trim().split_once('.') else {
+        return false;
+    };
+    let Ok(expiry) = expiry.parse::<i64>() else {
+        return false;
+    };
+    !token.is_empty()
+        && expiry > now
+        && expiry <= now + ASSET_TICKET_TTL
+        && valid_token(signature, &asset_signature(token, expiry))
+}
+fn asset_ticket_ok(request: &Request, config: &Config) -> bool {
+    if !matches!(request.method.as_str(), "GET" | "HEAD") || !is_asset_route(&request.path) {
+        return false;
+    }
+    let ticket = request.query("ticket");
+    if ticket.is_empty() {
+        return false;
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs() as i64);
+    valid_asset_ticket(&ticket, &config.token, now)
 }
 
 /// Go net.SplitHostPort semantics relevant to Host: raw IPv6 is portless; the
@@ -233,6 +289,7 @@ fn trusted_remote(remote: &str, networks: &[String]) -> bool {
 }
 pub fn token_or_trusted(request: &Request, config: &Config) -> bool {
     valid_token(&request_token(request), &config.token)
+        || asset_ticket_ok(request, config)
         || (config.hub.allow_loopback_without_token
             && ((!logically_remote(request) && is_loopback(&request.remote_addr))
                 || trusted_remote(&request.remote_addr, &config.hub.trusted_networks)))

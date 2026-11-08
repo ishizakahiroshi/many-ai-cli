@@ -555,6 +555,8 @@
   "settings_ntfy_include_body_label": "Bao gồm nội dung",
   "settings_ntfy_include_body_note": "Mặc định chỉ gửi tiêu đề. Khi bật, câu hỏi phê duyệt và tóm tắt hoàn thành sẽ được gửi tới dịch vụ bên ngoài (thông tin bí mật được che trước khi gửi).",
   "settings_ntfy_action_links_note": "Thông báo phê duyệt qua ntfy có nút Approve và Reject trả lời được trong 120 giây mà không cần token Hub hay PIN (phê duyệt rủi ro cao chỉ có Reject). Đừng để người khác thấy thông báo của bạn. Nếu đích là http, chỉ gửi nút Open.",
+  "signed_out_title": "Trình duyệt này chưa đăng nhập vào Hub.",
+  "signed_out_body": "Hãy mở bảng điều khiển từ many-ai-cli (hoặc khay hệ thống), hoặc mở một lần URL của Hub có ?token=. Mã QR của URL đó nằm trong Cài đặt > Kết nối di động.",
   "settings_done_summary_notify": "Thông báo hoàn thành task",
   "settings_done_summary_notify_desc": "Gửi tóm tắt khi AI hoàn thành task. Cần bật quy tắc phê duyệt.",
   "settings_ntfy_save": "Lưu",

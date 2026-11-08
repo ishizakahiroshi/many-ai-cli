@@ -35,7 +35,7 @@
 // 縁取り」に差し替える。画像は new Image() で読み込めたことを確かめてから使う（CSP でインラインの
 // onerror は書けない）。読み込めなければ、または画像を外すと、頭文字の表示に戻る。図形は変えない。
 
-import { escapeHtml } from './util.js';
+import { escapeHtml, withAssetTicket } from './util.js';
 
 type IconShape = 'circle' | 'rect';
 
@@ -136,7 +136,7 @@ function defaultImageProbe(href: string): Promise<boolean> {
     const img = new Image();
     img.onload = () => resolve(true);
     img.onerror = () => resolve(false);
-    img.src = href;
+    img.src = withAssetTicket(href);
   });
 }
 
@@ -188,7 +188,7 @@ function buildSymbolInner(token: string, raw: unknown, options: SymbolInnerOptio
     const ring = rect
       ? `<rect class="prov-shape${cls}" x="1" y="1" width="14" height="14" rx="3" stroke-width="2" style="${ringStyle}"/>`
       : `<circle class="prov-shape${cls}" cx="8" cy="8" r="6" stroke-width="2" style="${ringStyle}"/>`;
-    return `<clipPath id="${options.clipId}">${clipShape}</clipPath>${base}<image href="${escapeHtml(options.imageHref)}" x="1" y="1" width="14" height="14" preserveAspectRatio="xMidYMid slice" clip-path="url(#${options.clipId})"/>${ring}`;
+    return `<clipPath id="${options.clipId}">${clipShape}</clipPath>${base}<image href="${escapeHtml(withAssetTicket(options.imageHref))}" x="1" y="1" width="14" height="14" preserveAspectRatio="xMidYMid slice" clip-path="url(#${options.clipId})"/>${ring}`;
   }
   const shape = def?.shape === 'rect'
     ? `<rect class="prov-shape${cls}" x="1" y="1" width="14" height="14" rx="3" stroke-width="2" style="${shapeStyle}"/>`

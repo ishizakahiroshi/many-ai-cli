@@ -2,7 +2,7 @@ import { noteSpawnCorrelation, noteSpawnDisconnected, noteSpawnSessions, noteSpa
 import { noteSessionListTurnEnd, preserveSessionListSelection } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { showToast, token } from './util.js';
+import { showToast, token, webSocketTicketQuery } from './util.js';
 import { isDetachedTabView } from './detached-view-mode.js';
 import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, autoDismissTimers, chatHistory, deriveProjectKeyFromCwd, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory, updateInputAffordance } from '../app.js';
@@ -233,7 +233,7 @@ export function _connectWs() {
   // ブロックされ snapshot を受信できずセッションカードが出ない。ページの protocol に
   // 合わせて wss:// / ws:// を選ぶ。
   const wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-  const _ws = new WebSocket(`${wsProto}${location.host}/ws`);
+  const _ws = new WebSocket(`${wsProto}${location.host}/ws${webSocketTicketQuery()}`);
   ws = _ws;
   _ws.onerror = () => { document.getElementById('summary').textContent = t('ws_error'); };
   _ws.onclose = (e) => {

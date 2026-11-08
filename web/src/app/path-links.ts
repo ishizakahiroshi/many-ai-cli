@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { apiFetch, showToast } from './util.js';
+import { apiFetch, showToast, withAssetTicket } from './util.js';
 import { sessions } from './state.js';
 import { FilesTabManager, FilesPreview, resolveLiveSessionId } from './files-view.js';
 import { saveTextToMemo } from './memo-model.js';
@@ -92,13 +92,13 @@ export function isAnyAiCliPreviewable(filePath) {
 
 export function getFilesAssetUrl(absPath, sessionId) {
   const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
-  // Cookie auth for same-origin media/preview — keep token out of HTML attributes (F-WEB-07).
-  return `/api/files-asset?path=${encodeURIComponent(absPath)}${sessionQs}`;
+  // 画像・動画は header を付けられないので読み取り専用の券を付ける。token は属性に載せない（F-WEB-07）。
+  return withAssetTicket(`/api/files-asset?path=${encodeURIComponent(absPath)}${sessionQs}`);
 }
 
 export function getFilesDownloadUrl(absPath, sessionId) {
   const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
-  return `/api/files-download?path=${encodeURIComponent(absPath)}${sessionQs}`;
+  return withAssetTicket(`/api/files-download?path=${encodeURIComponent(absPath)}${sessionQs}`);
 }
 
 export function getPathOpenItem(filePath, sessionId) {

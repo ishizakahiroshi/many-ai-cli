@@ -161,10 +161,11 @@ fn service_token_precedence_and_bearer_case_are_go_compatible() {
     assert_eq!(request_token(&r), "synthetic");
     r.query = "token=&token=second".into();
     assert_eq!(request_token(&r), "header");
+    // A cookie no longer carries the token (U05).
     r.headers[0].1 = "bearer ignored".into();
-    assert_eq!(request_token(&r), "cookie");
+    assert_eq!(request_token(&r), "");
     r.headers[0].1 = "Bearer   ".into();
-    assert_eq!(request_token(&r), "cookie"); // TrimSpace removes the required trailing prefix space.
+    assert_eq!(request_token(&r), ""); // TrimSpace removes the required trailing prefix space.
     r.headers[0].1 = "Bearer \t x ".into();
     assert_eq!(request_token(&r), "x");
     assert!(!valid_token("", ""));
@@ -1063,9 +1064,32 @@ fn service_reauth_page_cookie_and_public_assets_policy() {
     r.method = "GET".into();
     r.query.clear();
     r.headers.push(("Accept".into(), "text/html".into()));
+    // The page holds nothing secret: it is served without the token, and an
+    // old token cookie is deleted, never set (U05).
+    r.headers
+        .push(("Cookie".into(), format!("{TOKEN_COOKIE}=synthetic")));
+    let response = router.handle(&r, 1000).response;
+    assert_eq!(response.status, 200);
+    let cleared: Vec<_> = response
+        .cookies
+        .iter()
+        .filter(|cookie| cookie.starts_with(&format!("{TOKEN_COOKIE}=")))
+        .collect();
+    assert_eq!(cleared.len(), 1);
+    assert!(
+        cleared[0].starts_with(&format!("{TOKEN_COOKIE}=;")) && cleared[0].contains("Max-Age=0")
+    );
+    assert!(!String::from_utf8_lossy(&response.body).contains("synthetic"));
+    // With a launch code the sign-in page answers, to trade it.
+    r.query = "launch=0123".into();
     let response = router.handle(&r, 1000).response;
     assert_eq!(response.status, 401);
-    assert!(response.cookies.is_empty());
+    assert!(
+        !response
+            .cookies
+            .iter()
+            .any(|cookie| cookie.contains("synthetic"))
+    );
     let html = String::from_utf8(response.body).unwrap();
     assert!(html.contains("many-ai-cli-token"));
     assert!(!html.contains("__NONCE__"));
@@ -1103,10 +1127,10 @@ fn service_pin_login_ignores_set_pin_fields_as_unknown() {
 }
 
 #[test]
-fn service_query_ignores_go_invalid_pairs_before_cookie_fallback() {
+fn service_query_ignores_go_invalid_pairs_before_header_fallback() {
     let mut r = request();
     r.headers
-        .push(("Cookie".into(), format!("{TOKEN_COOKIE}=synthetic")));
+        .push(("Authorization".into(), "Bearer synthetic".into()));
     for query in [
         "token=bad;pair",
         "token=%ZZ",
@@ -1115,6 +1139,10 @@ fn service_query_ignores_go_invalid_pairs_before_cookie_fallback() {
         r.query = query.into();
         assert_eq!(request_token(&r), "synthetic", "{query}");
     }
+    // The token cookie of an earlier version is not read (U05).
+    r.headers = vec![("Cookie".into(), format!("{TOKEN_COOKIE}=synthetic"))];
+    r.query = "token=bad;pair".into();
+    assert_eq!(request_token(&r), "");
 }
 
 #[test]
@@ -1340,6 +1368,68 @@ fn audit_u04_a_launch_code_opens_the_dashboard_once_for_this_user_only() {
     let mut r = request();
     r.path = "/api/auth/launch-code".into();
     r.query.clear();
+    assert_eq!(router.handle(&r, 1000).response.status, 401);
+}
+
+#[test]
+fn audit_u05_an_asset_ticket_reads_media_only_and_ends_with_the_token() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let cfg = config();
+    let ticket = asset_ticket(&cfg.token, now);
+    let mut r = request();
+    r.query = format!("ticket={ticket}&path=x");
+    r.method = "GET".into();
+    for path in [
+        "/api/files-asset",
+        "/api/files-download",
+        "/api/avatar",
+        "/api/user-prefs/notify-sound-custom",
+        "/api/memo-images/a.png",
+        "/api/provider-icons/claude",
+    ] {
+        r.path = path.into();
+        assert!(token_or_trusted(&r, &cfg), "{path}");
+    }
+    // It opens no other route, and does not write.
+    r.path = "/api/files-content".into();
+    assert!(!token_or_trusted(&r, &cfg));
+    r.path = "/api/asset-ticket".into();
+    assert!(!token_or_trusted(&r, &cfg));
+    r.path = "/api/files-asset".into();
+    r.method = "POST".into();
+    assert!(!token_or_trusted(&r, &cfg));
+    r.method = "GET".into();
+    // A rotated token, an expired or a forged ticket is refused.
+    let rotated = Config {
+        token: "rotated".into(),
+        ..config()
+    };
+    assert!(!token_or_trusted(&r, &rotated));
+    assert!(!valid_asset_ticket(
+        &ticket,
+        &cfg.token,
+        now + ASSET_TICKET_TTL
+    ));
+    let forged = format!("{}.{}", now + 60, "0".repeat(64));
+    assert!(!valid_asset_ticket(&forged, &cfg.token, now));
+    let far = asset_ticket(&cfg.token, now + ASSET_TICKET_TTL);
+    assert!(!valid_asset_ticket(&far, &cfg.token, now));
+    // Only a token holder is given a ticket.
+    let (_dir, router) = router();
+    let mut r = request();
+    r.path = "/api/asset-ticket".into();
+    r.method = "GET".into();
+    let response = router.handle(&r, 1000).response;
+    assert_eq!(response.status, 200);
+    let given = json_response(&response)["ticket"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(valid_asset_ticket(&given, "synthetic", 1000));
+    r.query = format!("ticket={given}");
     assert_eq!(router.handle(&r, 1000).response.status, 401);
 }
 

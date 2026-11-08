@@ -1557,6 +1557,20 @@ impl ServiceRouter {
                 }
                 "/api/auth/logout" => self.auth.logout(request, config),
                 "/api/auth/launch-code" => self.auth.launch_code(request, now),
+                // Only a token holder gets a ticket: a ticket cannot ask for one.
+                "/api/asset-ticket"
+                    if auth::valid_token(&auth::request_token(request), &config.token) =>
+                {
+                    Response::json(
+                        200,
+                        &serde_json::json!({
+                            "ticket": auth::asset_ticket(&config.token, now),
+                            "expires_in": auth::ASSET_TICKET_TTL,
+                        }),
+                    )
+                    .no_store()
+                }
+                "/api/asset-ticket" => Response::error(401, "unauthorized", "unauthorized"),
                 "/api/auth/set-pin" => self.auth.set_pin(request, &self.config, now),
                 "/api/auth/revoke-all" => {
                     let Some(core) = &self.core else {
@@ -1832,7 +1846,7 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
                 &["POST"]
             }
         }
-        "/api/auth/status" => &["GET"],
+        "/api/auth/status" | "/api/asset-ticket" => &["GET"],
         "/api/auth/login"
         | "/api/auth/logout"
         | "/api/auth/launch"

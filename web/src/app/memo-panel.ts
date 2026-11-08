@@ -3,7 +3,7 @@
 // グループ化・並び順・件数の純粋ロジックは memo-model.ts にある。
 import { t } from '../i18n.js';
 import { uiButtonClass, uiIconHtml } from './ui-components.js';
-import { apiFetch } from './util.js';
+import { apiFetch, withAssetTicket } from './util.js';
 import { openLightbox } from './lightbox.js';
 import { activeSessionId, sessions } from './state.js';
 import { openSpawnPanelWith } from './spawn-panel.js';
@@ -89,8 +89,8 @@ let pendingImagesEl: HTMLElement;
 const inflightUploads = new Set<Promise<void>>();
 
 function memoImageUrl(name: string): string {
-  // Cookie (MANY_AI_CLI_token) is enough for same-origin <img>; avoid ?token= in HTML/URL bar.
-  return `/api/memo-images/${encodeURIComponent(name)}`;
+  // <img> は header を付けられないので、読み取り専用の券を付ける（token は URL に載せない）。
+  return withAssetTicket(`/api/memo-images/${encodeURIComponent(name)}`);
 }
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, text = '', className = ''): HTMLElementTagNameMap[K] {

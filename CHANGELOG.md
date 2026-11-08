@@ -108,6 +108,14 @@ Release artifacts are published at
 
 ### Security
 
+- **The token is no longer kept in a cookie.** A browser sends a 127.0.0.1
+  cookie to every port on 127.0.0.1, so another program listening there could
+  receive it. The dashboard now sends the token in a header and in the first
+  WebSocket message only. Images, video, audio and downloads, which cannot
+  carry a header, use a read-only ticket that works only for those reads, lasts
+  12 hours and ends when the token is rotated. The dashboard page itself is
+  served without the token; a browser that holds no token is told how to sign
+  in. A token cookie left by an earlier version is deleted.
 - **The browser is opened with a one-time code, not the token.** When the
   Hub, the CLI, the tray or the launcher opens the dashboard, the browser's
   command line (which other users of a Linux or macOS machine can read)

@@ -33,15 +33,12 @@ code{background:#1b1d22;padding:.1em .35em;border-radius:.25em}
     // 先頭が // や /\ だと、location.replace が別サイトへの URL として解釈する。
     return (path.charAt(0) !== '/' || path.charAt(1) === '/' || path.charAt(1) === '\\') ? '/' : path;
   }
-  function signIn(token, back) {
-    return fetch('/', {
-      method: 'GET',
-      credentials: 'same-origin',
-      headers: { 'Authorization': 'Bearer ' + token }
-    }).then(function (res) {
-      if (res.ok) { location.replace(back); return; }
-      giveUp();
-    });
+  // token は cookie に置かない。画面は保存した token を header と WebSocket の
+  // 最初のメッセージで送る。localStorage が使えないときはこのタブの間だけ持つ。
+  function keep(token) {
+    try { localStorage.setItem('__TOKEN_KEY__', token); return true; } catch (e) { /* private mode 等 */ }
+    try { sessionStorage.setItem('__TOKEN_KEY__', token); return true; } catch (e) { /* 保存できない */ }
+    return false;
   }
   // Hub が開いたときは、token の代わりに一度だけ使える起動の番号が付く。
   var params = new URLSearchParams(location.search);
@@ -59,21 +56,12 @@ code{background:#1b1d22;padding:.1em .35em;border-radius:.25em}
     }).then(function (res) {
       return res.ok ? res.json() : null;
     }).then(function (data) {
-      if (!data || typeof data.token !== 'string' || !data.token) { giveUp(); return; }
-      try { localStorage.setItem('__TOKEN_KEY__', data.token); } catch (e) { /* private mode 等 */ }
-      return signIn(data.token, back);
+      if (!data || typeof data.token !== 'string' || !data.token || !keep(data.token)) { giveUp(); return; }
+      location.replace(back);
     }).catch(function () { giveUp(); });
     return;
   }
-  var stored = null;
-  try { stored = localStorage.getItem('__TOKEN_KEY__'); } catch (e) { /* private mode 等 */ }
-  if (!stored) { giveUp(); return; }
-  var tried = null;
-  try { tried = sessionStorage.getItem('__GUARD_KEY__'); } catch (e) { /* private mode 等 */ }
-  if (tried) { giveUp(); return; }
-  try { sessionStorage.setItem('__GUARD_KEY__', '1'); } catch (e) { /* private mode 等 */ }
-  signIn(stored, safePath(location.pathname + location.search + location.hash))
-    .catch(function () { giveUp(); });
+  giveUp();
 })();
 </script>
 </body>

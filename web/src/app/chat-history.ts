@@ -1,5 +1,5 @@
 // --- ESM imports (generated) ---
-import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
+import { apiFetch, escapeHtml, showToast, ti18n, token, withAssetTicket } from './util.js';
 import { uiIconHtml } from './ui-components.js';
 import { appendTextWithUrlLinks } from './url-links.js';
 import { splitChatPaths } from './chat-path-links.js';
@@ -878,7 +878,7 @@ export function renderMessageBubble(sid, msg) {
   if (role === 'user') {
     if (_userAvatarUrl) {
       const img = document.createElement('img');
-      img.src = _userAvatarUrl;
+      img.src = withAssetTicket(_userAvatarUrl);
       img.alt = getUserAvatarLetter();
       img.onerror = () => {
         img.remove();
@@ -1001,7 +1001,7 @@ export function renderMessageBubble(sid, msg) {
       thumb.className = 'thumb';
       if (a.url) {
         const img = document.createElement('img');
-        img.src = a.url;
+        img.src = withAssetTicket(a.url);
         img.alt = a.filename || '';
         img.style.cursor = 'pointer';
         img.addEventListener('click', () => {

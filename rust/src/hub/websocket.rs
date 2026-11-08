@@ -790,14 +790,21 @@ fn authorize_first(
         && pin_satisfied(request, auth_service, config, now)
 }
 /// The upgrade request alone would pass `authorize_first`. Such a socket waits
-/// in the authorized pool; the first frame is still checked as before.
+/// in the authorized pool; the first frame is still checked as before. A
+/// browser cannot put a header on a WebSocket, so the dashboard shows its
+/// asset ticket in the URL instead: that only picks the pool (U05, U07).
 fn authorized_upgrade(
     request: &Request,
     auth_service: &super::pin::AuthService,
     config: &Config,
     now: Timestamp,
 ) -> bool {
-    auth::token_or_trusted(request, config) && pin_satisfied(request, auth_service, config, now)
+    let seconds = now
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs() as i64);
+    (auth::token_or_trusted(request, config)
+        || auth::valid_asset_ticket(&request.query("ticket"), &config.token, seconds))
+        && pin_satisfied(request, auth_service, config, now)
 }
 struct WsWriter(SplitSink<WebSocket, WsMessage>);
 struct PinUiWriter {
@@ -1023,11 +1030,13 @@ mod tests {
         assert!(!authorized_upgrade(&request, &auth, &config, UNIX_EPOCH));
         request.headers = vec![("Authorization".into(), format!("Bearer {}", config.token))];
         assert!(authorized_upgrade(&request, &auth, &config, UNIX_EPOCH));
+        // The token cookie of an earlier version no longer counts (U05).
         request.headers = vec![(
             "Cookie".into(),
             format!("{}={}", auth::TOKEN_COOKIE, config.token),
         )];
-        assert!(authorized_upgrade(&request, &auth, &config, UNIX_EPOCH));
+        assert!(!authorized_upgrade(&request, &auth, &config, UNIX_EPOCH));
+        request.headers = vec![("Authorization".into(), format!("Bearer {}", config.token))];
         // A remote token holder without the PIN still waits in the shared pool.
         request
             .headers
@@ -1040,7 +1049,7 @@ mod tests {
         assert!(!authorized_upgrade(&request, &auth, &pinned, UNIX_EPOCH));
     }
     #[test]
-    fn first_message_token_or_http_cookie_fallback() {
+    fn first_message_token_or_http_header_fallback() {
         let config = Config {
             token: "synthetic-hub-token".into(),
             ..Default::default()
@@ -1058,10 +1067,17 @@ mod tests {
         assert!(!authorize_first(
             &request, &auth, &config, &first, UNIX_EPOCH
         ));
+        // The token cookie of an earlier version no longer counts (U05).
         request.headers.push((
             "Cookie".into(),
             format!("{}={}", auth::TOKEN_COOKIE, config.token),
         ));
+        assert!(!authorize_first(
+            &request, &auth, &config, &first, UNIX_EPOCH
+        ));
+        request
+            .headers
+            .push(("Authorization".into(), format!("Bearer {}", config.token)));
         assert!(authorize_first(
             &request, &auth, &config, &first, UNIX_EPOCH
         ));

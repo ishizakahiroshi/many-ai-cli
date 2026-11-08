@@ -128,10 +128,25 @@ async fn audit_u07_sockets_without_a_credential_cannot_crowd_out_authorized_upgr
         .await;
     wrapper.until("registered").await;
     assert_eq!(f.core.snapshots().len(), 1);
-    // So does the dashboard, which presents its token cookie.
-    let (mut ui, status) = Client::connect(
+    // So does the dashboard, which shows its asset ticket in the URL: a
+    // browser cannot put a header on a WebSocket, and the token is no longer
+    // in a cookie (U05).
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let ticket = crate::hub::auth::asset_ticket("synthetic-websocket-token", now);
+    let (_, status) = Client::connect(
         f.port,
         "Cookie: MANY_AI_CLI_token=synthetic-websocket-token\r\n",
+    )
+    .await;
+    assert!(status.starts_with("HTTP/1.1 429"), "{status}");
+    let (mut ui, status) = Client::connect_target(
+        f.port,
+        &format!("127.0.0.1:{}", f.port),
+        &format!("/ws?ticket={ticket}"),
+        "",
     )
     .await;
     assert!(status.starts_with("HTTP/1.1 101"), "{status}");

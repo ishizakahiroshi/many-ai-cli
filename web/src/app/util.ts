@@ -14,12 +14,13 @@ import { t } from '../i18n.js';
 // Hub の token がローテートしたら保存値は無効になり、再度 token 付き URL が必要。
 // SW 側の token キャッシュ（pwa.ts → sw.ts postMessage）は従来通り別系統で保持。
 //
-// C5 (plan_audit_score_s_promotion_2026-07-05.md) 縮退方針:
-// サーバ側は既に HttpOnly Cookie (MANY_AI_CLI_token) を handleIndex で発行しており、
-// 以降の同一 origin fetch は自動で Cookie を送るため、URL の ?token= や
-// localStorage 値は「Cookie が失効/未発行のリロード」向け PWA fallback 用に縮退できる。
-// 新規 fetch は下記 apiFetch() を使い、query token を経由しない Cookie 主体化を進める。
+// token は cookie に置かない（監査 U05）。ブラウザは 127.0.0.1 の cookie を別のポートの
+// サーバーにも送るので、同じ PC の別のプログラムが受け取れてしまうため。API は apiFetch が
+// Authorization header で、WebSocket は最初のメッセージで token を送る。header を付けられない
+// <img>・<video>・<audio>・ダウンロードのリンクは withAssetTicket() で読み取り専用の券を付ける。
+// localStorage が使えないとき（private mode 等）はサインインの画面が sessionStorage に置く。
 const TOKEN_STORAGE_KEY = 'many-ai-cli-token';
+const ASSET_TICKET_STORAGE_KEY = 'many-ai-cli-asset-ticket';
 
 function initToken(): string | null {
   let tk: string | null = null;
@@ -33,6 +34,9 @@ function initToken(): string | null {
       try { history.replaceState(history.state, '', location.pathname + (qs ? `?${qs}` : '') + location.hash); } catch (_) { /* 失敗しても従来動作 */ }
     } else {
       try { tk = localStorage.getItem(TOKEN_STORAGE_KEY); } catch (_) { /* 取得不可なら null のまま */ }
+      if (!tk) {
+        try { tk = sessionStorage.getItem(TOKEN_STORAGE_KEY); } catch (_) { /* 取得不可なら null のまま */ }
+      }
     }
   } catch (_) { /* URL 解析失敗時は null */ }
   return tk;
@@ -52,14 +56,10 @@ export const token = initToken() ?? '';
 // キー名は writeReauthPage 側の reauthGuardKey と同じ値。片方だけ変えないこと。
 try { sessionStorage.removeItem('many-ai-cli-reauth'); } catch (_) { /* private mode 等は無視 */ }
 
-// apiFetch は Hub の `/api/*` を Cookie 主体で呼ぶための共通ヘルパ。
-// 同一 origin では credentials 既定値 'same-origin' で Cookie は既に送られるが、
-// 将来 credentials を厳しく設定する箇所（PWA fallback / manifest 経由 fetch 等）でも
-// 一貫して Cookie を送るように 'same-origin' を明示する。
-// URL に `?token=` を付けないことで、ブラウザ history / server access log / crash
-// report への token 露出を減らす（C5 縮退の第一歩）。
-// Bearer 経由や旧来の `?token=` fetch も requestToken 側で並列に受理される
-// ので、本ヘルパを使わない fetch は現状維持で回帰しない。
+// apiFetch は Hub の `/api/*` を Authorization header 付きで呼ぶ共通ヘルパ。
+// credentials 'same-origin' は遠隔の PIN の cookie を送るために残す。
+// URL に `?token=` を付けないので、ブラウザ history / server access log / crash
+// report へ token が出ない。
 export function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   if (token && !headers.has('Authorization')) {
@@ -71,6 +71,84 @@ export function apiFetch(path: string, init: RequestInit = {}): Promise<Response
     credentials: init.credentials ?? 'same-origin',
   };
   return fetch(path, merged);
+}
+
+// ---- 読み取り専用の券（asset ticket）----
+// <img>・<video>・<audio>・ダウンロードのリンクは header を付けられないので、Hub の
+// 画像・ファイルの GET にだけ通る券を URL に付ける。券は token から作られ 12 時間で切れ、
+// token を作り直すと全部使えなくなる。読み込みのたびに待たないよう保存しておき、
+// 起動時と 1 時間ごとに取り直す。
+const ASSET_ROUTE_PREFIXES = [
+  '/api/files-asset?', '/api/files-download?', '/api/memo-images/', '/api/provider-icons/',
+  '/api/user-prefs/notify-sound-custom', '/api/avatar',
+];
+
+function storedAssetTicket(): string {
+  try {
+    const stored = localStorage.getItem(ASSET_TICKET_STORAGE_KEY) || '';
+    const expiry = Number(stored.split('.')[0]);
+    // 期限の 1 分前からは使わない。
+    if (stored && Number.isFinite(expiry) && expiry * 1000 > Date.now() + 60_000) return stored;
+  } catch (_) { /* private mode 等 */ }
+  return '';
+}
+
+let assetTicket = token ? storedAssetTicket() : '';
+
+export function withAssetTicket(url: string): string {
+  if (!assetTicket || typeof url !== 'string') return url;
+  if (!ASSET_ROUTE_PREFIXES.some((prefix) => url.startsWith(prefix))) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}ticket=${encodeURIComponent(assetTicket)}`;
+}
+
+// WebSocket も header を付けられない。券を URL に載せると、Hub は認証済みの待ち枠へ入れる
+// （待ち枠を選ぶだけで、接続の認証は最初のメッセージの token で行う）。
+export function webSocketTicketQuery(): string {
+  return assetTicket ? `?ticket=${encodeURIComponent(assetTicket)}` : '';
+}
+
+export async function refreshAssetTicket(): Promise<void> {
+  if (!token) return;
+  try {
+    const res = await apiFetch('/api/asset-ticket');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (typeof data?.ticket !== 'string' || !data.ticket) return;
+    assetTicket = data.ticket;
+    try { localStorage.setItem(ASSET_TICKET_STORAGE_KEY, data.ticket); } catch (_) { /* private mode 等 */ }
+  } catch (_) { /* 次の取り直しで再試行する */ }
+}
+
+// token を持たずに開いたとき（保存が消えた・別のブラウザ）は、Hub が token 無しを許して
+// いない限り、何もできない画面のまま黙らず、token 付きの URL を開くよう伝える。
+function showSignedOut(): void {
+  const box = document.createElement('div');
+  box.className = 'signed-out-notice';
+  box.setAttribute('role', 'alert');
+  // 言語のファイルがまだ読めていなければ英語の文を出す。
+  const text = (key: string, fallback: string) => {
+    const value = t(key);
+    return value && value !== key ? value : fallback;
+  };
+  const title = document.createElement('p');
+  title.textContent = text('signed_out_title', 'This browser is not signed in to the Hub.');
+  const body = document.createElement('p');
+  body.textContent = text(
+    'signed_out_body',
+    'Open the dashboard from many-ai-cli (or the tray), or open the Hub URL that includes ?token= once. Settings > Mobile connect shows a QR code for it.',
+  );
+  box.append(title, body);
+  document.body.replaceChildren(box);
+}
+
+if (token) {
+  void refreshAssetTicket();
+  setInterval(() => { void refreshAssetTicket(); }, 60 * 60 * 1000);
+} else {
+  fetch('/api/auth/status', { credentials: 'same-origin' })
+    .then((res) => { if (res.status === 401) showSignedOut(); })
+    .catch(() => { /* Hub に届かないときは接続の表示に任せる */ });
 }
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.

@@ -155,6 +155,14 @@ impl Client {
         Self::connect_host(port, &format!("127.0.0.1:{port}"), extra_headers).await
     }
     async fn connect_host(port: u16, host: &str, extra_headers: &str) -> (Self, String) {
+        Self::connect_target(port, host, "/ws", extra_headers).await
+    }
+    async fn connect_target(
+        port: u16,
+        host: &str,
+        target: &str,
+        extra_headers: &str,
+    ) -> (Self, String) {
         let mut stream = tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
             .await
             .unwrap();
@@ -162,7 +170,7 @@ impl Client {
         use base64::Engine as _;
         let key = base64::engine::general_purpose::STANDARD.encode([42; 16]);
         let request = format!(
-            "GET /ws HTTP/1.1\r\nHost: {host}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n{extra_headers}\r\n"
+            "GET {target} HTTP/1.1\r\nHost: {host}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n{extra_headers}\r\n"
         );
         stream.write_all(request.as_bytes()).await.unwrap();
         let mut response = Vec::new();
@@ -296,8 +304,10 @@ async fn loopback_first_frame_auth_real_core_output_input_and_shutdown() {
     fixture.stop().await;
 }
 #[tokio::test]
-async fn loopback_cookie_fallback_and_strict_whole_frame_json() {
+async fn loopback_token_cookie_no_longer_counts_and_strict_whole_frame_json() {
     let fixture = fixture().await;
+    // The token cookie of an earlier version does not stand in for a stale
+    // first frame any more (U05).
     let (mut ui, status) = Client::connect(
         fixture.port,
         "Cookie: MANY_AI_CLI_token=synthetic-websocket-token\r\n",
@@ -305,6 +315,11 @@ async fn loopback_cookie_fallback_and_strict_whole_frame_json() {
     .await;
     assert!(status.starts_with("HTTP/1.1 101"));
     ui.json(serde_json::json!({"role":"ui","token":"stale-storage-token"}))
+        .await;
+    assert!(ui.frame().await.is_none());
+    let (mut ui, status) = Client::connect(fixture.port, "").await;
+    assert!(status.starts_with("HTTP/1.1 101"));
+    ui.json(serde_json::json!({"role":"ui","token":"synthetic-websocket-token"}))
         .await;
     assert_eq!(ui.frame().await.unwrap()["type"], "snapshot");
     let (mut invalid, status) = Client::connect(fixture.port, "").await;

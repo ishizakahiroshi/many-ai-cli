@@ -4,7 +4,7 @@ import { t } from '../i18n.js';
 import { confirmationLabels, type ConfirmationAction } from './confirmation-labels.js';
 import { uiButtonClass, uiIconHtml, uiModalClass } from './ui-components.js';
 import { getNotificationVolume, setNotificationVolume, STORAGE_NOTIFY_SOUND_VOLUME_KEY } from './notification-volume.js';
-import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
+import { apiFetch, escapeHtml, showToast, ti18n, token, withAssetTicket } from './util.js';
 import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_6_KEY, STORAGE_QUICK_CMD_7_KEY, STORAGE_QUICK_CMD_8_KEY, STORAGE_QUICK_CMD_9_KEY, STORAGE_QUICK_CMD_10_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_QUICK_CMD_6_SHOW_KEY, STORAGE_QUICK_CMD_7_SHOW_KEY, STORAGE_QUICK_CMD_8_SHOW_KEY, STORAGE_QUICK_CMD_9_SHOW_KEY, STORAGE_QUICK_CMD_10_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, openProjectKey, sessions, terminals } from './state.js';
 import { getDoneSummary } from './done-summary.js';
@@ -364,7 +364,7 @@ export function playNotificationSound() {
   if (type === 'custom') {
     const customUrl = '/api/user-prefs/notify-sound-custom';
     try {
-      const audio = new Audio(customUrl);
+      const audio = new Audio(withAssetTicket(customUrl));
       audio.volume = volume;
       audio.play().catch(() => {});
       return;
@@ -2677,7 +2677,7 @@ initSettingsInformationArchitecture();
     previewEl.innerHTML = '';
     if (avatarUrl) {
       const img = document.createElement('img');
-      img.src = avatarUrl;
+      img.src = withAssetTicket(avatarUrl);
       img.alt = getInitialLetter(displayName);
       img.onload = () => {
         statusEl.textContent = typeof window.t === 'function' ? t('settings_avatar_loaded') : '画像を読み込み済み';
