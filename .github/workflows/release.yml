@@ -498,6 +498,9 @@ jobs:
 
   npm:
     needs: [plan, canonical]
+    # The npm key lives in the `release` environment; its required reviewer
+    # approves before the key reaches this job (U36).
+    environment: release
     if: ${{ always() && needs.canonical.result == 'success' && (needs.plan.outputs.mode == 'full' || needs.plan.outputs.mode == 'npm') }}
     runs-on: ubuntu-22.04
     permissions:
@@ -556,6 +559,8 @@ jobs:
 
   pointers:
     needs: [plan, canonical]
+    # Same environment as npm, so one approval lets both go (U36).
+    environment: release
     if: ${{ always() && needs.canonical.result == 'success' && (needs.plan.outputs.mode == 'full' || needs.plan.outputs.mode == 'homebrew' || needs.plan.outputs.mode == 'winget') }}
     runs-on: ubuntu-22.04
     strategy:

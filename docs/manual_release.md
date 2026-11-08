@@ -97,6 +97,12 @@ Homebrew / winget は canonical ZIP から manifest を作る stable 専用 poin
 prerelease は四 ZIP と npm `next` のみで、deb / rpm と stable pointer は明示的に skip します。
 Docker の build / push / auto-update はこの流れに含みません。
 
+`NPM_TOKEN` と `PUBLISH_GITHUB_TOKEN` は repository secret ではなく、environment `release`
+（必須の承認者は作者本人）の secret に置きます。`npm` と `pointers` の job はこの environment を
+使うので、鍵が job に渡る前に GitHub の画面で承認が要ります。2 つの job は `canonical` の後に
+同時に待つので、承認は 1 回で両方が進みます。`v` で始まる tag の作成は ruleset で作者本人に
+限ります（bot や AI 連携アプリが tag を作って公開を始められないようにするため。監査 U36）。
+
 既存の npm 注意点は現在も有効です。`npm publish` にディレクトリを渡す場合は `./npm/...`
 のように相対 path を明示し、GitHub shorthand と誤解釈させません。package manager を使っても
 OS の実行許可は別問題です。更新後は新しい版から `many-ai-cli setup` を再実行して shortcut を

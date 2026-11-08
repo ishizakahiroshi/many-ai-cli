@@ -108,6 +108,10 @@ Release artifacts are published at
 
 ### Security
 
+- **Release keys wait for the owner's approval.** The npm and Homebrew/winget
+  publishing jobs use the `release` environment, so the keys they need are
+  handed over only after the owner approves the run (one approval covers
+  both).
 - **The CLI sends the Hub token only to a Hub that runs as you.** Before
   `status`, `stop`, a wrapped session, the usage relay, `orchestrate`, the
   tray and the launcher send the token to a 127.0.0.1 port, they ask the
