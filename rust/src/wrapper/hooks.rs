@@ -55,6 +55,68 @@ pub struct ClaudeLaunch {
 fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
+/// Largest project settings file read when checking a bounded launch.
+const PROJECT_SETTINGS_CAP: u64 = 1024 * 1024;
+/// Why a bounded Claude child must not start in `cwd`: a project settings file
+/// between `cwd` and its Git root widens the sandbox. Claude Code adds the
+/// project's sandbox lists to the session's own, so a repository could let
+/// the child's commands write outside the folder, reach the network or skip
+/// the sandbox (owner's decision B1). `None` when nothing widens it.
+pub fn project_widens_sandbox(cwd: &Path) -> Option<String> {
+    fn widening(value: &Value, path: &str) -> Option<String> {
+        let sandbox = value.get("sandbox")?;
+        let listed =
+            |v: &Value| v.as_array().is_some_and(|a| !a.is_empty()) || v == &Value::Bool(true);
+        if sandbox.get("excludedCommands").is_some_and(listed) {
+            return Some(format!("{path}: sandbox.excludedCommands"));
+        }
+        for group in ["filesystem", "network"] {
+            if let Some(map) = sandbox.get(group).and_then(Value::as_object) {
+                for (key, v) in map {
+                    if key.starts_with("allow") && listed(v) {
+                        return Some(format!("{path}: sandbox.{group}.{key}"));
+                    }
+                }
+            }
+        }
+        None
+    }
+    let mut dir = Some(cwd);
+    while let Some(current) = dir {
+        for name in ["settings.json", "settings.local.json"] {
+            let file = current.join(".claude").join(name);
+            let shown = file.display().to_string();
+            let bytes = match std::fs::File::open(&file) {
+                Ok(f) => {
+                    let mut bytes = Vec::new();
+                    if f.take(PROJECT_SETTINGS_CAP + 1)
+                        .read_to_end(&mut bytes)
+                        .is_err()
+                        || bytes.len() as u64 > PROJECT_SETTINGS_CAP
+                    {
+                        return Some(format!("{shown}: could not be read"));
+                    }
+                    bytes
+                }
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                Err(_) => return Some(format!("{shown}: could not be read")),
+            };
+            match serde_json::from_slice::<Value>(&bytes) {
+                Ok(value) => {
+                    if let Some(reason) = widening(&value, &shown) {
+                        return Some(reason);
+                    }
+                }
+                Err(_) => return Some(format!("{shown}: is not valid JSON")),
+            }
+        }
+        if current.join(".git").exists() {
+            break;
+        }
+        dir = current.parent();
+    }
+    None
+}
 fn read(dir: &Dir, name: &str) -> io::Result<Vec<u8>> {
     let mut bytes = vec![];
     dir.open_file(name, false)?.read_to_end(&mut bytes)?;
@@ -781,5 +843,61 @@ mod tests {
             b"synthetic-owned-but-unrelated"
         );
         assert!(!root.path().join(OPENCODE_LOCK).exists());
+    }
+
+    #[test]
+    fn audit_b1_project_settings_that_widen_the_sandbox_are_found_up_to_the_git_root() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = root.path().join("repo");
+        let work = repo.join("sub").join("dir");
+        std::fs::create_dir_all(&work).unwrap();
+        std::fs::create_dir_all(repo.join(".git")).unwrap();
+        let write = |dir: &Path, name: &str, body: &str| {
+            std::fs::create_dir_all(dir.join(".claude")).unwrap();
+            std::fs::write(dir.join(".claude").join(name), body).unwrap();
+        };
+        // Nothing, or settings that do not widen the sandbox.
+        assert_eq!(project_widens_sandbox(&work), None);
+        write(
+            &repo,
+            "settings.json",
+            r#"{"permissions":{"allow":["Read"]},"sandbox":{"excludedCommands":[],"network":{"allowedDomains":[]}},"env":{"A":"1"}}"#,
+        );
+        assert_eq!(project_widens_sandbox(&work), None);
+        // Each widening list is found, in the folder or above it up to the Git root.
+        for (body, key) in [
+            (
+                r#"{"sandbox":{"excludedCommands":["docker"]}}"#,
+                "sandbox.excludedCommands",
+            ),
+            (
+                r#"{"sandbox":{"filesystem":{"allowWrite":["~/"]}}}"#,
+                "sandbox.filesystem.allowWrite",
+            ),
+            (
+                r#"{"sandbox":{"network":{"allowedDomains":["example.com"]}}}"#,
+                "sandbox.network.allowedDomains",
+            ),
+        ] {
+            write(&repo, "settings.local.json", body);
+            let reason = project_widens_sandbox(&work).unwrap();
+            assert!(reason.ends_with(key), "{reason}");
+            assert!(reason.contains("settings.local.json"), "{reason}");
+        }
+        std::fs::remove_file(repo.join(".claude").join("settings.local.json")).unwrap();
+        write(&work, "settings.json", "{ not json");
+        assert!(
+            project_widens_sandbox(&work)
+                .unwrap()
+                .ends_with("is not valid JSON")
+        );
+        std::fs::remove_file(work.join(".claude").join("settings.json")).unwrap();
+        // Above the Git root is not the project's.
+        write(
+            root.path(),
+            "settings.json",
+            r#"{"sandbox":{"excludedCommands":["docker"]}}"#,
+        );
+        assert_eq!(project_widens_sandbox(&work), None);
     }
 }

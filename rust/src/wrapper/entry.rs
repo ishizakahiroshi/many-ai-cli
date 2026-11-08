@@ -269,6 +269,18 @@ fn apply_hooks(
     env: &mut BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>>,
 ) -> io::Result<()> {
     for hook in &launch.required_hooks {
+        // A project that widens Claude Code's sandbox would loosen the bounded
+        // tier from the repository; refuse and say why (owner's decision B1).
+        if let LaunchHook::ClaudeRegistrationSettings { bounded: true } = hook
+            && crate::config::CLAUDE_SANDBOX
+            && let Some(reason) = super::hooks::project_widens_sandbox(context.cwd)
+        {
+            let message = format!(
+                "bounded Claude child not started: the project settings widen the sandbox ({reason}). Choose another permission tier, or remove that setting."
+            );
+            eprintln!("wrapper: {message}");
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied, message));
+        }
         match hook {
             LaunchHook::ClaudeRegistrationSettings { bounded } => match hooks.claude_settings(
                 context.paths,

@@ -77,13 +77,12 @@ const TABLE: &[Row] = &[
         }),
         full: BYPASS,
     },
+    // OpenCode's only unattended mode (--auto) runs any command its deny rules
+    // do not name, so a bounded request is shown and run as full access, like
+    // Grok (U49 follow-up, owner's decision B2).
     Row {
         provider: "opencode",
-        bounded: Some(Fields {
-            permission_mode: config::PERMISSION_MODE_BOUNDED,
-            risk_confirmed: true,
-            ..EMPTY
-        }),
+        bounded: None,
         full: BYPASS,
     },
     Row {
@@ -441,6 +440,20 @@ mod tests {
                 }
                 expected["allowed_tools"] = built_in;
             }
+            // The owner's decision B2 (U49 follow-up): a bounded OpenCode child is
+            // disclosed and run as full access, the way Go already treated Grok.
+            if body.provider == "opencode" && expected["tier"] == config::PERMISSION_PRESET_BOUNDED
+            {
+                let full = serde_json::to_value(permission_preset_approval(
+                    "opencode",
+                    config::PERMISSION_PRESET_FULL,
+                    &cfg.orchestration,
+                ))
+                .unwrap();
+                assert_eq!(full["permission_mode"], "bypassPermissions", "{name}");
+                expected = full;
+                expected["fallback_from"] = config::PERMISSION_PRESET_BOUNDED.into();
+            }
             assert_eq!(
                 serde_json::to_value(&actual).unwrap(),
                 expected,
@@ -523,6 +536,25 @@ mod tests {
             let wire = serde_json::to_value(prepared.request()).unwrap();
             assert!(wire.get("allowed_tools").is_none());
             assert!(wire.get("grant_folder_trust").is_none());
+        }
+    }
+
+    /// OpenCode's --auto runs any command a deny rule does not name, so a
+    /// bounded request falls back to full access and says so, like Grok.
+    #[test]
+    fn audit_u49_opencode_bounded_is_disclosed_as_full_access() {
+        let cfg = OrchestrationConfig::default();
+        for provider in ["opencode", "grok"] {
+            let approval =
+                permission_preset_approval(provider, config::PERMISSION_PRESET_BOUNDED, &cfg);
+            assert_eq!(approval.tier, config::PERMISSION_PRESET_FULL, "{provider}");
+            assert_eq!(
+                approval.fallback_from,
+                config::PERMISSION_PRESET_BOUNDED,
+                "{provider}"
+            );
+            assert_eq!(approval.permission_mode, "bypassPermissions", "{provider}");
+            assert!(approval.allowed_tools.is_empty(), "{provider}");
         }
     }
 }

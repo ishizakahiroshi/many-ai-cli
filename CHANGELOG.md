@@ -108,6 +108,16 @@ Release artifacts are published at
 
 ### Security
 
+- **A repository can no longer loosen a bounded Claude child's sandbox.**
+  Claude Code adds a project's own sandbox lists to the session's, so a
+  `.claude/settings.json` in the repository could let the child's commands
+  skip the sandbox, write outside the folder or reach the network. When the
+  project settings between the working folder and its Git root widen the
+  sandbox, the bounded Claude child is not started and the reason is shown.
+- **A bounded OpenCode child is shown as full access.** OpenCode's unattended
+  mode runs any command its deny rules do not name, so asking for `bounded`
+  now starts it as `full` and the confirmation dialog says so, as for Grok and
+  Cursor Agent.
 - **CI and release builds use Bun 1.4.4.** Bun 1.3.14 was affected by three
   advisories fixed in 1.4.4, including the brotli decoder flaw that CISA lists
   as known exploited (CVE-2026-111497). The release jobs run `bun install` with

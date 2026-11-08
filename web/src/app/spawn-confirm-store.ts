@@ -24,7 +24,7 @@ export interface ChildApproval {
   // 実際に適用される段（attended / bounded / full）。
   tier: string;
   // 要求された段がこの provider に無くて別の段へ落ちた場合、その要求された段。
-  // 今日は "bounded" のみ（grok / cursor-agent には範囲を限る設定が無い）。
+  // 今日は "bounded" のみ（grok / cursor-agent / opencode には範囲を限る設定が無い）。
   fallbackFrom: string;
 }
 
