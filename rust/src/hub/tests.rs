@@ -1250,6 +1250,66 @@ fn audit_u08_unidentified_remote_pin_attempts_share_a_staged_lock() {
 }
 
 #[test]
+fn audit_u08_a_pin_lock_that_starts_is_reported_once() {
+    use std::time::Duration;
+    let auth = super::pin::AuthService::default();
+    let mut cfg = config();
+    cfg.remote_pin_hash = bcrypt::hash("123456", 4).unwrap();
+    cfg.auth_cookie_secret = "synthetic-secret".into();
+    let mut r = request();
+    r.remote_addr = "203.0.113.9:5000".into();
+    r.headers.push((
+        "User-Agent".into(),
+        "Mozilla/5.0 (Windows NT 10.0) Chrome/1".into(),
+    ));
+    r.body = br#"{"pin":"654321"}"#.to_vec();
+    let at = UNIX_EPOCH + Duration::from_secs(1_000);
+    for _ in 0..4 {
+        assert_eq!(auth.login_at(&r, &cfg, at).status, 401);
+        assert!(auth.take_lockout_alerts().is_empty());
+    }
+    assert_eq!(auth.login_at(&r, &cfg, at).status, 429);
+    assert_eq!(
+        auth.take_lockout_alerts(),
+        vec![super::pin::LockoutAlert {
+            source: "203.0.113.9".into(),
+            device: "chrome/windows".into(),
+            seconds: 60,
+            global: false,
+        }]
+    );
+    // Attempts refused while locked do not report it again.
+    assert_eq!(auth.login_at(&r, &cfg, at).status, 429);
+    assert!(auth.take_lockout_alerts().is_empty());
+
+    // The right PIN on the attempt that reaches the limit leaves no lock.
+    let fresh = super::pin::AuthService::default();
+    for _ in 0..4 {
+        assert_eq!(fresh.login_at(&r, &cfg, at).status, 401);
+    }
+    let mut right = r.clone();
+    right.body = br#"{"pin":"123456"}"#.to_vec();
+    assert_eq!(fresh.login_at(&right, &cfg, at).status, 200);
+    assert!(fresh.take_lockout_alerts().is_empty());
+}
+
+#[test]
+fn audit_u08_the_global_pin_lock_is_reported_as_global() {
+    let mut limiter = super::pin::Limiter::default();
+    for i in 0..30 {
+        assert_eq!(limiter.begin(&format!("key-{i}"), 1000), 0);
+    }
+    assert_eq!(
+        limiter.take_started(),
+        vec![super::pin::Lockout {
+            seconds: 60,
+            global: true,
+        }]
+    );
+    assert!(limiter.take_started().is_empty());
+}
+
+#[test]
 fn audit_u08_pin_attempts_per_day_stay_low_for_one_key_and_for_new_keys() {
     // One unidentified key, tried whenever it is not locked for 24 hours.
     let mut limiter = super::pin::Limiter::default();

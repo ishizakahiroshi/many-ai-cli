@@ -108,6 +108,11 @@ Release artifacts are published at
 
 ### Security
 
+- **You are told when wrong PINs lock PIN entry.** When five wrong PINs in a
+  row lock one source, or many wrong PINs lock PIN entry for everyone, the
+  security notification (ntfy and push) says where the attempts came from and
+  for how long entry is locked. A right PIN on the attempt that reaches the
+  limit leaves no lock, so it sends nothing.
 - **The ntfy settings now say what the approval buttons can do.** Approve and
   Reject in an ntfy approval notification answer without the Hub token or PIN
   for 120 seconds, so the settings screen tells you not to let others see your

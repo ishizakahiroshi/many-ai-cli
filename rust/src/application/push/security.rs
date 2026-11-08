@@ -37,6 +37,14 @@ impl SecurityNotifications {
         let Some((title, body)) = admit(&self.devices, request, via, now) else {
             return;
         };
+        self.send(title, body);
+    }
+    /// Tells the owner that wrong PINs have locked PIN entry (U08).
+    pub fn note_pin_lockout(&self, alert: &crate::hub::pin::LockoutAlert) {
+        let (title, body) = pin_lockout_message(alert);
+        self.send(title, body);
+    }
+    fn send(&self, title: String, body: String) {
         if self
             .notifications
             .send_security(title.clone(), body.clone())
@@ -50,6 +58,21 @@ impl SecurityNotifications {
             (self.warning)("security push task unavailable");
         }
     }
+}
+fn pin_lockout_message(alert: &crate::hub::pin::LockoutAlert) -> (String, String) {
+    let advice = "If this was not you, change the PIN or revoke all sessions.";
+    let body = if alert.global {
+        format!(
+            "Too many wrong PINs from several sources, the last from {} ({}). PIN entry is locked for everyone for {} seconds. {advice}",
+            alert.source, alert.device, alert.seconds
+        )
+    } else {
+        format!(
+            "5 wrong PINs in a row from {} ({}). PIN entry from there is locked for {} seconds. {advice}",
+            alert.source, alert.device, alert.seconds
+        )
+    };
+    ("many-ai-cli: PIN entry locked".into(), body)
 }
 pub fn request_device_hash(request: &Request) -> String {
     let mut identity = request.remote_addr.clone();

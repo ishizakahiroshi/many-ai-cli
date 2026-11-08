@@ -118,6 +118,13 @@ struct Attempt {
     until: Option<i128>,
     last: i128,
 }
+/// A lock that one attempt has just started: for its own key, or for every
+/// key at once (the global counter).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Lockout {
+    pub seconds: i64,
+    pub global: bool,
+}
 #[derive(Default)]
 pub struct Limiter {
     ips: BTreeMap<String, Attempt>,
@@ -125,6 +132,7 @@ pub struct Limiter {
     global_level: usize,
     global_until: Option<i128>,
     global_seen: Option<i128>,
+    started: Vec<Lockout>,
 }
 impl Limiter {
     pub fn retry_after(&mut self, key: &str, now: i64) -> i64 {
@@ -163,9 +171,14 @@ impl Limiter {
             a.last = now;
             a.fails += 1;
             if a.fails >= 5 {
-                a.until = Some(now + LOCK_SECONDS[a.level.min(2)] * SECOND_NANOS);
+                let seconds = LOCK_SECONDS[a.level.min(2)];
+                a.until = Some(now + seconds * SECOND_NANOS);
                 a.level = (a.level + 1).min(2);
                 a.fails = 0;
+                self.started.push(Lockout {
+                    seconds: seconds as i64,
+                    global: false,
+                });
             }
         }
         // The global counter covers clients that each present a new key (a
@@ -180,17 +193,52 @@ impl Limiter {
         self.global_seen = Some(now);
         self.global_fails += 1;
         if self.global_fails >= 30 {
-            self.global_until = Some(now + LOCK_SECONDS[self.global_level] * SECOND_NANOS);
+            let seconds = LOCK_SECONDS[self.global_level];
+            self.global_until = Some(now + seconds * SECOND_NANOS);
             self.global_level = (self.global_level + 1).min(2);
             self.global_fails = 0;
+            self.started.push(Lockout {
+                seconds: seconds as i64,
+                global: true,
+            });
+        }
+        // Callers take these right after `begin`; the cap only matters for a
+        // caller that never does.
+        if self.started.len() > 8 {
+            self.started.drain(..self.started.len() - 8);
         }
         0
+    }
+    /// Locks started since the last call (U08: the owner is told).
+    pub fn take_started(&mut self) -> Vec<Lockout> {
+        std::mem::take(&mut self.started)
     }
     pub fn success(&mut self, key: &str) {
         if !key.is_empty() {
             self.ips.remove(key);
         }
     }
+}
+/// A PIN lock to report to the owner, with where the attempts came from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LockoutAlert {
+    pub source: String,
+    pub device: String,
+    pub seconds: i64,
+    pub global: bool,
+}
+fn lockout_source(request: &Request) -> String {
+    if is_loopback(&request.remote_addr) && logically_remote(request) {
+        let login = request.header("Tailscale-User-Login").trim().to_lowercase();
+        if login.is_empty() {
+            return "a client through the local proxy".into();
+        }
+        let login: String = login.chars().filter(|c| !c.is_control()).take(64).collect();
+        return format!("Tailscale user {login}");
+    }
+    remote_ip(&request.remote_addr)
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "unknown".into())
 }
 #[derive(Clone)]
 struct Session {
@@ -204,6 +252,7 @@ struct State {
     sessions: BTreeMap<String, Session>,
     remote_uis: BTreeMap<crate::proto::core::UiConnectionId, ui::RemoteUi>,
     limiter: Limiter,
+    alerts: Vec<LockoutAlert>,
     ui_secret: String,
     sequence: u64,
 }
@@ -388,6 +437,7 @@ impl AuthService {
         )
     }
     fn login_nanos(&self, request: &Request, config: &Config, now: i64, nanos: i128) -> Response {
+        let mut started = Vec::new();
         let result = (|| {
             if config.remote_pin_hash.trim().is_empty() {
                 return Response::json(200, &json!({"ok":true,"pin_enabled":false}));
@@ -403,7 +453,11 @@ impl AuthService {
             let retry = self
                 .state
                 .lock()
-                .map(|mut s| s.limiter.begin_nanos(&key, nanos))
+                .map(|mut s| {
+                    let retry = s.limiter.begin_nanos(&key, nanos);
+                    started = s.limiter.take_started();
+                    retry
+                })
                 .unwrap_or(1);
             if retry > 0 {
                 return locked(retry);
@@ -441,7 +495,35 @@ impl AuthService {
                 .push(cookie(PIN_COOKIE, &value, true, PIN_TTL, request));
             response
         })();
+        // A right PIN on the attempt that reached the limit clears that key's
+        // lock again, so only a lock that still stands is reported.
+        if result.status == 200 {
+            started.retain(|lock| lock.global);
+        }
+        if !started.is_empty()
+            && let Ok(mut s) = self.state.lock()
+        {
+            let source = lockout_source(request);
+            let device = user_agent_bucket(request.header("User-Agent"));
+            for lock in started {
+                if s.alerts.len() < 16 {
+                    s.alerts.push(LockoutAlert {
+                        source: source.clone(),
+                        device: device.clone(),
+                        seconds: lock.seconds,
+                        global: lock.global,
+                    });
+                }
+            }
+        }
         result.no_store()
+    }
+    /// PIN locks started since the last call, for the security notification.
+    pub fn take_lockout_alerts(&self) -> Vec<LockoutAlert> {
+        self.state
+            .lock()
+            .map(|mut s| std::mem::take(&mut s.alerts))
+            .unwrap_or_default()
     }
     pub fn logout(&self, request: &Request, config: &Config) -> Response {
         if let Some(value) = request.cookie(PIN_COOKIE)

@@ -88,3 +88,21 @@ fn source_bounded_oldest_device_and_utf8_byte_slice() {
     assert!(body.contains(&format!("{}�", "x".repeat(79))));
     assert!(body.ends_with("via pin_login"));
 }
+
+#[test]
+fn audit_u08_pin_lockout_message_names_the_source_and_the_wait() {
+    let mut alert = crate::hub::pin::LockoutAlert {
+        source: "203.0.113.9".into(),
+        device: "chrome/windows".into(),
+        seconds: 300,
+        global: false,
+    };
+    let (title, body) = pin_lockout_message(&alert);
+    assert_eq!(title, "many-ai-cli: PIN entry locked");
+    assert!(body.contains("from 203.0.113.9 (chrome/windows)"));
+    assert!(body.contains("locked for 300 seconds"));
+    assert!(body.contains("revoke all sessions"));
+    alert.global = true;
+    let (_, body) = pin_lockout_message(&alert);
+    assert!(body.contains("locked for everyone for 300 seconds"));
+}

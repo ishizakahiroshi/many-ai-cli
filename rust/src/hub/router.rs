@@ -1534,6 +1534,11 @@ impl ServiceRouter {
                     if response.status == 200 {
                         self.note_authenticated_remote(request, "pin_login", at);
                     }
+                    for alert in self.auth.take_lockout_alerts() {
+                        if let Some(owner) = &self.security {
+                            owner.note_pin_lockout(&alert);
+                        }
+                    }
                     response
                 }
                 "/api/auth/logout" => self.auth.logout(request, config),
