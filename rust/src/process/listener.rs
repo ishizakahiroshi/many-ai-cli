@@ -669,8 +669,17 @@ mod tests {
         assert!(!loopback_peer_is_own(peer_port.wrapping_add(1).max(1), port).unwrap());
         drop(client);
         drop(listener);
-        // Nobody listens any more: nothing is sent.
-        assert!(!loopback_listener_is_own(port).unwrap());
+        // Nobody listens any more: nothing is sent. Another test's child that
+        // is forked but not yet exec'd can hold a copy of the listener for a
+        // moment on Linux, so give it that moment.
+        let gone = (0..100).any(|_| {
+            let gone = !loopback_listener_is_own(port).unwrap();
+            if !gone {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            gone
+        });
+        assert!(gone);
         let error = require_own_loopback_listener(port).unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
         assert!(error.to_string().contains("the token was not sent"));

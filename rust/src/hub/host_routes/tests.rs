@@ -640,7 +640,10 @@ async fn default_open_judges_the_canonical_name_and_shows_other_types_in_their_f
     assert_eq!(open(&f, "/api/open-folder", &missing).await.0, 200);
     assert_eq!(last(), opened(OpenKind::Directory, &root.join("docs")));
     let under_file = root.join("payload.bat").join("missing");
-    assert_eq!(open(&f, "/api/open-folder", &under_file).await.0, 404);
+    // A name under a file is refused either way. Unix resolves it with
+    // ENOTDIR rather than "not found", so the root check refuses it first.
+    let refused = if cfg!(windows) { 404 } else { 403 };
+    assert_eq!(open(&f, "/api/open-folder", &under_file).await.0, refused);
     assert!(f.dispatch.opened.lock().unwrap().is_empty());
 }
 #[tokio::test]

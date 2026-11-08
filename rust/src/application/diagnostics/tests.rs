@@ -492,9 +492,16 @@ fn audit_u52_log_size_counts_files_in_subdirectories_without_following_links() {
         .with_log_dir(Path::new(&cfg.hub.log_dir))
         .unwrap()
         .resource(crate::config::Resource::Logs);
-    for (dir, file) in [(".", "hub.log"), ("sessions", "a.log"), ("spawn", "b.log")] {
-        std::fs::create_dir_all(logs.join(dir)).unwrap();
-        std::fs::write(logs.join(dir).join(file), b"0123456789").unwrap();
+    for (dir, file) in [("", "hub.log"), ("sessions", "a.log"), ("spawn", "b.log")] {
+        // Not `logs.join(".")`: on Linux create_dir_all of `missing/.` fails,
+        // because the `.` is dropped when it looks for the parent.
+        let dir = if dir.is_empty() {
+            logs.clone()
+        } else {
+            logs.join(dir)
+        };
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(file), b"0123456789").unwrap();
     }
     #[cfg(unix)]
     {
