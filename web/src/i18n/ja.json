@@ -554,6 +554,7 @@
   "settings_ntfy_include_body": "通知本文",
   "settings_ntfy_include_body_label": "本文を含める",
   "settings_ntfy_include_body_note": "既定では件名のみ送ります。有効にすると承認質問文・完了サマリーが外部サービスへ送られます（送信前にシークレットはマスクされます）。",
+  "settings_ntfy_action_links_note": "ntfy の承認待ちの通知には、Hub token も PIN も無しに 120 秒だけ承認・却下できる Approve と Reject のボタンが付きます（危険度が高い承認は Reject だけ）。通知を他人に見せないでください。送り先が http の場合は Open ボタンだけになります。",
   "settings_done_summary_notify": "タスク完了サマリー通知",
   "settings_done_summary_notify_desc": "AI のタスク完了時にサマリーを通知します。承認ルール機能を有効にする必要があります。",
   "settings_ntfy_save": "保存",

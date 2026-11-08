@@ -554,6 +554,7 @@
   "settings_ntfy_include_body": "Message body",
   "settings_ntfy_include_body_label": "Include body",
   "settings_ntfy_include_body_note": "Only the subject is sent by default. When enabled, approval questions and completion summaries are sent to the external service (secrets are masked before sending).",
+  "settings_ntfy_action_links_note": "ntfy approval notifications carry Approve and Reject buttons that answer without the Hub token or PIN for 120 seconds (high-risk approvals get Reject only). Do not let others see your notifications. When the destination is http, only an Open button is sent.",
   "settings_done_summary_notify": "Task completion notifications",
   "settings_done_summary_notify_desc": "Send a summary notification when AI completes a task. Requires approval rules to be enabled.",
   "settings_ntfy_save": "Save",

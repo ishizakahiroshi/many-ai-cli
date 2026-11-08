@@ -108,6 +108,10 @@ Release artifacts are published at
 
 ### Security
 
+- **The ntfy settings now say what the approval buttons can do.** Approve and
+  Reject in an ntfy approval notification answer without the Hub token or PIN
+  for 120 seconds, so the settings screen tells you not to let others see your
+  notifications, and that an http destination gets only the Open button.
 - **A repository can no longer loosen a bounded Claude child's sandbox.**
   Claude Code adds a project's own sandbox lists to the session's, so a
   `.claude/settings.json` in the repository could let the child's commands
