@@ -2,12 +2,15 @@
 
 ## Supported versions
 
-Security fixes are applied to the latest release on `main` and active development on `develop`.
+Security fixes are made on `develop` and ship in the next release. Only the newest release line receives them; earlier versions are not patched and fixes are not backported.
+
+The Go version (0.9.x and earlier) is frozen and will not get further fixes. Its successor, 0.10.0 (built from Rust), has not been released yet, so the fixes made since 0.9.0 are so far only in the source on `develop` and `main`. Once 0.10.0 is out, update to it to receive them.
 
 | Version | Supported |
 |---|---|
-| >= 0.8.x | :white_check_mark: |
-| < 0.8.0 | :x: |
+| 0.10.x (Rust, after its release) | :white_check_mark: |
+| 0.9.x (Go) | :x: no further fixes; update to 0.10.x once it is released |
+| < 0.9.0 | :x: |
 
 ## Reporting a vulnerability
 

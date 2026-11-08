@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "c325df8d947ee772d5b6a458ec80a76b59a836b2",
+    "commit": "63a6a4ae7dd3f0fc43ace53a3f3e5413d3805121",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2082,
-    "analyzed": 1616,
+    "discovered": 2084,
+    "analyzed": 1618,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 451,
@@ -44060,6 +44060,66 @@
         "summary": {
           "state": "value",
           "value": "--- ESM imports (generated) ---"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/chat-path-links-fixtures.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/chat-path-links.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "チャット表示の本文（URL 以外の区間）から、ファイルパスとして扱う部分を切り出す。"
         },
         "authentication": {
           "state": "not_configured"

@@ -2,6 +2,7 @@
 import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
 import { uiIconHtml } from './ui-components.js';
 import { appendTextWithUrlLinks } from './url-links.js';
+import { splitChatPaths } from './chat-path-links.js';
 import { activeSessionId, chatHistory, chatHistoryAutoCommitTimers, chatHistoryIdSeq, chatHistoryOutputBuffers, chatHistorySubs, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName } from '../app.js';
 import { activateSession, providerIconHtml, renderSessionList } from './session-list.js';
@@ -715,40 +716,19 @@ export function _appendPlainWithLinks(frag, text) {
   appendTextWithUrlLinks(frag, text, _appendPlainWithPaths);
 }
 
+// パスの切り出しは chat-path-links.ts（DOM なしで試験できる）に任せ、ここでは描画だけ行う。
 function _appendPlainWithPaths(frag, text) {
-  // path 候補:
-  //   - 絶対パス Unix: /usr/... (ただしコードブロック外)
-  //   - 絶対パス Windows: C:\... or C:/...
-  //   - 相対パス: ./xxx ../xxx
-  //   - 拡張子付き相対: foo/bar.ext または bar.ext (拡張子に絞る)
-  //
-  // 安全側: 末尾の句読点 ,.;:!?) を除外する。
-  const re = /((?:[a-zA-Z]:[\\/]|[.]{1,2}[\\/]|\/)[^\s<>"'`(\]]+)|([\w][\w\-/\\.]*\.[a-zA-Z]{1,8}\b)/g;
-  let last = 0;
-  let m;
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
-    let token = m[0];
-    // 末尾の句読点を分離
-    let trail = '';
-    while (token.length > 0 && /[.,;:!?)\]\}>]/.test(token[token.length - 1])) {
-      trail = token[token.length - 1] + trail;
-      token = token.slice(0, -1);
-    }
-    if (!token) {
-      frag.appendChild(document.createTextNode(m[0]));
-      last = m.index + m[0].length;
+  for (const piece of splitChatPaths(text)) {
+    if (piece.path === undefined) {
+      frag.appendChild(document.createTextNode(piece.text));
       continue;
     }
     const span = document.createElement('span');
     span.className = 'path-link';
-    span.dataset.path = token;
-    span.textContent = token;
+    span.dataset.path = piece.path;
+    span.textContent = piece.text;
     frag.appendChild(span);
-    if (trail) frag.appendChild(document.createTextNode(trail));
-    last = m.index + m[0].length;
   }
-  if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
 }
 
 // PTY output からツール呼び出しを抽出する（provider 別の簡易版）。

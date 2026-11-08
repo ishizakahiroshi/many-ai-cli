@@ -94,7 +94,12 @@ pub struct Status {
     pub binary_path: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub model_path: String,
+    /// The release the managed server was installed from, read from its
+    /// receipt; omitted when unknown (a baked server, or an earlier install).
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub binary_version: String,
+    /// The release this build installs (U35).
+    pub available_version: String,
     pub install: InstallState,
     pub models: &'static [manifest::Model],
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -207,6 +212,26 @@ impl Drop for InstallCompletion {
 impl Drop for StartReservation<'_> {
     fn drop(&mut self) {
         self.0.state.lock().unwrap().starting = false;
+    }
+}
+/// What a managed installation was extracted from. Written next to the server
+/// after every managed extraction; an installation whose receipt does not match
+/// the manifest (or that has none, from an earlier version) is out of date (U35).
+#[derive(Serialize, serde::Deserialize, PartialEq, Debug)]
+struct Receipt {
+    version: String,
+    archive_sha256: String,
+}
+const RECEIPT: &str = ".install-receipt.json";
+impl Receipt {
+    fn of(binary: &manifest::Binary) -> Self {
+        Self {
+            version: binary.version.into(),
+            archive_sha256: binary.sha256.into(),
+        }
+    }
+    fn read(bin: &Dir) -> Option<Self> {
+        serde_json::from_slice(&bin.read(RECEIPT, 4096).ok()?).ok()
     }
 }
 fn now() -> String {
@@ -344,6 +369,17 @@ impl WhisperManager {
                 .and_then(|base| base.child_dir("models", false))
                 .and_then(|models| models.open_file(model.file_name, false))
                 .is_ok();
+        let installed_version = if binary.is_some() && self.baked().is_none() {
+            self.root
+                .child_dir("whisper", false)
+                .and_then(|base| base.child_dir("bin", false))
+                .ok()
+                .and_then(|bin| Receipt::read(&bin))
+                .map(|receipt| receipt.version)
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
         let state = self.state.lock().unwrap();
         Ok(Status {
             ok: true,
@@ -364,7 +400,8 @@ impl WhisperManager {
                 .map(|path| path.to_string_lossy().into_owned())
                 .unwrap_or_default(),
             model_path: model_path.to_string_lossy().into_owned(),
-            binary_version: manifest::binary(&self.deps.platform, &self.deps.arch)
+            binary_version: installed_version,
+            available_version: manifest::binary(&self.deps.platform, &self.deps.arch)
                 .map(|entry| entry.version)
                 .unwrap_or(manifest::RELEASE)
                 .into(),
@@ -476,7 +513,14 @@ impl WhisperManager {
         let bin = Arc::new(base.child_dir("bin", true)?);
         let models = Arc::new(base.child_dir("models", true)?);
         let temp = Arc::new(base.child_dir("tmp", true)?);
-        if self.find_binary().is_none() {
+        let present = self.find_binary().is_some();
+        // A managed installation from another release (or from before receipts)
+        // is downloaded again and replaced; a baked server is never touched (U35).
+        let outdated = present
+            && self.baked().is_none()
+            && manifest::binary(&self.deps.platform, &self.deps.arch)
+                .is_some_and(|binary| Receipt::read(&bin) != Some(Receipt::of(binary)));
+        if !present || outdated {
             let binary =
                 manifest::binary(&self.deps.platform, &self.deps.arch).ok_or_else(|| {
                     WhisperError::new(400, "unsupported_platform", manifest::UNSUPPORTED)
@@ -510,12 +554,18 @@ impl WhisperManager {
                     &self.install_cancel,
                 )
                 .await?;
-            archive::extract(
-                temp.open_file(&name, false)?,
-                bin.clone(),
-                binary,
-                &self.install_cancel,
-            )?;
+            let downloaded = temp.open_file(&name, false)?;
+            if outdated {
+                // Windows cannot replace a running server or the DLLs it loaded.
+                // The download is complete first, so a failed one keeps it running.
+                let running = self.state.lock().unwrap().running.as_ref().map(|r| r.id);
+                if let Some(id) = running {
+                    self.stop_exact(id).await;
+                }
+                archive::extract_replacing(downloaded, bin.clone(), binary, &self.install_cancel)?;
+            } else {
+                archive::extract(downloaded, bin.clone(), binary, &self.install_cancel)?;
+            }
             drop(cleanup);
             if self.find_binary().is_none() {
                 return Err(WhisperError::new(
@@ -524,6 +574,10 @@ impl WhisperManager {
                     "whisper-server not found in release archive",
                 ));
             }
+            let receipt = serde_json::to_vec(&Receipt::of(binary)).map_err(|_| {
+                WhisperError::new(500, "whisper_install_failed", "Whisper receipt failed")
+            })?;
+            bin.replace(RECEIPT, &receipt, 0o600)?;
         }
         self.runtime(&bin)?;
         if models.open_file(model.file_name, false).is_err() {
@@ -565,13 +619,23 @@ impl WhisperManager {
             }
         })
     }
+    /// Put the bundled runtime files next to the server. A file whose content
+    /// differs from this build's copy is replaced, unless the managed server is
+    /// running and holds it; it is replaced before the next start (U35).
     fn runtime(&self, bin: &Dir) -> Result<(), WhisperError> {
+        let running = self.state.lock().unwrap().running.is_some();
         for (name, bytes) in &self.deps.runtime_payload {
             if name.starts_with('.') || name.to_lowercase().ends_with(".md") {
                 continue;
             }
-            if bin.open_file(name, false).is_err() {
-                bin.create_new(name, bytes, 0o700)?;
+            match bin.read(name, bytes.len() + 1) {
+                Ok(existing) if existing == *bytes => {}
+                Ok(_) if running => {}
+                Ok(_) => bin.replace(name, bytes, 0o700)?,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    bin.create_new(name, bytes, 0o700)?
+                }
+                Err(error) => return Err(error.into()),
             }
         }
         Ok(())

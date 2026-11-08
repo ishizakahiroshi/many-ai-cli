@@ -91,6 +91,20 @@ Release artifacts are published at
   progress; older runs and their request records are removed, and an older
   file is trimmed when the Hub starts. The 2-second check now copies only the
   runs in progress.
+- **A long line without spaces no longer freezes the chat view.** Finding file
+  paths in a reply took time that grew with the square of the line length, so
+  a reply with a long hexadecimal string could stop the whole dashboard,
+  approval buttons included, for seconds. Relative paths are now matched up to
+  255 characters (longer ones still link when they start with `./` or `/`).
+- **Managed Whisper is updated when its release changes.** An installed
+  `whisper-server` and its DLLs were never replaced, while the status reported
+  the version this build would install. Installing now records which release
+  was installed; an installation from another release (or one made before this
+  record existed) is downloaded again and replaced when you install, with the
+  old files put back if anything fails. The runtime files bundled with
+  many-ai-cli are replaced when they differ, before the server starts. The
+  status reports the installed version (`binary_version`) and the version this
+  build installs (`available_version`) separately.
 
 ### Security
 

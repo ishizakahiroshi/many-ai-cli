@@ -469,6 +469,8 @@ With the Hub stopped, copy the whole `~/.many-ai-cli/` folder (Windows: `%USERPR
 
 **Going back to v0.9.0**
 
+v0.9.0 does not include the security fixes made after it, and it will not get any (see [SECURITY.md](SECURITY.md)). Go back only for as long as you need to.
+
 1. Stop the Hub (`many-ai-cli stop`).
 2. Install v0.9.0 again from its [GitHub Releases page](https://github.com/ishizakahiroshi/many-ai-cli/releases/tag/v0.9.0), or through the same package manager at that version (for npm: `pnpm add -g many-ai-cli@0.9.0`).
 3. Replace `~/.many-ai-cli/` with the copy you made before updating. Do not leave data that the Rust version has already written next to v0.9.0.

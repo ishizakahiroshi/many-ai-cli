@@ -421,6 +421,8 @@ Hub を止めた状態で、`~/.many-ai-cli/` フォルダ（Windows: `%USERPROF
 
 **v0.9.0 へ戻す手順**
 
+v0.9.0 には、その後のセキュリティの修正が入っておらず、今後も入りません（[SECURITY.md](SECURITY.md)）。戻すのは必要な間だけにしてください。
+
 1. Hub を止めます（`many-ai-cli stop`）。
 2. v0.9.0 の [GitHub Releases ページ](https://github.com/ishizakahiroshi/many-ai-cli/releases/tag/v0.9.0) から入れ直します。パッケージマネージャで入れていた場合は、同じパッケージマネージャでその版を指定します（npm なら `pnpm add -g many-ai-cli@0.9.0`）。
 3. `~/.many-ai-cli/` を、更新前に作ったコピーで置き換えます。Rust 版がすでに書き込んだデータを、v0.9.0 のまま残さないでください。

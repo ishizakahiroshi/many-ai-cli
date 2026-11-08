@@ -10,6 +10,8 @@ struct FakeIo {
     gate: std::sync::atomic::AtomicBool,
     /// Another process holds the server's port (U31).
     foreign: std::sync::atomic::AtomicBool,
+    /// Bytes served for the release archive download (U35); others get a model.
+    archive: std::sync::Mutex<Option<Vec<u8>>>,
 }
 impl WhisperIo for FakeIo {
     fn download<'a>(
@@ -25,7 +27,13 @@ impl WhisperIo for FakeIo {
             if self.gate.load(Ordering::SeqCst) {
                 tokio::select! {_=cancel.cancelled()=>return Err(WhisperError::new(499,"cancelled","fixture cancelled")),_=self.release.notified()=>{}}
             }
-            dir.create_new(&spec.file_name, b"fixture model", 0o600)?;
+            let archive = self.archive.lock().unwrap().clone();
+            match archive {
+                Some(bytes) if spec.file_name.ends_with(".zip") => {
+                    dir.create_new(&spec.file_name, &bytes, 0o600)?
+                }
+                _ => dir.create_new(&spec.file_name, b"fixture model", 0o600)?,
+            }
             progress(13, Some(13));
             Ok(())
         })
@@ -116,7 +124,7 @@ impl Fixture {
     }
 }
 #[tokio::test]
-async fn prepared_runtime_is_copied_on_install_and_ensure_without_replacing_existing_files() {
+async fn prepared_runtime_is_copied_on_install_and_changed_files_are_replaced_before_a_start() {
     let payload: Vec<_> = crate::asset_contract::WINDOWS_RUNTIME_NAMES
         .iter()
         .map(|name| {
@@ -134,7 +142,8 @@ async fn prepared_runtime_is_copied_on_install_and_ensure_without_replacing_exis
     for (name, bytes) in &payload {
         assert_eq!(std::fs::read(bin.join(name)).unwrap(), *bytes);
     }
-    std::fs::write(bin.join(&payload[0].0), b"existing runtime preserved").unwrap();
+    // A copy from another build is replaced before the server starts (U35).
+    std::fs::write(bin.join(&payload[0].0), b"runtime from an older build").unwrap();
     std::fs::remove_file(bin.join(&payload[1].0)).unwrap();
     let config = fixture.manager.configuration().unwrap();
     fixture
@@ -144,13 +153,29 @@ async fn prepared_runtime_is_copied_on_install_and_ensure_without_replacing_exis
         .unwrap();
     assert_eq!(
         std::fs::read(bin.join(&payload[0].0)).unwrap(),
-        b"existing runtime preserved"
+        payload[0].1
     );
     assert_eq!(
         std::fs::read(bin.join(&payload[1].0)).unwrap(),
         payload[1].1
     );
     assert_eq!(fixture.io.starts.load(Ordering::SeqCst), 1);
+    // While the server runs and holds its files, they are left alone.
+    std::fs::write(bin.join(&payload[0].0), b"held by the running server").unwrap();
+    fixture
+        .manager
+        .ensure(&config, &Cancellation::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        std::fs::read(bin.join(&payload[0].0)).unwrap(),
+        b"held by the running server"
+    );
+    assert_eq!(fixture.io.starts.load(Ordering::SeqCst), 1);
+    // A baked server has no receipt: its version is not claimed.
+    let status = fixture.manager.status().unwrap();
+    assert_eq!(status.binary_version, "");
+    assert_eq!(status.available_version, manifest::RELEASE);
     fixture.manager.shutdown().await;
     fixture.owner.drain_effects().await;
 }
@@ -614,6 +639,104 @@ fn archive_publication_preserves_existing_executable_and_rolls_back_new_files() 
         assert_eq!(directory.entries().unwrap(), ["second.dll"], "{kind}");
         assert_eq!(existing.read("preserve", 64).unwrap(), b"existing child");
     }
+}
+
+#[test]
+fn audit_u35_an_update_replaces_the_server_and_dependencies_or_keeps_them_all() {
+    for kind in ["zip", "tar.gz"] {
+        let root = tempfile::tempdir().unwrap();
+        let directory = Arc::new(Dir::open(root.path()).unwrap());
+        for name in ["whisper-server.exe", "first.dll", "second.dll"] {
+            directory.create_new(name, b"old release", 0o600).unwrap();
+        }
+        // A broken archive changes nothing.
+        assert!(
+            archive::extract_replacing(
+                synthetic_whisper_archive(kind, &SYNTHETIC_WHISPER_FILES[..2]),
+                directory.clone(),
+                &synthetic_whisper_manifest(kind),
+                &Cancellation::default(),
+            )
+            .is_err()
+        );
+        let mut names = directory.entries().unwrap();
+        names.sort();
+        assert_eq!(
+            names,
+            ["first.dll", "second.dll", "whisper-server.exe"],
+            "{kind}"
+        );
+        for name in &names {
+            assert_eq!(directory.read(name, 64).unwrap(), b"old release", "{kind}");
+        }
+        archive::extract_replacing(
+            synthetic_whisper_archive(kind, SYNTHETIC_WHISPER_FILES),
+            directory.clone(),
+            &synthetic_whisper_manifest(kind),
+            &Cancellation::default(),
+        )
+        .unwrap();
+        let mut names = directory.entries().unwrap();
+        names.sort();
+        assert_eq!(
+            names,
+            ["first.dll", "second.dll", "whisper-server.exe"],
+            "{kind}"
+        );
+        assert_eq!(
+            directory.read("whisper-server.exe", 64).unwrap(),
+            b"synthetic server"
+        );
+        assert_eq!(
+            directory.read("second.dll", 64).unwrap(),
+            b"synthetic second dependency"
+        );
+    }
+}
+
+#[tokio::test]
+async fn audit_u35_install_replaces_a_managed_server_without_a_current_receipt() {
+    use std::io::Read;
+    let fixture = Fixture::new(false);
+    let mut bytes = Vec::new();
+    synthetic_whisper_archive(
+        "zip",
+        &manifest::WINDOWS
+            .keep
+            .iter()
+            .map(|name| (*name, b"new release".as_slice()))
+            .collect::<Vec<_>>(),
+    )
+    .read_to_end(&mut bytes)
+    .unwrap();
+    *fixture.io.archive.lock().unwrap() = Some(bytes);
+    // An installation from an earlier version: files, no receipt.
+    let bin = fixture.manager.base().join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    for name in manifest::WINDOWS.keep {
+        std::fs::write(bin.join(name), b"old release").unwrap();
+    }
+    assert_eq!(fixture.manager.status().unwrap().binary_version, "");
+    fixture.manager.install("small").unwrap();
+    fixture.owner.drain_effects().await;
+    let status = fixture.manager.status().unwrap();
+    assert_eq!(status.install.error, "");
+    assert_eq!(status.binary_version, manifest::RELEASE);
+    for name in manifest::WINDOWS.keep {
+        assert_eq!(
+            std::fs::read(bin.join(name)).unwrap(),
+            b"new release",
+            "{name}"
+        );
+    }
+    // Release archive and model: one download each.
+    assert_eq!(fixture.io.downloads.load(Ordering::SeqCst), 2);
+    // With a current receipt nothing is downloaded again.
+    fixture.manager.install("small").unwrap();
+    fixture.owner.drain_effects().await;
+    assert_eq!(fixture.io.downloads.load(Ordering::SeqCst), 2);
+    fixture.manager.shutdown().await;
+    fixture.owner.drain_effects().await;
 }
 
 #[test]

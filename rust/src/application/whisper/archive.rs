@@ -33,6 +33,9 @@ struct Extraction {
     published: Vec<String>,
     backups: Vec<(String, String)>,
     committed: bool,
+    /// An update of an installation whose receipt is out of date: the old
+    /// server is backed up and replaced like the dependencies (U35).
+    replace_server: bool,
     #[cfg(test)]
     after_publication: Option<PublicationObserver>,
 }
@@ -44,6 +47,7 @@ impl Extraction {
             published: Vec::new(),
             backups: Vec::new(),
             committed: false,
+            replace_server: false,
             #[cfg(test)]
             after_publication: None,
         }
@@ -74,7 +78,11 @@ impl Extraction {
         // The executable is the manager's installed/readiness marker. A present
         // server is not a repair candidate. Like Go, repair a missing server by
         // replacing stale dependencies, but keep their old inodes until commit.
+        // An update (replace_server) replaces the server the same way.
         for name in binary.server_names {
+            if self.replace_server {
+                break;
+            }
             match self.directory.open_file(name, false) {
                 Ok(_) => {
                     return Err(io::Error::new(
@@ -97,10 +105,11 @@ impl Extraction {
         });
         for (name, temporary) in &self.staged {
             check_cancelled(cancel)?;
-            if !binary
-                .server_names
-                .iter()
-                .any(|server| name.eq_ignore_ascii_case(server))
+            if self.replace_server
+                || !binary
+                    .server_names
+                    .iter()
+                    .any(|server| name.eq_ignore_ascii_case(server))
             {
                 match self.directory.open_file(name, false) {
                     Ok(existing) => {
@@ -251,6 +260,19 @@ pub fn extract(
     cancel: &Cancellation,
 ) -> Result<(), WhisperError> {
     extract_to(file, Extraction::new(directory), binary, cancel)
+}
+/// Like `extract`, for an installation being updated: the present server and
+/// dependencies are kept as backups until every new file is in place, and put
+/// back if anything fails (U35). The caller stops the managed server first.
+pub fn extract_replacing(
+    file: File,
+    directory: Arc<Dir>,
+    binary: &manifest::Binary,
+    cancel: &Cancellation,
+) -> Result<(), WhisperError> {
+    let mut extraction = Extraction::new(directory);
+    extraction.replace_server = true;
+    extract_to(file, extraction, binary, cancel)
 }
 
 // The test fixture observes the actual copy/publication path. Its callback and
