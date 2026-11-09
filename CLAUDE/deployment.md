@@ -122,7 +122,7 @@ npm registry 導線は `npm` コマンド推奨ではない。pnpm / bun / yarn 
 
 npm package を作る場合は platform 別 optional package に Go バイナリを同梱する方式を優先し、install 時に GitHub Releases から exe を後段ダウンロードする wrapper は避ける。
 
-> **実装済み（v0.3.0）**: `npm/many-ai-cli/`（root shim）+ `npm/many-ai-cli-<os>-<arch>/`（platform 別、バイナリは gitignore）。`scripts/sync-npm-version.mjs`（tag→version 同期）/ `scripts/stage-npm-binaries.mjs`（`dist/artifacts.json`→bin 配置）/ `scripts/smoke-npm.mjs`（pack 検証）。release.yml が publish（Rust 版は npm の Trusted Publishing で、npm の鍵を持たない）。詳細は `docs/manual_release.md` の「npm registry 配布」節。
+> **実装済み（v0.3.0）**: `npm/many-ai-cli/`（root shim）+ `npm/many-ai-cli-<os>-<arch>/`（platform 別、バイナリは gitignore）。`scripts/sync-npm-version.mjs`（tag→version 同期）/ `scripts/stage-npm-binaries.mjs`（`dist/artifacts.json`→bin 配置）/ `scripts/smoke-npm.mjs`（pack 検証）。release.yml が publish（Rust 版は npm の Trusted Publishing で鍵を持たず、段階公開して作者が npmjs.com で承認する）。詳細は `docs/manual_release.md` の「npm registry 配布」節。
 
 Hub は引き続き `127.0.0.1` 固定で bind し、外部公開用の Windows Firewall 例外を要求しない設計を維持する。
 

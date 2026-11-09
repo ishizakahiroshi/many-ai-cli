@@ -90,30 +90,34 @@ export async function publishPackages(tag, { root = repoRoot, run = npmCommand, 
       item.existing = registry(run, root, item.pkg, version);
       if (item.existing && item.existing !== item.integrity) throw new Error(`Published content differs: ${item.pkg}@${version}`);
     }
+    // Staged publishing: CI only places each version in npm's staging area.
+    // It goes live when a maintainer approves it on npmjs.com with 2FA, so a
+    // run of this workflow alone can never publish (U36). Running the npm
+    // channel again after approval verifies the live bytes through the
+    // byte-identical skip above.
     const distTag = version.includes('-') ? 'next' : 'latest';
+    const staged = [];
     for (const item of packed) {
       if (item.existing) { console.log(`SKIP ${item.pkg}: exact tarball integrity verified`); continue; }
       for (let attempt = 0; ; attempt++) {
-        const result = run(['publish', item.tar, '--ignore-scripts', '--access', 'public', '--provenance', '--tag', distTag], root);
-        if (success(result)) break;
-        if (/cannot publish over|previously published|EPUBLISHCONFLICT|409 Conflict/i.test(output(result))) {
+        const result = run(['stage', 'publish', item.tar, '--ignore-scripts', '--access', 'public', '--provenance', '--tag', distTag], root);
+        if (success(result)) { staged.push(item); break; }
+        if (/cannot publish over|previously published|already staged|EPUBLISHCONFLICT|409 Conflict/i.test(output(result))) {
           if (registry(run, root, item.pkg, version) === item.integrity) break;
-          throw new Error(`Publish conflict has different or unverifiable content: ${item.pkg}`);
+          throw new Error(`${item.pkg}@${version} is already staged or published with different or unverifiable content; review it under Staged Packages on npmjs.com`);
         }
         if (/rate.?limit|429|too many requests/i.test(output(result)) && attempt < 5) {
           await sleep(30000 * 2 ** attempt);
           continue;
         }
-        throw new Error(`npm publish failed: ${item.pkg}`);
+        throw new Error(`npm stage publish failed: ${item.pkg}`);
       }
-      let visible = null;
-      for (let attempt = 0; attempt < 6; attempt++) {
-        visible = registry(run, root, item.pkg, version);
-        if (visible !== null) break;
-        await sleep(500 * 2 ** attempt);
-      }
-      if (visible !== item.integrity) throw new Error(`Published tarball integrity verification failed: ${item.pkg}`);
-      console.log(`OK ${item.pkg}: published tarball integrity verified`);
+    }
+    if (staged.length) {
+      console.log(`STAGED ${staged.length} package(s) with tag ${distTag}. Nothing is live until approved.`);
+      console.log('Approve on npmjs.com (Staged Packages, 2FA) in this order; the root goes last so its platform packages exist first:');
+      staged.forEach((item, i) => console.log(`  ${i + 1}. ${item.pkg}@${version}  ${item.integrity}`));
+      console.log('Then run this workflow again with channel "npm" to verify the approved bytes.');
     }
   } finally { rmSync(ownedTemp, { recursive: true, force: true }); }
 }

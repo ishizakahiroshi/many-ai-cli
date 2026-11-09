@@ -246,41 +246,46 @@ function npmStub(root, { existing = 'absent', conflict = false, badPack = false,
       const integrity = visible.get(pkg) || (existing === 'same' ? integrities.get(pkg) : existing === 'different' ? 'sha512-c3ludGhldGlj' : null);
       return integrity ? { status: 0, stdout: JSON.stringify(integrity) } : { status: 1, stderr: 'synthetic E404' };
     }
-    if (args[0] === 'publish') {
-      const pkg = packages.find(p => args[1].endsWith(`/${p}-1.0.0.tgz`) || args[1].endsWith(`\\${p}-1.0.0.tgz`));
+    if (args[0] === 'stage' && args[1] === 'publish') {
+      const pkg = packages.find(p => args[2].endsWith(`/${p}-1.0.0.tgz`) || args[2].endsWith(`\\${p}-1.0.0.tgz`));
       assert.ok(pkg);
-      visible.set(pkg, conflict === 'different' ? 'sha512-c3ludGhldGlj' : integrities.get(pkg));
-      return conflict ? { status: 1, stderr: 'synthetic EPUBLISHCONFLICT' } : { status: 0, stdout: '' };
+      // Staging alone makes nothing visible; a conflict stands for a version
+      // that was staged and approved earlier.
+      if (!conflict) return { status: 0, stdout: '' };
+      if (conflict !== 'pending') visible.set(pkg, conflict === 'different' ? 'sha512-c3ludGhldGlj' : integrities.get(pkg));
+      return { status: 1, stderr: 'synthetic EPUBLISHCONFLICT' };
     }
     throw new Error('unexpected synthetic npm call');
   };
   return { run, calls };
 }
-test('publisher packs all packages and checks registry before platform-first publication', async t => {
+const staging = calls => calls.filter(a => a[0] === 'stage' && a[1] === 'publish');
+test('publisher packs all packages, checks registry, then stages platform-first and never publishes directly', async t => {
   const root = fixture(t), stub = npmStub(root);
   await publishPackages('v1.0.0', { root, ...stub, sleep: async () => {} });
   assert.equal(stub.calls.filter(a => a[0] === 'pack').length, 5);
   assert.equal(stub.calls.slice(0, 10).filter(a => a[0] === 'view').length, 5);
-  const published = stub.calls.filter(a => a[0] === 'publish');
-  assert.equal(published.length, 5);
-  assert.ok(published.at(-1)[1].endsWith('many-ai-cli-1.0.0.tgz'));
-  assert.ok(published.every(a => a.includes('--ignore-scripts') && a.at(-1) === 'latest'));
+  assert.equal(stub.calls.filter(a => a[0] === 'publish').length, 0);
+  const staged = staging(stub.calls);
+  assert.equal(staged.length, 5);
+  assert.ok(staged.at(-1)[2].endsWith('many-ai-cli-1.0.0.tgz'));
+  assert.ok(staged.every(a => a.includes('--ignore-scripts') && a.includes('--provenance') && a.at(-1) === 'latest'));
 });
-test('publisher resumes only byte-identical existing tarballs without publishing', async t => {
+test('publisher resumes only byte-identical existing tarballs without staging', async t => {
   const root = fixture(t), stub = npmStub(root, { existing: 'same' });
   await publishPackages('v1.0.0', { root, ...stub });
-  assert.equal(stub.calls.filter(a => a[0] === 'publish').length, 0);
+  assert.equal(staging(stub.calls).length, 0);
 });
 for (const options of [{ existing: 'different' }, { unavailable: true }, { badPack: true }]) {
-  test(`publisher refuses unverifiable/different content before publish: ${JSON.stringify(options)}`, async t => {
+  test(`publisher refuses unverifiable/different content before staging: ${JSON.stringify(options)}`, async t => {
     const root = fixture(t), stub = npmStub(root, options);
     await assert.rejects(publishPackages('v1.0.0', { root, ...stub }));
-    assert.equal(stub.calls.filter(a => a[0] === 'publish').length, 0);
+    assert.equal(staging(stub.calls).length, 0);
   });
 }
-for (const conflict of [true, 'different']) test(`publish conflict requires exact registry integrity: ${conflict}`, async t => {
+for (const conflict of [true, 'different', 'pending']) test(`stage conflict requires exact live registry integrity: ${conflict}`, async t => {
   const root = fixture(t), stub = npmStub(root, { conflict });
   const result = publishPackages('v1.0.0', { root, ...stub, sleep: async () => {} });
   if (conflict === true) await result;
-  else await assert.rejects(result, /different or unverifiable/);
+  else await assert.rejects(result, /Staged Packages on npmjs\.com/);
 });

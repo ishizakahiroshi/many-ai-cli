@@ -88,9 +88,13 @@ hash を全件確認してから staging します。npm は main binary だけ�
 
 `sync-npm-version.mjs <tag>` が root / 四 platform package と exact optionalDependencies を揃えます。
 `publish-npm.sh <tag>` は platform を先に、root を最後に、`--access public --provenance` 付きで
-公開します。既存の同一 npm version は payload の一致を確認し、不一致を上書きしません。
-prerelease は `next`、stable は `latest` です。npm へは Trusted Publishing で公開し、保存した npm の鍵は
-使いません（下の「npm の公開元の登録」）。npm を 11.5.1 以上にするため、`npm` の job だけ Node 24 を使います。
+**段階公開**（`npm stage publish`）します。CI は npm の staging に置くだけで、作者が npmjs.com の
+Staged Packages で 2 段階認証つきの承認を押したときに公開されます。承認の順番も platform 4 つが先、root が最後
+（ログに順番と各 tarball の integrity が出る）。承認の後に `channel: npm` でもう一度動かすと、公開された中身が
+手元で作った tarball と同じかだけを確かめます（同じなら公開はしない）。既存の同一 npm version は payload の
+一致を確認し、不一致を上書きしません。prerelease は `next`、stable は `latest` です。npm へは Trusted
+Publishing で置き、保存した npm の鍵は使いません（下の「npm の公開元の登録」）。段階公開に npm 11.15.0 以上が
+要るため、`npm` の job だけ Node 24 を使います。
 
 Homebrew / winget は canonical ZIP から manifest を作る stable 専用 pointer です。
 `PUBLISH_GITHUB_TOKEN` は最終 pointer 公開 step だけで使い、未設定なら skipped とします。
@@ -406,7 +410,7 @@ GoReleaser の `release --clean` 成功後に、同一 job 内で以下を実行
 ### ユーザー側の事前準備
 
 - npm に `many-ai-cli` を publish できるアカウント（package 名は予約済み）。
-- npm の公開元の登録（Trusted Publishing）。npmjs.com で 5 package それぞれの Settings → Trusted Publisher → GitHub Actions に、所有者 `ishizakahiroshi`・リポジトリ `many-ai-cli`・ワークフロー `release.yml`・environment `release` を入れる。登録が無い・違うと、`npm` の job の publish だけが失敗する（GitHub Release は出る。npm だけ `channel: npm` で出し直す）。npm の鍵（`NPM_TOKEN`）は置かない。
+- npm の公開元の登録（Trusted Publishing）。npmjs.com で 5 package それぞれの Settings → Trusted Publisher → GitHub Actions に、所有者 `ishizakahiroshi`・リポジトリ `many-ai-cli`・ワークフロー `release.yml`・environment `release` を入れ、Allowed actions の「Allow npm publish」と「Allow npm dist-tag」はチェックしない（段階公開だけを許す）。登録が無い・違うと、`npm` の job の段階公開だけが失敗する（GitHub Release は出る。npm だけ `channel: npm` で出し直す）。登録の直後は「Pending validation」で、表示された期限までに 1 回公開して確かめる。npm の鍵（`NPM_TOKEN`）は置かない。
 - 既に v0.3.0 を公開済みで後追い npm publish する場合は、`workflow_dispatch` か exact tag から同一 version で publish し、既存 GitHub Release zip は差し替えない。checksum 不整合が出るなら v0.3.1 に回す。
 
 ## タグを打つ前の確認

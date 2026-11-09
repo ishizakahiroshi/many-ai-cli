@@ -487,8 +487,11 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("id-token: write", jobs["npm"])
         self.assertNotIn("secrets.", jobs["npm"])
         self.assertRegex(jobs["npm"], r"node-version: '24\.\d+\.\d+'")
-        self.assertIn("11.5.1 or later required", jobs["npm"])
-        self.assertLess(jobs["npm"].index("11.5.1 or later required"), jobs["npm"].index("scripts/publish-npm.sh"))
+        self.assertIn("11.15.0 or later required", jobs["npm"])
+        self.assertLess(jobs["npm"].index("11.15.0 or later required"), jobs["npm"].index("scripts/publish-npm.sh"))
+        stager = (ROOT / "scripts/publish-npm.mjs").read_text(encoding="utf-8")
+        self.assertIn("['stage', 'publish',", stager)
+        self.assertNotIn("run(['publish',", stager)
 
     def test_whisper_build_runs_upstream_code_without_write_access_and_at_the_pinned_commit(self):
         # whisper-binaries.yml builds a third-party tag with CMake, which can run
