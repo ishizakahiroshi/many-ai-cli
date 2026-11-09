@@ -125,10 +125,11 @@ listed redistribution helpers are copied from the selected workflow source
 into that checkout; both source SHAs are recorded in the staging log. This keeps
 retry package bytes independent of later edits to npm package inputs.
 
-Normal and npm-only publication both use `stage-npm-from-release.mjs`. Only the
-last npm publication step receives `NPM_TOKEN`; the existing optional-token gate
-and npm provenance behavior are retained. No Trusted Publishing account setting
-is changed. Homebrew and winget are stable-only optional pointers and receive
+Normal and npm-only publication both use `stage-npm-from-release.mjs`. npm
+publication uses Trusted Publishing: no npm key is stored, the `npm` job runs in
+the approved `release` environment with `id-token: write`, and npm provenance is
+kept. Each package must list this repository's `release.yml` and `release` as its
+trusted publisher on npmjs.com. Homebrew and winget are stable-only optional pointers and receive
 `PUBLISH_GITHUB_TOKEN` only in their final publication step. A missing optional
 credential is explicitly reported as skipped and does not undo the canonical
 release. Prereleases publish ZIPs and npm `next`; deb/rpm and stable pointer

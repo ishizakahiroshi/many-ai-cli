@@ -89,17 +89,17 @@ hash を全件確認してから staging します。npm は main binary だけ�
 `sync-npm-version.mjs <tag>` が root / 四 platform package と exact optionalDependencies を揃えます。
 `publish-npm.sh <tag>` は platform を先に、root を最後に、`--access public --provenance` 付きで
 公開します。既存の同一 npm version は payload の一致を確認し、不一致を上書きしません。
-prerelease は `next`、stable は `latest` です。`NPM_TOKEN` は最終 publish step だけで使い、
-未設定なら npm を明示的に skipped とします。registry の Trusted Publishing 設定変更は行いません。
+prerelease は `next`、stable は `latest` です。npm へは Trusted Publishing で公開し、保存した npm の鍵は
+使いません（下の「npm の公開元の登録」）。npm を 11.5.1 以上にするため、`npm` の job だけ Node 24 を使います。
 
 Homebrew / winget は canonical ZIP から manifest を作る stable 専用 pointer です。
 `PUBLISH_GITHUB_TOKEN` は最終 pointer 公開 step だけで使い、未設定なら skipped とします。
 prerelease は四 ZIP と npm `next` のみで、deb / rpm と stable pointer は明示的に skip します。
 Docker の build / push / auto-update はこの流れに含みません。
 
-`NPM_TOKEN` と `PUBLISH_GITHUB_TOKEN` は repository secret ではなく、environment `release`
-（必須の承認者は作者本人）の secret に置きます。`npm` と `pointers` の job はこの environment を
-使うので、鍵が job に渡る前に GitHub の画面で承認が要ります。2 つの job は `canonical` の後に
+`PUBLISH_GITHUB_TOKEN` は repository secret ではなく、environment `release`
+（必須の承認者は作者本人）の secret に置きます。npm の鍵は持ちません。`npm` と `pointers` の job はこの environment を
+使うので、job が始まる前に GitHub の画面で承認が要ります。2 つの job は `canonical` の後に
 同時に待つので、承認は 1 回で両方が進みます。`v` で始まる tag の作成は ruleset で作者本人に
 限ります（bot や AI 連携アプリが tag を作って公開を始められないようにするため。監査 U36）。
 
@@ -168,7 +168,7 @@ v0.1.0 は試験リリース扱いとし、初回正式リリースは v0.1.1 �
 ### npm 配布の地雷
 
 - **publish パスの誤解釈**: `npm publish "npm/<pkg>"` は npm が **GitHub shorthand（`owner/repo`）と誤解釈**し Git リモートの取得を試みて `Permission denied` で失敗する。✅ 必ず **`npm publish "./npm/<pkg>"`**（先頭 `./`）。
-- **token は publish 権限必須**: read-only token だと publish が **`E429 "Could not publish, as user undefined: rate limited exceeded"`** で失敗する（権限不足を**紛らわしいレート制限文言**で返す。`npm whoami` は通っても publish 権限が無いと publish 不可）。granular token は **Permissions = Read and write / Packages = All packages**、または Classic の **Automation** token。CI secret `NPM_TOKEN` も同要件。granular は最長 90 日で失効するので CI 長期運用は Classic Automation（無期限可）推奨。
+- **token は publish 権限必須**: read-only token だと publish が **`E429 "Could not publish, as user undefined: rate limited exceeded"`** で失敗する（権限不足を**紛らわしいレート制限文言**で返す。`npm whoami` は通っても publish 権限が無いと publish 不可）。granular token は **Permissions = Read and write / Packages = All packages**、または Classic の **Automation** token。CI は Trusted Publishing で公開し、鍵を使わない。手元から出すときの granular token は最長 90 日で失効し、Classic token は 2025-12-09 に npm 側で全廃された。
 - **本物の E429（レート制限）**: 短時間に publish を連打すると npm がロックする。**連続試行は窓リセットで逆効果**。15〜20 分空けて 1 回ずつ。✅ 現在は `scripts/publish-npm.sh` に **指数バックオフ付きリトライ（E429 backoff）および idempotent skip** が実装済み。
 - **Windows から platform package を publish しない**: Windows の `npm pack` は **unix 実行ビットを付けられない**（tarball 内が `-rw-r--r--` = 0644）。root shim が `spawnSync(binary)` で直接 exec するため、これだと **linux/macOS パッケージが起動失敗（EACCES）**する。**正道は CI(Linux) で publish**。手動復旧する場合は **WSL(ext4) で `chmod 0755` してから `npm pack`/`publish`**（/mnt/c 上だと chmod が効かないことがあるのでネイティブ fs で）。展開だけ Windows・pack/publish は WSL、という分担。
 
@@ -268,7 +268,7 @@ GoReleaser が同時に動かす配布チャネル（`.goreleaser.yaml`）:
 | チャネル | 対象 | 必要 secret |
 |---|---|---|
 | GitHub Releases（zip / SHA256SUMS / cosign / SBOM） | 全 OS | `GITHUB_TOKEN` + `id-token: write` |
-| npm registry（root + platform package 4 つ） | 全 OS（release.yml 後段） | `NPM_TOKEN`（未設定ならスキップ） |
+| npm registry（root + platform package 4 つ） | 全 OS（release.yml 後段） | なし（Trusted Publishing。`id-token: write` と environment `release`） |
 | winget（`ishizakahiroshi/winget-pkgs` fork→upstream PR） | Windows x64 | `PUBLISH_GITHUB_TOKEN` |
 | Homebrew cask（`ishizakahiroshi/homebrew-tap`） | macOS | `PUBLISH_GITHUB_TOKEN` |
 | deb / rpm（nfpms、本体+ランチャー） | Linux x64 | なし |
@@ -390,7 +390,7 @@ Smart App Control と組織ポリシーへの根本対策は、将来のコー�
 
 ### release workflow での自動 publish（`.github/workflows/release.yml`）
 
-GoReleaser の `release --clean` 成功後に、同一 job 内で以下を実行する（`NPM_TOKEN` secret 未設定なら全 step スキップ＝既存リリースを壊さない）:
+GoReleaser の `release --clean` 成功後に、同一 job 内で以下を実行していた（Go 版の頃の記述。Rust 版の release は npm の鍵を持たず、Trusted Publishing で公開する）:
 
 1. `node scripts/stage-npm-binaries.mjs` — `dist/artifacts.json` から各 OS/arch の `many-ai-cli` バイナリを `npm/*/bin/` へ配置（非 Windows は実行ビット付与）。
 2. `node scripts/sync-npm-version.mjs "<tag>"` — tag から全 `npm/*/package.json` の version と root の optionalDependencies を一括更新（drift 防止）。
@@ -406,7 +406,7 @@ GoReleaser の `release --clean` 成功後に、同一 job 内で以下を実行
 ### ユーザー側の事前準備
 
 - npm に `many-ai-cli` を publish できるアカウント（package 名は予約済み）。
-- GitHub Actions secret `NPM_TOKEN`（automation token 推奨。provenance を使うため `id-token: write` は workflow で付与済み）。
+- npm の公開元の登録（Trusted Publishing）。npmjs.com で 5 package それぞれの Settings → Trusted Publisher → GitHub Actions に、所有者 `ishizakahiroshi`・リポジトリ `many-ai-cli`・ワークフロー `release.yml`・environment `release` を入れる。登録が無い・違うと、`npm` の job の publish だけが失敗する（GitHub Release は出る。npm だけ `channel: npm` で出し直す）。npm の鍵（`NPM_TOKEN`）は置かない。
 - 既に v0.3.0 を公開済みで後追い npm publish する場合は、`workflow_dispatch` か exact tag から同一 version で publish し、既存 GitHub Release zip は差し替えない。checksum 不整合が出るなら v0.3.1 に回す。
 
 ## タグを打つ前の確認

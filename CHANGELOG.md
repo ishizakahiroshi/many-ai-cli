@@ -141,6 +141,10 @@ Release artifacts are published at
   publishing jobs use the `release` environment, so the keys they need are
   handed over only after the owner approves the run (one approval covers
   both).
+- **npm packages are published without a stored npm key.** The release
+  publishes to npm through npm's Trusted Publishing, which accepts only this
+  repository's release workflow running in the approved `release` environment.
+  There is no long-lived npm key left to leak or to expire.
 - **The CLI sends the Hub token only to a Hub that runs as you.** Before
   `status`, `stop`, a wrapped session, the usage relay, `orchestrate`, the
   tray and the launcher send the token to a 127.0.0.1 port, they ask the

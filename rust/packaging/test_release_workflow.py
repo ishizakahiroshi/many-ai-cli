@@ -479,6 +479,16 @@ class ReleaseWorkflowTests(unittest.TestCase):
         for step in text.split("      - ")[1:]:
             if "NODE_AUTH_TOKEN:" in step or "GH_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}" in step:
                 self.assertNotRegex(step, r"bun (?:install|run)|npm install|cargo |apt-get|uses:")
+        # npm publishes through Trusted Publishing: no npm key anywhere, the job
+        # sits behind the approved `release` environment, and setup-node writes
+        # no .npmrc token placeholder (U36).
+        self.assertNotRegex(text, r"NPM_TOKEN|NODE_AUTH_TOKEN|registry-url:")
+        self.assertIn("environment: release", jobs["npm"])
+        self.assertIn("id-token: write", jobs["npm"])
+        self.assertNotIn("secrets.", jobs["npm"])
+        self.assertRegex(jobs["npm"], r"node-version: '24\.\d+\.\d+'")
+        self.assertIn("11.5.1 or later required", jobs["npm"])
+        self.assertLess(jobs["npm"].index("11.5.1 or later required"), jobs["npm"].index("scripts/publish-npm.sh"))
 
     def test_whisper_build_runs_upstream_code_without_write_access_and_at_the_pinned_commit(self):
         # whisper-binaries.yml builds a third-party tag with CMake, which can run
