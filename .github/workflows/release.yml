@@ -315,6 +315,8 @@ jobs:
         with:
           name: rust-release-sbom-${{ needs.plan.outputs.source_sha }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: .rust-release-sbom/
+          # upload-artifact v4 skips a dot folder's contents unless told to.
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
 

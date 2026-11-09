@@ -479,6 +479,11 @@ class ReleaseWorkflowTests(unittest.TestCase):
         for step in text.split("      - ")[1:]:
             if "NODE_AUTH_TOKEN:" in step or "GH_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}" in step:
                 self.assertNotRegex(step, r"bun (?:install|run)|npm install|cargo |apt-get|uses:")
+        # upload-artifact v4 uploads nothing from a dot folder unless
+        # include-hidden-files is set; the sbom job stopped v0.10.0-rc.1 so.
+        for step in text.split("      - ")[1:]:
+            if "actions/upload-artifact@" in step and re.search(r"^\s+path: \.", step, re.M):
+                self.assertIn("include-hidden-files: true", step, step.splitlines()[0])
         # npm publishes through Trusted Publishing: no npm key anywhere, the job
         # sits behind the approved `release` environment, and setup-node writes
         # no .npmrc token placeholder (U36).

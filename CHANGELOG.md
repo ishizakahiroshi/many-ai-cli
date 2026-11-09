@@ -380,13 +380,15 @@ Release artifacts are published at
   bytes each step copies, so such a file decodes quickly or stops at the
   limit.
 
-## [0.10.0-rc.1] - 2026-11-09
+## [0.10.0-rc.2] - 2026-11-09
 
 A release candidate for 0.10.0, published so that installing and starting it
 the way users do can be checked before 0.10.0 itself. It contains everything
 listed under Unreleased and 0.10.0 in CHANGELOG.md. npm installs it only with
 `npm install -g many-ai-cli@next` (a plain install still gets 0.9.0), and
-winget and Homebrew are not updated.
+winget and Homebrew are not updated. (The `v0.10.0-rc.1` tag published
+nothing: its release run stopped before signing, when the SBOM files were not
+uploaded.)
 
 ## [0.10.0] - Unreleased
 
@@ -4447,7 +4449,7 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 
 [Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...HEAD
 [0.10.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...v0.10.0
-[0.10.0-rc.1]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...v0.10.0-rc.1
+[0.10.0-rc.2]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...v0.10.0-rc.2
 [0.9.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.6.0...v0.7.0
