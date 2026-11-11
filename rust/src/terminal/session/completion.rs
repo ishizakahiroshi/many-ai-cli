@@ -903,24 +903,89 @@ pub fn truncate(text: &str) -> String {
         format!("{}…", text.chars().take(320).collect::<String>().trim())
     }
 }
+/// The kind of a DONE summary, from its words.
+///
+/// A wait for the user's decision counts wherever it is written. "Stopped"
+/// and "failed" are read from the conclusion only (see `conclusion`): the
+/// rules ask for the conclusion in the first sentence, and everything else
+/// describes what was done, where those words usually name something that was
+/// fixed or counted ("2/3 失敗 → 0/3 を直しました", "エラー 0 件"). Read from the
+/// whole text, such reports of finished work went out as failures (board
+/// label and high-priority notification).
 fn classify(text: &str) -> &'static str {
     let lower = text.to_lowercase();
+    if ["要判断", "要対応", "確認が必要", "blocked", "判断が必要"]
+        .iter()
+        .any(|term| lower.contains(term))
+    {
+        return "needs_action";
+    }
+    let conclusion = conclusion(&lower);
     for (kind, terms) in [
-        (
-            "needs_action",
-            &["要判断", "要対応", "確認が必要", "blocked", "判断が必要"][..],
-        ),
         (
             "aborted",
             &["中断", "キャンセル", "aborted", "cancelled", "canceled"][..],
         ),
-        ("failure", &["失敗", "エラー", "failed", "error"][..]),
+        (
+            "failure",
+            &["失敗", "エラー", "未完了", "failed", "error"][..],
+        ),
     ] {
-        if terms.iter().any(|term| lower.contains(term)) {
+        if terms.iter().any(|term| conclusion.contains(term)) {
             return kind;
         }
     }
     "success"
+}
+/// The part of a summary that says how the work ended: its first sentence,
+/// without what is in parentheses (details and counts), without the phrases
+/// that say none was found ("失敗 0 件", "no errors"), and, when the sentence
+/// lists several things with `、`, only its last clause, which holds the verb
+/// ("A の失敗を調べ、直しました" ends in "直しました").
+fn conclusion(text: &str) -> String {
+    static ASIDE: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"（[^（）]*）|\([^()]*\)").unwrap());
+    static NONE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(concat!(
+            r"(?:失敗|エラー)\s*(?:は|が|も)?\s*(?:0|０|ゼロ|なし|無し|無く|なく|ありません|無い|ない)",
+            r"|(?:\b0|\bno|\bzero|\bwithout)\s+(?:failed|failures?|errors?)\b",
+            r"|\b(?:failed|failures?|errors?)\s*[:=]?\s*0\b",
+        ))
+        .unwrap()
+    });
+    let mut sentence = first_sentence(text).to_owned();
+    // Innermost first, so nested parentheses go too.
+    while ASIDE.is_match(&sentence) {
+        sentence = ASIDE.replace_all(&sentence, " ").into_owned();
+    }
+    let sentence = NONE.replace_all(&sentence, " ");
+    sentence.rsplit('、').next().unwrap_or_default().to_owned()
+}
+/// Up to and including the first sentence end outside parentheses: `。`, or
+/// `.`, `!`, `?` before whitespace or the end ("v1.2" and "a.rs" do not end a
+/// sentence).
+fn first_sentence(text: &str) -> &str {
+    let mut depth = 0usize;
+    let mut chars = text.char_indices().peekable();
+    while let Some((index, c)) = chars.next() {
+        let ends = match c {
+            '（' | '(' => {
+                depth += 1;
+                false
+            }
+            '）' | ')' => {
+                depth = depth.saturating_sub(1);
+                false
+            }
+            '。' => true,
+            '.' | '!' | '?' => chars.peek().is_none_or(|(_, next)| next.is_whitespace()),
+            _ => false,
+        };
+        if ends && depth == 0 {
+            return &text[..index + c.len_utf8()];
+        }
+    }
+    text
 }
 fn chrome(line: &str) -> bool {
     line.chars().all(|c| {

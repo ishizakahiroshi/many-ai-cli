@@ -911,3 +911,67 @@ fn the_screen_joins_wrapped_lines_like_the_text_they_hold() {
         vec!["看板に載ったことを確かめました。Checked on the board.".to_string()]
     );
 }
+
+#[test]
+fn a_summary_is_classified_by_how_its_first_sentence_ends() {
+    for (text, expected) in [
+        // The three examples in the rules given to the AI.
+        (
+            "files タブの検索バグを修正しました。変更: web/src/app/files-view.ts。テスト: bun run check は成功しました。",
+            "success",
+        ),
+        (
+            "テスト追加は未完了です。internal/hub/server_test.go の既存失敗 3 件を確認しました。",
+            "failure",
+        ),
+        (
+            "実装は停止しています。破壊的な migration の適用可否についてユーザー判断が必要です。",
+            "needs_action",
+        ),
+        // Finished work that names what it fixed or counted (reports like
+        // these went out as failures on 2026-11-11).
+        (
+            "説明書の追記、試験が一時フォルダを残す件（281 個 → 0 個）、混んだ機械で Git の試験が落ちる件（3 本同時で 2/3 失敗 → 0/3）を直しました。",
+            "success",
+        ),
+        (
+            "files::branch の 3 件を直して develop に入れました（9ad0f94b、push なし。6 本同時で 6/6 失敗 → 0/6）。空のフォルダは残っています。",
+            "success",
+        ),
+        (
+            "古い試験の一時フォルダ 6,921 個を消し、.tmp フォルダは 0 個になりました（消す前に対象を数え直し、失敗 0 件）。",
+            "success",
+        ),
+        (
+            "一時フォルダを手放していない入れ物を、試験の実行時に見つけて失敗にする検査を足し、develop に入れました。",
+            "success",
+        ),
+        (
+            "検証スクリプトでリンク切れ・はみ出し・JS エラーが 0 件であることを確認しました。",
+            "success",
+        ),
+        ("失敗の原因を調べ、直しました。", "success"),
+        (
+            "修正を push しました。CI の check は失敗しています。",
+            "success",
+        ),
+        ("All 12 tests passed, 0 failed.", "success"),
+        // Work that did not end well says so in its conclusion.
+        ("ビルドに失敗しました。原因は調査中です。", "failure"),
+        (
+            "3 件を直しましたが、残り 1 件はエラーで止まりました。",
+            "failure",
+        ),
+        ("The build failed. See the log.", "failure"),
+        ("作業を中断しました。続きは次回です。", "aborted"),
+        ("中断していた作業を再開し、最後まで終えました。", "success"),
+        ("Cancelled by the user.", "aborted"),
+        // A wait for the user counts wherever it is written.
+        (
+            "案を 3 つ出しました。どれにするかは要判断です。",
+            "needs_action",
+        ),
+    ] {
+        assert_eq!(classify(text), expected, "{text}");
+    }
+}
