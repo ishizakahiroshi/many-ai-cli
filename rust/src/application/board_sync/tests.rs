@@ -45,6 +45,9 @@ struct Fixture {
     root: tempfile::TempDir,
 }
 async fn fixture(trial: bool) -> Fixture {
+    fixture_with(trial, None).await
+}
+async fn fixture_with(trial: bool, git: Option<Arc<dyn GitBranchSource>>) -> Fixture {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let board = Arc::new(Board {
@@ -70,13 +73,14 @@ async fn fixture(trial: bool) -> Fixture {
     let owner = HubTaskOwner::new(tokio::runtime::Handle::current());
     let warnings = Arc::new(Mutex::new(Vec::new()));
     let sink = warnings.clone();
-    let sync = BoardSync::new(
+    let sync = BoardSync::with_git(
         root.path(),
         trial,
         owner.handle(),
         Arc::new(move |operation: &str, detail: &str| {
             lock(&sink).push(format!("{operation}: {detail}"))
         }),
+        git,
     )
     .unwrap();
     Fixture {
@@ -540,7 +544,10 @@ async fn shelve(
 }
 /// A fixture whose listed repository writes to a `Shelf` holding project `demo`.
 async fn linked() -> (Fixture, Arc<Shelf>) {
-    let mut f = fixture(false).await;
+    linked_with(None).await
+}
+async fn linked_with(git: Option<Arc<dyn GitBranchSource>>) -> (Fixture, Arc<Shelf>) {
+    let mut f = fixture_with(false, git).await;
     let shelf = Arc::new(Shelf::default());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
@@ -906,5 +913,122 @@ fn work_titles_are_one_clean_line_with_the_first_sentence() {
     assert!(
         long.chars().count() <= TITLE_MAX && long.ends_with('…'),
         "{long}"
+    );
+}
+
+/// Answers `commit_page` from a table and keeps what it was asked.
+struct Pages {
+    known: Vec<(&'static str, &'static str)>,
+    asked: Mutex<Vec<String>>,
+}
+impl GitBranchSource for Pages {
+    fn branch<'a>(&'a self, _cwd: &'a str) -> CoreFuture<'a, String> {
+        Box::pin(async { String::new() })
+    }
+    fn changes<'a>(&'a self, _cwd: &'a str) -> CoreFuture<'a, (i64, i64, i64)> {
+        Box::pin(async { (0, 0, 0) })
+    }
+    fn project<'a>(&'a self, _cwd: &'a str) -> CoreFuture<'a, Option<String>> {
+        Box::pin(async { None })
+    }
+    fn commit_page<'a>(
+        &'a self,
+        _cwd: &'a str,
+        revision: &'a str,
+    ) -> CoreFuture<'a, Option<String>> {
+        Box::pin(async move {
+            lock(&self.asked).push(revision.to_owned());
+            self.known
+                .iter()
+                .find(|(hash, _)| *hash == revision)
+                .map(|(_, page)| (*page).to_owned())
+        })
+    }
+}
+
+#[tokio::test]
+async fn a_commit_the_summary_names_becomes_the_link_when_it_is_pushed() {
+    const PAGE: &str =
+        "https://github.com/example/repo/commit/0a1b2c3d4e5f60718293a4b5c6d7e8f901234567";
+    let pages = Arc::new(Pages {
+        known: vec![
+            ("0a1b2c3d", PAGE),
+            (
+                "feedc0de",
+                "https://github.com/example/repo/commit/feedc0de?token=synthetic",
+            ),
+        ],
+        asked: Mutex::default(),
+    });
+    let (f, shelf) = linked_with(Some(pages.clone())).await;
+    let d = details(40, &f.repo, Some(300));
+    f.sync.session_started(&d);
+    let turn = |text: &str| f.sync.turn_done(Some(&d), &done(40, text));
+    // Named in the text, Japanese on both sides, and pushed: linked.
+    turn("直しをコミット0a1b2c3dとして push しました。");
+    // Not pushed (Git has no page for it): the note goes out without a link.
+    turn("Saved it as 1234abcd, not pushed yet.");
+    // A link the summary gives itself is used, and Git is not asked.
+    turn("Done in 0a1b2c3d. 成果: https://github.com/example/repo/pull/7");
+    // Digits only (a date, a count) and short words are not hashes.
+    turn("Checked 20261112 and 1536 items, see abc12.");
+    // A page that could not be a board link is not used.
+    turn("Pushed feedc0de.");
+    // The first pushed one of several wins; a repeat is asked once.
+    turn("Tried 1234abcd and 1234abcd, then 0a1b2c3d.");
+    noted(&shelf, "session/300", 6).await;
+    let links: Vec<serde_json::Value> = shelf
+        .events_of("session/300", "note")
+        .iter()
+        .map(|note| note.get("ref").cloned().unwrap_or(serde_json::Value::Null))
+        .collect();
+    assert_eq!(
+        links,
+        vec![
+            serde_json::json!(PAGE),
+            serde_json::Value::Null,
+            serde_json::json!("https://github.com/example/repo/pull/7"),
+            serde_json::Value::Null,
+            serde_json::Value::Null,
+            serde_json::json!(PAGE),
+        ]
+    );
+    assert_eq!(
+        *lock(&pages.asked),
+        ["0a1b2c3d", "1234abcd", "feedc0de", "1234abcd", "0a1b2c3d"]
+    );
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn without_a_git_reader_a_named_commit_adds_no_link() {
+    let (f, shelf) = linked().await;
+    let d = details(41, &f.repo, Some(301));
+    f.sync.session_started(&d);
+    f.sync.turn_done(Some(&d), &done(41, "Pushed 0a1b2c3d."));
+    noted(&shelf, "session/301", 1).await;
+    assert!(
+        shelf.events_of("session/301", "note")[0]
+            .get("ref")
+            .is_none()
+    );
+    f.cancel.cancel();
+}
+
+#[test]
+fn commit_hashes_are_hex_words_with_a_letter_at_most_three_in_order() {
+    assert_eq!(
+        commit_hashes("コミット0a1b2c3dを push、（9ad0f94b、push なし）と fc8b2633 と ad0a730e"),
+        ["0a1b2c3d", "9ad0f94b", "fc8b2633"]
+    );
+    assert_eq!(
+        commit_hashes("20261112 1234567 abc12 ABCDEF12 xyz0a1b2c3d 0a1b2c3d_x"),
+        [""; 0]
+    );
+    assert_eq!(
+        commit_hashes(
+            "0a1b2c3d4e5f60718293a4b5c6d7e8f901234567 and 0a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+        ),
+        ["0a1b2c3d4e5f60718293a4b5c6d7e8f901234567"]
     );
 }

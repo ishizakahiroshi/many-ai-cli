@@ -26,13 +26,16 @@
 //! match; a plan file that exists in the repository but has no item yet gets
 //! one (title from its first heading). When later summaries name another plan,
 //! the work continues in a new item (`session/<id>/2`, ...), so each plan shows
-//! the work done for it. The outcome URL becomes the link of that note. What
-//! leaves the machine stays the same kind of thing: titles, states, summaries
-//! and references, never file contents.
+//! the work done for it. The outcome URL becomes the link of that note. A
+//! summary without one, which names a commit by its hash, gets that commit's
+//! GitHub page as its link once the commit is on `origin` (asked of Git, see
+//! `commit_link`). What leaves the machine stays the same kind of thing: titles,
+//! states, summaries and references, never file contents.
 //!
 //! Writes are best effort, in order, one at a time; a failure is logged and
 //! dropped.
 use crate::{
+    files::branch::GitBranchSource,
     hub::task_owner::HubTaskHandle,
     proto::{DoneSummary, core::*},
     storage::mask_secrets,
@@ -57,6 +60,8 @@ const QUEUE_MAX: usize = 256;
 const SENTENCE_MAX: usize = 80;
 /// The board's limit for a reference (path or URL).
 const REF_MAX: usize = 500;
+/// Hashes in one summary that are asked of Git, in the order written.
+const HASHES_MAX: usize = 3;
 /// A plan file is read this far for its first heading.
 const PLAN_HEAD_MAX: u64 = 64 * 1024;
 /// `board_list` returns only events after `since_seq`; this asks for none, so
@@ -363,6 +368,26 @@ fn unwrapped(value: &str) -> &str {
         .trim_matches(['`', '"', '\'', '<', '>'])
 }
 
+/// What may be a commit hash in a summary: 7 to 40 hexadecimal characters
+/// standing alone (ASCII letters, digits and `_` on neither side; Japanese
+/// text may touch them), with a letter among them (a date or a count is
+/// digits only).
+/// At most `HASHES_MAX`, without repeats, in the order written.
+fn commit_hashes(summary: &str) -> Vec<String> {
+    static HASH: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"(?-u:\b)[0-9a-f]{7,40}(?-u:\b)").unwrap());
+    let mut found: Vec<String> = Vec::new();
+    for hash in HASH.find_iter(summary).map(|m| m.as_str()) {
+        if hash.bytes().any(|b| b.is_ascii_alphabetic()) && !found.iter().any(|h| h == hash) {
+            found.push(hash.to_owned());
+            if found.len() == HASHES_MAX {
+                break;
+            }
+        }
+    }
+    found
+}
+
 /// What the board accepts as a link: `https://host/...` without user info,
 /// query or fragment, and without anything `mask_secrets` would hide. The link
 /// is cut out of the summary text before that text is masked, so it has to be
@@ -590,6 +615,9 @@ pub struct BoardSync {
     client: reqwest::Client,
     tasks: HubTaskHandle,
     warning: Arc<Warning>,
+    /// Answers where a commit named in a summary can be opened; `None` = no
+    /// commit links.
+    git: Option<Arc<dyn GitBranchSource>>,
     /// `None` = this session is not in a listed repository.
     sessions: Mutex<HashMap<LiveSessionId, Option<Seat>>>,
     /// Written by the worker only, in job order.
@@ -606,6 +634,18 @@ impl BoardSync {
         tasks: HubTaskHandle,
         warning: Arc<Warning>,
     ) -> Result<Arc<Self>, reqwest::Error> {
+        Self::with_git(root, trial, tasks, warning, None)
+    }
+
+    /// `new`, with the reader that turns a commit named in a summary into its
+    /// GitHub page.
+    pub fn with_git(
+        root: &Path,
+        trial: bool,
+        tasks: HubTaskHandle,
+        warning: Arc<Warning>,
+        git: Option<Arc<dyn GitBranchSource>>,
+    ) -> Result<Arc<Self>, reqwest::Error> {
         Ok(Arc::new(Self {
             file: root.join(FILE_NAME),
             enabled: !trial,
@@ -615,6 +655,7 @@ impl BoardSync {
                 .build()?,
             tasks,
             warning,
+            git,
             sessions: Mutex::default(),
             pieces: Mutex::default(),
             queue: Mutex::default(),
@@ -925,10 +966,30 @@ impl BoardSync {
                 piece.titled = piece.titled || name.is_some();
             }
         }
+        let link = match tails.outcome {
+            Some(outcome) => Some(outcome),
+            None => self.commit_link(&tails.rest, &seat.root).await,
+        };
         let text = truncate(&mask_secrets(&format!("[{kind}] {}", tails.rest)), TEXT_MAX);
-        self.event(target, &piece.item_id, "note", text, tails.outcome)
-            .await;
+        self.event(target, &piece.item_id, "note", text, link).await;
         lock(&self.pieces).insert(session, piece);
+    }
+
+    /// The GitHub page of the first commit the summary names by hash that is on
+    /// `origin`. Only what the summary itself names is linked: the repository's
+    /// newest commit may be another session's work, and a commit that is not
+    /// pushed has no page to open.
+    async fn commit_link(&self, summary: &str, root: &Path) -> Option<String> {
+        let git = self.git.as_ref()?;
+        let root = root.to_string_lossy();
+        for hash in commit_hashes(summary) {
+            if let Some(url) = git.commit_page(&root, &hash).await
+                && https_ok(&url)
+            {
+                return Some(url);
+            }
+        }
+        None
     }
 
     /// The items of the target's project (no events).

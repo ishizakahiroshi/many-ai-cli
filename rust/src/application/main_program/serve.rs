@@ -356,7 +356,7 @@ impl HubComposition {
             &paths,
         )
         .map_err(io::Error::other)?;
-        let board = crate::application::board_sync::BoardSync::new(
+        let board = crate::application::board_sync::BoardSync::with_git(
             paths.root(),
             paths.is_trial(),
             tasks.clone(),
@@ -364,6 +364,7 @@ impl HubComposition {
                 let logger = logger.clone();
                 Arc::new(move |operation, detail| logger.write("WARN", operation, detail))
             },
+            Some(files.branch_reader()),
         )
         .map_err(io::Error::other)?;
         let security = crate::application::push::security::SecurityNotifications::new(

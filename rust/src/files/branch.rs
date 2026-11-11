@@ -50,6 +50,17 @@ pub trait GitBranchSource: Send + Sync {
     ) -> CoreFuture<'a, Option<std::collections::BTreeSet<String>>> {
         Box::pin(async { None })
     }
+    /// The GitHub page of the commit that `revision` (an abbreviated or full
+    /// hash) names in the repository at `cwd`, when that commit is on a branch
+    /// of `origin` as this clone last saw it. `None` for anything else: not a
+    /// commit here, not pushed, `origin` not on GitHub, or Git did not answer.
+    fn commit_page<'a>(
+        &'a self,
+        _cwd: &'a str,
+        _revision: &'a str,
+    ) -> CoreFuture<'a, Option<String>> {
+        Box::pin(async { None })
+    }
 }
 
 impl FilesService {
@@ -208,6 +219,53 @@ impl GitBranchSource for FilesService {
             project_path(cwd, &output)
         })
     }
+
+    fn commit_page<'a>(
+        &'a self,
+        cwd: &'a str,
+        revision: &'a str,
+    ) -> CoreFuture<'a, Option<String>> {
+        Box::pin(async move {
+            let hex = |s: &str, min: usize| {
+                (min..=64).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_hexdigit())
+            };
+            if cwd.trim().is_empty() || !hex(revision, 7) {
+                return None;
+            }
+            // Not a display lookup: it runs once per finished turn, off the
+            // card refresh, so it may take as long as the statistics do.
+            let git = Lookup::unhurried(self);
+            let named = format!("{revision}^{{commit}}");
+            let commit = git
+                .run(cwd, &["rev-parse", "--verify", "--quiet", &named])
+                .await
+                .ok()?;
+            let commit = commit.trim();
+            if !hex(commit, 40) {
+                return None;
+            }
+            let pushed = git
+                .run(
+                    cwd,
+                    &[
+                        "for-each-ref",
+                        "--count=1",
+                        "--contains",
+                        commit,
+                        "--format=%(refname)",
+                        "refs/remotes/origin",
+                    ],
+                )
+                .await
+                .ok()?;
+            if pushed.trim().is_empty() {
+                return None;
+            }
+            let origin = git.run(cwd, &["remote", "get-url", "origin"]).await.ok()?;
+            let repository = super::git::github_url(origin.trim())?;
+            Some(format!("{repository}/commit/{commit}"))
+        })
+    }
 }
 
 impl FilesService {
@@ -274,6 +332,16 @@ impl<'a> Lookup<'a> {
             return Self::with_budget(service, budget);
         }
         Self::with_budget(service, LOOKUP_TIMEOUT)
+    }
+
+    /// For a lookup no card waits on: the statistics' budget (a test fixture
+    /// that sets its own budget gets at least that).
+    fn unhurried(service: &'a FilesService) -> Self {
+        #[cfg(test)]
+        if let Some(budget) = service.display_lookup_budget {
+            return Self::with_budget(service, budget.max(CHANGES_TIMEOUT));
+        }
+        Self::with_budget(service, CHANGES_TIMEOUT)
     }
 
     fn with_budget(service: &'a FilesService, budget: Duration) -> Self {
@@ -1203,5 +1271,67 @@ mod tests {
         )
         .unwrap();
         assert_eq!(fixture.service.project(fixture.cwd()).await, None);
+    }
+
+    #[tokio::test]
+    async fn commit_page_is_the_github_page_of_a_pushed_commit_and_nothing_else() {
+        let f = Fixture::patient();
+        f.init().await;
+        fs::write(f.root.join("pushed.txt"), "one\n").unwrap();
+        f.commit().await;
+        let pushed = f.git(&f.root, &["rev-parse", "HEAD"]).await;
+        // No `origin` yet: there is no page to open.
+        assert_eq!(f.service.commit_page(f.cwd(), &pushed[..8]).await, None);
+        f.git(
+            &f.root,
+            &[
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/example/synthetic-repo.git",
+            ],
+        )
+        .await;
+        // On `origin` as this clone last saw it (what a push or fetch records).
+        f.git(
+            &f.root,
+            &["update-ref", "refs/remotes/origin/synthetic", &pushed],
+        )
+        .await;
+        fs::write(f.root.join("local.txt"), "two\n").unwrap();
+        f.commit().await;
+        let local = f.git(&f.root, &["rev-parse", "HEAD"]).await;
+        let page = format!("https://github.com/example/synthetic-repo/commit/{pushed}");
+        assert_eq!(
+            f.service.commit_page(f.cwd(), &pushed[..8]).await,
+            Some(page.clone()),
+            "an abbreviated hash names the commit"
+        );
+        assert_eq!(f.service.commit_page(f.cwd(), &pushed).await, Some(page));
+        assert_eq!(
+            f.service.commit_page(f.cwd(), &local[..8]).await,
+            None,
+            "a commit that is not pushed has no page"
+        );
+        for not_a_commit in ["0000000", "synthetic", "HEAD", "--all", "abc12", ""] {
+            assert_eq!(
+                f.service.commit_page(f.cwd(), not_a_commit).await,
+                None,
+                "{not_a_commit:?}"
+            );
+        }
+        assert_eq!(f.service.commit_page("", &pushed[..8]).await, None);
+        // An `origin` somewhere else has no GitHub page.
+        f.git(
+            &f.root,
+            &[
+                "remote",
+                "set-url",
+                "origin",
+                "https://git.example.invalid/example/synthetic-repo.git",
+            ],
+        )
+        .await;
+        assert_eq!(f.service.commit_page(f.cwd(), &pushed[..8]).await, None);
     }
 }

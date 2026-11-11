@@ -1048,7 +1048,9 @@ fn parse_numstat(s: &str) -> BTreeMap<String, (i64, i64)> {
         })
         .collect()
 }
-fn github_url(remote: &str) -> Option<String> {
+/// `https://github.com/<owner>/<repo>` for an `origin` on GitHub (the path
+/// only: nothing a URL carries before the host is kept).
+pub(super) fn github_url(remote: &str) -> Option<String> {
     let ssh_prefix = "git@github.com:"; // secrets-scan: allow git@github.com -- public GitHub SSH service principal, not a personal address
     let path = if let Some(p) = remote.strip_prefix(ssh_prefix) {
         p.to_owned()

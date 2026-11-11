@@ -12,6 +12,13 @@ Release artifacts are published at
 
 ### Added
 
+- **A commit named in a finished-work summary links to its GitHub page on the
+  board.** When a summary has no `成果:` link but names a commit by its hash
+  (7 or more characters, for example "pushed 0a1b2c3d"), and that commit is on
+  a branch of `origin` on GitHub, the note on the board gets the commit's page
+  as its link. A commit that is not pushed gets no link, and the repository's
+  newest commit is never guessed: with several sessions in one repository it
+  may be another session's work.
 - **Input buttons live inside the progress band, and up to 10 quick commands.**
   On a wide screen the buttons stay in the band that shows the working message.
   Drag a button by its corner grip and drop it between others to reorder them
@@ -61,6 +68,15 @@ Release artifacts are published at
 
 ### Fixed
 
+- **Finished work is no longer reported as failed because of a word in its
+  details.** A summary was marked "failed" (board label, high-priority
+  notification) whenever it contained 失敗, エラー, failed or error anywhere, so
+  reports such as "fixed the test that failed 2 of 3 runs" or "0 errors" went
+  out as failures. "Failed" and "stopped" are now read from how the first
+  sentence ends: text in parentheses, "none found" phrases (失敗 0 件, no
+  errors) and the earlier clauses of a listing are left out. A first sentence
+  that says the work is unfinished (未完了) counts as failed. A wait for your
+  decision is still recognised anywhere in the summary.
 - **A file path that a CLI breaks across two lines opens as one link
   again.** Some CLIs (Codex's bulleted lists, for example) end a line on a
   directory and continue the path on the next line with a few spaces of
