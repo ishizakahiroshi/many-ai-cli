@@ -319,6 +319,9 @@ fn diagnostic_value(v: &toml_edit::Value) -> DiagnosticToml {
         ),
     }
 }
+// Both callers hand over the launcher's fields one by one; a parameter struct
+// would only rename them.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn run(
     paths: &RuntimePaths,
     home: &Path,
