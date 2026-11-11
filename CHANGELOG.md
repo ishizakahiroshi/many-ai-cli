@@ -51,6 +51,14 @@ Release artifacts are published at
   lists the work done for it. Without those lines everything is written as
   before.
 
+### Changed
+
+- **The terminal is about two lines taller on a desktop screen.** With a mouse
+  on a window 721px or wider, the top header is 28px instead of 44px (the name
+  and icon are smaller; nothing moved), the tab row is 32px instead of 36px,
+  and the spacing around the progress band and the input box is 16px tighter,
+  36px in total. Phone-width and touch screens are unchanged.
+
 ### Fixed
 
 - **A file path that a CLI breaks across two lines opens as one link

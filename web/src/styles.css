@@ -318,6 +318,19 @@ header {
   background: var(--line);
   flex-shrink: 0;
 }
+/* PC（幅 721px 以上・マウス操作）ではヘッダーを 44px → 28px に薄くして、端末の縦を広げる
+   （2026-11-11 利用者決定: 並びは変えない）。スマホ幅は下の @media (max-width: 720px) が高さ 0 にする。
+   タッチ操作の広い画面は 44px の操作領域が要るので元の高さのまま。
+   中の ui-button（再接続・聞き取り・別窓の Hub）は、寸法の変数を header の中だけ小さくして収める。 */
+@media (min-width: 721px) and (pointer: fine) {
+  :root { --app-header-h: 28px; }
+  header { --ui-control-regular: 22px; --ui-control-compact: 22px; }
+  header .ui-button { padding-top: 0; padding-bottom: 0; }
+  header .ui-button.ui-button--icon { width: auto; }
+  .header-logo { font-size: var(--fs-lg); }
+  /* 28px の段に収まるいちばん大きい寸法。角の丸みはアイコン自身の丸み（辺の 2 割）より深く切らない。 */
+  .header-logo-icon { width: 24px; height: 24px; border-radius: var(--radius-sm); }
+}
 #summary {
   color: var(--muted);
   font-size: var(--header-font-size);

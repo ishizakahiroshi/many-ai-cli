@@ -235,6 +235,12 @@ body.pane-resizing .xterm { pointer-events: none; }
   scrollbar-width: thin;
   min-height: 0;
 }
+/* PC（幅 721px 以上・マウス操作）ではタブの段を 36px → 32px に詰めて、端末の縦を広げる（2026-11-11）。
+   段の中の ui-button（タブ・補助操作）は、寸法の変数を段の中だけ小さくして追従させる。 */
+@media (min-width: 721px) and (pointer: fine) {
+  #unified-tab-bar { height: var(--control-h-sm); --ui-control-regular: var(--control-h-sm); }
+  #unified-tab-bar .session-info-chip { min-height: var(--control-h-sm); }
+}
 /* D11: セッション情報チップ (左端) */
 .session-info-chip {
   display: inline-flex;

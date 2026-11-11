@@ -1103,6 +1103,12 @@ body.pc-input-tools-off #input-tools { display: none; }
   #mobile-keyboard-toggle {
     display: none;
   }
+  /* PC では進捗の帯と入力欄の上下の余白を詰めて、端末の縦を広げる（2026-11-11）。
+     進捗の帯の下 6px → 2px、入力バーの上下 8px → 4px、入力欄の枠の内側の上下 8px → 6px（計 16px）。
+     スマホ幅・タッチ操作は基底の値のまま。 */
+  #terminal-live-status { margin-bottom: 2px; }
+  #input-bar { padding-top: 4px; padding-bottom: 4px; }
+  #input-wrap { padding-top: 6px; padding-bottom: 6px; }
 }
 
 /* appendLinkedText が生成するパスリンク（展開ポップアップ・チャット等で共用） */
