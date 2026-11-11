@@ -10,6 +10,8 @@ mod pty_unix;
 mod pty_windows;
 #[cfg(test)]
 pub(crate) mod test_temp;
+#[cfg(test)]
+mod test_temp_order;
 pub mod wrapper_startup;
 use std::{
     collections::BTreeMap,

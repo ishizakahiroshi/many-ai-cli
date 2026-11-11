@@ -16,8 +16,8 @@ use std::{
 const RELEASE: Duration = Duration::from_secs(30);
 
 pub(crate) struct ProcessTempDir {
-    dir: Option<tempfile::TempDir>,
     release: Duration,
+    dir: Option<tempfile::TempDir>,
 }
 
 pub(crate) fn tempdir() -> ProcessTempDir {

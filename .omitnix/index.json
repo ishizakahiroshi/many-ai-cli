@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "ca28c9790c7f729c3fdf54ca523204ed43ac8ca9",
+    "commit": "fee6e71d5ec0ccde01377f8a4b469ee4873cd832",
     "dirty": false,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2087,
-    "analyzed": 1620,
+    "discovered": 2088,
+    "analyzed": 1621,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 452,
@@ -34510,6 +34510,35 @@
         "summary": {
           "state": "value",
           "value": "A temporary folder for tests that start a process inside it."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/process/test_temp_order.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Every struct that owns a temporary folder declares it last."
         },
         "authentication": {
           "state": "not_configured"
