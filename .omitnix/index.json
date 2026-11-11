@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "88fa2b6360c1a22dbde0324a2cd0388b1c4bd770",
-    "dirty": true,
+    "commit": "d94b7ac9e9b1970477f195bde1dcf1345d796c8b",
+    "dirty": false,
     "tool": "omitnix 0.1.4",
     "partial": false,
     "adapters": [
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2084,
+    "discovered": 2085,
     "analyzed": 1618,
     "unresolved": 15,
     "unknown": 0,
-    "unclaimed": 451,
+    "unclaimed": 452,
     "skipped_by_config": 0
   },
   "files": [
@@ -37223,6 +37223,14 @@
     },
     {
       "path": "rust/src/wrapper/approval_injection/rules.txt",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.txt'"
+    },
+    {
+      "path": "rust/src/wrapper/approval_injection/rules_current.txt",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},

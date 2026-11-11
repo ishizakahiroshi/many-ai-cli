@@ -212,3 +212,30 @@ fn codex_thread_follow_rejects_subagent_and_parallel_peer_then_selects_latest_us
         (None, false)
     );
 }
+#[test]
+fn intent_line_keeps_next_and_unverified_and_leaves_the_board_tails_out() {
+    assert_eq!(
+        intent_text("done. 次: A 未検証: B").as_deref(),
+        Some("次: A / 未検証: B")
+    );
+    assert_eq!(
+        intent_text("done. 次: A 計画: docs/local/plan_x.md").as_deref(),
+        Some("次: A")
+    );
+    assert_eq!(
+        intent_text("done. 次: A 未検証: B 計画: docs/plan_x.md 成果: https://example.com/pull/1")
+            .as_deref(),
+        Some("次: A / 未検証: B")
+    );
+    assert_eq!(
+        intent_text("done. 計画: docs/plan_x.md 次: A").as_deref(),
+        Some("次: A")
+    );
+    assert_eq!(
+        intent_text("done. 計画: docs/plan_x.md 未検証: B 成果: https://example.com/c/1")
+            .as_deref(),
+        Some("未検証: B")
+    );
+    assert_eq!(intent_text("done. 計画: docs/plan_x.md"), None);
+    assert_eq!(intent_text("done."), None);
+}

@@ -49,6 +49,34 @@ type RoutineRecorder = dyn Fn(&proto::DoneSummary) -> Result<(), SessionError> +
 type ConductorRenderer = dyn Fn(&OrchestrationId) -> Result<String, SessionError> + Send + Sync;
 type WorkflowCompletion =
     dyn Fn(SessionBinding, &proto::WorkflowProgress) -> Result<(), SessionError> + Send + Sync;
+/// The `次:` and `未検証:` tails of a DONE summary as one handoff line.
+/// `計画:` and `成果:` are the tails the board sync reads
+/// (application::board_sync); they end these two and are not part of them.
+fn intent_text(summary: &str) -> Option<String> {
+    use std::sync::LazyLock;
+    static NEXT: LazyLock<regex::Regex> = LazyLock::new(|| {
+        regex::Regex::new(r"(?:^|(?-u:\s))次:(?-u:\s)*(.+?)(?:(?-u:\s)+(?:未検証|計画|成果):|$)")
+            .unwrap()
+    });
+    static UNVERIFIED: LazyLock<regex::Regex> = LazyLock::new(|| {
+        regex::Regex::new(r"(?:^|(?-u:\s))未検証:(?-u:\s)*(.+?)(?:(?-u:\s)+(?:計画|成果):|$)")
+            .unwrap()
+    });
+    let next = NEXT
+        .captures(summary)
+        .map(|matched| matched[1].trim().to_owned())
+        .unwrap_or_default();
+    let unverified = UNVERIFIED
+        .captures(summary)
+        .map(|matched| matched[1].trim().to_owned())
+        .unwrap_or_default();
+    match (next.is_empty(), unverified.is_empty()) {
+        (true, true) => None,
+        (false, false) => Some(format!("次: {next} / 未検証: {unverified}")),
+        (false, true) => Some(format!("次: {next}")),
+        _ => Some(format!("未検証: {unverified}")),
+    }
+}
 fn storage_error(detail: &str) -> SessionError {
     SessionError::Storage(StorageError {
         kind: StorageErrorKind::Write,
@@ -390,26 +418,7 @@ impl SessionWorkers {
         if let Some(hook) = self.completion_append_hook.get() {
             hook();
         }
-        use std::sync::LazyLock;
-        static NEXT: LazyLock<regex::Regex> = LazyLock::new(|| {
-            regex::Regex::new(r"(?:^|(?-u:\s))次:(?-u:\s)*(.+?)(?:(?-u:\s)+未検証:|$)").unwrap()
-        });
-        static UNVERIFIED: LazyLock<regex::Regex> =
-            LazyLock::new(|| regex::Regex::new(r"(?:^|(?-u:\s))未検証:(?-u:\s)*(.+)$").unwrap());
-        let next = NEXT
-            .captures(&summary.text)
-            .map(|matched| matched[1].trim().to_owned())
-            .unwrap_or_default();
-        let unverified = UNVERIFIED
-            .captures(&summary.text)
-            .map(|matched| matched[1].trim().to_owned())
-            .unwrap_or_default();
-        if !next.is_empty() || !unverified.is_empty() {
-            let text = match (next.is_empty(), unverified.is_empty()) {
-                (false, false) => format!("次: {next} / 未検証: {unverified}"),
-                (false, true) => format!("次: {next}"),
-                _ => format!("未検証: {unverified}"),
-            };
+        if let Some(text) = intent_text(&summary.text) {
             self.append_handoff(
                 binding,
                 Record {

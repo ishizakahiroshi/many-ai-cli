@@ -12,7 +12,12 @@ const OLD_START: &str = "<!-- any-ai-cli:approval-rules -->";
 const OLD_END: &str = "<!-- /any-ai-cli:approval-rules -->";
 const DELEGATE_START: &str = "<!-- many-ai-cli:delegation -->";
 const DELEGATE_END: &str = "<!-- /many-ai-cli:delegation -->";
-pub const RULES: &str = include_str!("approval_injection/rules.txt");
+/// The rules handed to the AI CLIs. `approval_injection/rules.txt` beside it is
+/// the frozen Go text (version 25) that the pinned oracle cases were generated
+/// with: it is kept byte for byte for those cases and is not shipped.
+pub const RULES: &str = include_str!("approval_injection/rules_current.txt");
+/// First line of `RULES`. A central file or shared block without it is replaced.
+const RULES_VERSION: &str = "<!-- version: 26 -->";
 static OPERATIONS: Mutex<()> = Mutex::new(());
 const CAP: usize = 32 * 1024 * 1024;
 fn pattern(pairs: &[(&str, &str)]) -> regex::bytes::Regex {
@@ -122,6 +127,16 @@ pub fn rules_present(provider: &str, content: &[u8]) -> bool {
     scan(content, markers).unwrap_or(false)
 }
 pub fn inject_rules_content(provider: &str, content: &[u8], central: &[u8]) -> io::Result<Vec<u8>> {
+    inject_rules_at(provider, content, central, RULES_VERSION)
+}
+/// `version` is the line a shared block must carry to be left alone; the pinned
+/// Go cases pass the version they were generated with.
+fn inject_rules_at(
+    provider: &str,
+    content: &[u8],
+    central: &[u8],
+    version: &str,
+) -> io::Result<Vec<u8>> {
     let markers = if provider == "claude" {
         vec![IMPORT]
     } else if shared(provider) {
@@ -133,7 +148,7 @@ pub fn inject_rules_content(provider: &str, content: &[u8], central: &[u8]) -> i
         ));
     };
     let already = scan(content, &markers)?;
-    if already && (provider == "claude" || current(content, START, END, "<!-- version: 25 -->")) {
+    if already && (provider == "claude" || current(content, START, END, version)) {
         return Ok(content.to_vec());
     }
     let mut result = if already {
@@ -302,11 +317,7 @@ impl InstructionFiles {
         let _guard = OPERATIONS
             .lock()
             .map_err(|_| io::Error::other("instruction lock failed"))?;
-        let central = self.sync(
-            "approval-rules.md",
-            "<!-- version: 25 -->",
-            RULES.as_bytes(),
-        )?;
+        let central = self.sync("approval-rules.md", RULES_VERSION, RULES.as_bytes())?; // doxguard: allow approval-rules.md
         let path = &self.resolve(path)?;
         let content = match self.read(path) {
             Ok(v) => v,

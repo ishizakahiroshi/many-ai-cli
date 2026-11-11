@@ -31,6 +31,17 @@ Release artifacts are published at
   without the file, for unlisted repositories, or in trial runtimes. The writer
   key is read from a file you name and never logged. See
   `docs/manual_board-sync.md`.
+- **Board work is named and filed under its plan.** With `board.json` in
+  place, a session's item is renamed from its first DONE summary (date,
+  provider, first sentence) instead of staying "claude: Claude". A summary may
+  end with `計画: <path or URL>` and `成果: <https URL>` (the approval rules,
+  now version 26, tell the AI about them): the work is put under the board
+  item whose source is that plan, a plan file that exists in the repository but
+  has no item yet gets one (title from its first heading; file contents are
+  never sent), and the outcome URL becomes the link of that note. When later
+  summaries name another plan, the work continues in a new item, so each plan
+  lists the work done for it. Without those lines everything is written as
+  before.
 
 ### Fixed
 
