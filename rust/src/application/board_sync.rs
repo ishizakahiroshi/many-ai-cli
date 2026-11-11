@@ -363,15 +363,23 @@ fn unwrapped(value: &str) -> &str {
         .trim_matches(['`', '"', '\'', '<', '>'])
 }
 
-/// What the board accepts as a link: `https://host/...` without user info.
+/// What the board accepts as a link: `https://host/...` without user info,
+/// query or fragment, and without anything `mask_secrets` would hide. The link
+/// is cut out of the summary text before that text is masked, so it has to be
+/// checked here; a URL refused here stays in the (masked) note text instead.
 fn https_ok(url: &str) -> bool {
     url.starts_with("https://")
         && url.chars().count() <= REF_MAX
         && !url
             .chars()
             .any(|c| c.is_whitespace() || c.is_control() || c == '\\')
+        && mask_secrets(url) == url
         && reqwest::Url::parse(url).is_ok_and(|u| {
-            u.host_str().is_some() && u.username().is_empty() && u.password().is_none()
+            u.host_str().is_some()
+                && u.username().is_empty()
+                && u.password().is_none()
+                && u.query().is_none()
+                && u.fragment().is_none()
         })
 }
 

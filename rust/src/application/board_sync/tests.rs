@@ -851,10 +851,21 @@ fn declared_plans_are_kept_as_the_board_keeps_a_reference() {
         "D:\\elsewhere\\plan.md",
         "http://example.com/issues/3",
         "https://user:pw@example.com/issues/3",
+        // A query or fragment can carry a secret, and the link is cut out of
+        // the text before the text is masked.
+        "https://example.com/issues/3?token=abc",
+        "https://example.com/issues/3#access",
         "docs//plan.md",
     ] {
         assert_eq!(plan_ref(refused, root), None, "{refused}");
     }
+    // A URL holding something `mask_secrets` hides is not sent as a link, and the
+    // outcome stays in the (masked) note text instead.
+    let secret_url = format!("https://example.com/pull/{}{}", "ghp_", "a".repeat(24));
+    assert_eq!(plan_ref(&secret_url, root), None);
+    let found = tails(&format!("Done. 成果: {secret_url}"), root);
+    assert_eq!(found.outcome, None);
+    assert!(found.rest.contains("成果"), "{}", found.rest);
     assert_eq!(
         plan_item_id("demo", "docs/plan_x.md"),
         "plan/demo/docs/plan_x.md"
