@@ -17,6 +17,7 @@ import {
   ABS_WIN_PATH_RE,
   REL_PATH_RE,
   boundedRowGetter,
+  continuationIndentLength,
   expandLogicalPathLine,
   isLikelyRelPath,
   isTerminalPathStartBoundary,
@@ -313,9 +314,10 @@ export function ensureTerminal(id) {
           const isWrapped = !!line.isWrapped;
           let text = line.translateToString(true);
           let cellMap = buildCellMap(line);
-          // ハードラップ継続行の行頭インデントはパスの一部ではない
-          if (i > start && !isWrapped) {
-            const lead = (text.match(/^[ \t]*/) || [''])[0].length;
+          // 継続行の行頭インデントはパスの一部ではない（折り返し行に字下げが残る場合の扱いは path-detect.ts）
+          if (i > start) {
+            const prevText = physRows[physRows.length - 1]?.text ?? '';
+            const lead = continuationIndentLength(prevText, text, isWrapped);
             if (lead > 0) {
               text = text.slice(lead);
               cellMap = cellMap.slice(lead);

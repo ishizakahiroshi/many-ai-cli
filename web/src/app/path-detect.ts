@@ -256,15 +256,28 @@ export function expandLogicalPathLine(
   return { start, end };
 }
 
+// 継続行の行頭にある空白のうち、パスの一部ではない分の長さ。
+// CLI が自分で改行した行（isWrapped なし）の行頭インデントは全部落とす。
+// xterm の自動折り返し（isWrapped あり）でも、CLI が字下げの空白を続けて書いた画面があり
+//（Codex の箇条書きなど）、そのまま結合すると「F:/dir/␣␣file.txt」になって
+// 「/」の直後の空白でパスが切れ、リンクが途中までになる（2026-11-11）。
+// 折り返しの行は、前の行が区切り文字（/ か \）で終わるとき（ディレクトリ名は空白で始まらない）か、
+// 空白が 2 つ以上続くとき（字下げ）だけ落とす。空白 1 つは「Program Files」のようにパスの一部かもしれない。
+export function continuationIndentLength(prevText: string, text: string, isWrapped: boolean): number {
+  const lead = (String(text || '').match(/^[ \t]*/) || [''])[0].length;
+  if (lead === 0) return 0;
+  if (!isWrapped) return lead;
+  if (/[\\/]$/.test(String(prevText || '').replace(/[ \t]+$/, ''))) return lead;
+  return lead >= 2 ? lead : 0;
+}
+
 export function joinPathWrapRowTexts(rows: PathWrapRow[]): string {
   if (rows.length === 0) return '';
   let out = String(rows[0].text || '');
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
-    const text = row.isWrapped
-      ? String(row.text || '')
-      : String(row.text || '').replace(/^[ \t]+/, '');
-    out += text;
+    const text = String(row.text || '');
+    out += text.slice(continuationIndentLength(rows[i - 1].text, text, row.isWrapped));
   }
   return out;
 }

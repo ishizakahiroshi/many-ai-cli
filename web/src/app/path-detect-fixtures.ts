@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import {
   ABS_WIN_PATH_RE,
   boundedRowGetter,
+  continuationIndentLength,
   expandLogicalPathLine,
   findPathCandidates,
   isPathContinuationText,
@@ -226,6 +227,39 @@ test('expandLogicalPathLine: 継続行の行頭インデントはパスに入れ
   ];
   const combined = combinedPath(rows, 0);
   assert.equal(combined, '実行ファイル: D:\\src\\foo\\bar_2026-09-12.md');
+});
+
+test('continuationIndentLength: 折り返し行に字下げが残っても、区切り文字の直後なら落とす（Codex の箇条書き・2026-11-11）', () => {
+  // 1 行目は「/」で終わり、2 行目は xterm の自動折り返し（isWrapped）で、行頭に字下げの空白 2 つが付いている
+  const rows = [
+    row('· 送信用の下書き (F:/worktrees/private/', { width: 139 }),
+    row('  mer/billing-guard-20261110/docs/local/copy/2026-11-11_ono-fujii_no208-staging-acceptance.txt)', { wrapped: true }),
+  ];
+  const combined = combinedPath(rows, 0, 139);
+  assert.equal(
+    combined,
+    '· 送信用の下書き (F:/worktrees/private/mer/billing-guard-20261110/docs/local/copy/2026-11-11_ono-fujii_no208-staging-acceptance.txt)',
+  );
+  const found = findPathCandidates(combined);
+  assert.equal(
+    found[found.length - 1].text,
+    'F:/worktrees/private/mer/billing-guard-20261110/docs/local/copy/2026-11-11_ono-fujii_no208-staging-acceptance.txt',
+  );
+  // CLI が自分で改行した行（isWrapped なし）も同じ結果になる
+  const hard = [rows[0], row(rows[1].text)];
+  assert.equal(combinedPath(hard, 0, 139), combined);
+});
+
+test('continuationIndentLength: 折り返し行の空白 1 つは、区切り文字の直後でなければパスの一部として残す', () => {
+  // 「Program Files」が空白の位置でちょうど折り返された場合
+  assert.equal(continuationIndentLength('C:/Program', ' Files/app.exe', true), 0);
+  // 同じ空白でも、前の行が「/」で終わるなら落とす（ディレクトリ名は空白で始まらない）
+  assert.equal(continuationIndentLength('C:/Program/', ' Files/app.exe', true), 1);
+  // 空白 2 つ以上は字下げとみなす
+  assert.equal(continuationIndentLength('C:/Program', '  Files/app.exe', true), 2);
+  // CLI の改行（isWrapped なし）は従来どおり全部落とす
+  assert.equal(continuationIndentLength('C:/Program', ' Files/app.exe', false), 1);
+  assert.equal(continuationIndentLength('C:/Program', 'Files/app.exe', true), 0);
 });
 
 test('expandLogicalPathLine: 次行が新しい Windows パスなら結合しない', () => {
