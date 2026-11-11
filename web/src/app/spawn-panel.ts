@@ -7,7 +7,7 @@ import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, ST
 import { sessions } from './state.js';
 import { activateSession, providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
-import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
+import { browserUseHint, loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 import { hasProviderCapability, loadProviderSummaries } from './provider-store.js';
 import { commandMissingIds, isAiLaunchProvider, spawnLaunchBlockReason } from './cli-availability.js';
 import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
@@ -237,7 +237,10 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
     // セッションに記録される）。
     options.push(`<option value="auto">${escapeHtml(t('spawn_subscription_auto'))}</option>`);
     for (const p of profiles) {
-      const label = p.name ? `${p.name} (${p.id})` : p.id;
+      const base = p.name ? `${p.name} (${p.id})` : p.id;
+      // 申告されているときだけ、ブラウザ操作の可否を添える（未申告は何も足さない）。
+      const hint = browserUseHint(p);
+      const label = hint ? `${base} — ${hint}` : base;
       options.push(`<option value="${escapeHtml(p.id)}">${escapeHtml(label)}</option>`);
     }
     spawnSubscriptionSelect.innerHTML = options.join('');
@@ -383,7 +386,10 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
     const options = [`<option value="">${escapeHtml(t('spawn_subscription_default'))}</option>`];
     options.push(`<option value="auto">${escapeHtml(t('spawn_subscription_auto'))}</option>`);
     for (const p of profiles) {
-      const label = p.name ? `${p.name} (${p.id})` : p.id;
+      const base = p.name ? `${p.name} (${p.id})` : p.id;
+      // 申告されているときだけ、ブラウザ操作の可否を添える（未申告は何も足さない）。
+      const hint = browserUseHint(p);
+      const label = hint ? `${base} — ${hint}` : base;
       options.push(`<option value="${escapeHtml(p.id)}">${escapeHtml(label)}</option>`);
     }
     subscription.innerHTML = options.join('');

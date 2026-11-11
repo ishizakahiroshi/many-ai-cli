@@ -327,6 +327,7 @@ pub(super) fn run(
     provider: &str,
     destination: &Dir,
     profile: &SubscriptionProfile,
+    codex_plugin_installer: &super::codex_browser::Installer,
 ) -> io::Result<SeedNotice> {
     let mut notice = SeedNotice::default();
     for mut entry in entries(paths, home, hub_cwd, environment, provider)? {
@@ -359,6 +360,22 @@ pub(super) fn run(
             // seed I/O failure. Do not pretend an unsupported seed succeeded.
             Err(error) if error.kind() == io::ErrorKind::Unsupported => return Err(error),
             Err(_) => notice.failed.push(entry.dest.into()),
+        }
+    }
+    if provider == "codex" {
+        // Codex Desktop's browser plugins live only in the default home.
+        let bundled = default_dir(paths, home, hub_cwd, environment, provider)?
+            .join(".tmp")
+            .join("bundled-marketplaces");
+        if check_path(paths, &bundled).is_ok() {
+            super::codex_browser::ensure(
+                &bundled,
+                destination.path(),
+                environment,
+                hub_cwd,
+                codex_plugin_installer,
+                &mut notice,
+            );
         }
     }
     Ok(notice)

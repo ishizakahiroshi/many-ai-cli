@@ -17,6 +17,7 @@ struct Body {
     id: String,
     name: Option<String>,
     enabled: Option<bool>,
+    browser_use: Option<String>,
     delete_credentials: bool,
     session_id: i64,
     cwd: String,
@@ -71,6 +72,7 @@ impl SubscriptionHttp {
                 &body.id,
                 body.name.as_deref(),
                 body.enabled,
+                body.browser_use.as_deref(),
             )));
         }
         if current_action == "remove" {
@@ -180,6 +182,10 @@ fn decode(r: &Request, action: &str) -> Result<Body, serde_json::Error> {
             Field {
                 name: "enabled",
                 kind: "*bool",
+            },
+            Field {
+                name: "browser_use",
+                kind: "*string",
             },
         ],
     }];

@@ -58,6 +58,17 @@
   border-radius: var(--radius-sm);
   padding: 0 5px;
 }
+/* ブラウザ操作の申告欄。ID と同じ並びの小さな補助欄で、既定の「不明」では目立たせない。 */
+.subs-browser {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.subs-browser-label { font-size: var(--fs-2xs); opacity: 0.8; }
+.subs-browser-select { width: auto; min-width: 0; }
 .subs-status {
   font-size: var(--fs-xs);
   color: var(--muted);

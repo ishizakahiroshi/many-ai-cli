@@ -24,6 +24,14 @@ Release artifacts are published at
   one, up to 10 (hidden ones count). The same list is in Settings. Your earlier
   free positions are converted to an order the first time, and your existing
   five quick commands are unchanged.
+- **Note whether each subscription can use browser control.** Whether an AI can
+  drive Chrome through the browser extension depends on the account the
+  extension is signed in to, so one subscription may work and another may not.
+  In Settings, each subscription now has a "Browser use" choice (Unknown /
+  Works / Does not work), and the session launch form shows it next to the
+  subscription when you have set it. It is only a note you keep: many-ai-cli
+  does not detect it and never blocks a launch because of it. Unknown (the
+  default) shows nothing.
 - **Progress on an MCP board (opt-in).** Put a `board.json` next to
   `config.yaml` to have sessions started in the repositories you list written
   to an MCP board (for example a Many Iris board): an item when the session
@@ -45,6 +53,21 @@ Release artifacts are published at
 
 ### Fixed
 
+- **A file path that a CLI breaks across two lines opens as one link
+  again.** Some CLIs (Codex's bulleted lists, for example) end a line on a
+  directory and continue the path on the next line with a few spaces of
+  indent. The terminal then linked only the first half of the path, so the
+  preview and "open in app" actions failed. The indent is now ignored when it
+  follows a path separator or is two or more spaces wide.
+- **Codex sessions started with a subscription profile can use the Codex
+  Desktop browser plugins.** Codex Desktop installs its Browser and Chrome
+  plugins only into your default Codex home, and Codex ignores them in a
+  profile, so asking a profile session to operate Chrome stopped before it
+  connected. When Codex Desktop is installed, preparing a Codex profile now
+  links the profile to Desktop's bundled plugins and installs the two plugins
+  into it with `codex plugin add` (once; later launches only check that they
+  are there). A failed install is reported with the other profile notices and
+  is tried again next time. Nothing changes without Codex Desktop.
 - **Saving a file no longer fails for a moment while the Hub starts a
   process.** A child process can briefly hold the lock of a file a save just
   closed, and a save in that moment was refused as "being saved by another

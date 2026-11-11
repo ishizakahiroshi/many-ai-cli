@@ -16,6 +16,8 @@ export interface SubscriptionProfileEntry {
   name?: string;
   plan?: string;
   enabled: boolean;
+  /** 利用者が申告した、この契約のアカウントでのブラウザ操作の可否。無いときは「不明」。 */
+  browser_use?: 'yes' | 'no';
   profile_dir?: string;
   exists: boolean;
   issue?: string;
@@ -89,6 +91,16 @@ export function selectableProfiles(provider: string): SubscriptionProfileEntry[]
   return entry.profiles.filter((p) => p.enabled && !p.issue);
 }
 
+/**
+ * 起動画面の契約の選択肢に添える、ブラウザ操作の申告の短い表示。
+ * 「不明」（未申告）のときは何も足さない。申告が無い契約を「使えない」と読ませないため。
+ */
+export function browserUseHint(p: SubscriptionProfileEntry): string {
+  if (p.browser_use === 'yes') return t('spawn_subscription_browser_yes');
+  if (p.browser_use === 'no') return t('spawn_subscription_browser_no');
+  return '';
+}
+
 export function onSubscriptionsChanged(cb: () => void): void {
   changeListeners.add(cb);
 }
@@ -144,6 +156,22 @@ function statusText(p: SubscriptionProfileEntry): string {
   return names ? `${base} ${t('subs_status_same_account', { names })}` : base;
 }
 
+/** 行の「ブラウザ操作」の選択欄。値は 不明 / 使える / 使えない の 3 つで、不明が既定。 */
+function browserUseControl(p: SubscriptionProfileEntry): string {
+  const current = p.browser_use === 'yes' || p.browser_use === 'no' ? p.browser_use : 'unknown';
+  const option = (value: string, key: string) =>
+    `<option value="${value}"${value === current ? ' selected' : ''}>${escapeHtml(t(key))}</option>`;
+  return (
+    `<label class="subs-browser" data-tooltip="${escapeHtml(t('subs_browser_tooltip'))}">` +
+    `<span class="subs-browser-label">${escapeHtml(t('subs_browser_label'))}</span>` +
+    `<select class="ui-input subs-browser-select" aria-label="${escapeHtml(t('subs_browser_label'))}">` +
+    option('unknown', 'subs_browser_unknown') +
+    option('yes', 'subs_browser_yes') +
+    option('no', 'subs_browser_no') +
+    `</select></label>`
+  );
+}
+
 function renderList(): void {
   const host = document.getElementById('subs-list');
   if (!host) return;
@@ -168,6 +196,7 @@ function renderList(): void {
         `<span class="subs-id" data-tooltip="${escapeHtml(t('subs_id_tooltip'))}">` +
         `<span class="subs-id-label">${escapeHtml(t('subs_id_label'))}</span>` +
         `<span class="subs-id-value">${escapeHtml(p.id)}</span></span>` +
+        browserUseControl(p) +
         `<span class="subs-status${sameAccountNames(p) ? ' subs-status--warn' : ''}">${escapeHtml(statusText(p))}</span>` +
         `<div class="subs-actions">` +
         `<button type="button" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn subs-login">${escapeHtml(t('subs_login'))}</button>` +
@@ -341,6 +370,14 @@ async function renameProfile(input: HTMLInputElement): Promise<void> {
   await postAndRefresh('/api/subscriptions/update', { ...ctx, name: input.value.trim() }, input, 'subs_rename_failed');
 }
 
+async function changeBrowserUse(select: HTMLSelectElement): Promise<void> {
+  const ctx = rowContext(select);
+  if (!ctx) return;
+  const ok = await postAndRefresh('/api/subscriptions/update', { ...ctx, browser_use: select.value }, select, 'subs_browser_failed');
+  // 保存できなかったときは、画面だけ新しい値のまま残さず、保存されている値へ戻す。
+  if (!ok) renderList();
+}
+
 async function toggleProfile(btn: HTMLElement): Promise<void> {
   const ctx = rowContext(btn);
   if (!ctx) return;
@@ -443,6 +480,7 @@ export function initSubscriptions(): void {
   host.addEventListener('change', (e) => {
     const target = e.target as HTMLElement | null;
     if (target?.classList.contains('subs-name')) void renameProfile(target as HTMLInputElement);
+    else if (target?.classList.contains('subs-browser-select')) void changeBrowserUse(target as HTMLSelectElement);
   });
 
   host.addEventListener('keydown', (e) => {

@@ -161,6 +161,105 @@ fn codex_first_seed_keeps_user_hooks_and_never_copies_auth() {
     );
     assert!(!destination.join("auth.json").exists());
 }
+type InstallCalls = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
+fn recording_installer(calls: InstallCalls, succeed: bool) -> Box<codex_browser::Installer> {
+    Box::new(
+        move |profile: &std::path::Path,
+              selector: &str,
+              _environment: &[String],
+              _cwd: &std::path::Path| {
+            calls.lock().unwrap().push(selector.to_string());
+            if !succeed {
+                return Err(std::io::Error::other("synthetic install failure"));
+            }
+            let plugin = selector.split('@').next().unwrap();
+            std::fs::create_dir_all(
+                profile
+                    .join("plugins/cache")
+                    .join(codex_browser::MARKETPLACE)
+                    .join(plugin),
+            )
+        },
+    )
+}
+fn codex_fixture(with_bundle: bool) -> (tempfile::TempDir, RuntimePaths, PathBuf, Config) {
+    let (root, paths, home, mut cfg) = fixture();
+    cfg.subscriptions
+        .insert("codex".into(), vec![profile("main")]);
+    let defaults = home.join(".codex");
+    std::fs::create_dir(&defaults).unwrap();
+    std::fs::write(defaults.join("config.toml"), "model = 'synthetic-model'\n").unwrap();
+    if with_bundle {
+        std::fs::create_dir_all(
+            defaults
+                .join(".tmp/bundled-marketplaces")
+                .join(codex_browser::MARKETPLACE),
+        )
+        .unwrap();
+    }
+    (root, paths, home, cfg)
+}
+#[test]
+fn codex_profile_links_desktop_bundle_and_installs_browser_plugins_once() {
+    let (_root, paths, home, cfg) = codex_fixture(true);
+    let calls = InstallCalls::default();
+    let launcher = SubscriptionLauncher::new(paths.clone(), home, paths.root().into())
+        .with_codex_plugin_installer(recording_installer(calls.clone(), true));
+    let (_, notice) = launcher.launch(&cfg, "codex", "main", &[]).unwrap();
+    let notice = notice.unwrap();
+    let destination = paths.resource(Resource::Subscriptions).join("codex/main");
+    assert!(
+        destination
+            .join(".tmp/bundled-marketplaces")
+            .join(codex_browser::MARKETPLACE)
+            .is_dir()
+    );
+    assert!(notice.applied.contains(&codex_browser::LINK_LABEL.into()));
+    assert!(
+        notice
+            .applied
+            .contains(&"plugin browser@openai-bundled".into())
+    );
+    assert!(
+        notice
+            .applied
+            .contains(&"plugin chrome@openai-bundled".into())
+    );
+    assert_eq!(
+        *calls.lock().unwrap(),
+        ["browser@openai-bundled", "chrome@openai-bundled"]
+    );
+    let (_, again) = launcher.launch(&cfg, "codex", "main", &[]).unwrap();
+    let again = again.unwrap();
+    assert_eq!(calls.lock().unwrap().len(), 2);
+    assert!(!again.applied.iter().any(|item| item.starts_with("plugin ")));
+    assert!(!again.applied.contains(&codex_browser::LINK_LABEL.into()));
+}
+#[test]
+fn codex_profile_without_desktop_bundle_is_left_alone() {
+    let (_root, paths, home, cfg) = codex_fixture(false);
+    let calls = InstallCalls::default();
+    let launcher = SubscriptionLauncher::new(paths.clone(), home, paths.root().into())
+        .with_codex_plugin_installer(recording_installer(calls.clone(), true));
+    let (_, notice) = launcher.launch(&cfg, "codex", "main", &[]).unwrap();
+    let destination = paths.resource(Resource::Subscriptions).join("codex/main");
+    assert!(std::fs::symlink_metadata(destination.join(".tmp/bundled-marketplaces")).is_err());
+    assert!(calls.lock().unwrap().is_empty());
+    assert!(notice.unwrap().failed.is_empty());
+}
+#[test]
+fn codex_browser_plugin_install_failure_is_reported_and_retried() {
+    let (_root, paths, home, cfg) = codex_fixture(true);
+    let calls = InstallCalls::default();
+    let launcher = SubscriptionLauncher::new(paths.clone(), home, paths.root().into())
+        .with_codex_plugin_installer(recording_installer(calls.clone(), false));
+    let (_, notice) = launcher.launch(&cfg, "codex", "main", &[]).unwrap();
+    let failed = notice.unwrap().failed;
+    assert!(failed.contains(&"plugin browser@openai-bundled".into()));
+    assert!(failed.contains(&"plugin chrome@openai-bundled".into()));
+    launcher.launch(&cfg, "codex", "main", &[]).unwrap();
+    assert_eq!(calls.lock().unwrap().len(), 4);
+}
 #[test]
 fn open_code_only_changes_data_home_and_grok_seeds_policy() {
     let (_root, paths, home, mut cfg) = fixture();

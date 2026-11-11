@@ -219,10 +219,40 @@ async fn crud_uses_single_config_registry_and_never_reads_credentials() {
     .unwrap();
     let list = f
         .service
-        .update("codex", "MAIN-PROFILE", Some(" New name "), Some(false))
+        .update(
+            "codex",
+            "MAIN-PROFILE",
+            Some(" New name "),
+            Some(false),
+            None,
+        )
         .unwrap_or_else(|e| panic!("{}", e.detail));
     assert_eq!(list["providers"][1]["profiles"][0]["enabled"], false);
     assert!(!list.to_string().contains("synthetic credential"));
+    // ブラウザ操作の申告: 未設定の間は一覧に出ない。yes / no は往復し、unknown は未設定へ戻す。
+    assert!(list["providers"][1]["profiles"][0]["browser_use"].is_null());
+    for (sent, shown) in [("yes", "yes"), ("no", "no")] {
+        let list = f
+            .service
+            .update("codex", "main-profile", None, None, Some(sent))
+            .unwrap_or_else(|e| panic!("{}", e.detail));
+        assert_eq!(list["providers"][1]["profiles"][0]["browser_use"], shown);
+        assert_eq!(list["providers"][1]["profiles"][0]["enabled"], false);
+    }
+    assert_eq!(
+        f.service.config.snapshot().unwrap().config.subscriptions["codex"][0].browser_use,
+        Some(false)
+    );
+    let list = f
+        .service
+        .update("codex", "main-profile", None, None, Some("unknown"))
+        .unwrap_or_else(|e| panic!("{}", e.detail));
+    assert!(list["providers"][1]["profiles"][0]["browser_use"].is_null());
+    assert!(
+        f.service
+            .update("codex", "main-profile", None, None, Some("maybe"))
+            .is_err()
+    );
     let removed = f
         .service
         .remove("codex", "main-profile", true)
@@ -310,7 +340,7 @@ async fn add_save_failure_rolls_back_reserved_profile_but_update_keeps_memory() 
     std::fs::create_dir(&config_path).unwrap();
     assert!(
         f.service
-            .update("codex", "p1", Some("retained"), None)
+            .update("codex", "p1", Some("retained"), None, None)
             .is_err()
     );
     assert_eq!(

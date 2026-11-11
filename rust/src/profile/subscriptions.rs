@@ -1,5 +1,6 @@
 //! Spawn-time profile selection and named-entry seeding. No auth/status/usage
 //! command exists in this module, and credentials are never part of its seed set.
+mod codex_browser;
 pub mod diagnostics;
 mod links;
 mod seed;
@@ -29,6 +30,8 @@ pub struct SubscriptionLauncher {
     hub_cwd: PathBuf,
     // Per-provider round robin, not session ownership or a quota ledger.
     round_robin: Mutex<BTreeMap<String, usize>>,
+    // Installs Codex Desktop's browser plugins into a Codex profile.
+    codex_plugin_installer: Box<codex_browser::Installer>,
 }
 impl SubscriptionLauncher {
     pub fn new(paths: RuntimePaths, home: PathBuf, hub_cwd: PathBuf) -> Self {
@@ -37,7 +40,13 @@ impl SubscriptionLauncher {
             home,
             hub_cwd,
             round_robin: Mutex::new(BTreeMap::new()),
+            codex_plugin_installer: Box::new(codex_browser::install_with_codex_cli),
         }
+    }
+    #[cfg(test)]
+    fn with_codex_plugin_installer(mut self, installer: Box<codex_browser::Installer>) -> Self {
+        self.codex_plugin_installer = installer;
+        self
     }
     /// CRUD creation uses the same named-entry seed authority as spawn, but
     /// does not select another profile or produce session environment entries.
@@ -68,6 +77,7 @@ impl SubscriptionLauncher {
             provider,
             &directory,
             profile,
+            &*self.codex_plugin_installer,
         )
     }
     pub fn launch(
@@ -123,6 +133,7 @@ impl SubscriptionLauncher {
             provider,
             &directory,
             &profile,
+            &*self.codex_plugin_installer,
         )?;
         Ok((
             vec![

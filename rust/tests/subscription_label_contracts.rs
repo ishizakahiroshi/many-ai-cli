@@ -249,7 +249,7 @@ async fn subscription_rename_updates_new_registration_and_warm_cold_reattach_onl
     f.hub
         .dependencies
         .subscriptions
-        .update("claude", "MAIN", Some("  Renamed Plan  "), None)
+        .update("claude", "MAIN", Some("  Renamed Plan  "), None, None)
         .unwrap_or_else(|error| panic!("subscription rename failed: {}", error.code));
     assert_eq!(
         f.hub

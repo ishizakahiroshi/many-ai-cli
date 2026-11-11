@@ -150,6 +150,7 @@ impl SubscriptionService {
         providers.into_iter().map(|provider|{let env=cli::env_key(&provider);let mut section=json!({"provider":provider,"supported":env.is_some(),"profiles":[]});if let Some(env)=env{section["env_var"]=env.into();}let mut seen=BTreeSet::new();let mut entries=vec![];
    for profile in cfg.subscriptions.get(&provider).into_iter().flatten(){let id=config::normalize_subscription_id(&profile.id);let mut row=json!({"provider":provider,"id":id,"enabled":profile.is_enabled(),"exists":false});if !profile.name.is_empty(){row["name"]=profile.name.clone().into();}
    if !profile.plan.is_empty(){row["plan"]=profile.plan.clone().into();}
+   if let Some(browser_use)=profile.browser_use{row["browser_use"]=(if browser_use{"yes"}else{"no"}).into();}
     let issue=if let Err(error)=config::validate_subscription_provider(&provider){Some(error.to_string())}else if let Err(error)=config::validate_subscription_id(&id){row["id"]=profile.id.clone().into();Some(error.to_string())}else if !seen.insert(id.clone()){Some(format!("duplicate profile id {}",crate::proto::go_quote::quote(&id)))}else{match config::resolve_subscription_profile_dir(&self.paths,&provider,profile,Some(&self.home)){Ok(path)=>{row["profile_dir"]=path.to_string_lossy().into_owned().into();row["exists"]=path.is_dir().into();None},Err(error)=>Some(error.to_string())}};
     if let Some(issue)=issue{row["issue"]=issue.into();}entries.push(row);
    }self.usage.mark_same_account(&provider,&mut entries);section["profiles"]=entries.into();section}).collect()
@@ -286,10 +287,19 @@ impl SubscriptionService {
         raw: &str,
         name: Option<&str>,
         enabled: Option<bool>,
+        browser_use: Option<&str>,
     ) -> Result<Value, ServiceError> {
         let provider = provider.trim();
         let id = config::normalize_subscription_id(raw);
         config::validate_subscription_id(&id).map_err(|e| ServiceError::bad(e.to_string()))?;
+        // 画面から来る値は "yes" / "no" / "unknown" の 3 つだけ。"unknown" は未設定へ戻す。
+        let browser_use = match browser_use {
+            None => None,
+            Some("yes") => Some(Some(true)),
+            Some("no") => Some(Some(false)),
+            Some("unknown") => Some(None),
+            Some(_) => return Err(ServiceError::bad("browser_use must be yes, no or unknown")),
+        };
         loop {
             let mut snapshot = self.config.snapshot().map_err(save_error)?;
             let profile = snapshot
@@ -308,6 +318,9 @@ impl SubscriptionService {
             }
             if let Some(enabled) = enabled {
                 profile.enabled = Some(enabled);
+            }
+            if let Some(browser_use) = browser_use {
+                profile.browser_use = browser_use;
             }
             match self
                 .config

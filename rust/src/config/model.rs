@@ -672,6 +672,11 @@ pub struct SubscriptionProfile {
     pub profile_owned_keys: Vec<String>,
     #[serde(rename = "default_wins_keys")]
     pub default_wins_keys: Vec<String>,
+    /// この契約のアカウントで、AI が Chrome 拡張を使ったブラウザ操作をできるか。
+    /// `None`（未設定）は「不明」、`Some(true)` は使える、`Some(false)` は使えない。
+    /// 利用者が画面で申告する値で、Hub は検出も書き換えもしない。
+    #[serde(rename = "browser_use")]
+    pub browser_use: Option<bool>,
 }
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize, Debug)]
 #[serde(default)]
@@ -2443,6 +2448,13 @@ pub(super) fn schema(kind: &str) -> &'static [Field] {
                 yaml: "default_wins_keys",
                 json: "default_wins_keys",
                 kind: "[]string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "browser_use",
+                json: "browser_use",
+                kind: "*bool",
                 yomit: true,
                 jomit: true,
             },
