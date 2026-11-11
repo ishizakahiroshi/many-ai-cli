@@ -45,6 +45,10 @@ pub struct FilesService {
     /// A test may freeze the instant Git budgets are counted from (`pin_git_clock`).
     #[cfg(test)]
     pub(crate) pinned_git_clock: std::sync::Mutex<Option<std::time::Instant>>,
+    /// A test about what Git answers, not how fast it starts, may give display
+    /// lookups more than their 250 ms (`files::branch`).
+    #[cfg(test)]
+    pub(crate) display_lookup_budget: Option<std::time::Duration>,
     history: Option<std::sync::Arc<dyn PersistenceEffectSink>>,
 }
 impl FilesService {
@@ -67,6 +71,8 @@ impl FilesService {
             expired_git_resolutions: Default::default(),
             #[cfg(test)]
             pinned_git_clock: Default::default(),
+            #[cfg(test)]
+            display_lookup_budget: None,
             history: None,
         }
     }

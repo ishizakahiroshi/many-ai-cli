@@ -269,6 +269,10 @@ impl LookupError {
 
 impl<'a> Lookup<'a> {
     fn new(service: &'a FilesService) -> Self {
+        #[cfg(test)]
+        if let Some(budget) = service.display_lookup_budget {
+            return Self::with_budget(service, budget);
+        }
         Self::with_budget(service, LOOKUP_TIMEOUT)
     }
 
@@ -549,6 +553,17 @@ mod tests {
             }
         }
 
+        /// For scenarios about what Git answers, not how fast it starts. A
+        /// display lookup gets the budget this fixture's own Git commands
+        /// have. With the production 250 ms, a busy machine emptied every
+        /// answer: 20 to 30 lookups in a row over 30 s while six test runs
+        /// shared the CPU. The budget itself is tested with `Fixture::new`.
+        fn patient() -> Self {
+            let mut fixture = Self::new();
+            fixture.service.display_lookup_budget = Some(Duration::from_secs(20));
+            fixture
+        }
+
         async fn git(&self, cwd: &Path, args: &[&str]) -> String {
             let mut argv = vec![OsString::from("-C"), cwd.as_os_str().into()];
             argv.extend(args.iter().map(OsString::from));
@@ -653,7 +668,7 @@ mod tests {
 
     #[tokio::test]
     async fn project_roots_cover_repository_subdirectory_worktree_bare_and_nonrepo() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::patient();
         fixture.init().await;
         fs::write(fixture.root.join("readme.txt"), "base\n").unwrap();
         fixture.commit().await;
@@ -746,7 +761,7 @@ mod tests {
 
     #[tokio::test]
     async fn branches_and_stats_cover_unborn_detached_switch_text_binary_and_untracked() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::patient();
         fixture.init().await;
         fs::write(fixture.root.join("text.txt"), "one\ntwo\n").unwrap();
         // HEAD already names the branch before the first commit; Git's
@@ -860,7 +875,7 @@ mod tests {
 
     #[tokio::test]
     async fn reftable_repository_is_left_to_git() {
-        let fixture = Fixture::new();
+        let fixture = Fixture::patient();
         let mut init = std::process::Command::new(&fixture.service.git_executable);
         init.args(["init", "--ref-format=reftable", "-b", "synthetic"])
             .arg(&fixture.root);

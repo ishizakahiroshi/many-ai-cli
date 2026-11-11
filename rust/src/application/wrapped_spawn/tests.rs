@@ -76,12 +76,12 @@ struct TestRuntime {
     spawner: Arc<ProcessWrappedSpawner>,
     // Last: fields drop in this order, and on Windows the folder cannot be
     // removed while a field above still holds a file inside it.
-    root: tempfile::TempDir,
-    _installed: tempfile::TempDir,
+    root: crate::process::test_temp::ProcessTempDir,
+    _installed: crate::process::test_temp::ProcessTempDir,
 }
 fn runtime(capacity: usize, fail_policy: bool) -> TestRuntime {
-    let root = tempfile::tempdir().unwrap();
-    let installed = tempfile::tempdir().unwrap();
+    let root = crate::process::test_temp::tempdir();
+    let installed = crate::process::test_temp::tempdir();
     let executable = root.path().join(if cfg!(windows) {
         "missing-synthetic.exe"
     } else {
