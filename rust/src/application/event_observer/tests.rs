@@ -268,7 +268,6 @@ impl GitTurnCompletionCallbacks for Callbacks {
 static REAL_GIT_FIXTURE_GATE: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
 struct Fixture {
-    _root: tempfile::TempDir,
     cwd: PathBuf,
     files: Arc<FilesService>,
     core: Arc<SessionEngine>,
@@ -279,6 +278,9 @@ struct Fixture {
     binding: SessionBinding,
     // Fields drop in declaration order; release admission after fixture teardown.
     _git_fixture: tokio::sync::SemaphorePermit<'static>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 async fn git(files: &FilesService, cwd: &std::path::Path, args: &[&str]) -> process::ProcessOutput {
     let plan = ProcessPlan {

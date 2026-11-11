@@ -81,8 +81,8 @@ fn native_rpc_fixture_child() {
 #[cfg(windows)]
 async fn synthetic_account(kind: &str) -> (std::io::Result<CodexUsage>, String, bool) {
     use crate::config::RuntimePaths;
-    let root = tempfile::tempdir().unwrap();
-    let installed = tempfile::tempdir().unwrap();
+    let root = crate::process::test_temp::tempdir();
+    let installed = crate::process::test_temp::tempdir();
     let paths = RuntimePaths::trial(root.path(), 49274, installed.path()).unwrap();
     let profile = root.path().join("profile");
     std::fs::create_dir(&profile).unwrap();

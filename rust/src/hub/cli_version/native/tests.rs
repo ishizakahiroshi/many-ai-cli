@@ -67,12 +67,14 @@ fn owned_cli_version_helper() {
 }
 
 struct Fixture {
-    _directory: tempfile::TempDir,
     paths: RuntimePaths,
     command: CliVersionCommand,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _directory: crate::process::test_temp::ProcessTempDir,
 }
 fn fixture(mode: &str) -> Fixture {
-    let directory = tempfile::tempdir().unwrap();
+    let directory = crate::process::test_temp::tempdir();
     let root = directory.path().join("trial");
     fs::create_dir(&root).unwrap();
     let paths = RuntimePaths::trial(&root, 48777, &directory.path().join("installed")).unwrap();

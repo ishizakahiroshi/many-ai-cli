@@ -112,12 +112,14 @@ impl ConfirmationExecutor for BoundExecutor {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
     _tasks: HubTaskOwner,
     core: Arc<SessionEngine>,
     route: Arc<ChildHttp>,
     io: Arc<Io>,
     parent: SessionBinding,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 async fn fixture(confirm: &str, limit: i64) -> Fixture {
     let root = tempfile::tempdir().unwrap();

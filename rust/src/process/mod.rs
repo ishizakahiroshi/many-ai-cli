@@ -8,6 +8,8 @@ pub mod pty;
 mod pty_unix;
 #[cfg(windows)]
 mod pty_windows;
+#[cfg(test)]
+pub(crate) mod test_temp;
 pub mod wrapper_startup;
 use std::{
     collections::BTreeMap,

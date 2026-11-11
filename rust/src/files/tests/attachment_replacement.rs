@@ -82,7 +82,6 @@ impl PersistenceEffectSink for AttachmentHistory {
     }
 }
 struct Fixture {
-    _temp: tempfile::TempDir,
     service: FilesService,
     journal: Arc<SessionJournal>,
     store: Arc<crate::storage::SqliteSessionStorage>,
@@ -91,6 +90,9 @@ struct Fixture {
     history: Arc<AttachmentHistory>,
     initial: SessionBinding,
     existing: PathBuf,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _temp: tempfile::TempDir,
 }
 impl Fixture {
     async fn new() -> Self {

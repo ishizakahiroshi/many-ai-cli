@@ -58,7 +58,6 @@ impl WrappedSessionSpawner for NoSpawn {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
     _owner: HubTaskOwner,
     rules: Arc<ApprovalRules>,
     core: Arc<SessionEngine>,
@@ -66,6 +65,9 @@ struct Fixture {
     transport: Arc<Transport>,
     audit: Arc<Mutex<Vec<String>>>,
     config: Arc<ConfigStore>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 impl Fixture {
     fn new(enabled: bool) -> Self {

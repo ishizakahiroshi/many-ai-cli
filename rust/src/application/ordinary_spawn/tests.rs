@@ -117,7 +117,6 @@ impl CoreEffectSink for Boundary {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
     paths: RuntimePaths,
     service: Arc<OrdinarySpawnService>,
     capture: Arc<Capture>,
@@ -128,6 +127,9 @@ struct Fixture {
     git: PathBuf,
     env: BTreeMap<OsString, Option<OsString>>,
     _tasks: crate::hub::task_owner::HubTaskOwner,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 impl Fixture {
     fn new(outcome: SpawnStartOutcome) -> Self {

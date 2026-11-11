@@ -5,11 +5,13 @@ use crate::storage::SqliteSessionStorage;
 use std::{sync::mpsc, time::Duration};
 
 struct Fixture {
-    _root: tempfile::TempDir,
-    _installed: tempfile::TempDir,
     journal: SessionJournal,
     store: Arc<SqliteSessionStorage>,
     warnings: Arc<Mutex<Vec<(LiveSessionId, SessionError)>>>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
+    _installed: tempfile::TempDir,
 }
 fn instant() -> Timestamp {
     Timestamp::UNIX_EPOCH + Duration::from_secs(1_700_000_000)

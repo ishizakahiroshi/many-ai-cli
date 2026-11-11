@@ -323,7 +323,7 @@ mod tests {
 
     #[test]
     fn failed_job_assignment_never_resumes_the_owned_child() {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::process::test_temp::tempdir();
         let plan = ProcessPlan {
             executable: std::env::current_exe().unwrap(),
             args: vec![

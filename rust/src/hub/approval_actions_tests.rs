@@ -160,8 +160,6 @@ impl WrappedSessionSpawner for NoSpawn {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
-    _installed: tempfile::TempDir,
     core: Arc<SessionEngine>,
     sink: Arc<Sink>,
     transport: Arc<Transport>,
@@ -171,6 +169,10 @@ struct Fixture {
     warnings: Arc<AtomicUsize>,
     http: Arc<ApprovalActionHttp>,
     tasks: Arc<TaskOwner>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
+    _installed: tempfile::TempDir,
 }
 fn fixture() -> Fixture {
     let root = tempfile::tempdir().unwrap();

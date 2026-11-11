@@ -26,11 +26,13 @@ impl PathEnvironment for IsolatedEnvironment {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
     paths: RuntimePaths,
     home: PathBuf,
     config: Arc<ConfigStore>,
     policy: ConfigSpawnLaunchPolicy,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 fn fixture(edit: impl FnOnce(&mut Config), models: LocalModelSnapshot) -> Fixture {
     let root = tempfile::tempdir().unwrap();

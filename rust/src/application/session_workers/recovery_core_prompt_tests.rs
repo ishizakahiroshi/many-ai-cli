@@ -53,13 +53,15 @@ impl WrappedSessionSpawner for SyntheticIo {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
     cwd: PathBuf,
     core: Arc<SessionEngine>,
     workers: Arc<SessionWorkers>,
     owner: HubTaskOwner,
     io: Arc<SyntheticIo>,
     binding: SessionBinding,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 impl Fixture {
     async fn new() -> Self {

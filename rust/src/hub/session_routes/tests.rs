@@ -84,14 +84,16 @@ impl CoreEffectSink for Sink {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
-    _installed: tempfile::TempDir,
     paths: RuntimePaths,
     config: Config,
     store: Option<Arc<SqliteSessionStorage>>,
     core: Arc<SessionEngine>,
     sink: Arc<Sink>,
     http: Arc<SessionHttp>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
+    _installed: tempfile::TempDir,
 }
 fn fixture(with_store: bool) -> Fixture {
     fixture_at_port(with_store, 49122)

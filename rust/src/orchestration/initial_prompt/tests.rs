@@ -431,13 +431,15 @@ impl InitialPromptCallbacks for Callbacks {
     }
 }
 struct Fixture {
-    root: tempfile::TempDir,
     engine: Arc<SessionEngine>,
     transport: Arc<Transport>,
     callbacks: Arc<Callbacks>,
     driver: Arc<InitialPromptDriver>,
     owner: HubTaskOwner,
     binding: SessionBinding,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    root: tempfile::TempDir,
 }
 impl Fixture {
     async fn new(provider: &str, submit_on: usize) -> Self {

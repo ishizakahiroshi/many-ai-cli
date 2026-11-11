@@ -36,9 +36,11 @@ impl OrchestrateIo for Fake {
     }
 }
 struct Fixture {
-    _temp: tempfile::TempDir,
     cli: OrchestrateCli,
     io: Arc<Fake>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _temp: tempfile::TempDir,
 }
 fn fixture() -> Fixture {
     let t = tempfile::tempdir().unwrap();

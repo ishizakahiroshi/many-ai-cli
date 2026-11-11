@@ -595,7 +595,6 @@ impl WrappedSessionSpawner for RegisteredSpawner {
     }
 }
 struct ExecutorFixture {
-    _root: TempDir,
     paths: RuntimePaths,
     executor: ChildLaunchExecutor,
     engine: Arc<SessionEngine>,
@@ -603,6 +602,9 @@ struct ExecutorFixture {
     services: Arc<TestServices>,
     spawner: Arc<RegisteredSpawner>,
     parent: SessionBinding,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: TempDir,
 }
 async fn executor_fixture() -> ExecutorFixture {
     let (root, paths) = roots();

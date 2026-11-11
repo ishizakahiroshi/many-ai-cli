@@ -51,6 +51,14 @@ async fn repo() -> (tempfile::TempDir, FilesService, PathBuf) {
         ("GIT_DIR".into(), None),
         ("GIT_WORK_TREE".into(), None),
     ]);
+    // A budget in these tests is the harness's allowance, not what is under
+    // test. Unfrozen, one budget is shared by every Git command of a scenario
+    // (two commits with hooks, status, diffs), and a busy machine used it up:
+    // the last commands failed with "git command timed out" or came back
+    // empty. With the budget clock frozen each command keeps its full budget;
+    // Git still runs for real and is still killed after that. Expiry is tested
+    // by expiring a budget on purpose (`expire_completed_resolution_for_test`).
+    service.pin_git_clock();
     Git::new(&service, 5)
         .run(&root, &["init", "-b", "synthetic"])
         .await

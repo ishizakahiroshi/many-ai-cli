@@ -116,12 +116,14 @@ impl SubscriptionCli for FakeIo {
     }
 }
 pub(super) struct Fixture {
-    pub _temp: tempfile::TempDir,
     pub paths: RuntimePaths,
     pub config: Arc<ConfigStore>,
     pub core: Arc<SessionEngine>,
     pub doctor: Arc<Diagnostics>,
     pub io: Arc<FakeIo>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    pub _temp: tempfile::TempDir,
 }
 pub(super) fn fixture() -> Fixture {
     let t = tempfile::tempdir().unwrap();

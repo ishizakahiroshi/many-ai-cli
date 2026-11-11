@@ -291,9 +291,11 @@ mod tests {
     use tempfile::TempDir;
 
     struct Fixture {
-        dir: TempDir,
         path: PathBuf,
         connection: Connection,
+        // Last: fields drop in this order, and the folder cannot be removed
+        // on Windows while the connection still has the database open.
+        dir: TempDir,
     }
 
     impl Fixture {

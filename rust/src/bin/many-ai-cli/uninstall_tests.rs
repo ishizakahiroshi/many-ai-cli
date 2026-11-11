@@ -109,8 +109,6 @@ impl Write for PromptWriter {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
-    _installed: tempfile::TempDir,
     owner: PlatformCli,
     context: Option<SyntheticHub>,
     state: Arc<State>,
@@ -118,6 +116,10 @@ struct Fixture {
     config_path: std::path::PathBuf,
     config_bytes: Vec<u8>,
     sentinel: std::path::PathBuf,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
+    _installed: tempfile::TempDir,
 }
 fn fixture() -> Fixture {
     let root = tempfile::tempdir().unwrap();

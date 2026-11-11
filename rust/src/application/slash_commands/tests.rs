@@ -35,12 +35,14 @@ impl SlashIo for FakeIo {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
     _tasks: HubTaskOwner,
     paths: RuntimePaths,
     config: Arc<ConfigStore>,
     io: Arc<FakeIo>,
     owner: Arc<SlashCommands>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 fn fixture() -> Fixture {
     let root = tempfile::tempdir().unwrap();

@@ -5,9 +5,11 @@ use std::{collections::BTreeMap, ffi::OsStr};
 use tempfile::TempDir;
 
 struct Fixture {
-    _root: TempDir,
     root: PathBuf,
     lifecycle: NormalWorktreeLifecycle,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: TempDir,
 }
 impl Fixture {
     fn new() -> Self {

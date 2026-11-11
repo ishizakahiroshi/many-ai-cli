@@ -49,9 +49,11 @@ struct Case {
     missing_root: bool,
 }
 struct Fixture {
-    _temp: tempfile::TempDir,
     paths: RuntimePaths,
     store: Arc<ConfigStore>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _temp: tempfile::TempDir,
 }
 fn fixture(initial: Value, missing_root: bool) -> Fixture {
     let temp = tempfile::tempdir().unwrap();

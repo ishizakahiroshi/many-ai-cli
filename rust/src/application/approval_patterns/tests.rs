@@ -85,14 +85,16 @@ impl WrappedSessionSpawner for NoExternalWork {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
-    _installed: tempfile::TempDir,
     owner: Arc<ApprovalPatterns>,
     core: Arc<SessionEngine>,
     effects: Arc<EffectDriver>,
     sockets: Arc<SocketRegistry>,
     recording: Recording,
     warnings: Arc<Mutex<Vec<String>>>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
+    _installed: tempfile::TempDir,
 }
 fn fixture_with_config(mut config: Config) -> Fixture {
     let root = tempfile::tempdir().unwrap();

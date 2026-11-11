@@ -70,12 +70,14 @@ fn spec(root: &Path, attempt: u64) -> WrappedSpawnSpec {
     }
 }
 struct TestRuntime {
-    root: tempfile::TempDir,
-    _installed: tempfile::TempDir,
     options: WrapperSpawnOptions,
     policy: Arc<Policy>,
     failures: Arc<AtomicUsize>,
     spawner: Arc<ProcessWrappedSpawner>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    root: tempfile::TempDir,
+    _installed: tempfile::TempDir,
 }
 fn runtime(capacity: usize, fail_policy: bool) -> TestRuntime {
     let root = tempfile::tempdir().unwrap();

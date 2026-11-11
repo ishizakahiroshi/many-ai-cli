@@ -144,11 +144,13 @@ fn clock() -> Timestamp {
     UNIX_EPOCH + Duration::new(1_700_000_000, 123_456_789)
 }
 struct Fixture {
-    _root: tempfile::TempDir,
     runner: Arc<RoutineRunner>,
     spawner: Arc<SyntheticSpawner>,
     preparation: Arc<SyntheticPreparation>,
     id: String,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 fn fixture() -> Fixture {
     let root = tempfile::tempdir().unwrap();

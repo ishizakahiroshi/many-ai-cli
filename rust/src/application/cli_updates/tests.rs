@@ -168,7 +168,6 @@ impl WrappedSessionSpawner for Spawn {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
     paths: RuntimePaths,
     owner: HubTaskOwner,
     updates: Arc<CliUpdates>,
@@ -176,6 +175,9 @@ struct Fixture {
     versions: Arc<Versions>,
     directory: Arc<Mutex<PathBuf>>,
     warnings: Arc<AtomicUsize>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 impl Fixture {
     fn new(count: usize) -> Self {

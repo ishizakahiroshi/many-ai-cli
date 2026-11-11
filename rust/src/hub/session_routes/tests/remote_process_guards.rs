@@ -4,12 +4,14 @@ use super::*;
 const PAYLOAD: &[u8] = b"synthetic-remote-payload";
 type LocalState = (Vec<(Value, Option<Vec<u8>>)>, usize);
 struct RemoteFixture {
-    fixture: Fixture,
     service: crate::files::FilesService,
     counter: std::path::PathBuf,
     shell: LiveSessionId,
     provider: LiveSessionId,
     disconnected: LiveSessionId,
+    // Last: it owns the temporary folders, and on Windows a folder cannot be
+    // removed while `service` above still holds it open.
+    fixture: Fixture,
 }
 impl RemoteFixture {
     async fn new() -> Self {

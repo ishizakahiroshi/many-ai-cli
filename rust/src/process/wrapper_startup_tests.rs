@@ -183,7 +183,7 @@ fn startup_fixture() {
 
 #[tokio::test]
 async fn failed_exec_and_non_null_stdin_create_no_wrapper() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::process::test_temp::tempdir();
     let mut launch = plan(root.path(), "early_exit");
     launch.executable = root.path().join("missing-wrapper");
     let log = private_io::open_append(&root.path().join("spawn.log")).unwrap();
@@ -200,7 +200,7 @@ async fn failed_exec_and_non_null_stdin_create_no_wrapper() {
 }
 #[tokio::test]
 async fn unacknowledged_owner_future_drop_reaps_wrapper_and_owned_descendant() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::process::test_temp::tempdir();
     let owner = launch(root.path(), "startup_child");
     let observed = owner.receipt();
     let child = file(root.path(), "descendant").await.parse().unwrap();
@@ -218,7 +218,7 @@ async fn unacknowledged_owner_future_drop_reaps_wrapper_and_owned_descendant() {
 }
 #[tokio::test]
 async fn failed_or_lost_initial_ack_does_not_start_provider() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::process::test_temp::tempdir();
     let owner = launch(root.path(), "await_ack");
     file(root.path(), "ready").await;
     let observed = owner.abort();
@@ -227,7 +227,7 @@ async fn failed_or_lost_initial_ack_does_not_start_provider() {
 }
 #[tokio::test]
 async fn early_exit_cleans_startup_descendant_and_preserves_status() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::process::test_temp::tempdir();
     let owner = launch(root.path(), "exit_with_descendant");
     let child = file(root.path(), "descendant").await.parse().unwrap();
     assert_eq!(exit(&owner.receipt()).await.code, Some(41));
@@ -236,7 +236,7 @@ async fn early_exit_cleans_startup_descendant_and_preserves_status() {
 #[tokio::test]
 async fn mismatched_attempt_or_owned_pid_cannot_transfer() {
     for wrong_attempt in [true, false] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::process::test_temp::tempdir();
         let owner = launch(root.path(), "await_ack");
         file(root.path(), "ready").await;
         let observed = owner.receipt();
@@ -252,8 +252,8 @@ async fn mismatched_attempt_or_owned_pid_cannot_transfer() {
 }
 #[tokio::test]
 async fn acknowledged_transfer_survives_owner_shutdown_and_exits_explicitly() {
-    let root = tempfile::tempdir().unwrap();
-    let unrelated_root = tempfile::tempdir().unwrap();
+    let root = crate::process::test_temp::tempdir();
+    let unrelated_root = crate::process::test_temp::tempdir();
     let unrelated = launch(unrelated_root.path(), "await_ack");
     file(unrelated_root.path(), "ready").await;
     let owner = launch(root.path(), "await_ack");
@@ -291,7 +291,7 @@ async fn acknowledged_transfer_survives_owner_shutdown_and_exits_explicitly() {
 #[tokio::test]
 async fn delivery_uncertain_provisional_drop_detaches_but_known_pre_ack_failure_aborts() {
     for uncertain in [true, false] {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::process::test_temp::tempdir();
         let owner = launch(root.path(), "await_ack");
         file(root.path(), "ready").await;
         let observed = owner.receipt();
@@ -314,7 +314,7 @@ async fn delivery_uncertain_provisional_drop_detaches_but_known_pre_ack_failure_
 
 #[test]
 fn detached_child_reaping_survives_hub_runtime_shutdown() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::process::test_temp::tempdir();
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()

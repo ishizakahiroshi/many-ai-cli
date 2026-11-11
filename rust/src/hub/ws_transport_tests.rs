@@ -33,7 +33,6 @@ impl OrderedEventObserver for SyntheticObserver {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
     port: u16,
     core: Arc<dyn SessionCore>,
     sockets: Arc<SocketRegistry>,
@@ -42,6 +41,9 @@ struct Fixture {
     websocket: Arc<WebSocketService>,
     cancel: Cancellation,
     server: Option<tokio::task::JoinHandle<std::io::Result<()>>>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 impl Drop for Fixture {
     fn drop(&mut self) {

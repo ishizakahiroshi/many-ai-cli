@@ -50,11 +50,13 @@ impl HostDispatch for Dispatch {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
     paths: RuntimePaths,
     core: Arc<SessionEngine>,
     owner: Arc<AgentHistory>,
     dispatch: Arc<Dispatch>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 fn fixture() -> Fixture {
     let root = tempfile::tempdir().unwrap();

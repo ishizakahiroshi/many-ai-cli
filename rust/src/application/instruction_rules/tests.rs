@@ -41,8 +41,6 @@ impl InstructionRootResolver for Root {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
-    _installed: tempfile::TempDir,
     home: PathBuf,
     paths: RuntimePaths,
     owner: Arc<InstructionRules>,
@@ -50,6 +48,10 @@ struct Fixture {
     config: Arc<ConfigStore>,
     warnings: Arc<std::sync::Mutex<Vec<&'static str>>>,
     root_calls: Arc<std::sync::atomic::AtomicUsize>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
+    _installed: tempfile::TempDir,
 }
 fn fixture() -> Fixture {
     build(false)

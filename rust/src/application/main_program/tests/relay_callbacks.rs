@@ -8,13 +8,15 @@ use crate::{
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 struct Fixture {
-    _root: tempfile::TempDir,
     composition: HubComposition,
     paths: RuntimePaths,
     binding: SessionBinding,
     run_id: String,
     summary: proto::DoneSummary,
     priming: UiBinding,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 impl Fixture {
     async fn new() -> Self {

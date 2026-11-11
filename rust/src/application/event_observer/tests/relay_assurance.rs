@@ -95,7 +95,6 @@ impl CoreEventPublisher for Publisher {
 }
 
 struct Publication {
-    _root: tempfile::TempDir,
     core: Arc<SessionEngine>,
     callbacks: Arc<CompletionCallbacks>,
     driver: EffectDriver,
@@ -103,6 +102,9 @@ struct Publication {
     summary: proto::DoneSummary,
     priming: UiBinding,
     trace: Arc<Mutex<Vec<&'static str>>>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 async fn publication(url: &str, gate: &str) -> Publication {
     let root = tempfile::tempdir().unwrap();

@@ -485,9 +485,11 @@ mod tests {
     }
 
     struct Fixture {
-        owned: tempfile::TempDir,
         service: FilesService,
         root: PathBuf,
+        // Last: fields drop in this order, and on Windows the folder cannot be
+        // removed while a field above still holds a file inside it.
+        owned: tempfile::TempDir,
     }
 
     impl Fixture {

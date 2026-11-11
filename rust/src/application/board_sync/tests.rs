@@ -36,11 +36,13 @@ struct Fixture {
     sync: Arc<BoardSync>,
     _owner: HubTaskOwner,
     board: Arc<Board>,
-    root: tempfile::TempDir,
     repo: PathBuf,
     url: String,
     warnings: Arc<Mutex<Vec<String>>>,
     cancel: crate::process::Cancellation,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    root: tempfile::TempDir,
 }
 async fn fixture(trial: bool) -> Fixture {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

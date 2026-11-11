@@ -34,10 +34,12 @@ impl WrappedSessionSpawner for Io {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
     owner: Arc<UsageHooks>,
     core: Arc<SessionEngine>,
     path: std::path::PathBuf,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 fn fixture(enabled: bool) -> Fixture {
     let root = tempfile::tempdir().unwrap();

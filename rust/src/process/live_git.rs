@@ -436,7 +436,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn windows_lookup_reads_a_running_git_directory_and_command_line() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = crate::process::test_temp::tempdir();
         let root = dir.path().join("synthetic live repo");
         std::fs::create_dir(&root).unwrap();
         // `git hash-object --stdin` waits for input, so it stays alive.

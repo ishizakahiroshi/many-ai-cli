@@ -834,10 +834,12 @@ esac
         assert!(cleanup_directory_missing(&link).is_err());
     }
     struct Fixture {
-        _root: tempfile::TempDir,
         paths: RuntimePaths,
         repo: PathBuf,
         git: RelayGit,
+        // Last: fields drop in this order, and on Windows the folder cannot be
+        // removed while a field above still holds a file inside it.
+        _root: tempfile::TempDir,
     }
     fn home_for_hooks(runtime: &Path) -> PathBuf {
         let hooks = runtime.join("empty-hooks");

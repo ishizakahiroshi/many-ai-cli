@@ -457,7 +457,6 @@ impl WrappedSessionSpawner for Io {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
     _tasks: HubTaskOwner,
     core: Arc<SessionEngine>,
     program: Arc<RelayProgram>,
@@ -466,6 +465,9 @@ struct Fixture {
     parent: SessionBinding,
     config: Arc<ConfigStore>,
     paths: RuntimePaths,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 async fn fixture(limit: i64) -> Fixture {
     let root = tempfile::tempdir().unwrap();

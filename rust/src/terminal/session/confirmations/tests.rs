@@ -132,13 +132,15 @@ impl WrappedSessionSpawner for NoSpawner {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
-    _installed: tempfile::TempDir,
     engine: Arc<SessionEngine>,
     executor: Arc<Executor>,
     sink: Arc<Sink>,
     parent: SessionBinding,
     warnings: Arc<AtomicUsize>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
+    _installed: tempfile::TempDir,
 }
 fn now() -> Timestamp {
     Timestamp::UNIX_EPOCH + Duration::from_secs(100)

@@ -35,12 +35,14 @@ pub(super) fn before_rename(index: usize, rollback: bool) {
 }
 
 struct Fixture {
-    _root: tempfile::TempDir,
     scope: Scope,
     src1: PathBuf,
     src2: PathBuf,
     dst1: PathBuf,
     dst2: PathBuf,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _root: tempfile::TempDir,
 }
 fn fixture() -> Fixture {
     let root = tempfile::tempdir().unwrap();

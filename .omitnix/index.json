@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "4fa2a97ca5a4b8a42f4b2e3583294e5c089d7a46",
-    "dirty": true,
+    "commit": "ca28c9790c7f729c3fdf54ca523204ed43ac8ca9",
+    "dirty": false,
     "tool": "omitnix 0.1.4",
     "partial": false,
     "adapters": [
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2086,
-    "analyzed": 1619,
+    "discovered": 2087,
+    "analyzed": 1620,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 452,
@@ -34481,6 +34481,35 @@
         "summary": {
           "state": "value",
           "value": "Native ConPTY: create suspended, assign the shared kill-on-close Job, then"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/process/test_temp.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "A temporary folder for tests that start a process inside it."
         },
         "authentication": {
           "state": "not_configured"
