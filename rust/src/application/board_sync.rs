@@ -34,13 +34,21 @@
 //!
 //! Writes are best effort, in order, one at a time; a failure is logged and
 //! dropped.
+//!
+//! The board's owner may hand a piece of planned work to an AI (`handoff` on
+//! an item, state `requested`). `handed_work` lists those for the listed
+//! repositories; nothing starts by itself. When the person at this machine
+//! starts a session for one (`claim` ties the start request to the item), the
+//! session takes the request with `board_accept_handoff` and its work is
+//! written onto that item instead of a new `session/<id>`. A request someone
+//! else took first leaves the session an ordinary one.
 use crate::{
     files::branch::GitBranchSource,
     hub::task_owner::HubTaskHandle,
     proto::{DoneSummary, core::*},
     storage::mask_secrets,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
     path::{Path, PathBuf},
@@ -70,6 +78,12 @@ const NO_EVENTS: u64 = 9_007_199_254_740_991;
 /// A tools/call reply is a few KiB. A longer one is refused rather than read,
 /// so a wrong or hostile board cannot exhaust the Hub's memory (U29).
 const RESPONSE_MAX: usize = 1024 * 1024;
+/// Handed-over work shown at once, and start requests remembered until their
+/// session registers.
+const HANDED_MAX: usize = 50;
+const CLAIMS_MAX: usize = 32;
+/// The board's limit for an item id; a request id is far shorter.
+const ID_MAX: usize = 200;
 
 pub type Warning = dyn Fn(&str, &str) + Send + Sync;
 
@@ -107,6 +121,47 @@ struct Seat {
     provider: String,
     /// Title until the first summary names the work.
     opening: String,
+    /// The request to take when the session starts: `target.item_id` is then
+    /// the handed-over item.
+    handoff: Option<String>,
+    /// The session's own item, used when the request cannot be taken.
+    own_item: String,
+}
+
+/// A piece of work the board's owner handed over and nobody has taken yet.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct HandedWork {
+    pub project: String,
+    pub item_id: String,
+    pub request_id: String,
+    pub title: String,
+    /// Milliseconds since the epoch, as the board keeps it.
+    pub requested_at: Option<u64>,
+    /// The listed folder of the project, where a session for it starts.
+    pub folder: PathBuf,
+}
+impl HandedWork {
+    /// `dir` is the project's listed folder or a folder inside it.
+    pub fn covers(&self, dir: &Path) -> bool {
+        dir.is_absolute() && inside(dir, &self.folder)
+    }
+}
+
+#[derive(Clone)]
+struct Claim {
+    project: String,
+    item_id: String,
+    request_id: String,
+}
+
+#[derive(Deserialize)]
+struct ListedHandoff {
+    #[serde(default)]
+    state: String,
+    #[serde(default)]
+    request_id: Option<String>,
+    #[serde(default)]
+    requested_at: Option<u64>,
 }
 
 /// The piece of work a session is on. Owned by the worker.
@@ -123,6 +178,9 @@ struct Piece {
     /// The item is on the board (`false` for a new piece until its first write).
     exists: bool,
     titled: bool,
+    /// The item is work the board's owner handed over: its name and its place
+    /// are the owner's, so summaries neither rename it nor move it to a plan.
+    handed: bool,
 }
 impl Piece {
     fn first(item_id: &str) -> Self {
@@ -134,6 +192,7 @@ impl Piece {
             linked: false,
             exists: true,
             titled: false,
+            handed: false,
         }
     }
 }
@@ -150,6 +209,8 @@ struct Listed {
     source_ref: Option<String>,
     #[serde(default)]
     parent_id: Option<String>,
+    #[serde(default)]
+    handoff: Option<ListedHandoff>,
 }
 
 enum Lookup {
@@ -228,6 +289,21 @@ fn url_allowed(url: &str) -> bool {
 
 fn project_ok(name: &str) -> bool {
     !name.trim().is_empty() && name.chars().count() <= PROJECT_MAX
+}
+
+/// The board project of a listed repository: the one written, or the folder's name.
+fn project_of(repo: &RepoEntry) -> String {
+    repo.project.clone().unwrap_or_else(|| {
+        repo.path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    })
+}
+
+/// An id from the board that is safe to show and to send back.
+fn id_ok(id: &str) -> bool {
+    !id.is_empty() && id.chars().count() <= ID_MAX && !id.chars().any(char::is_control)
 }
 
 /// Reads and checks the settings. `Ok(None)` means switched off (no file).
@@ -606,6 +682,7 @@ fn resume(items: &[Listed], base: &str, opening: &str) -> Option<Piece> {
         settled: true,
         exists: true,
         titled: item.title != opening,
+        handed: false,
     })
 }
 
@@ -625,6 +702,8 @@ pub struct BoardSync {
     queue: Mutex<VecDeque<Job>>,
     running: AtomicBool,
     warned: Mutex<Option<&'static str>>,
+    /// Start requests for handed-over work, by the request id of the start.
+    claims: Mutex<HashMap<String, Claim>>,
 }
 
 impl BoardSync {
@@ -661,6 +740,7 @@ impl BoardSync {
             queue: Mutex::default(),
             running: AtomicBool::new(false),
             warned: Mutex::new(None),
+            claims: Mutex::default(),
         }))
     }
 
@@ -693,27 +773,118 @@ impl BoardSync {
             .repos
             .iter()
             .find(|r| inside(&dir, &r.path) || inside(&cwd, &r.path))?;
-        let project = repo.project.clone().unwrap_or_else(|| {
-            repo.path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default()
-        });
+        let project = project_of(repo);
         if !project_ok(&project) {
             self.warn_once("board settings: project name unusable");
             return None;
         }
+        let own_item = item_id(details);
+        // A session started for handed-over work (same project only).
+        let request = &details.snapshot.client_request_id;
+        let claim = if request.is_empty() {
+            None
+        } else {
+            lock(&self.claims)
+                .remove(request)
+                .filter(|claim| claim.project == project)
+        };
+        let (item_id, handoff) = match claim {
+            Some(claim) => (claim.item_id, Some(claim.request_id)),
+            None => (own_item.clone(), None),
+        };
         Some(Seat {
             target: Target {
                 url: config.url,
                 key_file: config.key_file,
                 project,
-                item_id: item_id(details),
+                item_id,
             },
             root: dir,
             provider: details.snapshot.provider.clone(),
             opening: title(details),
+            handoff,
+            own_item,
         })
+    }
+
+    /// The work the board's owner handed over that nobody has taken, for the
+    /// listed repositories. Empty when the board is off or cannot be read.
+    pub async fn handed_work(&self) -> Vec<HandedWork> {
+        let mut found = Vec::new();
+        if !self.enabled {
+            return found;
+        }
+        let config = match load(&self.file) {
+            Ok(Some(config)) => config,
+            Ok(None) => return found,
+            Err(message) => {
+                self.warn_once(message);
+                return found;
+            }
+        };
+        let mut asked: Vec<String> = Vec::new();
+        for repo in &config.repos {
+            let project = project_of(repo);
+            if !project_ok(&project) || asked.contains(&project) {
+                continue;
+            }
+            asked.push(project.clone());
+            let target = Target {
+                url: config.url.clone(),
+                key_file: config.key_file.clone(),
+                project: project.clone(),
+                item_id: String::new(),
+            };
+            let Some(items) = self.items(&target).await else {
+                continue;
+            };
+            for item in items {
+                let Some(handoff) = item.handoff else {
+                    continue;
+                };
+                let Some(request_id) = handoff.request_id.filter(|id| id_ok(id)) else {
+                    continue;
+                };
+                if item.kind != "task" || handoff.state != "requested" || !id_ok(&item.item_id) {
+                    continue;
+                }
+                found.push(HandedWork {
+                    project: project.clone(),
+                    item_id: item.item_id,
+                    request_id,
+                    title: truncate(&clean_line(&item.title), TITLE_MAX),
+                    requested_at: handoff.requested_at,
+                    folder: repo.path.clone(),
+                });
+                if found.len() >= HANDED_MAX {
+                    return found;
+                }
+            }
+        }
+        found
+    }
+
+    /// Remembers that the session about to register with `start_request` (its
+    /// `client_request_id`) is started for `work`.
+    pub fn claim(&self, start_request: &str, work: &HandedWork) {
+        let mut claims = lock(&self.claims);
+        if claims.len() >= CLAIMS_MAX {
+            // Starts that never registered; none of them is waited for.
+            claims.clear();
+        }
+        claims.insert(
+            start_request.to_owned(),
+            Claim {
+                project: work.project.clone(),
+                item_id: work.item_id.clone(),
+                request_id: work.request_id.clone(),
+            },
+        );
+    }
+
+    /// Forgets a start that did not happen.
+    pub fn unclaim(&self, start_request: &str) {
+        lock(&self.claims).remove(start_request);
     }
 
     /// Session registered (also called again on reattach; the board item is
@@ -834,7 +1005,16 @@ impl BoardSync {
                 seat,
                 kind,
                 summary,
-            } => self.note(session, &seat, kind, &summary).await,
+            } => {
+                // The seat may have changed since this was queued (a handed-over
+                // request that could not be taken).
+                let seat = lock(&self.sessions)
+                    .get(&session)
+                    .cloned()
+                    .flatten()
+                    .unwrap_or(seat);
+                self.note(session, &seat, kind, &summary).await
+            }
             Job::End {
                 session,
                 target,
@@ -857,7 +1037,31 @@ impl BoardSync {
         }
     }
 
-    async fn start(&self, session: LiveSessionId, seat: &Seat, text: String) {
+    async fn start(&self, session: LiveSessionId, seat: &Seat, mut text: String) {
+        let mut seat = seat.clone();
+        let mut taken = false;
+        if let Some(request) = seat.handoff.take() {
+            let args = serde_json::json!({"item_id": seat.target.item_id, "request_id": request});
+            if self
+                .call(&seat.target, "board_accept_handoff", args)
+                .await
+                .is_some()
+            {
+                taken = true;
+                text = truncate(
+                    &format!("{text}（任された仕事 {request} を受けた）"),
+                    TEXT_MAX,
+                );
+            } else {
+                // Taken by someone else, taken back, or the board is away: the
+                // session goes on as an ordinary one.
+                seat.target.item_id = seat.own_item.clone();
+            }
+            if let Some(slot) = lock(&self.sessions).get_mut(&session) {
+                *slot = Some(seat.clone());
+            }
+        }
+        let seat = &seat;
         let target = &seat.target;
         // After a Hub restart the work may already be on the board, named and
         // in a later piece: continue there instead of resetting it.
@@ -865,10 +1069,14 @@ impl BoardSync {
             .items(target)
             .await
             .and_then(|items| resume(&items, &target.item_id, &seat.opening));
-        let piece = known
+        let mut piece = known
             .clone()
             .unwrap_or_else(|| Piece::first(&target.item_id));
-        let args = if known.is_some() {
+        if taken {
+            piece.titled = true;
+            piece.handed = true;
+        }
+        let args = if known.is_some() || taken {
             serde_json::json!({"item_id": piece.item_id, "state": "in_progress"})
         } else {
             serde_json::json!({
@@ -877,7 +1085,7 @@ impl BoardSync {
             })
         };
         if let Some(result) = self.call(target, "board_upsert_item", args).await
-            && result.get("changed").and_then(|v| v.as_bool()) != Some(false)
+            && (taken || result.get("changed").and_then(|v| v.as_bool()) != Some(false))
         {
             self.event(target, &piece.item_id, "session_start", text, None)
                 .await;
@@ -888,11 +1096,11 @@ impl BoardSync {
     async fn note(&self, session: LiveSessionId, seat: &Seat, kind: &str, summary: &str) {
         let target = &seat.target;
         let tails = tails(summary, &seat.root);
-        let declared = tails.plan.clone();
         let mut piece = lock(&self.pieces)
             .get(&session)
             .cloned()
             .unwrap_or_else(|| Piece::first(&target.item_id));
+        let declared = tails.plan.clone().filter(|_| !piece.handed);
         if let Some(plan) = declared
             && piece.plan.as_ref() != Some(&plan)
         {
@@ -910,6 +1118,7 @@ impl BoardSync {
                     linked: false,
                     exists: false,
                     titled: false,
+                    handed: false,
                 };
             }
             piece.plan = Some(plan);

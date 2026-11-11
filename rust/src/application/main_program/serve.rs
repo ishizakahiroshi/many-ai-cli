@@ -1275,6 +1275,9 @@ impl HubComposition {
             runner: Some(routines.clone()),
             home: context.vendor_home.clone(),
         }))
+        .with_board_handoffs(Arc::new(
+            crate::hub::board_handoff_routes::BoardHandoffHttp::new(board.clone()),
+        ))
         .with_memos(memos)
         .with_settings_published(Arc::new(move |path, config| {
             if path == "/api/idle-timeout" {
@@ -1353,7 +1356,10 @@ impl HubComposition {
         )))
         .with_approval_actions(approval_actions, approval_rules.policy.clone())
         .with_spawn(
-            Arc::new(crate::hub::spawn_routes::SpawnHttp::new(ordinary.clone())),
+            Arc::new(
+                crate::hub::spawn_routes::SpawnHttp::new(ordinary.clone())
+                    .with_board(board.clone()),
+            ),
             Arc::new(|| chrono::Local::now().offset().local_minus_utc()),
         );
         // An Iris configuration mistake disables only Iris; the Hub and every

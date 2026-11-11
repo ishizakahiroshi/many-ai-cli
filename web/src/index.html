@@ -1365,6 +1365,14 @@
             <path d="M12 7v5l3 2"/>
           </svg>
         </button>
+        <!-- 看板の持ち主が任せた仕事（board.json がある Hub だけ）。任された仕事がある間だけ出る。 -->
+        <button type="button" class="ui-button ui-button--secondary ui-button--compact detached-grid-launcher-sidebar-btn" data-open-board-handoffs data-i18n-tooltip="board_handoffs_title" aria-label="Work handed over from the board" hidden>
+          <svg class="routine-sidebar-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 13h4l2 3h4l2-3h4"/>
+            <path d="M6 5h12l2 8v6H4v-6z"/>
+          </svg>
+          <span data-board-handoffs-count></span>
+        </button>
         <!-- C3: plan_memo-panel.md — 自分用の作業メモ（プロジェクトに紐づく）。
              AI がセッション単位で書く引き継ぎ看板とは別物。ルーティンと新規セッションの間に置く。 -->
         <button type="button" class="ui-button ui-button--secondary ui-button--compact detached-grid-launcher-sidebar-btn" data-open-memo data-i18n-tooltip="memo_button_tooltip" aria-label="Memo">
@@ -1419,6 +1427,7 @@
                     aria-label="What does this provider option do?">?</button>
           </div>
           <p id="spawn-cli-missing-note" class="settings-note spawn-cli-missing-note" hidden></p>
+          <p id="spawn-board-handoff-note" class="settings-note" role="status" hidden></p>
           <div class="spawn-cwd-row">
             <div class="cwd-combobox">
               <input type="text" id="spawn-cwd" class="ui-input spawn-input" data-i18n-placeholder="spawn_cwd_placeholder" autocomplete="off">

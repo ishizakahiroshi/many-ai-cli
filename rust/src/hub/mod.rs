@@ -16,6 +16,7 @@ pub use router::{Dispatch, ServiceRouter};
 #[cfg(test)]
 mod tests;
 
+pub mod board_handoff_routes;
 pub mod routines;
 
 pub mod approval_actions;

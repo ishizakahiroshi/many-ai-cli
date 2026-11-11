@@ -12,7 +12,16 @@ Release artifacts are published at
 
 ### Added
 
-- **A commit named in a finished-work summary links to its GitHub page on the
+- **Start work the board's owner handed over.** When the owner of an MCP board
+  (for example Many Iris) hands a piece of planned work to an AI, the Hub's
+  sidebar shows "Work handed over from the board" for the projects listed in
+  `board.json`. Choosing one opens the ordinary new-session form with the
+  project's folder and the work's title filled in; nothing starts until you
+  press Launch. The session then takes the request on the board
+  (`board_accept_handoff`), and its start, summaries and end are written onto
+  the handed-over item instead of a new `session/<id>` item. A request someone
+  else took first leaves the session an ordinary one. See
+  `docs/manual_board-sync.md`.- **A commit named in a finished-work summary links to its GitHub page on the
   board.** When a summary has no `成果:` link but names a commit by its hash
   (7 or more characters, for example "pushed 0a1b2c3d"), and that commit is on
   a branch of `origin` on GitHub, the note on the board gets the commit's page

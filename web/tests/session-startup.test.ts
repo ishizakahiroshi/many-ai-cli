@@ -86,7 +86,7 @@ function spawnFixture(options: { status?: number; pendingHttp?: boolean; rejectN
   const start = moduleSource.indexOf('  async function spawnSession()');
   const end = moduleSource.indexOf('\n  }', start) + 4;
   const no = () => {}; const store = new SessionStartupStore(); let resolveHttp: (value: any) => void = no;
-  const notices: string[] = [];
+  const notices: string[] = []; const bodies: any[] = []; const events: string[] = [];
   const calls: string[] = []; const inputs: any = { 'spawn-provider': { value: 'claude' }, 'spawn-label': { value: 'Synthetic' }, 'spawn-permission-mode': { value: 'default' } };
   const context: any = { spawnLaunchSequence: 0, captureSpawnTab: () => 'tab-A', document: { getElementById: (id: string) => inputs[id] || { value: '' } },
     spawnCwdInput: { value: '/repos/example' }, spawnLaunchBlockReason: () => '', isPathMissing: () => false, commandMissingProviderIds: new Set(), spawnLaunchBtn: { disabled: false }, spawnModelInput: { value: '' },
@@ -99,20 +99,36 @@ function spawnFixture(options: { status?: number; pendingHttp?: boolean; rejectN
       const placement = options.placement || 'pane'; if (placement === 'no-space') store.dismiss(id); return placement;
     }, noteSessionStartupOutcome: (id: string, definite: boolean, detail: string) => store.outcome(id, definite, detail),
     dropSessionStartup: (id: string) => { calls.push('drop'); store.dismiss(id); },
-    apiFetch: async () => { calls.push('http'); if (options.rejectNetwork) throw Error('synthetic disconnect'); if (options.pendingHttp) return new Promise(resolve => { resolveHttp = resolve; }); return { ok: (options.status || 200) === 200, status: options.status || 200 }; },
+    apiFetch: async (_path: string, init: any) => { calls.push('http'); bodies.push(JSON.parse(init.body)); if (options.rejectNetwork) throw Error('synthetic disconnect'); if (options.pendingHttp) return new Promise(resolve => { resolveHttp = resolve; }); return { ok: (options.status || 200) === 200, status: options.status || 200 }; },
     saveCwdHistory: no, spawnSubscriptionRow: { hidden: true }, spawnIsolateWorktree: { checked: false }, spawnDelegation: { checked: false }, spawnRememberApprovalSettings: { checked: true },
     mergeProviderBooleanSetting: (value: any) => value, mergeApprovalSettings: (value: any) => value,
     saveSpawnSettings: () => { calls.push('preferences'); return new Promise(() => {}); }, newSessionPanel: { hidden: false }, setSpawnOrchestrationMode: no,
     waitForTrackedSpawn: () => { calls.push('legacy-wait'); return Promise.resolve([7]); }, activateSession: () => { calls.push('activate'); }, spawnErrorMessage: async () => 'synthetic rejection',
-    alert: () => { calls.push('alert'); }, showToast: (text: string) => { notices.push(text); }, t: (key: string) => key, window: {} };
+    alert: () => { calls.push('alert'); }, showToast: (text: string) => { notices.push(text); }, t: (key: string) => key,
+    boardHandoff: null, setBoardHandoff: (next: any) => { context.boardHandoff = next; },
+    CustomEvent: class { constructor(public type: string) {} }, window: { dispatchEvent: (event: any) => { events.push(event.type); } } };
   runInNewContext(compile(moduleSource.slice(start, end)) + '\nglobalThis.spawn=spawnSession;', context);
-  return { context, calls, store, notices, resolveHttp: (value: any) => resolveHttp(value) };
+  return { context, calls, store, notices, bodies, events, resolveHttp: (value: any) => resolveHttp(value) };
 }
 test('actual click paints pending UI before slow HTTP, and slow prefs do not hold completion', async () => {
   const fixture = spawnFixture({ pendingHttp: true }); const pending = fixture.context.spawn(); await tick();
   assert.deepEqual(fixture.calls, ['pane', 'http']); assert.equal(fixture.context.newSessionPanel.hidden, true);
   fixture.resolveHttp({ ok: true, status: 200 }); await pending;
   assert.ok(fixture.calls.includes('preferences')); assert.ok(!fixture.calls.includes('legacy-wait')); assert.ok(!fixture.calls.includes('activate'));
+});
+test('a launch opened for work handed over from the board names that work once', async () => {
+  const named = { item_id: 'backlog/20260102-0a0b0c0d', request_id: 'REQ-20260102-11111111', title: 'Synthetic work' };
+  const ordinary = spawnFixture(); await ordinary.context.spawn();
+  assert.equal('board_handoff' in ordinary.bodies[0], false); assert.deepEqual(ordinary.events, []);
+  const started = spawnFixture(); started.context.boardHandoff = named; await started.context.spawn();
+  assert.deepEqual(started.bodies[0].board_handoff, { item_id: named.item_id, request_id: named.request_id });
+  assert.equal(started.context.boardHandoff, null); assert.deepEqual(started.events, ['many-ai-cli:board-handoff-started']);
+  // Taken elsewhere or taken back: the next launch from this form is an ordinary one.
+  const gone = spawnFixture({ status: 409 }); gone.context.boardHandoff = named; await gone.context.spawn();
+  assert.equal(gone.context.boardHandoff, null);
+  // Any other refusal keeps the work named, so a corrected form can be launched again.
+  const refused = spawnFixture({ status: 400 }); refused.context.boardHandoff = named; await refused.context.spawn();
+  assert.equal(refused.context.boardHandoff, named); assert.deepEqual(refused.events, []);
 });
 test('actual click distinguishes definitive refusal from transport uncertainty without retry', async () => {
   const refused = spawnFixture({ status: 403 }); await refused.context.spawn(); assert.equal(refused.store.requests.get('A')?.phase, 'failed');

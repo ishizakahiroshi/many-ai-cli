@@ -3,6 +3,7 @@ import { beginSessionStartup, dropSessionStartup, noteSessionStartupOutcome } fr
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { apiFetch, escapeHtml, showToast, token } from './util.js';
+import type { BoardHandoffRef } from './board-handoffs-model.js';
 import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, STORAGE_SPAWN_KEY, flushUserPrefsPut, setUserPref } from './user-prefs.js';
 import { sessions } from './state.js';
 import { activateSession, providerIconHtml } from './session-list.js';
@@ -53,13 +54,15 @@ export function openSpawnPanelIfClosed(): void {
 
 // C3（plan_memo-panel.md）: メモの「ここから起動」用。cwd と最初の指示をプリセットして
 // 新規セッションパネルを開く。メモは特定の provider を持たないので provider は変えない。
-let _openSpawnPanelWithImpl: ((opts: { cwd: string; prompt: string }) => void) | null = null;
+// boardHandoff: 看板の持ち主が任せた仕事（board-handoffs.ts）。付けて開いた起動だけ、その仕事として始まる。
+type SpawnPanelPreset = { cwd: string; prompt: string; boardHandoff?: BoardHandoffRef };
+let _openSpawnPanelWithImpl: ((opts: SpawnPanelPreset) => void) | null = null;
 
 /**
  * 新規セッションパネルを cwd / 最初の指示（initial prompt）を入れた状態で開く。
  * 起動そのものは行わない（起動ボタンは利用者が押す。メモ側から /api/spawn を直接呼ばない）。
  */
-export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void {
+export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
   _openSpawnPanelWithImpl?.(opts);
 }
 
@@ -83,6 +86,16 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
   const spawnProviderList = document.getElementById('spawn-provider-list');
   const spawnProviderNoteHelp = document.getElementById('spawn-provider-note-help');
   const spawnCliMissingNote = document.getElementById('spawn-cli-missing-note');
+  const spawnBoardHandoffNote = document.getElementById('spawn-board-handoff-note');
+  // 看板で任された仕事として起動する指定。別の入口でフォームを開いたとき・取り消したときは外す
+  // （外さないと、関係のない次の起動がその仕事を受けてしまう）。
+  let boardHandoff: BoardHandoffRef | null = null;
+  function setBoardHandoff(next: BoardHandoffRef | null): void {
+    boardHandoff = next;
+    if (!spawnBoardHandoffNote) return;
+    spawnBoardHandoffNote.hidden = !next;
+    spawnBoardHandoffNote.textContent = next ? t('board_handoffs_spawn_note', { title: next.title }) : '';
+  }
   let commandMissingProviderIds = new Set<string>();
   let spawnLaunchSequence = 0;
   const spawnRememberApprovalSettings = document.getElementById('spawn-remember-approval-settings') as HTMLInputElement | null;
@@ -2077,6 +2090,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
 
   // ボタン押下: パネル表示 + 保存設定を復元 / 未保存時は /api/info から CWD を取得
   async function openSpawnPanelForMode(orchestration: boolean): Promise<void> {
+    setBoardHandoff(null);
     if (!newSessionPanel.hidden) { newSessionPanel.hidden = true; return; }
     setSpawnOrchestrationMode(orchestration);
     const hasSavedCwd = loadSpawnSettings();
@@ -2119,6 +2133,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
   // 検知した provider と元 shell セッションの cwd をプリセットして新規セッションパネルを開く。
   async function openSpawnFor(provider: string, cwd: string): Promise<void> {
     // shell セッションからの誘導起動は常に通常モード（オーケストレーションではない）。
+    setBoardHandoff(null);
     setSpawnOrchestrationMode(false);
     loadSpawnSettings();
     if (cwd) {
@@ -2152,6 +2167,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
   // C3（plan_memo-panel.md）: メモの「ここから起動」の実体。cwd が空（メモが未分類）の
   // ときは openSpawnFor と同じく既存の入力値を残し、無ければ /api/info の cwd へ倒す。
   _openSpawnPanelWithImpl = (opts) => {
+    setBoardHandoff(opts.boardHandoff || null);
     setSpawnOrchestrationMode(false);
     loadSpawnSettings();
     if (opts.cwd) {
@@ -2180,7 +2196,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
     }
   };
 
-  spawnCancelBtn.addEventListener('click', () => { newSessionPanel.hidden = true; setSpawnOrchestrationMode(false); });
+  spawnCancelBtn.addEventListener('click', () => { newSessionPanel.hidden = true; setSpawnOrchestrationMode(false); setBoardHandoff(null); });
   spawnLaunchBtn.addEventListener('click', spawnSession);
   // Web folder browser — used when the OS native picker is unavailable
   // (headless Linux / remote Hub with no zenity|kdialog) or when env_kind is
@@ -2512,7 +2528,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
       }
     }
     if (e.key === 'Enter')  { cwdDropdown.hidden = true; if (!spawnLaunchBtn.disabled) spawnSession(); }
-    if (e.key === 'Escape') { cwdDropdown.hidden = true; newSessionPanel.hidden = true; }
+    if (e.key === 'Escape') { cwdDropdown.hidden = true; newSessionPanel.hidden = true; setBoardHandoff(null); }
     if (e.key === 'ArrowDown' && !cwdDropdown.hidden) {
       e.preventDefault();
       const first = cwdDropdown.querySelector('.cwd-dropdown-item');
@@ -2949,6 +2965,9 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
         const { roles, count } = collectOrchestrationRoles();
         if (count > 0) bodyObj.orchestration_roles = roles;
       }
+      // 任された仕事かどうかと、そのフォルダかどうかは Hub が看板と設定で確かめる（ここでは名指しするだけ）。
+      const submittedBoardHandoff = boardHandoff;
+      if (submittedBoardHandoff) bodyObj.board_handoff = { item_id: submittedBoardHandoff.item_id, request_id: submittedBoardHandoff.request_id };
       const spawnRequest = beginTrackedSpawn(1, spawnTabId);
       const submittedBooleans = { isolate_worktree: !!spawnIsolateWorktree?.checked, delegation: !!spawnDelegation?.checked };
       const rememberApprovalSettings = spawnRememberApprovalSettings?.checked ?? true;
@@ -2973,6 +2992,11 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...bodyObj, client_request_id: spawnRequest }),
       });
+      if (submittedBoardHandoff && (res.ok || res.status === 409)) {
+        // 始まった、または看板でもう開いていない（ほかで受けられた・取り下げられた）。
+        if (boardHandoff === submittedBoardHandoff) setBoardHandoff(null);
+        window.dispatchEvent(new CustomEvent('many-ai-cli:board-handoff-started'));
+      }
       if (res.ok) {
         saveCwdHistory(cwd);
         // Ollama route のモデルは default として保存しない。

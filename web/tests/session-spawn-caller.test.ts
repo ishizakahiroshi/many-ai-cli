@@ -115,7 +115,7 @@ test('actual spawn click keeps its tab through risk wait, preference save, and n
   updateSpawnLaunchButton:no,getCachedSpawnModelGroups:()=>[],isModelCompatibleWithProvider:()=>true,resolveRoute:()=>'',isCustomProviderValue:()=>false,
   readSpawnDefaults:()=>({provider_claude:'existing'}),hasProviderBooleanSetting:()=>false,spawnInitialPrompt:{value:''},selectedSubscriptionID:()=>'',
   effortForSpawnBody:()=>'',selectedEffort:()=>'',claudeModelSelection:null,codexModelSelection:null,isClaudeHighRisk:()=>true,
-  appConfirm:async()=>{tab='during-risk';return true;},spawnOrchestrationMode:false,
+  appConfirm:async()=>{tab='during-risk';return true;},spawnOrchestrationMode:false,boardHandoff:null,setBoardHandoff:no,
   beginTrackedSpawn:(_count:number,captured:string)=>{assert.equal(captured,'click-tab');return 'ordinary-id';},
   apiFetch:async(_path:string,init:any)=>{requestBody=JSON.parse(init.body);return {ok:true};},saveCwdHistory:no,
   getSpawnOpenTarget:()=> 'detached',getSpawnGridLayout:()=> '2x2',spawnDetachedPreset:{value:'shell-2x2'},

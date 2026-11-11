@@ -23,6 +23,7 @@ pub struct ServiceRouter {
     workspace: Option<Arc<dyn crate::files::WorkspaceReads>>,
     approvals: Option<ApprovalRoutes>,
     routines: Option<Arc<super::routines::RoutineHttp>>,
+    board_handoffs: Option<Arc<super::board_handoff_routes::BoardHandoffHttp>>,
     confirmations: Option<Arc<super::confirmations::ConfirmationHttp>>,
     children: Option<Arc<super::child_routes::ChildHttp>>,
     iris_execution: Option<Arc<super::iris_execution::IrisExecutionHttp>>,
@@ -225,6 +226,7 @@ impl ServiceRouter {
             workspace: None,
             approvals: None,
             routines: None,
+            board_handoffs: None,
             confirmations: None,
             children: None,
             iris_execution: None,
@@ -504,6 +506,13 @@ impl ServiceRouter {
     }
     pub fn with_routines(mut self, routines: Arc<super::routines::RoutineHttp>) -> Self {
         self.routines = Some(routines);
+        self
+    }
+    pub fn with_board_handoffs(
+        mut self,
+        owner: Arc<super::board_handoff_routes::BoardHandoffHttp>,
+    ) -> Self {
+        self.board_handoffs = Some(owner);
         self
     }
     pub(crate) fn owned_request_permit(
@@ -1105,6 +1114,7 @@ impl ServiceRouter {
             workspace: None,
             approvals: None,
             routines: None,
+            board_handoffs: None,
             confirmations: None,
             children: None,
             iris_execution: None,
@@ -1278,6 +1288,17 @@ impl ServiceRouter {
                     )
                 });
             return Dispatch::response(response);
+        }
+        if request.path == super::board_handoff_routes::PATH {
+            if let Err(error) = self.preflight(request, now) {
+                return Dispatch::response(error);
+            }
+            return Dispatch::response(match &self.board_handoffs {
+                Some(owner) => owner.list_authenticated(request).await,
+                None => {
+                    Response::error(503, "board_unavailable", "board service is not initialized")
+                }
+            });
         }
         if crate::files::ROUTES.contains(&request.path.as_str()) {
             if let Err(error) = self.preflight(request, now) {
@@ -1820,6 +1841,7 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
             &["GET", "POST", "PUT", "DELETE"]
         }
         p if p == "/api/routine-runs" || p.starts_with("/api/routine-runs/") => &["GET"],
+        super::board_handoff_routes::PATH => &["GET"],
         p if p == "/api/memos" || p.starts_with("/api/memos/") => {
             &["GET", "POST", "PATCH", "DELETE"]
         }

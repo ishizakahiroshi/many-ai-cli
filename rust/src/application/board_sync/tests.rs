@@ -539,6 +539,22 @@ async fn shelve(
             lock(&shelf.events).push(args);
             reply(serde_json::json!({"ok": true}))
         }
+        "board_accept_handoff" => {
+            let mut items = lock(&shelf.items);
+            let open = items.iter_mut().find(|item| {
+                item["item_id"] == args["item_id"]
+                    && item["handoff"]["state"] == "requested"
+                    && item["handoff"]["request_id"] == args["request_id"]
+            });
+            match open {
+                Some(item) => {
+                    item["handoff"]["state"] = "accepted".into();
+                    item["state"] = "in_progress".into();
+                    reply(serde_json::json!({"ok": true, "changed": true}))
+                }
+                None => reply(refused),
+            }
+        }
         _ => reply(refused),
     }
 }
@@ -1031,4 +1047,256 @@ fn commit_hashes_are_hex_words_with_a_letter_at_most_three_in_order() {
         ),
         ["0a1b2c3d4e5f60718293a4b5c6d7e8f901234567"]
     );
+}
+
+// ---- Work the board's owner handed over. ----
+
+fn handed_item(id: &str, request: &str, state: &str) -> serde_json::Value {
+    serde_json::json!({
+        "item_id": id, "project": "demo", "kind": "task", "title": "Check the closing price",
+        "state": "planned",
+        "handoff": {"state": state, "request_id": request, "requested_at": 1_700_000_000_000u64},
+    })
+}
+fn started_for(id: i64, cwd: &Path, db: i64, start_request: &str) -> SessionDetails {
+    let mut d = details(id, cwd, Some(db));
+    d.snapshot.client_request_id = start_request.into();
+    d
+}
+
+#[tokio::test]
+async fn handed_over_work_is_listed_with_the_folder_to_start_in() {
+    let (f, shelf) = linked().await;
+    shelf.put(handed_item(
+        "backlog/1",
+        "REQ-20260102-0a0b0c0d",
+        "requested",
+    ));
+    shelf.put(handed_item(
+        "backlog/2",
+        "REQ-20260102-11111111",
+        "accepted",
+    ));
+    shelf.put(serde_json::json!({
+        "item_id": "backlog/3", "project": "demo", "kind": "task", "title": "Not handed over",
+        "state": "planned", "handoff": null,
+    }));
+    shelf.put(serde_json::json!({
+        "item_id": "other/1", "project": "elsewhere", "kind": "task", "title": "Another project",
+        "state": "planned", "handoff": {"state": "requested", "request_id": "REQ-20260102-22222222"},
+    }));
+    let work = f.sync.handed_work().await;
+    assert_eq!(
+        work,
+        [HandedWork {
+            project: "demo".into(),
+            item_id: "backlog/1".into(),
+            request_id: "REQ-20260102-0a0b0c0d".into(),
+            title: "Check the closing price".into(),
+            requested_at: Some(1_700_000_000_000),
+            folder: f.repo.clone(),
+        }]
+    );
+    assert!(lock(&f.warnings).is_empty(), "{:?}", lock(&f.warnings));
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn without_settings_no_handed_over_work_is_asked_for() {
+    let f = fixture(false).await;
+    assert!(f.sync.handed_work().await.is_empty());
+    assert_eq!(f.board.calls.load(Ordering::SeqCst), 0);
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn a_session_started_for_handed_over_work_takes_it_and_writes_onto_it() {
+    let (f, shelf) = linked().await;
+    shelf.put(handed_item(
+        "backlog/1",
+        "REQ-20260102-0a0b0c0d",
+        "requested",
+    ));
+    let work = f.sync.handed_work().await.remove(0);
+    f.sync.claim("start-1", &work);
+    let d = started_for(31, &f.repo, 300, "start-1");
+    f.sync.session_started(&d);
+    shelf.put(plan_item("demo/plan/a", "docs/plan_a.md"));
+    f.sync
+        .turn_done(Some(&d), &done(31, "Looked the price up. 次: none"));
+    // Naming a plan does not move handed-over work away from where the owner put it.
+    f.sync
+        .turn_done(Some(&d), &done(31, "Wrote it down. 計画: docs/plan_a.md"));
+    noted(&shelf, "backlog/1", 2).await;
+    assert!(shelf.item("backlog/1").unwrap()["parent_id"].is_null());
+    let item = shelf.item("backlog/1").unwrap();
+    assert_eq!(item["handoff"]["state"], "accepted");
+    assert_eq!(item["state"], "in_progress");
+    assert_eq!(
+        item["title"], "Check the closing price",
+        "the owner's title stays"
+    );
+    let starts = shelf.events_of("backlog/1", "session_start");
+    assert_eq!(starts.len(), 1, "{starts:?}");
+    assert!(
+        starts[0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("REQ-20260102-0a0b0c0d"),
+        "{starts:?}"
+    );
+    assert!(shelf.work_ids().is_empty(), "{:?}", shelf.work_ids());
+    f.sync.session_ended(LiveSessionId(31), "exited");
+    tokio::time::timeout(Duration::from_secs(20), async {
+        while shelf.events_of("backlog/1", "session_end").is_empty() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(shelf.item("backlog/1").unwrap()["state"], "done");
+    // The start request is used once: a later session with the same one is ordinary.
+    let again = started_for(32, &f.repo, 301, "start-1");
+    f.sync.session_started(&again);
+    f.sync.turn_done(Some(&again), &done(32, "Other work."));
+    noted(&shelf, "session/301", 1).await;
+    assert!(lock(&f.warnings).is_empty(), "{:?}", lock(&f.warnings));
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn a_request_someone_else_took_leaves_the_session_an_ordinary_one() {
+    let (f, shelf) = linked().await;
+    shelf.put(handed_item(
+        "backlog/1",
+        "REQ-20260102-0a0b0c0d",
+        "requested",
+    ));
+    let work = f.sync.handed_work().await.remove(0);
+    f.sync.claim("start-2", &work);
+    // Another machine takes it first.
+    lock(&shelf.items)
+        .iter_mut()
+        .find(|item| item["item_id"] == "backlog/1")
+        .unwrap()["handoff"]["state"] = "accepted".into();
+    let d = started_for(33, &f.repo, 302, "start-2");
+    f.sync.session_started(&d);
+    f.sync
+        .turn_done(Some(&d), &done(33, "Did the work anyway."));
+    noted(&shelf, "session/302", 1).await;
+    assert_eq!(shelf.work_ids(), ["session/302"]);
+    assert_eq!(shelf.item("backlog/1").unwrap()["state"], "planned");
+    assert!(shelf.events_of("backlog/1", "session_start").is_empty());
+    assert!(shelf.events_of("backlog/1", "note").is_empty());
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn a_start_for_another_project_does_not_take_the_work() {
+    let (f, shelf) = linked().await;
+    shelf.put(handed_item(
+        "backlog/1",
+        "REQ-20260102-0a0b0c0d",
+        "requested",
+    ));
+    let mut work = f.sync.handed_work().await.remove(0);
+    work.project = "elsewhere".into();
+    f.sync.claim("start-3", &work);
+    let d = started_for(34, &f.repo, 303, "start-3");
+    f.sync.session_started(&d);
+    f.sync.turn_done(Some(&d), &done(34, "Unrelated work."));
+    noted(&shelf, "session/303", 1).await;
+    assert_eq!(
+        shelf.item("backlog/1").unwrap()["handoff"]["state"],
+        "requested"
+    );
+    f.cancel.cancel();
+}
+
+fn start_request(body: serde_json::Value) -> crate::hub::http::Request {
+    crate::hub::http::Request {
+        method: "POST".into(),
+        path: "/api/spawn".into(),
+        body: body.to_string().into_bytes(),
+        ..Default::default()
+    }
+}
+async fn claimed(f: &Fixture, body: serde_json::Value) -> Result<Option<String>, (u16, String)> {
+    crate::hub::spawn_routes::claim_handoff(Some(&f.sync), &start_request(body))
+        .await
+        .map_err(|response| {
+            let body: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
+            (response.status, body["error"].as_str().unwrap().to_owned())
+        })
+}
+
+#[tokio::test]
+async fn a_start_is_tied_to_handed_over_work_only_when_the_board_and_the_folder_agree() {
+    let (f, shelf) = linked().await;
+    shelf.put(handed_item(
+        "backlog/1",
+        "REQ-20260102-0a0b0c0d",
+        "requested",
+    ));
+    let named = serde_json::json!({"item_id": "backlog/1", "request_id": "REQ-20260102-0a0b0c0d"});
+    let inside_repo = f.repo.join("src");
+    // An ordinary start names no work and asks the board nothing.
+    let calls = shelf.calls.load(Ordering::SeqCst);
+    assert_eq!(
+        claimed(
+            &f,
+            serde_json::json!({"client_request_id": "spawn-1", "cwd": f.repo})
+        )
+        .await,
+        Ok(None)
+    );
+    assert_eq!(shelf.calls.load(Ordering::SeqCst), calls);
+    for (body, refusal) in [
+        (
+            serde_json::json!({"cwd": f.repo, "board_handoff": named}),
+            (400, "board_handoff_invalid"),
+        ),
+        (
+            serde_json::json!({"client_request_id": "spawn-1", "cwd": f.repo,
+                "board_handoff": {"item_id": "backlog/1", "request_id": "REQ-20260102-ffffffff"}}),
+            (409, "board_handoff_gone"),
+        ),
+        (
+            serde_json::json!({"client_request_id": "spawn-1", "cwd": f.root.path(), "board_handoff": named}),
+            (400, "board_handoff_folder"),
+        ),
+        (
+            serde_json::json!({"client_request_id": "spawn-1", "cwd": "", "board_handoff": named}),
+            (400, "board_handoff_folder"),
+        ),
+    ] {
+        let refused = claimed(&f, body.clone()).await.unwrap_err();
+        assert_eq!((refused.0, refused.1.as_str()), refusal, "{body}");
+    }
+    assert_eq!(
+        claimed(
+            &f,
+            serde_json::json!({"client_request_id": "spawn-1", "cwd": inside_repo, "board_handoff": named}),
+        )
+        .await,
+        Ok(Some("spawn-1".into()))
+    );
+    // The session that registers with that start takes the work.
+    let d = started_for(41, &f.repo, 400, "spawn-1");
+    f.sync.session_started(&d);
+    f.sync.turn_done(Some(&d), &done(41, "Done."));
+    noted(&shelf, "backlog/1", 1).await;
+    assert_eq!(
+        shelf.item("backlog/1").unwrap()["handoff"]["state"],
+        "accepted"
+    );
+    // Without a board the start is refused, not started as something else.
+    let refused = crate::hub::spawn_routes::claim_handoff(
+        None,
+        &start_request(serde_json::json!({"client_request_id": "spawn-2", "cwd": f.repo, "board_handoff": named})),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(refused.status, 503);
+    f.cancel.cancel();
 }
