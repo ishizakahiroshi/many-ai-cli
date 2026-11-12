@@ -47,6 +47,71 @@ mod transcript_path;
 type ActiveRoutineProbe = dyn Fn(&str, Timestamp) -> bool + Send + Sync;
 type RoutineRecorder = dyn Fn(&proto::DoneSummary) -> Result<(), SessionError> + Send + Sync;
 type ConductorRenderer = dyn Fn(&OrchestrationId) -> Result<String, SessionError> + Send + Sync;
+/// Types a notice into a parent through the orchestration program, which holds
+/// it while the parent cannot take it (audit N04).
+type ParentNotice = dyn Fn(SessionBinding, String, TaskCancellation) -> CoreFuture<'static, Result<(), SessionError>>
+    + Send
+    + Sync;
+/// Types a request the Hub makes of an AI session (a handoff note, a turn
+/// summary) as guarded input (audit N05). These used to be plain internal input:
+/// pasted and entered into whatever the session showed, an approval prompt
+/// included, where the Enter is the answer. `Ok(Some(rest))` is exactly what was
+/// not written because the session cannot take it now.
+async fn type_guarded(
+    core: &SessionEngine,
+    binding: SessionBinding,
+    bytes: Vec<u8>,
+) -> Result<Option<Vec<u8>>, SessionError> {
+    let receipt = core
+        .submit(
+            binding,
+            InputRequest {
+                bytes,
+                authority: InputAuthority::GuardedInternal,
+            },
+            Timestamp::now(),
+            &TaskCancellation::default(),
+        )
+        .await;
+    match receipt.disposition {
+        InputDisposition::TransportWritten { .. } => Ok(None),
+        InputDisposition::Failed {
+            unsent_remainder,
+            detail,
+        } if guarded_input_held(&detail) => Ok(Some(unsent_remainder)),
+        _ => Err(SessionError::Transport(
+            "internal prompt delivery failed".into(),
+        )),
+    }
+}
+/// Keeps trying `rest` until the session takes it, for at most `wait`. `false`
+/// when it was never typed: the caller gives the request up.
+async fn type_when_free(
+    workers: &Weak<SessionWorkers>,
+    binding: SessionBinding,
+    mut rest: Vec<u8>,
+    wait: Duration,
+    cancel: &TaskCancellation,
+) -> bool {
+    let until = tokio::time::Instant::now() + wait;
+    loop {
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_millis(500)) => {}
+            _ = cancel.token().cancelled() => return false,
+        }
+        let Some(owner) = workers.upgrade() else {
+            return false;
+        };
+        let Ok(core) = owner.core() else {
+            return false;
+        };
+        match type_guarded(&core, binding, rest).await {
+            Ok(None) => return true,
+            Ok(Some(left)) if tokio::time::Instant::now() < until => rest = left,
+            _ => return false,
+        }
+    }
+}
 type WorkflowCompletion =
     dyn Fn(SessionBinding, &proto::WorkflowProgress) -> Result<(), SessionError> + Send + Sync;
 /// The `次:` and `未検証:` tails of a DONE summary as one handoff line.
@@ -108,6 +173,7 @@ pub struct SessionWorkers {
     this: Weak<SessionWorkers>,
     branch_refresh: Arc<branch_refresh::Owner>,
     conductor_renderer: OnceLock<Arc<ConductorRenderer>>,
+    parent_notice: OnceLock<Arc<ParentNotice>>,
     active_routine_probe: OnceLock<Arc<ActiveRoutineProbe>>,
     routine_recorder: OnceLock<Arc<RoutineRecorder>>,
     observation_registry: OnceLock<super::spawn_policy::RegistrySnapshot>,
@@ -178,6 +244,7 @@ impl SessionWorkers {
             started: false.into(),
             this: this.clone(),
             conductor_renderer: OnceLock::new(),
+            parent_notice: OnceLock::new(),
             active_routine_probe: OnceLock::new(),
             routine_recorder: OnceLock::new(),
             observation_registry: OnceLock::new(),
@@ -220,6 +287,11 @@ impl SessionWorkers {
         self.conductor_renderer
             .set(renderer)
             .map_err(|_| SessionError::InvalidRequest("conductor renderer already bound".into()))
+    }
+    pub fn set_parent_notice(&self, notice: Arc<ParentNotice>) -> Result<(), SessionError> {
+        self.parent_notice
+            .set(notice)
+            .map_err(|_| SessionError::InvalidRequest("parent notice already bound".into()))
     }
     pub fn set_active_routine_probe(
         &self,
@@ -758,11 +830,33 @@ impl InitialPromptCallbacks for SessionWorkers {
         cancel: &'a TaskCancellation,
     ) -> CoreFuture<'a, Result<(), SessionError>> {
         Box::pin(async move {
+            // Audit N04: the parent may be on an approval prompt by now, and the
+            // Enter of this notice would answer it. The orchestration program
+            // types it as guarded input and holds it until the parent is free.
+            let text = format!("[MANY-AI-CLI-ORCHESTRATION-ERROR] {limit}: {detail}");
+            if let Some(notice) = self.parent_notice.get() {
+                return notice(parent, text, cancel.clone()).await;
+            }
+            // No orchestration program is bound: guarded all the same, without a
+            // place to hold it. The board already carries the failure.
             let core = self.core()?;
-            let receipt = core.submit(parent, InputRequest {bytes: format!("\x1b[200~[MANY-AI-CLI-ORCHESTRATION-ERROR] {limit}: {detail}\x1b[201~\r").into_bytes(), authority: InputAuthority::Internal}, Timestamp::now(), cancel).await;
+            let receipt = core
+                .submit(
+                    parent,
+                    InputRequest {
+                        bytes: format!("\x1b[200~{text}\x1b[201~\r").into_bytes(),
+                        authority: InputAuthority::GuardedInternal,
+                    },
+                    Timestamp::now(),
+                    cancel,
+                )
+                .await;
             match receipt.disposition {
-                InputDisposition::TransportWritten { .. } | InputDisposition::Deferred { .. } => {
-                    Ok(())
+                InputDisposition::TransportWritten { .. } => Ok(()),
+                InputDisposition::Failed { detail, .. } if guarded_input_held(&detail) => {
+                    Err(SessionError::Transport(format!(
+                        "parent startup failure notice was not typed: {detail}"
+                    )))
                 }
                 _ => Err(SessionError::Transport(
                     "parent startup failure notice could not be delivered".into(),
@@ -820,25 +914,36 @@ impl GitTurnCompletionCallbacks for SessionWorkers {
                 cfg.user_prefs.display.lang.is_empty()
                     || cfg.user_prefs.display.lang.eq_ignore_ascii_case("ja"),
             );
-            let receipt = core
-                .submit(
-                    binding,
-                    InputRequest {
-                        bytes: format!("\x1b[200~{prompt}\x1b[201~\r").into_bytes(),
-                        authority: InputAuthority::Internal,
-                    },
-                    Timestamp::now(),
-                    &TaskCancellation::default(),
-                )
-                .await;
-            match receipt.disposition {
-                InputDisposition::TransportWritten { .. } | InputDisposition::Deferred { .. } => {
-                    Ok(())
+            let bytes = format!("\x1b[200~{prompt}\x1b[201~\r").into_bytes();
+            let Some(rest) = type_guarded(&core, binding, bytes).await.map_err(|_| {
+                SessionError::Transport("turn summary prompt delivery failed".into())
+            })?
+            else {
+                return Ok(());
+            };
+            // Audit N05: the session is on an approval prompt (or not ready).
+            // The request is typed once it is free, early enough for an answer
+            // inside the 60 seconds `begin_turn_summary` waits; otherwise that
+            // wait runs out and no summary is recorded for this turn.
+            let retry = self.tasks.effect_permit().map_err(|_| {
+                SessionError::Transport("turn summary prompt delivery unavailable".into())
+            })?;
+            let workers = self.this.clone();
+            let cancel = retry.cancellation();
+            drop(retry.start(async move {
+                if !type_when_free(&workers, binding, rest, Duration::from_secs(20), &cancel).await
+                    && !cancel.token().is_cancelled()
+                    && let Some(owner) = workers.upgrade()
+                {
+                    (owner.warning)(
+                        "turn summary prompt",
+                        &SessionError::Transport(
+                            "not typed: the session was waiting on an approval or not ready".into(),
+                        ),
+                    );
                 }
-                _ => Err(SessionError::Transport(
-                    "turn summary prompt delivery failed".into(),
-                )),
-            }
+            }));
+            Ok(())
         })
     }
     fn after_git_turn_broadcast<'a>(

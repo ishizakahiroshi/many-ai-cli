@@ -136,6 +136,9 @@ impl ChildControl {
                 let Some(session) = self.core.details(id) else {
                     return Response::error(404, "not_found", "session not found");
                 };
+                if let Some(refusal) = self.cannot_type(&session) {
+                    return refusal;
+                }
                 if let Err(error) = self.enqueue(
                     session.binding,
                     &session.snapshot.provider,
@@ -222,6 +225,9 @@ impl ChildControl {
                         );
                     }
                 }
+                if let Some(refusal) = self.cannot_type(&child) {
+                    return refusal;
+                }
                 let safe = sanitize_inject_text(&body.text);
                 let text = format!(
                     "\n[orchestration] instruction from conductor (session={}):\n{safe}\n",
@@ -261,6 +267,34 @@ impl ChildControl {
                 )
             }
             _ => Response::error(404, "not_found", "not found"),
+        }
+    }
+    /// Audit N06: text typed into an AI session that shows an approval prompt
+    /// answers the prompt (its Enter) or dismisses it (the ESC of `interrupt`)
+    /// in the user's place. The caller is told so and sends again later, as for
+    /// a child that has not taken its launch instructions. A session that is
+    /// reconnecting or has queued input is refused too: text queued there is
+    /// replayed later without this check.
+    fn cannot_type(&self, target: &SessionDetails) -> Option<Response> {
+        if target.snapshot.provider == "shell" {
+            return None;
+        }
+        let id = target.binding.session.0;
+        match self.core.guarded_input_block(target.binding)? {
+            INPUT_BLOCKED_BY_APPROVAL => Some(Response::error(
+                409,
+                "session_waiting_approval",
+                &format!(
+                    "session id={id} is waiting on an approval prompt; nothing was typed. Text typed now would answer or dismiss that prompt in the user's place. The user answers it in that session; send this again after the session has moved on"
+                ),
+            )),
+            _ => Some(Response::error(
+                409,
+                "session_not_ready",
+                &format!(
+                    "session id={id} is starting, reconnecting or has queued input; nothing was typed. Send this again shortly"
+                ),
+            )),
         }
     }
     fn enqueue(
@@ -315,13 +349,20 @@ impl ChildControl {
                 )
                 .into_bytes()
             });
+            // Guarded for an AI session: an approval that opens after the caller
+            // was answered still stops the frame under the session lock (N06).
+            let authority = if shell {
+                InputAuthority::Internal
+            } else {
+                InputAuthority::GuardedInternal
+            };
             for bytes in frames {
                 let receipt = core
                     .submit(
                         binding,
                         InputRequest {
                             bytes,
-                            authority: InputAuthority::Internal,
+                            authority: authority.clone(),
                         },
                         now,
                         &cancellation,
@@ -335,6 +376,8 @@ impl ChildControl {
                         "session inject delivery",
                         &SessionError::Transport("internal input delivery failed".into()),
                     );
+                    // The text never follows an ESC that was not written.
+                    break;
                 }
             }
         }));

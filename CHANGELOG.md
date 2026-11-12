@@ -232,6 +232,31 @@ Release artifacts are published at
   record of the call). Prompts of the other CLIs, and commands that contain a
   secret-looking value, parentheses, braces, a comment or several lines, wait
   for you; you can still answer them from the dashboard or a notification.
+- **Text the Hub types on its own no longer answers an approval prompt.**
+  When the Hub types into an AI session by itself, it pastes the text and
+  presses Enter. If the session was showing an approval prompt at that moment,
+  the Enter answered the prompt for you. Relay reminders and conductor notices
+  were already held back while a prompt was open; these were not, and now are:
+  - the notice a parent gets when a child's launch instructions could not be
+    delivered (held, and typed once the parent has moved on);
+  - the request for a handoff note and the request for a turn summary (typed
+    once the prompt is gone; a note request that cannot be typed within a
+    minute is reported as "not written");
+  - the request for an AI-written commit message from the Git view (refused
+    with a message while the session waits on an approval);
+  - `many-ai-cli orchestrate send` and the `inject` API (refused with HTTP 409
+    `session_waiting_approval`, or `session_not_ready` while the session is
+    starting, reconnecting or has queued input; nothing is typed, and the
+    caller sends again later). An `inject` with `interrupt` no longer sends
+    its ESC to a prompt either.
+
+  Two cases where the Hub did not notice the prompt are closed as well. After
+  you answered a Claude Code Bash prompt from the Hub, a second command whose
+  first line was the same (a heredoc `git commit -m "$(cat <<'EOF'`, for
+  example) was taken for the prompt you had just answered: no approval card
+  appeared, and the session did not count as waiting. Every line of the command
+  now tells two prompts apart. And a prompt that is on the screen now holds
+  the Hub's own typing back even when no approval card was opened for it.
 - **A relay can no longer skip the PIN.** With a PIN set, a connection counts
   as local only when it proves it: the dashboard the Hub opened itself carries
   a cookie it got with its launch code, and the many-ai-cli commands on this

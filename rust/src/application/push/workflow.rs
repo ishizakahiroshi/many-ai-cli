@@ -100,6 +100,7 @@ mod tests {
                 version: ApprovalStateVersion(0),
                 record: None,
             },
+            prompt_visible: false,
             workflow: None,
             subagents: None,
             done: None,

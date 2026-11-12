@@ -102,8 +102,11 @@ impl SessionEngine {
             if s.native_tail != tail {
                 s.native_tail = tail;
                 let phrases = self.approval_phrases_for(&s.snapshot.provider);
-                if let Some(native) = detect::detect_native(&s.snapshot.provider, &lines, &phrases)
-                {
+                let native = detect::detect_native(&s.snapshot.provider, &lines, &phrases);
+                // Kept apart from the record: `observe` below opens none for a
+                // prompt it takes for the one just answered (audit N03).
+                s.native_prompt_visible = native.is_some();
+                if let Some(native) = native {
                     // The record shows the whole command when the transcript
                     // confirms it, and never a low risk for an unconfirmed one.
                     let (native, _) = s.authorize_native(native);
@@ -451,6 +454,7 @@ impl SessionEngine {
             s.snapshot.first_message.clear();
             s.snapshot.last_message.clear();
             s.native_tail.clear();
+            s.native_prompt_visible = false;
             s.approval_reservation = None;
             s.marker_suppression.reset_history();
             effects.0.extend(s.approval.reset_history(now).0);

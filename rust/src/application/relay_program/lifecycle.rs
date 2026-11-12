@@ -706,6 +706,7 @@ impl RelayProgram {
                 // idle nor toward a timeout. The board hears once if a reminder
                 // falls due meanwhile.
                 if details.approval.record.is_some()
+                    || details.prompt_visible
                     || details.snapshot.activity.awaiting_approval
                     || details.snapshot.activity.awaiting_user
                 {

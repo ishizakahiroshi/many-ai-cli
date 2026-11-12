@@ -1009,3 +1009,115 @@ async fn guarded_internal_text_never_waits_in_the_reconnect_queue() {
         "only ordinary input was queued and replayed"
     );
 }
+
+// Audit N03: text the Hub types on its own must stop at a prompt that is on the
+// screen, whether or not a record was opened for it.
+async fn heading_prompt(f: &Fixture, session: SessionBinding, lines: &[&str]) {
+    let block: String = lines.iter().map(|line| format!("   {line}\r\n")).collect();
+    let text = format!(
+        "\x1b[2J\x1b[H Bash command\r\n\r\n{block}   Synthetic description\r\n\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No"
+    );
+    screen(f, session, &text).await;
+}
+async fn screen(f: &Fixture, session: SessionBinding, text: &str) {
+    f.sink
+        .apply(
+            f.engine
+                .observe_output(
+                    session,
+                    OutputChunk {
+                        total_pty_bytes: text.len() as i64,
+                        bytes: text.as_bytes().to_vec(),
+                    },
+                    now(),
+                )
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+}
+/// The user answers the open prompt on the Hub's approval card.
+async fn answer_on_the_hub(f: &Fixture, session: SessionBinding) {
+    let reserved = f
+        .engine
+        .prepare_and_send(
+            NativeActionRequest {
+                binding: binding(f, session),
+                selection: NativeActionSelection::ApproveOnce,
+                origin: NativeActionOrigin::User,
+            },
+            &TaskCancellation::default(),
+        )
+        .await
+        .unwrap();
+    f.sink
+        .apply(f.engine.commit(reserved, now()).unwrap())
+        .await
+        .unwrap();
+    assert!(!pending(f, session));
+}
+fn held_by_approval(receipt: InputReceipt) {
+    let InputDisposition::Failed {
+        unsent_remainder,
+        detail,
+    } = receipt.disposition
+    else {
+        panic!("guarded text must be held: {:?}", receipt.disposition);
+    };
+    assert_eq!(detail, INPUT_BLOCKED_BY_APPROVAL);
+    assert_eq!(unsent_remainder, RELAY_TEXT);
+}
+
+#[tokio::test]
+async fn audit_n03_a_second_command_that_starts_like_the_answered_one_is_a_new_approval() {
+    let f = fixture();
+    let session = plain_session(&f).await;
+    let first_line = r#"git commit -m "$(cat <<'EOF'"#;
+    heading_prompt(
+        &f,
+        session,
+        &[first_line, "docs: update readme", "EOF", r#")""#],
+    )
+    .await;
+    let first = binding(&f, session);
+    answer_on_the_hub(&f, session).await;
+    // Same question, same options, same first line; the rest is another command.
+    heading_prompt(
+        &f,
+        session,
+        &[first_line, r#"x"; ./run.sh; echo ""#, "EOF", r#")""#],
+    )
+    .await;
+    assert!(
+        pending(&f, session),
+        "the second command needs its own answer"
+    );
+    assert_ne!(binding(&f, session).candidate_key, first.candidate_key);
+    held_by_approval(guarded(&f, session).await);
+    assert_eq!(sent(&f), vec![b"\r".to_vec()], "only the user's answer");
+}
+
+#[tokio::test]
+async fn audit_n03_guarded_text_is_held_by_a_prompt_on_the_screen_that_has_no_record() {
+    let f = fixture();
+    let session = native_session(&f, "git status", "Yes", true).await;
+    answer_on_the_hub(&f, session).await;
+    screen(&f, session, "\x1b[2J\x1b[HWorking...").await;
+    assert!(!f.engine.details(session.session).unwrap().prompt_visible);
+    // The CLI asks the very same thing again in the same turn. It is taken for
+    // the prompt just answered, so no record opens and no card is shown.
+    repaint(&f, session, "git status", "Yes", true).await;
+    assert!(
+        !pending(&f, session),
+        "fixture must reproduce the suppressed record"
+    );
+    assert!(f.engine.details(session.session).unwrap().prompt_visible);
+    held_by_approval(guarded(&f, session).await);
+    assert_eq!(sent(&f), vec![b"\r".to_vec()], "only the user's answer");
+    // Positive control: with the prompt gone the same text is typed.
+    screen(&f, session, "\x1b[2J\x1b[HWorking...").await;
+    assert!(matches!(
+        guarded(&f, session).await.disposition,
+        InputDisposition::TransportWritten { .. }
+    ));
+}

@@ -28,8 +28,13 @@ impl Session {
     /// written now, if it cannot (audit U27). An open approval would take its
     /// Enter as the answer. During startup, queued input or a reconnect it would
     /// have to wait in the reconnect queue, which replays without this check.
-    fn guarded_input_block(&self) -> Option<&'static str> {
+    ///
+    /// Audit N03: a prompt on the screen counts without a record. After the Hub
+    /// answers one prompt, the next that reads the same (same question and
+    /// options) gets no record, yet it would take the Enter all the same.
+    pub(super) fn guarded_input_block(&self) -> Option<&'static str> {
         if self.approval.record().is_some()
+            || self.native_prompt_visible
             || self.snapshot.activity.awaiting_approval
             || self.snapshot.activity.awaiting_user
         {
@@ -53,6 +58,17 @@ impl Drop for FrameReservationGuard<'_> {
     }
 }
 impl SessionEngine {
+    /// Why text the Hub types on its own (`GuardedInternal`) would not be
+    /// written to this session now: `INPUT_BLOCKED_BY_APPROVAL`,
+    /// `INPUT_NOT_READY`, or `None`. For answering a caller before the write is
+    /// started; the write itself checks again under the lock.
+    pub fn guarded_input_block(&self, binding: SessionBinding) -> Option<&'static str> {
+        let mut state = lock(&self.state);
+        match state.session(binding) {
+            Ok(session) => session.guarded_input_block(),
+            Err(_) => Some(INPUT_NOT_READY),
+        }
+    }
     pub(super) fn input_ticket(
         &self,
         binding: SessionBinding,

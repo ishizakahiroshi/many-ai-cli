@@ -82,6 +82,31 @@ fn candidate_identity_ignores_labels_order_and_reflow() {
     assert_ne!(x.key, y.key);
 }
 #[test]
+fn audit_n03_heading_prompts_differ_by_every_command_line_and_survive_rewrap() {
+    // Only the first line under the heading was in the identity, so a second
+    // command that starts alike was the prompt just answered: no record.
+    let key = |context: &str| {
+        candidate(
+            "claude",
+            "native",
+            "Do you want to proceed?",
+            context,
+            &[option(1, "Yes", ""), option(2, "No", "")],
+            ApprovalSourceEpoch(1),
+        )
+        .key
+    };
+    let first = " Bash command\n\n   git commit -m \"$(cat <<'EOF'\n   docs: update readme\n   EOF\n   )\"\n   Synthetic description\n\n Do you want to proceed?\n❯ 1. Yes\n  2. No";
+    let second = first.replace("docs: update readme", "x\"; ./run.sh; echo \"");
+    assert_ne!(key(first), key(&second));
+    // The same command at another width, with the focus on the other option.
+    let redrawn = first
+        .replace("docs: update readme", "docs: update\n   readme")
+        .replace("❯ 1. Yes\n  2. No", "  1. Yes\n❯ 2. No");
+    assert_ne!(redrawn, first);
+    assert_eq!(key(first), key(&redrawn));
+}
+#[test]
 fn marker_identity_and_corruption_classification() {
     let a = format!("{OPEN}\nQ1 choose?\n1. Yes\n2. No\nN. User specifies\n{CLOSE}");
     let b = format!("{OPEN}\nQ1 choose?\n2. deny\n1. allow\n{CLOSE}");

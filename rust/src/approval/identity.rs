@@ -1,6 +1,6 @@
 //! Candidate identity material exactly follows approval_identity.go. Labels,
 //! record signature and replay epoch are deliberately not suppression identity.
-use super::summary::{command_from_line, summarize};
+use super::summary::{command_from_line, command_heading, summarize};
 use crate::proto::{
     ApprovalOption,
     core::{ApprovalSourceEpoch, CandidateIdentity},
@@ -87,12 +87,34 @@ pub fn question_with_context(question: &str, context: &str, options: &[ApprovalO
     if options.iter().any(|o| !o.send_text.is_empty()) || command_from_line(question).is_some() {
         return question.into();
     }
-    let subject = summarize(question, context).command;
+    let subject =
+        heading_subject(question, context).unwrap_or_else(|| summarize(question, context).command);
     if subject.is_empty() || normalize(&subject) == normalize(question) {
         question.into()
     } else {
         format!("{}\n{subject}", question.trim())
     }
+}
+/// Everything a command heading prompt shows between the heading and the
+/// question (audit N03). `summarize` keeps only the first line under the heading,
+/// so two commands that start alike (`git commit -m "$(cat <<'EOF'`) were one
+/// candidate, and the second prompt was taken for the one just answered. White
+/// space is dropped: the same command wraps differently at another width.
+fn heading_subject(question: &str, context: &str) -> Option<String> {
+    let question = question.trim();
+    if question.is_empty() || command_heading(question) {
+        return None;
+    }
+    let mut lines = context
+        .split('\n')
+        .skip_while(|line| !command_heading(line.trim()));
+    lines.next()?;
+    let body: String = lines
+        .take_while(|line| line.trim() != question)
+        .flat_map(str::chars)
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    (!body.is_empty()).then_some(body)
 }
 pub fn marker_candidate(
     provider: &str,

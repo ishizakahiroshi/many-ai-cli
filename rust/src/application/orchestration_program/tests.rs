@@ -672,6 +672,84 @@ async fn interrupt_notice_is_held_while_the_conductor_waits_on_an_approval() {
     assert!(lock(&f.owner.state).held.is_empty());
 }
 #[tokio::test]
+async fn audit_n04_a_childs_failed_start_is_not_typed_into_the_parents_approval_prompt() {
+    use crate::orchestration::initial_prompt::InitialPromptCallbacks;
+    let f = fixture().await;
+    // The same binding the Hub makes at startup.
+    let program = Arc::downgrade(&f.owner);
+    f.owner
+        .deps
+        .workers
+        .set_parent_notice(Arc::new(move |parent, text, cancel| {
+            let program = program.clone();
+            Box::pin(async move {
+                program
+                    .upgrade()
+                    .ok_or(SessionError::Shutdown)?
+                    .notify_parent(parent, text, cancel)
+                    .await
+            })
+        }))
+        .unwrap();
+    let record = |f: &Fixture| {
+        f.core
+            .details(f.binding.session)
+            .unwrap()
+            .approval
+            .record
+            .is_some()
+    };
+    // The parent went on to its next command while the child was starting.
+    output(
+        &f,
+        f.binding,
+        "\x1b[2J\x1b[HRun: git push\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No",
+        Timestamp::now(),
+    );
+    assert!(record(&f));
+    f.owner
+        .deps
+        .workers
+        .notify_parent_failure(
+            f.binding,
+            "child_input_blocked",
+            "role=worker id=9: the launch instructions were not delivered".into(),
+            &TaskCancellation::default(),
+        )
+        .await
+        .unwrap();
+    f.owner.flush_held().await;
+    assert!(
+        lock(&f.io.sent).is_empty(),
+        "the notice's Enter would have answered the parent's prompt"
+    );
+    assert!(record(&f), "the approval stays for the user");
+    for step in 0..8 {
+        if !record(&f) {
+            break;
+        }
+        output(
+            &f,
+            f.binding,
+            &format!("\x1b[2J\x1b[Hidle {step}"),
+            Timestamp::now(),
+        );
+    }
+    assert!(!record(&f), "the synthetic approval must close");
+    f.owner.flush_held().await;
+    let sent = lock(&f.io.sent).clone();
+    assert_eq!(
+        sent.first().map(Vec::as_slice),
+        Some(
+            b"\x1b[200~[MANY-AI-CLI-ORCHESTRATION-ERROR] child_input_blocked: role=worker id=9: the launch instructions were not delivered\x1b[201~"
+                .as_slice()
+        ),
+        "the held notice is typed once the parent can take it"
+    );
+    assert_eq!(sent.last().map(Vec::as_slice), Some(b"\r".as_slice()));
+    assert!(lock(&f.owner.state).held.is_empty());
+}
+#[tokio::test]
 async fn initial_gate_and_failed_transport_keep_fifo_out_of_reconnect_input() {
     let f = fixture().await;
     f.core

@@ -735,6 +735,19 @@ impl HubComposition {
                     .conductor_prompt(id))
             }))
             .map_err(session_error)?;
+        let notifier = Arc::downgrade(&orchestration);
+        workers
+            .set_parent_notice(Arc::new(move |parent, text, cancel| {
+                let notifier = notifier.clone();
+                Box::pin(async move {
+                    notifier
+                        .upgrade()
+                        .ok_or(SessionError::Shutdown)?
+                        .notify_parent(parent, text, cancel)
+                        .await
+                })
+            }))
+            .map_err(session_error)?;
         let preparer = crate::orchestration::child_launch::ChildPreparer::new(
             &paths,
             context.cwd.clone(),

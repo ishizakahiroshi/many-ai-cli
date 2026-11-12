@@ -81,7 +81,7 @@ impl HandoffHttpHooks for SessionWorkers {
     fn request_note<'a>(
         &'a self,
         id: LiveSessionId,
-        now: Timestamp,
+        _now: Timestamp,
     ) -> CoreFuture<'a, Result<PathBuf, &'static str>> {
         Box::pin(async move {
             let cfg = self.config().map_err(|_| "handoff_disabled")?;
@@ -109,41 +109,54 @@ impl HandoffHttpHooks for SessionWorkers {
                 .effect_permit()
                 .map_err(|_| "session_not_writable")?;
             let seq = core.begin_handoff_note(binding, path.clone())?;
+            let prompt = note_prompt(
+                &path,
+                cfg.user_prefs.display.lang.trim().is_empty()
+                    || cfg.user_prefs.display.lang.eq_ignore_ascii_case("ja"),
+            );
+            // Audit N05: guarded, so the Enter of this request never answers an
+            // approval prompt the session is showing. What could not be typed
+            // now is typed once the session is free, for up to a minute.
+            let held = match type_guarded(
+                &core,
+                binding,
+                format!("\x1b[200~{prompt}\x1b[201~\r").into_bytes(),
+            )
+            .await
+            {
+                Ok(held) => held,
+                Err(_) => {
+                    (self.warning)(
+                        "handoff note prompt delivery",
+                        &SessionError::Transport("memo prompt delivery failed".into()),
+                    );
+                    None
+                }
+            };
             let weak = self.this.clone();
-            let cancellation = timer.cancellation().token().clone();
+            let cancel = timer.cancellation();
             drop(timer.start(async move {
-                tokio::select! { _=tokio::time::sleep(Duration::from_secs(60))=>{}, _=cancellation.cancelled()=>return }
+                // The minute for writing the note starts when the request is
+                // typed. A request that was never typed is given up at once,
+                // and the screen hears "not written" as for a timeout.
+                let typed = match held {
+                    Some(rest) => {
+                        type_when_free(&weak, binding, rest, Duration::from_secs(60), &cancel).await
+                    }
+                    None => true,
+                };
+                if cancel.token().is_cancelled() {
+                    return;
+                }
+                if typed {
+                    tokio::select! { _=tokio::time::sleep(Duration::from_secs(60))=>{}, _=cancel.token().cancelled()=>return }
+                }
                 if let Some(owner)=weak.upgrade()
                     && let Ok(core)=owner.core()
                     && let Err(error)=owner.apply(core.expire_handoff_note(binding,seq)).await {
                     (owner.warning)("handoff note timeout",&error);
                 }
             }));
-            let prompt = note_prompt(
-                &path,
-                cfg.user_prefs.display.lang.trim().is_empty()
-                    || cfg.user_prefs.display.lang.eq_ignore_ascii_case("ja"),
-            );
-            let receipt = core
-                .submit(
-                    binding,
-                    InputRequest {
-                        bytes: format!("\x1b[200~{prompt}\x1b[201~\r").into_bytes(),
-                        authority: InputAuthority::Internal,
-                    },
-                    now,
-                    &TaskCancellation::default(),
-                )
-                .await;
-            if !matches!(
-                receipt.disposition,
-                InputDisposition::TransportWritten { .. } | InputDisposition::Deferred { .. }
-            ) {
-                (self.warning)(
-                    "handoff note prompt delivery",
-                    &SessionError::Transport("memo prompt delivery failed".into()),
-                );
-            }
             Ok(path)
         })
     }

@@ -28,6 +28,21 @@ impl FrameWriter for Recording {
             Ok(())
         })
     }
+    // Same boundary as the Hub socket: the guard runs right before the write.
+    fn write_guarded<'a>(
+        &'a mut self,
+        frame: WireFrame,
+        guard: InputSendGuard<'a>,
+    ) -> CoreFuture<'a, Result<(), SessionError>> {
+        Box::pin(async move {
+            let mut frame = Some(frame);
+            let mut dispatch = || {
+                self.0.lock().unwrap().extend(frame.take());
+                Ok(())
+            };
+            guard(&mut dispatch)
+        })
+    }
 }
 impl Recording {
     fn messages(&self) -> Vec<proto::Message> {
@@ -415,4 +430,126 @@ async fn handoff_marker_keeps_later_effects_and_real_wrapper_connection_alive() 
         .unwrap()
         .unwrap()
         .unwrap();
+}
+
+fn typed(wrapper: &Recording) -> Vec<u8> {
+    wrapper
+        .messages()
+        .into_iter()
+        .filter(|message| message.r#type == "pty_input")
+        .flat_map(|message| message.data)
+        .collect()
+}
+async fn show(fixture: &Fixture, binding: SessionBinding, text: &str) {
+    let effects = fixture
+        .core
+        .observe_output(
+            binding,
+            OutputChunk {
+                total_pty_bytes: text.len() as i64,
+                bytes: text.as_bytes().to_vec(),
+            },
+            Timestamp::now(),
+        )
+        .unwrap();
+    fixture.effects.apply(effects).await.unwrap();
+}
+#[tokio::test]
+async fn audit_n05_a_note_or_summary_request_is_typed_only_once_the_approval_prompt_is_gone() {
+    use crate::application::event_observer::GitTurnCompletionCallbacks;
+    let fixture = Fixture::new(49679);
+    let mut snapshot = fixture.config.snapshot().unwrap();
+    snapshot.config.handoff.intent_mode = "turn-summary".into();
+    fixture
+        .config
+        .publish_then_persist_legacy(snapshot.revision, snapshot.config)
+        .unwrap();
+    for request in ["note", "summary"] {
+        let binding = fixture.register().await;
+        let wrapper = Recording::default();
+        fixture
+            .sockets
+            .insert_wrapper(binding, Box::new(wrapper.clone()))
+            .unwrap();
+        fixture
+            .sockets
+            .acknowledge_wrapper(
+                binding,
+                proto::Message {
+                    r#type: "registered".into(),
+                    session_id: binding.session.0,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        show(
+            &fixture,
+            binding,
+            "\x1b[2J\x1b[HRun: git push\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No",
+        )
+        .await;
+        assert!(
+            fixture
+                .core
+                .details(binding.session)
+                .unwrap()
+                .approval
+                .record
+                .is_some(),
+            "fixture must show a prompt"
+        );
+        // Both used to paste the request and press Enter at once: the Enter
+        // answered the prompt in the user's place.
+        if request == "note" {
+            fixture
+                .workers
+                .request_note(binding.session, Timestamp::now())
+                .await
+                .unwrap();
+        } else {
+            fixture
+                .workers
+                .inject_turn_summary(binding, 1)
+                .await
+                .unwrap();
+        }
+        // Longer than two retry rounds, with the prompt still there.
+        tokio::time::sleep(Duration::from_millis(1300)).await;
+        assert!(typed(&wrapper).is_empty(), "{request}");
+        assert_eq!(
+            fixture.core.guarded_input_block(binding),
+            Some(INPUT_BLOCKED_BY_APPROVAL),
+            "{request}: held by the prompt, not by a failure"
+        );
+        assert!(
+            fixture.warnings.lock().unwrap().is_empty(),
+            "{request}: {:?}",
+            fixture.warnings.lock().unwrap()
+        );
+        // The user answers on the prompt and the CLI goes on.
+        for dots in 1..=3 {
+            show(
+                &fixture,
+                binding,
+                &format!("\x1b[2J\x1b[HWorking{}", ".".repeat(dots)),
+            )
+            .await;
+        }
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !typed(&wrapper).ends_with(b"\r") {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "{request}: the request must be typed once the session is free (block: {:?}, warnings: {:?}, typed: {:?})",
+                fixture.core.guarded_input_block(binding),
+                fixture.warnings.lock().unwrap(),
+                String::from_utf8_lossy(&typed(&wrapper))
+            )
+        });
+        assert!(typed(&wrapper).starts_with(b"\x1b[200~"), "{request}");
+    }
 }

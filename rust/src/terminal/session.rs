@@ -195,6 +195,8 @@ struct Session {
     subscription_login: bool,
     custom_provider: bool,
     native_tail: String,
+    /// Whether the last look at `native_tail` found a native approval prompt.
+    native_prompt_visible: bool,
     /// Last transcript read of unanswered shell calls (`None`: not read or
     /// unreadable). Filled outside the lock by `refresh_pending_shell`.
     pending_shell: Option<Arc<[String]>>,
@@ -577,6 +579,7 @@ impl Session {
             git_root: self.git_root.clone(),
             transcript: self.transcript.clone(),
             approval: self.approval.snapshot(),
+            prompt_visible: self.native_prompt_visible,
             workflow: self.workflow.clone(),
             subagents: self.subagents.clone(),
             done: self.done.clone(),

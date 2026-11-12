@@ -342,7 +342,9 @@ impl FilesService {
         }
         let request = InputRequest {
             bytes: format!("\x1b[200~{}\x1b[201~\r", ai_prompt(ja)).into_bytes(),
-            authority: InputAuthority::Internal,
+            // Same class as audit N05: the button asks for a commit message, not
+            // for the answer to an approval prompt the session may be showing.
+            authority: InputAuthority::GuardedInternal,
         };
         let cancel = TaskCancellation::default();
         let receipt = core.submit(binding, request, now, &cancel).await;
@@ -355,6 +357,23 @@ impl FilesService {
                 .unwrap_or_else(|e| e.into_inner())
                 .awaiting
                 .remove(&sid);
+            if let InputDisposition::Failed { detail, .. } = &receipt.disposition
+                && guarded_input_held(detail)
+            {
+                return Err(if detail == INPUT_BLOCKED_BY_APPROVAL {
+                    err(
+                        409,
+                        "session_waiting_approval",
+                        "the AI session is waiting on an approval; answer it first, then ask again",
+                    )
+                } else {
+                    err(
+                        409,
+                        "session_not_ready",
+                        "the AI session is starting, reconnecting or has queued input; ask again shortly",
+                    )
+                });
+            }
             return Err(err(
                 409,
                 "no_wrapper",

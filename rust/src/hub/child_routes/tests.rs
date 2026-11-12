@@ -39,6 +39,21 @@ impl WrapperTransport for Io {
             Ok(())
         })
     }
+    // Same boundary as the Hub socket: the guard runs right before dispatch.
+    fn send_guarded<'a>(
+        &'a self,
+        _: SessionBinding,
+        message: crate::proto::Message,
+        guard: InputSendGuard<'a>,
+    ) -> CoreFuture<'a, Result<(), SessionError>> {
+        Box::pin(async move {
+            let mut dispatch = || {
+                self.sent.lock().unwrap().push(message.data.clone());
+                Ok(())
+            };
+            guard(&mut dispatch)
+        })
+    }
 }
 impl CoreEffectSink for Io {
     fn apply<'a>(&'a self, _: CoreEffects) -> CoreFuture<'a, Result<(), CoreEffectFailure>> {
@@ -495,6 +510,65 @@ async fn actual_inject_queue_preserves_raw_controls_and_interrupt_order() {
         400
     );
     assert_eq!(f.io.sent.lock().unwrap().len(), 2);
+}
+#[tokio::test]
+async fn audit_n06_inject_types_nothing_into_a_session_that_shows_an_approval_prompt() {
+    let f = fixture("off", 4).await;
+    let control = crate::hub::child_control::ChildControl::new(
+        f.core.clone(),
+        f.route.program.clone(),
+        f._tasks.handle(),
+        Arc::new(|_, _| {}),
+    );
+    let inject = |body: serde_json::Value| Request {
+        method: "POST".into(),
+        path: format!("/api/sessions/{}/inject", f.parent.session.0),
+        body: serde_json::to_vec(&body).unwrap(),
+        ..Default::default()
+    };
+    let screen =
+        "\x1b[2J\x1b[HAllow this command?\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No"
+            .as_bytes()
+            .to_vec();
+    drop(
+        f.core
+            .observe_output(
+                f.parent,
+                OutputChunk {
+                    total_pty_bytes: screen.len() as i64,
+                    bytes: screen,
+                },
+                Timestamp::now(),
+            )
+            .unwrap(),
+    );
+    assert!(
+        f.core
+            .details(f.parent.session)
+            .unwrap()
+            .approval
+            .record
+            .is_some(),
+        "fixture must show a prompt"
+    );
+    // An instruction with its Enter would answer the prompt; an interrupt's ESC
+    // would dismiss it. Neither is what the caller meant.
+    for body in [
+        serde_json::json!({"text":"continue with the next step","press_enter":true}),
+        serde_json::json!({"text":"stop","press_enter":false,"interrupt":true}),
+    ] {
+        let response = control.handle_authenticated(&inject(body), Timestamp::now());
+        assert_eq!(response.status, 409);
+        assert!(
+            String::from_utf8_lossy(&response.body).contains("session_waiting_approval"),
+            "{}",
+            String::from_utf8_lossy(&response.body)
+        );
+    }
+    for _ in 0..50 {
+        tokio::task::yield_now().await;
+    }
+    assert!(f.io.sent.lock().unwrap().is_empty());
 }
 #[tokio::test]
 async fn autonomous_spawn_without_confirmation_keeps_configured_capacity() {

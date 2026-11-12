@@ -320,6 +320,24 @@ impl OrchestrationProgram {
         self.inject(parent, sanitize_notice(&text), TaskCancellation::default())
             .await
     }
+    /// Types a Hub notice into a parent as guarded input, held while the parent
+    /// cannot take it (audit N04: a child's failed start used to be typed with
+    /// its Enter into whatever the parent was showing, an approval included).
+    pub async fn notify_parent(
+        &self,
+        parent: SessionBinding,
+        text: String,
+        cancel: TaskCancellation,
+    ) -> Result<(), SessionError> {
+        let core = self.core()?;
+        let Some(details) = core.details(parent.session) else {
+            return Ok(());
+        };
+        if details.binding.incarnation != parent.incarnation {
+            return Err(SessionError::StaleBinding);
+        }
+        self.inject(parent.session, text, cancel).await
+    }
     pub fn relay_owns(&self, id: &OrchestrationId) -> bool {
         lock(&self.state).relay_boards.contains(id)
     }

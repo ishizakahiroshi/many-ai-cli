@@ -140,6 +140,7 @@ fn details(id: i64, cwd: &Path, db: Option<i64>) -> SessionDetails {
             version: ApprovalStateVersion(0),
             record: None,
         },
+        prompt_visible: false,
         workflow: None,
         subagents: None,
         done: None,

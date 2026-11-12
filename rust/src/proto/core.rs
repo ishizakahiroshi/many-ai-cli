@@ -1275,6 +1275,10 @@ pub struct SessionDetails {
     pub git_root: Option<std::path::PathBuf>,
     pub transcript: TranscriptSessionIdentity,
     pub approval: ApprovalSessionSnapshot,
+    /// A native approval prompt is on the screen now, with or without a record
+    /// (audit N03: the record of a prompt that looks like the one just answered
+    /// is suppressed). Whoever types on its own must treat it as a pending one.
+    pub prompt_visible: bool,
     pub workflow: Option<super::WorkflowProgress>,
     pub subagents: Option<super::SubagentTree>,
     pub done: Option<super::DoneSummary>,
