@@ -287,6 +287,15 @@ fn url_allowed(url: &str) -> bool {
     })
 }
 
+/// The port of a board reached over plain http, which `url_allowed` admits
+/// on this machine only. `None` for https.
+fn local_port(url: &str) -> Option<u16> {
+    let url = reqwest::Url::parse(url).ok()?;
+    (url.scheme() == "http")
+        .then(|| url.port_or_known_default())
+        .flatten()
+}
+
 fn project_ok(name: &str) -> bool {
     !name.trim().is_empty() && name.chars().count() <= PROJECT_MAX
 }
@@ -579,12 +588,22 @@ fn today() -> String {
 /// (items cannot be removed from the board).
 fn plan_title(root: &Path, plan: &str) -> Option<String> {
     use std::io::Read;
-    let file = root.join(plan);
-    let markdown = file
-        .extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("markdown"));
-    if !markdown || !file.is_file() {
+    let named = root.join(plan);
+    let markdown = |file: &Path| {
+        file.extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("markdown"))
+    };
+    if !markdown(&named) {
+        return None;
+    }
+    // The summary names the path, and a repository can hold links: what is
+    // read is the file the name resolves to, which must itself be a Markdown
+    // file inside the repository. Otherwise a link named `plan.md` would send
+    // the first `#` line of any file on the machine to the board (audit N31).
+    let file = std::fs::canonicalize(&named).ok()?;
+    let root = std::fs::canonicalize(root).ok()?;
+    if !file.starts_with(&root) || !markdown(&file) || !file.is_file() {
         return None;
     }
     let mut head = Vec::new();
@@ -616,7 +635,8 @@ fn plan_title(root: &Path, plan: &str) -> Option<String> {
         .map(|line| clean_line(&mask_secrets(line)))
         .filter(|line| !line.is_empty());
     let name = heading.or_else(|| {
-        file.file_stem()
+        named
+            .file_stem()
             .map(|stem| clean_line(&stem.to_string_lossy()))
             .filter(|stem| !stem.is_empty())
     })?;
@@ -690,6 +710,11 @@ pub struct BoardSync {
     file: PathBuf,
     enabled: bool,
     client: reqwest::Client,
+    /// For a board on this machine (`http://127.0.0.1`): never through a
+    /// proxy, which would receive the key instead (audit N29).
+    local_client: reqwest::Client,
+    /// Whether every listener on a loopback port belongs to this OS user.
+    own_listener: fn(u16) -> std::io::Result<bool>,
     tasks: HubTaskHandle,
     warning: Arc<Warning>,
     /// Answers where a commit named in a summary can be opened; `None` = no
@@ -732,6 +757,12 @@ impl BoardSync {
                 .timeout(Duration::from_secs(15))
                 .redirect(reqwest::redirect::Policy::none())
                 .build()?,
+            local_client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(15))
+                .redirect(reqwest::redirect::Policy::none())
+                .no_proxy()
+                .build()?,
+            own_listener: crate::process::listener::loopback_listener_is_own,
             tasks,
             warning,
             git,
@@ -1282,6 +1313,21 @@ impl BoardSync {
         tool: &str,
         arguments: serde_json::Value,
     ) -> Result<serde_json::Value, Failed> {
+        // A board on this machine is reached over plain http, and a loopback
+        // port answers to whoever listens on it: while the board server is
+        // down, another OS user can take the port and would be handed the
+        // key. Like the Hub token, the key goes only to a listener of this
+        // OS user, and is not even read otherwise (audit N29).
+        let local = match local_port(&target.url) {
+            Some(port) => {
+                if !(self.own_listener)(port).unwrap_or(false) {
+                    self.warn_once("board listener on this machine is not this user's");
+                    return Err(Failed::Unreached);
+                }
+                true
+            }
+            None => false,
+        };
         let Some(key) = read_key(&target.key_file) else {
             self.warn_once("board key file unreadable");
             return Err(Failed::Unreached);
@@ -1290,8 +1336,12 @@ impl BoardSync {
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": tool, "arguments": arguments},
         });
-        let mut response = match self
-            .client
+        let client = if local {
+            &self.local_client
+        } else {
+            &self.client
+        };
+        let mut response = match client
             .post(&target.url)
             .bearer_auth(key)
             .header("accept", "application/json")

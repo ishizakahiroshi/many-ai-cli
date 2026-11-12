@@ -369,6 +369,23 @@ Release artifacts are published at
   request from another machine is answered before its body is read. Every
   other request body must arrive within 30 seconds (10 minutes for uploads);
   a body that takes longer gets `408`.
+- **The progress board (`board.json`) hands its key and a plan's title to
+  less.** Two things the Hub sent on its own are narrowed:
+  - *The key of a board on this machine.* With a board address of
+    `http://127.0.0.1…` (or `localhost`, `[::1]`), the Hub sent the board's
+    write key to whoever listened on that port; while the board server was
+    stopped, another user of the machine could take the port and receive the
+    key within a minute. The Hub now sends it only when every listener on the
+    port belongs to your own OS user, does not read the key file otherwise,
+    and never sends such a request through a proxy. A board server that runs
+    as a different OS user on the same machine is therefore no longer written
+    to; use an `https` address for it.
+  - *The title of a plan.* A summary that names a plan file (`計画: <path>`)
+    makes the Hub read that file's first heading as the title of a new board
+    item. A link in the repository named like a plan could lead to
+    any file on the machine, whose first `#` line was then sent to the board.
+    The title is now read only from a Markdown file that is really inside the
+    repository once links are resolved.
 - **Release keys wait for the owner's approval.** The npm and Homebrew/winget
   publishing jobs use the `release` environment, so the keys they need are
   handed over only after the owner approves the run (one approval covers

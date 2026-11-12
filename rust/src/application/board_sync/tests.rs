@@ -344,6 +344,87 @@ async fn missing_key_file_sends_nothing_and_warns() {
     f.cancel.cancel();
 }
 
+#[tokio::test]
+async fn audit_n29_the_key_goes_only_to_a_board_listener_of_this_os_user() {
+    // The board's port answers, but the OS says the listener is not this
+    // user's (another user took the port while the board server was down),
+    // or cannot say whose it is.
+    let strangers: [fn(u16) -> std::io::Result<bool>; 2] =
+        [|_| Ok(false), |_| Err(std::io::Error::other("synthetic"))];
+    for stranger in strangers {
+        let mut f = fixture(false).await;
+        Arc::get_mut(&mut f.sync).unwrap().own_listener = stranger;
+        f.list_repo();
+        // Nothing reads the key either: with the file gone, the warning is
+        // still about the listener.
+        std::fs::remove_file(f.root.path().join("writer.key")).unwrap();
+        let d = details(9, &f.repo, Some(15));
+        f.sync.session_started(&d);
+        f.sync.turn_done(Some(&d), &done(9, "summary"));
+        assert!(f.sync.handed_work().await.is_empty());
+        settle().await;
+        assert_eq!(f.board.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            *lock(&f.warnings),
+            ["board sync: board listener on this machine is not this user's"]
+        );
+        f.cancel.cancel();
+    }
+    // Only plain http is on this machine; an https board is not asked about.
+    assert_eq!(local_port("http://127.0.0.1:8123/board/mcp"), Some(8123));
+    assert_eq!(local_port("http://localhost/board/mcp"), Some(80));
+    assert_eq!(local_port("http://[::1]:9/board/mcp"), Some(9));
+    assert_eq!(local_port("https://board.example/mcp"), None);
+}
+
+#[test]
+fn audit_n31_a_plan_title_is_read_only_from_a_markdown_file_inside_the_repository() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = root.path().join("repo");
+    let outside = root.path().join("outside");
+    std::fs::create_dir_all(repo.join("docs")).unwrap();
+    std::fs::create_dir_all(&outside).unwrap();
+    std::fs::write(repo.join("docs").join("real.md"), "# Real plan\n").unwrap();
+    std::fs::write(repo.join("settings.conf"), "# synthetic inside comment\n").unwrap();
+    std::fs::write(outside.join("notes.md"), "# synthetic outside heading\n").unwrap();
+    std::fs::write(
+        outside.join("private.conf"),
+        "# synthetic outside comment\n",
+    )
+    .unwrap();
+    assert_eq!(
+        plan_title(&repo, "docs/real.md").as_deref(),
+        Some("Real plan")
+    );
+    assert_eq!(plan_title(&repo, "docs/missing.md"), None);
+    #[cfg(unix)]
+    use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file};
+    #[cfg(windows)]
+    use std::os::windows::fs::{symlink_dir, symlink_file};
+    let docs = repo.join("docs");
+    // Without the right to make links (Windows without developer mode) the
+    // cases below cannot be built; the plain cases above still ran.
+    if symlink_file(docs.join("real.md"), docs.join("alias.md")).is_err() {
+        eprintln!("audit_n31: links cannot be made here; link cases not run");
+        return;
+    }
+    // A link to a Markdown file of the repository is that file.
+    assert_eq!(
+        plan_title(&repo, "docs/alias.md").as_deref(),
+        Some("Real plan")
+    );
+    // A link named like a plan that leads out of the repository, to a file
+    // or through a folder, is read by nobody.
+    symlink_file(outside.join("private.conf"), docs.join("plan.md")).unwrap();
+    symlink_file(outside.join("notes.md"), docs.join("notes.md")).unwrap();
+    symlink_dir(&outside, docs.join("shared")).unwrap();
+    for plan in ["docs/plan.md", "docs/notes.md", "docs/shared/notes.md"] {
+        assert_eq!(plan_title(&repo, plan), None, "{plan}");
+    }
+    // Nor one that stays inside but leads to a file that is not Markdown.
+    symlink_file(repo.join("settings.conf"), docs.join("config.md")).unwrap();
+    assert_eq!(plan_title(&repo, "docs/config.md"), None);
+}
 /// A board that answers one request with `head` and `body` as raw bytes.
 async fn raw_board(head: &str, body: Vec<u8>) -> String {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
