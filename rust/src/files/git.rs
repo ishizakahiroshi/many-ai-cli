@@ -435,17 +435,7 @@ impl FilesService {
                     weights.into_iter().map(|(k, (a, b))| (k, a + b)).collect();
                 for f in &files {
                     if f.status == "??" && !weights.contains_key(&f.path) {
-                        let path = cwd.join(&f.path);
-                        let n = scope::parent_capability(&path)
-                            .and_then(|(d, n)| d.read(&n, 1024 * 1024))
-                            .ok()
-                            .filter(|b| !b.contains(&0))
-                            .map(|b| {
-                                b.iter().filter(|b| **b == b'\n').count()
-                                    + usize::from(!b.is_empty() && !b.ends_with(b"\n"))
-                            })
-                            .unwrap_or(0);
-                        weights.insert(f.path.clone(), n as i64);
+                        weights.insert(f.path.clone(), untracked_lines(&root, &f.path));
                     }
                 }
                 let (subject, body) =
@@ -1067,6 +1057,25 @@ pub(super) fn github_url(remote: &str) -> Option<String> {
     } else {
         Some(format!("https://github.com/{path}"))
     }
+}
+/// How many lines an untracked text file has, to weigh it in a suggested
+/// commit message. `rel` is as `git status` prints it: relative to the
+/// repository root, wherever in the repository the session works. Joined onto
+/// the session's folder it named another file, or none (audit N15).
+fn untracked_lines(root: &Path, rel: &str) -> i64 {
+    let path = scope::clean(&root.join(rel));
+    if !path.starts_with(root) {
+        return 0;
+    }
+    scope::parent_capability(&path)
+        .and_then(|(d, n)| d.read(&n, 1024 * 1024))
+        .ok()
+        .filter(|b| !b.contains(&0))
+        .map(|b| {
+            b.iter().filter(|b| **b == b'\n').count()
+                + usize::from(!b.is_empty() && !b.ends_with(b"\n"))
+        })
+        .unwrap_or(0) as i64
 }
 fn untracked(root: &Path, rel: &str) -> (String, i64) {
     let path = scope::clean(&root.join(rel));

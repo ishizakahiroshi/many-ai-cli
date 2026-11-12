@@ -5,6 +5,7 @@ import { confirmationLabels, type ConfirmationAction } from './confirmation-labe
 import { uiButtonClass, uiIconHtml, uiModalClass } from './ui-components.js';
 import { getNotificationVolume, setNotificationVolume, STORAGE_NOTIFY_SOUND_VOLUME_KEY } from './notification-volume.js';
 import { apiFetch, escapeHtml, showToast, ti18n, token, withAssetTicket } from './util.js';
+import { httpsUrlOrEmpty } from './url-detect.js';
 import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_6_KEY, STORAGE_QUICK_CMD_7_KEY, STORAGE_QUICK_CMD_8_KEY, STORAGE_QUICK_CMD_9_KEY, STORAGE_QUICK_CMD_10_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_QUICK_CMD_6_SHOW_KEY, STORAGE_QUICK_CMD_7_SHOW_KEY, STORAGE_QUICK_CMD_8_SHOW_KEY, STORAGE_QUICK_CMD_9_SHOW_KEY, STORAGE_QUICK_CMD_10_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, openProjectKey, sessions, terminals } from './state.js';
 import { getDoneSummary } from './done-summary.js';
@@ -2795,8 +2796,10 @@ initSettingsInformationArchitecture();
     const d = await res.json();
     for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok', 'command-code']) {
       // 空文字は無視（GitHub 側が古くキーを欠く場合に空で返るため、
-      // ローカルの正しいデフォルト値を潰さない）
-      if (typeof d[k] === 'string' && d[k] !== '') DEFAULT_USAGE_LINKS[k] = d[k];
+      // ローカルの正しいデフォルト値を潰さない）。https 以外の値も既定値にしない（監査 N36。
+      // Hub の側でも落としている）。
+      const fetched = httpsUrlOrEmpty(d[k]);
+      if (fetched) DEFAULT_USAGE_LINKS[k] = fetched;
     }
     applyUsageLinks();
   } catch (_) {}

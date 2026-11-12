@@ -9,6 +9,7 @@ pub mod git_lock;
 mod mutation;
 mod remote_attach;
 pub mod safe_fs;
+mod save_backup;
 pub mod scope;
 #[cfg(test)]
 mod tests;
@@ -124,6 +125,7 @@ impl FilesService {
                 | "/api/files-asset"
                 | "/api/files-download"
                 | "/api/files-roots"
+                | save_backup::LIST
         ) {
             "GET"
         } else {
@@ -140,6 +142,13 @@ impl FilesService {
             self.remote_download(request, core).await
         } else if path == "/api/attachments/purge" {
             self.purge_attachments(core)
+        } else if matches!(
+            path,
+            save_backup::LIST | save_backup::RESTORE | save_backup::DISCARD
+        ) {
+            // Copies that interrupted saves left belong to the Hub, not to a
+            // session's folder.
+            save_backup::handle(request, &self.paths)
         } else {
             let cwd = self.cwd(request, core);
             let scope = scope::Scope::new(cwd, self.paths.clone());
@@ -173,6 +182,9 @@ pub const ROUTES: &[&str] = &[
     "/api/files-create",
     "/api/files-save",
     "/api/files-delete-dir",
+    save_backup::LIST,
+    save_backup::RESTORE,
+    save_backup::DISCARD,
     "/api/git-log",
     "/api/git-show",
     "/api/git-refs",

@@ -275,6 +275,10 @@ fn prepare_resolved(
         args.push(format!("--label={}", spec.label).into());
     }
     let mut prompt = None;
+    // What a model template or an effort mapping expands to, when the wrapper
+    // cannot take it as its own `--model` / `--effort`: handed over behind
+    // `--` after every wrapper flag (audit N19).
+    let mut provider_tail: Vec<OsString> = Vec::new();
     if bare {
         if kind == Some(WrappedStartKind::Bare) && spec.provider == "shell" && spec.utf8_session {
             args.push("--utf8".into());
@@ -285,7 +289,23 @@ fn prepare_resolved(
         if kind.is_some()
             && !crate::proto::provider::BUILTIN_PROVIDER_IDS.contains(&spec.provider.as_str())
         {
-            args.extend(resolved.ordinary_model_args.iter().cloned().map(Into::into));
+            // The wrapper reads its flags the way Go's flag package does: it
+            // stops at the first one it does not know and drops it. Put
+            // first, a template such as `--engine <model>` therefore ended
+            // the wrapper's own flags (the first prompt, the allowed tools)
+            // and lost its flag name. Only a plain `--model <name>` is the
+            // wrapper's own flag and stays in front.
+            let model = &resolved.ordinary_model_args;
+            let own = match model.as_slice() {
+                [flag, _] => flag == "--model",
+                [one] => one.starts_with("--model="),
+                _ => false,
+            };
+            if own {
+                args.extend(model.iter().cloned().map(Into::into));
+            } else {
+                provider_tail.extend(model.iter().cloned().map(Into::into));
+            }
         } else if !resolved.resolved_model.is_empty() {
             args.extend(["--model".into(), resolved.resolved_model.clone().into()]);
         }
@@ -317,7 +337,20 @@ fn prepare_resolved(
             }
             _ => {}
         }
-        args.extend(resolved.effort_args.iter().cloned().map(Into::into));
+        // An effort mapping is the same: `--effort <level>` is the wrapper's
+        // own flag, and a provider's own spelling (codex:
+        // `-c model_reasoning_effort="high"`) is not, so it follows `--` too.
+        let effort = &resolved.effort_args;
+        let own = match effort.as_slice() {
+            [flag, _] => flag == "--effort",
+            [one] => one.starts_with("--effort="),
+            _ => false,
+        };
+        if own {
+            args.extend(effort.iter().cloned().map(Into::into));
+        } else {
+            provider_tail.extend(effort.iter().cloned().map(Into::into));
+        }
         let tools = spec
             .grants
             .allowed_tools()
@@ -340,6 +373,10 @@ fn prepare_resolved(
         }
         if spec.utf8_session {
             args.push("--utf8".into());
+        }
+        if !provider_tail.is_empty() {
+            args.push("--".into());
+            args.append(&mut provider_tail);
         }
     }
     let mut environment = BTreeMap::new();

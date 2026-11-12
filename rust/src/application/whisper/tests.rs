@@ -12,6 +12,12 @@ struct FakeIo {
     foreign: std::sync::atomic::AtomicBool,
     /// Bytes served for the release archive download (U35); others get a model.
     archive: std::sync::Mutex<Option<Vec<u8>>>,
+    /// The server takes its time to listen (audit N35): `ready` waits for
+    /// `listen`, and until then nothing serves the port.
+    slow_ready: std::sync::atomic::AtomicBool,
+    not_listening: std::sync::atomic::AtomicBool,
+    waiting_ready: tokio::sync::Notify,
+    listen: tokio::sync::Notify,
 }
 impl WhisperIo for FakeIo {
     fn download<'a>(
@@ -51,6 +57,9 @@ impl WhisperIo for FakeIo {
             assert_eq!(plan.timeout, Duration::ZERO);
             assert!(plan.args.iter().any(|arg| arg == "127.0.0.1"));
             self.starts.fetch_add(1, Ordering::SeqCst);
+            if self.slow_ready.load(Ordering::SeqCst) {
+                self.not_listening.store(true, Ordering::SeqCst);
+            }
             let cancel = Cancellation::default();
             let held = cancel.clone();
             let (sender, done) = tokio::sync::watch::channel(None);
@@ -71,10 +80,19 @@ impl WhisperIo for FakeIo {
         _: u16,
         _: &'a Cancellation,
     ) -> CoreFuture<'a, Result<(), WhisperError>> {
-        Box::pin(async { Ok(()) })
+        Box::pin(async {
+            if self.slow_ready.load(Ordering::SeqCst) {
+                self.waiting_ready.notify_one();
+                self.listen.notified().await;
+                self.not_listening.store(false, Ordering::SeqCst);
+            }
+            Ok(())
+        })
     }
     fn serves(&self, _: u16, process: &WhisperProcess) -> bool {
-        process.done.borrow().is_none() && !self.foreign.load(Ordering::SeqCst)
+        process.done.borrow().is_none()
+            && !self.foreign.load(Ordering::SeqCst)
+            && !self.not_listening.load(Ordering::SeqCst)
     }
 }
 struct Fixture {
@@ -210,6 +228,40 @@ async fn install_owned_singleflight_publishes_config_then_start_reuses_same_proc
     assert_eq!(cfg.server_port, 0);
     assert!(cfg.server_url.is_empty());
     assert!(!fixture.manager.base().exists());
+}
+#[tokio::test]
+async fn audit_n35_a_request_during_a_start_waits_for_that_server_instead_of_stopping_it() {
+    let fixture = Fixture::new(true);
+    fixture.manager.install("tiny-q5_1").unwrap();
+    fixture.owner.drain_effects().await;
+    let cfg = fixture.manager.configuration().unwrap();
+    fixture.io.slow_ready.store(true, Ordering::SeqCst);
+    let (manager, first_cfg) = (fixture.manager.clone(), cfg.clone());
+    let first = tokio::spawn(async move {
+        manager
+            .ensure(&first_cfg, &Cancellation::default())
+            .await
+            .map(|cfg| cfg.server_url)
+    });
+    // The first request has started the server, which does not listen yet.
+    fixture.io.waiting_ready.notified().await;
+    let (manager, second_cfg) = (fixture.manager.clone(), cfg.clone());
+    let second = tokio::spawn(async move {
+        manager
+            .ensure(&second_cfg, &Cancellation::default())
+            .await
+            .map(|cfg| cfg.server_url)
+    });
+    // Give the second request time to do whatever it does to a starting server.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(!second.is_finished());
+    fixture.io.listen.notify_one();
+    let first = first.await.unwrap().unwrap();
+    let second = second.await.unwrap().unwrap();
+    assert_eq!(first, second);
+    assert_eq!(fixture.io.starts.load(Ordering::SeqCst), 1);
+    fixture.manager.shutdown().await;
+    fixture.owner.drain_effects().await;
 }
 #[tokio::test]
 async fn shutdown_cancels_install_and_joins_owned_producer() {

@@ -776,6 +776,15 @@ header {
 .git-lock-row-actions { display: flex; justify-content: flex-end; margin-top: 6px; }
 .git-lock-remove:disabled { opacity: 0.6; cursor: default; }
 
+/* 保存の途中で Hub が止まった file の知らせ（監査 N16）。帯と行は上の index.lock の知らせと
+   同じ部品を使う。両方が出たときは重ならないよう、広い画面では左隣、狭い画面では上へ置く。 */
+.save-leftover-actions { gap: 8px; flex-wrap: wrap; }
+.save-leftover-actions button:disabled { opacity: 0.6; cursor: default; }
+body:has(.git-lock-banner:not(.save-leftover-banner)) .save-leftover-banner { right: calc(16px + min(380px, 100vw - 32px) + 8px); }
+@media (max-width: 820px) {
+  body:has(.git-lock-banner:not(.save-leftover-banner)) .save-leftover-banner { right: 16px; bottom: auto; top: 16px; }
+}
+
 /* C3: plan_derived-session-launch_c3_derive-launch.md — 派生起動ダイアログ
    （種別 = 引き継ぎ / 子）。handoff-dialog と同じ寸法・同じ配色で、欄が多い分だけ
    少し広い。.aac-wheel-overlay は derive-dialog.ts 側で付ける

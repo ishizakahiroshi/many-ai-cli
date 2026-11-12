@@ -223,6 +223,9 @@ struct Receipt {
     archive_sha256: String,
 }
 const RECEIPT: &str = ".install-receipt.json";
+/// How long a request waits for a start another request began: a little more
+/// than the 20 seconds the server gets to become ready.
+const START_WAIT: Duration = Duration::from_secs(25);
 impl Receipt {
     fn of(binary: &manifest::Binary) -> Self {
         Self {
@@ -710,6 +713,31 @@ impl WhisperManager {
         base: Arc<Dir>,
         cancel: &Cancellation,
     ) -> Result<String, WhisperError> {
+        // A server another request is starting is registered before it
+        // listens. Judged by its listener then, it looked like one that had
+        // ended and was stopped, and both requests failed (audit N35). A
+        // request that arrives during a start waits for that start instead,
+        // and then uses its server like any later request.
+        let patience = tokio::time::Instant::now() + START_WAIT;
+        while self.state.lock().unwrap().starting {
+            if tokio::time::Instant::now() >= patience {
+                return Err(WhisperError::new(
+                    409,
+                    "whisper_starting",
+                    "whisper server is starting",
+                ));
+            }
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_millis(100)) => {}
+                _ = cancel.cancelled() => {
+                    return Err(WhisperError::new(
+                        409,
+                        "whisper_starting",
+                        "whisper server is starting",
+                    ));
+                }
+            }
+        }
         let reuse = self.state.lock().unwrap().running.as_ref().map(|running| {
             (
                 running.id,

@@ -852,3 +852,26 @@ fn z_parsers_read_renames_copies_and_binary_counts() {
     assert_eq!(stats["x => y.txt"], (2, 0));
     assert_eq!(literal_pathspec("a[b].txt"), ":(literal)a[b].txt");
 }
+
+#[test]
+fn audit_n15_an_untracked_file_is_weighed_by_its_own_lines_from_the_repository_root() {
+    // `git status` names files from the repository root, also when the
+    // session works in a folder below it.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("repo");
+    std::fs::create_dir_all(root.join("sub").join("sub")).unwrap();
+    std::fs::write(root.join("sub").join("new.txt"), "one\ntwo\nthree\n").unwrap();
+    std::fs::write(root.join("sub").join("sub").join("new.txt"), "other\n").unwrap();
+    assert_eq!(untracked_lines(&root, "sub/new.txt"), 3);
+    // Joined onto the session's folder, the same name is a different file.
+    assert_eq!(untracked_lines(&root.join("sub"), "sub/new.txt"), 1);
+    // A last line without a line break counts; binary and missing files and
+    // names that leave the repository weigh nothing.
+    std::fs::write(root.join("tail.txt"), "one\ntwo").unwrap();
+    std::fs::write(root.join("blob.bin"), b"a\0b\n").unwrap();
+    std::fs::write(dir.path().join("outside.txt"), "one\n").unwrap();
+    assert_eq!(untracked_lines(&root, "tail.txt"), 2);
+    assert_eq!(untracked_lines(&root, "blob.bin"), 0);
+    assert_eq!(untracked_lines(&root, "missing.txt"), 0);
+    assert_eq!(untracked_lines(&root, "../outside.txt"), 0);
+}

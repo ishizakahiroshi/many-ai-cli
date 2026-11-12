@@ -3,6 +3,7 @@ use super::{
     content::{CONTENT_MAX, text_file},
     err,
     safe_fs::Dir,
+    save_backup::SaveBackup,
     scope::{self, Scope},
     time,
 };
@@ -133,61 +134,7 @@ fn overwrite(file: &mut std::fs::File, content: &[u8]) -> std::io::Result<()> {
     file.set_len(content.len() as u64)?;
     file.sync_all()
 }
-/// A copy of a file's bytes from before a save, in the Hub's own folder,
-/// kept until the new content is on disk (U18). The file itself is written in
-/// place, so its identity, links and permissions stay as they were.
-struct SaveBackup {
-    dir: Dir,
-    name: String,
-    file: std::fs::File,
-}
-impl SaveBackup {
-    /// A copy left by a save that was interrupted is kept this long for the
-    /// user, then removed by a later save.
-    const KEEP: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 3600);
-    fn take(original: &mut std::fs::File, s: &Scope) -> std::io::Result<Self> {
-        let folder = s
-            .paths
-            .resource(crate::config::Resource::Temporary)
-            .join("save-backups");
-        let dir = Dir::open_or_create_private_components(&folder)?;
-        for name in dir.entries().unwrap_or_default() {
-            let old = dir
-                .metadata(&name)
-                .ok()
-                .and_then(|meta| meta.modified().ok())
-                .and_then(|at| std::time::SystemTime::now().duration_since(at).ok())
-                .is_some_and(|age| age > Self::KEEP);
-            if name.ends_with(".bak") && old {
-                let _ = dir.remove_file(&name);
-            }
-        }
-        let name = format!("{}.bak", &crate::process::random_token()?[..24]);
-        dir.create_new(&name, &[], 0o600)?;
-        let mut file = dir.open_file(&name, true)?;
-        original.seek(SeekFrom::Start(0))?;
-        std::io::copy(original, &mut file)?;
-        file.sync_all()?;
-        Ok(Self { dir, name, file })
-    }
-    fn restore(&mut self, original: &mut std::fs::File) -> std::io::Result<()> {
-        self.file.seek(SeekFrom::Start(0))?;
-        original.seek(SeekFrom::Start(0))?;
-        let length = std::io::copy(&mut self.file, original)?;
-        original.set_len(length)?;
-        original.sync_all()
-    }
-    fn path(&self) -> PathBuf {
-        self.dir.path().join(&self.name)
-    }
-    fn discard(self) {
-        let Self { dir, name, file } = self;
-        // Closed first: Windows does not remove an open file.
-        drop(file);
-        let _ = dir.remove_file(&name);
-    }
-}
-fn lock_for_save(file: &std::fs::File) -> Result<()> {
+pub(super) fn lock_for_save(file: &std::fs::File) -> Result<()> {
     const TRIES: u32 = 5;
     for attempt in 1..=TRIES {
         match file.try_lock() {
@@ -268,7 +215,7 @@ fn save_file_with(
     // A write cut short (a full disk, an I/O error) must not leave the file
     // half old and half new: the earlier bytes are put back from the copy.
     let mut backup =
-        SaveBackup::take(&mut file, s).map_err(|e| super::io_error(e, "backup_failed"))?;
+        SaveBackup::take(&mut file, &path, s).map_err(|e| super::io_error(e, "backup_failed"))?;
     if let Err(error) = write(&mut file, q.content.as_bytes()) {
         if backup.restore(&mut file).is_ok() {
             backup.discard();

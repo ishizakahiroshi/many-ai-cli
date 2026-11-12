@@ -330,7 +330,7 @@ pub(super) fn run(
     provider: &str,
     destination: &Dir,
     profile: &SubscriptionProfile,
-    codex_plugin_installer: &super::codex_browser::Installer,
+    codex_plugin_installer: &std::sync::Arc<super::codex_browser::Installer>,
 ) -> io::Result<SeedNotice> {
     let mut notice = SeedNotice::default();
     for mut entry in entries(paths, home, hub_cwd, environment, provider)? {

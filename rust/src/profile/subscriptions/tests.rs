@@ -215,16 +215,14 @@ fn codex_profile_links_desktop_bundle_and_installs_browser_plugins_once() {
             .is_dir()
     );
     assert!(notice.applied.contains(&codex_browser::LINK_LABEL.into()));
-    assert!(
-        notice
-            .applied
-            .contains(&"plugin browser@openai-bundled".into())
-    );
-    assert!(
-        notice
-            .applied
-            .contains(&"plugin chrome@openai-bundled".into())
-    );
+    // The plugins are installed in the background (audit N32).
+    for plugin in ["browser", "chrome"] {
+        assert!(notice.applied.contains(&format!(
+            "plugin {plugin}@openai-bundled{}",
+            codex_browser::INSTALLING
+        )));
+    }
+    codex_browser::settle(&destination);
     assert_eq!(
         *calls.lock().unwrap(),
         ["browser@openai-bundled", "chrome@openai-bundled"]
@@ -253,12 +251,61 @@ fn codex_browser_plugin_install_failure_is_reported_and_retried() {
     let calls = InstallCalls::default();
     let launcher = SubscriptionLauncher::new(paths.clone(), home, paths.root().into())
         .with_codex_plugin_installer(recording_installer(calls.clone(), false));
+    let destination = paths.resource(Resource::Subscriptions).join("codex/main");
+    launcher.launch(&cfg, "codex", "main", &[]).unwrap();
+    codex_browser::settle(&destination);
+    assert_eq!(calls.lock().unwrap().len(), 2);
+    // The next start reports the failure and does not run the install again
+    // (audit N32: a start used to wait for it every time).
     let (_, notice) = launcher.launch(&cfg, "codex", "main", &[]).unwrap();
     let failed = notice.unwrap().failed;
     assert!(failed.contains(&"plugin browser@openai-bundled".into()));
     assert!(failed.contains(&"plugin chrome@openai-bundled".into()));
+    assert!(!codex_browser::running(&destination));
+    assert_eq!(calls.lock().unwrap().len(), 2);
+    // Once the failure is old enough, a start tries again.
+    codex_browser::forget_failure(&destination);
     launcher.launch(&cfg, "codex", "main", &[]).unwrap();
+    codex_browser::settle(&destination);
     assert_eq!(calls.lock().unwrap().len(), 4);
+}
+#[test]
+fn audit_n32_a_start_does_not_wait_for_the_codex_plugin_install() {
+    let (_root, paths, home, cfg) = codex_fixture(true);
+    let destination = paths.resource(Resource::Subscriptions).join("codex/main");
+    let calls = InstallCalls::default();
+    let (release, gate) = std::sync::mpsc::channel::<()>();
+    let gate = std::sync::Mutex::new(gate);
+    let recorded = calls.clone();
+    // An install that does not come back until it is told to, like a
+    // `codex plugin add` without a network.
+    let stuck: Box<codex_browser::Installer> = Box::new(
+        move |_profile: &std::path::Path,
+              selector: &str,
+              _environment: &[String],
+              _cwd: &std::path::Path| {
+            recorded.lock().unwrap().push(selector.to_string());
+            let _ = gate.lock().unwrap().recv();
+            Err(std::io::Error::other("synthetic install failure"))
+        },
+    );
+    let launcher = SubscriptionLauncher::new(paths.clone(), home, paths.root().into())
+        .with_codex_plugin_installer(stuck);
+    // Both starts come back while the install is still stuck, and the second
+    // does not begin another.
+    let (_, notice) = launcher.launch(&cfg, "codex", "main", &[]).unwrap();
+    assert!(notice.unwrap().failed.is_empty());
+    assert!(codex_browser::running(&destination));
+    let (_, again) = launcher.launch(&cfg, "codex", "main", &[]).unwrap();
+    let again = again.unwrap();
+    assert!(!again.applied.iter().any(|item| item.starts_with("plugin ")));
+    assert!(codex_browser::running(&destination));
+    drop(release);
+    codex_browser::settle(&destination);
+    assert_eq!(
+        *calls.lock().unwrap(),
+        ["browser@openai-bundled", "chrome@openai-bundled"]
+    );
 }
 #[test]
 fn open_code_only_changes_data_home_and_grok_seeds_policy() {

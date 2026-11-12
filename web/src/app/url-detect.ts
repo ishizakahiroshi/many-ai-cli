@@ -56,6 +56,24 @@ export function isHttpUrl(url: string): boolean {
   return /^https?:\/\/[A-Za-z0-9[]/i.test(String(url || ''));
 }
 
+/**
+ * Hub が GitHub から取ってきた既定のリンク（利用状況のページなど）を、リンクの行き先に
+ * 入れてよい形にする（監査 N36）。https の URL だけを通し、それ以外（`javascript:`・OS の
+ * 独自 scheme・http）は空文字にする。取得元が書き換えられても、押すと別のアプリが起動する
+ * ようなリンクを既定値にしないため。利用者が自分で入れた値には使わない（http も許す）。
+ */
+export function httpsUrlOrEmpty(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const raw = value.trim();
+  if (!/^https:\/\//i.test(raw)) return '';
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'https:' ? url.href : '';
+  } catch (_) {
+    return '';
+  }
+}
+
 export function findUrlCandidates(text: string): UrlCandidate[] {
   const src = String(text || '');
   const out: UrlCandidate[] = [];

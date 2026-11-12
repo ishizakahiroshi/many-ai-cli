@@ -177,6 +177,42 @@ Release artifacts are published at
   many-ai-cli are replaced when they differ, before the server starts. The
   status reports the installed version (`binary_version`) and the version this
   build installs (`available_version`) separately.
+- **A save the Hub was stopped in the middle of is now reported, and the
+  earlier content can be put back.** Saving in the Files tab keeps a copy of
+  the file's earlier content until the new content is written. If the Hub was
+  killed or the machine lost power during the write, the file stayed half
+  written and the copy stayed under a random name with nothing saying which
+  file it belonged to; nobody was told, and a later save deleted copies older
+  than seven days. Each copy now carries a record of its file, time and size.
+  When you open the dashboard, a notice lists such files with two buttons: put
+  the earlier content back, or delete the copy. A copy is removed by age only
+  seven days after it was first listed for you. Copies left by earlier
+  versions are listed without a file name and can be deleted from the notice.
+- **A provider's own flags no longer cut off the options that follow them at
+  launch.** The wrapper reads its own flags and stops at the first one it does
+  not know. A custom provider's model arguments (`model_args` other than
+  `--model <name>`) and an effort mapping written in the provider's own flags
+  (Codex's `-c model_reasoning_effort="…"`, a custom `effort_args`) were placed
+  before the wrapper's remaining flags, so the first prompt, the allowed tools,
+  headless mode and the UTF-8 setting that followed could be handed to the
+  provider as arguments instead of being applied. These arguments are now
+  passed last, after `--`.
+- **Two voice-input requests at the same moment no longer stop the Whisper
+  server that is starting.** A request that arrived while another was still
+  starting the server judged it as ended, stopped it, and both failed. It now
+  waits for that start (up to 25 seconds) and uses the same server.
+- **Starting a Codex session no longer waits for its browser plugins to be
+  installed.** The first start of a Codex profile ran `codex plugin add` for
+  the bundled browser plugins and waited for it, up to the command's time
+  limit, on every start while the install kept failing (for example without a
+  network). The install now runs in the background: the session starts at
+  once, the notice says the plugins are being installed, a failure is reported
+  on the next start, and a failed install is tried again after 30 minutes.
+- **A suggested commit message weighs a new file by its own size when the
+  session works in a subfolder.** Untracked files are named from the
+  repository root, but their line counts were read relative to the session's
+  folder, so in a subfolder the count was 0 or that of another file with the
+  same relative name.
 
 ### Security
 
@@ -628,6 +664,12 @@ Release artifacts are published at
   A mapping that merges name is now resolved once, and the budget counts the
   bytes each step copies, so such a file decodes quickly or stops at the
   limit.
+- **Default usage links fetched from GitHub are used only when they are https
+  URLs.** The settings screen takes the default "usage page" links for each
+  provider from this project's `resources/` on GitHub and opens them when you
+  click. A value with another scheme (`javascript:`, a custom app scheme,
+  `http:`) is now dropped by the Hub and again by the screen, and the built-in
+  default is used instead. Links you enter yourself are not affected.
 
 ## [0.10.0-rc.2] - 2026-11-09
 

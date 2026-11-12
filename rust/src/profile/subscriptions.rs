@@ -31,7 +31,7 @@ pub struct SubscriptionLauncher {
     // Per-provider round robin, not session ownership or a quota ledger.
     round_robin: Mutex<BTreeMap<String, usize>>,
     // Installs Codex Desktop's browser plugins into a Codex profile.
-    codex_plugin_installer: Box<codex_browser::Installer>,
+    codex_plugin_installer: std::sync::Arc<codex_browser::Installer>,
 }
 impl SubscriptionLauncher {
     pub fn new(paths: RuntimePaths, home: PathBuf, hub_cwd: PathBuf) -> Self {
@@ -40,12 +40,12 @@ impl SubscriptionLauncher {
             home,
             hub_cwd,
             round_robin: Mutex::new(BTreeMap::new()),
-            codex_plugin_installer: Box::new(codex_browser::install_with_codex_cli),
+            codex_plugin_installer: std::sync::Arc::new(codex_browser::install_with_codex_cli),
         }
     }
     #[cfg(test)]
     fn with_codex_plugin_installer(mut self, installer: Box<codex_browser::Installer>) -> Self {
-        self.codex_plugin_installer = installer;
+        self.codex_plugin_installer = installer.into();
         self
     }
     /// CRUD creation uses the same named-entry seed authority as spawn, but
@@ -77,7 +77,7 @@ impl SubscriptionLauncher {
             provider,
             &directory,
             profile,
-            &*self.codex_plugin_installer,
+            &self.codex_plugin_installer,
         )
     }
     pub fn launch(
@@ -133,7 +133,7 @@ impl SubscriptionLauncher {
             provider,
             &directory,
             &profile,
-            &*self.codex_plugin_installer,
+            &self.codex_plugin_installer,
         )?;
         Ok((
             vec![

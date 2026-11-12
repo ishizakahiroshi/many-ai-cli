@@ -22,6 +22,7 @@ import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } 
 import { handleUsageStatMessage, removeUsageCacheEntry, resetUsageCache } from './token-statusbar.js';
 import { checkHandoffNotifyFromUsageStat, handleHandoffNoteMessage } from './handoff.js';
 import { refreshGitLockNotice, scheduleGitLockCheck } from './git-lock-notice.js';
+import { refreshSaveLeftoverNotice } from './save-leftover-notice.js';
 import { receiveSubagentTree, receiveWorkflowProgress, removeWorkflowSnapshot } from './workflow-modal.js';
 import { removeSubagentTree, setSubagentTree } from './workflow-store.js';
 import { dropDoneSummary, setDoneSummary } from './done-summary.js';
@@ -302,6 +303,8 @@ export function _connectWs() {
     _sendRegister();
     // 止まった git が残したロックは Hub が覚えている。つながるたびに一覧を取り直す。
     void refreshGitLockNotice();
+    // 保存の途中で Hub が止まった file の控えも、つながるたびに一覧を取り直す。
+    void refreshSaveLeftoverNotice();
   };
   _ws.onmessage = (ev) => {
     // 任意のメッセージ受信（ping 含む）で死活タイマを更新する。

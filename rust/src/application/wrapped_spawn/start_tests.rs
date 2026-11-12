@@ -184,6 +184,8 @@ fn ordinary_permission_risk_and_custom_model_arguments_match_provider_switch() {
         req.spec.sandbox = "danger-full-access".into();
         req.spec.ask_for_approval = "never".into();
         req.spec.risk_confirmed = false;
+        // A wrapper flag that comes after the model in the command line.
+        req.spec.utf8_session = true;
         req.policy.ordinary_model_args =
             vec!["--synthetic-model=日本語 a".into(), "literal;$()".into()];
         let unconfirmed = launch::prepare_start(
@@ -221,14 +223,60 @@ fn ordinary_permission_risk_and_custom_model_arguments_match_provider_switch() {
             provider == "codex",
             "{provider}"
         );
+        // Audit N19: what the wrapper does not know as a flag of its own (a
+        // custom model template, the provider's own spelling of an effort)
+        // goes last, behind `--`, so the wrapper reads every flag of its own
+        // and hands the rest over whole.
+        let wrap = argv.iter().position(|v| v == "wrap").unwrap();
+        let wrapper: Vec<String> = argv[wrap + 2..]
+            .iter()
+            .map(|v| v.to_string_lossy().into_owned())
+            .collect();
+        let parsed = crate::wrapper::launch::WrapperArgs::parse(&wrapper);
+        assert_eq!(parsed.parse_error, None, "{provider}");
+        assert!(parsed.utf8, "{provider}");
         if provider == "synthetic-custom" {
             assert!(!argv.iter().any(|v| v == "--model"));
-            assert!(
-                argv.windows(2)
-                    .any(|v| v == ["--synthetic-model=日本語 a", "literal;$()"])
+            assert_eq!(
+                parsed.provider_args,
+                [
+                    "--synthetic-model=日本語 a",
+                    "literal;$()",
+                    "-c",
+                    "model_reasoning_effort=high"
+                ]
             );
+            assert!(argv.ends_with(&[
+                "--".into(),
+                "--synthetic-model=日本語 a".into(),
+                "literal;$()".into(),
+                "-c".into(),
+                "model_reasoning_effort=high".into()
+            ]));
+            // A plain `--model <name>` is the wrapper's own flag and stays
+            // where it was.
+            req.policy.ordinary_model_args = vec!["--model".into(), "synthetic-name".into()];
+            let prepared = launch::prepare_start(
+                &t.options,
+                t.policy.as_ref(),
+                &req.spec,
+                &req.policy,
+                req.kind,
+                &|_| {},
+            )
+            .unwrap();
+            let argv = prepared.process.args;
+            let model = argv.iter().position(|v| v == "--model").unwrap();
+            assert_eq!(argv[model + 1], "synthetic-name");
+            assert!(model < argv.iter().position(|v| v == "--").unwrap());
         } else {
             assert!(argv.windows(2).any(|v| v == ["--model", "prepared-model"]));
+            assert_eq!(parsed.model, "prepared-model", "{provider}");
+            assert_eq!(
+                parsed.provider_args,
+                ["-c", "model_reasoning_effort=high"],
+                "{provider}"
+            );
         }
     }
 }

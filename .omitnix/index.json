@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "4309a681497b6bc528ff4d936f84b737a780bee2",
+    "commit": "82d29841a7e2c80ca69b42c903fe78621aefa096",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2095,
-    "analyzed": 1628,
+    "discovered": 2099,
+    "analyzed": 1632,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 452,
@@ -29777,6 +29777,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/files/save_backup.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "The copy of a file's earlier bytes that a save keeps while it writes (U18),"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/files/scope.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -47176,6 +47205,36 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/save-leftover-notice.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "保存の途中で Hub が止まった file の知らせ（監査 N16）。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/server-modal.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -51393,6 +51452,36 @@
       "unresolved": []
     },
     {
+      "path": "web/tests/save-leftover-notice.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/tests/session-list-tabs-dom.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -51844,6 +51933,36 @@
     },
     {
       "path": "web/tests/ui-components.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/usage-link-defaults.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

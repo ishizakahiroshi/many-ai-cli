@@ -1863,6 +1863,7 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
                     | "/api/files-asset"
                     | "/api/files-download"
                     | "/api/files-roots"
+                    | "/api/files-save-leftovers"
                     | "/api/git-log"
                     | "/api/git-show"
                     | "/api/git-refs"
