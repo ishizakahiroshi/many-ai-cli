@@ -29,67 +29,9 @@ export function stripAnsiBasic(s) {
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
 }
 
-// Claude Code / Codex の「思考中」スピナー行を判定する。
-// PTY を ANSI 除去しただけだと、思考中ステータス行
-// （"✳ Imploring… (12s · ↑3.2k tokens · esc to interrupt)" 等）の再描画フレームが
-// 大量に連結して残る。これらは会話本文ではないので 1 行まるごと落とす。
-// 誤検出を避けるため、星形 dingbat（✢✳✶✷ U+2722–U+273F）と braille に絞り、
-// ✓✗ など普通に使う記号は対象にしない。Go 側 sessionlog.IsThinkingNoiseLine と同義。
-const SPINNER_ANIM_RE = /[✢-✿⠀-⣿]/;
-const SPINNER_ANIM_RE_G = /[✢-✿⠀-⣿]/g;
-
-export function isThinkingNoiseLine(line) {
-  const t = String(line == null ? '' : line).trim();
-  if (!t) return false;
-  const lower = t.toLowerCase();
-  // 1) ステータスフッター（Claude/Codex とも "esc to interrupt" を必ず表示する）
-  if (lower.includes('esc to interrupt')) return true;
-  // 2) モード切替ヒント "auto mode on (shift+tab to cycle)"
-  if (/shift\s*\+\s*tab to cycle/i.test(t)) return true;
-  // 3) トークンバー "↑111.0k ↓764"
-  if (t.includes('↑') && t.includes('↓')) return true;
-  // 4) "thinking" + スピナーグリフ（思考アニメの再描画フレーム）
-  if (lower.includes('thinking') && SPINNER_ANIM_RE.test(t)) return true;
-  // 5) スピナーグリフが複数現れる断片（"Imp·rmpovri✶osviisng✶..." 等）
-  const m = t.match(SPINNER_ANIM_RE_G);
-  if (m && m.length >= 2) return true;
-  return false;
-}
-
-// D15: 軽い正規化（行頭末 trim / prompt prefix 除去 / 連続空行圧縮）。
-// コードブロック内（```...```）の trim はあえてしない。
-export function normalizeChatText(raw) {
-  if (!raw) return '';
-  // [MANY-AI-CLI]...[/MANY-AI-CLI] / [MANY-AI-CLI-DONE]...[/MANY-AI-CLI-DONE] ブロックを除去
-  // （承認マーカー・完了サマリーマーカーはチャットに表示しない。DONE は -DONE 付きで
-  //  別リテラルのため、汎用の [MANY-AI-CLI] パターンに一致せず先に専用で除去する）
-  let s = raw
-    .replace(/\[MANY-AI-CLI-DONE\][\s\S]*?\[\/MANY-AI-CLI-DONE\]/g, '')
-    .replace(/\[MANY-AI-CLI\][\s\S]*?\[\/MANY-AI-CLI\]/g, '');
-  const lines = s.split(/\r?\n/);
-  const out = [];
-  let inFence = false;
-  let blankRun = 0;
-  for (let line of lines) {
-    const isFenceMarker = /^\s*```/.test(line);
-    if (isFenceMarker) inFence = !inFence;
-    // 思考中スピナーの再描画フレーム行を丸ごと落とす（コードフェンス内・フェンス行は対象外）
-    if (!inFence && !isFenceMarker && isThinkingNoiseLine(line)) continue;
-    if (!inFence) {
-      // prompt prefix 除去（行頭のみ）
-      line = line.replace(/^[\s]*[▌>$#]\s?/, '');
-      line = line.replace(/\s+$/, '');
-    }
-    if (!inFence && line.trim() === '') {
-      blankRun++;
-      if (blankRun <= 1) out.push('');
-    } else {
-      blankRun = 0;
-      out.push(line);
-    }
-  }
-  return out.join('\n').replace(/^\n+|\n+$/g, '');
-}
+// 本文の正規化（思考中の行の判定を含む）は chat-normalize.ts にある。ここからも今までどおり使える。
+import { isThinkingNoiseLine, normalizeChatText } from './chat-normalize.js';
+export { isThinkingNoiseLine, normalizeChatText };
 
 export function chatHistoryNextId(sid) {
   const next = (chatHistoryIdSeq.get(sid) || 0) + 1;

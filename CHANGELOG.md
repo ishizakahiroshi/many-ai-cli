@@ -213,6 +213,14 @@ Release artifacts are published at
   repository root, but their line counts were read relative to the session's
   folder, so in a subfolder the count was 0 or that of another file with the
   same relative name.
+- **A message with a very long run of spaces or blank lines no longer freezes
+  the dashboard.** Every received chat message is tidied (trailing spaces,
+  leading and trailing blank lines) whether or not the chat view is open. A
+  single line of 200,000 spaces followed by a character, or as many blank
+  lines inside a code block, took about 11 seconds each in V8 (the JavaScript
+  engine of Chrome; measured with Node), during which the page does not
+  respond. The same inputs now take under 20 milliseconds; the tidied text is
+  unchanged.
 
 ### Security
 

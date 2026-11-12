@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "82d29841a7e2c80ca69b42c903fe78621aefa096",
+    "commit": "b305cfecd809f3f51486d55a33d6cef32f665d5e",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2099,
-    "analyzed": 1632,
+    "discovered": 2104,
+    "analyzed": 1637,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 452,
@@ -43425,6 +43425,36 @@
       "unresolved": []
     },
     {
+      "path": "web/scripts/fixture-files.mjs",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "node --test で回す fixture の一覧。web/src/app/*-fixtures.ts から作る（手で並べない。監査 N37）。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/scripts/repro-spinner-fossil.mjs",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -43432,6 +43462,36 @@
         "summary": {
           "state": "value",
           "value": "bugfix_spinner-cup-not-consumed-in-webui_2026-07-02.md の仮説確定実験。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/scripts/run-fixtures.mjs",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "dist の fixture（web/src/app/*-fixtures.ts を組み立てたもの）を node --test で全部回す。"
         },
         "authentication": {
           "state": "not_configured"
@@ -44302,6 +44362,66 @@
         "summary": {
           "state": "value",
           "value": "--- ESM imports (generated) ---"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/chat-normalize-fixtures.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/chat-normalize.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "チャットに入れる本文の軽い正規化（chat-history.ts から分けた。DOM に触らないので単体で試せる）。"
         },
         "authentication": {
           "state": "not_configured"
@@ -50943,6 +51063,36 @@
     },
     {
       "path": "web/tests/files-open-mode.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/fixture-list.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {
