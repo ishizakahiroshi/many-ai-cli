@@ -24,7 +24,7 @@ TARGETS = {
 }
 WINDOWS_RUNTIME_NAMES = ('vcomp140.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
 PACKAGING_INPUTS = ('BUILD-INPUTS.json', 'CRATE-NOTICES.txt', 'build-inputs.spdx.json')
-PINNED_NODE_VERSION = 'v22.23.4'
+PINNED_NODE_VERSION = 'v22.23.5'
 # The helper bounds every step itself (about 240 s in total plus cleanup); this outer
 # limit only stops a helper that has hung, well before the job's own 45 minutes.
 SMOKE_SCRIPT = 'scripts/rust-candidate-smoke.py'
@@ -34,7 +34,7 @@ SMOKE_OUTER_TIMEOUT_SECONDS = 420
 
 def require_node_version(version: str) -> None:
     if version != PINNED_NODE_VERSION:
-        raise ValueError('pinned Node 22.23.4 toolchain mismatch')
+        raise ValueError('pinned Node 22.23.5 toolchain mismatch')
 
 def release_version(tag: str) -> str:
     if not isinstance(tag, str):

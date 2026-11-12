@@ -19,8 +19,8 @@ spec.loader.exec_module(ci)
 
 class CandidateReceiptTests(unittest.TestCase):
     def test_node_runtime_rejects_missing_old_and_unselected_versions(self):
-        ci.require_node_version('v22.23.4')
-        for value in ('', 'v22.23.3', 'v22.22.0', 'v20.20.0', 'v24.22.1', '22.23.4', 'v22.23.4\nextra'):
+        ci.require_node_version('v22.23.5')
+        for value in ('', 'v22.23.4', 'v22.23.3', 'v22.22.0', 'v20.20.0', 'v24.22.3', '22.23.5', 'v22.23.5\nextra'):
             with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'Node'):
                 ci.require_node_version(value)
 
@@ -169,7 +169,7 @@ class CandidateReceiptTests(unittest.TestCase):
             if args == ['bun', '--version']:
                 return '1.4.4'
             if args == ['node', '--version']:
-                return 'v22.23.4'
+                return 'v22.23.5'
             if args[:2] == ['go', 'env']:
                 return str(root / 'synthetic-cache')
             raise AssertionError(f'unexpected mocked command: {args}')
@@ -217,7 +217,7 @@ class CandidateReceiptTests(unittest.TestCase):
         self.assertEqual(receipt['status'], 'native-release-build-not-accepted-for-publication')
         self.assertEqual(receipt['release_tag'], 'v1.0.0')
         self.assertEqual(receipt['build_commit'], 'a' * 40)
-        self.assertEqual(receipt['node'], 'v22.23.4')
+        self.assertEqual(receipt['node'], 'v22.23.5')
         for args, env in calls:
             if args[0] == 'cargo':
                 self.assertEqual(env['MANY_AI_BUILD_VERSION'], '1.0.0')

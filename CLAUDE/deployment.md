@@ -15,7 +15,7 @@ v0.3.x 設計書（非公開・履歴）: [../docs/local/archive/v0.3.x/v0.3.x-m
 リリース前に調査用のログ・追跡・監視・計測機能を全件 `debug-purge` し、`node scripts/check-instrumentation.mjs --release` を通す。方針と分離方法は [coding.md の「調査用機能の分離と purge」](coding.md#調査用機能の分離と-purge)、台帳は `instrumentation.json`。GitHub Release workflow とローカル GoReleaser の before hook の両方で検査し、未パージなら止める。ビルド対象からの除外と、パージ完了は別の条件である。
 
 - Go 1.26.8+（`go.mod` の `go` 行が正本）
-- Node.js 20+（フロントのビルドスクリプト `web/scripts/build.mjs`、`scripts/` の検査スクリプト、`node --test` の実行用）
+- Node.js 22+（フロントのビルドスクリプト `web/scripts/build.mjs`、`scripts/` の検査スクリプト、`node --test` の実行用）
 - Bun 1.3+（フロント `web/` の依存取得・スクリプト起動用。npm は使わない）
 - フロントは事前に `web/dist/` をビルドし、Go の `//go:embed web/dist` で同梱
 

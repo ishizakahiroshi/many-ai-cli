@@ -315,7 +315,7 @@ Linux/macOS builds are expected to work, but they have not been fully validated 
 
 **Developer install (npm registry — recommended):**
 
-Use a supported Node.js release with current security fixes for the Node launcher (for example, Node.js 22.23.4 LTS or a later patched release). The package's engine range describes compatibility, not a security support policy. [Node.js security release](https://nodejs.org/en/blog/release/v22.23.4).
+The npm launcher needs Node.js 22 or later. Use a supported Node.js release with current security fixes for it (for example, Node.js 22.23.5 LTS or a later patched release). The package's engine range describes compatibility, not a security support policy. [Node.js security release](https://nodejs.org/en/blog/release/v22.23.5).
 
 ```powershell
 pnpm add -g many-ai-cli

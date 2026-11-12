@@ -43,6 +43,6 @@
     "many-ai-cli-macos-apple-silicon": "0.3.1"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   }
 }

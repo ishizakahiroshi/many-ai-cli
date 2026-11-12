@@ -13,7 +13,7 @@
 | ツール | 用途 | 備考 |
 |---|---|---|
 | Go 1.26.8+（`go.mod` が正本） | 本体ビルド | `winget install GoLang.Go` または公式インストーラ |
-| Node.js 20+ | フロント (`web/`) ビルドスクリプト実行 | `winget install OpenJS.NodeJS.LTS` |
+| Node.js 22+ | フロント (`web/`) ビルドスクリプト実行 | `winget install OpenJS.NodeJS.LTS` |
 | Bun 1.3+ | フロント (`web/`) 依存取得・スクリプト起動 | `winget install Oven-sh.Bun` |
 | Git | バージョン管理 | Git Bash (MSYS2) 同梱 |
 | VS Code | エディタ | Go・ESLint 拡張 |

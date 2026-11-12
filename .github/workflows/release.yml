@@ -58,7 +58,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         if: steps.target.outputs.mode == 'full'
         with:
-          node-version: '22.23.4'
+          node-version: '22.23.5'
       - name: Refuse registered instrumentation before any native compile
         if: steps.target.outputs.mode == 'full'
         run: node scripts/check-instrumentation.mjs --release
@@ -130,7 +130,7 @@ jobs:
           cache: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '22.23.4'
+          node-version: '22.23.5'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: '1.4.4'
@@ -186,7 +186,7 @@ jobs:
           python-version: '3.12'
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '22.23.4'
+          node-version: '22.23.5'
       - name: Require four current native artifacts (partial reruns fail)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -526,13 +526,13 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
-      # Node 24.22.2 carries npm 11.19.1; staged publishing (npm stage publish)
+      # Node 24.22.3 carries npm 11.19.1; staged publishing (npm stage publish)
       # needs npm 11.15.0 or later. The registry URL input stays unset, so setup-node writes no
       # .npmrc whose token placeholder npm could send instead of the exchanged
       # credential.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '24.22.2'
+          node-version: '24.22.3'
       - name: Require an npm that can stage through Trusted Publishing
         run: |
           set -euo pipefail

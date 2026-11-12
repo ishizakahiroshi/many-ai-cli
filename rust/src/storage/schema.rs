@@ -14,10 +14,10 @@ pub(super) fn open_connection(
     // SQLITE_OPEN_NOFOLLOW also rejects Darwin's system /var alias. Expand
     // only the fixed OS aliases; do not follow arbitrary trial path components.
     let path = crate::config::paths::native_system_path(path);
-    let conn = Connection::open_with_flags(path.as_ref(), flags)
+    let mut conn = Connection::open_with_flags(path.as_ref(), flags)
         .map_err(|e| sql_error(StorageErrorKind::Open, e))?;
-    let fts = initialize(&conn, init_timeout)?;
-    purge_message_bodies(&conn, fts, init_timeout)?;
+    let fts = initialize(&mut conn, init_timeout)?;
+    purge_message_bodies(&mut conn, fts, init_timeout)?;
     mask_stored_approvals(&conn).map_err(|e| sql_error(StorageErrorKind::Open, e))?;
     Ok((conn, fts))
 }
@@ -68,7 +68,7 @@ fn mask_stored_approvals(conn: &Connection) -> rusqlite::Result<()> {
 }
 /// Databases written by earlier versions hold conversation bodies. Remove them
 /// once (zeroing freed pages) so a stored secret does not outlive the upgrade.
-fn purge_message_bodies(conn: &Connection, fts: bool, timeout: Duration) -> StorageResult<()> {
+fn purge_message_bodies(conn: &mut Connection, fts: bool, timeout: Duration) -> StorageResult<()> {
     let stale = conn
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM messages WHERE NOT (role='system' AND kind='attach')) OR EXISTS(SELECT 1 FROM events) OR EXISTS(SELECT 1 FROM sessions WHERE COALESCE(first_message,'')<>'' OR COALESCE(last_message,'')<>'')",
@@ -99,7 +99,7 @@ fn purge_message_bodies(conn: &Connection, fts: bool, timeout: Duration) -> Stor
         .map_err(|e| sql_error(StorageErrorKind::Open, e))?;
     purged
 }
-fn initialize(conn: &Connection, init_timeout: Duration) -> StorageResult<bool> {
+fn initialize(conn: &mut Connection, init_timeout: Duration) -> StorageResult<bool> {
     // The timeout must precede even journal mode: the first pragma can contend.
     conn.busy_timeout(Duration::from_secs(3))
         .map_err(|e| sql_error(StorageErrorKind::Open, e))?;
@@ -143,7 +143,8 @@ fn ensure_columns(
     }
     Ok(())
 }
-pub(super) fn deadline(conn: &Connection, at: Instant) -> rusqlite::Result<()> {
+/// rusqlite 0.41 takes the connection exclusively to install a handler.
+pub(super) fn deadline(conn: &mut Connection, at: Instant) -> rusqlite::Result<()> {
     conn.progress_handler(1000, Some(move || Instant::now() >= at))
 }
 pub(super) fn apply_pending_reset(directory: &Dir) -> StorageResult<()> {
@@ -186,7 +187,7 @@ mod tests {
     #[test]
     fn unavailable_fts_is_a_supported_initialization_capability() {
         let root = tempfile::tempdir().unwrap();
-        let c = Connection::open(root.path().join("synthetic.db")).unwrap();
+        let mut c = Connection::open(root.path().join("synthetic.db")).unwrap();
         c.authorizer(Some(|ctx: AuthContext<'_>| {
             if matches!(ctx.action, AuthAction::CreateVtable { .. }) {
                 Authorization::Deny
@@ -195,7 +196,7 @@ mod tests {
             }
         }))
         .unwrap();
-        assert!(!initialize(&c, Duration::from_secs(30)).unwrap());
+        assert!(!initialize(&mut c, Duration::from_secs(30)).unwrap());
         c.execute(
             "INSERT INTO sessions(live_session_id,jsonl_path) VALUES (1,'synthetic')",
             [],

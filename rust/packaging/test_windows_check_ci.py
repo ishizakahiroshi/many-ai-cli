@@ -23,7 +23,7 @@ ENV = {"MANY_AI_REVIEW_HEAD_SHA": SHA, "RUNNER_OS": "Windows", "RUNNER_ARCH": "X
        "GITHUB_WORKFLOW_REF": "synthetic/repo/.github/workflows/rust-windows-check.yml@refs/heads/check",
        "GITHUB_WORKFLOW_SHA": "b" * 40}
 VERSIONS = {"rustc": "rustc 1.90.0 (synthetic)\nhost: x86_64-pc-windows-msvc",
-            "go": "go version go1.26.8 windows/amd64", "bun": "1.4.4", "node": "v22.23.4"}
+            "go": "go version go1.26.8 windows/amd64", "bun": "1.4.4", "node": "v22.23.5"}
 
 
 class WindowsCheckTests(unittest.TestCase):

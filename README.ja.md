@@ -278,7 +278,7 @@ Linux / macOS でも動作する想定ですが、現時点では実機での十
 
 **開発者向けインストール（npm registry・推奨）:**
 
-Node起動処理には、セキュリティ修正済みのサポート中Node.jsを使ってください（例: Node.js 22.23.4 LTS以降の修正版）。packageのengine範囲は互換性を表し、安全性のサポート期間を保証するものではありません。[Node.jsの修正リリース](https://nodejs.org/en/blog/release/v22.23.4)。
+npmの起動処理にはNode.js 22以降が必要です。セキュリティ修正済みのサポート中Node.jsを使ってください（例: Node.js 22.23.5 LTS以降の修正版）。packageのengine範囲は互換性を表し、安全性のサポート期間を保証するものではありません。[Node.jsの修正リリース](https://nodejs.org/en/blog/release/v22.23.5)。
 
 ```powershell
 pnpm add -g many-ai-cli

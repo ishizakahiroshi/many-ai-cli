@@ -678,6 +678,15 @@ Release artifacts are published at
   click. A value with another scheme (`javascript:`, a custom app scheme,
   `http:`) is now dropped by the Hub and again by the screen, and the built-in
   default is used instead. Links you enter yourself are not affected.
+- **The bundled SQLite is updated to a version with the fix for
+  RUSTSEC-2026-0459 (CVE-2026-119375).** `rusqlite` goes from 0.40.2 to 0.41.1
+  (`libsqlite3-sys` 0.38.2 to 0.39.1). The flaw is in reading a crafted `-wal`
+  file placed beside a database the Hub opens; the Hub's databases are created
+  by the Hub in its own folder.
+- **The npm launcher now requires Node.js 22 or later** (`engines.node` was
+  `>=18`; Node.js 18 and 20 no longer receive security fixes). CI and the
+  release workflow build with Node.js 22.23.5 (2026-11-11) and 24.22.3
+  (2026-11-10), the current security releases.
 
 ## [0.10.0-rc.2] - 2026-11-09
 
