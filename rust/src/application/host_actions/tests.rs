@@ -191,6 +191,27 @@ fn windows_terminal_and_explorer_take_the_folder_name_as_data() {
     );
 }
 #[test]
+fn audit_n12_a_configured_windows_terminal_is_recognised_however_it_is_written() {
+    // Recognised, it gets the folder as an escaped `-d` value instead of a
+    // bare argument it would split at `;`.
+    for app in [
+        "wt.exe",
+        "wt",
+        "WT.EXE",
+        r"C:\Synthetic\Apps\wt.exe",
+        "C:/Synthetic/Apps/WindowsTerminal.exe",
+        r#""C:\Synthetic Apps\wt.exe""#,
+        " wt.exe ",
+    ] {
+        assert!(is_windows_terminal(app), "{app}");
+    }
+    for app in ["synthetic-terminal", "wt-helper.exe", "alacritty.exe", ""] {
+        assert!(!is_windows_terminal(app), "{app}");
+    }
+    #[cfg(windows)]
+    assert_eq!(terminal_description("wt.exe"), "wt.exe -d <dir>");
+}
+#[test]
 fn macos_open_only_selects_a_folder_that_can_be_an_app_bundle() {
     let args = |kind, path: &str| -> Vec<String> {
         macos_open_args(kind, Path::new(path))

@@ -336,7 +336,40 @@ Release artifacts are published at
   out, to a browser that looks the same, for 7 days. Logging out, changing or
   clearing the PIN, revoking all access and restarting the Hub each end it.
   With a PIN set, a tab left open across a Hub restart is asked for the PIN
-  (or open the dashboard again from many-ai-cli).- **Release keys wait for the owner's approval.** The npm and Homebrew/winget
+  (or open the dashboard again from many-ai-cli).
+- **"Open in terminal" starts the terminal only on a folder that exists, and
+  looks at nothing on another machine.** The path comes from a link: text an
+  AI CLI printed, a file name, a link in a Markdown file.
+  - The text was handed to the terminal app as it was. A folder name that did
+    not exist could carry a `;`, which Windows Terminal (when set as
+    `terminal_app`) reads as the start of another command; a path to a file
+    (a work-memo path without an extension counts as a folder) could reach the
+    macOS or Linux terminal app, which may run it. The Hub now resolves the
+    path and starts the terminal on an existing folder only: the folder
+    itself, or the folder of an existing file. A name that does not exist
+    answers "folder not found". A configured Windows Terminal (`wt`,
+    `wt.exe`, `WindowsTerminal.exe`) gets the folder as `-d` with each `;`
+    escaped, like the default one.
+  - On Windows, a link spelled `\\host\share\…` made the Hub look the path up,
+    and Windows connected to that host to do so (which can hand over a
+    challenge-response of your sign-in). Such a spelling is now refused before
+    anything looks at it. A folder on a network share can therefore no longer
+    be opened in a terminal from the dashboard, as with "Open folder".
+- **A connection from another machine cannot register itself as a session.**
+  The sockets of running sessions are kept when access is revoked, so that
+  work goes on. Someone who held the token (and a PIN session) remotely could
+  open such a socket, and it stayed after "Revoke all access", a PIN change
+  and logout: a session of theirs in your list, receiving what you typed into
+  it. A session socket is now taken only from this machine (with a PIN set,
+  only with the proof many-ai-cli makes from the private config).
+- **Request bodies have a size that fits and a time limit.** The request that
+  trades a launch code is read before any credential is checked; it accepted
+  up to 1 MiB with no time limit, so anyone who could reach the port could
+  hold connections and memory. It now takes 1 KiB within 10 seconds, and a
+  request from another machine is answered before its body is read. Every
+  other request body must arrive within 30 seconds (10 minutes for uploads);
+  a body that takes longer gets `408`.
+- **Release keys wait for the owner's approval.** The npm and Homebrew/winget
   publishing jobs use the `release` environment, so the keys they need are
   handed over only after the owner approves the run (one approval covers
   both).

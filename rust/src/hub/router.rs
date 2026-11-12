@@ -175,7 +175,16 @@ impl ServiceRouter {
             // The launch code stands in for the token here (U04).
             super::http::require_method(request, &["POST"])?;
             auth::require_host(request, config, port)?;
-            return auth::require_origin(request, config, port);
+            auth::require_origin(request, config, port)?;
+            // A code is redeemed only on this machine; a request from
+            // elsewhere is answered before its body is read (audit N28), with
+            // the answer the handler gives it.
+            if auth::logically_remote(request) {
+                return Err(
+                    Response::error(401, "launch_refused", "launch code refused").no_store(),
+                );
+            }
+            return Ok(());
         }
         let base = matches!(
             request.path.as_str(),

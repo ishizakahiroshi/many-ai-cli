@@ -658,8 +658,66 @@ async fn terminal_route_hands_a_folder_name_with_semicolons_to_the_dispatch_as_i
     assert_eq!(open(&f, "/api/open-terminal", &folder).await.0, 200);
     assert_eq!(
         f.dispatch.opened.lock().unwrap().pop().unwrap(),
-        (OpenKind::Terminal, folder, String::new())
+        (OpenKind::Terminal, canonical(&folder), String::new())
     );
+}
+#[tokio::test]
+async fn audit_n12_the_terminal_gets_an_existing_folder_and_never_a_file_or_a_missing_name() {
+    let f = fixture();
+    let root = f.http.paths.root().to_owned();
+    std::fs::create_dir(root.join("tools")).unwrap();
+    // A file a terminal app would run if it were handed over.
+    let script = root.join("tools").join("setup");
+    std::fs::write(&script, b"synthetic").unwrap();
+    assert_eq!(open(&f, "/api/open-terminal", &script).await.0, 200);
+    assert_eq!(
+        f.dispatch.opened.lock().unwrap().pop().unwrap(),
+        (
+            OpenKind::Terminal,
+            canonical(&root.join("tools")),
+            String::new()
+        )
+    );
+    // A name that does not exist is text someone else wrote: with `;` in it,
+    // a terminal app would read the rest as a command.
+    for missing in [root.join("a;calc"), root.join("tools").join("a;calc")] {
+        let (status, body) = open(&f, "/api/open-terminal", &missing).await;
+        assert_eq!(status, 404, "{body}");
+    }
+    assert!(f.dispatch.opened.lock().unwrap().is_empty());
+    // What is opened is the resolved folder, not the spelling that was sent.
+    let sep = std::path::MAIN_SEPARATOR;
+    let roundabout = format!("{}{sep}..{sep}tools", root.join("tools").display());
+    assert_eq!(open(&f, "/api/open-terminal", &roundabout).await.0, 200);
+    assert_eq!(
+        f.dispatch.opened.lock().unwrap().pop().unwrap().1,
+        canonical(&root.join("tools"))
+    );
+}
+#[tokio::test]
+async fn audit_n13_the_terminal_route_refuses_another_machine_before_touching_the_file_system() {
+    let f = fixture();
+    // Resolving any of these would make Windows connect to the named host.
+    // The refusal is the one made on the spelling alone, not the later
+    // "outside the roots" that follows a look at the file system.
+    let spellings: &[&str] = if cfg!(windows) {
+        &[
+            r"\\synthetic-host.invalid\share\folder",
+            "//synthetic-host.invalid/share/folder",
+            r"\\?\UNC\synthetic-host.invalid\share\folder",
+            r"\\.\pipe\synthetic",
+        ]
+    } else {
+        // Elsewhere two leading separators are an ordinary local path; a
+        // final `..` is still not taken as spelled.
+        &["/synthetic/folder/.."]
+    };
+    for spelling in spellings {
+        let (status, body) = open(&f, "/api/open-terminal", spelling).await;
+        assert_eq!(status, 403, "{spelling}: {body}");
+        assert!(body.to_string().contains("spelling"), "{spelling}: {body}");
+    }
+    assert!(f.dispatch.opened.lock().unwrap().is_empty());
 }
 #[test]
 fn source_path_casefold_uses_unicode_classes_and_component_boundary() {

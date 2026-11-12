@@ -259,6 +259,13 @@ impl HostDispatch for NativeHostDispatch {
     fn open(&self, kind: OpenKind, path: &Path, app: &str) -> io::Result<()> {
         self.allowed()?;
         if kind == OpenKind::Terminal && !app.is_empty() {
+            // A configured Windows Terminal reads ";" in its arguments as the
+            // start of another command, like the default one below (U12,
+            // audit N12): it gets the folder as an escaped `-d` value.
+            #[cfg(windows)]
+            if is_windows_terminal(app) {
+                return self.detached(app, vec!["-d".into(), wt_directory(path)]);
+            }
             return self.detached(app, vec![path.as_os_str().to_owned()]);
         }
         #[cfg(windows)]
@@ -379,6 +386,22 @@ fn explorer_argument(select: bool, path: &Path) -> OsString {
     value.push("\"");
     value
 }
+/// Whether a configured terminal app is Windows Terminal (`wt`, `wt.exe`,
+/// `WindowsTerminal.exe`, with or without a folder in front).
+#[cfg(any(test, windows))]
+fn is_windows_terminal(app: &str) -> bool {
+    let name = app
+        .trim()
+        .trim_matches('"')
+        .rsplit(['\\', '/'])
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    matches!(
+        name.as_str(),
+        "wt" | "wt.exe" | "windowsterminal" | "windowsterminal.exe"
+    )
+}
 /// Windows Terminal splits its own command line at every `;` that is not
 /// written as `\;`, even inside one argument, and reads the rest as another
 /// command (U12). Each `;` is escaped, which Windows Terminal turns back into
@@ -411,6 +434,10 @@ fn macos_open_args(kind: OpenKind, path: &Path) -> Vec<OsString> {
 }
 pub fn terminal_description(app: &str) -> String {
     if !app.is_empty() {
+        #[cfg(windows)]
+        if is_windows_terminal(app) {
+            return format!("{app} -d <dir>");
+        }
         return format!("{app} <dir>");
     }
     if cfg!(windows) {

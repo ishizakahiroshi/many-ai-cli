@@ -305,6 +305,25 @@ impl WebSocketService {
                     "unknown WebSocket role".into(),
                 ));
             }
+            // A wrapper is a process on this machine: it connects to 127.0.0.1
+            // and, with a PIN set, shows the proof made from the private
+            // config. A wrapper-role socket is not closed when access is
+            // revoked (running sessions stay connected), so one opened from
+            // elsewhere with a token and a PIN session would outlive both
+            // and go on receiving input and painting output (audit N26).
+            // Such a connection is not taken as a wrapper at all.
+            let now_seconds = Timestamp::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |elapsed| elapsed.as_secs() as i64);
+            if self
+                .services
+                .auth
+                .treated_remote(&request, &config.config, now_seconds)
+            {
+                return Err(SessionError::InvalidRequest(
+                    "wrapper connections are accepted only from this machine".into(),
+                ));
+            }
             let spawn_proof = registration_proof(&request)?;
             if first.r#type == "reattach" && spawn_proof.is_some() {
                 return Err(SessionError::InvalidRequest(

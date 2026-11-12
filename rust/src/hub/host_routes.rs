@@ -149,19 +149,33 @@ impl HostHttp {
                     return Response::error(400, "bad_request", "path is required");
                 }
                 if path == "/api/open-terminal" {
-                    if let Err(response) = self.allowed(r, &body.path, false) {
+                    // The path comes from text an AI CLI or a file showed
+                    // (a path link). A spelling that names another machine
+                    // or a device is refused before anything touches the
+                    // file system, which would connect to that machine
+                    // (audit N13). What the terminal is started on is an
+                    // existing folder under its resolved name: a file is
+                    // never handed over, where a terminal would run it,
+                    // and a name that does not exist cannot carry text
+                    // the terminal reads as a command (audit N12).
+                    let raw = without_verbatim_disk(&body.path);
+                    if !plain_local_spelling(raw) {
+                        return Response::error(403, "forbidden", "path spelling not allowed");
+                    }
+                    if let Err(response) = self.allowed(r, raw, false) {
                         return response;
                     }
+                    let target = match terminal_target(Path::new(raw)) {
+                        Ok(target) => target,
+                        Err(response) => return response,
+                    };
                     let app = match self.config.snapshot() {
                         Ok(cfg) => cfg.config.terminal_app,
                         Err(_) => {
                             return Response::error(500, "internal", "configuration unavailable");
                         }
                     };
-                    return match self
-                        .dispatch
-                        .open(OpenKind::Terminal, Path::new(&body.path), &app)
-                    {
+                    return match self.dispatch.open(OpenKind::Terminal, &target, &app) {
                         Ok(()) => Response::json(200, &serde_json::json!({"ok":true})),
                         Err(error) => Response::error(500, "open_failed", &error.to_string()),
                     };
@@ -510,6 +524,23 @@ fn folder_target(raw: &Path) -> Result<(OpenKind, PathBuf), Response> {
         Ok((OpenKind::Directory, target))
     } else {
         Err(Response::error(404, "not_found", "folder not found"))
+    }
+}
+/// "Open in terminal": an existing folder, or the folder holding an existing
+/// file. A name that does not exist is refused: unlike "Open folder", nothing
+/// is guessed from a name nobody can see.
+fn terminal_target(raw: &Path) -> Result<PathBuf, Response> {
+    let missing = || Response::error(404, "not_found", "folder not found");
+    let target = existing(raw).map_err(|_| missing())?;
+    let folder = if target.is_dir() {
+        target
+    } else {
+        target.parent().map(Path::to_path_buf).ok_or_else(missing)?
+    };
+    if folder.is_dir() {
+        Ok(folder)
+    } else {
+        Err(missing())
     }
 }
 /// Types whose usual app only shows the content: Office documents that

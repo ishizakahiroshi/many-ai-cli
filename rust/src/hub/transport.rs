@@ -350,6 +350,13 @@ async fn handle(
     if reads_body {
         request.body = match read_body(body, &request.path).await {
             Ok(v) => v,
+            Err(error) if error.kind() == io::ErrorKind::TimedOut => {
+                return response(Response::error(
+                    408,
+                    "request_timeout",
+                    "request body took too long",
+                ));
+            }
             Err(_) if request.path.starts_with("/api/provider-icons/") => {
                 return response(Response::error(400, "bad_request", "could not read image"));
             }
@@ -425,11 +432,28 @@ fn decode_path(path: &str) -> Option<String> {
     }
     Some(String::from_utf8_lossy(&out).into_owned())
 }
+/// `{"code":"<32 hex digits>"}` is about 50 bytes.
+const LAUNCH_BODY_LIMIT: usize = 1024;
+/// How long a whole request body may take to arrive (audit N28). Without a
+/// limit a client that never finishes its body holds the connection, the
+/// buffer and the task for as long as it likes, and `/api/auth/launch` is read
+/// before any credential is checked. Uploads get the time a slow line needs.
+fn body_deadline(path: &str) -> std::time::Duration {
+    let seconds = match path {
+        "/api/auth/launch" => 10,
+        _ if body_policy(path).0 > http::JSON_BODY_LIMIT => 10 * 60,
+        _ => 30,
+    };
+    std::time::Duration::from_secs(seconds)
+}
 fn body_policy(path: &str) -> (usize, bool) {
     if path.starts_with("/api/provider-icons/") {
         return (crate::application::provider_assets::ICON_LIMIT, false);
     }
     match path {
+        // Read before any credential is checked: the body is one launch code
+        // (audit N28).
+        "/api/auth/launch" => (LAUNCH_BODY_LIMIT, true),
         super::iris_execution::PATH => (super::iris_execution_mcp::MAX_BYTES, false),
         "/api/logs/legacy-notice" => (1 << 16, true),
         super::jev_routes::PATH => (8192, false),
@@ -444,8 +468,19 @@ fn body_policy(path: &str) -> (usize, bool) {
 }
 async fn read_body(mut body: Body, path: &str) -> io::Result<Vec<u8>> {
     let (limit, first_value) = body_policy(path);
+    let deadline = tokio::time::Instant::now() + body_deadline(path);
     let mut bytes = Vec::new();
-    while let Some(frame) = std::future::poll_fn(|cx| Pin::new(&mut body).poll_frame(cx)).await {
+    loop {
+        let next = std::future::poll_fn(|cx| Pin::new(&mut body).poll_frame(cx));
+        let Ok(frame) = tokio::time::timeout_at(deadline, next).await else {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "request body took too long",
+            ));
+        };
+        let Some(frame) = frame else {
+            break;
+        };
         let frame = frame.map_err(io::Error::other)?;
         if let Ok(chunk) = frame.into_data() {
             let remaining = (limit + 1).saturating_sub(bytes.len());
@@ -651,11 +686,51 @@ mod tests {
         assert_eq!(bytes.len(), super::super::iris_execution_mcp::MAX_BYTES + 1);
         assert!(super::super::iris_execution_mcp::parse_json(&bytes).is_err());
     }
+    #[tokio::test(start_paused = true)]
+    async fn audit_n28_a_body_that_never_finishes_ends_at_its_deadline() {
+        // The route read before any credential: a small body, ten seconds.
+        assert_eq!(super::body_policy("/api/auth/launch"), (1024, true));
+        for (path, seconds) in [
+            ("/api/auth/launch", 10),
+            ("/api/input-config", 30),
+            ("/api/attach", 600),
+        ] {
+            let unfinished = futures_util::stream::iter(vec![Ok::<_, std::io::Error>(
+                Bytes::from_static(br#"{"code":"aaaa"#),
+            )])
+            .chain(futures_util::stream::pending());
+            let begin = tokio::time::Instant::now();
+            let error = super::read_body(Body::from_stream(unfinished), path)
+                .await
+                .unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::TimedOut, "{path}");
+            assert_eq!(begin.elapsed().as_secs(), seconds, "{path}");
+        }
+        // More than a launch code is cut at the limit, not buffered to 1 MiB.
+        let flood = futures_util::stream::iter(vec![Ok::<_, std::io::Error>(Bytes::from(vec![
+                b'"';
+                70_000
+            ]))]);
+        let bytes = super::read_body(Body::from_stream(flood), "/api/auth/launch")
+            .await
+            .unwrap();
+        assert_eq!(bytes.len(), 1025);
+        // A complete body is taken at once, as before.
+        let code = futures_util::stream::iter(vec![Ok::<_, std::io::Error>(Bytes::from_static(
+            br#"{"code":"0123"}"#,
+        ))])
+        .chain(futures_util::stream::pending());
+        let bytes = super::read_body(Body::from_stream(code), "/api/auth/launch")
+            .await
+            .unwrap();
+        assert_eq!(bytes, br#"{"code":"0123"}"#);
+    }
     use super::*;
     use crate::{
         config::{Config, ConfigStore, RuntimePaths},
         proto::core::{CoreEffects, CoreFuture},
     };
+    use futures_util::StreamExt as _;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     #[tokio::test(start_paused = true)]
     async fn transient_accept_failures_retry_without_losing_the_next_connection() {

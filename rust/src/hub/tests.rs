@@ -1394,6 +1394,23 @@ fn audit_u04_a_launch_code_opens_the_dashboard_once_for_this_user_only() {
 }
 
 #[test]
+fn audit_n28_a_launch_from_elsewhere_is_answered_before_its_body_is_read() {
+    let (_dir, router) = router();
+    let mut launch = request();
+    launch.path = "/api/auth/launch".into();
+    launch.query.clear();
+    // On this machine the route is open without a token: the code stands in.
+    assert!(router.preflight(&launch, 1000).is_ok());
+    // From elsewhere the answer is the handler's refusal, given at once.
+    let mut remote = launch.clone();
+    remote
+        .headers
+        .push(("X-Forwarded-For".into(), "203.0.113.9".into()));
+    let refused = router.preflight(&remote, 1000).unwrap_err();
+    assert_eq!(refused.status, 401);
+    assert_eq!(json_response(&refused)["error"], "launch_refused");
+}
+#[test]
 fn audit_u09_a_browser_the_hub_opened_counts_as_local_for_the_pin() {
     let mut cfg = config();
     cfg.remote_pin_hash = bcrypt::hash("123456", 4).unwrap();

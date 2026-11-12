@@ -122,6 +122,46 @@ async fn input(wrapper: &mut Client, ui: &mut Client, id: i64, text: &str) {
 }
 
 #[tokio::test]
+async fn audit_n26_a_wrapper_role_connection_from_elsewhere_is_not_taken() {
+    for pin in [true, false] {
+        let f = fixture().await;
+        let mut headers = format!(
+            "Origin: http://127.0.0.1:{}\r\nUser-Agent: {UA}\r\nX-Forwarded-For: 203.0.113.9\r\n",
+            f.port
+        );
+        if pin {
+            // With a PIN set, the stranger holds the token and a PIN session.
+            configure_pin(&f);
+            headers.push_str(&format!("Cookie: {}\r\n", login(&f, "123456").await));
+        }
+        let register = serde_json::json!({"type":"register","provider":"shell","cwd":f._root.path(),"pid":456,"token":TOKEN});
+        let (mut stranger, status) = Client::connect(f.port, &headers).await;
+        assert!(status.starts_with("HTTP/1.1 101"), "pin={pin}");
+        stranger.json(register.clone()).await;
+        // No session is registered for it: the socket ends without an answer
+        // that revoking access would then fail to close.
+        let mut registered = false;
+        while let Some(frame) = stranger.frame_with_timeout(Duration::from_secs(2)).await {
+            registered |= frame["type"] == "registered";
+        }
+        assert!(!registered, "pin={pin}");
+        if pin {
+            // Nor without its proof on this machine once a PIN is set.
+            let (mut unproven, _) = Client::connect(f.port, "").await;
+            unproven.json(register).await;
+            let mut registered = false;
+            while let Some(frame) = unproven.frame_with_timeout(Duration::from_secs(2)).await {
+                registered |= frame["type"] == "registered";
+            }
+            assert!(!registered);
+        }
+        // The wrapper many-ai-cli itself starts is taken as before.
+        let (_wrapper, id) = wrapper(&f).await;
+        assert!(id > 0, "pin={pin}");
+    }
+}
+
+#[tokio::test]
 async fn remote_pin_logout_revokes_its_cookie_ui_and_keeps_other_cookie_local_ui_and_wrapper() {
     let f = fixture().await;
     configure_pin(&f);
