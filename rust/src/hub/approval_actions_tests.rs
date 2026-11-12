@@ -169,6 +169,8 @@ struct Fixture {
     warnings: Arc<AtomicUsize>,
     http: Arc<ApprovalActionHttp>,
     tasks: Arc<TaskOwner>,
+    /// The unanswered shell calls the engine reads as every session's transcript.
+    transcript: Arc<Mutex<Vec<String>>>,
     // Last: fields drop in this order, and on Windows the folder cannot be
     // removed while a field above still holds a file inside it.
     _root: tempfile::TempDir,
@@ -206,9 +208,17 @@ fn fixture() -> Fixture {
         completed: Notify::new(),
     });
     let transport = Arc::new(Transport::default());
+    let transcript = Arc::new(Mutex::new(Vec::<String>::new()));
     let core = Arc::new(SessionEngine::new(
         EngineOptions {
             warning: Arc::new(|_, _| {}),
+            pending_shell: Some(Arc::new({
+                let transcript = transcript.clone();
+                move |_| {
+                    let pending = transcript.lock().unwrap().clone();
+                    Box::pin(async move { Some(pending) })
+                }
+            })),
             ..Default::default()
         },
         journal,
@@ -249,6 +259,7 @@ fn fixture() -> Fixture {
         warnings,
         http,
         tasks,
+        transcript,
     }
 }
 fn output(command: &str, focus_yes: bool) -> OutputChunk {
@@ -263,7 +274,34 @@ fn output(command: &str, focus_yes: bool) -> OutputChunk {
         bytes,
     }
 }
+/// A prompt with no command heading: a person may answer it, by one tap too,
+/// but a batch or a rule never does (audit N08).
 async fn native(f: &Fixture, command: &str) -> SessionBinding {
+    open(f, output(command, true)).await
+}
+/// Claude's Bash prompt with its call pending in the transcript: the only kind
+/// of prompt a batch or a rule acts on.
+async fn shell(f: &Fixture, command: &str) -> SessionBinding {
+    {
+        let mut transcript = f.transcript.lock().unwrap();
+        if !transcript.iter().any(|pending| pending == command) {
+            transcript.push(command.to_owned());
+        }
+    }
+    let bytes = format!(
+        "\x1b[2J\x1b[H Bash command\r\n\r\n   {command}\r\n   Synthetic description\r\n\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No"
+    )
+    .into_bytes();
+    open(
+        f,
+        OutputChunk {
+            total_pty_bytes: bytes.len() as i64,
+            bytes,
+        },
+    )
+    .await
+}
+async fn open(f: &Fixture, prompt: OutputChunk) -> SessionBinding {
     let number = f.core.snapshots().len() as u64 + 1;
     let registration = f
         .core
@@ -285,7 +323,18 @@ async fn native(f: &Fixture, command: &str) -> SessionBinding {
         .await
         .unwrap();
     f.sink.apply(registration.after_registered).await.unwrap();
-    repaint(f, registration.binding, command, true).await;
+    // Production reads the transcript before it records a heading prompt.
+    f.core
+        .refresh_pending_shell(registration.binding.session)
+        .await;
+    f.sink
+        .apply(
+            f.core
+                .observe_output(registration.binding, prompt, now())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     let ui = UiBinding {
         connection: UiConnectionId(number),
         auth_epoch: f.core.auth_epoch(),
@@ -761,10 +810,10 @@ async fn batch(f: &Fixture, rules: &Rules, body: Vec<u8>) -> Response {
 #[tokio::test]
 async fn batch_only_approves_matching_low_risk_and_retains_other_risks() {
     let f = fixture();
-    let low = native(&f, "git status").await;
-    let other_low = native(&f, "git status").await;
-    let mid = native(&f, "git commit -m synthetic").await;
-    let high = native(&f, "rm -rf /synthetic/owned-output").await;
+    let low = shell(&f, "git status").await;
+    let other_low = shell(&f, "git status").await;
+    let mid = shell(&f, "git commit -m synthetic").await;
+    let high = shell(&f, "rm -rf /synthetic/owned-output").await;
     let rules = Rules::default();
     let response = batch(
         &f,
@@ -791,6 +840,57 @@ async fn batch_only_approves_matching_low_risk_and_retains_other_risks() {
 }
 
 #[tokio::test]
+async fn audit_n08_n01_batch_and_add_rule_act_only_on_a_confirmed_unmasked_low_command() {
+    let f = fixture();
+    let rules = Rules::default();
+    // N08: a `Run:` line above a prompt with no heading. Two sessions show the
+    // same text, and the transcript holds a pending call of that text as well.
+    f.transcript.lock().unwrap().push("git status".into());
+    let inline = native(&f, "git status").await;
+    let other_inline = native(&f, "git status").await;
+    // N01: confirmed by the transcript, but the part shown as [REDACTED] is a
+    // second command. Its masked text alone would be low.
+    let masked = shell(&f, "git status token=x|./run.sh").await;
+    for (session, matched) in [(inline, 2), (masked, 1)] {
+        let summary = f
+            .core
+            .details(session.session)
+            .unwrap()
+            .approval
+            .record
+            .unwrap()
+            .data()
+            .summary
+            .clone();
+        assert_eq!(summary.risk, "mid", "{}", summary.command);
+        assert!(!summary.command.contains("run.sh"));
+        let sig = signature(&f, session);
+        let response = batch(
+            &f,
+            &rules,
+            serde_json::to_vec(&json!({"signature":sig,"action":"approve"})).unwrap(),
+        )
+        .await;
+        assert_eq!(
+            body(&response),
+            json!({"ok":true,"matched":matched,"applied":0})
+        );
+        let response = batch(
+            &f,
+            &rules,
+            serde_json::to_vec(&json!({"signature":sig,"action":"auto_rule"})).unwrap(),
+        )
+        .await;
+        error(&response, 403, "auto_rule_requires_low_risk");
+    }
+    for session in [inline, other_inline, masked] {
+        assert!(pending(&f, session));
+    }
+    assert!(rules.calls.lock().unwrap().is_empty());
+    assert!(frames(&f).is_empty());
+}
+
+#[tokio::test]
 async fn deny_session_preserves_the_source_or_signature_matching_quirk() {
     let f = fixture();
     let target = native(&f, "git status").await;
@@ -809,9 +909,9 @@ async fn deny_session_preserves_the_source_or_signature_matching_quirk() {
 #[tokio::test]
 async fn batch_keeps_disconnected_after_matching_count_but_excludes_stale_screens() {
     let f = fixture();
-    let first = native(&f, "git status").await;
-    let disconnected = native(&f, "git status").await;
-    let stale = native(&f, "git status").await;
+    let first = shell(&f, "git status").await;
+    let disconnected = shell(&f, "git status").await;
+    let stale = shell(&f, "git status").await;
     let sig = signature(&f, first);
     *f.transport.hook.lock().unwrap() = Some(Arc::new({
         let core = f.core.clone();
@@ -858,7 +958,7 @@ async fn batch_keeps_disconnected_after_matching_count_but_excludes_stale_screen
 #[tokio::test]
 async fn batch_auto_rule_requires_live_low_risk_and_propagates_real_adapter_result() {
     let f = fixture();
-    let mid = native(&f, "git commit -m synthetic").await;
+    let mid = shell(&f, "git commit -m synthetic").await;
     let rules = Rules::default();
     let response = batch(
         &f,
@@ -868,7 +968,7 @@ async fn batch_auto_rule_requires_live_low_risk_and_propagates_real_adapter_resu
     .await;
     error(&response, 403, "auto_rule_requires_low_risk");
     assert!(rules.calls.lock().unwrap().is_empty());
-    let low = native(&f, "git status").await;
+    let low = shell(&f, "git status").await;
     let request =
         serde_json::to_vec(&json!({"signature":signature(&f, low),"action":"auto_rule"})).unwrap();
     *rules.error.lock().unwrap() = Some("synthetic policy save failed".into());
@@ -1436,8 +1536,8 @@ async fn served_batch_keeps_all_matched_items_after_the_socket_waiter_disappears
     use crate::hub::{ServiceRouter, task_owner::HubTaskOwner, transport};
     use tokio::io::AsyncWriteExt;
     let f = fixture();
-    let one = native(&f, "git status").await;
-    let two = native(&f, "git status").await;
+    let one = shell(&f, "git status").await;
+    let two = shell(&f, "git status").await;
     let candidates = f.core.pending_native_approval_actions();
     let selected = candidates
         .iter()

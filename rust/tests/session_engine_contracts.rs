@@ -160,6 +160,8 @@ struct Fixture {
     transport: Arc<Transport>,
     sink: Arc<Sink>,
     store: Arc<SqliteSessionStorage>,
+    /// What the engine reads as a Claude session's unanswered shell calls.
+    transcript: Arc<Mutex<Vec<String>>>,
 }
 fn fixture() -> Fixture {
     fixture_with_spawner(Arc::new(NoSpawn))
@@ -210,6 +212,7 @@ fn fixture_with_branch_lookup(
         ui: Mutex::new(Vec::new()),
         events: Mutex::new(Vec::new()),
     });
+    let transcript = Arc::new(Mutex::new(Vec::<String>::new()));
     let options = EngineOptions {
         hub_instance: "synthetic-hub".into(),
         submit_timing: SubmitTiming {
@@ -222,6 +225,13 @@ fn fixture_with_branch_lookup(
         },
         warning,
         branch_lookup,
+        pending_shell: Some(Arc::new({
+            let transcript = transcript.clone();
+            move |_| {
+                let pending = transcript.lock().unwrap().clone();
+                Box::pin(async move { Some(pending) })
+            }
+        })),
         ..Default::default()
     };
     let engine = Arc::new(SessionEngine::new(
@@ -239,6 +249,7 @@ fn fixture_with_branch_lookup(
         transport,
         sink,
         store,
+        transcript,
     }
 }
 async fn register_unapplied(f: &Fixture) -> Registration {

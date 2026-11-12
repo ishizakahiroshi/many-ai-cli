@@ -2,7 +2,7 @@
 //! caller supplies cached provider/common trigger phrases; detection performs no IO.
 use super::{
     identity::candidate,
-    summary::{mask_secrets, summarize},
+    summary::{mask_secrets, risk_before_masking, summarize},
 };
 use crate::proto::{ApprovalOption, ApprovalSummary, core::ApprovalSourceEpoch};
 use regex::Regex;
@@ -467,9 +467,14 @@ fn notice(provider: &str, question: &str) -> NativeApproval {
 }
 /// The masked terminal-text summary of a native prompt. Callers that re-check a
 /// recorded prompt start from this, never from an already authorized summary.
+///
+/// Audit N01: the risk is judged on the text as the terminal drew it. Only the
+/// risk leaves this function; every string in the summary is masked as before.
 pub fn native_summary(question: &str, context: &str) -> ApprovalSummary {
+    let judged = summarize(question, context);
     let mut summary = summarize(&mask_secrets(question), &mask_secrets(context));
     summary.command = mask_secrets(&summary.command);
+    summary.risk = risk_before_masking(&judged.command, &summary.command).into();
     summary.raw = mask_secrets(&summary.raw);
     for p in &mut summary.paths {
         *p = mask_secrets(p);

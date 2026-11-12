@@ -661,7 +661,7 @@
               <span class="approval-toggle-slider"></span>
             </label>
           </div>
-          <div class="settings-note">low リスクかつ <code>~/.many-ai-cli/auto-approval.yaml</code> のホワイトリストに一致する承認だけを処理します。破壊操作・外部送信は常に手動確認です。</div>
+          <div class="settings-note">low リスクかつ <code>~/.many-ai-cli/auto-approval.yaml</code> のホワイトリストに一致する承認だけを処理します。対象は Claude Code の Bash の承認（Hub がコマンドの全文を確かめられたもの）だけです。ほかの CLI の承認と、秘密らしい値・括弧・コメント・改行を含むコマンドは手動確認です。破壊操作・外部送信は常に手動確認です。</div>
           <div class="settings-row">
             <label class="settings-label" for="approval-high-risk-mode">高リスク承認</label>
             <select id="approval-high-risk-mode" class="ui-input settings-select">

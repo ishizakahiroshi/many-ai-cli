@@ -224,6 +224,11 @@ impl Policy {
         if risk != "low" {
             return Decision::manual("low 以外の危険度は自動承認できません");
         }
+        // Audit N07: a rule is written for one command on one line. A caller
+        // that says "low" for several lines is not believed here either.
+        if command.chars().any(char::is_control) {
+            return Decision::manual("改行や制御文字を含むコマンドは自動承認できません");
+        }
         for rule in &self.rules {
             if rule.command.is_match(command)
                 && rule

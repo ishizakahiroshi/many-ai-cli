@@ -12,12 +12,23 @@
 //! (still unanswered) shell call in the transcript is what the screen shows; the
 //! whole command is then what is classified and matched. Otherwise it is
 //! *unverified*: its risk is at least `mid`, and only a person choosing on the
-//! prompt may approve it. Prompts without a heading keep their summary unchanged.
+//! prompt may approve it.
+//!
+//! A prompt without a heading has no such evidence (audit N08). Its "command" is
+//! a `Run:`-like line, or the question itself, found among the lines above the
+//! options, and those lines can be the model's own words or a file being shown
+//! above an approval of another kind (a file write, a fetch, an MCP tool). So it
+//! is never low, and rules and batch approval never act on it. A provider's
+//! shell prompt may be let through here only once its screen form is confirmed
+//! on the real CLI and can be told apart from its other prompts.
+//!
+//! Audit N01: the verified command is classified before `mask_secrets`; see
+//! `summary::risk_before_masking`.
 //!
 //! The transcript is read by the caller outside the session lock (see
 //! `EngineOptions::pending_shell`); this module only parses and compares.
 use crate::{
-    approval::summary::{classify_risk, command_heading, mask_secrets},
+    approval::summary::{command_heading, mask_secrets, risk_before_masking, stricter},
     proto::ApprovalSummary,
 };
 use serde_json::Value;
@@ -28,7 +39,7 @@ const MAX_COMMAND_BYTES: usize = 256 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommandAuthority {
-    /// No command heading: the one-line extraction already is the whole command.
+    /// No command heading: nothing confirms what is being approved (audit N08).
     NotHeading,
     /// Exactly one pending transcript call is what the prompt shows.
     Verified,
@@ -142,11 +153,16 @@ pub fn authorize(
     pending: Option<&[String]>,
 ) -> (ApprovalSummary, CommandAuthority) {
     let Some(after) = heading_tail(question, context) else {
-        return (summary, CommandAuthority::NotHeading);
+        let risk = stricter("mid", &summary.risk).to_owned();
+        return (
+            ApprovalSummary { risk, ..summary },
+            CommandAuthority::NotHeading,
+        );
     };
     if let Some(command) = pending.and_then(|pending| shown_command(&after, pending)) {
-        let command = mask_secrets(&compact_lines(command));
-        let risk = stricter(classify_risk(&command), &summary.risk).to_owned();
+        let plain = compact_lines(command);
+        let command = mask_secrets(&plain);
+        let risk = stricter(risk_before_masking(&plain, &command), &summary.risk).to_owned();
         return (
             ApprovalSummary {
                 command,
@@ -172,22 +188,6 @@ fn compact_lines(command: &str) -> String {
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-fn rank(risk: &str) -> u8 {
-    match risk {
-        "low" => 0,
-        "high" => 2,
-        _ => 1,
-    }
-}
-
-fn stricter<'a>(left: &'a str, right: &'a str) -> &'a str {
-    if rank(right) > rank(left) {
-        right
-    } else {
-        left
-    }
 }
 
 #[cfg(test)]
@@ -317,11 +317,51 @@ mod tests {
     }
 
     #[test]
-    fn inline_prompts_are_unchanged() {
-        let context = "Run: git status\nDo you want to proceed?";
+    fn audit_n08_a_prompt_without_a_heading_is_never_low() {
+        // The line above an approval of another kind reads like a shell prompt.
+        let context =
+            "Run: git status\nCreate file\n ./deploy.sh\nDo you want to create deploy.sh?";
         let base = summarize(QUESTION, context);
-        let (summary, authority) = authorize(base.clone(), QUESTION, context, None);
-        assert_eq!(authority, CommandAuthority::NotHeading);
-        assert!(summary == base, "inline prompts keep their summary");
+        assert_eq!(
+            (base.command.as_str(), base.risk.as_str()),
+            ("git status", "low"),
+            "fixture must reproduce the extraction"
+        );
+        // A pending shell call of the same text is not evidence either: without
+        // the heading nothing ties it to this prompt.
+        let pending = vec!["git status".to_owned()];
+        for pending in [None, Some(pending.as_slice())] {
+            let (summary, authority) = authorize(base.clone(), QUESTION, context, pending);
+            assert_eq!(authority, CommandAuthority::NotHeading);
+            assert_eq!(summary.risk, "mid");
+            assert_eq!(summary.command, base.command);
+        }
+        let high = summarize(QUESTION, "Run: rm -rf ./x");
+        assert_eq!(authorize(high, QUESTION, "", None).0.risk, "high");
+    }
+
+    #[test]
+    fn audit_n01_a_verified_command_is_classified_before_masking() {
+        for (full, risk) in [
+            // The value position of a masked name holds what runs.
+            ("ls token=$(touch${IFS}x)", "mid"),
+            ("cat a.txt password=x|./run.sh", "mid"),
+            ("git status secret=x|sudo sh", "high"),
+            // A value that is only a value is still shown masked: never low.
+            ("cat a.txt token=syntheticvalue123", "mid"),
+        ] {
+            let context = format!("Bash command\n\n  {full}\n  Synthetic description");
+            let pending = vec![full.to_owned()];
+            let (summary, authority) = authorize(
+                crate::approval::detect::native_summary(QUESTION, &context),
+                QUESTION,
+                &context,
+                Some(&pending),
+            );
+            assert_eq!(authority, CommandAuthority::Verified, "{full}");
+            assert_eq!(summary.risk, risk, "{full}");
+            assert!(summary.command.contains("[REDACTED]"), "{full}");
+            assert!(!summary.command.contains("run.sh"), "{full}");
+        }
     }
 }

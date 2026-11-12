@@ -201,6 +201,37 @@ Release artifacts are published at
   Cleanup now judges against the upstream as it was last fetched. After a
   merge on the remote, fetch from the Git view or your own Git, and the
   worktree is removed at the next check; until then it stays.
+- **Auto-approval, batch approval and "add to auto-approval" act only on a
+  shell command the Hub has confirmed.** Three ways an approval could be
+  answered without you seeing what ran are closed:
+  - *The hidden part of a command was not judged.* The Hub hides secret-looking
+    values (`token=…`, `password=…`, `Bearer …`, known key prefixes) before it
+    shows a command, and it also judged the command after hiding them. Text
+    placed where the value goes, such as a pipe into another program or a
+    `$(…)`, was therefore shown as `[REDACTED]` and never looked at: the
+    command could be LOW, match a rule, share a batch with a different
+    command, and be saved as a rule that matched any value. The risk is now
+    judged before anything is hidden, and a command with a hidden part is never
+    LOW.
+  - *Some shell syntax made two commands look like one.* A quote the Hub
+    counted differently from the shell (`$'…\'…'`, a `#` comment holding a
+    quote), or a PowerShell `( … )` in an argument, let a second command sit
+    behind a LOW first one. LOW is now given only to text made of constructs
+    the Hub can split the way the shell does; a line break, `#`, `( ) { }`,
+    `$'`, `$"`, `${`, a backslash before a quote, or an unclosed quote makes
+    it MID. A rule never matches a command of several lines.
+  - *A line that merely read like a command was taken as the command.* For a
+    prompt without Claude Code's `Bash command` heading, the Hub took a line
+    such as `Run: …` or `Command: …` from the 12 lines above the options, even
+    when the prompt asked about something else (creating a file, a fetch, an
+    MCP tool) and the line was the AI's own text. Such a prompt is now never
+    LOW, and rules and batch approval do not act on it.
+
+  What changes for you: auto-approval and batch approval now work for Claude
+  Code's Bash prompts only (the command is checked against Claude Code's own
+  record of the call). Prompts of the other CLIs, and commands that contain a
+  secret-looking value, parentheses, braces, a comment or several lines, wait
+  for you; you can still answer them from the dashboard or a notification.
 - **A relay can no longer skip the PIN.** With a PIN set, a connection counts
   as local only when it proves it: the dashboard the Hub opened itself carries
   a cookie it got with its launch code, and the many-ai-cli commands on this

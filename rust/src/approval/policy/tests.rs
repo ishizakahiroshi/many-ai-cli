@@ -244,6 +244,32 @@ rules:
 }
 
 #[test]
+fn audit_n07_a_command_of_several_lines_matches_no_rule() {
+    // A rule that fixes only the start is valid, and the caller says "low".
+    let policy = Policy::from_yaml(
+        br#"version: 1
+rules:
+ - id: status
+   command: '^git status'
+"#,
+    );
+    assert!(policy.warnings.is_empty(), "{:?}", policy.warnings);
+    assert!(policy.evaluate("git status --short", ".", "low").allowed);
+    for command in [
+        "git status\n./run.sh",
+        "git status\r./run.sh",
+        "git status \u{1b}[2K",
+    ] {
+        let decision = policy.evaluate(command, ".", "low");
+        assert!(!decision.allowed, "{command:?}");
+        assert_eq!(
+            decision.reason, "改行や制御文字を含むコマンドは自動承認できません",
+            "{command:?}"
+        );
+    }
+}
+
+#[test]
 fn read_failure_load_and_startup_warning_semantics_are_distinct() {
     let (_root, _installed, paths) = fixture();
     std::fs::create_dir(path(&paths)).unwrap();

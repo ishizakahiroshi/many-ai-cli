@@ -180,10 +180,13 @@ impl ApprovalActions for SessionEngine {
                         {
                             return Err(ApprovalActionError::UnverifiedCommand);
                         }
+                        // Audit N08: a rule or a batch acts only on a command the
+                        // transcript confirmed, whatever risk the summary carries.
                         if matches!(
                             request.origin,
                             NativeActionOrigin::Batch | NativeActionOrigin::Automatic { .. }
-                        ) && live.summary.risk != "low"
+                        ) && (live.summary.risk != "low"
+                            || authority != CommandAuthority::Verified)
                         {
                             return Err(ApprovalActionError::StaleCandidate);
                         }

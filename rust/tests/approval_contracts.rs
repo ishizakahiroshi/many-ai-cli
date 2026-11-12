@@ -454,6 +454,39 @@ fn provider_summary_masks_only_synthetic_secrets() {
 }
 
 #[test]
+fn audit_n01_provider_summary_is_judged_before_it_is_masked() {
+    use many_ai_cli::approval::detect::detect_native;
+    // The value of a masked name is where the second command sits. The summary
+    // still shows none of it, and its risk is the risk of what runs.
+    for (command, value, risk) in [
+        ("git status secret=x|sudo sh", "x|sudo", "high"),
+        ("ls token=$(./run.sh)", "$(./run.sh)", "mid"),
+        ("cat a.txt password=x|./run.sh", "x|./run.sh", "mid"),
+        (
+            "cat a.txt token=syntheticvalue123",
+            "syntheticvalue123",
+            "mid",
+        ),
+    ] {
+        let lines = vec![
+            format!("Run: {command}"),
+            "Do you want to proceed?".into(),
+            "❯ 1. Yes".into(),
+            "2. No".into(),
+        ];
+        let a = detect_native("claude", &lines, &[]).unwrap();
+        assert_eq!(a.summary.risk, risk, "{command}");
+        assert!(a.summary.command.contains("[REDACTED]"), "{command}");
+        let shown = [a.summary.command.as_str(), a.summary.raw.as_str()]
+            .into_iter()
+            .chain(a.summary.paths.iter().map(String::as_str))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!shown.contains(value), "{command}");
+    }
+}
+
+#[test]
 fn go_oracle_risk_summaries_and_native_detectors() {
     use many_ai_cli::approval::detect::detect_native;
     let corpus: serde_json::Value = serde_json::from_str(include_str!(

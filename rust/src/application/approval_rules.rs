@@ -132,11 +132,18 @@ impl ApprovalRules {
                 &data.context,
             )
             .await;
-            let decision = if authority == CommandAuthority::Unverified {
+            // Audit N08: without a heading nothing confirms that the extracted
+            // line is what this prompt approves, so no rule is consulted.
+            let decision = if authority != CommandAuthority::Verified {
                 Decision {
                     allowed: false,
                     rule_id: String::new(),
-                    reason: "コマンドの全文を確かめられないため手動確認が必要です".into(),
+                    reason: if authority == CommandAuthority::Unverified {
+                        "コマンドの全文を確かめられないため手動確認が必要です"
+                    } else {
+                        "シェルのコマンドの承認だと確かめられないため手動確認が必要です"
+                    }
+                    .into(),
                 }
             } else {
                 self.policy

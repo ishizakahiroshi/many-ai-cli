@@ -26,9 +26,14 @@ async fn native_session(f: &Fixture, command: &str, yes: &str, focus_yes: bool) 
     repaint(f, registered.binding, command, yes, focus_yes).await;
     registered.binding
 }
+/// Claude's Bash prompt with its call pending in the transcript. Batch and
+/// automatic approval act on nothing else (audits U23 and N08), and production
+/// reads the transcript before it records a prompt with this heading.
 async fn repaint(f: &Fixture, binding: SessionBinding, command: &str, yes: &str, focus_yes: bool) {
+    *f.transcript.lock().unwrap() = vec![command.to_owned()];
+    f.engine.refresh_pending_shell(binding.session).await;
     let text = format!(
-        "\x1b[2J\x1b[HRun: {command}\r\nDo you want to proceed?\r\n{} 1. {yes}\r\n{} 2. No",
+        "\x1b[2J\x1b[H Bash command\r\n\r\n   {command}\r\n   Synthetic description\r\n\r\nDo you want to proceed?\r\n{} 1. {yes}\r\n{} 2. No",
         if focus_yes { "❯" } else { " " },
         if focus_yes { " " } else { "❯" }
     );
@@ -645,7 +650,12 @@ async fn batch_snapshot_redetects_summary_without_mutating_immutable_record() {
     let f = fixture();
     let session = shortcut_session(&f).await;
     let original = f.engine.details(session.session).unwrap().approval;
-    assert_eq!(original.record.as_ref().unwrap().data().summary.risk, "low");
+    // Audit N08: a `Run:` line above a prompt with no heading is never low.
+    let recorded = &original.record.as_ref().unwrap().data().summary;
+    assert_eq!(
+        (recorded.command.as_str(), recorded.risk.as_str()),
+        ("git status", "mid")
+    );
     let first = f.engine.pending_native_approval_actions();
     assert_eq!(first.len(), 1);
     assert_eq!(first[0].provider, "codex");
@@ -665,8 +675,65 @@ async fn batch_snapshot_redetects_summary_without_mutating_immutable_record() {
     assert!(sent(&f).is_empty());
 }
 
+/// The recheck after the input queue is what the Codex test below used to show
+/// with a risk that changed; since audit N08 only a confirmed command is low.
 #[tokio::test]
-async fn batch_and_automatic_recheck_low_risk_after_fifo_but_one_tap_allows_mid() {
+async fn batch_and_automatic_recheck_the_transcript_after_fifo() {
+    for origin in [
+        NativeActionOrigin::Batch,
+        NativeActionOrigin::Automatic {
+            rule_id: "synthetic-rule".into(),
+        },
+    ] {
+        let f = fixture();
+        let session = native_session(&f, "git status", "Yes", true).await;
+        let bound = binding(&f, session);
+        assert_eq!(
+            f.engine.pending_native_approval_actions()[0].summary.risk,
+            "low"
+        );
+        let cancel = TaskCancellation::default();
+        let predecessor = f.engine.submit(
+            session,
+            InputRequest {
+                bytes: b"unsent predecessor".to_vec(),
+                authority: InputAuthority::Internal,
+            },
+            now(),
+            &cancel,
+        );
+        let mut queued = f.engine.prepare_and_send(
+            NativeActionRequest {
+                binding: bound.clone(),
+                selection: NativeActionSelection::ApproveOnce,
+                origin,
+            },
+            &cancel,
+        );
+        assert!(matches!(
+            futures_util::poll!(&mut queued),
+            std::task::Poll::Pending
+        ));
+        // The same screen, but the call is no longer pending in the transcript:
+        // what was confirmed when the action was queued is not what decides.
+        f.transcript.lock().unwrap().clear();
+        f.engine.refresh_pending_shell(session.session).await;
+        assert_eq!(binding(&f, session), bound);
+        drop(predecessor);
+        assert!(matches!(
+            queued.await,
+            Err(ApprovalActionError::UnverifiedCommand)
+        ));
+        assert!(sent(&f).is_empty());
+        assert!(pending(&f, session));
+    }
+}
+
+/// Audit N08: a prompt without a command heading (here Codex with a `Run:` line
+/// above it) is never answered by a batch or a rule, whatever the line says. A
+/// person's one tap still answers it.
+#[tokio::test]
+async fn batch_and_automatic_never_answer_a_prompt_without_a_heading_but_one_tap_does() {
     for origin in [
         NativeActionOrigin::Batch,
         NativeActionOrigin::Automatic {
@@ -698,10 +765,13 @@ async fn batch_and_automatic_recheck_low_risk_after_fifo_but_one_tap_allows_mid(
             futures_util::poll!(&mut queued),
             std::task::Poll::Pending
         ));
-        shortcut_repaint(&f, session, "git branch foo").await;
+        // A pending call of the same text does not tie the line to this prompt.
+        *f.transcript.lock().unwrap() = vec!["git status".to_owned()];
+        f.engine.refresh_pending_shell(session.session).await;
+        let live = &f.engine.pending_native_approval_actions()[0].summary;
         assert_eq!(
-            f.engine.pending_native_approval_actions()[0].summary.risk,
-            "mid"
+            (live.command.as_str(), live.risk.as_str()),
+            ("git status", "mid")
         );
         assert_eq!(binding(&f, session), bound);
         drop(predecessor);

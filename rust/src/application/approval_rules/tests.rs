@@ -73,8 +73,9 @@ impl Fixture {
     fn new(enabled: bool) -> Self {
         Self::with_sink(enabled, Arc::new(Sink))
     }
+    /// The transcript holds the one pending call that `candidate` draws.
     fn with_sink(enabled: bool, effects: Arc<dyn CoreEffectSink>) -> Self {
-        Self::build(enabled, effects, None)
+        Self::build(enabled, effects, transcript(&["git status"]))
     }
     fn build(
         enabled: bool,
@@ -143,14 +144,7 @@ impl Fixture {
     }
     /// Claude's Bash prompt: heading, command lines and description in one indent.
     async fn heading_candidate(&self, lines: &[&str]) -> (LiveSessionId, ImmutableApprovalRecord) {
-        let block = lines
-            .iter()
-            .map(|line| format!("   {line}\r\n"))
-            .collect::<String>();
-        let screen = format!(
-            "\x1b[2J\x1b[H Bash command\r\n\r\n{block}   Synthetic description\r\n\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No"
-        );
-        let (id, record, effects) = self.observe_candidate(screen).await;
+        let (id, record, effects) = self.observe_candidate(heading_screen(lines)).await;
         drop(effects);
         (id, record)
     }
@@ -158,10 +152,17 @@ impl Fixture {
         &self,
         command: &str,
     ) -> (LiveSessionId, ImmutableApprovalRecord, CoreEffects) {
-        self.observe_candidate(format!(
-            "\x1b[2J\x1b[HRun: {command}\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No"
-        ))
-        .await
+        self.observe_candidate(heading_screen(&[command])).await
+    }
+    /// A prompt with no heading: the command is only a line above the options.
+    async fn inline_candidate(&self, command: &str) -> (LiveSessionId, ImmutableApprovalRecord) {
+        let (id, record, effects) = self
+            .observe_candidate(format!(
+                "\x1b[2J\x1b[HRun: {command}\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No"
+            ))
+            .await;
+        drop(effects);
+        (id, record)
     }
     async fn observe_candidate(
         &self,
@@ -299,6 +300,68 @@ async fn live_setting_disable_after_detection_prevents_runtime_action() {
     assert!(!f.rules.try_apply(id, &record).await.unwrap());
     assert_eq!(f.transport.0.load(Ordering::SeqCst), 0);
     assert!(f.audit.lock().unwrap().is_empty());
+}
+
+fn heading_screen(lines: &[&str]) -> String {
+    let block = lines
+        .iter()
+        .map(|line| format!("   {line}\r\n"))
+        .collect::<String>();
+    format!(
+        "\x1b[2J\x1b[H Bash command\r\n\r\n{block}   Synthetic description\r\n\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No"
+    )
+}
+
+#[tokio::test(start_paused = true)]
+async fn audit_n08_a_command_like_line_above_a_prompt_without_a_heading_is_never_auto_approved() {
+    // Before the fix this screen, a `Run:` line above any approval, was approved
+    // by the literal rule: nothing checked that the prompt is a shell approval.
+    // The transcript even holds a pending call of the same text.
+    let f = Fixture::new(true);
+    let (id, record) = f.inline_candidate("git status").await;
+    f.rules
+        .policy
+        .add_and_reload("git status", "/synthetic/project")
+        .unwrap();
+    assert_eq!(record.data().summary.command, "git status");
+    assert_eq!(record.data().summary.risk, "mid");
+    assert!(!f.rules.try_apply(id, &record).await.unwrap());
+    assert_eq!(f.transport.0.load(Ordering::SeqCst), 0);
+    assert!(f.audit.lock().unwrap().is_empty());
+    let last = f.rules.history().pop().unwrap();
+    assert!(!last.decision.allowed);
+    assert!(last.decision.rule_id.is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn audit_n01_a_command_whose_masked_value_holds_a_second_command_is_never_auto_approved() {
+    // Shown as `git status token=[REDACTED]`: a rule that takes one argument
+    // used to match the masked text, and the masked text used to be low.
+    let full = "git status token=x|./run.sh";
+    let f = Fixture::build(true, Arc::new(Sink), transcript(&[full]));
+    let (id, record) = f.heading_candidate(&[full]).await;
+    let path = f.rules.policy.path();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        path,
+        "version: 1\nrules:\n - id: one-argument\n   command: '^git status \\S+$'\n",
+    )
+    .unwrap();
+    f.rules.policy.reload().unwrap();
+    let policy = f.rules.policy.snapshot();
+    assert_eq!(policy.active_rules(), 1, "{:?}", policy.warnings);
+    assert!(
+        policy
+            .evaluate("git status token=[REDACTED]", "/synthetic/project", "low")
+            .allowed,
+        "the rule must match the masked text for this test to mean anything"
+    );
+    assert!(!f.rules.try_apply(id, &record).await.unwrap());
+    assert_eq!(f.transport.0.load(Ordering::SeqCst), 0);
+    let last = f.rules.history().pop().unwrap();
+    assert_eq!(last.summary.command, "git status token=[REDACTED]");
+    assert_eq!(last.summary.risk, "mid");
+    assert!(!last.decision.allowed);
 }
 
 fn transcript(commands: &[&str]) -> Option<PendingShellLookup> {

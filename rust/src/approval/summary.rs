@@ -170,6 +170,11 @@ pub fn classify_risk(command: &str) -> &'static str {
         "grep ",
         "type ",
     ];
+    // Audit N07: `split_segments` only knows plain quoting. Low is an allowlist:
+    // anything it cannot be sure to cut the way the shell does is not low.
+    if !plain_shell(&value) {
+        return "mid";
+    }
     let mut saw_low = false;
     for segment in split_segments(&value) {
         let s = segment.trim();
@@ -190,6 +195,76 @@ pub fn classify_risk(command: &str) -> &'static str {
         }
     }
     if saw_low { "low" } else { "mid" }
+}
+/// Whether `split_segments` reads this text the way every supported shell does
+/// (audit N07). Refused, because they start a construct it does not model or one
+/// that shells read differently: a line break or other control character; outside
+/// quotes `#` (comment), `( ) { }` (grouping, PowerShell expression, zsh glob
+/// qualifier) and `$'` / `$"` (ANSI-C and locale quoting); `${` outside single
+/// quotes; a backslash before a quote (an escape in sh, an ordinary character in
+/// PowerShell and cmd); and a quote left open.
+fn plain_shell(value: &str) -> bool {
+    if value.chars().any(char::is_control) {
+        return false;
+    }
+    let bytes = value.as_bytes();
+    let mut quote = 0;
+    for (i, &c) in bytes.iter().enumerate() {
+        let next = bytes.get(i + 1).copied();
+        if quote == b'\'' {
+            if c == b'\'' {
+                quote = 0;
+            }
+            continue;
+        }
+        if c == b'\\' && matches!(next, Some(b'\'' | b'"')) {
+            return false;
+        }
+        if c == b'$' && next == Some(b'{') {
+            return false;
+        }
+        if quote == b'"' {
+            if c == b'"' {
+                quote = 0;
+            }
+            continue;
+        }
+        match c {
+            b'#' | b'(' | b')' | b'{' | b'}' => return false,
+            b'$' if matches!(next, Some(b'\'' | b'"')) => return false,
+            b'\'' | b'"' => quote = c,
+            _ => {}
+        }
+    }
+    quote == 0
+}
+fn rank(risk: &str) -> u8 {
+    match risk {
+        "low" => 0,
+        "high" => 2,
+        _ => 1,
+    }
+}
+/// The higher of two risks.
+pub(crate) fn stricter<'a>(left: &'a str, right: &'a str) -> &'a str {
+    if rank(right) > rank(left) {
+        right
+    } else {
+        left
+    }
+}
+/// The risk of a command that is shown as `shown` after `mask_secrets` (audit
+/// N01). It is classified before masking: masking replaces a whole `name=value`
+/// value, and that value can hold a substitution, a pipe or a second command. A
+/// command masking changed is never low, so no rule, batch or stored literal is
+/// ever decided on text that differs from what runs.
+pub(crate) fn risk_before_masking(plain: &str, shown: &str) -> &'static str {
+    let risk = stricter(classify_risk(plain), classify_risk(shown));
+    if plain == shown {
+        risk
+    } else {
+        stricter("mid", risk)
+    }
 }
 fn split_segments(value: &str) -> Vec<&str> {
     let bytes = value.as_bytes();
@@ -361,6 +436,92 @@ pub fn mask_secrets(text: &str) -> String {
     KNOWN_TOKEN
         .replace_all(&text, "[REDACTED_TOKEN]")
         .into_owned()
+}
+
+#[cfg(test)]
+mod audit_n07_n01_tests {
+    use super::{classify_risk, mask_secrets, risk_before_masking, split_segments};
+
+    #[test]
+    fn low_is_only_for_text_the_segment_splitter_reads_like_the_shell() {
+        // Each of these was one low segment: the splitter lost count of the
+        // quotes, or did not know the construct, and never saw the second command.
+        for command in [
+            // (a) ANSI-C quoting: `\'` does not end the string in bash.
+            r"ls $'\'' ; ./run.sh ; echo '",
+            r"git status $'a\'b' ; ./run.sh '",
+            // (b) a comment holding a quote, then another line.
+            "git status # it's fine\n./run.sh\n# it's done",
+            "ls -la # don't\n./run.sh '",
+            // (c) a PowerShell expression in argument position.
+            "ls (./run.ps1)",
+            "dir -Path (Invoke-Thing)",
+            "type {./run.ps1}",
+            // A backslash before a quote ends the string in PowerShell and cmd.
+            r#"ls "a\" ; ./run.exe ; "b\" "c""#,
+            // Locale quoting, parameter expansion with operators, zsh qualifiers.
+            r#"ls $"a""#,
+            r#"cat "${x@P}""#,
+            "ls *(e:./run.sh:)",
+            // Never one line.
+            "git status\ngit status",
+            "git status\r\ngit diff",
+            "ls -la\u{1b}[2K",
+            // A quote left open.
+            "cat 'a",
+            r#"cat "a"#,
+        ] {
+            assert_eq!(classify_risk(command), "mid", "{command:?}");
+        }
+        assert_eq!(
+            split_segments(r"ls $'\'' ; ./run.sh ; echo '").len(),
+            1,
+            "fixture must reproduce the lost quote"
+        );
+        // Still low: ordinary quoting, globs, pipes between low commands, and
+        // the same characters where they are only characters.
+        for command in [
+            "git status",
+            "ls -la",
+            "cat 'a (1).txt'",
+            r#"cat "a {b} #c.txt""#,
+            "grep 'end$' a.txt",
+            r#"grep "end$" a.txt"#,
+            "rg 'fn main\\(\\)' src",
+            r"cat C:\synthetic\a.txt",
+            "git log --oneline | head -n 5",
+            "git branch --list f*",
+            "cat a >\"$null\"",
+            "cat \\> file",
+        ] {
+            assert_eq!(classify_risk(command), "low", "{command:?}");
+        }
+    }
+
+    #[test]
+    fn a_command_masking_changed_is_never_low_and_keeps_the_risk_of_what_runs() {
+        for (plain, risk) in [
+            ("ls token=$(./run.sh)", "mid"),
+            ("cat a.txt password=x|./run.sh", "mid"),
+            ("git status secret=x|sudo sh", "high"),
+            ("ls api_key=x&&rm${IFS}-rf${IFS}./x", "mid"),
+            ("cat a.txt auth:x>./owned.txt", "mid"),
+            ("cat a.txt token=syntheticvalue123", "mid"),
+            ("cat a.txt sk-syntheticsyntheticsynthetic", "mid"),
+        ] {
+            let shown = mask_secrets(plain);
+            assert_ne!(shown, plain, "{plain}");
+            assert_eq!(
+                classify_risk(&shown),
+                "low",
+                "{plain}: the masked text alone must be low for this to be a test"
+            );
+            assert_eq!(risk_before_masking(plain, &shown), risk, "{plain}");
+        }
+        for plain in ["git status", "cat ./a.txt"] {
+            assert_eq!(risk_before_masking(plain, &mask_secrets(plain)), "low");
+        }
+    }
 }
 
 #[cfg(test)]
