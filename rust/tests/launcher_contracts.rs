@@ -1253,6 +1253,97 @@ async fn launcher_registry_readiness_rejects_redirect_without_following_token() 
     server.abort();
 }
 
+/// Stands in for the browser: asks for the page it was started on (audit
+/// N22: the launcher hands the Hub address over on a page of its own) and
+/// keeps the answer.
+fn arrive(url: &str, answers: &Arc<std::sync::Mutex<Vec<String>>>) {
+    use std::io::{Read, Write};
+    let rest = url.strip_prefix("http://").unwrap().to_owned();
+    let answers = answers.clone();
+    std::thread::spawn(move || {
+        let (address, path) = rest.split_once('/').unwrap();
+        let mut stream = std::net::TcpStream::connect(address).unwrap();
+        write!(stream, "GET /{path} HTTP/1.1\r\nHost: {address}\r\n\r\n").unwrap();
+        let mut answer = Vec::new();
+        let _ = stream.read_to_end(&mut answer);
+        answers
+            .lock()
+            .unwrap()
+            .push(String::from_utf8_lossy(&answer).into_owned());
+    });
+}
+
+#[tokio::test]
+async fn audit_n22_cli_connect_puts_neither_token_nor_launch_code_on_the_browser_command_line() {
+    use axum::{
+        Router,
+        routing::{get, post},
+    };
+    let t = tempfile::tempdir().unwrap();
+    let store = store_at(&t.path().join("candidate"));
+    // A Hub of this OS user that issues launch codes, as the far end of an
+    // SSH forward does.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new()
+                .route("/api/info", get(|| async { "{}" }))
+                .route(
+                    "/api/auth/launch-code",
+                    post(|| async { r#"{"code":"c0de1234","expires_in":60}"# }),
+                ),
+        )
+        .await
+        .unwrap();
+    });
+    store
+        .register_active(
+            "remote",
+            &format!("http://127.0.0.1:{port}/?token=synthetic-hub-token&via=ssh"),
+        )
+        .unwrap();
+    let config = ConnectorConfig::new(store.paths.clone(), t.path().into());
+    let opens = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let answers = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let (seen, got) = (opens.clone(), answers.clone());
+    connect_cli(
+        &store,
+        &config,
+        ssh(),
+        &Cancellation::default(),
+        &move |url| {
+            seen.lock().unwrap().push(url.to_owned());
+            arrive(url, &got);
+            Ok(())
+        },
+    )
+    .await
+    .unwrap();
+    let opens = opens.lock().unwrap().clone();
+    assert_eq!(opens.len(), 1, "{opens:?}");
+    for secret in ["?", "c0de1234", "synthetic-hub-token"] {
+        assert!(!opens[0].contains(secret), "{secret}: {opens:?}");
+    }
+    // The code reaches the browser inside the answer to its own request.
+    for _ in 0..200 {
+        if !answers.lock().unwrap().is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let answer = answers.lock().unwrap().first().cloned().unwrap_or_default();
+    assert!(answer.starts_with("HTTP/1.1 303"), "{answer}");
+    assert!(
+        answer.contains(&format!(
+            "\r\nLocation: http://127.0.0.1:{port}/?launch=c0de1234&via=ssh\r\n"
+        )),
+        "{answer}"
+    );
+    assert!(!answer.contains("synthetic-hub-token"), "{answer}");
+    server.abort();
+}
 #[cfg(unix)]
 #[tokio::test]
 async fn launcher_cli_caller_reuses_active_and_cleans_on_signal_cancellation() {
@@ -1278,7 +1369,8 @@ async fn launcher_cli_caller_reuses_active_and_cleans_on_signal_cancellation() {
     let mut profile = ssh();
     profile.hub_port = i64::from(port);
     let opens = Arc::new(std::sync::Mutex::new(Vec::new()));
-    let first_opens = opens.clone();
+    let answers = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let (first_opens, first_answers) = (opens.clone(), answers.clone());
     let cancel = Cancellation::default();
     let first_cancel = cancel.clone();
     let first_store = store.clone();
@@ -1292,6 +1384,7 @@ async fn launcher_cli_caller_reuses_active_and_cleans_on_signal_cancellation() {
             &first_cancel,
             &move |url| {
                 first_opens.lock().unwrap().push(url.to_owned());
+                arrive(url, &first_answers);
                 Ok(())
             },
         )
@@ -1304,7 +1397,7 @@ async fn launcher_cli_caller_reuses_active_and_cleans_on_signal_cancellation() {
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     assert_eq!(store.active_snapshot().unwrap().len(), 1);
-    let second_opens = opens.clone();
+    let (second_opens, second_answers) = (opens.clone(), answers.clone());
     connect_cli(
         &store,
         &config,
@@ -1312,12 +1405,16 @@ async fn launcher_cli_caller_reuses_active_and_cleans_on_signal_cancellation() {
         &Cancellation::default(),
         &move |url| {
             second_opens.lock().unwrap().push(url.to_owned());
+            arrive(url, &second_answers);
             Ok(())
         },
     )
     .await
     .unwrap();
     assert_eq!(opens.lock().unwrap().len(), 2);
+    // Audit N22: what goes on the browser's command line carries no query,
+    // so neither a token nor a launch code.
+    assert!(opens.lock().unwrap().iter().all(|url| !url.contains('?')));
     cancel.cancel();
     first.await.unwrap().unwrap();
     assert!(store.active_snapshot().unwrap().is_empty());

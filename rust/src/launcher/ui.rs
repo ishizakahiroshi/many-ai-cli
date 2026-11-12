@@ -52,6 +52,11 @@ pub struct UiServer {
     pub manager: Arc<ConnectionManager>,
     token: String,
     port: AtomicU16,
+    /// Audit N23: the page's address, token included, is on the browser's
+    /// command line, which other users of the machine can read. Only
+    /// connections this OS user opened are served, so the token is of no use
+    /// to them.
+    own_peer: super::handoff::PeerCheck,
 }
 impl UiServer {
     pub fn new(manager: Arc<ConnectionManager>) -> io::Result<Arc<Self>> {
@@ -60,6 +65,7 @@ impl UiServer {
             manager,
             token,
             port: AtomicU16::new(0),
+            own_peer: super::handoff::own_peer,
         }))
     }
     pub fn from_token(
@@ -74,6 +80,7 @@ impl UiServer {
             manager,
             token,
             port: AtomicU16::new(port),
+            own_peer: super::handoff::own_peer,
         }))
     }
     pub fn page_url(&self) -> String {
@@ -182,7 +189,14 @@ impl UiServer {
                     _=stop.cancelled()=>break,
                     Some(_)=connections.join_next(),if !connections.is_empty()=>{},
                     accepted = listener.accept() => {
-                        let (stream, _) = accepted?;
+                        let (stream, peer) = accepted?;
+                        if !(server.own_peer)(peer, server.port.load(Ordering::Acquire)) {
+                            connections.spawn(async move {
+                                super::handoff::refuse(stream).await;
+                                Ok(())
+                            });
+                            continue;
+                        }
                         connections.spawn(serve_connection(stream, server.clone()));
                     }
                 }
@@ -521,6 +535,80 @@ fn parse_ranges(raw: &str, size: usize) -> Result<Vec<(usize, usize)>, bool> {
         Err(true)
     } else {
         Ok(ranges)
+    }
+}
+
+#[cfg(test)]
+mod peer_tests {
+    use super::*;
+    use crate::{
+        config::RuntimePaths,
+        launcher::{ConnectorConfig, LauncherStore},
+    };
+    use std::net::SocketAddr;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    const TOKEN: &str = "synthetic-peer-token";
+
+    fn stranger(_: SocketAddr, _: u16) -> bool {
+        false
+    }
+    fn server(own_peer: super::super::handoff::PeerCheck) -> (tempfile::TempDir, Arc<UiServer>) {
+        let root = tempfile::tempdir().unwrap();
+        let trial = root.path().join("trial");
+        std::fs::create_dir(&trial).unwrap();
+        let paths = RuntimePaths::trial(&trial, 49001, &root.path().join("installed")).unwrap();
+        let store = LauncherStore::open(paths.clone()).unwrap();
+        let manager =
+            ConnectionManager::new(store, ConnectorConfig::new(paths, root.path().into()));
+        let server = Arc::new(UiServer {
+            manager,
+            token: TOKEN.into(),
+            port: AtomicU16::new(0),
+            own_peer,
+        });
+        (root, server)
+    }
+    /// What a holder of the page's address gets for `path` over real TCP.
+    async fn get(url: &str, path: &str) -> String {
+        let address = url
+            .strip_prefix("http://")
+            .and_then(|rest| rest.split('/').next())
+            .unwrap();
+        let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+        let request = format!(
+            "GET {path}?token={TOKEN} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n"
+        );
+        stream.write_all(request.as_bytes()).await.unwrap();
+        let mut response = Vec::new();
+        let _ = stream.read_to_end(&mut response).await;
+        String::from_utf8_lossy(&response).into_owned()
+    }
+
+    #[tokio::test]
+    async fn audit_n23_the_page_token_opens_nothing_for_a_connection_that_is_not_this_users() {
+        // The token is on the browser's command line, so another OS user has it.
+        let (_root, server) = server(stranger);
+        let mut running = server.serve(Cancellation::default()).await.unwrap();
+        for path in ["/", "/api/profiles", "/api/connect/status"] {
+            let response = get(&running.url, path).await;
+            assert!(response.starts_with("HTTP/1.1 403"), "{path}: {response}");
+            assert!(!response.contains("profiles"), "{path}: {response}");
+        }
+        running.cancel();
+        running.wait().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn audit_n23_the_page_still_opens_for_this_os_user() {
+        let (_root, server) = server(super::super::handoff::own_peer);
+        let mut running = server.serve(Cancellation::default()).await.unwrap();
+        let page = get(&running.url, "/").await;
+        assert!(page.starts_with("HTTP/1.1 200"), "{page}");
+        let status = get(&running.url, "/api/connect/status").await;
+        assert!(status.starts_with("HTTP/1.1 200"), "{status}");
+        running.cancel();
+        running.wait().await.unwrap();
     }
 }
 

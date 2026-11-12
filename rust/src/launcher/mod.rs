@@ -18,6 +18,7 @@ pub use connector::*;
 
 mod exchange;
 pub use exchange::*;
+mod handoff;
 mod platform;
 pub use platform::{
     browser_command, close_behavior_notice, configure_console_utf8, open_browser, startup_banner,

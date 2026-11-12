@@ -281,6 +281,30 @@ Release artifacts are published at
   opened by the Hub's own OS user. The dashboard trades it for the token on
   the sign-in page and removes it from the address bar. The launcher's own
   settings screen still opens with its own token.
+- **What the launcher hands to the browser is of no use to another user of the
+  machine.** Two things another OS user of the machine the launcher runs on
+  could take from the browser's command line are closed:
+  - *The one-time code of a Hub behind SSH.* With `many-ai-cli connect
+    --profile`, `many-ai-cli-launcher -profile` or `-last` and an SSH profile,
+    the code went on the browser's command line. A Hub behind an SSH forward
+    cannot tell who connected to the local end of the forward, so another user
+    could use the code first and receive the remote Hub's token. The launcher
+    now starts the browser on a one-time page of its own, answers that page
+    only for a connection opened by the launcher's OS user, and sends the
+    browser on to the Hub from there; the code is asked for when the browser
+    arrives and never appears on a command line. If the browser does not ask
+    for the page within 30 seconds, the launcher says so and the connection
+    stays up; run the command again to open the dashboard.
+  - *The token of the launcher's settings screen.* It is still in the address
+    the browser is started with, but the screen now answers only connections
+    opened by the launcher's OS user. Anyone else who has the address gets
+    `403` for the page and for every request, so they can no longer rewrite
+    profiles (and so run commands over your SSH) or read the address of a
+    connected Hub.
+
+  Where the launcher cannot find out who opened a connection (an OS other than
+  Windows, Linux and macOS, or a browser that reaches the launcher through
+  another user's process), the page and the settings screen answer nobody.
 - **Release keys wait for the owner's approval.** The npm and Homebrew/winget
   publishing jobs use the `release` environment, so the keys they need are
   handed over only after the owner approves the run (one approval covers

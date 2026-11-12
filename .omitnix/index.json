@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "612d9ecca0b7a9cf9e2946f71a7b84d25e9a6940",
+    "commit": "1d9be86c79ae773cdda713837e6ea96df92465da",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2092,
-    "analyzed": 1625,
+    "discovered": 2093,
+    "analyzed": 1626,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 452,
@@ -33019,6 +33019,35 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/launcher/handoff.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Who may talk to the launcher's own loopback listeners, and how a URL that"
         },
         "authentication": {
           "state": "not_configured"

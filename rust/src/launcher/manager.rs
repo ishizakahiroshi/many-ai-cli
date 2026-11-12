@@ -401,7 +401,7 @@ pub async fn connect_cli(
                 super::network::without_local_proof(&record.hub_url)
             ),
         );
-        cli_browser(config, browser, &record.hub_url).await;
+        cli_browser(config, browser, &record.hub_url, cancel).await;
         return Ok(());
     }
     let lock_store = store.clone();
@@ -432,7 +432,7 @@ pub async fn connect_cli(
                     super::network::without_local_proof(&record.hub_url)
                 ),
             );
-            cli_browser(config, browser, &record.hub_url).await;
+            cli_browser(config, browser, &record.hub_url, cancel).await;
         } else if !cancel.is_cancelled() {
             cli_output(
                 config,
@@ -453,22 +453,39 @@ pub async fn connect_cli(
     }
     let mut connection = config.start(profile.clone())?;
     let ready = tokio::select! {result=connection.ready()=>result,_=cancel.cancelled()=>{connection.cancel();let _=connection.wait().await;return Ok(());}};
-    match ready {
+    let url = match ready {
         Ok(url) => {
-            cli_browser(config, browser, &url).await;
             let record_store = store.clone();
             let name = profile.name.clone();
-            let _ = tokio::task::spawn_blocking(move || record_store.register_active(&name, &url))
-                .await;
+            let active = url.clone();
+            let _ =
+                tokio::task::spawn_blocking(move || record_store.register_active(&name, &active))
+                    .await;
             let _ = startup_lock.release();
+            url
         }
         Err(error) => {
             connection.cancel();
             let _ = connection.wait().await;
             return Err(error);
         }
-    }
-    let result = tokio::select! {result=connection.wait()=>result,_=cancel.cancelled()=>{connection.cancel();connection.wait().await}};
+    };
+    // The browser is handed its address while the connection is already being
+    // watched: a browser that never comes holds up neither the end of the
+    // connection nor a signal.
+    let opening = cli_browser(config, browser, &url, cancel);
+    tokio::pin!(opening);
+    let mut opened = false;
+    let result = loop {
+        tokio::select! {
+            _ = &mut opening, if !opened => opened = true,
+            result = connection.wait() => break result,
+            _ = cancel.cancelled() => {
+                connection.cancel();
+                break connection.wait().await;
+            }
+        }
+    };
     let record_store = store.clone();
     let _ =
         tokio::task::spawn_blocking(move || record_store.unregister_active(&profile.name)).await;
@@ -490,16 +507,29 @@ async fn cli_browser(
     config: &ConnectorConfig,
     browser: &(dyn Fn(&str) -> std::io::Result<()> + Send + Sync),
     url: &str,
+    cancel: &Cancellation,
 ) {
-    // The browser's command line gets a launch code, not the token (U04).
-    let url = &super::network::browser_url(url).await;
-    if let Err(error) = browser(url) {
-        cli_output(
-            config,
-            crate::process::OutputStream::Stderr,
-            &format!("many-ai-cli-launcher: failed to open browser for {url}: {error}\n"),
-        );
-    }
+    // The browser's command line gets neither the token (U04) nor the launch
+    // code (audit N22): only the address of a one-time page of this process,
+    // which redirects this OS user's browser to the Hub.
+    let opened = tokio::select! {
+        opened = super::handoff::open_in_browser(
+            url,
+            browser,
+            super::handoff::WAIT,
+            super::handoff::own_peer,
+        ) => opened,
+        _ = cancel.cancelled() => return,
+    };
+    let trouble = match opened {
+        Ok(true) => return,
+        Ok(false) => format!(
+            "many-ai-cli-launcher: the browser did not ask for the Hub page within {} seconds; run the command again to open it\n",
+            super::handoff::WAIT.as_secs()
+        ),
+        Err(error) => format!("many-ai-cli-launcher: failed to open browser: {error}\n"),
+    };
+    cli_output(config, crate::process::OutputStream::Stderr, &trouble);
 }
 
 #[cfg(test)]
