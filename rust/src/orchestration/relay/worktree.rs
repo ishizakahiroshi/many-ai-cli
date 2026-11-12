@@ -734,6 +734,8 @@ mod tests {
                 &executable,
                 br#"#!/bin/sh
 case "$3:$4" in
+# The lookup of hook and filter names before an unattended command: none set.
+config:*) exit 1 ;;
 worktree:remove) exit 1 ;;
 worktree:list)
     # Real Git always emits the main worktree, even when the target is unregistered.

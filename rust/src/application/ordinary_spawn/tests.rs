@@ -552,10 +552,11 @@ async fn closed_unmerged_tree_is_listed_and_a_later_start_removes_it_once_merged
     assert_eq!(f.messages().len(), 1);
 }
 
-// (d) through the service: an unreachable upstream keeps the tree with its own
-// warning, at close and at the startup recheck.
+// (d) through the service (audit N11): cleanup contacts no remote, so an
+// unreachable upstream is an unmerged tree like any other, at close and at the
+// startup recheck.
 #[tokio::test]
-async fn unreachable_upstream_warns_at_close_and_at_recheck() {
+async fn an_unreachable_upstream_is_not_contacted_at_close_or_at_recheck() {
     let f = Fixture::new(SpawnStartOutcome::Started { pid: 42 });
     let branch = f.git(&f.repo, &["rev-parse", "--abbrev-ref", "HEAD"]);
     let missing = f._root.path().join("missing-origin.git");
@@ -579,21 +580,15 @@ async fn unreachable_upstream_warns_at_close_and_at_recheck() {
     f.commit(&tree, "work.txt");
     f.close(&tree).await;
     assert!(Path::new(&tree.path).is_dir());
-    assert_eq!(
-        f.messages(),
-        ["dismissed worktree upstream fetch failed; worktree retained"]
-    );
+    assert_eq!(f.messages(), ["dismissed worktree cleanup failed"]);
     let report = f
         .service
         .recheck_retained_worktrees(&Cancellation::default())
         .await;
-    assert_eq!(report.fetch_failed, 1);
+    assert_eq!(report.retained, 1);
     assert!(Path::new(&tree.path).is_dir());
     assert_eq!(f.retained.load().unwrap().len(), 1);
-    assert_eq!(
-        f.messages().last(),
-        Some(&"retained worktree upstream fetch failed; worktrees retained")
-    );
+    assert_eq!(f.messages().len(), 1);
 }
 
 // (f) through the core: a wrapper that outlived the previous Hub reattaches

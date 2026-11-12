@@ -13,10 +13,25 @@
 //!
 //! A folder the user opens may hold a `.git` someone else wrote (an unpacked
 //! archive, a shared folder). Unless the user asked for the action in the Git
-//! tab ([`GitCommand::user_action`]), a plan therefore runs none of the
-//! programs that repository's config can name (audit U13): the fsmonitor
-//! hook, hooks such as `post-index-change`, `gpg.program` for `log`, and diff
-//! drivers. Command-scope settings outrank the repository's own config.
+//! tab ([`GitCommand::user_action`]), a plan therefore switches off the known
+//! ways that repository's config can name a program. Command-scope settings
+//! outrank the repository's own config.
+//!
+//! - Fixed settings, put on the plan here (audit U13): the fsmonitor hook,
+//!   hooks in a hooks directory, `gpg.program` for `log`, and diff drivers.
+//! - Programs the config names by a name of its own choosing (audit N09, N10):
+//!   config-defined hooks (`hook.<name>.command`) and filter drivers
+//!   (`filter.<name>.clean` / `smudge` / `process`). Git has no setting that
+//!   turns these off as a class, so the one place every owned process runs
+//!   (`process::run_observed`) first asks Git for the names
+//!   ([`named_programs_query`]) and overrides each ([`without_named_programs`]).
+//!   If the names cannot be read, the command does not run.
+//!
+//! What this does not cover: a kind of program-naming setting that is not
+//! listed here, a name added between the lookup and the command (a process
+//! that can write `.git/config` while the Hub looks), and a submodule's own
+//! config. A Hub Git never fetches on its own (audit N11): a transport is a
+//! program the repository's config names as well.
 //!
 //! `git_processes_are_planned_only_here` fails when production code builds a
 //! Git `ProcessPlan` directly instead of coming through [`GitCommand::plan`].
@@ -59,7 +74,7 @@ fn forced_config() -> [(&'static str, &'static OsStr); 3] {
 /// Appends the forced settings after any the caller, or the Hub's own
 /// environment, already passes through `GIT_CONFIG_COUNT`, so those still apply.
 fn force_config(env: &mut BTreeMap<OsString, Option<OsString>>) {
-    append_config(env, &forced_config());
+    append_config(env, forced_config());
 }
 
 /// Turns the repository's Git hooks off for the programs a process starts:
@@ -68,35 +83,191 @@ fn force_config(env: &mut BTreeMap<OsString, Option<OsString>>) {
 /// without a sandbox gets this, so `git commit` cannot run a hook it edited
 /// (U49).
 pub fn disable_hooks(env: &mut BTreeMap<OsString, Option<OsString>>) {
-    append_config(env, &[("core.hooksPath", no_hooks_path())]);
+    append_config(env, [("core.hooksPath", no_hooks_path())]);
 }
 
-fn append_config(
-    env: &mut BTreeMap<OsString, Option<OsString>>,
-    forced: &[(&'static str, &'static OsStr)],
-) {
+fn config_count(env: &BTreeMap<OsString, Option<OsString>>) -> usize {
     let passed = match env.get(OsStr::new(CONFIG_COUNT)) {
         Some(value) => value.clone(),
         None => std::env::var_os(CONFIG_COUNT),
     };
-    let base = passed
+    passed
         .and_then(|value| value.to_str().and_then(|v| v.trim().parse::<usize>().ok()))
-        .unwrap_or(0);
-    for (offset, (key, value)) in forced.iter().enumerate() {
-        let index = base + offset;
-        env.insert(
-            format!("GIT_CONFIG_KEY_{index}").into(),
-            Some((*key).into()),
-        );
+        .unwrap_or(0)
+}
+
+fn append_config<K: Into<OsString>, V: Into<OsString>>(
+    env: &mut BTreeMap<OsString, Option<OsString>>,
+    forced: impl IntoIterator<Item = (K, V)>,
+) {
+    let mut index = config_count(env);
+    for (key, value) in forced {
+        env.insert(format!("GIT_CONFIG_KEY_{index}").into(), Some(key.into()));
         env.insert(
             format!("GIT_CONFIG_VALUE_{index}").into(),
-            Some((*value).to_owned()),
+            Some(value.into()),
         );
+        index += 1;
     }
-    env.insert(
-        CONFIG_COUNT.into(),
-        Some((base + forced.len()).to_string().into()),
+    env.insert(CONFIG_COUNT.into(), Some(index.to_string().into()));
+}
+
+/// Whether the plan carries the forced settings, that is: it came from
+/// [`GitCommand::plan`] and is not the user's own action.
+fn unattended(plan: &ProcessPlan) -> bool {
+    let value = |key: String| plan.env.get(OsStr::new(&key)).cloned().flatten();
+    let forced = |name: &str, expected: &OsStr| {
+        (0..config_count(&plan.env)).any(|index| {
+            value(format!("GIT_CONFIG_KEY_{index}")).is_some_and(|key| key == name)
+                && value(format!("GIT_CONFIG_VALUE_{index}")).is_some_and(|v| v == expected)
+        })
+    };
+    plan.env.get(OsStr::new(OPTIONAL_LOCKS)) == Some(&Some("0".into()))
+        && forced("core.fsmonitor", OsStr::new("false"))
+        && forced("core.hooksPath", no_hooks_path())
+}
+
+/// Subcommands that only read refs, objects, ignore rules or config. They run
+/// no hook and no filter, so they skip the lookup of names; most are display
+/// lookups on a 250 ms budget. Anything not listed gets the lookup.
+const PROGRAM_FREE: &[&str] = &[
+    "check-ignore",
+    "for-each-ref",
+    "merge-base",
+    "rev-list",
+    "rev-parse",
+];
+
+fn program_free(args: &[OsString], index: usize, name: &str) -> bool {
+    PROGRAM_FREE.contains(&name)
+        || (name == "remote"
+            && args
+                .get(index + 1)
+                .is_some_and(|operation| operation.as_os_str() == OsStr::new("get-url")))
+}
+
+/// The config sections whose subsection is a name the repository chooses and
+/// whose settings name a program, with the settings that switch that name off.
+/// An empty value clears a command (and the list of a hook's events).
+const NAMED_PROGRAMS: &[(&str, &[(&str, &str)])] = &[
+    ("hook", &[("enabled", "false"), ("event", "")]),
+    (
+        "filter",
+        &[
+            ("clean", ""),
+            ("smudge", ""),
+            ("process", ""),
+            ("required", "false"),
+        ],
+    ),
+];
+const NAMES_PATTERN: &str = r"^(hook|filter)\.";
+const NAMES_CAP: usize = 1024 * 1024;
+const NAMES_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// For an unattended Hub Git that can run a hook or a filter: the Git that
+/// lists every `hook.*` and `filter.*` setting name in effect for the same
+/// repository (it reads config only, and runs none of those programs).
+/// `None` when the plan needs no lookup.
+pub(super) fn named_programs_query(plan: &ProcessPlan) -> Option<ProcessPlan> {
+    if !unattended(plan) {
+        return None;
+    }
+    let (index, name) = subcommand(&plan.args)?;
+    if program_free(&plan.args, index, &name) {
+        return None;
+    }
+    let mut args = plan.args[..index].to_vec();
+    args.extend(
+        [
+            "config",
+            "--null",
+            "--name-only",
+            "--get-regexp",
+            NAMES_PATTERN,
+        ]
+        .map(OsString::from),
     );
+    Some(ProcessPlan {
+        executable: plan.executable.clone(),
+        args,
+        cwd: plan.cwd.clone(),
+        env: plan.env.clone(),
+        stdin: Vec::new(),
+        timeout: if plan.timeout.is_zero() {
+            NAMES_TIMEOUT
+        } else {
+            plan.timeout.min(NAMES_TIMEOUT)
+        },
+        output_cap: NAMES_CAP,
+        pipe_drain_timeout: plan.pipe_drain_timeout,
+    })
+}
+
+/// `plan` with every hook and filter driver the lookup listed switched off.
+/// `Err` is what the command reports instead of running: the lookup's own
+/// result when Git could not answer (a missing directory or a broken config
+/// stops the command the same way), or an error when the list is unusable.
+pub(super) fn without_named_programs(
+    plan: &ProcessPlan,
+    listed: super::ProcessOutput,
+    spent: Duration,
+) -> Result<ProcessPlan, std::io::Result<super::ProcessOutput>> {
+    let unanswered = |outcome| {
+        Err(Ok(super::ProcessOutput {
+            stdout: Vec::new(),
+            stderr: listed.stderr.clone(),
+            stdout_truncated: false,
+            stderr_truncated: listed.stderr_truncated,
+            pipes_forced_closed: false,
+            outcome,
+        }))
+    };
+    let unusable = || {
+        Err(Err(std::io::Error::other(
+            "git config names of hooks and filters could not be read",
+        )))
+    };
+    let names: &[u8] = match listed.outcome {
+        super::ExitOutcome::Exited { code: Some(0), .. } => &listed.stdout,
+        // Exit 1: no such setting.
+        super::ExitOutcome::Exited { code: Some(1), .. } => &[],
+        ref other => return unanswered(other.clone()),
+    };
+    if listed.stdout_truncated || listed.pipes_forced_closed {
+        return unusable();
+    }
+    let Ok(names) = std::str::from_utf8(names) else {
+        return unusable();
+    };
+    let mut overrides = std::collections::BTreeSet::new();
+    for key in names.split('\0') {
+        for (section, settings) in NAMED_PROGRAMS {
+            // `<section>.<name>.<setting>`: the name may itself hold dots.
+            let Some(name) = key
+                .strip_prefix(section)
+                .and_then(|rest| rest.strip_prefix('.'))
+                .and_then(|rest| rest.rsplit_once('.'))
+                .map(|(name, _)| name)
+                .filter(|name| !name.is_empty())
+            else {
+                continue;
+            };
+            for (setting, value) in *settings {
+                overrides.insert((format!("{section}.{name}.{setting}"), *value));
+            }
+        }
+    }
+    let mut plan = plan.clone();
+    if !plan.timeout.is_zero() {
+        // Zero would mean "no deadline", so a used-up budget is a timeout.
+        plan.timeout = plan.timeout.saturating_sub(spent);
+        if plan.timeout.is_zero() {
+            return unanswered(super::ExitOutcome::TimedOut);
+        }
+    }
+    append_config(&mut plan.env, overrides);
+    Ok(plan)
 }
 
 /// Subcommands that can show a diff. They get `--no-ext-diff --no-textconv`
@@ -531,6 +702,185 @@ mod tests {
             diff.plan().unwrap().args,
             argv(&["diff", "--cached", "--quiet"])
         );
+    }
+
+    fn listed(code: i32, stdout: &[u8]) -> crate::process::ProcessOutput {
+        crate::process::ProcessOutput {
+            stdout: stdout.to_vec(),
+            stderr: b"synthetic stderr".to_vec(),
+            stdout_truncated: false,
+            stderr_truncated: false,
+            pipes_forced_closed: false,
+            outcome: crate::process::ExitOutcome::Exited {
+                code: Some(code),
+                signal: None,
+            },
+        }
+    }
+
+    #[test]
+    fn only_an_unattended_git_that_can_run_a_program_asks_for_the_names() {
+        // Audit N09, N10. The lookup keeps the global options, so it reads the
+        // same repository with the same settings.
+        let plan = command(&[
+            "-C",
+            "repo",
+            "-c",
+            "core.quotePath=false",
+            "status",
+            "--porcelain",
+        ])
+        .plan()
+        .unwrap();
+        let query = named_programs_query(&plan).unwrap();
+        assert_eq!(
+            query.args,
+            argv(&[
+                "-C",
+                "repo",
+                "-c",
+                "core.quotePath=false",
+                "config",
+                "--null",
+                "--name-only",
+                "--get-regexp",
+                r"^(hook|filter)\."
+            ])
+        );
+        assert_eq!(query.env, plan.env);
+        assert_eq!(query.cwd, plan.cwd);
+        assert_eq!(query.executable, plan.executable);
+        assert_eq!(query.timeout, Duration::from_secs(1));
+        assert!(query.stdin.is_empty());
+        for asks in [
+            &["add", "-A"][..],
+            &["read-tree", "HEAD"],
+            &["write-tree"],
+            &["diff-index", "-M", "--numstat", "HEAD"],
+            &["worktree", "add", "-b", "x", "path", "HEAD"],
+            &["log", "-1"],
+            &["symbolic-ref", "-q", "HEAD"],
+            &["remote", "update"],
+            &["ls-files", "-m"],
+        ] {
+            assert!(
+                named_programs_query(&command(asks).plan().unwrap()).is_some(),
+                "{asks:?}"
+            );
+        }
+        for free in [
+            &["rev-parse", "--show-toplevel"][..],
+            &["-C", "repo", "merge-base", "--is-ancestor", "a", "b"],
+            &["remote", "get-url", "origin"],
+            &["check-ignore", "--stdin", "-z"],
+            &["--version"],
+            &[],
+        ] {
+            assert!(
+                named_programs_query(&command(free).plan().unwrap()).is_none(),
+                "{free:?}"
+            );
+        }
+        // The user's own action runs the repository's hooks and filters.
+        let mut commit = command(&["commit", "-m", "x"]);
+        commit.user_action = true;
+        assert!(named_programs_query(&commit.plan().unwrap()).is_none());
+        // A plan that did not come from this entry is not this entry's to change.
+        let mut foreign = plan.clone();
+        foreign.env.remove(OsStr::new(OPTIONAL_LOCKS));
+        assert!(named_programs_query(&foreign).is_none());
+        // A command without a deadline still bounds its lookup.
+        let mut open = plan;
+        open.timeout = Duration::ZERO;
+        assert_eq!(named_programs_query(&open).unwrap().timeout, NAMES_TIMEOUT);
+    }
+
+    #[test]
+    fn listed_hooks_and_filters_are_switched_off_after_the_forced_settings() {
+        // Audit N09, N10. Names keep their case, spaces and dots.
+        let plan = command(&["-C", "repo", "add", "-A"]).plan().unwrap();
+        let names = b"hook.audit.command\0hook.audit.event\0hook.Two Words.v2.event\0\
+            filter.x.clean\0filter.lfs.process\0hook.jobs\0filter.\0core.hookspath\0";
+        let off = without_named_programs(&plan, listed(0, names), Duration::from_millis(100))
+            .ok()
+            .unwrap();
+        let config = forced(&off);
+        assert_eq!(config.len(), 3 + 2 * 2 + 2 * 4);
+        assert_eq!(config[OsStr::new("core.hooksPath")], no_hooks_path());
+        for hook in ["audit", "Two Words.v2"] {
+            assert_eq!(config[OsStr::new(&format!("hook.{hook}.enabled"))], "false");
+            assert_eq!(config[OsStr::new(&format!("hook.{hook}.event"))], "");
+        }
+        for filter in ["x", "lfs"] {
+            for setting in ["clean", "smudge", "process"] {
+                assert_eq!(
+                    config[OsStr::new(&format!("filter.{filter}.{setting}"))],
+                    ""
+                );
+            }
+            assert_eq!(
+                config[OsStr::new(&format!("filter.{filter}.required"))],
+                "false"
+            );
+        }
+        assert_eq!(off.args, plan.args);
+        assert_eq!(off.timeout, Duration::from_millis(900));
+        // No such setting (exit 1): the plan is unchanged.
+        let none = without_named_programs(&plan, listed(1, b""), Duration::ZERO)
+            .ok()
+            .unwrap();
+        assert_eq!(none.env, plan.env);
+        // No deadline stays no deadline.
+        let mut open = plan.clone();
+        open.timeout = Duration::ZERO;
+        let open = without_named_programs(&open, listed(1, b""), Duration::from_secs(9))
+            .ok()
+            .unwrap();
+        assert!(open.timeout.is_zero());
+    }
+
+    #[test]
+    fn without_the_names_the_command_does_not_run() {
+        use crate::process::ExitOutcome;
+        let plan = command(&["-C", "absent", "status", "--porcelain"])
+            .plan()
+            .unwrap();
+        let instead = |listed, spent| {
+            without_named_programs(&plan, listed, spent)
+                .err()
+                .expect("the command must not be planned")
+        };
+        // Git could not answer: its own exit and message stand for the command's.
+        let failed = instead(listed(128, b"ignored"), Duration::ZERO).unwrap();
+        assert_eq!(
+            failed.outcome,
+            ExitOutcome::Exited {
+                code: Some(128),
+                signal: None
+            }
+        );
+        assert_eq!(failed.stderr, b"synthetic stderr");
+        assert!(failed.stdout.is_empty());
+        for outcome in [ExitOutcome::TimedOut, ExitOutcome::Cancelled] {
+            let mut stopped = listed(0, b"hook.audit.event\0");
+            stopped.outcome = outcome.clone();
+            assert_eq!(instead(stopped, Duration::ZERO).unwrap().outcome, outcome);
+        }
+        // The lookup used the whole budget.
+        assert_eq!(
+            instead(listed(1, b""), Duration::from_secs(1))
+                .unwrap()
+                .outcome,
+            ExitOutcome::TimedOut
+        );
+        // A list that is cut short or unreadable names nothing reliably.
+        let mut truncated = listed(0, b"hook.audit.event\0");
+        truncated.stdout_truncated = true;
+        assert!(instead(truncated, Duration::ZERO).is_err());
+        let mut forced_closed = listed(0, b"hook.audit.event\0");
+        forced_closed.pipes_forced_closed = true;
+        assert!(instead(forced_closed, Duration::ZERO).is_err());
+        assert!(instead(listed(0, b"hook.\xff.event\0"), Duration::ZERO).is_err());
     }
 
     #[test]

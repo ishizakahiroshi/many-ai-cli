@@ -8,9 +8,8 @@ use crate::{
     orchestration::{
         child_launch::{cwd_too_broad, prompt::sanitize_inject_text},
         normal_worktree::{
-            NormalWorktreeLifecycle, RecheckReport, RetainedWorktrees, UPSTREAM_FETCH_FAILED,
-            WORKTREE_CLEANUP_DELETE, effective_worktree_cleanup, path_within,
-            valid_worktree_cleanup,
+            NormalWorktreeLifecycle, RecheckReport, RetainedWorktrees, WORKTREE_CLEANUP_DELETE,
+            effective_worktree_cleanup, path_within, valid_worktree_cleanup,
         },
     },
     process::Cancellation,
@@ -504,9 +503,9 @@ impl OrdinarySpawnService {
             self.hooks.warning("unregistered worktree cleanup failed");
         }
     }
-    /// Cleanup may fetch the upstream, so it runs as a Hub-owned effect: a slow
-    /// or unreachable remote never holds the caller (the UI socket's receive
-    /// loop). A tree that stays is remembered for the next Hub start.
+    /// Cleanup runs several Git commands, so it runs as a Hub-owned effect and
+    /// never holds the caller (the UI socket's receive loop). A tree that
+    /// stays is remembered for the next Hub start.
     pub async fn dismissed(&self, snapshot: &SessionSnapshot) {
         let tree = snapshot.normal_worktree.clone();
         let policy = snapshot.worktree_cleanup.clone();
@@ -519,14 +518,11 @@ impl OrdinarySpawnService {
         let core = self.core.clone();
         match self.tasks.effect_permit() {
             Ok(permit) => {
-                let cancel = permit.cancellation();
                 drop(permit.start(async move {
                     // The dismissed session has already left the core, so only
                     // another live session inside the tree keeps it.
                     let in_use = move |path: &Path| session_uses(&core, path);
-                    let result = worktrees
-                        .cleanup_guarded(&tree, &policy, &in_use, cancel.token())
-                        .await;
+                    let result = worktrees.cleanup_guarded(&tree, &policy, &in_use).await;
                     settle_dismissed(&tree, result, retained.as_deref(), hooks.as_ref());
                 }));
             }
@@ -548,10 +544,6 @@ impl OrdinarySpawnService {
             .worktrees
             .recheck_retained(store, &in_use, cancel)
             .await;
-        if report.fetch_failed > 0 {
-            self.hooks
-                .warning("retained worktree upstream fetch failed; worktrees retained");
-        }
         if report.store_failed {
             self.hooks.warning("retained worktree list unavailable");
         }
@@ -573,12 +565,8 @@ fn settle_dismissed(
 ) {
     let recorded = match result {
         Ok(()) => retained.map(|store| store.forget(&tree.path)),
-        Err(error) => {
-            hooks.warning(if error.starts_with(UPSTREAM_FETCH_FAILED) {
-                "dismissed worktree upstream fetch failed; worktree retained"
-            } else {
-                "dismissed worktree cleanup failed"
-            });
+        Err(_) => {
+            hooks.warning("dismissed worktree cleanup failed");
             retained
                 .filter(|_| Path::new(&tree.path).is_dir())
                 .map(|store| store.remember(tree))

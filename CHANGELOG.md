@@ -180,6 +180,27 @@ Release artifacts are published at
 
 ### Security
 
+- **Git settings in a folder you open no longer run programs while the Hub
+  looks at it.** A folder's own `.git/config` (an unpacked archive, a shared
+  folder, a file an AI CLI wrote) could name a hook (`hook.<name>.command`) or
+  a filter driver (`filter.<name>.clean` with `.gitattributes`), and the Git
+  the Hub runs on its own ran them with your permissions: the filter as soon
+  as the dashboard showed the session, the hook at your first input. The
+  Hub's own Git (branch and change counts, turn snapshots, the Review and Git
+  views, session worktrees) now asks Git for those names first and switches
+  each one off; if the names cannot be read, that Git command does not run.
+  What you do yourself in the Git view (commit, fetch, pull, push) still runs
+  with the repository's hooks and filters. In a repository that uses a filter
+  such as Git LFS, the Hub's change counts and turn diffs now compare the
+  files as they are on disk, so they can differ from `git status`.
+- **Closing a session no longer fetches.** With
+  `user_prefs.spawn.worktree_cleanup: delete`, closing a worktree session (and
+  each Hub start) fetched the parent repository's upstream to see whether the
+  branch was merged, and a fetch runs what the repository's config names (the
+  remote's transport and upload-pack command, hooks on the updated refs).
+  Cleanup now judges against the upstream as it was last fetched. After a
+  merge on the remote, fetch from the Git view or your own Git, and the
+  worktree is removed at the next check; until then it stays.
 - **A relay can no longer skip the PIN.** With a PIN set, a connection counts
   as local only when it proves it: the dashboard the Hub opened itself carries
   a cookie it got with its launch code, and the many-ai-cli commands on this

@@ -660,9 +660,10 @@ async fn cleanup_clean_check_leaves_the_worktree_index_and_its_lock_alone() {
 }
 
 // (a) Sessions push their work to the remote branch; the parent's own develop
-// stays old until someone pulls. Closing must still see the merge.
+// stays old until someone pulls. Once the user has fetched, closing sees the
+// merge in origin/develop. Until then the tree stays: cleanup does not fetch.
 #[tokio::test]
-async fn upstream_merge_removes_the_tree_while_local_develop_stays_behind() {
+async fn upstream_merge_removes_the_tree_once_fetched_while_local_develop_stays_behind() {
     let f = Fixture::new();
     let t = f.tracked("pushed").await;
     let tree = f.prepare(&t.repo, "worker").await;
@@ -675,6 +676,13 @@ async fn upstream_merge_removes_the_tree_while_local_develop_stays_behind() {
         !f.is_ancestor(&t.repo, &tree.branch, "refs/remotes/origin/develop")
             .await
     );
+    assert_eq!(
+        f.lifecycle.cleanup(&tree, "delete").await.unwrap_err(),
+        not_merged(&tree)
+    );
+    assert!(Path::new(&tree.path).is_dir());
+    // The user's own fetch (the Git tab, or their Git).
+    f.git(&t.repo, &["fetch", "-q", "origin"]).await;
     f.lifecycle.cleanup(&tree, "delete").await.unwrap();
     assert!(!Path::new(&tree.path).exists());
     assert_eq!(f.git(&t.repo, &["rev-parse", "develop"]).await, develop);
@@ -689,8 +697,8 @@ async fn upstream_merge_removes_the_tree_while_local_develop_stays_behind() {
     );
 }
 
-// (b) Unmerged when its session closed, merged afterwards: the next start's
-// recheck removes it and drops it from the list.
+// (b) Unmerged when its session closed, merged and fetched afterwards: the
+// next start's recheck removes it and drops it from the list.
 #[tokio::test]
 async fn merged_after_close_is_removed_by_the_startup_recheck() {
     let f = Fixture::new();
@@ -705,6 +713,9 @@ async fn merged_after_close_is_removed_by_the_startup_recheck() {
     store.remember(&tree).unwrap();
     assert_eq!(f.recheck(&store).await.retained, 1);
     f.merge_on_origin(&t, &tree.branch).await;
+    // Merged on the remote only: still listed until the user fetches.
+    assert_eq!(f.recheck(&store).await.retained, 1);
+    f.git(&t.repo, &["fetch", "-q", "origin"]).await;
     assert_eq!(
         f.recheck(&store).await,
         RecheckReport {
@@ -717,8 +728,8 @@ async fn merged_after_close_is_removed_by_the_startup_recheck() {
     assert!(store.load().unwrap().is_empty());
 }
 
-// (c) Uncommitted work, or a branch merged nowhere (the upstream is fetched
-// and checked too), is kept at close and by every recheck.
+// (c) Uncommitted work, or a branch merged nowhere (the upstream is checked
+// too), is kept at close and by every recheck.
 #[tokio::test]
 async fn dirty_or_unmerged_everywhere_is_kept_and_stays_listed() {
     let f = Fixture::new();
@@ -749,30 +760,65 @@ async fn dirty_or_unmerged_everywhere_is_kept_and_stays_listed() {
     assert_eq!(store.load().unwrap().len(), 2);
 }
 
-// (d) An unreachable remote is never taken as "merged": the tree stays, stays
-// listed, and the failure is reported for a warning.
+/// A shell script at `path` that appends a line to `marker` each time it runs.
+/// Returned quoted, with forward slashes, for a Git setting that names a command.
+fn recorder(path: &Path, marker: &Path) -> String {
+    let marker = marker.to_string_lossy().replace('\\', "/");
+    fs::write(path, format!("#!/bin/sh\necho ran >> '{marker}'\nexit 1\n")).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    format!("'{}'", path.to_string_lossy().replace('\\', "/"))
+}
+
+// (d) Audit N11: cleanup contacts no remote, so it runs none of the programs a
+// fetch would run for the parent's config (here the remote's upload-pack
+// command). The remote's merge is unseen, the tree stays and stays listed.
 #[tokio::test]
-async fn failed_fetch_keeps_the_tree_and_reports_it() {
+async fn audit_n11_cleanup_never_fetches_so_the_remotes_programs_do_not_run() {
     let f = Fixture::new();
     let t = f.tracked("offline").await;
     let tree = f.prepare(&t.repo, "worker").await;
     f.publish(&tree, "work.txt").await;
     f.merge_on_origin(&t, &tree.branch).await;
-    fs::rename(&t.origin, f.root.join("offline-moved.git")).unwrap();
-    let error = f.lifecycle.cleanup(&tree, "delete").await.unwrap_err();
-    assert!(error.starts_with(UPSTREAM_FETCH_FAILED), "{error}");
+    let marker = f.root.join("ran-uploadpack.txt");
+    let uploadpack = recorder(&f.root.join("uploadpack.sh"), &marker);
+    f.git(
+        &t.repo,
+        &["config", "remote.origin.uploadpack", &uploadpack],
+    )
+    .await;
+    assert_eq!(
+        f.lifecycle.cleanup(&tree, "delete").await.unwrap_err(),
+        not_merged(&tree)
+    );
     assert!(Path::new(&tree.path).is_dir());
     let store = f.store();
     store.remember(&tree).unwrap();
     assert_eq!(
         f.recheck(&store).await,
         RecheckReport {
-            fetch_failed: 1,
+            retained: 1,
             ..Default::default()
         }
     );
     assert!(Path::new(&tree.path).is_dir());
     assert_eq!(store.load().unwrap().len(), 1);
+    assert!(!marker.exists(), "cleanup ran the remote's upload-pack");
+    // Control: a fetch in the same parent runs it.
+    let fetched = f
+        .lifecycle
+        .run(
+            &t.repo,
+            &args(&["fetch", "-q", "origin"]),
+            Instant::now() + Duration::from_secs(10),
+            GitOutput::Combined,
+        )
+        .await;
+    assert!(fetched.is_err());
+    assert!(marker.exists(), "upload-pack control");
 }
 
 // (e) No upstream: only the local HEAD decides, exactly as before, and no
@@ -826,7 +872,7 @@ async fn a_tree_a_live_session_uses_is_not_removed_by_the_recheck() {
 }
 
 #[tokio::test]
-async fn one_fetch_per_parent_serves_every_record_of_the_recheck() {
+async fn every_record_of_a_parent_is_judged_against_the_fetched_upstream() {
     let f = Fixture::new();
     let t = f.tracked("shared").await;
     let first = f.prepare(&t.repo, "a-first").await;
@@ -835,30 +881,20 @@ async fn one_fetch_per_parent_serves_every_record_of_the_recheck() {
     f.publish(&second, "second.txt").await;
     f.merge_on_origin(&t, &first.branch).await;
     f.merge_on_origin(&t, &second.branch).await;
+    f.git(&t.repo, &["fetch", "-q", "origin"]).await;
     let store = f.store();
     store.remember(&first).unwrap();
     store.remember(&second).unwrap();
-    // Once the first record is removed, the remote vanishes: a second fetch
-    // for the same parent would fail and keep the second tree.
-    let (origin, moved) = (t.origin.clone(), f.root.join("shared-moved.git"));
-    let first_path = PathBuf::from(&first.path);
-    let in_use = move |_: &Path| {
-        if !first_path.exists() && origin.exists() {
-            fs::rename(&origin, &moved).unwrap();
-        }
-        false
-    };
+    // The remote is gone by now: the recheck needs only what was fetched.
+    fs::rename(&t.origin, f.root.join("shared-moved.git")).unwrap();
     assert_eq!(
-        f.lifecycle
-            .recheck_retained(&store, &in_use, &Cancellation::default())
-            .await,
+        f.recheck(&store).await,
         RecheckReport {
             removed: 2,
             forgotten: 2,
             ..Default::default()
         }
     );
-    assert!(!t.origin.exists());
 }
 
 #[tokio::test]

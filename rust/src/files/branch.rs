@@ -1237,11 +1237,19 @@ mod tests {
             "if [ \"$4\" = --abbrev-ref ]; then printf 'HEAD\\n'; else exit 1; fi",
         );
         assert_eq!(fixture.service.branch(fixture.cwd()).await, "");
+        // `config` is the lookup of hook and filter names that precedes an
+        // unattended command (exit 1: none are set).
         script(
             &mut fixture,
-            "if [ \"$3\" = status ]; then printf ' M one\\n\\n?? two\\n'; else exit 128; fi",
+            "case \"$3\" in config) exit 1 ;; status) printf ' M one\\n\\n?? two\\n' ;; *) exit 128 ;; esac",
         );
         assert_eq!(fixture.service.changes(fixture.cwd()).await, (2, 0, 0));
+        // A helper that cannot answer the lookup runs no command at all.
+        script(
+            &mut fixture,
+            "if [ \"$3\" = status ]; then printf ' M one\\n'; else exit 128; fi",
+        );
+        assert_eq!(fixture.service.changes(fixture.cwd()).await, (0, 0, 0));
     }
 
     #[cfg(unix)]
@@ -1252,7 +1260,7 @@ mod tests {
         // well inside the statistics budget.
         script(
             &mut fixture,
-            "sleep 0.6\nif [ \"$3\" = status ]; then printf ' M one\\n'; else printf '2\\t1\\tone\\n'; fi",
+            "if [ \"$3\" = config ]; then exit 1; fi\nsleep 0.6\nif [ \"$3\" = status ]; then printf ' M one\\n'; else printf '2\\t1\\tone\\n'; fi",
         );
         assert_eq!(fixture.service.changes(fixture.cwd()).await, (1, 2, 1));
     }

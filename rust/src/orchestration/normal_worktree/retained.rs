@@ -48,7 +48,6 @@ pub struct RecheckReport {
     pub removed: usize,
     pub retained: usize,
     pub in_use: usize,
-    pub fetch_failed: usize,
     pub forgotten: usize,
     pub store_failed: bool,
 }

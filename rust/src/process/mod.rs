@@ -413,7 +413,10 @@ pub async fn run_capped_with_options(
     run_observed(plan, cancel, None, options, None, None).await
 }
 /// Every owned run ends here, so a writing Git stopped before it finished is
-/// reported once (`git::report`; the Hub then looks for a stranded lock).
+/// reported once (`git::report`; the Hub then looks for a stranded lock), and
+/// an unattended Hub Git first has the hooks and filters its repository's
+/// config names switched off (`git::named_programs_query`; audit N09, N10).
+/// Without that list the command does not run.
 async fn run_observed(
     plan: &ProcessPlan,
     cancel: &Cancellation,
@@ -424,6 +427,34 @@ async fn run_observed(
 ) -> io::Result<ProcessOutput> {
     let ran = !cancel.is_cancelled();
     let started = std::time::SystemTime::now();
+    let without_named_programs;
+    let plan = match git::named_programs_query(plan) {
+        Some(query) if ran => {
+            let asked = std::time::Instant::now();
+            let listed = run_contained(
+                &query,
+                cancel,
+                None,
+                SpawnOptions {
+                    no_window: options.no_window,
+                    env_clear: options.env_clear,
+                    stdin_null: true,
+                    ..Default::default()
+                },
+                None,
+                None,
+            )
+            .await?;
+            match git::without_named_programs(plan, listed, asked.elapsed()) {
+                Ok(plan) => {
+                    without_named_programs = plan;
+                    &without_named_programs
+                }
+                Err(instead) => return instead,
+            }
+        }
+        _ => plan,
+    };
     let result = run_contained(plan, cancel, events, options, interactive_input, log_file).await;
     if ran && let Ok(output) = &result {
         git::report(plan, &output.outcome, started);

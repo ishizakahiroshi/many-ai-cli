@@ -714,6 +714,63 @@ async fn hub_git_runs_no_program_the_repository_config_names() {
     );
 }
 #[tokio::test]
+async fn hub_git_runs_no_hook_or_filter_the_repository_names_by_a_name_of_its_own() {
+    // Audit N09, N10: a config-defined hook and a filter driver carry a name
+    // the repository chooses, so no fixed setting turns them off. Hub Git that
+    // only looks or captures a turn asks for the names and runs neither; plain
+    // Git in the same repository runs both (the controls below).
+    let (dir, service, root) = repo().await;
+    let git = Git::new(&service, 20);
+    let user = |subject: &str| GitRequest {
+        subject: subject.into(),
+        ..Default::default()
+    };
+    fs::write(root.join(".gitattributes"), "*.txt filter=record\n").unwrap();
+    fs::write(root.join("a.txt"), "one\n").unwrap();
+    git.commit(&root, &root, &user("base")).await.unwrap();
+    let marker = |name: &str| dir.path().join(format!("ran-{name}.txt"));
+    let quoted = |script: String| format!("'{script}'");
+    let hook = quoted(recorder(&dir.path().join("hook.sh"), &marker("hook")));
+    // A clean filter passes its input on.
+    let filter = dir.path().join("filter.sh");
+    let filter_marker = marker("filter").to_string_lossy().replace('\\', "/");
+    fs::write(
+        &filter,
+        format!("#!/bin/sh\necho ran >> '{filter_marker}'\ncat\n"),
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&filter, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let filter = quoted(filter.to_string_lossy().replace('\\', "/"));
+    for (key, value) in [
+        ("hook.Audit Name.command", hook.as_str()),
+        ("hook.Audit Name.event", "post-index-change"),
+        ("filter.record.clean", filter.as_str()),
+        ("filter.record.required", "true"),
+    ] {
+        git.run(&root, &["config", key, value]).await.unwrap();
+    }
+    fs::write(root.join("a.txt"), "two\n").unwrap();
+    git.status(&root, &root).await.unwrap();
+    git.diff(&root, &root, None).await.unwrap();
+    let tree = git.worktree_tree(&root).await.unwrap();
+    let turn = git.diff(&root, &root, Some(("HEAD", &tree))).await.unwrap();
+    assert!(turn["files"][0]["diff"].as_str().unwrap().contains("+two"));
+    for name in ["hook", "filter"] {
+        assert!(
+            !marker(name).exists(),
+            "Hub Git ran the repository's {name}"
+        );
+    }
+    // Controls: plain Git runs both here.
+    porcelain(&service, &root, &["add", "-A"]);
+    assert!(marker("filter").exists(), "clean filter control");
+    assert!(marker("hook").exists(), "config hook control");
+}
+#[tokio::test]
 async fn per_file_diffs_match_each_name_literally() {
     // Audit U16: `a[b].txt` is not a glob that takes in `ab.txt`, and a name
     // Git would C-quote keeps its raw path, its own diff and its counts.
