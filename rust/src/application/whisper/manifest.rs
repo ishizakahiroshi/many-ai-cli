@@ -1,6 +1,10 @@
 //! Fixed Go download definitions; no inferred URL, hash or binary platform.
 use serde::Serialize;
-pub const RELEASE: &str = "v1.8.6";
+// v1.8.6 crashed on recordings shorter than half a frame (the reflective
+// padding in log_mel_spectrogram read past the input). The fix is upstream
+// PR #3956; v1.9.5 contains it. Upstream attaches the Windows binaries of that
+// commit (d1be6fde) to the `b5454` release, not to the `v1.9.5` one.
+pub const RELEASE: &str = "v1.9.5";
 pub const DEFAULT_MODEL: &str = "small";
 pub const EXTRA_ROOM: u64 = 256 * 1024 * 1024;
 pub struct Binary {
@@ -15,17 +19,28 @@ pub struct Binary {
 }
 pub const WINDOWS: Binary = Binary {
     version: RELEASE,
-    url: "https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.6/whisper-bin-x64.zip",
-    sha256: "b07ea0b1b4115a38e1a7b07debf581f0b77d999925f8acb8f39d322b0ba0a822",
-    size_bytes: 4093849,
+    url: "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-x64.zip",
+    sha256: "6ba69e3482d7826214f90a6a9c84ca07782aec1e1d0c6a7c30c994fd5d816ccb",
+    size_bytes: 8928640,
     archive: "zip",
     server_names: &["whisper-server.exe", "server.exe"],
+    // ggml.dll picks one CPU backend at run time from the `ggml-cpu-*.dll`
+    // beside the server, so every variant in the archive is kept. An older
+    // `ggml-cpu.dll` left by v1.8.6 is only a fallback when no variant loads.
     keep: &[
         "whisper-server.exe",
         "whisper.dll",
         "ggml.dll",
         "ggml-base.dll",
-        "ggml-cpu.dll",
+        "ggml-cpu-alderlake.dll",
+        "ggml-cpu-cannonlake.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-cpu-haswell.dll",
+        "ggml-cpu-icelake.dll",
+        "ggml-cpu-sandybridge.dll",
+        "ggml-cpu-skylakex.dll",
+        "ggml-cpu-sse42.dll",
+        "ggml-cpu-x64.dll",
     ],
     runtime: "windows-amd64",
 };

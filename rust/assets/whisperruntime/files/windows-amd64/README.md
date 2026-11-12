@@ -11,7 +11,7 @@ managed install 時に `~/.many-ai-cli/whisper/bin/` へ展開される（`whisp
 
 | DLL | 役割 |
 |---|---|
-| `vcomp140.dll` | OpenMP（`ggml-base.dll` / `ggml-cpu.dll` が実 import） |
+| `vcomp140.dll` | OpenMP（`ggml-base.dll` / `ggml-cpu-*.dll` が実 import） |
 | `msvcp140.dll` | C++ 標準ライブラリ |
 | `vcruntime140.dll` | C ランタイム |
 | `vcruntime140_1.dll` | x64 の FH4 例外処理（x86 には無い） |

@@ -221,6 +221,16 @@ Release artifacts are published at
   engine of Chrome; measured with Node), during which the page does not
   respond. The same inputs now take under 20 milliseconds; the tidied text is
   unchanged.
+- **Managed Whisper (Windows x64) moves from whisper.cpp v1.8.6 to v1.9.5.**
+  v1.8.6 reads past the end of a recording of 200 samples or fewer (12.5
+  milliseconds at 16 kHz) when it pads the audio (fixed upstream in
+  whisper.cpp PR #3956), which can stop the Whisper server. The installer now
+  downloads the Windows x64 build of the v1.9.5 commit (upstream publishes it
+  as release `b5454`), SHA-256 verified as before. That build ships one CPU
+  library per processor generation (`ggml-cpu-*.dll`) and picks one when it
+  starts. An existing v1.8.6 install is downloaded again and replaced the next
+  time you install in Settings → Voice. The whisper.cpp built for the Docker
+  image is still v1.8.6.
 
 ### Security
 

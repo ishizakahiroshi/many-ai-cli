@@ -308,8 +308,17 @@ async fn unmanaged_ensure_never_runs_process_or_download_and_trial_native_is_clo
 }
 #[test]
 fn exact_manifest_and_hash_contract() {
-    assert_eq!(manifest::WINDOWS.size_bytes, 4093849);
+    assert_eq!(manifest::WINDOWS.size_bytes, 8928640);
     assert_eq!(manifest::WINDOWS.sha256.len(), 64);
+    // audit DN6: the pinned release is one that guards the short-audio padding.
+    assert_eq!(manifest::RELEASE, "v1.9.5");
+    assert!(
+        manifest::WINDOWS
+            .url
+            .ends_with("/b5454/whisper-bin-x64.zip")
+    );
+    assert!(manifest::WINDOWS.keep.contains(&"ggml-cpu-x64.dll"));
+    assert!(!manifest::WINDOWS.keep.contains(&"ggml-cpu.dll"));
     assert!(manifest::binary("linux", "amd64").is_none());
     assert_eq!(manifest::model("").unwrap().id, "small");
     assert!(native::verify_hash(
