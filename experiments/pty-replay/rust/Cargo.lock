@@ -1,0 +1,7 @@
+# This file is intentionally checked in for the dependency-free benchmark.
+# No dependency resolution or benchmark execution has been performed by AI.
+version = 4
+
+[[package]]
+name = "replay-bench-rust"
+version = "0.1.0"

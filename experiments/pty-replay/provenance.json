@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "base_branch": "develop",
+  "base_commit": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "source_path": "internal/wrapper/pty_replay.go",
+  "source_git_blob": "c51f7c4e2e92dda36374655297255d37336f8c34",
+  "source_sha256": "3bda8395d3e18d293d97d0876717287df70556a9236cc11258987b1c918e525e",
+  "source_url": "https://github.com/ishizakahiroshi/many-ai-cli/blob/21d0bc7935a2c4696fb89ccff2e324157a528c2d/internal/wrapper/pty_replay.go",
+  "go_adaptation": [
+    "package wrapper becomes package main",
+    "remove many-ai-cli/internal/proto import",
+    "replace proto.PTYReplayBufferLimit with a local 2*1024*1024 constant",
+    "append and snapshot bodies otherwise unchanged"
+  ],
+  "isolation": "Separate Go module and Cargo project. No imports, probes, endpoints, build steps or runtime hooks added to many-ai-cli.",
+  "interpretation": "Compares these two standalone implementations, including their runtime and allocator choices. Does not establish benefits for an integrated Go/Rust product."
+}
