@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "1d9be86c79ae773cdda713837e6ea96df92465da",
+    "commit": "4309a681497b6bc528ff4d936f84b737a780bee2",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2093,
-    "analyzed": 1626,
+    "discovered": 2095,
+    "analyzed": 1628,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 452,
@@ -48496,6 +48496,36 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/token-store.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Hub の token と読み取り専用の券を、ブラウザのどこに置くかを決める（監査 N24）。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/transcript-message-fixtures.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -51724,6 +51754,36 @@
     },
     {
       "path": "web/tests/terminal-link-provider.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/token-store.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

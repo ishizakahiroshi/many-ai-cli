@@ -1111,6 +1111,14 @@ fn service_reauth_page_cookie_and_public_assets_policy() {
     assert!(html.contains("path.charAt(1) === '/'") && html.contains("path.charAt(1) === '\\\\'"));
     // The launch code is traded once and taken out of the address bar first.
     assert!(html.contains("'/api/auth/launch'") && html.contains("params.delete('launch')"));
+    // Audit N24: on this machine the page keeps the token in the tab only and
+    // deletes what an earlier version left (web/tests/token-store.test.ts runs
+    // this script; here the text that reaches the browser is pinned).
+    assert!(
+        html.contains("sessionStorage.setItem('many-ai-cli-token', token)")
+            && html.contains("localStorage.removeItem('many-ai-cli-token')")
+            && html.contains("id=\"failed-here\"")
+    );
     assert!(response.headers["Content-Security-Policy"].contains("nonce-"));
     r.path = "/app.js".into();
     r.host = "evil.invalid".into();
@@ -1419,14 +1427,15 @@ fn audit_u09_a_browser_the_hub_opened_counts_as_local_for_the_pin() {
     page.headers.push(("Cookie".into(), pair.clone()));
     assert!(!auth.treated_remote(&page, &cfg, 1000));
     assert!(auth.guard(&page, &cfg, 48888, &["GET"], 1000).is_ok());
-    // It does not make a proxied request local, nor outlive its 30 days,
+    // It does not make a proxied request local, nor outlive its 7 days,
     // nor survive a new cookie secret (revoking all access).
     let mut proxied = page.clone();
     proxied
         .headers
         .push(("X-Forwarded-For".into(), "203.0.113.9".into()));
     assert!(auth.treated_remote(&proxied, &cfg, 1000));
-    assert!(auth.treated_remote(&page, &cfg, 1000 + 30 * 24 * 60 * 60));
+    assert!(!auth.treated_remote(&page, &cfg, 1000 + 7 * 24 * 60 * 60 - 1));
+    assert!(auth.treated_remote(&page, &cfg, 1000 + 7 * 24 * 60 * 60));
     let rotated = Config {
         auth_cookie_secret: "rotated-secret".into(),
         ..cfg.clone()
@@ -1439,6 +1448,95 @@ fn audit_u09_a_browser_the_hub_opened_counts_as_local_for_the_pin() {
     assert!(!auth.treated_remote(&plain, &open, 1000));
 }
 
+/// A browser the Hub opened: the request it sends, with its local cookie.
+fn opened_browser(auth: &super::pin::AuthService, cfg: &Config, now: i64) -> Request {
+    let code = auth.mint_launch_code(now).unwrap();
+    let mut launch = request();
+    launch.path = "/api/auth/launch".into();
+    launch.body = format!(r#"{{"code":"{code}"}}"#).into_bytes();
+    let response = auth.launch_for_test(&launch, cfg, now, true);
+    assert_eq!(response.status, 200);
+    let pair = response
+        .cookies
+        .iter()
+        .find(|cookie| cookie.starts_with(&format!("{}=", super::pin::LOCAL_COOKIE)))
+        .and_then(|cookie| cookie.split(';').next())
+        .unwrap()
+        .to_owned();
+    let mut page = request();
+    page.path = "/api/input-config".into();
+    page.method = "GET".into();
+    page.headers.push(("Cookie".into(), pair));
+    page
+}
+
+#[test]
+fn audit_n25_the_local_cookie_counts_only_while_the_hub_remembers_handing_it_out() {
+    let mut cfg = config();
+    cfg.remote_pin_hash = bcrypt::hash("123456", 4).unwrap();
+    cfg.auth_cookie_secret = "synthetic-secret".into();
+    let auth = super::pin::AuthService::default();
+    let page = opened_browser(&auth, &cfg, 1000);
+    assert!(!auth.treated_remote(&page, &cfg, 1000));
+    // The same cookie from a browser that looks different is not the one the
+    // Hub opened.
+    let mut other = page.clone();
+    other.headers.push((
+        "User-Agent".into(),
+        "Mozilla/5.0 (X11; Linux x86_64) Firefox/130.0".into(),
+    ));
+    assert!(auth.treated_remote(&other, &cfg, 1000));
+    // A Hub that was restarted remembers no cookie, however well signed.
+    let restarted = super::pin::AuthService::default();
+    assert!(restarted.treated_remote(&page, &cfg, 1000));
+    // Logging out ends it, and tells the browser to drop the cookie.
+    let response = auth.logout(&page, &cfg);
+    assert!(response.cookies.iter().any(|cookie| {
+        cookie.starts_with(&format!("{}=;", super::pin::LOCAL_COOKIE))
+            && cookie.contains("Max-Age=0")
+    }));
+    assert!(auth.treated_remote(&page, &cfg, 1000));
+    assert_eq!(
+        auth.guard(&page, &cfg, 48888, &["GET"], 1000)
+            .unwrap_err()
+            .status,
+        401
+    );
+    // Another browser's cookie is not touched by that logout.
+    let second = opened_browser(&auth, &cfg, 1000);
+    let third = opened_browser(&auth, &cfg, 1000);
+    auth.logout(&second, &cfg);
+    assert!(auth.treated_remote(&second, &cfg, 1000));
+    assert!(!auth.treated_remote(&third, &cfg, 1000));
+}
+
+#[test]
+fn audit_n25_changing_or_clearing_the_pin_ends_every_local_cookie() {
+    for body in [r#"{"pin":"654321"}"#, r#"{"clear":true}"#] {
+        let dir = tempfile::tempdir().unwrap();
+        let trial = dir.path().join("trial");
+        std::fs::create_dir(&trial).unwrap();
+        let paths =
+            crate::config::RuntimePaths::trial(&trial, 48888, &dir.path().join("installed"))
+                .unwrap();
+        let mut cfg = config();
+        cfg.remote_pin_hash = bcrypt::hash("123456", 4).unwrap();
+        cfg.auth_cookie_secret = "synthetic-secret".into();
+        let store = crate::config::ConfigStore::new(paths, cfg.clone()).unwrap();
+        let auth = super::pin::AuthService::default();
+        let page = opened_browser(&auth, &cfg, 1000);
+        let bystander = opened_browser(&auth, &cfg, 1000);
+        let mut change = page.clone();
+        change.method = "POST".into();
+        change.path = "/api/auth/set-pin".into();
+        change.body = body.as_bytes().to_vec();
+        assert_eq!(auth.set_pin(&change, &store, 1000).status, 200, "{body}");
+        // Judged against a config that still asks for a PIN: neither cookie
+        // counts any more (the secret did not change, only the Hub's memory).
+        assert!(auth.treated_remote(&page, &cfg, 1000), "{body}");
+        assert!(auth.treated_remote(&bystander, &cfg, 1000), "{body}");
+    }
+}
 #[test]
 fn audit_u05_an_asset_ticket_reads_media_only_and_ends_with_the_token() {
     let now = std::time::SystemTime::now()

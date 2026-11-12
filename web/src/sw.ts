@@ -7,6 +7,25 @@ const TOKEN_URL = '/__many-ai-cli-token__';
 // Hub の handleIndex は 24h の HttpOnly Cookie を発行するので実運用で不整合になりにくい。
 const TOKEN_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+// PC の手元の画面（origin が 127.0.0.1 / localhost / ::1 で、PC のブラウザ）では token を
+// 預からない（監査 N24）。Cache Storage は origin ごとで、origin はポートまでしか見ないので、
+// Hub が居ない間に同じ PC の別の利用者がそのポートで待ち受けると、そこのページから読めて
+// しまう。スマホ・タブレットは今までどおり預かる。理由の全文と、同じ判定を持つほかの
+// 2 か所は app/token-store.ts。Service Worker からはタッチの点数が見えないので、Mac と名乗る
+// iPad はここでは PC と見なす（画面の側は localStorage に token を持つので、開き直しは動く）。
+function keepsNoToken(): boolean {
+  const host = String(self.location.hostname || '').trim().toLowerCase()
+    .replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '');
+  const parts = host.split('.');
+  const loopback = host === 'localhost' || host.endsWith('.localhost') || host === '::1'
+    || (parts.length === 4 && parts[0] === '127'
+      && parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255));
+  if (!loopback) return false;
+  const browser = (self.navigator || {}) as { userAgent?: string; userAgentData?: { mobile?: boolean } };
+  return !(browser.userAgentData?.mobile === true
+    || /Android|iPhone|iPad|iPod/i.test(String(browser.userAgent || '')));
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
 });
@@ -14,14 +33,21 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter((key) => key !== CACHE_VERSION && key !== TOKEN_CACHE).map((key) => caches.delete(key)));
+    // PC の手元の画面では、前の版が預かった token もここで消す。
+    const keepToken = !keepsNoToken();
+    await Promise.all(keys.filter((key) => key !== CACHE_VERSION && !(keepToken && key === TOKEN_CACHE)).map((key) => caches.delete(key)));
     await self.clients.claim();
   })());
 });
 
 self.addEventListener('message', (event) => {
   const data = event.data || {};
-  if (data.type !== 'many-ai-cli-token' || !data.token) return;
+  if (data.type !== 'many-ai-cli-token') return;
+  if (keepsNoToken()) {
+    event.waitUntil(caches.delete(TOKEN_CACHE));
+    return;
+  }
+  if (!data.token) return;
   event.waitUntil((async () => {
     const cache = await caches.open(TOKEN_CACHE);
     // C5: token と一緒に expires (絶対時刻 ms) を保存し、readHubToken 側で TTL check する。
@@ -156,6 +182,7 @@ async function notificationURL(url, sessionId) {
 }
 
 async function readHubToken() {
+  if (keepsNoToken()) return '';
   try {
     const cache = await caches.open(TOKEN_CACHE);
     const res = await cache.match(TOKEN_URL);

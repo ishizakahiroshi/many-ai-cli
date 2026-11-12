@@ -20,11 +20,36 @@ code{background:#1b1d22;padding:.1em .35em;border-radius:.25em}
 <p>This device is not signed in to the Hub.</p>
 <p>Open the Hub URL that includes <code>?token=</code> once. Settings &gt; Mobile connect shows a QR code for it. After that this app restores the session on its own.</p>
 </div>
+<div id="failed-here" class="hide">
+<p>This tab could not sign in to the Hub.</p>
+<p>Open the dashboard again from many-ai-cli (or the tray). On this computer the sign-in is kept only until the tab is closed, and the address that opens it works once.</p>
+</div>
 </div>
 <script nonce="__NONCE__">
 (function () {
   var working = document.getElementById('working');
-  var failed = document.getElementById('failed');
+  // PC の手元の画面（origin が 127.0.0.1 / localhost / ::1 で、PC のブラウザ）かどうか
+  // （監査 N24）。スマホ・タブレットは SSH の転送で自分の 127.0.0.1 を開くので、ブラウザの
+  // 種類も見る。同じ判定が web/src/app/token-store.ts と web/src/sw.ts にある。変えるときは揃える。
+  function handheld() {
+    var nav = navigator || {};
+    if (nav.userAgentData && nav.userAgentData.mobile === true) return true;
+    if (/Android|iPhone|iPad|iPod/i.test(String(nav.userAgent || ''))) return true;
+    return nav.platform === 'MacIntel' && Number(nav.maxTouchPoints) > 1;
+  }
+  function thisMachine() {
+    if (handheld()) return false;
+    var host = String(location.hostname || '').trim().toLowerCase()
+      .replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '');
+    if (host === 'localhost' || /\.localhost$/.test(host) || host === '::1') return true;
+    var parts = host.split('.');
+    if (parts.length !== 4 || parts[0] !== '127') return false;
+    for (var i = 0; i < parts.length; i++) {
+      if (!/^\d{1,3}$/.test(parts[i]) || Number(parts[i]) > 255) return false;
+    }
+    return true;
+  }
+  var failed = document.getElementById(thisMachine() ? 'failed-here' : 'failed');
   function giveUp() {
     working.className = 'hide';
     failed.className = '';
@@ -35,7 +60,15 @@ code{background:#1b1d22;padding:.1em .35em;border-radius:.25em}
   }
   // token は cookie に置かない。画面は保存した token を header と WebSocket の
   // 最初のメッセージで送る。localStorage が使えないときはこのタブの間だけ持つ。
+  // PC の手元の画面では、いつもこのタブの間だけ持つ（監査 N24）。localStorage は origin ごとで、
+  // origin はポートまでしか見ないので、Hub が居ない間に同じ PC の別の利用者がこのポートで
+  // 待ち受けると、そこのページから読めてしまう。前の版が残した値もここで消す。
   function keep(token) {
+    if (thisMachine()) {
+      try { localStorage.removeItem('__TOKEN_KEY__'); } catch (e) { /* private mode 等 */ }
+      try { sessionStorage.setItem('__TOKEN_KEY__', token); return true; } catch (e) { /* 保存できない */ }
+      return false;
+    }
     try { localStorage.setItem('__TOKEN_KEY__', token); return true; } catch (e) { /* private mode 等 */ }
     try { sessionStorage.setItem('__TOKEN_KEY__', token); return true; } catch (e) { /* 保存できない */ }
     return false;

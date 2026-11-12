@@ -557,6 +557,7 @@
   "settings_ntfy_action_links_note": "ntfy approval notifications carry Approve and Reject buttons that answer without the Hub token or PIN for 120 seconds (high-risk approvals get Reject only). Do not let others see your notifications. When the destination is http, only an Open button is sent.",
   "signed_out_title": "This browser is not signed in to the Hub.",
   "signed_out_body": "Open the dashboard from many-ai-cli (or the tray), or open the Hub URL that includes ?token= once. Settings > Mobile connect shows a QR code for it.",
+  "signed_out_local_body": "Open the dashboard from many-ai-cli (or the tray). On this computer the sign-in is kept only until the tab is closed, so a bookmark, a new tab or the installed app cannot open it by itself.",
   "settings_done_summary_notify": "Task completion notifications",
   "settings_done_summary_notify_desc": "Send a summary notification when AI completes a task. Requires approval rules to be enabled.",
   "settings_ntfy_save": "Save",

@@ -20,7 +20,9 @@ pub(super) use ui::RemotePinUi;
 pub const UI_ORIGIN_COOKIE: &str = "MANY_AI_CLI_ui_origin";
 /// The cookie of a browser the Hub opened itself (U09).
 pub const LOCAL_COOKIE: &str = "MANY_AI_CLI_local";
-const LOCAL_COOKIE_TTL: i64 = 30 * 24 * 60 * 60;
+const LOCAL_COOKIE_TTL: i64 = 7 * 24 * 60 * 60;
+/// How many browsers the Hub opened are remembered at once (audit N25).
+const MAX_LOCAL_MARKS: usize = 64;
 /// The header a CLI on this machine sends to show it read the private config.
 pub const LOCAL_PROOF_HEADER: &str = "X-Many-AI-CLI-Local";
 /// The environment variable that hands the CLI proof to the usage relay and
@@ -262,9 +264,19 @@ struct Session {
     issued: u64,
     policy: [u8; 32],
 }
+/// A browser the Hub opened itself, as the Hub remembers it (audit N25). The
+/// cookie alone proves nothing: it must name a mark that is still here, so
+/// logging out, changing the PIN, revoking all access and restarting the Hub
+/// each end it.
+struct LocalMark {
+    expiry: i64,
+    device: String,
+}
 #[derive(Default)]
 struct State {
     sessions: BTreeMap<String, Session>,
+    /// Local cookies handed out and still valid, by their nonce.
+    local_marks: BTreeMap<String, LocalMark>,
     remote_uis: BTreeMap<crate::proto::core::UiConnectionId, ui::RemoteUi>,
     limiter: Limiter,
     alerts: Vec<LockoutAlert>,
@@ -393,17 +405,56 @@ impl AuthService {
         else {
             return false;
         };
-        payload.split_once('.').is_some_and(|(expiry, nonce)| {
-            !nonce.is_empty() && expiry.parse::<i64>().is_ok_and(|expiry| now < expiry)
+        let Some((expiry, nonce)) = payload.split_once('.') else {
+            return false;
+        };
+        let Ok(expiry) = expiry.parse::<i64>() else {
+            return false;
+        };
+        if nonce.is_empty() || expiry <= now {
+            return false;
+        }
+        // The cookie goes to every port of 127.0.0.1 (a browser does not keep
+        // cookies apart by port), so its signature and date are not enough
+        // (audit N25): the Hub must still remember having handed it out, to a
+        // browser that looks the same.
+        let device = device_hash(request);
+        self.state.lock().is_ok_and(|mut s| {
+            s.local_marks.retain(|_, mark| mark.expiry > now);
+            s.local_marks
+                .get(nonce)
+                .is_some_and(|mark| mark.expiry == expiry && valid_token(&mark.device, &device))
         })
     }
     /// The cookie that marks a browser the Hub opened itself (through a
-    /// launch code) as on this machine. It proves nothing without the token.
+    /// launch code) as on this machine. It proves nothing without the token,
+    /// and nothing once the Hub has forgotten the mark it names.
     fn local_cookie(&self, request: &Request, config: &Config, now: i64) -> Option<String> {
         if config.auth_cookie_secret.is_empty() {
             return None;
         }
-        let payload = format!("{}.{}", now + LOCAL_COOKIE_TTL, random_hex(16).ok()?);
+        let expiry = now + LOCAL_COOKIE_TTL;
+        let nonce = random_hex(16).ok()?;
+        {
+            let mut s = self.state.lock().ok()?;
+            s.local_marks.retain(|_, mark| mark.expiry > now);
+            while s.local_marks.len() >= MAX_LOCAL_MARKS {
+                let oldest = s
+                    .local_marks
+                    .iter()
+                    .min_by_key(|(_, mark)| mark.expiry)
+                    .map(|(nonce, _)| nonce.clone())?;
+                s.local_marks.remove(&oldest);
+            }
+            s.local_marks.insert(
+                nonce.clone(),
+                LocalMark {
+                    expiry,
+                    device: device_hash(request),
+                },
+            );
+        }
+        let payload = format!("{expiry}.{nonce}");
         Some(cookie(
             LOCAL_COOKIE,
             &signed(&config.auth_cookie_secret, &payload, "local-v1:"),
@@ -700,6 +751,16 @@ impl AuthService {
         {
             s.sessions.remove(nonce);
         }
+        // Logging out also ends this browser's standing as one the Hub opened
+        // (audit N25).
+        if let Some(value) = request.cookie(LOCAL_COOKIE)
+            && let Some(payload) =
+                verify_signed(&config.auth_cookie_secret, value.trim(), "local-v1:")
+            && let Some((_, nonce)) = payload.split_once('.')
+            && let Ok(mut s) = self.state.lock()
+        {
+            s.local_marks.remove(nonce);
+        }
         let mut response = Response::json(200, &json!({"ok":true})).no_store();
         response
             .cookies
@@ -707,6 +768,9 @@ impl AuthService {
         response
             .cookies
             .push(cookie(PIN_COOKIE, "", true, 0, request));
+        response
+            .cookies
+            .push(cookie(LOCAL_COOKIE, "", true, 0, request));
         response
     }
     pub fn set_pin(&self, request: &Request, store: &ConfigStore, now: i64) -> Response {
@@ -734,6 +798,7 @@ impl AuthService {
                     Ok(_) => {
                         if let Ok(mut state) = self.state.lock() {
                             state.sessions.clear();
+                            state.local_marks.clear();
                         }
                         Response::json(200, &json!({"ok":true,"pin_enabled":false}))
                     }
@@ -761,8 +826,12 @@ impl AuthService {
             if store.persist(snapshot.revision, snapshot.config).is_err() {
                 return Response::error(500, "internal", "failed to persist config");
             }
+            // A new PIN ends what the old one let through, the browsers the
+            // Hub opened included (audit N25). The browser that set it goes on
+            // with the PIN session issued below.
             if let Ok(mut state) = self.state.lock() {
                 state.sessions.clear();
+                state.local_marks.clear();
             }
             let value = match self.issue(request, &secret, &pin_hash, now) {
                 Ok(v) => v,
@@ -804,6 +873,7 @@ impl AuthService {
             .map_err(|_| Response::error(500, "internal", "failed to persist config"))?;
         if let Ok(mut s) = self.state.lock() {
             s.sessions.clear();
+            s.local_marks.clear();
             s.ui_secret.clear();
         }
         Ok(Response::json(

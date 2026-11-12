@@ -305,7 +305,38 @@ Release artifacts are published at
   Where the launcher cannot find out who opened a connection (an OS other than
   Windows, Linux and macOS, or a browser that reaches the launcher through
   another user's process), the page and the settings screen answer nobody.
-- **Release keys wait for the owner's approval.** The npm and Homebrew/winget
+- **On the computer the Hub runs on, the browser keeps the sign-in only until
+  the tab is closed.** The dashboard kept the Hub token in the browser's
+  storage for `http://127.0.0.1:<port>`, so that a bookmark could open it
+  again. A browser keeps that storage per address, port included, and does not
+  know who answers there: while the Hub was stopped, or after it started on
+  another port because its own was taken, another user of the same computer
+  could listen on the port, and a page they served could read the token. A
+  desktop browser on `127.0.0.1` / `localhost` now keeps the token and the
+  read-only ticket in the tab only, and the service worker keeps no token
+  there.
+  - Reloading, and reconnecting after the Hub restarts, work as before, and so
+    do the windows the dashboard opens itself. A new tab, a bookmark or the
+    installed app shows "not signed in": open the dashboard from many-ai-cli
+    (or the tray), which hands the token over with a one-time code each time.
+  - A token an earlier version left in the browser is moved into the tab and
+    deleted the first time the updated dashboard opens.
+  - Phones and tablets (including a phone that opens its own `127.0.0.1`
+    through an SSH forward), and addresses other than `127.0.0.1`, keep the
+    sign-in as before, so the home-screen app still opens.
+  - What remains: a tab that is still open holds the token, so reloading that
+    tab while another program answers on the port still hands it over.
+  - A Hub that could not have its configured port now says so when it starts
+    (in its terminal and in the log): the old address reaches whoever holds
+    that port.
+- **The cookie that lets a browser the Hub opened skip the PIN ends when it
+  should.** A browser sends a `127.0.0.1` cookie to every port, and this one
+  was valid for 30 days on its signature alone: logging out and changing the
+  PIN did not end it. It now counts only while the Hub remembers handing it
+  out, to a browser that looks the same, for 7 days. Logging out, changing or
+  clearing the PIN, revoking all access and restarting the Hub each end it.
+  With a PIN set, a tab left open across a Hub restart is asked for the PIN
+  (or open the dashboard again from many-ai-cli).- **Release keys wait for the owner's approval.** The npm and Homebrew/winget
   publishing jobs use the `release` environment, so the keys they need are
   handed over only after the owner approves the run (one approval covers
   both).

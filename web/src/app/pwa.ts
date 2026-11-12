@@ -1,4 +1,4 @@
-import { token, apiFetch } from './util.js';
+import { token, tokenTabOnly, apiFetch } from './util.js';
 import { activateSession } from './session-list.js';
 
 let serviceWorkerReadyPromise = null;
@@ -129,7 +129,9 @@ async function deletePushSubscription(subscription) {
 function rememberHubToken(registration) {
   if (!registration) return;
   const target = registration.active || navigator.serviceWorker.controller;
-  if (target) target.postMessage({ type: 'many-ai-cli-token', token: token || '' });
+  // PC の手元の画面では token を預けない（監査 N24）。知らせだけは送り、前の版が預けた分を消させる。
+  const kept = tokenTabOnly ? '' : (token || '');
+  if (target) target.postMessage({ type: 'many-ai-cli-token', token: kept });
 }
 
 function urlBase64ToUint8Array(base64String) {

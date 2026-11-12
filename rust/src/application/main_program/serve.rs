@@ -1592,7 +1592,20 @@ impl HubComposition {
             &format!("pid={} port={}", std::process::id(), services.bound_port()),
         );
         if let Ok(snapshot) = self.dependencies.config.snapshot() {
-            super::banner::write_startup(&snapshot.config, services.bound_port());
+            // A trial Hub listens on its own fixed port, whatever the config says.
+            let configured = if self.paths.is_trial() {
+                i64::from(services.bound_port())
+            } else {
+                snapshot.config.hub.port
+            };
+            // Audit N24: the browser treats the other port as a different
+            // site, and the configured one now answers to another program.
+            if let Some(notice) =
+                super::banner::moved_port_notice(configured, services.bound_port())
+            {
+                self.logger.write("WARN", "Hub port moved", &notice);
+            }
+            super::banner::write_startup(&snapshot.config, services.bound_port(), configured);
         }
         let serve = crate::hub::transport::serve_with_websockets(
             self.listener,
