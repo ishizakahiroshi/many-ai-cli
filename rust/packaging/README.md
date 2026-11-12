@@ -115,15 +115,16 @@ publication, installation, native voice, device or update/rollback acceptance.
 `channel` choice defaults to `legacy` and can explicitly select `full`, `npm`,
 `homebrew` or `winget`. Full dispatch must run **at the requested tag ref**, not
 an unrelated branch, so the signing identity is the same as a tag push. A
-channel retry may use newer redistribution scripts, but it downloads the
-published four canonical ZIPs, verifies the tag-bound checksum signature and
-every archive hash, and never invokes a native build. Current Rust npm staging
-requires the formal Rust notices/build-input layout; it does not republish old
-Go releases as Rust packages. npm package metadata, shims and README inputs are
-checked out from the release tag commit, even on a retry. Only the explicitly
-listed redistribution helpers are copied from the selected workflow source
-into that checkout; both source SHAs are recorded in the staging log. This keeps
-retry package bytes independent of later edits to npm package inputs.
+channel retry must start at the tag ref too: the scripts of the ref a run
+starts at receive the publishing token and npm's OIDC identity, so every job
+checks out the tag commit and the `release` environment accepts only `v*`
+tags. A retry downloads the published four canonical ZIPs, verifies the
+tag-bound checksum signature and every archive hash, and never invokes a
+native build. Current Rust npm staging requires the formal Rust
+notices/build-input layout; it does not republish old Go releases as Rust
+packages. npm package metadata, shims, README inputs and the staging scripts
+all come from the release tag commit, even on a retry; a redistribution script
+fixed after the tag ships with the next tag.
 
 Normal and npm-only publication both use `stage-npm-from-release.mjs`. npm
 publication uses Trusted Publishing: no npm key is stored, the `npm` job runs in

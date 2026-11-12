@@ -82,9 +82,9 @@ checksum の cosign 署名、package manager、`unblock-windows.cmd` は OS の 
 通常公開と npm-only 再実行はともに `stage-npm-from-release.mjs` を使います。
 四 ZIP の checksum、正式 Rust receipt、source / tag / target、両 binary と build-input 証拠の
 hash を全件確認してから staging します。npm は main binary だけを platform package へ置き、
-別 launcher は含めません。root shim、package metadata、README は release tag commit に固定し、
-再実行時に選択した workflow source から移すのは明示された redistribution helper だけです。
-両 source SHA を記録し、後日の package metadata drift を混ぜません。
+別 launcher は含めません。root shim、package metadata、README、staging と公開の script は
+release tag commit のものを使います。再実行も tag から起動するので（下の「部分失敗時の
+workflow_dispatch」）、tag の後に直した script は次の tag で出します。
 
 `sync-npm-version.mjs <tag>` が root / 四 platform package と exact optionalDependencies を揃えます。
 `publish-npm.sh <tag>` は platform を先に、root を最後に、`--access public --provenance` 付きで
@@ -106,6 +106,10 @@ Docker の build / push / auto-update はこの流れに含みません。
 使うので、job が始まる前に GitHub の画面で承認が要ります。2 つの job は `canonical` の後に
 同時に待つので、承認は 1 回で両方が進みます。`v` で始まる tag の作成は ruleset で作者本人に
 限ります（bot や AI 連携アプリが tag を作って公開を始められないようにするため。監査 U36）。
+environment `release` に入れるのは `v*` の tag から起動した run だけです（Settings → Environments →
+release の Deployment branches and tags。2026-11-12 設定）。branch から起動した run は、承認の画面まで
+進めません。`PUBLISH_GITHUB_TOKEN` の scope（`repo` / `workflow`）は、`pointers` の job が token を使う
+直前に確かめます（`repo` が無ければその channel の job が失敗、`workflow` が無ければ warning）。
 
 既存の npm 注意点は現在も有効です。`npm publish` にディレクトリを渡す場合は `./npm/...`
 のように相対 path を明示し、GitHub shorthand と誤解釈させません。package manager を使っても
@@ -123,6 +127,11 @@ OS の実行許可は別問題です。更新後は新しい版から `many-ai-c
 | `channel: legacy` と `npm_only: false` | full。選択する workflow ref も要求 tag であることが必須 |
 | `channel: full` | 明示 full。選択 ref / event SHA / HEAD / tag commit の一致が必須 |
 | `channel: npm` / `homebrew` / `winget` | 指定チャネルだけ。`npm_only` よりこちらの明示選択を優先 |
+
+**手動の実行は、どの channel でも対象の tag から起動します**（Actions の「Run workflow」で
+「Use workflow from」を Tags の対象の tag にする。`gh workflow run release.yml --ref <tag> -f tag=<tag> …`）。
+branch から起動した run は最初の step で止まります。起動した ref の script が公開用の token と npm の
+OIDC を受け取るので、tag の commit の script だけを使うためです（監査 N39）。
 
 選択チャネルの再実行では native build をせず、公開済み tag-bound cosign 署名と四 canonical
 ZIP の hash / source を検証します。古い Go ZIP や候補 receipt は正式 Rust npm の入力にしません。
@@ -190,6 +199,7 @@ v0.1.0 は試験リリース扱いとし、初回正式リリースは v0.1.1 �
   2. 同期の失敗でリリース全体を止めない（1 チャネルの都合を正本の発行から切り離す）
   当初この 2 つを「どちらか選ぶもの」として扱ってしまったが、直している問題が違う。**両方要る。**
 - **再発防止**: Validate に `release-token-scopes` ジョブを追加し、PAT のスコープ（`repo` / `workflow`）を毎回検査する。**`release.yml` ではなく `validate.yml` に置く**のは、release 側で hard fail にすると「1 チャネルの都合でリリースが止まる」構造へ逆戻りするため。Validate は develop/main への push ごとに走るので、タグを打つずっと前に不足が分かる。
+  - **2026-11-13 に置き場を変えた**: token を environment `release` の secret へ移した後、environment を宣言しない Validate の job からは token が空に見え、検査が毎回 skip されて成功していた（監査 N40）。検査は `release.yml` の `pointers` の job（environment の中、token を使う直前）へ移し、Validate の job は消した。Rust 版の release では GitHub Release と npm が `pointers` より前の別の job なので、ここで失敗しても公開済みの成果物は止まらない。代わりに、不足が分かるのは tag を打った後（承認の後）になる。token を作り直したときは、scope に `repo` と `workflow` があることを手で確かめる。
 - fine-grained PAT はスコープを introspection できない（`X-OAuth-Scopes` を返さない）ので、その場合は warning 止まりにしてある。
 
 ### v0.6.0 公開で踏んだもの（調査用コードの残存・実行時配信リソースの検査漏れ）

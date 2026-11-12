@@ -683,6 +683,16 @@ Release artifacts are published at
   (`libsqlite3-sys` 0.38.2 to 0.39.1). The flaw is in reading a crafted `-wal`
   file placed beside a database the Hub opens; the Hub's databases are created
   by the Hub in its own folder.
+- **Release workflow: reruns, release notes and the token check are bound to
+  the tag.** A channel rerun (npm, Homebrew, winget) started from a branch ran
+  that branch's scripts with the publishing token and npm's signing identity
+  once approved; every manual run must now start at the tag, each job checks
+  out the tag commit, and the `release` environment accepts only `v*` tags.
+  The text of a GitHub Release was passed between jobs as a file that a later
+  job could replace; it is now written from the tag's CHANGELOG by the job
+  that publishes it. The check of the publishing token's scopes had stopped
+  running after the token moved into the `release` environment; it now runs
+  inside that environment, right before the token is used.
 - **The npm launcher now requires Node.js 22 or later** (`engines.node` was
   `>=18`; Node.js 18 and 20 no longer receive security fixes). CI and the
   release workflow build with Node.js 22.23.5 (2026-11-11) and 24.22.3

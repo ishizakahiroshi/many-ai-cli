@@ -38,6 +38,18 @@ jobs:
       source_sha: ${{ steps.target.outputs.source_sha }}
       prerelease: ${{ steps.target.outputs.prerelease }}
     steps:
+      # Every manual run, a channel rerun included, starts at the tag itself:
+      # the scripts of the ref a run starts at receive the publishing
+      # credential and npm's OIDC identity once the run is approved. The
+      # `release` environment accepts only `v*` tags for the same reason, and
+      # the plan step below checks the exact commit (audit N39).
+      - name: Refuse a manual run that was not started at the release tag
+        if: github.event_name == 'workflow_dispatch' && github.ref != format('refs/tags/{0}', inputs.tag)
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          echo "::error::start this workflow at the tag itself (Use workflow from: Tags, $RELEASE_TAG); it was started at $GITHUB_REF"
+          exit 1
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
@@ -234,8 +246,11 @@ jobs:
           node scripts/check-instrumentation.mjs --release
           node scripts/check-artifact-clean.mjs .rust-release-bundle .rust-release-assets
           if [ -d .rust-release-channels ]; then node scripts/check-artifact-clean.mjs .rust-release-channels; fi
+      # A check only. The publish job writes the notes it publishes itself,
+      # from the tag's CHANGELOG: an artifact handed across the SBOM job could
+      # be replaced there (audit N41).
       - name: Require human release notes
-        run: python3 scripts/rust-release-workflow.py notes --tag "$RELEASE_TAG" --output .rust-release-notes.md
+        run: python3 scripts/rust-release-workflow.py notes --tag "$RELEASE_TAG" --output "$RUNNER_TEMP/release-notes.md"
       - name: Record payload digests for the SBOM and signing jobs
         id: payload
         working-directory: .rust-release-assets
@@ -250,13 +265,6 @@ jobs:
         with:
           name: rust-release-payload-${{ needs.plan.outputs.source_sha }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: .rust-release-assets/
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 7
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: rust-release-notes-${{ github.run_id }}-attempt-${{ github.run_attempt }}
-          path: .rust-release-notes.md
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
@@ -436,19 +444,19 @@ jobs:
         with:
           name: rust-release-signed-${{ needs.plan.outputs.source_sha }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: .rust-release-assets/
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: rust-release-notes-${{ github.run_id }}-attempt-${{ github.run_attempt }}
-          path: .release-notes/
       - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
         with:
           cosign-release: 'v2.4.3'
+      # The notes come from the CHANGELOG of the tag commit checked out above,
+      # not from an artifact of an earlier job (audit N41).
+      - name: Write the release notes from the tag source
+        run: python3 scripts/rust-release-workflow.py notes --tag "$RELEASE_TAG" --output "$RUNNER_TEMP/release-notes.md"
       - name: Verify signed handoff before publication credential
         run: |
           set -euo pipefail
           cosign verify-blob --certificate .rust-release-assets/SHA256SUMS.txt.pem --signature .rust-release-assets/SHA256SUMS.txt.sig --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/tags/$RELEASE_TAG" --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' .rust-release-assets/SHA256SUMS.txt
           python3 scripts/rust-release-workflow.py verify-assets --directory .rust-release-assets --tag "$RELEASE_TAG"
-          test -s .release-notes/.rust-release-notes.md
+          test -s "$RUNNER_TEMP/release-notes.md"
       - name: Publish canonical signed assets and human release notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -457,7 +465,7 @@ jobs:
           set -euo pipefail
           options=()
           if [ "$PRERELEASE" = true ]; then options+=(--prerelease); fi
-          gh release create "$RELEASE_TAG" .rust-release-assets/* --repo "$GITHUB_REPOSITORY" --verify-tag --title "$RELEASE_TAG" --notes-file .release-notes/.rust-release-notes.md "${options[@]}"
+          gh release create "$RELEASE_TAG" .rust-release-assets/* --repo "$GITHUB_REPOSITORY" --verify-tag --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md" "${options[@]}"
 
   canonical:
     needs: [plan, publish]
@@ -466,10 +474,11 @@ jobs:
     env:
       RELEASE_TAG: ${{ needs.plan.outputs.tag }}
     steps:
-      # Retries use selected ref's scripts; binaries always come from the tag.
+      # Reruns use the tag commit's scripts, like the binaries (audit N39).
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          ref: ${{ needs.plan.outputs.source_sha }}
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
@@ -517,7 +526,8 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: Pin package metadata, shim and README to the release source
+          ref: ${{ needs.plan.outputs.source_sha }}
+      - name: Pin package metadata, shim, README and staging scripts to the release source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
@@ -550,8 +560,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/rust-release-workflow.py verify-archives --directory .canonical --tag "$RELEASE_TAG" --source "$PACKAGE_SOURCE_SHA"
-          echo "npm package inputs=$PACKAGE_SOURCE_SHA redistribution scripts=$GITHUB_SHA"
-          cp scripts/{stage-npm-from-release.mjs,stage-npm-binaries.mjs,publish-npm.mjs,publish-npm.sh,sync-npm-version.mjs} .release-tag/scripts/
+          echo "npm package inputs and staging scripts=$PACKAGE_SOURCE_SHA"
           cd .release-tag
           node scripts/stage-npm-from-release.mjs ../.canonical
           node scripts/sync-npm-version.mjs "$RELEASE_TAG"
@@ -583,6 +592,7 @@ jobs:
         if: env.POINTER_AVAILABLE == 'true' && env.STABLE == 'true' && (env.MODE == 'full' || env.MODE == env.CHANNEL)
         with:
           persist-credentials: false
+          ref: ${{ needs.plan.outputs.source_sha }}
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         if: env.POINTER_AVAILABLE == 'true' && env.STABLE == 'true' && (env.MODE == 'full' || env.MODE == env.CHANNEL)
         with:
@@ -597,6 +607,34 @@ jobs:
         run: >-
           python3 scripts/prepare-rust-release-channels.py --archives .canonical
           --tag "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --output .pointer-inputs
+      # The token lives only in this environment, so its scopes are checked
+      # here; a job outside the environment reads it as empty and would skip
+      # the check every time (audit N40). `repo` is needed to write the tap and
+      # the fork. `workflow` is needed to sync the winget-pkgs fork, but only
+      # when upstream changed a workflow file, so releases can pass for months
+      # without it (v0.6.0, 2026-08-11); the sync itself only warns, so a
+      # missing `workflow` is a warning here too.
+      - name: Check the publishing token's scopes
+        if: env.POINTER_AVAILABLE == 'true' && env.STABLE == 'true' && (env.MODE == 'full' || env.MODE == env.CHANNEL)
+        env:
+          GH_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          headers=$(gh api -i user 2>/dev/null | sed -n '1,/^\r*$/p')
+          scopes=$(printf '%s' "$headers" | grep -i '^x-oauth-scopes:' | cut -d: -f2- | tr -d ' \r' || true)
+          if [ -z "$scopes" ]; then
+            echo "::warning title=token scopes not introspectable::PUBLISH_GITHUB_TOKEN returned no scope list (a fine-grained token does not). Check by hand that it can write the tap and the winget-pkgs fork."
+            exit 0
+          fi
+          echo "scopes: $scopes"
+          case ",$scopes," in
+            *,repo,*) ;;
+            *) echo "::error title=PUBLISH_GITHUB_TOKEN is missing the repo scope::current scopes: $scopes"; exit 1 ;;
+          esac
+          case ",$scopes," in
+            *,workflow,*) echo "OK: repo and workflow" ;;
+            *) echo "::warning title=PUBLISH_GITHUB_TOKEN is missing the workflow scope::The winget-pkgs fork cannot be synced when upstream changed a workflow file. Add the scope at https://github.com/settings/tokens and update the secret of the release environment. Current scopes: $scopes" ;;
+          esac
       - name: Publish pointer (cross-repository PAT only here)
         if: env.POINTER_AVAILABLE == 'true' && env.STABLE == 'true' && (env.MODE == 'full' || env.MODE == env.CHANNEL)
         env:

@@ -60,13 +60,25 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(self.plan(event="workflow_dispatch", channel="full")["source_sha"], SOURCE)
 
     def test_legacy_dispatch_retains_boolean_contract(self):
-        self.assertEqual(self.plan(event="workflow_dispatch", npm_only="true", ref="refs/heads/main", head=OTHER, event_sha=OTHER)["mode"], "npm")
+        self.assertEqual(self.plan(event="workflow_dispatch", npm_only="true")["mode"], "npm")
         self.assertEqual(self.plan(event="workflow_dispatch", npm_only="false")["mode"], "full")
 
     def test_explicit_channel_does_not_build(self):
         for channel in ("npm", "homebrew", "winget"):
             with self.subTest(channel=channel):
-                self.assertEqual(self.plan(event="workflow_dispatch", ref="refs/heads/develop", head=OTHER, event_sha=OTHER, channel=channel)["mode"], channel)
+                self.assertEqual(self.plan(event="workflow_dispatch", channel=channel)["mode"], channel)
+
+    def test_audit_n39_a_channel_rerun_must_start_at_the_tag_like_a_full_release(self):
+        # The scripts of the ref a run starts at receive the publishing
+        # credential and npm's OIDC identity, so a rerun from a branch, or from
+        # a commit other than the tag's, is refused whatever the channel.
+        reruns = [dict(channel=channel) for channel in ("npm", "homebrew", "winget")]
+        reruns.append(dict(channel="legacy", npm_only="true"))
+        for rerun in reruns:
+            for changes in ({"ref": "refs/heads/develop", "head": OTHER, "event_sha": OTHER},
+                            {"ref": "refs/heads/main"}, {"event_sha": OTHER}, {"head": OTHER}, {"tag_commit": OTHER}):
+                with self.subTest(rerun=rerun, changes=changes), self.assertRaisesRegex(ValueError, "at the requested tag"):
+                    self.plan(event="workflow_dispatch", **rerun, **changes)
 
     def test_unrelated_branch_cannot_full_release_even_after_tag_checkout(self):
         for changes in ({"ref": "refs/heads/main"}, {"event_sha": OTHER}, {"head": OTHER}, {"tag_commit": OTHER}):
@@ -497,6 +509,43 @@ class ReleaseWorkflowTests(unittest.TestCase):
         stager = (ROOT / "scripts/publish-npm.mjs").read_text(encoding="utf-8")
         self.assertIn("['stage', 'publish',", stager)
         self.assertNotIn("run(['publish',", stager)
+
+    def test_audit_n39_n40_n41_reruns_notes_and_token_check_are_bound_to_the_tag_and_the_environment(self):
+        text = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        jobs = dict(re.findall(r"^  ([a-z]+):\n(.*?)(?=^  [a-z]+:|\Z)", text.split("jobs:\n", 1)[1], re.M | re.S))
+        # N39: a manual run is refused before anything is checked out unless it
+        # was started at the tag, and every job that follows the plan, a
+        # channel rerun included, checks out the tag commit.
+        guard = "github.event_name == 'workflow_dispatch' && github.ref != format('refs/tags/{0}', inputs.tag)"
+        self.assertIn(guard, jobs["plan"])
+        self.assertLess(jobs["plan"].index(guard), jobs["plan"].index("actions/checkout@"))
+        pinned = "ref: ${{ needs.plan.outputs.source_sha }}"
+        for name, body in jobs.items():
+            if name == "plan":
+                continue
+            checkouts = [step for step in body.split("      - ")[1:] if "actions/checkout@" in step]
+            self.assertTrue(checkouts or name == "native", name)
+            for step in checkouts:
+                self.assertIn(pinned, step, name)
+        self.assertNotRegex(jobs["npm"], r"\bcp scripts/")
+        self.assertNotIn("GITHUB_SHA", jobs["npm"])
+        # N41: the published notes are written by the publish job from the tag
+        # checkout; no notes artifact crosses the SBOM job.
+        self.assertNotIn("release-notes-", text)
+        self.assertNotRegex(text, r"download-artifact[^\n]*\n(?:[^\n]*\n){0,3}[^\n]*notes")
+        notes = 'rust-release-workflow.py notes --tag "$RELEASE_TAG" --output "$RUNNER_TEMP/release-notes.md"'
+        self.assertIn(notes, jobs["publish"])
+        self.assertIn('--notes-file "$RUNNER_TEMP/release-notes.md"', jobs["publish"])
+        self.assertLess(jobs["publish"].index(notes), jobs["publish"].index("gh release create"))
+        # N40: the token's scopes are checked where the token is: in the
+        # pointers job, inside the release environment, before it is used.
+        self.assertIn("environment: release", jobs["pointers"])
+        self.assertLess(jobs["pointers"].index("x-oauth-scopes"), jobs["pointers"].index("publish-pointer"))
+        validate = (ROOT / ".github/workflows/validate.yml").read_text(encoding="utf-8")
+        self.assertNotIn("secrets.PUBLISH_GITHUB_TOKEN", validate)
+        for workflow in (ROOT / ".github/workflows").glob("*.yml"):
+            if workflow.name != "release.yml":
+                self.assertNotIn("secrets.PUBLISH_GITHUB_TOKEN", workflow.read_text(encoding="utf-8"), workflow.name)
 
     def test_whisper_build_runs_upstream_code_without_write_access_and_at_the_pinned_commit(self):
         # whisper-binaries.yml builds a third-party tag with CMake, which can run

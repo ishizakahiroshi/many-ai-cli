@@ -60,11 +60,14 @@ def release_plan(*, event: str, ref: str, event_sha: str, tag: str,
     if channel not in ("legacy", "full", "npm", "homebrew", "winget"):
         raise ValueError("unsupported release channel")
     mode = "full" if event == "push" else (("npm" if npm_only == "true" else "full") if channel == "legacy" else channel)
-    if mode == "full":
-        # A tag checkout is not enough: dispatching old tag sources from an
-        # unrelated branch would sign under that branch's OIDC identity.
-        if ref != f"refs/tags/{tag}" or event_sha != tag_commit or head != tag_commit:
-            raise ValueError("full release must execute at the requested tag and exact tag commit")
+    # Every mode runs at the requested tag and its exact commit. A tag checkout
+    # is not enough for a full release: dispatching old tag sources from an
+    # unrelated branch would sign under that branch's OIDC identity. A channel
+    # rerun started at a branch would hand that branch's scripts the publishing
+    # credential and npm's OIDC identity once the run is approved (audit N39).
+    if ref != f"refs/tags/{tag}" or event_sha != tag_commit or head != tag_commit:
+        raise ValueError("a release run must execute at the requested tag and exact tag commit; "
+                         "start the workflow at the tag itself (Use workflow from: Tags)")
     return {"tag": tag, "version": tag[1:], "mode": mode, "source_sha": tag_commit,
             "scripts_sha": head, "prerelease": "true" if "-" in tag else "false"}
 
