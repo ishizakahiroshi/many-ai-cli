@@ -368,3 +368,18 @@ test('expandLogicalPathLine: バッククォート囲みのハイフン折り返
   assert.equal(found[0].text, 'D:\\src\\foo\\bugfix_example_2026-09-13.md');
   assert.equal(PREVIEWABLE_EXT_RE.test(found[0].text), true);
 });
+
+test('全角の括弧の直後に始まる相対パスを検出し、CLI の改行で割れても全角の閉じ括弧と句点を除いて 1 本に戻す（2026-11-12）', () => {
+  const head = '「選ぶ欄」はあっても、「何を判断するのか」が弱かったですね。HTMLを修正しました（docs/local/review_mer-retention-requirements_2026-11-';
+  const rows = [row(head), row('  12.html）。')];
+  assert.equal(looksLikePathWrapContinuation(rows[0], rows[1]), true);
+  const combined = combinedPath(rows, 0);
+  const found = findPathCandidates(combined);
+  assert.equal(found.length, 1);
+  assert.equal(found[0].text, 'docs/local/review_mer-retention-requirements_2026-11-12.html');
+  // 半角の括弧と句点でも同じ
+  const ascii = [row(head.replace('（', '(')), row('  12.html)。')];
+  assert.equal(findPathCandidates(combinedPath(ascii, 1))[0].text, 'docs/local/review_mer-retention-requirements_2026-11-12.html');
+  // 割れていない 1 行でも、全角のかぎ括弧の直後のパスを拾う
+  assert.equal(findPathCandidates('「docs/a/b.md」を見てください')[0].text, 'docs/a/b.md');
+});

@@ -92,7 +92,8 @@ export const ABS_WIN_PATH_RE = /([A-Za-z]:[\\/](?:[^\s\x00-\x1f<>:"|?*(`]+|(?!\s
 // 空白を挟んだ説明文中の区切り（例: "hljs / highlight / prism"）を
 // Unix 絶対パスとして誤検出しないよう、セグメント内の空白は許可しない。
 export const ABS_UNIX_PATH_RE = /(\/[^\s\/\x00-\x1f"'<>`|(]+(?:\/[^\s\/\x00-\x1f"'<>`|(]*)*)/g;
-export const REL_PATH_RE = /(^|[\s([{"'`])((?:\.{1,2}[\\/]|[A-Za-z0-9_.-]+[\\/])(?:[^\s\x00-\x1f"'<>`|(]+[\\/])*[^\s\x00-\x1f"'<>`|(]+)/g;
+// 日本語の文中では、パスの直前が全角の括弧・かぎ括弧になる（「…しました（docs/a.html）」）。
+export const REL_PATH_RE = /(^|[\s([{"'`（「『【〔［｛〈《＜])((?:\.{1,2}[\\/]|[A-Za-z0-9_.-]+[\\/])(?:[^\s\x00-\x1f"'<>`|(]+[\\/])*[^\s\x00-\x1f"'<>`|(]+)/g;
 
 // `Y/N` / `1/2` / `bash/zsh` 等を誤検出しないための post-filter。
 // 受理条件: `./` `../` 始まり、またはセパレータ 2 個以上、または末尾拡張子あり。
@@ -107,7 +108,7 @@ export function isLikelyRelPath(path: string): boolean {
 
 export function isTerminalPathStartBoundary(text: string, start: number): boolean {
   if (start <= 0) return true;
-  return /[\s([{"'`]/.test(text[start - 1] || '');
+  return /[\s([{"'`（「『【〔［｛〈《＜]/.test(text[start - 1] || '');
 }
 
 export function findPathCandidates(text: string): PathCandidate[] {
@@ -148,7 +149,8 @@ function trimWrapLine(text: string): string {
 function stripTrailingWrapPunct(text: string): string {
   const value = String(text || '');
   let end = value.length;
-  while (end > 0 && /[\s,;:'"`<>\])}]/.test(value[end - 1])) end--;
+  // 全角の閉じ括弧と句点（「12.html）。」）も、パスの一部ではない末尾として落とす。
+  while (end > 0 && /[\s,;:'"`<>\])}）」』】〕］｝〉》＞。、，．]/.test(value[end - 1])) end--;
   return value.slice(0, end);
 }
 
