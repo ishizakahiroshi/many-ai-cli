@@ -82,8 +82,8 @@ export const STORAGE_USAGE_PROBE_MODEL_KEY    = 'ai_cli_hub_usage_probe_model';
 export const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
 export const STORAGE_VOICE_INPUT_DISABLED_KEY = 'ai_cli_hub_voice_input_disabled';
 export const STORAGE_VOICE_ENGINE_KEY         = 'anyai.voiceEngine';
-export const STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY = 'anyai.voiceWhisperAutoSubmit';
-export const STORAGE_VOICE_WHISPER_AUTO_STOP_KEY = 'anyai.voiceWhisperAutoStop';
+// 廃止した Whisper エンジンの保存値。読み替えのあと消すためにだけ持つ。
+const LEGACY_VOICE_WHISPER_KEYS = ['anyai.voiceWhisperAutoSubmit', 'anyai.voiceWhisperAutoStop'];
 export const STORAGE_DISPLAY_LOCKED_MODE_KEY  = 'ai_cli_hub_display_locked_mode';
 // ライブステータス帯（#terminal-live-status「実行中」）のユーザー配色。
 // 空文字＝テーマ既定。旧共通色はダーク側だけの互換入力として保持する。
@@ -138,8 +138,7 @@ export function setTurnEndBellOff(id: number, off: boolean): void {
 export function clearAllTurnEndBellMutes(): void {
   try { localStorage.removeItem(STORAGE_TURN_END_MUTED_SESSIONS_KEY); } catch (_) {}
 }
-// 両エンジン共通の「終了検知の待ち時間（秒）」既定値。
-// Whisper では無音がこの秒数続くと自動確定する（旧 Whisper 固定値 1.8秒に近い 2秒を採用）。
+// 「終了検知の待ち時間（秒）」の既定値。
 export const DEFAULT_VOICE_GRACE_SEC          = 2;
 export const STORAGE_WAKE_WORD_ENABLED_KEY    = 'ai_cli_hub_wake_word_enabled';
 export const STORAGE_WAKE_WORD_PHRASE_KEY     = 'ai_cli_hub_wake_word_phrase';
@@ -195,18 +194,26 @@ export function setDetachedGridPrefs(prefs: DetachedGridPrefs): void {
   } catch (_) {}
 }
 
-export type VoiceEngine = 'off' | 'browser' | 'whisper';
+export type VoiceEngine = 'off' | 'browser';
 
 export function normalizeVoiceEngine(value: any): VoiceEngine {
-  if (value === 'off' || value === 'browser' || value === 'whisper') return value;
+  // 保存済みの 'whisper'（廃止）や未知の値はブラウザ内蔵認識へ読み替える。
+  if (value === 'off') return 'off';
   return 'browser';
+}
+
+function dropLegacyWhisperKeys(): void {
+  try { for (const k of LEGACY_VOICE_WHISPER_KEYS) localStorage.removeItem(k); } catch (_) {}
 }
 
 export function getVoiceEngine(): VoiceEngine {
   const explicit = localStorage.getItem(STORAGE_VOICE_ENGINE_KEY);
   if (explicit != null) {
     const normalized = normalizeVoiceEngine(explicit);
-    if (normalized !== explicit) localStorage.setItem(STORAGE_VOICE_ENGINE_KEY, normalized);
+    if (normalized !== explicit) {
+      localStorage.setItem(STORAGE_VOICE_ENGINE_KEY, normalized);
+      dropLegacyWhisperKeys();
+    }
     return normalized;
   }
   const migrated = localStorage.getItem(STORAGE_VOICE_INPUT_DISABLED_KEY) === '1' ? 'off' : 'browser';
@@ -327,7 +334,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'display.custom_themes':     [STORAGE_CUSTOM_THEMES_KEY,         JSON.stringify],
 };
 // Voice engine selection is intentionally absent from server-synced user prefs.
-// It must stay device-local so PC can use browser recognition while iPhone uses Whisper.
+// It must stay device-local so each device keeps its own on/off setting.
 
 export const _USER_PREFS_STRING_PATHS = new Set([
   'trigger.phrase',

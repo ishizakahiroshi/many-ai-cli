@@ -134,7 +134,6 @@ import { voiceInput } from './voice-engine.js';
       btn.hidden = true;
       return;
     }
-    if (btn.dataset.voiceWhisperSupported !== '1') btn.hidden = true;
   }
   updateBrowserVoiceButtonVisibility();
   document.addEventListener('voiceengine:changed', updateBrowserVoiceButtonVisibility);

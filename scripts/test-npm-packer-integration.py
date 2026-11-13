@@ -78,8 +78,6 @@ class PackerNpmIntegration(unittest.TestCase):
                     "binaries": binaries, "third_party_notices": notices, "packaging_inputs": evidence,
                 }
                 if goos == "windows":
-                    receipt["windows_runtime"] = {"source_sha": source, "embedded_in": "many-ai-cli.exe",
-                                                  "embedded_bytes_verified": True}
                     receipt["windows_resources"] = {
                         "version": version, "icon_sha256": "e" * 64,
                         "binaries": [{**item, "file_version": version, "product_version": version,

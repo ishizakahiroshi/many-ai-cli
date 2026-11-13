@@ -17,7 +17,6 @@ fn fixture() -> tempfile::TempDir {
         "app-entry.ts",
         "app.ts",
         "sw.ts",
-        "whisper-recorder-worklet.js",
         "i18n/en.json",
         "icons/icon.png",
         "styles/base.css",
@@ -61,7 +60,6 @@ fn actual_embedded_assets_include_boot_and_voice() {
         "app-entry.js",
         "app.js",
         "sw.js",
-        "whisper-recorder-worklet.js",
         "vendor/xterm.min.js",
         ".src-hash",
     ] {

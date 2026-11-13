@@ -228,19 +228,6 @@ impl DeliveryManifest {
                 return Err("runtime provenance/license/verification evidence is required".into());
             }
         }
-        for name in [
-            "vcomp140.dll",
-            "msvcp140.dll",
-            "vcruntime140.dll",
-            "vcruntime140_1.dll",
-        ] {
-            if !self.runtimes.iter().any(|r| {
-                r.target == Target::WindowsX64
-                    && Path::new(&r.file.path).file_name().and_then(|p| p.to_str()) == Some(name)
-            }) {
-                return Err(format!("missing verified Windows runtime input: {name}"));
-            }
-        }
         Ok(())
     }
     /// Readback uses non-symlink held-directory opens, not unchecked manifest paths.

@@ -227,15 +227,14 @@ class WindowsCheckTests(unittest.TestCase):
             stack.enter_context(patch.dict(os.environ, ENV, clear=True))
             stack.enter_context(patch.object(ci.candidate, "capture", side_effect=capture))
             stack.enter_context(patch.object(ci.candidate, "run", side_effect=run))
-            runtime = stack.enter_context(patch.object(ci.candidate, "windows_runtime_receipt", return_value={"source_sha": SHA}))
             stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
             code = ci.main(["--suite", suite, "--repeat", str(repeat)])
         output = root / ".rust-candidate-artifacts/windows-check"
         receipt = json.loads((output / "QUICK-CHECK.json").read_text(encoding="utf-8"))
-        return code, receipt, calls, captured_envs, runtime, output
+        return code, receipt, calls, captured_envs, output
 
     def test_cache_hit_still_prepares_and_checks_all_inputs_without_release_or_collector(self):
-        code, receipt, calls, envs, runtime, output = self.run_synthetic()
+        code, receipt, calls, envs, output = self.run_synthetic()
         self.assertEqual(code, 0)
         self.assertEqual(receipt["status"], "passed-partial-check-only")
         self.assertEqual(receipt["source_sha"], SHA)
@@ -244,23 +243,20 @@ class WindowsCheckTests(unittest.TestCase):
         self.assertEqual(receipt["generated_web_asset_inputs"][0]["path"], "index.html")
         self.assertEqual(len(receipt["launcher_ui_input_sha256"]), 64)
         self.assertIn(["go", "mod", "download"], calls)
-        self.assertTrue(any("prepare_windows_runtime.ps1" in " ".join(command) for command in calls))
         self.assertTrue(any(command[1:4] == ["-m", "unittest", "discover"] for command in calls))
         for command in (["bun", "install", "--frozen-lockfile"], ["bun", "run", "check"], ["bun", "run", "build"]):
             self.assertIn(command, calls)
         clippy = next(command for command in calls if command[:2] == ["cargo", "clippy"])
         self.assertEqual(clippy[-4:], ["--all-targets", "--", "-D", "warnings"])
-        self.assertEqual(runtime.call_count, 2)
         for command, env in zip(calls, envs):
             if command[0] == "cargo":
-                self.assertEqual(env["MANY_AI_REQUIRE_WINDOWS_RUNTIME"], "1")
                 self.assertEqual(env["MANY_AI_BUILD_COMMIT"], SHA)
                 self.assertTrue(env["MANY_AI_BUILD_TIME"])
         self.assertFalse(any("--release" in command or any("collect_inputs" in part for part in command) for command in calls))
         self.assertFalse((output / "BUILD-RECEIPT.json").exists())
 
     def test_focused_checks_keep_doctests_and_failed_first_repeat(self):
-        code, receipt, _, _, _, output = self.run_synthetic("appserver", 3, ("appserver", 1))
+        code, receipt, _, _, output = self.run_synthetic("appserver", 3, ("appserver", 1))
         self.assertEqual(code, 1)
         self.assertEqual(receipt["status"], "failed")
         self.assertIn("tests outside selected groups are omitted", receipt["test_scope"])
@@ -277,7 +273,7 @@ class WindowsCheckTests(unittest.TestCase):
                 self.assertEqual(receipt["status"], "failed")
 
     def test_preparation_failure_keeps_receipt_and_blocks_cargo(self):
-        code, receipt, calls, _, _, output = self.run_synthetic(failure=("bun", "run", "check"))
+        code, receipt, calls, _, output = self.run_synthetic(failure=("bun", "run", "check"))
         self.assertEqual(code, 1)
         self.assertEqual(receipt["status"], "failed")
         self.assertEqual(receipt["failure"]["type"], "CalledProcessError")

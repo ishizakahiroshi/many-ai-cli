@@ -24,16 +24,10 @@ Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / OpenCode / Gro
 
 - 一覧の正本は `resources/slash-commands/` 配下の markdown テーブル:
   - `claude.md` / `codex.md` / `copilot.md` / `cursor-agent.md` / `opencode.md` / `grok.md` / `command-code.md`
-- Hub は実行時にこのファイルを **GitHub の raw URL 経由で取得・パース**する。デフォルト取得元は `internal/config/config.go` の以下:
-  - `DefaultClaudeSlashCmdSource = https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/claude.md`
-  - `DefaultCodexSlashCmdSource = https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/codex.md`
-  - `DefaultCopilotSlashCmdSource = https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/copilot.md`
-  - `DefaultCursorAgentSlashCmdSource = https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/cursor-agent.md`
-  - `DefaultOpenCodeSlashCmdSource = https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/opencode.md`
-  - `DefaultGrokSlashCmdSource = https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/grok.md`
-  - `DefaultCommandCodeSlashCmdSource = https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/command-code.md`
+- Hub は実行時にこのファイルを **GitHub の raw URL 経由で取得・パース**する。取得元は config の `slash_cmd_sources`（`rust/src/config/model.rs` の `SlashCmdSources`）で、既定は provider ごとに次の形:
+  - `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/<provider>.md`
 - **リビルド不要・トークン消費 0** で更新できる（md を更新して `main` に push するだけ）。バイナリには影響しない。
-- 取得結果は provider ごとに **24h キャッシュ**（`slashCmdCacheTTL`）。
+- 取得結果は provider ごとに **24h キャッシュ**（`rust/src/application/slash_commands.rs`）。
 
 ## 手順
 
@@ -77,10 +71,10 @@ rg -a -o --no-filename "\bcommand-name\b" <CLI の実行ファイル>
 
 各行は `| \`/cmd\` | 目的（1文） | いつ使うか（1文） |` のテーブル形式。並び順は **コマンド名の ABC 順**（provider 間で統一）。
 
-**パーサ仕様による必須ルール**（`internal/hub/slash_cmd_fetch.go` の `cleanDescMarkdown` / `tableRowRe`）:
+**パーサ仕様による必須ルール**（`rust/src/application/slash_commands/markdown.rs` の `parse` / `clean`）:
 
 - **コマンド列は引数なしのコマンド名のみ**書く。`/effort [level|auto]` のように `|` を含む引数を入れるとテーブル行パースが壊れる。
-- **説明文に `( )` を入れない**。`cleanDescMarkdown` が丸括弧・角括弧の中身を除去するため、括弧内に書いた情報はダッシュボード表示時に消える。
+- **説明文に `( )` を入れない**。`clean` が丸括弧・角括弧の中身を除去するため、括弧内に書いた情報はダッシュボード表示時に消える。
   - 例: レベル一覧は `Set the model effort level: low, medium, high, ...` のようにコロン区切りで書く（括弧で囲まない）。
 - 説明文に `|`（パイプ）を入れない（列区切りと衝突する）。
 - markdown 装飾（`**bold**` / `[link](url)` / `` `code` ``）は自動で剥がされるので、残ってもよいが避けたほうが無難。
@@ -91,7 +85,7 @@ rg -a -o --no-filename "\bcommand-name\b" <CLI の実行ファイル>
 node scripts/check-slash-commands.mjs
 ```
 
-Go 側の `tableRowRe` と同じ正規表現で **「表の行数」と「パーサが実際に拾える件数」を突き合わせる**。あわせて行の形・ABC 順・重複・括弧や markdown 装飾も検査する。Validate の `instrumentation` ジョブでも走る。
+Hub のパーサと同じ正規表現で **「表の行数」と「パーサが実際に拾える件数」を突き合わせる**。あわせて行の形・ABC 順・重複・括弧や markdown 装飾も検査する。Validate の `instrumentation` ジョブでも走る。
 
 **なぜ必須か（2026-08-11 に発覚）**: `cursor-agent.md` にエイリアスを 1 行へまとめた行が 6 行あった。
 
@@ -99,14 +93,14 @@ Go 側の `tableRowRe` と同じ正規表現で **「表の行数」と「パー
 | `/clear` / `/new` / `/new-chat` / `/newchat` | 説明 | 説明 |
 ```
 
-`tableRowRe` はバッククオートを跨げないため **この形は 1 件もマッチしない**。`/clear` `/quit` `/open` `/run-everything` `/shell` `/summarize` がピッカーに一度も出ていなかった。**md としては正しく見えるので目視では気づけない。**
+行のパーサはバッククオートを跨げないため **この形は 1 件もマッチしない**。`/clear` `/quit` `/open` `/run-everything` `/shell` `/summarize` がピッカーに一度も出ていなかった。**md としては正しく見えるので目視では気づけない。**
 
 #### 参考: 一時テストによる確認（任意）
 
-実ファイルをパーサに通して、新コマンドが取得できるか確認できる。`internal/hub/` に一時テストを置いて `fetchAndParseSlashCmds` を実ファイルパスで呼ぶ:
+実ファイルをパーサに通して、新コマンドが取得できるか確認できる。`rust/src/application/slash_commands/tests.rs` に一時テストを置き、`markdown::parse` に実ファイルの中身を渡す:
 
 ```powershell
-go test ./internal/hub/ -run <一時テスト名> -v
+cargo +1.90.0 test --manifest-path rust/Cargo.toml <一時テスト名> -- --nocapture
 ```
 
 - パース件数とファイルの行数（`| \`/` で始まる行数）が一致すればパース漏れなし。
@@ -157,8 +151,8 @@ Hub は 24h キャッシュのため、即時反映には手動で強制再取�
 ## 関連
 
 - 半自動化スキル: `<DEV_ROOT>\workshop\skills\slash-commands-update\SKILL.md`（契約: `references/provider-sources.md`）
-- パーサ実装: `internal/hub/slash_cmd_fetch.go`
-- API ハンドラ: `internal/hub/slash_handlers.go`(`handleSlashCommands` が GET=キャッシュ / POST=強制再取得)
-- 取得元 URL 定義: `internal/config/config.go`
-- ピッカー UI: `web/src/app.js`(スラッシュコマンドピッカー節) / `web/src/index.html`(`slash-picker-refresh`)
+- パーサ実装: `rust/src/application/slash_commands/markdown.rs`
+- API ハンドラ: `rust/src/hub/slash_routes.rs`（GET=キャッシュ / POST=強制再取得）
+- 取得元 URL 定義: `rust/src/config/model.rs`（`SlashCmdSources`）
+- ピッカー UI: `web/src/app.ts`(スラッシュコマンドピッカー節) / `web/src/index.html`(`slash-picker-refresh`)
 - リリース手順: [manual_release.md](manual_release.md)（runtime-served resources の差分確認手順あり）

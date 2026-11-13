@@ -7,6 +7,9 @@ use std::io;
 /// Whether `pid` owns every listener that a connection to 127.0.0.1:`port`
 /// could reach, and there is at least one. Unsupported where the system gives
 /// no owner information.
+// No production caller since the Whisper runtime was removed; kept with its
+// per-OS implementations and tests for the next managed local service.
+#[allow(dead_code)]
 pub(crate) fn loopback_listeners_owned_by(port: u16, pid: u32) -> io::Result<bool> {
     if port == 0 || pid == 0 {
         return Ok(false);

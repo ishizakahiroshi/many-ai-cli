@@ -1,7 +1,5 @@
 //! Source-generated yaml.v3 comparisons. Only synthetic config files are used.
-use many_ai_cli::config::{
-    Config, ConfigError, ConfigStore, DEFAULT_WHISPER_HALLUCINATION_PHRASES, Resource, RuntimePaths,
-};
+use many_ai_cli::config::{Config, ConfigError, ConfigStore, Resource, RuntimePaths};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path};
@@ -23,14 +21,13 @@ struct Case {
     expected: Option<BTreeMap<String, Value>>,
     #[serde(default)]
     rejected: bool,
-    saved_has_hallucination_phrases: bool,
 }
 
 #[test]
 fn schema_directed_yaml_matches_frozen_go_scalar_and_collection_cases() {
     let cases: Vec<Case> =
         serde_json::from_str(include_str!("fixtures/foundation/yaml/compat.json")).unwrap();
-    assert_eq!(cases.len(), 42);
+    assert_eq!(cases.len(), 41);
     let paths = synthetic_paths();
     for case in cases {
         let result = Config::from_yaml(&case.yaml, &paths);
@@ -70,30 +67,7 @@ fn schema_directed_yaml_matches_frozen_go_scalar_and_collection_cases() {
             "{} persisted PIN hash",
             case.name
         );
-        let mut expected_reload = config.clone();
-        if config
-            .voice
-            .whisper
-            .hallucination_phrases
-            .as_ref()
-            .is_some_and(Vec::is_empty)
-        {
-            // Go yaml.Marshal omitempty drops the empty slice. Its next config
-            // load restores the default list; this is not a lossless-roundtrip
-            // contract. The oracle records the actual Go save omission.
-            assert!(
-                !case.saved_has_hallucination_phrases,
-                "{} Go omission",
-                case.name
-            );
-            assert!(!saved.contains("hallucination_phrases:"));
-            expected_reload.voice.whisper.hallucination_phrases = Some(
-                DEFAULT_WHISPER_HALLUCINATION_PHRASES
-                    .iter()
-                    .map(|value| (*value).to_owned())
-                    .collect(),
-            );
-        }
+        let expected_reload = config.clone();
         assert_eq!(
             expected_reload.public_json(),
             reloaded.public_json(),

@@ -334,32 +334,6 @@ pub struct UserPrefsCustomTheme {
 }
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize, Debug)]
 #[serde(default)]
-pub struct VoiceWhisperConfig {
-    #[serde(rename = "server_url")]
-    pub server_url: String,
-    #[serde(rename = "request_path")]
-    pub request_path: String,
-    #[serde(rename = "language")]
-    pub language: String,
-    #[serde(rename = "timeout_seconds")]
-    pub timeout_seconds: i64,
-    #[serde(rename = "managed")]
-    pub managed: bool,
-    #[serde(rename = "model")]
-    pub model: String,
-    #[serde(rename = "server_port")]
-    pub server_port: i64,
-    #[serde(rename = "hallucination_phrases")]
-    pub hallucination_phrases: Option<Vec<String>>,
-}
-#[derive(Clone, Default, PartialEq, Serialize, Deserialize, Debug)]
-#[serde(default)]
-pub struct VoiceConfig {
-    #[serde(rename = "whisper")]
-    pub whisper: VoiceWhisperConfig,
-}
-#[derive(Clone, Default, PartialEq, Serialize, Deserialize, Debug)]
-#[serde(default)]
 pub struct UserPrefsProjectView {
     #[serde(rename = "session_id")]
     pub session_id: i64,
@@ -638,8 +612,6 @@ pub struct Config {
     pub local_models: Vec<LocalModel>,
     #[serde(rename = "user_prefs")]
     pub user_prefs: UserPrefs,
-    #[serde(rename = "voice")]
-    pub voice: VoiceConfig,
     #[serde(rename = "notify")]
     pub notify: NotifyConfig,
     #[serde(rename = "orchestration")]
@@ -1551,71 +1523,6 @@ pub(super) fn schema(kind: &str) -> &'static [Field] {
                 jomit: false,
             },
         ],
-        "VoiceWhisperConfig" => &[
-            Field {
-                yaml: "server_url",
-                json: "server_url",
-                kind: "string",
-                yomit: true,
-                jomit: true,
-            },
-            Field {
-                yaml: "request_path",
-                json: "request_path",
-                kind: "string",
-                yomit: true,
-                jomit: true,
-            },
-            Field {
-                yaml: "language",
-                json: "language",
-                kind: "string",
-                yomit: true,
-                jomit: true,
-            },
-            Field {
-                yaml: "timeout_seconds",
-                json: "timeout_seconds",
-                kind: "int",
-                yomit: true,
-                jomit: true,
-            },
-            Field {
-                yaml: "managed",
-                json: "managed",
-                kind: "bool",
-                yomit: true,
-                jomit: true,
-            },
-            Field {
-                yaml: "model",
-                json: "model",
-                kind: "string",
-                yomit: true,
-                jomit: true,
-            },
-            Field {
-                yaml: "server_port",
-                json: "server_port",
-                kind: "int",
-                yomit: true,
-                jomit: true,
-            },
-            Field {
-                yaml: "hallucination_phrases",
-                json: "hallucination_phrases",
-                kind: "[]string",
-                yomit: true,
-                jomit: true,
-            },
-        ],
-        "VoiceConfig" => &[Field {
-            yaml: "whisper",
-            json: "whisper",
-            kind: "VoiceWhisperConfig",
-            yomit: true,
-            jomit: true,
-        }],
         "UserPrefsProjectView" => &[
             Field {
                 yaml: "session_id",
@@ -2345,13 +2252,6 @@ pub(super) fn schema(kind: &str) -> &'static [Field] {
                 jomit: true,
             },
             Field {
-                yaml: "voice",
-                json: "voice",
-                kind: "VoiceConfig",
-                yomit: true,
-                jomit: true,
-            },
-            Field {
                 yaml: "notify",
                 json: "notify",
                 kind: "NotifyConfig",
@@ -2577,18 +2477,6 @@ pub const BUILTIN_PROVIDER_IDS: &[&str] = &[
     "opencode",
     "grok",
     "command-code",
-];
-pub const DEFAULT_WHISPER_HALLUCINATION_PHRASES: &[&str] = &[
-    "ご視聴ありがとうございました",
-    "ご清聴ありがとうございました",
-    "チャンネル登録をお願いします",
-    "チャンネル登録よろしくお願いします",
-    "字幕視聴ありがとうございました",
-    "thanks for watching",
-    "thank you for watching",
-    "please subscribe",
-    "like and subscribe",
-    "don't forget to subscribe",
 ];
 
 pub fn valid_usage_probe_model(raw: &str) -> bool {
@@ -2887,24 +2775,6 @@ impl Config {
     pub fn apply_defaults(&mut self, paths: &RuntimePaths) {
         self.user_prefs.usage_probe_model =
             effective_usage_probe_model(&self.user_prefs.usage_probe_model);
-        let whisper = &mut self.voice.whisper;
-        if whisper.language.trim().is_empty() {
-            whisper.language = "ja".into();
-        }
-        if whisper.timeout_seconds <= 0 {
-            whisper.timeout_seconds = 60;
-        }
-        if whisper.model.trim().is_empty() {
-            whisper.model = "small".into();
-        }
-        if whisper.hallucination_phrases.is_none() {
-            whisper.hallucination_phrases = Some(
-                DEFAULT_WHISPER_HALLUCINATION_PHRASES
-                    .iter()
-                    .map(|s| (*s).into())
-                    .collect(),
-            );
-        }
         let o = &mut self.orchestration;
         for (field, default) in [
             (&mut o.max_depth, 1),
@@ -3258,8 +3128,7 @@ fn normalize_node(
                 {
                     continue;
                 }
-                if ((kind == "VoiceWhisperConfig" && field.yaml == "hallucination_phrases")
-                    || (kind == "NotifyConfig" && matches!(field.yaml, "backends" | "events")))
+                if (kind == "NotifyConfig" && matches!(field.yaml, "backends" | "events"))
                     && value.is_null()
                 {
                     out.insert(field.yaml.into(), Value::Null);
@@ -3380,40 +3249,6 @@ impl Config {
                     "hub.allowed_hosts contains an invalid host name or IP literal (ports are not allowed)",
                 ));
             }
-        }
-        let whisper = &self.voice.whisper;
-        if !whisper.server_url.trim().is_empty() {
-            let url = parse_config_url(whisper.server_url.trim()).map_err(|_| {
-                ConfigError::invalid("voice.whisper.server_url must be a localhost http URL")
-            })?;
-            if url.scheme != "http" || url.host.is_empty() {
-                return Err(ConfigError::invalid(
-                    "voice.whisper.server_url must be a localhost http URL",
-                ));
-            }
-            let host = url.host.to_lowercase();
-            let host = host.strip_suffix('.').unwrap_or(&host).to_owned();
-            if !matches!(host.as_str(), "127.0.0.1" | "localhost" | "::1") {
-                return Err(ConfigError::invalid(
-                    "voice.whisper.server_url must point to localhost",
-                ));
-            }
-        }
-        let path = whisper.request_path.trim();
-        if !path.is_empty() && (!path.starts_with('/') || path.contains("://")) {
-            return Err(ConfigError::invalid(
-                "voice.whisper.request_path must be empty or start with /",
-            ));
-        }
-        if !(1..=300).contains(&whisper.timeout_seconds) {
-            return Err(ConfigError::invalid(
-                "voice.whisper.timeout_seconds must be between 1 and 300",
-            ));
-        }
-        if whisper.server_port != 0 && !(1024..=65535).contains(&whisper.server_port) {
-            return Err(ConfigError::invalid(
-                "voice.whisper.server_port must be between 1024 and 65535",
-            ));
         }
         validate_model_url("ollama", &self.ollama.base_url)?;
         validate_model_url("lm_studio", &self.lm_studio.base_url)?;

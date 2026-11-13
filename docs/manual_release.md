@@ -45,7 +45,6 @@ native helper の正式 mode は `--target <triple> --release-tag <tag>`、梱�
 正式 mode は compile 前に tag commit を HEAD と照合し、tag 由来の版・commit・日時を
 注入します。Windows では既存 SDK の `rc.exe` で version / icon resource を用意し、
 生成した両 PE の version と group icon → icon resource の readback を検査します。
-Whisper runtime の準備・署名・x64・同梱 bytes 確認も別の検査です。
 通常 candidate mode の成功を、これら正式 Windows 資材の受入と読み替えません。
 
 梱包は同じ source / run / attempt の四 artifact だけを要求します。

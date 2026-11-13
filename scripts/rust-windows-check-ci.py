@@ -167,7 +167,7 @@ def write_receipt(output: Path, receipt: dict) -> None:
 
 
 def owned_artifacts(output: Path) -> set[str]:
-    names = {"QUICK-CHECK.json", "VALIDATION-STEPS.json", "WINDOWS-RUNTIME.json"}
+    names = {"QUICK-CHECK.json", "VALIDATION-STEPS.json"}
     for step in candidate.STEPS:
         names.update((step["log"], step["stdout"]))
     return {(output / name).relative_to(ROOT).as_posix() for name in names}
@@ -243,11 +243,6 @@ def validate(args: argparse.Namespace, source: str, output: Path, receipt: dict)
     write_receipt(output, receipt)
     # The frozen Go oracle module lives under go/ since 2026-10-19.
     candidate.run(["go", "mod", "download"], env, ROOT / "go")
-    runtime = output / "WINDOWS-RUNTIME.json"
-    candidate.run(["pwsh", "-NoProfile", "-File", "rust/packaging/prepare_windows_runtime.ps1",
-                   "-ReceiptPath", runtime.relative_to(ROOT).as_posix()], env, ROOT)
-    receipt["windows_runtime"] = candidate.windows_runtime_receipt(runtime, source)
-    env["MANY_AI_REQUIRE_WINDOWS_RUNTIME"] = "1"
     candidate.run([sys.executable, "-m", "unittest", "discover", "-s", "rust/packaging", "-p", "test_*.py"], env, ROOT)
     candidate.run(["bun", "install", "--frozen-lockfile"], env, ROOT / "web")
     candidate.run(["bun", "run", "check"], env, ROOT / "web")
@@ -309,11 +304,9 @@ def validate(args: argparse.Namespace, source: str, output: Path, receipt: dict)
         groups.append(group)
         write_receipt(output, receipt)
     failed |= repeat_tests(groups, args.repeat, env, output, receipt)
-    # Verify source and runtime inputs stayed bound to this check, even when
+    # Verify source inputs stayed bound to this check, even when
     # restored caches were used. No binary embedding/release claim is made.
     source_gate(owned_artifacts=owned_artifacts(output))
-    if candidate.windows_runtime_receipt(runtime, source) != receipt["windows_runtime"]:
-        raise ValueError("runtime inputs changed during Windows checks")
     return failed
 
 

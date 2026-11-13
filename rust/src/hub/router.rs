@@ -39,7 +39,6 @@ pub struct ServiceRouter {
     host: Option<Arc<super::host_routes::HostHttp>>,
     servers: Option<Arc<super::server_routes::ServerHttp>>,
     slash: Option<Arc<super::slash_routes::SlashHttp>>,
-    whisper: Option<Arc<super::whisper_routes::WhisperHttp>>,
     subscriptions: Option<Arc<super::subscription_routes::SubscriptionHttp>>,
     usage: Option<Arc<super::usage_routes::UsageHttp>>,
     updates: Option<Arc<super::update_routes::UpdateHttp>>,
@@ -56,7 +55,6 @@ pub struct ServiceRouter {
     nvidia: Option<Arc<super::nvidia_routes::NvidiaHttp>>,
     patterns: Option<Arc<super::approval_pattern_routes::ApprovalPatternHttp>>,
     instruction_rules: Option<Arc<super::approval_status_routes::ApprovalStatusHttp>>,
-    pub(crate) voice: Option<Arc<super::voice_routes::VoiceHttp>>,
     spawn: Option<(Arc<super::spawn_routes::SpawnHttp>, Arc<SpawnOffset>)>,
     settings_published: Option<Arc<SettingsPublished>>,
     notifications: Option<Arc<crate::notify::Manager>>,
@@ -251,7 +249,6 @@ impl ServiceRouter {
             host: None,
             servers: None,
             slash: None,
-            whisper: None,
             subscriptions: None,
             usage: None,
             updates: None,
@@ -268,7 +265,6 @@ impl ServiceRouter {
             nvidia: None,
             patterns: None,
             instruction_rules: None,
-            voice: None,
             spawn: None,
             settings_published: None,
             notifications: None,
@@ -404,14 +400,6 @@ impl ServiceRouter {
     }
     pub fn with_slash_commands(mut self, owner: Arc<super::slash_routes::SlashHttp>) -> Self {
         self.slash = Some(owner);
-        self
-    }
-    pub fn with_voice(mut self, owner: Arc<super::voice_routes::VoiceHttp>) -> Self {
-        self.voice = Some(owner);
-        self
-    }
-    pub fn with_whisper(mut self, owner: Arc<super::whisper_routes::WhisperHttp>) -> Self {
-        self.whisper = Some(owner);
         self
     }
     pub fn with_subscriptions(
@@ -958,34 +946,6 @@ impl ServiceRouter {
                 None => Response::error(503, "usage_unavailable", "usage service unavailable"),
             });
         }
-        if request.path == super::voice_routes::PATH {
-            // The raw transport prepares managed voice before reading audio.
-            return Dispatch::response(match &self.voice {
-                Some(voice) => {
-                    voice
-                        .handle_authenticated(request, cancellation.token())
-                        .await
-                }
-                None => Response::error(
-                    503,
-                    "whisper_unavailable",
-                    "voice service is not initialized",
-                ),
-            });
-        }
-        if super::whisper_routes::WhisperHttp::methods(&request.path).is_some() {
-            return Dispatch::response(match &self.whisper {
-                Some(whisper) => whisper
-                    .handle_authenticated(request, cancellation.token())
-                    .await
-                    .expect("recognized whisper route"),
-                None => Response::error(
-                    503,
-                    "whisper_unavailable",
-                    "managed Whisper service is not initialized",
-                ),
-            });
-        }
         if request.path == "/api/models" {
             return Dispatch::response(match &self.models {
                 Some(models) => models.handle(request, cancellation.token()).await,
@@ -1139,7 +1099,6 @@ impl ServiceRouter {
             host: None,
             servers: None,
             slash: None,
-            whisper: None,
             subscriptions: None,
             usage: None,
             updates: None,
@@ -1156,7 +1115,6 @@ impl ServiceRouter {
             nvidia: None,
             patterns: None,
             instruction_rules: None,
-            voice: None,
             spawn: None,
             settings_published: None,
             notifications: None,
@@ -1680,8 +1638,6 @@ pub(crate) fn needs_owned_request(path: &str) -> bool {
         || super::host_routes::methods(path).is_some()
         || super::server_routes::methods(path).is_some()
         || super::slash_routes::is_route(path)
-        || super::whisper_routes::WhisperHttp::methods(path).is_some()
-        || path == super::voice_routes::PATH
         || super::subscription_routes::methods(path).is_some()
         || super::usage_routes::is_route(path)
         || super::update_routes::methods(path).is_some()
@@ -1797,10 +1753,6 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
         }
         p if super::subscription_routes::methods(p).is_some() => {
             super::subscription_routes::methods(p).unwrap()
-        }
-        super::voice_routes::PATH => &["POST"],
-        p if super::whisper_routes::WhisperHttp::methods(p).is_some() => {
-            super::whisper_routes::WhisperHttp::methods(p).unwrap()
         }
         p if super::slash_routes::is_route(p) => &["GET", "POST"],
         p if super::server_routes::methods(p).is_some() => {

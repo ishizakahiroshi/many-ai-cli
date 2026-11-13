@@ -547,30 +547,6 @@ class ReleaseWorkflowTests(unittest.TestCase):
             if workflow.name != "release.yml":
                 self.assertNotIn("secrets.PUBLISH_GITHUB_TOKEN", workflow.read_text(encoding="utf-8"), workflow.name)
 
-    def test_whisper_build_runs_upstream_code_without_write_access_and_at_the_pinned_commit(self):
-        # whisper-binaries.yml builds a third-party tag with CMake, which can run
-        # any command. That job must hold no write token, leave no credential in
-        # .git/config and build only the commit the tag was reviewed at (U39).
-        text = (ROOT / ".github/workflows/whisper-binaries.yml").read_text(encoding="utf-8")
-        jobs = dict(re.findall(r"^  ([a-z]+):\n(.*?)(?=^  [a-z]+:|\Z)", text.split("jobs:\n", 1)[1], re.M | re.S))
-        self.assertEqual(set(jobs), {"build", "publish"})
-        build, publish = jobs["build"], jobs["publish"]
-        self.assertIn("permissions:\n      contents: read\n", build)
-        self.assertNotRegex(build, r"contents: write|GH_TOKEN|secrets\.|gh release")
-        self.assertIn("ref: refs/tags/${{ inputs.whisper_tag }}", build)
-        self.assertIn("persist-credentials: false", build)
-        verify = build.index('if [ "$actual" != "$WHISPER_COMMIT" ]')
-        self.assertLess(build.index('actual="$(git rev-parse HEAD)"'), verify)
-        self.assertLess(verify, build.index("cmake -B build"))
-        self.assertIn("needs: build", publish)
-        self.assertIn("permissions:\n      contents: write\n", publish)
-        self.assertNotRegex(publish, r"ggml-org|cmake|actions/checkout")
-        # The default tag and commit move together with the Docker image's pin.
-        docker = (ROOT / "deploy/docker/Dockerfile").read_text(encoding="utf-8")
-        defaults = re.findall(r'default: "([^"]+)"', text.split("jobs:\n", 1)[0])
-        self.assertEqual(defaults[:2], [re.search(r"ARG WHISPER_CPP_TAG=(\S+)", docker).group(1),
-                                        re.search(r"ARG WHISPER_CPP_COMMIT=(\S+)", docker).group(1)])
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -5,8 +5,8 @@
     "authority": "Authoritative current source-binding view; top-level routes/dynamic_operations and earlier receipt fields are historical compatibility data.",
     "source_index": "rust/inventory/recovery-current-20261005.json",
     "counts": {
-      "http_registrations": 154,
-      "http_source_bound": 154,
+      "http_registrations": 147,
+      "http_source_bound": 147,
       "http_source_binding_missing": 0,
       "dynamic_operation_rows": 44,
       "dynamic_source_bound": 44,
@@ -96,13 +96,6 @@
         "main_binding": "with_assets",
         "state": "source_implemented_bound_unaccepted",
         "source_index_json_pointer": "/http/10"
-      },
-      {
-        "path": "/whisper-recorder-worklet.js",
-        "rust_owner": "rust/src/hub/assets.rs",
-        "main_binding": "with_assets",
-        "state": "source_implemented_bound_unaccepted",
-        "source_index_json_pointer": "/http/11"
       },
       {
         "path": "/i18n.js",
@@ -1013,48 +1006,6 @@
         "main_binding": "with_push",
         "state": "source_implemented_bound_unaccepted",
         "source_index_json_pointer": "/http/142"
-      },
-      {
-        "path": "/api/voice/transcribe",
-        "rust_owner": "rust/src/hub/voice_routes.rs",
-        "main_binding": "with_voice",
-        "state": "source_implemented_bound_unaccepted",
-        "source_index_json_pointer": "/http/143"
-      },
-      {
-        "path": "/api/whisper/status",
-        "rust_owner": "rust/src/hub/whisper_routes.rs",
-        "main_binding": "with_whisper",
-        "state": "source_implemented_bound_unaccepted",
-        "source_index_json_pointer": "/http/144"
-      },
-      {
-        "path": "/api/whisper/install",
-        "rust_owner": "rust/src/hub/whisper_routes.rs",
-        "main_binding": "with_whisper",
-        "state": "source_implemented_bound_unaccepted",
-        "source_index_json_pointer": "/http/145"
-      },
-      {
-        "path": "/api/whisper/uninstall",
-        "rust_owner": "rust/src/hub/whisper_routes.rs",
-        "main_binding": "with_whisper",
-        "state": "source_implemented_bound_unaccepted",
-        "source_index_json_pointer": "/http/146"
-      },
-      {
-        "path": "/api/whisper/start",
-        "rust_owner": "rust/src/hub/whisper_routes.rs",
-        "main_binding": "with_whisper",
-        "state": "source_implemented_bound_unaccepted",
-        "source_index_json_pointer": "/http/147"
-      },
-      {
-        "path": "/api/whisper/stop",
-        "rust_owner": "rust/src/hub/whisper_routes.rs",
-        "main_binding": "with_whisper",
-        "state": "source_implemented_bound_unaccepted",
-        "source_index_json_pointer": "/http/148"
       },
       {
         "path": "/api/session-usage",
@@ -2259,18 +2210,6 @@
     ],
     "validation_receipt": "docs/bot/rust-recovery-resume/VALIDATION-4dc961ce.json",
     "artifacts": "docs/bot/rust-recovery-resume/ARTIFACTS-4dc961ce.md",
-    "remaining_known_implementation_gap": {
-      "id": "windows-whisper-bundled-runtime",
-      "state": "missing_in_4dc_baseline_continuation_implements_dynamic_vs_receipt",
-      "gate_receipt": "docs/bot/rust-recovery-resume/WINDOWS-RUNTIME-SUPPLY-GATE.md",
-      "source_refs": [
-        {
-          "file": "rust/src/application/main_program/serve.rs",
-          "line": 1062
-        }
-      ],
-      "detail": "At recorded source4dc961ce the composed Whisper owner had no supplemental embedded runtime DLL bytes. The corrected continuation policy uses the existing Go VS-only acquisition and validation, records actual FileVersion/SHA256 per build, and wires embedded payloads to serve. No pre-pinned DLL version/hash is required. Final native payload evidence and product acceptance remain separate."
-    },
     "acceptance_limit": "Green native synthetic CI, source binding and zero placeholder macros do not accept all behavior, supported OS versions, providers, devices, signed packaging, installed data or cutover."
   },
   "historical_fields_scope": {
@@ -2391,10 +2330,9 @@
     {
       "path": "/whisper-recorder-worklet.js",
       "source_handler": "staticHandler",
-      "status": "partial",
-      "implementation": "rust/src/hub/assets.rs",
-      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
-      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
     },
     {
       "path": "/i18n.js",

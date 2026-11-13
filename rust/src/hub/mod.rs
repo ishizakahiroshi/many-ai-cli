@@ -44,8 +44,6 @@ pub mod slash_routes;
 pub mod subscription_routes;
 pub mod update_routes;
 pub mod usage_routes;
-pub mod voice_routes;
-pub mod whisper_routes;
 
 pub mod provider_routes;
 #[cfg(test)]

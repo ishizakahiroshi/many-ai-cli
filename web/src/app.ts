@@ -6,7 +6,7 @@ import { probeSpan } from './debug/probe.js';
 import { t } from './i18n.js';
 import { DEFAULT_NOTIFY_SOUND_VOLUME, setNotificationVolume } from './app/notification-volume.js';
 import { apiFetch, cleanCopiedText, showToast } from './app/util.js';
-import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
+import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, batchFreeText, approvalAutoSwitchQueue, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals, forgetAllAnsweredApprovals, forgetAnsweredApprovals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
@@ -2443,7 +2443,6 @@ inputEl.addEventListener('blur', (e) => {
     setUserPref('voice.wake_word_enabled', false);
     setUserPref('voice.wake_word_phrase', getDefaultWakeWordPhrase());
     setVoiceEngine('browser');
-    try { localStorage.removeItem(STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY); } catch (_) {}
     setUserPref('notify_sound.enabled', false);
     setUserPref('notify_sound.type', 'default');
     setNotificationVolume(DEFAULT_NOTIFY_SOUND_VOLUME);

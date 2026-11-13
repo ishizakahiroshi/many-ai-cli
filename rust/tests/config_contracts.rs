@@ -167,33 +167,12 @@ fn defaults_false_values_and_go_empty_filter_omission_are_preserved() {
     assert!(defaults.orchestration.worktree_enabled());
     assert!(defaults.orchestration.child_full_bypass_enabled());
     assert_eq!(defaults.handoff.retention_days, 14);
-    assert_eq!(defaults.voice.whisper.model, "small");
-    assert_eq!(
-        defaults
-            .voice
-            .whisper
-            .hallucination_phrases
-            .as_ref()
-            .unwrap()
-            .len(),
-        10
-    );
     let config = Config::from_yaml("voice: {whisper: {hallucination_phrases: []}}\norchestration: {worktree_auto: false, child_full_bypass: false, max_children_per_parent: 999}\nhandoff: {enabled: false}\n", &paths()).unwrap();
     assert!(!config.orchestration.worktree_enabled());
     assert!(!config.orchestration.child_full_bypass_enabled());
     assert!(!config.handoff.enabled_or_default());
     assert_eq!(config.orchestration.max_children_per_parent, 256);
     let restored = Config::from_yaml(&config.to_private_yaml().unwrap(), &paths()).unwrap();
-    assert_eq!(
-        restored
-            .voice
-            .whisper
-            .hallucination_phrases
-            .as_ref()
-            .unwrap()
-            .len(),
-        10
-    );
     assert_eq!(restored.orchestration.worktree_auto, Some(false));
     assert_eq!(restored.handoff.enabled, Some(false));
 }
@@ -280,10 +259,6 @@ fn validation_separates_optional_warnings_and_fatal_network_settings() {
     assert_eq!(config.warnings().len(), 1);
     config.ollama.allow_private_hosts = true;
     assert!(config.warnings().is_empty());
-    config.voice.whisper.server_url = "https://synthetic.example".into();
-    assert!(config.validate().is_err());
-    config.voice.whisper.server_url = "http://127.0.0.1:8178".into();
-    assert!(config.validate().is_ok());
 }
 
 #[test]
@@ -535,11 +510,6 @@ fn terminal_color_and_raw_url_validation_match_go_normalization() {
         config.ollama.base_url = raw.into();
         assert!(config.validate().is_err(), "{raw}");
     }
-    for raw in ["http://127.1", "http://0x7f000001"] {
-        let mut config = Config::defaults(&paths());
-        config.voice.whisper.server_url = raw.into();
-        assert!(config.validate().is_err(), "{raw}");
-    }
     let mut config = Config::defaults(&paths());
     config.hub.allowed_hosts = vec!["synthetic.example..".into()];
     assert!(config.validate().is_err());
@@ -756,4 +726,39 @@ fn loaded_config_keeps_owned_directory_after_path_replacement() {
     assert!(!outside.join("must-not-follow").exists());
     let current = store.snapshot().unwrap();
     assert!(store.persist(current.revision, current.config).is_err());
+}
+
+#[test]
+fn removed_voice_whisper_keys_in_an_existing_config_are_ignored() {
+    // The Whisper voice engine was removed; configs written by older versions
+    // still carry voice.whisper.* (even values that used to fail validation)
+    // and engine selections. They must load without error and not affect startup.
+    let yaml = "token: synthetic-legacy-token
+voice:
+  engine: whisper
+  whisper:
+    server_url: https://synthetic.example
+    request_path: no-slash
+    timeout_seconds: 9999
+    server_port: 1
+    managed: true
+    model: small
+    hallucination_phrases: []
+user_prefs:
+  voice:
+    engine: whisper
+    grace_seconds: 3
+";
+    let config =
+        Config::from_yaml(yaml, &paths()).expect("legacy whisper keys must not be an error");
+    assert_eq!(config.token, "synthetic-legacy-token");
+    assert_eq!(config.user_prefs.voice.grace_seconds, 3);
+    let (_root, _installed, paths) = trial();
+    std::fs::write(paths.resource(Resource::Config), yaml).unwrap();
+    let store =
+        ConfigStore::load_or_create(paths, || panic!("existing token must be kept")).unwrap();
+    assert_eq!(
+        store.snapshot().unwrap().config.token,
+        "synthetic-legacy-token"
+    );
 }

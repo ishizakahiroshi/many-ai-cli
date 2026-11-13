@@ -82,7 +82,6 @@ pub struct HubCompositionDependencies {
     pub routines: Arc<crate::routine::runner::RoutineRunner>,
     pub routine_store: Arc<crate::routine::store::RoutineStore>,
     pub servers: Arc<crate::launcher::ConnectionManager>,
-    pub whisper: Arc<crate::application::whisper::WhisperManager>,
 }
 pub struct HubComposition {
     pub dependencies: HubCompositionDependencies,
@@ -1148,38 +1147,6 @@ impl HubComposition {
             crate::launcher::LauncherStore::open(paths.clone())?,
             connector,
         );
-        let whisper = crate::application::whisper::WhisperManager::new(
-            crate::application::whisper::WhisperDependencies {
-                paths: paths.clone(),
-                config: context.config.clone(),
-                tasks: tasks.clone(),
-                environment: context.environment.clone(),
-                platform: if cfg!(windows) {
-                    "windows"
-                } else if cfg!(target_os = "macos") {
-                    "darwin"
-                } else {
-                    "linux"
-                }
-                .into(),
-                arch: if cfg!(target_arch = "x86_64") {
-                    "amd64"
-                } else if cfg!(target_arch = "aarch64") {
-                    "arm64"
-                } else {
-                    std::env::consts::ARCH
-                }
-                .into(),
-                io: Arc::new(crate::application::whisper::native::NativeWhisperIo {
-                    paths: paths.clone(),
-                }),
-                warning: warning.clone(),
-                // Candidate Windows builds prepare the same verified VS Redist
-                // inputs as Go and retain their actual version/hash receipt.
-                runtime_payload: crate::assets::windows_runtime_payload(),
-            },
-        )
-        .map_err(io::Error::other)?;
         let host_dispatch = crate::application::host_actions::NativeHostDispatch::new(
             paths.clone(),
             context.cwd.clone(),
@@ -1234,13 +1201,6 @@ impl HubComposition {
         ))
         .with_mobile(Arc::new(crate::hub::mobile_routes::MobileHttp::new(mobile)))
         .with_nvidia(crate::hub::nvidia_routes::NvidiaHttp::new(nvidia))
-        .with_whisper(Arc::new(crate::hub::whisper_routes::WhisperHttp::new(
-            whisper.clone(),
-        )))
-        .with_voice(Arc::new(crate::hub::voice_routes::VoiceHttp::new(
-            context.config.clone(),
-            Arc::new(whisper.clone()),
-        )))
         .with_servers(Arc::new(crate::hub::server_routes::ServerHttp::new(
             servers.clone(),
         )))
@@ -1425,7 +1385,6 @@ impl HubComposition {
                 routines,
                 routine_store,
                 servers,
-                whisper,
             },
             services,
             sockets,
@@ -1657,7 +1616,6 @@ impl HubComposition {
             self.owner.drain_requests().await;
         }
         self.spawner.shutdown();
-        self.dependencies.whisper.shutdown().await;
         self.dependencies.servers.close_all().await;
         self.dependencies.routines.join_launches().await;
         self.spawner.drain().await;

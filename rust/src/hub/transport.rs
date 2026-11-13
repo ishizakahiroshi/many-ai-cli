@@ -260,51 +260,6 @@ async fn handle(
     if let Err(rejection) = state.services.preflight(&request, now) {
         return response(rejection);
     }
-    if request.path == super::voice_routes::PATH {
-        let Some(voice) = state.services.voice.clone() else {
-            return response(Response::error(
-                503,
-                "whisper_unavailable",
-                "voice service is not initialized",
-            ));
-        };
-        let permit = match state.services.owned_request_permit() {
-            Ok(permit) => permit,
-            Err(_) => {
-                return response(Response::error(
-                    503,
-                    "whisper_unavailable",
-                    "voice service is shutting down",
-                ));
-            }
-        };
-        let cancellation = permit.cancellation();
-        let waiter = crate::proto::core::HttpWaitCancellation::default();
-        let _guard = HttpWaitGuard(waiter.clone());
-        let waiter_token = waiter.token().clone();
-        let completion=permit.start(async move {
-            let operation=async {
-                // Go starts or verifies a managed service before reading raw
-                // audio; failures therefore don't wait on a slow upload.
-                let config=match voice.prepare(cancellation.token()).await {Ok(config)=>config,Err(response)=>return response};
-                let audio=match read_body(body,super::voice_routes::PATH).await {Ok(audio)=>audio,Err(_)=>return Response::error(400,"bad_request","read audio failed")};
-                // Uploads can outlive their token or PIN session. Admission to
-                // recognition uses current authority and time; accepted work
-                // keeps the existing request-owner cancellation contract.
-                let recognition_now=crate::proto::time::Timestamp::now().duration_since(crate::proto::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
-                if let Err(rejection)=state.services.preflight(&request,recognition_now) {return rejection;}
-                voice.transcribe_audio(&config,&audio,cancellation.token()).await
-            };
-            tokio::select! {
-                result=operation=>result,
-                _=waiter_token.cancelled()=>Response::error(502,"whisper_unreachable","whisper unreachable: request cancelled"),
-                _=cancellation.token().cancelled()=>Response::error(503,"whisper_unavailable","voice service is shutting down"),
-            }
-        });
-        return response(completion.wait().await.unwrap_or_else(|_| {
-            Response::error(503, "whisper_unavailable", "voice request owner ended")
-        }));
-    }
     let reads_body = !matches!(request.method.as_str(), "GET" | "HEAD" | "OPTIONS")
         && request.path.starts_with("/api/")
         && !request
@@ -458,7 +413,6 @@ fn body_policy(path: &str) -> (usize, bool) {
         "/api/logs/legacy-notice" => (1 << 16, true),
         super::jev_routes::PATH => (8192, false),
         "/api/attach" => (11 * 1024 * 1024, false),
-        "/api/voice/transcribe" => (25 * 1024 * 1024, false),
         "/api/memo-images" | "/api/memo-images/" => (10 * 1024 * 1024, false),
         "/api/user-prefs/avatar" => (5 * 1024 * 1024, false),
         "/api/user-prefs/notify-sound-custom" => (2 * 1024 * 1024, false),
@@ -655,8 +609,6 @@ impl HttpBody for FileBody {
     }
 }
 
-#[cfg(test)]
-mod voice_auth_tests;
 #[cfg(test)]
 mod tests {
     #[tokio::test]
@@ -926,76 +878,6 @@ mod tests {
         assert_eq!(accepted.unwrap(), None);
     }
 
-    #[tokio::test]
-    async fn managed_voice_failure_returns_before_incomplete_audio_upload() {
-        struct FailingManaged;
-        impl crate::hub::voice_routes::ManagedWhisper for FailingManaged {
-            fn ensure<'a>(
-                &'a self,
-                _: crate::config::VoiceWhisperConfig,
-                _: &'a Cancellation,
-            ) -> CoreFuture<'a, Result<crate::config::VoiceWhisperConfig, Response>> {
-                Box::pin(async {
-                    Err(Response::error(
-                        503,
-                        "synthetic_managed_failure",
-                        "synthetic unavailable",
-                    ))
-                })
-            }
-        }
-        let dir = tempfile::tempdir().unwrap();
-        let installed = tempfile::tempdir().unwrap();
-        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
-            .await
-            .unwrap();
-        let port = listener.local_addr().unwrap().port();
-        let paths = RuntimePaths::trial(dir.path(), port, installed.path()).unwrap();
-        let mut cfg = Config {
-            token: "synthetic-voice".into(),
-            ..Default::default()
-        };
-        cfg.voice.whisper.managed = true;
-        let config = Arc::new(ConfigStore::new(paths.clone(), cfg).unwrap());
-        let tasks = super::super::task_owner::HubTaskOwner::new(tokio::runtime::Handle::current());
-        let services = Arc::new(
-            ServiceRouter::isolated_at_port(config.clone(), paths, port)
-                .unwrap()
-                .with_task_owner(tasks.handle())
-                .with_voice(Arc::new(super::super::voice_routes::VoiceHttp::new(
-                    config,
-                    Arc::new(FailingManaged),
-                ))),
-        );
-        let cancel = Cancellation::default();
-        let server = tokio::spawn(serve(
-            listener,
-            services,
-            Arc::new(EmptyEffects),
-            cancel.clone(),
-        ));
-        let mut socket = tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
-            .await
-            .unwrap();
-        socket.write_all(format!("POST /api/voice/transcribe?token=synthetic-voice HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 1000000\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
-        let mut bytes = vec![0; 8192];
-        let count =
-            tokio::time::timeout(std::time::Duration::from_secs(3), socket.read(&mut bytes))
-                .await
-                .unwrap()
-                .unwrap();
-        let response = String::from_utf8_lossy(&bytes[..count]);
-        assert!(response.starts_with("HTTP/1.1 503"), "{response}");
-        assert!(response.contains("synthetic_managed_failure"), "{response}");
-        drop(socket);
-        cancel.cancel();
-        tokio::time::timeout(std::time::Duration::from_secs(3), server)
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-        assert_eq!(tasks.snapshot().requests.running, 0);
-    }
     struct EmptyEffects;
     impl CoreEffectSink for EmptyEffects {
         fn apply<'a>(

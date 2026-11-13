@@ -13,8 +13,7 @@
       "/auth_cookie_secret": "0xFF",
       "/remote_pin_hash": "TRUE",
       "/token": "00123"
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "exponent-lexemes-and-map-keys",
@@ -35,8 +34,7 @@
         "TRUE": "1e3",
         "nullish": ""
       }
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "quoted-lexemes",
@@ -50,8 +48,7 @@
       "/auth_cookie_secret": "0xFF",
       "/remote_pin_hash": "TRUE",
       "/token": "00123"
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "string-tags",
@@ -65,8 +62,7 @@
       "/auth_cookie_secret": "0xFF",
       "/remote_pin_hash": "null",
       "/token": "00123"
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "explicit-numeric-tags-keep-string-lexemes",
@@ -82,8 +78,7 @@
       "/auth_cookie_secret": "1e3",
       "/remote_pin_hash": "TRUE",
       "/token": "00123"
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "binary-string",
@@ -93,12 +88,11 @@
     ],
     "expected": {
       "/token": "synthetic-binary"
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "block-strings",
-    "yaml": "token: |\n  synthetic line one\n  line two\nauth_cookie_secret: \u003e-\n  folded synthetic\n  text\n",
+    "yaml": "token: |\n  synthetic line one\n  line two\nauth_cookie_secret: >-\n  folded synthetic\n  text\n",
     "paths": [
       "/token",
       "/auth_cookie_secret"
@@ -106,8 +100,7 @@
     "expected": {
       "/auth_cookie_secret": "folded synthetic text",
       "/token": "synthetic line one\nline two\n"
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "unknown-yaml-only-values",
@@ -119,8 +112,7 @@
     "expected": {
       "/Hub/Port": 48888,
       "/token": "synthetic-stable-token"
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "unknown-invalid-tag-is-not-decoded",
@@ -130,19 +122,17 @@
     ],
     "expected": {
       "/token": "synthetic-stable-token"
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "unused-alias-cycle",
-    "yaml": "token: synthetic-stable-token\nfuture: \u0026unused {self: *unused}\n",
+    "yaml": "token: synthetic-stable-token\nfuture: &unused {self: *unused}\n",
     "paths": [
       "/token"
     ],
     "expected": {
       "/token": "synthetic-stable-token"
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "unknown-duplicate-subtree",
@@ -152,15 +142,13 @@
     ],
     "expected": {
       "/token": "synthetic-stable-token"
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "null-slice-elements",
-    "yaml": "token: synthetic-stable-token\nvoice:\n  whisper:\n    hallucination_phrases: [null, 00123, ~, TRUE, 'null', '', 0xFF]\nsubscriptions:\n  claude:\n    - id: work\n      profile_owned_keys: [null, 00123, TRUE, ~, 'null']\n      default_wins_keys: [null, theme]\n",
+    "yaml": "token: synthetic-stable-token\nsubscriptions:\n  claude:\n    - id: work\n      profile_owned_keys: [null, 00123, TRUE, ~, 'null']\n      default_wins_keys: [null, theme]\n",
     "paths": [
       "/token",
-      "/voice/whisper/hallucination_phrases",
       "/subscriptions"
     ],
     "expected": {
@@ -179,27 +167,8 @@
           }
         ]
       },
-      "/token": "synthetic-stable-token",
-      "/voice/whisper/hallucination_phrases": [
-        "00123",
-        "TRUE",
-        "null",
-        "",
-        "0xFF"
-      ]
-    },
-    "saved_has_hallucination_phrases": true
-  },
-  {
-    "name": "all-null-string-list",
-    "yaml": "token: synthetic-stable-token\nvoice: {whisper: {hallucination_phrases: [null, ~]}}\n",
-    "paths": [
-      "/voice/whisper/hallucination_phrases"
-    ],
-    "expected": {
-      "/voice/whisper/hallucination_phrases": null
-    },
-    "saved_has_hallucination_phrases": false
+      "/token": "synthetic-stable-token"
+    }
   },
   {
     "name": "legacy-session-order-scalars",
@@ -217,8 +186,7 @@
         7,
         -2
       ]
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "integer-numeric-forms",
@@ -236,8 +204,7 @@
       "/Log/max_size_mb": 83,
       "/Log/session_max_size_mb": 7,
       "/Log/session_retention_days": 1000
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "integer-legacy-invalid-octal-falls-back-float",
@@ -247,8 +214,7 @@
     ],
     "expected": {
       "/Hub/Port": 8
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "boolean-legacy-and-explicit",
@@ -262,8 +228,7 @@
       "/Hub/OpenBrowser": false,
       "/Log/compress": true,
       "/Log/enabled": true
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "boolean-null-leaves-existing-default",
@@ -273,12 +238,11 @@
     ],
     "expected": {
       "/Hub/OpenBrowser": true
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "anchor-scalars-use-destination-type",
-    "yaml": "future: \u0026value 0123\ntoken: *value\nauth_cookie_secret: *value\nhub: {port: *value}\n",
+    "yaml": "future: &value 0123\ntoken: *value\nauth_cookie_secret: *value\nhub: {port: *value}\n",
     "paths": [
       "/token",
       "/auth_cookie_secret",
@@ -288,23 +252,21 @@
       "/Hub/Port": 83,
       "/auth_cookie_secret": "0123",
       "/token": "0123"
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "anchor-strings-with-nan",
-    "yaml": "future: \u0026value .nan\ntoken: *value\n",
+    "yaml": "future: &value .nan\ntoken: *value\n",
     "paths": [
       "/token"
     ],
     "expected": {
       "/token": ".nan"
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "mapping-merge-explicit-wins",
-    "yaml": "token: synthetic-stable-token\ndefaults: \u0026defaults {port: 0123, open_browser: false, future: .nan}\nhub: {\u003c\u003c: *defaults, port: 48888}\n",
+    "yaml": "token: synthetic-stable-token\ndefaults: &defaults {port: 0123, open_browser: false, future: .nan}\nhub: {<<: *defaults, port: 48888}\n",
     "paths": [
       "/Hub/Port",
       "/Hub/OpenBrowser"
@@ -312,12 +274,11 @@
     "expected": {
       "/Hub/OpenBrowser": false,
       "/Hub/Port": 48888
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "mapping-merge-sequence-first-wins",
-    "yaml": "token: synthetic-stable-token\nfirst: \u0026first {port: 0123, open_browser: false}\nsecond: \u0026second {port: 49999, open_browser: true}\nhub: {\u003c\u003c: [*first, *second]}\n",
+    "yaml": "token: synthetic-stable-token\nfirst: &first {port: 0123, open_browser: false}\nsecond: &second {port: 49999, open_browser: true}\nhub: {<<: [*first, *second]}\n",
     "paths": [
       "/Hub/Port",
       "/Hub/OpenBrowser"
@@ -325,12 +286,11 @@
     "expected": {
       "/Hub/OpenBrowser": false,
       "/Hub/Port": 83
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "mapping-merge-later-position",
-    "yaml": "token: synthetic-stable-token\ndefaults: \u0026defaults {port: 0123, open_browser: false}\nhub: {port: 48888, \u003c\u003c: *defaults}\n",
+    "yaml": "token: synthetic-stable-token\ndefaults: &defaults {port: 0123, open_browser: false}\nhub: {port: 48888, <<: *defaults}\n",
     "paths": [
       "/Hub/Port",
       "/Hub/OpenBrowser"
@@ -338,12 +298,11 @@
     "expected": {
       "/Hub/OpenBrowser": false,
       "/Hub/Port": 48888
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "anchor-sequence-and-tolerant-profile",
-    "yaml": "token: synthetic-stable-token\nkeys: \u0026keys [00123, null, TRUE, {}, theme]\nsubscriptions:\n  claude:\n    - id: 00123\n      profile_owned_keys: *keys\n      default_wins_keys: *keys\n      enabled: invalid\n      future: {[x,y]: .nan}\n",
+    "yaml": "token: synthetic-stable-token\nkeys: &keys [00123, null, TRUE, {}, theme]\nsubscriptions:\n  claude:\n    - id: 00123\n      profile_owned_keys: *keys\n      default_wins_keys: *keys\n      enabled: invalid\n      future: {[x,y]: .nan}\n",
     "paths": [
       "/subscriptions"
     ],
@@ -366,8 +325,7 @@
           }
         ]
       }
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "custom-providers-historical-scalars",
@@ -399,8 +357,7 @@
           "id": "bad"
         }
       ]
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "tolerant-malformed-optional-sections",
@@ -416,8 +373,7 @@
       "/subscriptions": null,
       "/token": "synthetic-stable-token",
       "/user_prefs/session_order": null
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "duplicate-top-level-known",
@@ -426,8 +382,7 @@
       "/token"
     ],
     "expected": null,
-    "rejected": true,
-    "saved_has_hallucination_phrases": false
+    "rejected": true
   },
   {
     "name": "duplicate-top-level-unknown",
@@ -436,8 +391,7 @@
       "/token"
     ],
     "expected": null,
-    "rejected": true,
-    "saved_has_hallucination_phrases": false
+    "rejected": true
   },
   {
     "name": "malformed-known-int-quoted",
@@ -446,8 +400,7 @@
       "/token"
     ],
     "expected": null,
-    "rejected": true,
-    "saved_has_hallucination_phrases": false
+    "rejected": true
   },
   {
     "name": "malformed-known-int-tag",
@@ -456,8 +409,7 @@
       "/token"
     ],
     "expected": null,
-    "rejected": true,
-    "saved_has_hallucination_phrases": false
+    "rejected": true
   },
   {
     "name": "malformed-known-string-tag",
@@ -466,8 +418,7 @@
       "/token"
     ],
     "expected": null,
-    "rejected": true,
-    "saved_has_hallucination_phrases": false
+    "rejected": true
   },
   {
     "name": "malformed-known-string-map",
@@ -476,8 +427,7 @@
       "/token"
     ],
     "expected": null,
-    "rejected": true,
-    "saved_has_hallucination_phrases": false
+    "rejected": true
   },
   {
     "name": "malformed-known-bool-quoted-true",
@@ -486,8 +436,7 @@
       "/token"
     ],
     "expected": null,
-    "rejected": true,
-    "saved_has_hallucination_phrases": false
+    "rejected": true
   },
   {
     "name": "malformed-known-nan-int",
@@ -496,8 +445,7 @@
       "/token"
     ],
     "expected": null,
-    "rejected": true,
-    "saved_has_hallucination_phrases": false
+    "rejected": true
   },
   {
     "name": "malformed-known-map-key",
@@ -506,18 +454,16 @@
       "/token"
     ],
     "expected": null,
-    "rejected": true,
-    "saved_has_hallucination_phrases": false
+    "rejected": true
   },
   {
     "name": "malformed-merge-target",
-    "yaml": "token: synthetic-stable-token\nhub: {\u003c\u003c: [scalar]}\n",
+    "yaml": "token: synthetic-stable-token\nhub: {<<: [scalar]}\n",
     "paths": [
       "/token"
     ],
     "expected": null,
-    "rejected": true,
-    "saved_has_hallucination_phrases": false
+    "rejected": true
   },
   {
     "name": "malformed-syntax",
@@ -526,8 +472,7 @@
       "/token"
     ],
     "expected": null,
-    "rejected": true,
-    "saved_has_hallucination_phrases": false
+    "rejected": true
   },
   {
     "name": "first-document-only",
@@ -539,8 +484,7 @@
     "expected": {
       "/Hub/Port": 48888,
       "/token": "synthetic-stable-token"
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "timestamp-tags-valid",
@@ -552,8 +496,7 @@
     "expected": {
       "/auth_cookie_secret": "2026-10-03T04:50:00Z",
       "/token": "2026-2-3"
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "timestamp-tag-malformed",
@@ -562,8 +505,7 @@
       "/token"
     ],
     "expected": null,
-    "rejected": true,
-    "saved_has_hallucination_phrases": false
+    "rejected": true
   },
   {
     "name": "session-order-complex-key-discards-list",
@@ -573,8 +515,7 @@
     ],
     "expected": {
       "/user_prefs/session_order": null
-    },
-    "saved_has_hallucination_phrases": false
+    }
   },
   {
     "name": "custom-null-pointer-elements",
@@ -597,7 +538,6 @@
           }
         ]
       }
-    },
-    "saved_has_hallucination_phrases": false
+    }
   }
 ]

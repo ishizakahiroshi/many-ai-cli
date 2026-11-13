@@ -997,24 +997,6 @@ fn launcher_delivery_target_channel_contract_and_hash_readback() {
     for asset in ["web/dist/index.html", "rust/assets/launcher/ui/index.html"] {
         manifest.embedded_assets.push(make(asset.into()));
     }
-    assert!(
-        manifest.validate().is_err(),
-        "missing verified runtime input must block packaging"
-    );
-    for name in [
-        "vcomp140.dll",
-        "msvcp140.dll",
-        "vcruntime140.dll",
-        "vcruntime140_1.dll",
-    ] {
-        manifest.runtimes.push(RuntimeArtifact {
-            target: Target::WindowsX64,
-            identity: "synthetic-runtime".into(),
-            license: "synthetic-license".into(),
-            verification: "synthetic-only, no real signature claim".into(),
-            file: make(format!("runtime/{name}")),
-        });
-    }
     manifest.validate().unwrap();
     manifest.oracle = "21d0bc7935a2c4696fb89ccff2e324157a528c2d".into();
     assert!(

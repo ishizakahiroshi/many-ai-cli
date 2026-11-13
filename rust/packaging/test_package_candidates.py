@@ -48,8 +48,6 @@ class PackageCandidateTests(unittest.TestCase):
                 "launcher_ui_input_sha256": "e" * 64,
                 "generated_web_asset_inputs": [{"path": "index.html", "sha256": "c" * 64}],
                 "binaries": binaries, "third_party_notices": notices,
-                "windows_runtime": {"source_sha": self.source, "embedded_in": "many-ai-cli.exe",
-                                    "embedded_bytes_verified": True} if goos == "windows" else None,
             }
             self.receipts[suffix] = receipt
             self.write_receipt(suffix)
@@ -289,8 +287,8 @@ class PackageCandidateTests(unittest.TestCase):
             path.write_bytes(original)
             self.assertFalse(self.output.exists())
 
-    def test_missing_runtime_failed_inputs_and_release_version_refused(self):
-        for field, value in (("windows_runtime", None), ("packaging_input_exit_code", 1), ("version", "1.0.0")):
+    def test_failed_inputs_and_release_version_refused(self):
+        for field, value in (("packaging_input_exit_code", 1), ("version", "1.0.0")):
             original = self.receipts["windows-x64"][field]
             self.receipts["windows-x64"][field] = value
             self.write_receipt("windows-x64")

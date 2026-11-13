@@ -28,7 +28,6 @@ pub const STATIC_PATHS: &[&str] = &[
     "/icons/",
     "/manifest.webmanifest",
     "/sw.js",
-    "/whisper-recorder-worklet.js",
     "/i18n.js",
     "/i18n/",
     "/vendor/",

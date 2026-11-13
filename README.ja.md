@@ -112,7 +112,7 @@ NVIDIA API の trial 利用は、別途適用される subscription がない限
 - **軽量オーケストレーション API**: 指揮者セッションが子 AI セッションを spawn し、`~/.many-ai-cli/orchestration/<id>/board.md` を共有、既定で git worktree に隔離して並行作業させる
 - **ファイル / 画像添付**: ファイルや画像の paste / D&D からローカル保存し、セッションへパスを inject
 - **生ログの参照ショートカット**: セッションの生ログ画面から、フルパスをコピーしたり、保存フォルダを OS のファイルマネージャで開いたりできる
-- **音声入力**: ブラウザ内蔵認識またはローカル Whisper でプロンプトを入力（Windows x64 では Whisper 管理インストール対応）
+- **音声入力**: ブラウザ内蔵認識でプロンプトを入力
 - **PWA + opt-in Web Push**: Hub をローカル Web アプリとしてインストールし、Settings で明示的に有効化した場合だけ承認待ち通知を受け取る
 - **作業終了通知**: デスクトップ通知と通知音は、承認待ちだけでなくセッションが作業を終えて入力待ちに戻ったときにも鳴る。セッションカードのベルで個別にミュートでき、Settings で全体を OFF にもできる
 - **承認検出パターン profile**: GitHub から同期する公式 trigger phrase と、ユーザー編集用 custom profile を分離
@@ -180,7 +180,6 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 - **ローカル限定**: Hub は `127.0.0.1` のみに bind。`many-ai-cli` 自身はテレメトリを送信しません
 - **リモートアクセス保護**: 設定の「リモートアクセス保護」から、token と認証 cookie を一括再生成する**全アクセス失効**（紛失時のキルスイッチ）、Hub 自身が開いた画面とこの PC の many-ai-cli のコマンド・launcher 以外のすべての接続に求める**任意 PIN**（既定 OFF・ロックアウト付き。socat やリバースプロキシなどの中継を通しても外れない）、**新規デバイスの接続と、PIN の連続ミスでロックがかかったときの通知**が使えます
   - PIN の期限切れ・ログアウトでは、その PIN セッションを使う遠隔画面を切断します。PIN の変更・有効化・解除では既存の遠隔画面を切断するため、接続し直して必要な認証を行ってください。実行中の AI・端末セッションとローカル画面は維持します。Hub が受理済みの入力は完了を待ってから画面を閉じ、失効後の新しい入力と画面データの送信を拒否します。
-  - Hub 経由の Whisper 音声は、アップロード完了後の認識開始直前にも認証を確認します。受信中に権限が失効した要求は認識前に拒否し、すでに始まった認識は完了を許します。
 - **1 つの CLI に複数のサブスクリプション**: 7 つの CLI を 1 つの Hub に。Claude / Codex / Grok / opencode は契約を足して同時に使えます。設定 → Usageには Claude / Codex / Grok のプロファイル別残量が出ます（下記参照）
 
 ## 1 つの CLI に複数のサブスクリプション
@@ -1134,31 +1133,23 @@ Hub UI の入力欄に音声でテキストを入力できます。
 
 ### エンジンの使い分け
 
-- **Whisper（ローカル）** — 音声データを外部サービスへ送りたくない人向け。録音は Hub 経由でローカルの whisper.cpp サーバに渡され、外には出ません（Hub は `voice.whisper.server_url` に localhost の `http://` アドレスしか受け付けません）。精度はモデルと CPU 性能次第。
 - **ブラウザ内蔵** — Chrome / Edge の Web Speech API。**音声データは Google / Microsoft の認識サーバへ送信されます**。精度・反応速度は良好。プライバシーより精度・手軽さを優先する場面向け。
 - **スマホからの利用** — Hub の音声入力エンジンを使わず、**スマホ OS の音声入力 / IME**（iPhone の場合は `Gboard` 等のサードパーティ IME も含む）を使う選択肢もあります。クラウド処理である点はブラウザ内蔵と同じですが、スマホは IME 経由のほうが反応が良いことが多いです。
 
-要するに「音声を外に出したくない → Whisper」「精度・手軽さ優先 → ブラウザ内蔵 or スマホ IME」で選び分けてください。
+要するに「精度・手軽さ優先 → ブラウザ内蔵 or スマホ IME」です。音声を外に出したくない場合は音声入力を `OFF` にして、キーボードで入力してください。
 
 ### 使い方
 
-1. 設定パネル → **音声入力** で認識エンジン（`OFF` / `ブラウザ内蔵` / `Whisper（ローカル）`）を選択
+1. 設定パネル → **音声入力** で認識エンジン（`OFF` / `ブラウザ内蔵`）を選択
 2. 🎤 ボタンをクリック、または `Alt+V`（macOS: `Option+V`）で録音開始
 3. マイクに向かって話す
-4. ブラウザ内蔵では認識テキストが随時挿入される。Whisper では停止後に変換され、結果が入力欄へ挿入される
+4. 認識テキストが随時入力欄へ挿入される
 5. 入力欄の内容を確認して `Enter` で送信
 
 > **ブラウザ内蔵**: Chrome / Edge（Web Speech API）
-> **Whisper（ローカル）**: ブラウザで録音した WAV を Hub 経由で Whisper サーバへ送信。Windows x64 の Hub では設定パネルから whisper.cpp server とモデルを `~/.many-ai-cli/whisper/` にインストール・起動できます。その他の環境では手動で Whisper 互換サーバを起動し、`voice.whisper.server_url` を設定してください。
 > 初回使用時にマイクへのアクセス許可が必要です。
 
-> ⚠️ **プライバシー注意**: ブラウザ内蔵認識では、録音された音声は **ブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます**。Whisper はローカル処理です。Hub は `voice.whisper.server_url` に `http://127.0.0.1:...` / `http://localhost:...` のような localhost の `http://` アドレスしか受け付けません。管理インストーラーは whisper.cpp を GitHub Releases から、モデルを Hugging Face から取得します。詳細は「セキュリティ → 外部への通信について」と [`docs/manual_whisper.md`](docs/manual_whisper.md) を参照してください。
-
-### Whisper サーバ推奨設定
-
-Whisper は無音や環境音で定型文を幻覚することがあります。Hub UI 側では、ほぼ無音の録音を送信前に破棄し、「ご視聴ありがとうございました」「チャンネル登録」など既知の幻覚句が結果全体と一致した場合だけ破棄します。
-
-サーバ側でも、利用する whisper.cpp / Whisper 互換サーバの VAD / no-speech フィルタを有効化してください。whisper.cpp を使う場合は、そのビルドの現行ドキュメントに従って Silero VAD モデルを指定し、temperature は低め（決定的）にする構成を推奨します。Hub は OpenAI 互換 `/v1/audio/transcriptions` を先に試し、未対応なら `/inference` にフォールバックします。
+> ⚠️ **プライバシー注意**: ブラウザ内蔵認識では、録音された音声は **ブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます**。Hub は音声を受け取りません。詳細は「セキュリティ → 外部への通信について」を参照してください。
 
 ### 自動送信トリガー
 
@@ -1172,7 +1163,7 @@ Whisper は無音や環境音で定型文を幻覚することがあります。
 
 ### 終了検知の待ち時間
 
-設定パネル → **音声入力** で「終了検知の待ち時間」を変更できます。これはブラウザ内蔵認識だけの設定です。Chrome の音声認識が無音で自動終了した後でも、直近の発話から指定秒数以内なら認識を再開します。Whisper はバッチ認識のため、この設定は使いません。
+設定パネル → **音声入力** で「終了検知の待ち時間」を変更できます。これはブラウザ内蔵認識だけの設定です。Chrome の音声認識が無音で自動終了した後でも、直近の発話から指定秒数以内なら認識を再開します。
 
 ### トラブルシューティング
 
@@ -1186,7 +1177,6 @@ Whisper は無音や環境音で定型文を幻覚することがあります。
 
 設定パネル → **音声入力** の「診断」ボタンで症状の確認とログのコピーができます。
 
-Whisper で `Whisper サーバがインストールされていません` / `Whisper サーバが設定されていません` / `接続できません` が出る場合は、Windows x64 の Hub なら **設定パネル → 音声入力 → インストール** を実行し、それ以外では `~/.many-ai-cli/config.yaml` の `voice.whisper.server_url` と手動起動した Whisper サーバを確認してください。管理サーバのログは `~/.many-ai-cli/whisper/whisper-server.log` に出力されます。
 
 ---
 
@@ -1210,15 +1200,6 @@ hub:
 ollama:
   base_url: ""              # 空 = http://localhost:11434。別ホストの Ollama を使う場合は例: http://<host-ip>:11434
 
-voice:
-  whisper:
-    managed: false          # true = Hub がローカル whisper.cpp server を管理
-    model: "small"            # 既定。高性能 CPU / GPU サーバなら large-v3-turbo-q5_0 も選べる
-    server_url: ""          # 例: http://127.0.0.1:8080（managed では自動設定）
-    server_port: 0          # 0 = 自動採番
-    request_path: ""        # 空 = /v1/audio/transcriptions → /inference の順で試行
-    language: "ja"          # ja / en / auto など
-    timeout_seconds: 60
 
 log:                        # hub.log のローテーション設定（サイズ基準）
   enabled: true
@@ -1247,7 +1228,7 @@ token: ""                   # 空 = 起動時にランダム生成（再起動�
 
 `user_prefs:`（D2）はブラウザの localStorage ではなくサーバ側に保存されるため、ポート変更（例: WSL ランチャーが 47777 から 47877 へ移る）でも維持されます。
 
-音声入力の認識エンジン（`OFF` / `ブラウザ内蔵` / `Whisper`）だけは端末ごとに自然な設定のため localStorage に保存され、`user_prefs` では同期しません。PC はブラウザ内蔵、iPhone は Whisper のように使い分けできます。
+音声入力の認識エンジン（`OFF` / `ブラウザ内蔵`）だけは端末ごとに自然な設定のため localStorage に保存され、`user_prefs` では同期しません。端末ごとに選べます。
 
 初回ロード時、ブラウザはサーバから D2 の値をミラーします。以降の変更は localStorage（キャッシュ）とサーバの両方へ同時に書き込まれます。既存の localStorage 値は初回に自動でサーバへ反映されます。
 
@@ -1496,8 +1477,7 @@ Grok セッションでは、生成された子は親自身のセッションフ
 - **NVIDIA NIM のモデルカタログと接続試験（Hub 本体の通信 / opt-in のみ）**: NVIDIA NIM を設定している場合（上記の [NVIDIA NIM trial route](#nvidia-nim-trial-routeopencode-専用) 参照）、Hub は NVIDIA の `/v1/models` endpoint を呼び、モデルピッカーの一覧取得と設定画面の接続試験に使います。推論そのものは proxy されず、OpenCode から NVIDIA の Chat Completions endpoint へ直接送られます。
 - **Web Push 通知（Hub 本体の通信 / opt-in のみ）**: プッシュ通知を有効にした場合、Hub は暗号化された Web Push request をブラウザベンダーの push サービスへ HTTPS 送信します。承認 payload には OS 通知表示に必要なセッション ID / 名前、provider、承認質問・文脈の短い抜粋が含まれます。Workflow 完了 payload はセッション名と agent 集計件数だけです。Hub URL token、journal の result 本文、agent ID は含めません。VAPID 鍵と購読情報は `~/.many-ai-cli/push_store.json` にローカル保存されます。SSH トンネルが切れていても通知配送自体は届く場合がありますが、通知から Hub を開くにはトンネルと Hub に到達できる必要があります。
 - **Jev によるプロンプト評価（Hub 本体の通信 / opt-in のみ）**: Hub の環境に `TYPESAFE_API_KEY` があり、このブラウザで評価をオンにした場合だけ、評価ボタンを押すとプロンプトの文を最大 4096 バイト `api.typesafe.ai` へ送ります。TypeSafe 側でキーに課金されることがあります。結果は表示だけで、どの AI を動かすかは変えません。
-- **音声入力（使用時のみ）**: ブラウザ内蔵認識は Web Speech API を使用しており、Chrome / Edge では **マイク音声がブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます**。Whisper モードでは音声が Hub へ送られ、Hub が `voice.whisper.server_url` の Whisper サーバへ中継します。Hub は `voice.whisper.server_url` に localhost の `http://` アドレスしか受け付けないため、Whisper の音声はこの端末の中で処理されます。「音声入力」節の注意書きも参照。
-- **Whisper 管理インストール（Windows x64 Hub / opt-in のみ）**: **設定パネル → 音声入力 → インストール** を押した場合だけ、Hub は whisper.cpp の Windows x64 release archive を GitHub Releases から、選択した ggml モデルを Hugging Face から `~/.many-ai-cli/whisper/` へ HTTPS ダウンロードします。release archive は展開前に SHA-256 を照合します。公開ハッシュ未設定のモデルは HTTPS ダウンロードとして扱い、UI ではハッシュ未検証として表示します。
+- **音声入力（使用時のみ）**: ブラウザ内蔵認識は Web Speech API を使用しており、Chrome / Edge では **マイク音声がブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます**。Hub 自身は音声を受け取らず、保存もしません。「音声入力」節の注意書きも参照。
 - **wrap 対象 CLI の API 通信（CLI 自身の通信）**: ラップ対象である Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI / opencode / Command Code 自身は、それぞれのバックエンドと HTTPS で直接通信します。公式 5 CLI はそれぞれのベンダー API（Anthropic / OpenAI / GitHub / Cursor / xAI）、opencode と Command Code は設定したモデルプロバイダー（opencode は NVIDIA NIM を含む。上記参照）です。`many-ai-cli` は PTY の入出力をローカル WebSocket で中継するだけで、これらの API 通信を傍受・記録・プロキシすることはありません。元の CLI のネットワーク挙動がそのまま適用されます。
 
 ### ⚠️ wrap 対象 CLI のデータ保持について
@@ -1697,7 +1677,7 @@ docker compose up -d
 docker compose up -d && rm HOLD
 ```
 
-Docker をローカルビルドするときは、作業中のホームディレクトリではなく clean checkout から開始してください。Dockerfile 専用の ignore 設定が、Docker daemon へ送る前に認証情報、AI エージェントの状態、worktree メタデータ、ログ、transcript などのローカル作業物を除外します。Dockerfile は公式 base image を manifest digest で固定し、Whisper の source commit と Cursor archive の SHA-256 を展開前に検証し、provider CLI は追跡した exact version の npm lockfile からインストールします。これは Docker build input の境界を守るための検査であり、Ubuntu apt は live 更新、Cursor の hash は公式 HTTPS byte に対する literal TOFU pin のため、bit-for-bit の完全再現を意味しません。
+Docker をローカルビルドするときは、作業中のホームディレクトリではなく clean checkout から開始してください。Dockerfile 専用の ignore 設定が、Docker daemon へ送る前に認証情報、AI エージェントの状態、worktree メタデータ、ログ、transcript などのローカル作業物を除外します。Dockerfile は公式 base image を manifest digest で固定し、Cursor archive の SHA-256 を展開前に検証し、provider CLI は追跡した exact version の npm lockfile からインストールします。これは Docker build input の境界を守るための検査であり、Ubuntu apt は live 更新、Cursor の hash は公式 HTTPS byte に対する literal TOFU pin のため、bit-for-bit の完全再現を意味しません。
 
 保持している入力 pin の検査は静的な保護です。成功しても、コンテナビルド・実行時の互換性・v0.10.0 の Docker サポートが成立した証拠にはなりません。
 

@@ -129,9 +129,6 @@
     "voice": {},
     "workflow_completion_notify": {}
   },
-  "voice": {
-    "whisper": {}
-  },
   "workflow": {
     "journal_enabled": false,
     "subagent_tree_enabled": false,

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "b305cfecd809f3f51486d55a33d6cef32f665d5e",
+    "commit": "fc47da623a10c8247b72836d662ddb773c8c3bbe",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2104,
-    "analyzed": 1637,
+    "discovered": 2085,
+    "analyzed": 1623,
     "unresolved": 15,
     "unknown": 0,
-    "unclaimed": 452,
+    "unclaimed": 447,
     "skipped_by_config": 0
   },
   "files": [
@@ -260,14 +260,6 @@
     },
     {
       "path": ".github/workflows/validate.yml",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.yml'"
-    },
-    {
-      "path": ".github/workflows/whisper-binaries.yml",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -1403,14 +1395,6 @@
     },
     {
       "path": "docs/manual_slash_commands_update.md",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.md'"
-    },
-    {
-      "path": "docs/manual_whisper.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -21483,57 +21467,6 @@
       "reason": "no adapter claims '.json'"
     },
     {
-      "path": "rust/assets/whisperruntime/fetch_windows_runtime.ps1",
-      "adapter": "powershell",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "requires -Version 5.1"
-        },
-        "authentication": {
-          "state": "out_of_scope"
-        },
-        "authorization": {
-          "state": "out_of_scope"
-        },
-        "reads": {
-          "state": "out_of_scope"
-        },
-        "writes": {
-          "state": "out_of_scope"
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "rust/assets/whisperruntime/files/windows-amd64/.gitignore",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '(no extension)'"
-    },
-    {
-      "path": "rust/assets/whisperruntime/files/windows-amd64/.gitkeep",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '(no extension)'"
-    },
-    {
-      "path": "rust/assets/whisperruntime/files/windows-amd64/README.md",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.md'"
-    },
-    {
       "path": "rust/build.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -21802,33 +21735,6 @@
       "unresolved": []
     },
     {
-      "path": "rust/packaging/prepare_windows_runtime.ps1",
-      "adapter": "powershell",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "requires -Version 5.1"
-        },
-        "authentication": {
-          "state": "out_of_scope"
-        },
-        "authorization": {
-          "state": "out_of_scope"
-        },
-        "reads": {
-          "state": "out_of_scope"
-        },
-        "writes": {
-          "state": "out_of_scope"
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
       "path": "rust/packaging/source-notices.json",
       "adapter": null,
       "status": "unclaimed",
@@ -22047,35 +21953,6 @@
         "summary": {
           "state": "value",
           "value": "Offline safety/selection/failure contracts; no Cargo, Windows runtime or network."
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "rust/packaging/test_windows_runtime.py",
-      "adapter": "python",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "Synthetic runtime receipt/embedded-byte checks; no DLL download or execution."
         },
         "authentication": {
           "state": "not_configured"
@@ -27926,151 +27803,6 @@
       "unresolved": []
     },
     {
-      "path": "rust/src/application/whisper.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "Actual managed Whisper installer and process owner over explicit runtime paths."
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "rust/src/application/whisper/archive.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "Flatten only manifest-selected regular files into a pinned private directory."
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "rust/src/application/whisper/manifest.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "Fixed Go download definitions; no inferred URL, hash or binary platform."
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "rust/src/application/whisper/native.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "Address-pinned downloads and contained, retained native server process."
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "rust/src/application/whisper/tests.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
       "path": "rust/src/application/wrapped_spawn.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -32569,35 +32301,6 @@
       "unresolved": []
     },
     {
-      "path": "rust/src/hub/transport/voice_auth_tests.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "HTTP-N07: real transport/router authority, gated uploads and a loopback-only"
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
       "path": "rust/src/hub/update_routes.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -32656,93 +32359,6 @@
       "unresolved": []
     },
     {
-      "path": "rust/src/hub/voice_routes.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "Raw audio proxy: each dial is pinned to validated loopback addresses."
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "rust/src/hub/voice_routes/path_observer.go",
-      "adapter": "go",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "Synthetic stdlib-only oracle; no provider, network, config or home access."
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "rust/src/hub/voice_routes/precision_tests.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
       "path": "rust/src/hub/websocket.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -32750,35 +32366,6 @@
         "summary": {
           "state": "value",
           "value": "WebSocket framing and callers. Core owns sessions, input FIFO, authorization"
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "rust/src/hub/whisper_routes.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "Authenticated managed Whisper HTTP operations; install survives its waiter."
         },
         "authentication": {
           "state": "not_configured"
@@ -34394,6 +33981,35 @@
         "summary": {
           "state": "value",
           "value": "The one place a Hub-launched Git process is planned."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/process/image_under.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Which running processes were started from an executable under a directory."
         },
         "authentication": {
           "state": "not_configured"
@@ -49138,37 +48754,7 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "音声入力エンジン（vtype-core）の生成。ブラウザ内蔵認識と Whisper の 2 エンジンを 1 か所で作り、"
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "none_observed",
-          "value": []
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "web/src/app/voice-whisper.ts",
-      "adapter": "tsjs",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "--- ESM imports (generated) ---"
+          "value": "音声入力エンジン（vtype-core）の生成。ブラウザ内蔵認識（SpeechRecognition）だけを作る。"
         },
         "authentication": {
           "state": "not_configured"
@@ -50769,36 +50355,6 @@
         "summary": {
           "state": "none_observed",
           "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "none_observed",
-          "value": []
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "web/src/whisper-recorder-worklet.js",
-      "adapter": "tsjs",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "Whisper 録音用 AudioWorklet プロセッサ。"
         },
         "authentication": {
           "state": "not_configured"

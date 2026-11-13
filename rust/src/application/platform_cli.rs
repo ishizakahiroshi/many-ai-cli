@@ -302,6 +302,31 @@ impl PlatformCli {
             "以下を削除します:\n  設定・ログ: {}",
             self.locations.config.display()
         )?;
+        let whisper = self.locations.config.join("whisper");
+        if let Ok(meta) = std::fs::symlink_metadata(&whisper) {
+            writeln!(
+                out,
+                "  廃止した Whisper の残り（設定・ログの中）: {}",
+                whisper.display()
+            )?;
+            // A whisper-server an older version left running keeps its exe
+            // locked on Windows, so the folder removal would fail. Show the
+            // PIDs; never terminate them (same stance as `doctor`).
+            if meta.is_dir()
+                && let Ok(pids) = crate::process::image_under::processes_under(&whisper)
+                && !pids.is_empty()
+            {
+                let list = pids
+                    .iter()
+                    .map(u32::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                writeln!(
+                    out,
+                    "  注意: 旧版の Whisper サーバーが動いたままです（PID {list}）。先にタスクマネージャーなどで終了してください。動いたままだとこのフォルダを消せません"
+                )?;
+            }
+        }
         if purge {
             writeln!(out, "  バイナリ:   {}", self.locations.executable.display())?;
         }

@@ -316,20 +316,6 @@
       "enabled": true
     }
   },
-  "voice": {
-    "whisper": {
-      "hallucination_phrases": [
-        "synthetic-日本語"
-      ],
-      "language": "synthetic-日本語",
-      "managed": true,
-      "model": "synthetic-日本語",
-      "request_path": "synthetic-日本語",
-      "server_port": 17,
-      "server_url": "synthetic-日本語",
-      "timeout_seconds": 17
-    }
-  },
   "workflow": {
     "journal_enabled": true,
     "subagent_tree_enabled": true,

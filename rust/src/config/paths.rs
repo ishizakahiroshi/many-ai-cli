@@ -66,7 +66,6 @@ pub enum Resource {
     Temporary,
     Profiles,
     Subscriptions,
-    Models,
     Runtime,
     Update,
     UsageHooks,
@@ -89,9 +88,6 @@ pub enum Resource {
     ApprovalRules,
     ApprovalRuleTargets,
     Delegation,
-    Whisper,
-    WhisperBin,
-    WhisperTemporary,
     NotifySound,
     Avatar,
 }
@@ -302,9 +298,6 @@ impl RuntimePaths {
                 return base.join("any-ai-cli.db");
             }
             Resource::Update => return self.log_dir.join("cli-updates"),
-            Resource::Models => return self.root.join("whisper").join("models"),
-            Resource::WhisperBin => return self.root.join("whisper").join("bin"),
-            Resource::WhisperTemporary => return self.root.join("whisper").join("tmp"),
             Resource::ProviderBackups => return self.root.join("backups").join("providers"),
             _ => {}
         }
@@ -319,7 +312,6 @@ impl RuntimePaths {
             Resource::Temporary => "tmp",
             Resource::Profiles => "subscriptions",
             Resource::Subscriptions => "subscriptions",
-            Resource::Models => unreachable!("handled above"),
             Resource::Runtime => "hub-runtime.json",
             Resource::Update => "update",
             Resource::UsageHooks => "tmp",
@@ -342,9 +334,6 @@ impl RuntimePaths {
             Resource::ApprovalRules => "approval-rules.md",
             Resource::ApprovalRuleTargets => "approval-rule-targets.json",
             Resource::Delegation => "delegation.md",
-            Resource::Whisper => "whisper",
-            Resource::WhisperBin => unreachable!("handled above"),
-            Resource::WhisperTemporary => unreachable!("handled above"),
             Resource::NotifySound => "notify_sound_custom.bin",
             Resource::Avatar => "user_avatar.bin",
         };
@@ -465,7 +454,6 @@ mod tests {
             Resource::Temporary,
             Resource::Profiles,
             Resource::Subscriptions,
-            Resource::Models,
             Resource::Runtime,
             Resource::Update,
             Resource::UsageHooks,
@@ -528,10 +516,6 @@ mod tests {
         assert_eq!(
             p.resource(Resource::Runtime),
             home.join(".many-ai-cli/hub-runtime.json")
-        );
-        assert_eq!(
-            p.resource(Resource::Models),
-            home.join(".many-ai-cli/whisper/models")
         );
         let plain = RuntimePaths::production_launcher(&home, true, false, Some(&win)).unwrap();
         assert_eq!(

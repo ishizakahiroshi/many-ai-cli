@@ -97,7 +97,6 @@ export const REQUIRED_DOCKERIGNORE_PATTERNS = Object.freeze([
 
 const SHA256_RE = /^sha256:[0-9a-f]{64}$/;
 const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
-const SHA1_HEX_RE = /^[0-9a-f]{40}$/;
 const EXACT_VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 function normalizeNewlines(value) {
@@ -193,22 +192,6 @@ function checkDangerousInstallPaths(lines, errors) {
   }
 }
 
-function checkWhisperPin(lines, errors) {
-  const tag = parseArg(lines, 'WHISPER_CPP_TAG');
-  if (tag !== 'v1.8.6') errors.push(`WHISPER_CPP_TAG must remain v1.8.6, got ${tag || '(missing)'}`);
-  const commit = parseArg(lines, 'WHISPER_CPP_COMMIT');
-  if (!commit || !SHA1_HEX_RE.test(commit)) {
-    errors.push('WHISPER_CPP_COMMIT must be a 40-character lowercase commit SHA');
-  }
-  const joined = lines.join('\n');
-  if (!/checkout\s+--detach[^\n]*WHISPER_CPP_COMMIT/i.test(joined)) {
-    errors.push('Whisper source is not checked out at WHISPER_CPP_COMMIT with --detach');
-  }
-  if (!/rev-parse\s+HEAD\)[^\n]*WHISPER_CPP_COMMIT/i.test(joined)) {
-    errors.push('Whisper HEAD is not compared with WHISPER_CPP_COMMIT');
-  }
-}
-
 function checkCursorPins(lines, errors) {
   const version = parseArg(lines, 'CURSOR_AGENT_VERSION');
   if (!version || version !== '2026.06.03-0bbb28e') {
@@ -237,7 +220,6 @@ export function checkDockerfileInputs(source) {
   checkFromPins(lines, errors);
   checkCopyFromPins(lines, errors);
   checkDangerousInstallPaths(lines, errors);
-  checkWhisperPin(lines, errors);
   checkCursorPins(lines, errors);
 
   const providerArgs = {

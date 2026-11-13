@@ -423,3 +423,64 @@ pub(super) fn handoff(owner: &Diagnostics, cfg: &Config) -> Check {
         Check::new("handoff", "OK", msg, "")
     }
 }
+/// Leftovers of the retired Whisper voice engine: the folder an older
+/// many-ai-cli wrote under `~/.many-ai-cli/whisper/` (server, models, bin, tmp)
+/// and a `whisper-server` it left running. Read-only: nothing is deleted or
+/// ended here; the fix text says how. Links are reported but never followed.
+pub(super) fn whisper_leftover(owner: &Diagnostics) -> Vec<Check> {
+    let root = owner.deps.paths.root();
+    let path = root.join("whisper");
+    let name = "residue";
+    let info = match std::fs::symlink_metadata(&path) {
+        Ok(info) => info,
+        Err(_) => return vec![],
+    };
+    let mut checks = vec![];
+    if info.file_type().is_symlink() || !info.is_dir() {
+        checks.push(Check::new(
+            name,
+            "WARN",
+            format!(
+                "廃止した Whisper の置き場所 {} がリンクまたはファイルとして残っています（中身は調べていません）",
+                path.display()
+            ),
+            "リンク先は消えません。不要ならこのリンクだけを削除してください",
+        ));
+        return checks;
+    }
+    let size = Dir::open(&path)
+        .and_then(|dir| walk(&dir, LOG_WALK_DEPTH))
+        .map(|(count, size)| format!("{count} files, {}", human_bytes(size)))
+        .unwrap_or_else(|_| "容量を確認できません".into());
+    checks.push(Check::new(
+        name,
+        "WARN",
+        format!(
+            "廃止した Whisper の残りがあります: {}（{size}。旧版が取得したサーバー・モデルなど）",
+            path.display()
+        ),
+        &format!(
+            "もう使われません。Hub を止めてから、このフォルダを削除してください: {}（many-ai-cli uninstall でも消えます）",
+            path.display()
+        ),
+    ));
+    if let Ok(pids) = crate::process::image_under::processes_under(&path)
+        && !pids.is_empty()
+    {
+        let list = pids
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        checks.push(Check::new(
+            name,
+            "WARN",
+            format!(
+                "旧版が起動した Whisper のサーバーが動いたままです（PID {list}。{} 配下の実行ファイル）",
+                path.display()
+            ),
+            "many-ai-cli は終了させません。タスクマネージャーなどで上の PID を終了してから、フォルダを削除してください",
+        ));
+    }
+    checks
+}

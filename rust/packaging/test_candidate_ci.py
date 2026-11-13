@@ -198,17 +198,16 @@ class CandidateReceiptTests(unittest.TestCase):
         with patch.object(ci, 'ROOT', root), patch.object(ci, 'capture', side_effect=capture), patch.object(ci, 'run', side_effect=run):
             with patch.object(ci.shutil, 'which', return_value='synthetic-rc.exe'):
                 with patch.object(ci, 'windows_file_version', side_effect=lambda path: {'FileVersion': '1.0.0', 'ProductVersion': '1.0.0', 'OriginalFilename': path.name}):
-                    with patch.object(ci, 'windows_runtime_receipt', return_value={'source_sha': 'a' * 40, 'embedded_in': 'many-ai-cli.exe', 'embedded_bytes_verified': True}):
-                        with patch.dict(os.environ, {'MANY_AI_REVIEW_HEAD_SHA': 'a' * 40,
-                                                     'CARGO_TARGET_DIR': str(root / 'rust/target')}), patch.object(sys, 'argv', argv), patch.object(ctypes, 'WinDLL', return_value=api, create=True):
-                            if moved_tag:
-                                with self.assertRaisesRegex(ValueError, 'tag commit does not match'):
-                                    ci.main()
-                            elif smoke != 'passed':
-                                with self.assertRaisesRegex(SystemExit, 'runtime smoke failed'):
-                                    ci.main()
-                            else:
+                    with patch.dict(os.environ, {'MANY_AI_REVIEW_HEAD_SHA': 'a' * 40,
+                                                 'CARGO_TARGET_DIR': str(root / 'rust/target')}), patch.object(sys, 'argv', argv), patch.object(ctypes, 'WinDLL', return_value=api, create=True):
+                        if moved_tag:
+                            with self.assertRaisesRegex(ValueError, 'tag commit does not match'):
                                 ci.main()
+                        elif smoke != 'passed':
+                            with self.assertRaisesRegex(SystemExit, 'runtime smoke failed'):
+                                ci.main()
+                        else:
+                            ci.main()
         return root / '.rust-candidate-artifacts' / suffix, calls
 
     def test_release_native_mock_stamps_before_every_compile_and_binds_evidence(self):

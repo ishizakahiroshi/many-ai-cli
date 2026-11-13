@@ -75,6 +75,15 @@ Release artifacts are published at
   and the spacing around the progress band and the input box is 16px tighter,
   36px in total. Phone-width and touch screens are unchanged.
 
+### Removed
+
+- **The Whisper voice engine is removed.** The local whisper.cpp server, its
+  managed install, and the `/api/voice/transcribe` and `/api/whisper*` routes
+  are gone. Voice input now uses the browser's built-in recognition only, and
+  Settings → Voice offers `OFF` or `Browser`. If you used Whisper, a leftover
+  `~/.many-ai-cli/whisper/` is reported by `many-ai-cli doctor` and removed by
+  `many-ai-cli uninstall`; `voice.whisper.*` keys in `config.yaml` are ignored.
+
 ### Fixed
 
 - **Finished work is no longer reported as failed because of a word in its

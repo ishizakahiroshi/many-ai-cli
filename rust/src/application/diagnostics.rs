@@ -109,7 +109,6 @@ impl Diagnostics {
             local::token(self, &cfg),
             local::acl(self),
             self.ollama(&cfg, cancel).await,
-            self.whisper(&cfg, cancel).await,
             self.nvidia(&cfg),
             self.tailscale(&cfg, cancel).await,
             local::logs(self, &cfg),
@@ -117,6 +116,7 @@ impl Diagnostics {
             local::handoff(self, &cfg),
         ];
         checks.extend(supplemental::residue(self, &cfg, cancel).await);
+        checks.extend(local::whisper_leftover(self));
         checks.extend(supplemental::approval_instructions(self, &cfg));
         checks.extend(self.command_code(cancel).await);
         checks.extend(supplemental::subscriptions(self, &cfg, cancel).await);
@@ -218,39 +218,6 @@ impl Diagnostics {
                 "Ollama の起動状態と base_url を確認してください",
             ),
             Ok(_) => Check::new("Ollama", "OK", "Ollama に接続できます", ""),
-        }
-    }
-    async fn whisper(&self, cfg: &Config, cancel: &Cancellation) -> Check {
-        let url = cfg.voice.whisper.server_url.trim();
-        if url.is_empty() {
-            return Check::new(
-                "Whisper",
-                "WARN",
-                "Whisper サーバーは未設定です",
-                "音声入力を使う場合は Settings で Whisper を設定してください",
-            );
-        }
-        if url::Url::parse(url).is_err() {
-            return Check::new(
-                "Whisper",
-                "WARN",
-                "server_url が不正",
-                "voice.whisper.server_url を確認してください",
-            );
-        }
-        match self
-            .deps
-            .io
-            .http_status(url, Duration::from_secs(2), cancel)
-            .await
-        {
-            Err(_) => Check::new(
-                "Whisper",
-                "WARN",
-                "Whisper に接続できません",
-                "Whisper runtime を起動するか server_url を確認してください",
-            ),
-            Ok(_) => Check::new("Whisper", "OK", "Whisper endpoint に接続できます", ""),
         }
     }
     fn nvidia(&self, cfg: &Config) -> Check {

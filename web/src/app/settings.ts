@@ -6,7 +6,7 @@ import { uiButtonClass, uiIconHtml, uiModalClass } from './ui-components.js';
 import { getNotificationVolume, setNotificationVolume, STORAGE_NOTIFY_SOUND_VOLUME_KEY } from './notification-volume.js';
 import { apiFetch, escapeHtml, showToast, ti18n, token, withAssetTicket } from './util.js';
 import { httpsUrlOrEmpty } from './url-detect.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_6_KEY, STORAGE_QUICK_CMD_7_KEY, STORAGE_QUICK_CMD_8_KEY, STORAGE_QUICK_CMD_9_KEY, STORAGE_QUICK_CMD_10_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_QUICK_CMD_6_SHOW_KEY, STORAGE_QUICK_CMD_7_SHOW_KEY, STORAGE_QUICK_CMD_8_SHOW_KEY, STORAGE_QUICK_CMD_9_SHOW_KEY, STORAGE_QUICK_CMD_10_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_6_KEY, STORAGE_QUICK_CMD_7_KEY, STORAGE_QUICK_CMD_8_KEY, STORAGE_QUICK_CMD_9_KEY, STORAGE_QUICK_CMD_10_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_QUICK_CMD_6_SHOW_KEY, STORAGE_QUICK_CMD_7_SHOW_KEY, STORAGE_QUICK_CMD_8_SHOW_KEY, STORAGE_QUICK_CMD_9_SHOW_KEY, STORAGE_QUICK_CMD_10_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, openProjectKey, sessions, terminals } from './state.js';
 import { getDoneSummary } from './done-summary.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
@@ -2130,25 +2130,9 @@ initSettingsInformationArchitecture();
   const buttons = Array.from(group.querySelectorAll('[data-voice-engine]'));
   const descEl = document.getElementById('voice-engine-desc');
   const browserUnavailableEl = document.getElementById('voice-browser-unavailable-note');
-  const whisperBlock = document.getElementById('voice-whisper-settings');
-  const whisperAutoSubmitEl = document.getElementById('voice-whisper-auto-submit');
-  const whisperAutoStopEl = document.getElementById('voice-whisper-auto-stop');
-  const whisperManagedPanel = document.getElementById('voice-whisper-managed-panel');
-  const whisperManagedStateEl = document.getElementById('voice-whisper-managed-state');
-  const whisperModelSelect = document.getElementById('voice-whisper-model-select');
-  const whisperInstallProgress = document.getElementById('voice-whisper-install-progress');
-  const whisperInstallProgressBar = document.getElementById('voice-whisper-install-progress-bar');
-  const whisperManagedNote = document.getElementById('voice-whisper-managed-note');
-  const whisperInstallBtn = document.getElementById('voice-whisper-install-btn');
-  const whisperStartBtn = document.getElementById('voice-whisper-start-btn');
-  const whisperStopBtn = document.getElementById('voice-whisper-stop-btn');
-  const whisperUninstallBtn = document.getElementById('voice-whisper-uninstall-btn');
   const graceRow = document.getElementById('voice-grace-row');
   const graceDesc = document.getElementById('voice-grace-desc');
   const diagnosticsPanel = document.getElementById('voice-diagnostics-panel');
-  let whisperPollTimer = null;
-  let lastWhisperStatus = null;
-  let whisperUserModelChoice = null;
 
   function browserRecognitionSupported() {
     return detectSupport().supported;
@@ -2156,7 +2140,6 @@ initSettingsInformationArchitecture();
 
   function descriptionKey(engine) {
     if (engine === 'off') return 'settings_voice_engine_desc_off';
-    if (engine === 'whisper') return 'settings_voice_engine_desc_whisper';
     return 'settings_voice_engine_desc_browser';
   }
 
@@ -2178,136 +2161,11 @@ initSettingsInformationArchitecture();
       descEl.textContent = t(key);
     }
     if (browserUnavailableEl) browserUnavailableEl.hidden = browserSupported;
-    if (whisperBlock) whisperBlock.hidden = engine !== 'whisper';
-    // 「終了検知の待ち時間」は browser / whisper の両方で表示する（OFF のときだけ隠す）。
-    // 値（秒）は両エンジン共通の voice.grace_seconds。Whisper では無音→自動確定までの待ち時間として実効、
+    // 「終了検知の待ち時間」は OFF のときだけ隠す。値（秒）は voice.grace_seconds。
     // Chrome 内蔵では Web Speech API の制約からブラウザ側の終了判定が優先される。
     if (graceRow) graceRow.hidden = engine === 'off';
     if (graceDesc) graceDesc.hidden = engine === 'off';
     if (diagnosticsPanel) diagnosticsPanel.hidden = engine !== 'browser';
-    if (whisperAutoSubmitEl) {
-      whisperAutoSubmitEl.checked = localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY) === '1';
-    }
-    if (whisperAutoStopEl) {
-      whisperAutoStopEl.checked = localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_STOP_KEY) !== '0';
-    }
-    if (engine === 'whisper') {
-      refreshWhisperStatus();
-    } else {
-      setWhisperPolling(false);
-    }
-  }
-
-  function formatWhisperBytes(bytes) {
-    const n = Number(bytes || 0);
-    if (!Number.isFinite(n) || n <= 0) return '';
-    if (n >= 1024 * 1024 * 1024) return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
-    if (n >= 1024 * 1024) return `${Math.round(n / 1024 / 1024)} MB`;
-    return `${Math.round(n / 1024)} KB`;
-  }
-
-  function setWhisperPolling(active) {
-    if (whisperPollTimer) {
-      clearInterval(whisperPollTimer);
-      whisperPollTimer = null;
-    }
-    if (active) {
-      whisperPollTimer = setInterval(refreshWhisperStatus, 2000);
-    }
-  }
-
-  function renderWhisperStatus(data) {
-    lastWhisperStatus = data;
-    if (!data || !whisperManagedPanel) return;
-    whisperManagedPanel.hidden = false;
-    if (whisperModelSelect && Array.isArray(data.models)) {
-      const current = whisperModelSelect.value || data.model || '';
-      whisperModelSelect.innerHTML = '';
-      for (const model of data.models) {
-        const opt = document.createElement('option');
-        opt.value = model.id;
-        const size = formatWhisperBytes(model.size_bytes);
-        opt.textContent = size ? `${model.label} (${size})` : model.label;
-        opt.title = model.quality || '';
-        whisperModelSelect.appendChild(opt);
-      }
-      if (whisperUserModelChoice && whisperUserModelChoice === data.model) {
-        whisperUserModelChoice = null;
-      }
-      whisperModelSelect.value = (whisperUserModelChoice && !data.running)
-        ? whisperUserModelChoice
-        : (data.model || current);
-    }
-    const install = data.install || {};
-    const installing = !!install.installing;
-    const percent = Math.round((Number(install.progress || 0) * 100));
-    if (whisperInstallProgress) whisperInstallProgress.hidden = !installing;
-    if (whisperInstallProgressBar) whisperInstallProgressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
-
-    let stateText = '';
-    if (!data.supported) {
-      stateText = t('settings_voice_whisper_status_unsupported');
-    } else if (installing) {
-      stateText = t('settings_voice_whisper_status_installing')
-        .replace('{phase}', install.phase || '')
-        .replace('{percent}', String(percent));
-    } else if (install.error) {
-      stateText = t('settings_voice_whisper_status_error').replace('{error}', install.error);
-    } else if (data.running) {
-      stateText = t('settings_voice_whisper_status_running');
-    } else if (data.installed) {
-      stateText = t('settings_voice_whisper_status_installed');
-    } else {
-      stateText = t('settings_voice_whisper_status_not_installed');
-    }
-    if (whisperManagedStateEl) whisperManagedStateEl.textContent = stateText;
-    if (document.getElementById('voice-whisper-status')) {
-      const statusEl = document.getElementById('voice-whisper-status');
-      statusEl.textContent = data.server_url || stateText;
-      statusEl.dataset.i18n = '';
-    }
-    const supported = !!data.supported;
-    if (whisperInstallBtn) whisperInstallBtn.disabled = !supported || installing;
-    if (whisperStartBtn) whisperStartBtn.disabled = !supported || installing || !data.installed || data.running;
-    if (whisperStopBtn) whisperStopBtn.disabled = !supported || installing || !data.running;
-    if (whisperUninstallBtn) whisperUninstallBtn.disabled = !supported || installing || (!data.installed && !data.managed);
-    if (whisperModelSelect) whisperModelSelect.disabled = !supported || installing || data.running;
-    if (whisperManagedNote) {
-      if (!supported) {
-        whisperManagedNote.textContent = data.manual_only_message || t('settings_voice_whisper_status_unsupported');
-      } else if (data.installed) {
-        whisperManagedNote.textContent = t('settings_voice_whisper_note_ready').replace('{path}', data.install_dir || '');
-      } else {
-        whisperManagedNote.textContent = t('settings_voice_whisper_note_download');
-      }
-    }
-    setWhisperPolling(installing && getVoiceEngine() === 'whisper');
-  }
-
-  async function refreshWhisperStatus() {
-    if (!whisperManagedPanel) return;
-    try {
-      const res = await apiFetch('/api/whisper/status');
-      if (!res.ok) return;
-      renderWhisperStatus(await res.json());
-    } catch (_) {}
-  }
-
-  async function postWhisperAction(action, body = null) {
-    const init: any = { method: 'POST' };
-    if (body) {
-      init.headers = { 'Content-Type': 'application/json' };
-      init.body = JSON.stringify(body);
-    }
-    const res = await apiFetch(`/api/whisper/${action}`, init);
-    let data = null;
-    try { data = await res.json(); } catch (_) {}
-    if (!res.ok) {
-      const detail = data?.detail || data?.error || `${action} failed`;
-      throw new Error(detail);
-    }
-    renderWhisperStatus(data);
-    return data;
   }
 
   buttons.forEach((button) => {
@@ -2323,50 +2181,6 @@ initSettingsInformationArchitecture();
     });
   });
 
-  whisperModelSelect?.addEventListener('change', () => {
-    whisperUserModelChoice = whisperModelSelect.value || null;
-  });
-  whisperAutoSubmitEl?.addEventListener('change', () => {
-    localStorage.setItem(STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, whisperAutoSubmitEl.checked ? '1' : '0');
-  });
-  whisperAutoStopEl?.addEventListener('change', () => {
-    localStorage.setItem(STORAGE_VOICE_WHISPER_AUTO_STOP_KEY, whisperAutoStopEl.checked ? '1' : '0');
-  });
-  whisperInstallBtn?.addEventListener('click', async () => {
-    try {
-      await postWhisperAction('install', { model: whisperModelSelect?.value || lastWhisperStatus?.model || 'small' });
-      showToast(t('settings_voice_whisper_action_done'), whisperInstallBtn);
-    } catch (err) {
-      showToast(String(err?.message || err), whisperInstallBtn);
-    }
-  });
-  whisperStartBtn?.addEventListener('click', async () => {
-    try {
-      const model = whisperModelSelect?.value || '';
-      await postWhisperAction('start', model ? { model } : null);
-      showToast(t('settings_voice_whisper_action_done'), whisperStartBtn);
-    } catch (err) {
-      showToast(String(err?.message || err), whisperStartBtn);
-    }
-  });
-  whisperStopBtn?.addEventListener('click', async () => {
-    try {
-      await postWhisperAction('stop');
-      showToast(t('settings_voice_whisper_action_done'), whisperStopBtn);
-    } catch (err) {
-      showToast(String(err?.message || err), whisperStopBtn);
-    }
-  });
-  whisperUninstallBtn?.addEventListener('click', async () => {
-    if (!window.confirm(t('settings_voice_whisper_uninstall'))) return;
-    try {
-      await postWhisperAction('uninstall');
-      showToast(t('settings_voice_whisper_action_done'), whisperUninstallBtn);
-    } catch (err) {
-      showToast(String(err?.message || err), whisperUninstallBtn);
-    }
-  });
-
   document.addEventListener('voiceengine:changed', renderVoiceEngineSettings);
   renderVoiceEngineSettings();
 })();
@@ -2376,7 +2190,6 @@ initSettingsInformationArchitecture();
   const sel = document.getElementById('voice-grace-select');
   if (!sel) return;
   // 旧来は「2 を既定値リセット対象として消す」移行処理があったが、
-  // この設定が Whisper の無音→自動確定にも実効するようになり 2 秒が標準的な既定値になったため撤去。
   const saved = localStorage.getItem(STORAGE_VOICE_GRACE_KEY);
   const v = saved == null ? DEFAULT_VOICE_GRACE_SEC : parseInt(saved, 10);
   const clamped = Number.isFinite(v) ? Math.max(0, Math.min(5, v)) : DEFAULT_VOICE_GRACE_SEC;
@@ -4500,20 +4313,7 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
     const engine = getVoiceEngine();
     if (engine === 'off') return 'OFF';
     const grace = localStorage.getItem(STORAGE_VOICE_GRACE_KEY) || String(DEFAULT_VOICE_GRACE_SEC);
-    if (engine === 'browser') {
-      return `${_summaryLabel('ブラウザ内蔵', 'browser')}・${grace}${_summaryLabel('秒', 's')}`;
-    }
-    // whisper（サブ設定はエンジン=whisper のときだけ要約に出す）
-    const autoStop = localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_STOP_KEY) !== '0';
-    const autoSubmit = localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY) === '1';
-    const modelSel = document.getElementById('voice-whisper-model-select') as HTMLSelectElement | null;
-    const model = modelSel?.value || '';
-    const parts = ['Whisper'];
-    if (model) parts.push(model);
-    if (autoStop) parts.push(_summaryLabel('自動停止', 'auto-stop'));
-    if (autoSubmit) parts.push(_summaryLabel('自動送信', 'auto-submit'));
-    parts.push(`${grace}${_summaryLabel('秒', 's')}`);
-    return parts.join('・');
+    return `${_summaryLabel('ブラウザ内蔵', 'browser')}・${grace}${_summaryLabel('秒', 's')}`;
   },
 
   trigger: () => {

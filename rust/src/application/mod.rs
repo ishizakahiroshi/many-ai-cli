@@ -45,6 +45,5 @@ pub mod subscriptions;
 pub mod tray;
 pub mod usage_hooks;
 pub mod usage_relay;
-pub mod whisper;
 
 pub mod relay_program;

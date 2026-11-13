@@ -112,7 +112,7 @@ The install-status list (first-run screen, and Settings → AI CLI integrations)
 - **Light orchestration API** — a conductor session can spawn child AI sessions, share `~/.many-ai-cli/orchestration/<id>/board.md`, and keep child work isolated in git worktrees by default
 - **File and image attach** — paste or drag-and-drop images and files into the terminal session
 - **Raw-log shortcuts** — from a session's raw transcript, copy its full path or open the containing folder in the system file manager
-- **Voice input** — dictate prompts through Browser recognition or local Whisper, with Windows x64 managed Whisper install
+- **Voice input** — dictate prompts through the browser's built-in speech recognition
 - **PWA + opt-in Web Push** — install the Hub as a local web app and receive approval notifications after explicitly enabling push in Settings
 - **Finished-run notifications** — desktop notification and sound also fire when a session finishes a run and goes back to idle, not only for approvals; mute it per session with the bell on its card, or turn it off entirely in Settings
 - **Approval pattern profiles** — keep official remote-synced trigger phrases separate from local custom edits
@@ -179,7 +179,6 @@ A relay stops for a round limit, timeout, missing verdict or review file, blocke
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `many-ai-cli` itself
 - **Remote access protection** — Settings → "Remote access protection" offers a **Revoke all access** kill switch (regenerates the token and auth cookie when a device is lost), an **optional PIN** (off by default, with lockout) required for every connection except the dashboards the Hub opens itself and the many-ai-cli commands and launcher on this machine; a relay such as socat or a reverse proxy cannot skip it, and **notifications** when a new device connects or wrong PINs lock PIN entry
   - PIN expiry or logout disconnects remote screens using that PIN session. Changing, enabling, or disabling the PIN disconnects existing remote screens; reconnect and authenticate again as required. Running AI/terminal sessions and local screens stay connected. Input already accepted by the Hub finishes before the screen closes; new input and screen data stop when authorization expires.
-  - For Whisper audio uploaded through the Hub, authorization is checked again after upload and before transcription starts. A request that lost authorization is rejected before recognition; transcription already started may finish.
 - **Multiple subscriptions per provider** — seven CLIs in one Hub; Claude, Codex, Grok, and opencode can stack extra paid plans per session. The Settings → Usage view shows remaining quota per profile for Claude, Codex, and Grok (see below)
 
 ## Multiple subscriptions per provider
@@ -1198,31 +1197,23 @@ You can dictate text into the Hub UI input box.
 
 ### Choosing an engine
 
-- **Whisper (local)** — for users who do not want audio leaving the machine. The browser sends the recording through the Hub to a local whisper.cpp server, and nothing goes to a third-party service (the Hub accepts only a localhost `http://` address in `voice.whisper.server_url`). Accuracy depends on the model and CPU.
 - **Browser** — Chrome / Edge Web Speech API. **Audio is sent to Google / Microsoft recognition servers.** Fast and accurate; pick this when convenience and accuracy matter more than privacy.
 - **Smartphone usage** — instead of the Hub's voice engines, you can use the **phone OS's voice input or an IME** (on iPhone, third-party IMEs like `Gboard` are an option too). These are also cloud-based like the Browser engine, but the phone IME path is often more responsive on mobile.
 
-In short: "don't want audio leaving the machine → Whisper", "want convenience and accuracy → Browser or phone IME".
+In short: "want convenience and accuracy → Browser or phone IME". If you do not want audio leaving the machine, turn voice input `OFF` and type instead.
 
 ### How to use
 
-1. In Settings → Voice, choose a recognition engine (`OFF` / `Browser` / `Whisper (local)`)
+1. In Settings → Voice, choose a recognition engine (`OFF` / `Browser`)
 2. Click the 🎤 button or press `Alt+V` (macOS: `Option+V`) to start recording
 3. Speak into the microphone
-4. Browser mode inserts recognized text as you speak; Whisper mode transcribes after you stop and inserts the result into the input box
+4. Recognized text is inserted into the input box as you speak
 5. Review the input box and press `Enter` to send
 
 > **Browser**: Chrome / Edge (Web Speech API)
-> **Whisper (local)**: a WAV recorded in the browser is sent through the Hub to a Whisper server. On a Windows x64 Hub, Settings → Voice can install and run a whisper.cpp server and model under `~/.many-ai-cli/whisper/`. On other platforms, start a Whisper-compatible server yourself and set `voice.whisper.server_url`.
 > Microphone permission is required on first use.
 
-> ⚠️ **Privacy note**: In Browser mode, recorded audio is sent to the browser vendor's speech-recognition servers (Google / Microsoft). Whisper mode stays local: the Hub accepts only a localhost `http://` address such as `http://127.0.0.1:...` / `http://localhost:...` in `voice.whisper.server_url`. The managed installer downloads whisper.cpp from GitHub Releases and the model from Hugging Face. See "Security / Privacy → Outbound network traffic" and [Whisper setup](docs/manual_whisper.md).
-
-### Recommended Whisper server settings
-
-Whisper can hallucinate boilerplate phrases on silent or noisy audio. On the Hub UI side, near-silent recordings are discarded before sending, and known hallucination phrases are dropped only when they match the entire result.
-
-On the server side, enable the VAD / no-speech filtering of the whisper.cpp / Whisper-compatible server you use. For whisper.cpp, follow its current docs to specify a Silero VAD model and keep temperature low (deterministic). The Hub tries the OpenAI-compatible `/v1/audio/transcriptions` endpoint first and falls back to `/inference`.
+> ⚠️ **Privacy note**: In Browser mode, recorded audio is sent to the browser vendor's speech-recognition servers (Google / Microsoft). The Hub does not receive the audio. See "Security / Privacy → Outbound network traffic".
 
 ### Auto-submit trigger
 
@@ -1236,7 +1227,7 @@ The phrase itself is not sent to the PTY or the AI.
 
 ### End-of-speech wait time
 
-In Settings → Voice you can change the "end-of-speech wait time". This applies to Browser recognition only. Even after Chrome's recognition auto-stops on silence, it resumes recognition if you speak again within the configured number of seconds. Whisper is batch recognition, so this setting does not apply.
+In Settings → Voice you can change the "end-of-speech wait time". This applies to Browser recognition only. Even after Chrome's recognition auto-stops on silence, it resumes recognition if you speak again within the configured number of seconds.
 
 ### Troubleshooting
 
@@ -1250,7 +1241,6 @@ If Browser recognition stops responding (button press has no effect, or the micr
 
 Use **Settings → Voice → Diagnose** to identify the problem and copy a diagnostic log.
 
-For Whisper, `Whisper server is not installed` / `Whisper server is not configured` / `cannot connect` means either run **Settings → Voice → Install** on a Windows x64 Hub or configure `voice.whisper.server_url` to a manually started local server. The managed server log is written to `~/.many-ai-cli/whisper/whisper-server.log`.
 
 ---
 
@@ -1275,15 +1265,6 @@ hub:
 ollama:
   base_url: ""              # empty = http://localhost:11434. For another host, use e.g. http://<host-ip>:11434
 
-voice:
-  whisper:
-    managed: false          # true = Hub manages a local whisper.cpp server
-    model: "small"            # default; pick large-v3-turbo-q5_0 on a fast CPU / GPU server
-    server_url: ""          # e.g. http://127.0.0.1:8080 (auto-set in managed mode)
-    server_port: 0          # 0 = auto-pick
-    request_path: ""        # empty = try /v1/audio/transcriptions then /inference
-    language: "ja"          # ja / en / auto, etc.
-    timeout_seconds: 60
 
 log:                        # hub.log rotation (size-based)
   enabled: true
@@ -1312,7 +1293,7 @@ Settings are split into three categories:
 
 `user_prefs:` (D2) survives port changes (e.g. the WSL launcher shifting from 47777 to 47877) because it is stored server-side rather than in per-origin localStorage.
 
-Voice engine selection is the exception: `off` / `browser` / `whisper` stays in each browser's localStorage so a PC can keep Browser recognition while an iPhone uses Whisper.
+Voice engine selection is the exception: `off` / `browser` stays in each browser's localStorage so each device keeps its own choice.
 
 On first load the browser mirrors D2 values from the server. Subsequent changes are written to both localStorage (as a cache) and the server simultaneously. Any existing localStorage values are pushed to the server automatically on first run.
 
@@ -1561,8 +1542,7 @@ The new session's own board records which session it continues, and the two card
 - **NVIDIA NIM model catalog and connection check (Hub itself, opt-in only)** — When NVIDIA NIM is configured (see [NVIDIA NIM trial route](#nvidia-nim-trial-route-opencode-only) above), the Hub calls NVIDIA's `/v1/models` endpoint to populate the model picker and to run the Settings connection check. Inference itself is not proxied — OpenCode sends it directly to NVIDIA's Chat Completions endpoint.
 - **Web Push notifications (Hub itself, opt-in only)** — When Push notifications are enabled, the Hub sends encrypted Web Push requests to the browser vendor's push service over HTTPS. Approval payloads include the session ID/name, provider, and a short approval-question/context excerpt; workflow-completion payloads contain only the session name and aggregate agent count. They do **not** include the Hub URL token, journal result text, or agent IDs. VAPID keys and subscriptions are stored locally in `~/.many-ai-cli/push_store.json`. Notifications can be delivered while an SSH tunnel is down, but opening the Hub from the notification still requires the tunnel and Hub to be reachable.
 - **Jev prompt rating (Hub itself, opt-in only)** — Only when `TYPESAFE_API_KEY` is set in the Hub's environment and you turn the rating on in this browser, pressing the rating button sends up to 4096 bytes of the prompt text to `api.typesafe.ai`. TypeSafe may bill your key for it. The result is only displayed and does not change which AI runs.
-- **Voice input (only while in use)** — Browser mode uses the Web Speech API; in Chrome / Edge, **microphone audio is sent to the browser vendor's speech-recognition servers (Google / Microsoft)**. Whisper mode sends audio to the Hub and then to the configured Whisper server. The Hub accepts only a localhost `http://` address for `voice.whisper.server_url`, so Whisper audio is processed on this machine. See also the privacy note in the voice input section.
-- **Managed Whisper install (Windows x64 Hub, opt-in only)** — Clicking **Settings → Voice → Install** downloads a whisper.cpp Windows x64 release archive from GitHub Releases and the selected ggml model from Hugging Face into `~/.many-ai-cli/whisper/`. The release archive is SHA-256 verified before extraction; model entries without a published hash are downloaded over HTTPS and shown as hash-unverified in the UI.
+- **Voice input (only while in use)** — Browser mode uses the Web Speech API; in Chrome / Edge, **microphone audio is sent to the browser vendor's speech-recognition servers (Google / Microsoft)**. The Hub itself does not receive or store the audio. See also the privacy note in the voice input section.
 - **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI, opencode, Command Code) talk directly to their own backends over HTTPS — Anthropic, OpenAI, GitHub, Cursor, and xAI for the five official CLIs, and whichever model provider opencode or Command Code is configured to use (including NVIDIA NIM for opencode, see above). `many-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
 
 ### ⚠️ Data retention by wrapped CLIs
@@ -1765,7 +1745,7 @@ docker compose up -d
 docker compose up -d && rm HOLD
 ```
 
-For a local Docker build, start from a clean checkout rather than a working home directory. The per-Dockerfile ignore file excludes credentials, AI-agent state, worktree metadata, logs, transcripts, and other local artifacts before the build context is sent to Docker. The Dockerfile pins official base images by manifest digest, verifies the Whisper source commit and Cursor archive SHA-256 before extraction, and installs the provider CLIs from the tracked exact-version npm lockfile. These checks protect the build input boundary; they do not claim bit-for-bit reproducibility because Ubuntu apt updates remain live and the Cursor archive hash is a literal HTTPS TOFU pin.
+For a local Docker build, start from a clean checkout rather than a working home directory. The per-Dockerfile ignore file excludes credentials, AI-agent state, worktree metadata, logs, transcripts, and other local artifacts before the build context is sent to Docker. The Dockerfile pins official base images by manifest digest, verifies the Cursor archive SHA-256 before extraction, and installs the provider CLIs from the tracked exact-version npm lockfile. These checks protect the build input boundary; they do not claim bit-for-bit reproducibility because Ubuntu apt updates remain live and the Cursor archive hash is a literal HTTPS TOFU pin.
 
 The retained input-pin checks are static protection; passing them does not establish a successful container build, runtime compatibility or v0.10.0 Docker support.
 

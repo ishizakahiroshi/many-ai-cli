@@ -405,33 +405,6 @@
 
 .settings-inline-btn { width: auto; min-width: 54px; justify-content: center; text-align: center; white-space: nowrap; }
 
-.voice-whisper-managed-panel {
-  margin: 6px 14px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--panel);
-  overflow: hidden;
-}
-.voice-whisper-managed-panel[hidden] { display: none !important; }
-.voice-whisper-managed-panel .settings-row {
-  padding-left: 10px;
-  padding-right: 10px;
-}
-.whisper-install-progress {
-  height: 7px;
-  margin: 4px 10px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--bg);
-  overflow: hidden;
-  border: 1px solid var(--line);
-}
-.whisper-install-progress[hidden] { display: none !important; }
-.whisper-install-progress-bar {
-  height: 100%;
-  width: 0;
-  background: var(--accent);
-  transition: width 0.2s ease;
-}
 
 /* 節は常に開いた状態で、選ばれた 1 節だけが右ペインに出る（見出しは開閉ではなくペインの題名）。 */
 .settings-section { border-top: 1px solid var(--line); }
@@ -652,19 +625,6 @@ summary.settings-section-title::-webkit-details-marker { display: none; }
 .settings-segment-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
-}
-.voice-whisper-settings {
-  margin: 4px 14px 8px;
-  padding: 8px 0 6px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg) 72%, transparent);
-}
-.voice-whisper-settings[hidden] { display: none !important; }
-.voice-whisper-settings .settings-row,
-.voice-whisper-settings .settings-note {
-  padding-left: 10px;
-  padding-right: 10px;
 }
 .settings-effective-command {
   margin: 0 14px 8px;

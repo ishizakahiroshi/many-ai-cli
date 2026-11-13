@@ -137,11 +137,6 @@ def load_candidates(inputs, release_tag=None):
         evidence = (verified_entries(folder / "packaging-inputs", receipt.get("packaging_inputs"),
                                      PACKAGING_INPUTS, sizes=True) if release_tag else {})
         if goos == "windows":
-            runtime = receipt.get("windows_runtime")
-            if (not isinstance(runtime, dict) or runtime.get("source_sha") != source
-                    or runtime.get("embedded_in") != "many-ai-cli.exe"
-                    or runtime.get("embedded_bytes_verified") is not True):
-                raise ValueError("Windows embedded runtime evidence is missing")
             if release_tag:
                 resources = receipt.get("windows_resources")
                 if (not isinstance(resources, dict) or resources.get("version") != version

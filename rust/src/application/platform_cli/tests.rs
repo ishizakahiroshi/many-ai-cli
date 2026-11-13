@@ -452,6 +452,40 @@ async fn unix_setup_artifacts_have_source_targets_and_explicit_executable_modes(
 }
 
 #[test]
+fn native_uninstall_removes_retired_whisper_tree_without_following_links() {
+    let (_temp, owner, _) = fixture();
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(outside.path().join("retain.bin"), b"retained model").unwrap();
+    let whisper = owner.locations.config.join("whisper");
+    for (dir, file) in [
+        ("bin", "whisper-server"),
+        ("models", "ggml-base.bin"),
+        ("tmp", "a.wav"),
+    ] {
+        std::fs::create_dir_all(whisper.join(dir)).unwrap();
+        std::fs::write(whisper.join(dir).join(file), b"synthetic").unwrap();
+    }
+    let alias = whisper.join("models").join("linked");
+    #[cfg(windows)]
+    fixture_junction(outside.path(), &alias).unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(outside.path(), &alias).unwrap();
+    let native = native::NativePlatformIo {
+        actor: crate::application::diagnostics::NativeDiagnosticIo {
+            paths: owner.paths.clone(),
+            cwd: owner.paths.root().into(),
+            environment: vec![],
+        },
+    };
+    assert!(native.remove_data(&owner.locations.config).unwrap());
+    assert!(!whisper.exists());
+    assert_eq!(
+        std::fs::read(outside.path().join("retain.bin")).unwrap(),
+        b"retained model"
+    );
+}
+
+#[test]
 fn native_uninstall_removes_real_tree_preserves_link_target_and_reports_missing() {
     let (_temp, owner, _) = fixture();
     let outside = tempfile::tempdir().unwrap();

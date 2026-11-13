@@ -192,14 +192,13 @@ async fn real_checks_have_source_order_bounded_probes_and_disabled_profile_never
         .map(|c| c.name.as_str())
         .collect::<Vec<_>>();
     assert_eq!(
-        &names[..11],
+        &names[..10],
         &[
             "provider",
             "port",
             "token",
             "ACL",
             "Ollama",
-            "Whisper",
             "NVIDIA NIM",
             "Tailscale",
             "log",
@@ -518,6 +517,49 @@ fn audit_u52_log_size_counts_files_in_subdirectories_without_following_links() {
     assert_eq!(check.level, "OK", "{}", check.message);
     assert!(check.message.contains("3 files"), "{}", check.message);
 }
+#[tokio::test]
+async fn retired_whisper_folder_is_reported_with_size_and_absent_folder_reports_nothing() {
+    let f = fixture();
+    assert!(local::whisper_leftover(&f.doctor).is_empty());
+    let whisper = f.paths.root().join("whisper");
+    for (dir, file) in [("bin", "whisper-server"), ("models", "ggml-base.bin")] {
+        std::fs::create_dir_all(whisper.join(dir)).unwrap();
+        std::fs::write(whisper.join(dir).join(file), b"0123456789").unwrap();
+    }
+    #[cfg(unix)]
+    {
+        // A link out of the folder is neither followed nor counted.
+        let outside = f._temp.path().join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::write(outside.join("big.bin"), vec![b'x'; 4096]).unwrap();
+        std::os::unix::fs::symlink(&outside, whisper.join("linked")).unwrap();
+    }
+    let checks = local::whisper_leftover(&f.doctor);
+    assert_eq!(checks.len(), 1, "{checks:?}");
+    assert_eq!(checks[0].name, "residue");
+    assert_eq!(checks[0].level, "WARN");
+    assert!(
+        checks[0].message.contains("廃止した Whisper の残り"),
+        "{}",
+        checks[0].message
+    );
+    assert!(
+        checks[0].message.contains("2 files"),
+        "{}",
+        checks[0].message
+    );
+    assert!(checks[0].fix.contains("削除"), "{}", checks[0].fix);
+    // The full doctor run includes it, and deletes nothing.
+    let report = f.doctor.run(&Cancellation::default()).await.unwrap();
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|c| c.message.contains("廃止した Whisper の残り"))
+    );
+    assert!(whisper.join("bin/whisper-server").exists());
+}
+
 #[cfg(windows)]
 #[test]
 fn audit_u53_windows_doctor_reads_the_configuration_dacl() {
