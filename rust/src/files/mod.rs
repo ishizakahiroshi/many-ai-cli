@@ -151,7 +151,8 @@ impl FilesService {
             save_backup::handle(request, &self.paths)
         } else {
             let cwd = self.cwd(request, core);
-            let scope = scope::Scope::new(cwd, self.paths.clone());
+            let scope =
+                scope::Scope::new(cwd, self.paths.clone()).with_follow_links(!logical_remote);
             if method == "GET" {
                 self.read_handle(request, &scope, storage, logical_remote, workspace)
             } else {

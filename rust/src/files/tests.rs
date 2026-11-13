@@ -509,6 +509,27 @@ fn list_follows_a_directory_link_for_local_requests_only() {
         &Workspace(vec![]),
     ));
     assert_eq!(opened.status, 200, "open through the link: {opened:?}");
+    let save = |scope: &scope::Scope, text: &str| {
+        response(mutation::handle(
+            &request(
+                "/api/files-save",
+                json!({"path":link.join("inside.md"),"content":text}),
+            ),
+            scope,
+        ))
+    };
+    // 保存はリモート扱い（既定）では、リンク先が許可ルートの外なので拒否する。
+    let refused = save(&s, "remote");
+    assert_eq!(refused.status, 403, "remote save: {refused:?}");
+    assert_eq!(
+        fs::read(target.join("inside.md")).unwrap(),
+        b"# Inside\n\nbody"
+    );
+    // ローカル扱いでは、プロジェクト内のリンク越しの保存を通す。
+    let local_scope = s.clone().with_follow_links(true);
+    let saved = save(&local_scope, "saved");
+    assert_eq!(saved.status, 200, "local save: {saved:?}");
+    assert_eq!(fs::read(target.join("inside.md")).unwrap(), b"saved");
     let remote = names(true);
     assert!(!remote.iter().any(|n| n == "local"), "{remote:?}");
     assert!(!remote.iter().any(|n| n == "inside.md"), "{remote:?}");

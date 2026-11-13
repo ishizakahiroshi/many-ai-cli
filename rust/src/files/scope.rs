@@ -13,6 +13,8 @@ pub struct Scope {
     pub cwd: PathBuf,
     pub git_root: PathBuf,
     pub paths: RuntimePaths,
+    /// ローカル要求だけ true。プロジェクト内のジャンクション / シンボリックリンク越しの保存を許す。
+    pub follow_links: bool,
 }
 pub struct ReadGrant {
     pub path: PathBuf,
@@ -31,7 +33,12 @@ impl Scope {
             cwd,
             git_root,
             paths,
+            follow_links: false,
         }
+    }
+    pub fn with_follow_links(mut self, follow: bool) -> Self {
+        self.follow_links = follow;
+        self
     }
     pub fn write_roots(&self) -> Vec<PathBuf> {
         vec![self.cwd.clone(), self.git_root.clone()]
@@ -57,7 +64,15 @@ impl Scope {
         }
         let canonical = canonical(path).map_err(|e| super::io_error(e, "open_failed"))?;
         if !under_roots(&canonical, &self.write_roots()) {
-            return Err(err(403, "forbidden", "path is outside allowed roots"));
+            // プロジェクト内に置いたリンク（例: docs/local）越しの保存は、ローカル要求に限り許す。
+            // 元のパスがプロジェクト内で、リンク先が秘密らしいファイルでないときだけ。
+            let via_link = self.follow_links
+                && lexically_under_roots(path, &self.write_roots())
+                && !secret_denied(path, &self.paths)
+                && !secret_denied(&canonical, &self.paths);
+            if !via_link {
+                return Err(err(403, "forbidden", "path is outside allowed roots"));
+            }
         }
         if vcs_path(path) || vcs_path(&canonical) {
             return Err(err(
@@ -232,6 +247,14 @@ pub fn canonical(path: &Path) -> io::Result<PathBuf> {
         }
         Err(e) => Err(e),
     }
+}
+/// リンクを解決せず、パスの文字列だけでルートの下にあるかを見る（`docs/local` のようなリンクの入口判定用）。
+fn lexically_under_roots(path: &Path, roots: &[PathBuf]) -> bool {
+    let p = clean(path);
+    roots
+        .iter()
+        .filter(|r| !r.as_os_str().is_empty())
+        .any(|r| p.starts_with(clean(r)))
 }
 pub fn under_roots(path: &Path, roots: &[PathBuf]) -> bool {
     let Ok(p) = canonical(path) else {
