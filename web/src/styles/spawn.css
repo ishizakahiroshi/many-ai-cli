@@ -432,6 +432,10 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
    spawn-input の見た目を引き継ぎつつ、複数行入力向けに resize と行間だけ足す。 */
 .spawn-initial-prompt-row { display: flex; flex-direction: column; gap: var(--space-1); }
 .spawn-field-label { font-size: var(--fs-sm); color: var(--muted); }
+/* シェルだけ出す「添付の送り先」。ラベルが長いので、select を下に置く。 */
+.spawn-remote-attach-row { display: flex; flex-direction: column; gap: var(--space-1, 4px); }
+.spawn-remote-attach-row[hidden] { display: none !important; }
+.spawn-remote-attach-row .spawn-select { min-width: 0; }
 .spawn-textarea {
   width: 100%;
   box-sizing: border-box;

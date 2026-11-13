@@ -7,6 +7,24 @@ import { appendComposerAttachment, captureComposerOwner, inputEl, isComposerOwne
 import { pushMessage } from './chat-history.js';
 import { openLightbox } from './lightbox.js';
 import { isFetchableRemotePath, isRemoteViewablePath, openRemoteFileView } from './remote-file-view.js';
+import { STORAGE_SPAWN_KEY, setUserPref } from './user-prefs.js';
+import {
+  MAX_PROFILE_NAME,
+  MAX_REMOTE_PROFILES,
+  REMOTE_LAST_KEY,
+  REMOTE_PROFILES_KEY,
+  isValidProfileName,
+  isValidRemoteIdentity,
+  isValidRemoteTarget,
+  parseRemoteLast,
+  parseRemoteProfiles,
+  removeRemoteProfile,
+  resolveLaunchChoice,
+  serializeRemoteLast,
+  serializeRemoteProfiles,
+  upsertRemoteProfile,
+  type RemoteAttachProfile,
+} from './remote-attach-profiles.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -236,7 +254,58 @@ function setRemoteAttachTarget(sessionId: number, target: string, identity = '')
   const entries = loadRemoteTargets().filter((e) => e.key !== key);
   entries.push(target ? { key, target, ...(identity ? { identity } : {}) } : { key, target: '', local: true });
   storeRemoteTargets(entries);
+  // 新しいシェルを起動するときの「前回と同じ」に使う。ssh 先を決めたときだけ覚える（「このPCで読む」は覚えない）。
+  if (target) writeSpawnDefault(REMOTE_LAST_KEY, serializeRemoteLast({ target, identity }));
 }
+
+// ---- プロファイル・前回の送り先（user_prefs の spawn.defaults。Hub へ同期される） ----
+// spawn.defaults は文字列だけの表で、新規セッションのフォームが丸ごと書き戻す。
+// ここでは自分のキーだけを足し引きし、ほかのキーには触れない。
+
+function readSpawnDefaultsObject(): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_SPAWN_KEY) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function writeSpawnDefault(key: string, value: string): void {
+  setUserPref('spawn.defaults', { ...readSpawnDefaultsObject(), [key]: value });
+}
+
+function loadRemoteProfiles(): RemoteAttachProfile[] {
+  return parseRemoteProfiles(readSpawnDefaultsObject()[REMOTE_PROFILES_KEY]);
+}
+
+function storeRemoteProfiles(profiles: RemoteAttachProfile[]): void {
+  writeSpawnDefault(REMOTE_PROFILES_KEY, serializeRemoteProfiles(profiles));
+}
+
+/**
+ * 新しいシェルの最初の送り先を、起動フォームの選択どおりに決める。
+ * 指した先（前回・プロファイル）が無いときは何も決めず、最初の添付を送るときに聞く。
+ * 起動の応答の直後は、画面側にセッションがまだ載っていないことがあるので、少しだけ待って試す。
+ */
+function applyRemoteAttachLaunchChoice(sessionId: number, choice: string, attempt = 0): void {
+  if (!remoteTargetKey(sessionId)) {
+    if (attempt < 10) setTimeout(() => applyRemoteAttachLaunchChoice(sessionId, choice, attempt + 1), 200);
+    return;
+  }
+  if (!isRemoteAttachChoicePending(sessionId)) return; // 利用者が先に決めた分は上書きしない
+  const resolved = resolveLaunchChoice(choice, loadRemoteProfiles(), parseRemoteLast(readSpawnDefaultsObject()[REMOTE_LAST_KEY]));
+  if (resolved.kind === 'ask') return;
+  if (resolved.kind === 'local') setRemoteAttachTarget(sessionId, '');
+  else setRemoteAttachTarget(sessionId, resolved.target, resolved.identity);
+  syncRemoteAttachButton();
+}
+
+document.addEventListener('remote-attach-launch-choice', (event) => {
+  const detail = (event as CustomEvent<{ sessionId?: unknown; choice?: unknown }>).detail;
+  if (!detail || typeof detail.sessionId !== 'number' || typeof detail.choice !== 'string') return;
+  applyRemoteAttachLaunchChoice(detail.sessionId, detail.choice);
+});
 
 function recentRemoteTargets(): string[] {
   const seen = new Set<string>();
@@ -246,11 +315,8 @@ function recentRemoteTargets(): string[] {
   return [...seen];
 }
 
-// Hub 側（remote_attach.rs の validate_target）と同じ規則。ここでは送る前に打ち間違いを見せるためだけに使う。
-export function isValidRemoteTarget(target: string): boolean {
-  const host = target.startsWith('ssh://') ? target.slice('ssh://'.length) : target;
-  return host.length > 0 && target.length <= 255 && !host.startsWith('-') && /^[A-Za-z0-9._@:[\]-]+$/.test(host);
-}
+// Hub 側（remote_attach.rs の validate_target）と同じ規則。実体は remote-attach-profiles.ts。
+export { isValidRemoteTarget };
 
 export const attachRemoteBtn = document.getElementById('attach-remote-btn') as HTMLButtonElement | null;
 let remoteAttachPopup: HTMLDivElement | null = null;
@@ -358,6 +424,109 @@ function openRemoteAttachPopup(anchor: HTMLButtonElement, sessionId: number, opt
   identityHint.className = 'agent-log-popup-title remote-attach-hint';
   identityHint.textContent = t('remote_attach_identity_hint');
 
+  // ---- プロファイル（名前を付けて残す送り先。起動フォームの選択肢にもなる） ----
+  const profileSelect = document.createElement('select');
+  profileSelect.className = 'ui-input remote-attach-input';
+  profileSelect.setAttribute('aria-label', t('remote_profile_select_placeholder'));
+  const nameLabel = document.createElement('label');
+  nameLabel.className = 'agent-log-popup-title remote-attach-hint';
+  nameLabel.textContent = t('remote_profile_name_label');
+  nameLabel.htmlFor = 'remote-attach-profile-name';
+  const nameInput = document.createElement('input');
+  nameInput.id = 'remote-attach-profile-name';
+  nameInput.type = 'text';
+  nameInput.className = 'ui-input remote-attach-input';
+  nameInput.placeholder = t('remote_profile_name_placeholder');
+  nameInput.maxLength = MAX_PROFILE_NAME;
+  nameInput.spellcheck = false;
+  nameInput.autocomplete = 'off';
+  nameInput.setAttribute('aria-label', t('remote_profile_name_label'));
+
+  const fillProfiles = (selectedName = '') => {
+    const profiles = loadRemoteProfiles();
+    profileSelect.replaceChildren();
+    const first = document.createElement('option');
+    first.value = '';
+    first.textContent = t('remote_profile_select_placeholder');
+    profileSelect.appendChild(first);
+    for (const profile of profiles) {
+      const option = document.createElement('option');
+      option.value = profile.name;
+      option.textContent = `${profile.name}: ${profile.target}`;
+      profileSelect.appendChild(option);
+    }
+    profileSelect.value = profiles.some((p) => p.name === selectedName) ? selectedName : '';
+    profileSelect.hidden = profiles.length === 0;
+  };
+  fillProfiles();
+  profileSelect.addEventListener('change', () => {
+    const picked = loadRemoteProfiles().find((p) => p.name === profileSelect.value);
+    if (!picked) return;
+    input.value = picked.target;
+    identityInput.value = picked.identity;
+    nameInput.value = picked.name;
+    input.removeAttribute('aria-invalid');
+    identityInput.removeAttribute('aria-invalid');
+  });
+
+  const saveProfile = () => {
+    const name = nameInput.value.trim();
+    const target = input.value.trim();
+    const identity = identityInput.value.trim();
+    if (!isValidProfileName(name)) {
+      nameInput.setAttribute('aria-invalid', 'true');
+      showToast(t('remote_profile_name_invalid'), nameInput);
+      return;
+    }
+    if (!target) {
+      input.setAttribute('aria-invalid', 'true');
+      showToast(t('remote_profile_target_required'), input);
+      return;
+    }
+    if (!isValidRemoteTarget(target)) {
+      input.setAttribute('aria-invalid', 'true');
+      showToast(t('remote_attach_invalid'), input);
+      return;
+    }
+    if (!isValidRemoteIdentity(identity)) {
+      identityInput.setAttribute('aria-invalid', 'true');
+      showToast(t('remote_attach_identity_invalid'), identityInput);
+      return;
+    }
+    const next = upsertRemoteProfile(loadRemoteProfiles(), { name, target, identity });
+    if (!next) {
+      showToast(t('remote_profile_limit', { max: MAX_REMOTE_PROFILES }), nameInput);
+      return;
+    }
+    storeRemoteProfiles(next);
+    fillProfiles(name);
+    showToast(t('remote_profile_saved', { name }), nameInput);
+  };
+  const deleteProfile = () => {
+    const name = nameInput.value.trim() || profileSelect.value;
+    const profiles = loadRemoteProfiles();
+    if (!profiles.some((p) => p.name === name)) {
+      showToast(t('remote_profile_not_found'), nameInput);
+      return;
+    }
+    storeRemoteProfiles(removeRemoteProfile(profiles, name));
+    fillProfiles();
+    nameInput.value = '';
+    showToast(t('remote_profile_deleted', { name }), nameInput);
+  };
+  nameInput.addEventListener('input', () => nameInput.removeAttribute('aria-invalid'));
+  nameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) {
+      e.preventDefault();
+      saveProfile();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeRemoteAttachPopup();
+      if (opts.beforeSend) inputEl.focus();
+      else anchor.focus();
+    }
+  });
+
   const save = () => {
     const target = input.value.trim();
     const identity = identityInput.value.trim();
@@ -366,7 +535,7 @@ function openRemoteAttachPopup(anchor: HTMLButtonElement, sessionId: number, opt
       showToast(t('remote_attach_invalid'), input);
       return;
     }
-    if (target && (identity.length > 4096 || identity.startsWith('-') || /[\x00-\x1f\x7f-\x9f]/.test(identity))) {
+    if (target && !isValidRemoteIdentity(identity)) {
       identityInput.setAttribute('aria-invalid', 'true');
       showToast(t('remote_attach_identity_invalid'), identityInput);
       return;
@@ -413,7 +582,35 @@ function openRemoteAttachPopup(anchor: HTMLButtonElement, sessionId: number, opt
   });
   actions.append(saveBtn, localBtn);
 
-  box.append(title, ...(choose ? [choose] : []), hint, input, recent, identityLabel, identityInput, identityHint, actions);
+  const profileActions = document.createElement('div');
+  profileActions.className = 'agent-log-popup-actions';
+  const saveProfileBtn = document.createElement('button');
+  saveProfileBtn.type = 'button';
+  saveProfileBtn.className = 'ui-button ui-button--quiet ui-button--compact';
+  saveProfileBtn.textContent = t('remote_profile_save');
+  saveProfileBtn.addEventListener('click', saveProfile);
+  const deleteProfileBtn = document.createElement('button');
+  deleteProfileBtn.type = 'button';
+  deleteProfileBtn.className = 'ui-button ui-button--quiet ui-button--compact';
+  deleteProfileBtn.textContent = t('remote_profile_delete');
+  deleteProfileBtn.addEventListener('click', deleteProfile);
+  profileActions.append(saveProfileBtn, deleteProfileBtn);
+
+  box.append(
+    title,
+    ...(choose ? [choose] : []),
+    hint,
+    profileSelect,
+    input,
+    recent,
+    identityLabel,
+    identityInput,
+    identityHint,
+    actions,
+    nameLabel,
+    nameInput,
+    profileActions,
+  );
   box.hidden = false;
   // スマホ幅では添付欄ごと隠れていて、ボタンの位置が取れない（全部 0）。そのときは入力欄の上に出す。
   let rect = anchor.getBoundingClientRect();

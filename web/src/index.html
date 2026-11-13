@@ -1414,6 +1414,13 @@
             <select id="spawn-subscription" class="ui-input spawn-select"></select>
           </div>
 
+          <!-- シェルだけ: 新しいシェルの添付の送り先（ssh 先）の最初の値。
+               選択肢は画面側のスクリプトが組む（決めない / このPC / 前回と同じ / 保存したプロファイル）。 -->
+          <div class="spawn-remote-attach-row" id="spawn-remote-attach-row" hidden>
+            <label class="spawn-field-label" for="spawn-remote-attach" data-i18n="spawn_remote_attach_label"></label>
+            <select id="spawn-remote-attach" class="ui-input spawn-select"></select>
+          </div>
+
           <!-- effort: /api/info の effort_levels に写像がある provider でのみ出す。
                無い provider では行ごと隠し、送信 JSON も従来と同一に保つ
                （docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C5）。

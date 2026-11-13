@@ -26,6 +26,18 @@ import {
   loadSpawnModelGroups,
 } from './spawn-model-groups.js';
 import { PROVIDER_ORDER_CHANGED_EVENT, clearProviderOrder, saveProviderOrder, sortByProviderOrder } from './provider-order.js';
+import {
+  LAUNCH_CHOICE_ASK,
+  LAUNCH_CHOICE_LAST,
+  LAUNCH_CHOICE_LOCAL,
+  REMOTE_LAST_KEY,
+  REMOTE_LAUNCH_KEY,
+  REMOTE_PROFILES_KEY,
+  normalizeLaunchChoice,
+  parseRemoteLast,
+  parseRemoteProfiles,
+  profileChoiceValue,
+} from './remote-attach-profiles.js';
 
 export { compareCwdByBasename, sortCwdSubdirItems, splitCwdPath } from './cwd-path.js';
 
@@ -120,6 +132,8 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
   const spawnModelRefreshBtn = document.getElementById('spawn-model-refresh');
   const spawnSubscriptionRow = document.getElementById('spawn-subscription-row');
   const spawnSubscriptionSelect = document.getElementById('spawn-subscription') as HTMLSelectElement | null;
+  const spawnRemoteAttachRow = document.getElementById('spawn-remote-attach-row');
+  const spawnRemoteAttachSelect = document.getElementById('spawn-remote-attach') as HTMLSelectElement | null;
   let codexModelSelection: any = null;
   let claudeModelSelection: any = null;
 
@@ -219,6 +233,44 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
     const v = defaults[SUBSCRIPTION_PREF_PREFIX + provider];
     return typeof v === 'string' ? v : '';
   }
+
+  // ---- シェルの「添付の送り先」（新しいシェルの最初の送り先） ----
+  // 選択肢: 決めない（既定。最初の添付を送るときに聞く）/ このPCで読む / 前回と同じ / 保存したプロファイル。
+  // 選んだ値は shell を起動するたびに spawn.defaults へ覚え、次回のフォームの初期値にする。
+  // 決めた値の適用は attachments.ts が受ける（セッション番号が決まってから）。
+  function refreshRemoteAttachLaunchRow(restoreSaved: boolean): void {
+    if (!spawnRemoteAttachRow || !spawnRemoteAttachSelect) return;
+    const isShell = (spawnProviderEl as HTMLSelectElement).value === 'shell';
+    spawnRemoteAttachRow.hidden = !isShell;
+    if (!isShell) return;
+    const defaults = readSpawnDefaults();
+    const profiles = parseRemoteProfiles(defaults[REMOTE_PROFILES_KEY]);
+    const last = parseRemoteLast(defaults[REMOTE_LAST_KEY]);
+    const wanted = restoreSaved || spawnRemoteAttachSelect.options.length === 0
+      ? normalizeLaunchChoice(defaults[REMOTE_LAUNCH_KEY])
+      : spawnRemoteAttachSelect.value;
+    const add = (value: string, label: string, disabled = false) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      option.disabled = disabled;
+      spawnRemoteAttachSelect.appendChild(option);
+    };
+    spawnRemoteAttachSelect.replaceChildren();
+    add(LAUNCH_CHOICE_ASK, t('spawn_remote_attach_ask'));
+    add(LAUNCH_CHOICE_LOCAL, t('spawn_remote_attach_local'));
+    add(
+      LAUNCH_CHOICE_LAST,
+      last ? t('spawn_remote_attach_last', { target: last.target }) : t('spawn_remote_attach_last_none'),
+      !last,
+    );
+    for (const profile of profiles) {
+      add(profileChoiceValue(profile.name), t('spawn_remote_attach_profile', { name: profile.name, target: profile.target }));
+    }
+    const available = Array.from(spawnRemoteAttachSelect.options).some((o) => o.value === wanted && !o.disabled);
+    spawnRemoteAttachSelect.value = available ? wanted : LAUNCH_CHOICE_ASK;
+  }
+  document.addEventListener('i18n-ready', () => refreshRemoteAttachLaunchRow(false));
 
   // 直前に options を組んだ provider。provider が変わったときは画面に残っている
   // 選択値ではなく、その provider の保存値から復元する。
@@ -1194,6 +1246,7 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
     spawnProviderInlineHelp.setNote(selectedNote);
     syncPermissionModeOptions(p);
     syncEffortField(p);
+    refreshRemoteAttachLaunchRow(false);
   }
 
   function applySpawnApprovalSettings(provider: string, defaults: Record<string, unknown>): void {
@@ -1349,6 +1402,7 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
     // パネルを開き直したときと同じ「前回起動したときの選択」に戻す（開きっぱなしで
     // いじった一時的な選択ではなく保存値が正）。
     refreshSubscriptionSelector({ restoreSaved: true });
+    refreshRemoteAttachLaunchRow(true);
   }
 
   function currentApprovalSettings(provider: string): Record<string, string> {
@@ -2970,6 +3024,10 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
       if (submittedBoardHandoff) bodyObj.board_handoff = { item_id: submittedBoardHandoff.item_id, request_id: submittedBoardHandoff.request_id };
       const spawnRequest = beginTrackedSpawn(1, spawnTabId);
       const submittedBooleans = { isolate_worktree: !!spawnIsolateWorktree?.checked, delegation: !!spawnDelegation?.checked };
+      // シェルのときだけ、新しいシェルの最初の添付の送り先（送った瞬間の選択を使う）。
+      const submittedRemoteAttachChoice = provider === 'shell' && spawnRemoteAttachSelect
+        ? normalizeLaunchChoice(spawnRemoteAttachSelect.value)
+        : null;
       const rememberApprovalSettings = spawnRememberApprovalSettings?.checked ?? true;
       const subscriptionWasVisible = !!spawnSubscriptionRow && !spawnSubscriptionRow.hidden;
       const submittedCodexSelection = codexModelSelection;
@@ -3024,6 +3082,8 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
         if (subscriptionWasVisible) {
           baseDefaults[SUBSCRIPTION_PREF_PREFIX + provider] = subscriptionID;
         }
+        // シェルを起動したときだけ、「添付の送り先」の選択を次回のフォームの初期値として覚える。
+        if (submittedRemoteAttachChoice !== null) baseDefaults[REMOTE_LAUNCH_KEY] = submittedRemoteAttachChoice;
         const withProviderBooleans = mergeProviderBooleanSetting(baseDefaults, provider, submittedBooleans);
         const persistedDefaults = mergeApprovalSettings(
           withProviderBooleans,
@@ -3035,6 +3095,15 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
         // not hold the startup display or the already accepted terminal hostage.
         if (launchSequence === spawnLaunchSequence) {
           void saveSpawnSettings(persistedDefaults).catch(() => showToast(t('startup_preferences_failed')));
+        }
+        // 起動できたシェルへ、選んだ送り先を決める（セッション番号が決まってから。「決めない」は何もしない）。
+        if (submittedRemoteAttachChoice) {
+          const choice = submittedRemoteAttachChoice;
+          void waitForTrackedSpawn(spawnRequest).then(ids => {
+            if (ids.length) {
+              document.dispatchEvent(new CustomEvent('remote-attach-launch-choice', { detail: { sessionId: ids[0], choice } }));
+            }
+          });
         }
         const sameForm = launchSequence === spawnLaunchSequence &&
           document.getElementById('spawn-provider').value === provider && spawnCwdInput.value.trim() === cwd &&
