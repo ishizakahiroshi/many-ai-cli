@@ -8,23 +8,8 @@ import { pushMessage } from './chat-history.js';
 import { openLightbox } from './lightbox.js';
 import { isFetchableRemotePath, isRemoteViewablePath, openRemoteFileView } from './remote-file-view.js';
 import { STORAGE_SPAWN_KEY, setUserPref } from './user-prefs.js';
-import {
-  MAX_PROFILE_NAME,
-  MAX_REMOTE_PROFILES,
-  REMOTE_LAST_KEY,
-  REMOTE_PROFILES_KEY,
-  isValidProfileName,
-  isValidRemoteIdentity,
-  isValidRemoteTarget,
-  parseRemoteLast,
-  parseRemoteProfiles,
-  removeRemoteProfile,
-  resolveLaunchChoice,
-  serializeRemoteLast,
-  serializeRemoteProfiles,
-  upsertRemoteProfile,
-  type RemoteAttachProfile,
-} from './remote-attach-profiles.js';
+// 注意: 添付の送り先の test（tests/attachments-*.test.ts）は import を 1 行ずつ外して読み込むので、import は複数行に分けない。
+import { MAX_PROFILE_NAME, MAX_REMOTE_PROFILES, REMOTE_LAST_KEY, REMOTE_PROFILES_KEY, isValidProfileName, isValidRemoteIdentity, isValidRemoteTarget, parseRemoteLast, parseRemoteProfiles, removeRemoteProfile, resolveLaunchChoice, serializeRemoteLast, serializeRemoteProfiles, upsertRemoteProfile, type RemoteAttachProfile } from './remote-attach-profiles.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 

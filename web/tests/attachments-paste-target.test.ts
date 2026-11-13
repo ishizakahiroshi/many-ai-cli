@@ -28,6 +28,7 @@ function fixture() {
     URL, File, Blob, Promise, Math, Error,
     document: { getElementById: () => null, addEventListener: () => {}, createElement: () => ({}) },
     window: { addEventListener: (type: string, fn: Function) => windowListeners.set(type, [...(windowListeners.get(type) || []), fn]) },
+    STORAGE_SPAWN_KEY: 'ai_cli_hub_spawn_settings', setUserPref: () => {},
     t: (key: string) => key, apiFetch: async () => ({ ok: true }), showToast: () => {}, token: '',
     activeSessionId: 7, sessions, terminals: new Map(),
     // app.ts の同名関数と同じ振る舞い（アクティブなセッションを持ち主にし、まだ生きている間だけ積む）。
@@ -55,7 +56,12 @@ function fixture() {
   };
   const source = readFileSync(new URL('../src/app/attachments.ts', import.meta.url), 'utf8')
     .replace(/^import .*;\r?$/gm, '').replace(/^export /gm, '');
-  runInNewContext(new Bun.Transpiler({ loader: 'ts' }).transformSync(source), ctx);
+  // 添付の送り先の規則（接続先の形・プロファイル）は別 module。同じ context へ先に読み込む。
+  const rules = readFileSync(new URL('../src/app/remote-attach-profiles.ts', import.meta.url), 'utf8')
+    .replace(/^export /gm, '');
+  // 1 本の script にまとめる（const は別の script から見えない）。
+  runInNewContext(new Bun.Transpiler({ loader: 'ts' }).transformSync(`${rules}
+${source}`), ctx);
 
   async function paste(target: FakeElement, data: { text?: string; image?: boolean }) {
     const items = data.image

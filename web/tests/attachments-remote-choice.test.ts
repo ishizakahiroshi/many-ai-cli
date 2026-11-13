@@ -72,6 +72,7 @@ function fixture(opts: { stored?: unknown; storageBroken?: boolean } = {}) {
         store.set(k, v);
       },
     },
+    STORAGE_SPAWN_KEY: 'ai_cli_hub_spawn_settings', setUserPref: () => {},
     t: (key: string) => key,
     apiFetch: async () => ({ ok: true }), showToast: (msg: string) => { toasts.push(msg); }, token: '',
     activeSessionId: 7, sessions, terminals: new Map(),
@@ -83,7 +84,12 @@ function fixture(opts: { stored?: unknown; storageBroken?: boolean } = {}) {
   };
   const source = readFileSync(new URL('../src/app/attachments.ts', import.meta.url), 'utf8')
     .replace(/^import .*;\r?$/gm, '').replace(/^export /gm, '');
-  runInNewContext(new Bun.Transpiler({ loader: 'ts' }).transformSync(source), ctx);
+  // 添付の送り先の規則（接続先の形・プロファイル）は別 module。同じ context へ先に読み込む。
+  const rules = readFileSync(new URL('../src/app/remote-attach-profiles.ts', import.meta.url), 'utf8')
+    .replace(/^export /gm, '');
+  // 1 本の script にまとめる（const は別の script から見えない）。
+  runInNewContext(new Bun.Transpiler({ loader: 'ts' }).transformSync(`${rules}
+${source}`), ctx);
 
   const stored = () => JSON.parse(store.get('remoteAttachTargetsV1') || '[]');
   const popup = (): FakeEl => body.children[0];
