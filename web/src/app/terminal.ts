@@ -1271,6 +1271,9 @@ export function isWheelTargetExcluded(target) {
   // 「端末以外なら除外」という構造で判定する（オーバーレイ側の .aac-wheel-overlay と同じ考え方）。
   const inDisplayArea = target.closest('#display-area');
   if (inDisplayArea && !target.closest('#terminal-wrapper')) return true;
+  // マルチ表示のタブ枠（files / history など端末以外のビューを載せる枠）は #display-area の外にあり、
+  // 上の判定に掛からない。除外しないと端末へ転送されて、枠内のスクロールが効かなくなる。
+  if (target.closest('.pane-tab-slot')) return true;
   return false;
 }
 
