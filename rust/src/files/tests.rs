@@ -462,6 +462,57 @@ fn list_never_summarizes_secrets_and_skips_symlinks_heavy_subtrees() {
         "hello world"
     );
 }
+#[test]
+fn list_follows_a_directory_link_for_local_requests_only() {
+    let (dir, service, s) = setup();
+    let target = dir.path().join("link-target");
+    fs::create_dir_all(&target).unwrap();
+    fs::write(target.join("inside.md"), "# Inside\n\nbody").unwrap();
+    let docs = s.cwd.join("docs");
+    fs::create_dir_all(&docs).unwrap();
+    let link = docs.join("local");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    #[cfg(windows)]
+    {
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&link)
+            .arg(&target)
+            .output()
+            .unwrap();
+        assert!(status.status.success(), "mklink /J failed");
+    }
+    let names = |remote: bool| -> Vec<String> {
+        let r = response(service.read_handle(
+            &list_request(&s.cwd.to_string_lossy()),
+            &s,
+            None,
+            remote,
+            &Workspace(vec![]),
+        ));
+        value(&r)["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v["name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let local = names(false);
+    assert!(local.iter().any(|n| n == "local"), "{local:?}");
+    assert!(local.iter().any(|n| n == "inside.md"), "{local:?}");
+    let opened = response(service.read_handle(
+        &read_request("/api/files-content", &link.join("inside.md")),
+        &s,
+        None,
+        false,
+        &Workspace(vec![]),
+    ));
+    assert_eq!(opened.status, 200, "open through the link: {opened:?}");
+    let remote = names(true);
+    assert!(!remote.iter().any(|n| n == "local"), "{remote:?}");
+    assert!(!remote.iter().any(|n| n == "inside.md"), "{remote:?}");
+}
 
 fn list_request(root: &str) -> Request {
     Request {

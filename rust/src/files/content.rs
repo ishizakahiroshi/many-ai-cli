@@ -236,7 +236,16 @@ fn list(r: &Request, s: &Scope, remote: bool) -> Result<Response> {
     let mut items = Vec::new();
     let mut truncated = false;
     if let Ok(cap) = cap {
-        walk(&root, &cap, &s.cwd, s, 1, &mut items, &mut truncated);
+        walk(
+            &root,
+            &cap,
+            &s.cwd,
+            s,
+            1,
+            remote,
+            &mut items,
+            &mut truncated,
+        );
     }
     items.sort_by_key(|item| std::cmp::Reverse(item.0));
     let items: Vec<Value> = items.into_iter().map(|(_, v)| v).collect();
@@ -245,12 +254,14 @@ fn list(r: &Request, s: &Scope, remote: bool) -> Result<Response> {
         &json!({"root":root,"exists":exists,"truncated":truncated,"items":items}),
     ))
 }
+#[allow(clippy::too_many_arguments)]
 fn walk(
     dir: &Path,
     cap: &super::safe_fs::Dir,
     cwd: &Path,
     s: &Scope,
     depth: usize,
+    remote: bool,
     out: &mut Vec<(std::time::SystemTime, Value)>,
     truncated: &mut bool,
 ) {
@@ -262,11 +273,26 @@ fn walk(
     };
     for name in entries {
         let full = dir.join(&name);
-        let child = cap.child_dir(&name, false).ok();
-        let info = match &child {
+        let mut child = cap.child_dir(&name, false).ok();
+        let mut info = match &child {
             Some(d) => d.own_metadata(),
             None => cap.metadata(&name),
         };
+        // ジャンクション / シンボリックリンクのディレクトリは、自分の画面（ローカル要求）に限って
+        // 先を辿って載せる。リモート要求は従来どおり辿らない（許可ルートの外へ出られるため）。
+        // 循環は depth 上限と件数上限で止まる。
+        if !remote
+            && child.is_none()
+            && info.is_err()
+            && std::fs::symlink_metadata(&full).is_ok_and(|m| m.file_type().is_symlink())
+            && let Ok(target) = std::fs::metadata(&full)
+            && target.is_dir()
+            && let Ok(real) = scope::canonical(&full)
+            && let Ok(d) = super::safe_fs::Dir::open(&real)
+        {
+            child = Some(d);
+            info = Ok(target);
+        }
         let Ok(info) = info else {
             continue;
         };
@@ -306,7 +332,7 @@ fn walk(
             && !matches!(name.as_str(), ".git" | ".hg" | ".svn")
             && let Some(child) = child
         {
-            walk(&full, &child, cwd, s, depth + 1, out, truncated);
+            walk(&full, &child, cwd, s, depth + 1, remote, out, truncated);
         }
     }
 }
