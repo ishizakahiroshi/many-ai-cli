@@ -11,7 +11,7 @@ import { STORAGE_SIDEBAR_PIN_MIGRATED_KEY, isTurnEndBellOff, setTurnEndBellOff, 
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
 import { renderZeroSessionEmptyState } from './zero-session-empty-state.js';
 import { attachTerminal, claimPtyResizeOwnership, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, syncPtySizeToViewportAfterLayout, updateScrollLockBtn } from './terminal.js';
-import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, setActiveTab, updateChatCountBadge } from './settings.js';
+import { applyActiveSessionViewMode, filterFirstMessage, getQuickCommand, openCardCtxMenu, renderSessionInfoChip, setActiveTab, updateChatCountBadge } from './settings.js';
 import { pickRestoreSession } from './project-view-memory.js';
 import { readOpenProjectKey, readProjectView, runWithProjectViewRestore, saveOpenProjectKey, saveProjectView } from './project-view-store.js';
 import { syncElapsedTimer } from './ws-client.js';
@@ -365,10 +365,15 @@ export function updateQuickCmdButtons(id) {
   const shouldDisable = isOllama || isLMStudio || isShell;
   const modelBtn  = document.getElementById('quick-model-btn');
   const pickerBtn = document.getElementById('slash-picker-btn');
+  // スロット 2 は歴史的に /model 用の別名だが、中身は利用者が自由に書き換えられる。
+  // 「bug fix」のような普通の文言を入れたスロットまで shell / Ollama で無効にすると、
+  // 送れるはずの定型文が #3 だけ押せなくなる。無効にするのは /model 系のときだけ。
+  const modelSlotIsModelCmd = /^\/model(\s|$)/i.test(getQuickCommand(2));
   for (const btn of [modelBtn, pickerBtn]) {
     if (!btn) continue;
-    btn.disabled = shouldDisable;
-    if (shouldDisable) btn.setAttribute('aria-disabled', 'true');
+    const off = shouldDisable && (btn !== modelBtn || modelSlotIsModelCmd);
+    btn.disabled = off;
+    if (off) btn.setAttribute('aria-disabled', 'true');
     else btn.removeAttribute('aria-disabled');
   }
 }
