@@ -114,3 +114,6 @@ desktop.ini
 .serverless/
 **/supabase/.temp/
 !.env.example
+
+# Python のバイトコード（テストを回すと scripts/ や rust/packaging/ にできる）
+__pycache__/
