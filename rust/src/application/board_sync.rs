@@ -221,6 +221,18 @@ enum Lookup {
     Unread,
 }
 
+/// What asking the board to withdraw a request came to.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TakeBack {
+    Done,
+    /// Not in the list of open requests any more.
+    Gone,
+    /// The board answered and refused (taken meanwhile, or no such tool).
+    Refused,
+    /// The board could not be reached.
+    Unreached,
+}
+
 enum Failed {
     /// No usable reply (key, network, size).
     Unreached,
@@ -893,6 +905,36 @@ impl BoardSync {
             }
         }
         found
+    }
+
+    /// Withdraws a request nobody has taken yet (the board's `take back`), so
+    /// the work goes back on the pile. Only a request this Hub lists as open
+    /// can be named; the board has the last word and refuses a taken one.
+    pub async fn take_back(&self, item_id: &str, request_id: &str) -> TakeBack {
+        let open = self.handed_work().await;
+        let Some(work) = open
+            .iter()
+            .find(|work| work.item_id == item_id && work.request_id == request_id)
+        else {
+            return TakeBack::Gone;
+        };
+        let config = match load(&self.file) {
+            Ok(Some(config)) => config,
+            _ => return TakeBack::Unreached,
+        };
+        let target = Target {
+            url: config.url,
+            key_file: config.key_file,
+            project: work.project.clone(),
+            item_id: work.item_id.clone(),
+        };
+        let args = serde_json::json!({"item_id": item_id, "request_id": request_id});
+        match self.request(&target, "board_take_back_handoff", args).await {
+            Ok(_) => TakeBack::Done,
+            // Taken meanwhile, or a board without the tool: nothing was withdrawn.
+            Err(Failed::Refused) => TakeBack::Refused,
+            Err(Failed::Unreached) => TakeBack::Unreached,
+        }
     }
 
     /// Remembers that the session about to register with `start_request` (its

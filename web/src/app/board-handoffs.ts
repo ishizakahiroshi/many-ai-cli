@@ -16,6 +16,16 @@ let work: HandedWork[] = [];
 let dialog: HTMLDialogElement | null = null;
 let content: HTMLElement;
 let loading = false;
+// 「隠す」は、この画面（ブラウザ）だけの操作。看板側の依頼はそのまま残る。
+const HIDDEN_KEY = 'many-ai-cli:board-handoffs-hidden';
+let hiddenIds = new Set<string>();
+let hiddenCount = 0;
+let showHidden = false;
+let notice = ''; // 取り下げに失敗したときの一言。次に取り下げを始めるまで出す
+try { hiddenIds = new Set<string>(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')); } catch (_) { /* 読めなければ何も隠さない */ }
+function saveHidden(): void {
+  try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hiddenIds])); } catch (_) { /* 保存できなくても今回は隠れる */ }
+}
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, text = '', className = ''): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag); el.textContent = text; el.className = className; return el;
@@ -32,14 +42,19 @@ function when(at: number | null): string {
 function showButtons(): void {
   for (const el of document.querySelectorAll<HTMLElement>('[data-open-board-handoffs]')) {
     el.hidden = work.length === 0;
-    const count = el.querySelector('[data-board-handoffs-count]');
-    if (count) count.textContent = work.length ? String(work.length) : '';
+    const count = el.querySelector<HTMLElement>('[data-board-handoffs-count]');
+    if (count) { count.textContent = work.length ? String(work.length) : ''; count.hidden = work.length === 0; }
   }
 }
 function render(): void {
   if (!dialog?.open) return;
   content.replaceChildren(node('p', tr('note'), 'routines-note'));
+  if (notice) content.append(node('p', notice, 'routines-note'));
   if (!work.length) content.append(node('p', tr('empty'), 'routines-note'));
+  if (hiddenCount) {
+    const toggle = button(showHidden ? tr('hide_hidden') : t('board_handoffs_show_hidden', { n: String(hiddenCount) }), () => { showHidden = !showHidden; void refresh(); });
+    content.append(toggle);
+  }
   for (const item of work) {
     const card = node('article', '', 'routine-card');
     card.append(node('h3', item.title || item.item_id), node('p', `${item.project} · ${item.folder}`, 'routines-note'));
@@ -52,6 +67,31 @@ function render(): void {
         boardHandoff: { item_id: item.item_id, request_id: item.request_id, title: item.title || item.item_id },
       });
     }, true));
+    if (!hiddenIds.has(item.request_id)) {
+      controls.append(button(tr('hide'), () => { hiddenIds.add(item.request_id); saveHidden(); void refresh(); }));
+    }
+    controls.append(button(tr('withdraw'), () => {
+      // 看板側の依頼を取り下げる（取り戻せない）。確かめの行を同じカードの中に出す。
+      controls.replaceChildren(node('p', tr('withdraw_confirm'), 'routines-note'));
+      const cancel = button(tr('cancel'), () => void render());
+      const doit = button(tr('withdraw_do'), async () => {
+        doit.disabled = true; cancel.disabled = true; notice = '';
+        try {
+          const response = await apiFetch('/api/board-handoffs', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ item_id: item.item_id, request_id: item.request_id }),
+          });
+          // 409 は「もう開いていない」（誰かが受けた・すでに取り下げた）。どちらも一覧から外れるので再取得に任せる。
+          if (!response.ok && response.status !== 409) throw new Error(String(response.status));
+          await refresh();
+          // 断られたのに依頼が残っている（古い看板など）なら、黙らず失敗を伝える。
+          if (work.some(w => w.request_id === item.request_id)) { notice = tr('withdraw_failed'); render(); }
+        } catch (_) {
+          notice = tr('withdraw_failed'); render();
+        }
+      }, true);
+      controls.append(cancel, doit);
+    }));
     card.append(controls); content.append(card);
   }
 }
@@ -61,7 +101,13 @@ async function refresh(): Promise<void> {
   try {
     const response = await apiFetch('/api/board-handoffs');
     // A Hub without a board, or one that cannot reach it, has nothing to show.
-    work = response.ok ? handedWorkFrom(await response.json()) : [];
+    const all = response.ok ? handedWorkFrom(await response.json()) : [];
+    // 看板から消えた依頼の印は捨てる（溜め込まない）。
+    const live = new Set(all.map(w => w.request_id));
+    const kept = [...hiddenIds].filter(id => live.has(id));
+    if (kept.length !== hiddenIds.size) { hiddenIds = new Set(kept); saveHidden(); }
+    hiddenCount = all.filter(w => hiddenIds.has(w.request_id)).length;
+    work = showHidden ? all : all.filter(w => !hiddenIds.has(w.request_id));
   } catch (_) { /* Keep what was shown; the next round asks again. */ }
   finally { loading = false; }
   showButtons(); render();

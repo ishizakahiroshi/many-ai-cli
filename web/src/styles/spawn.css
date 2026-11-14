@@ -64,6 +64,58 @@
 
 .orchestration-icon { width: calc(var(--nsb-size, 32px) * 0.53); height: calc(var(--nsb-size, 32px) * 0.53); display: block; }
 
+/* PC ではアイコン列をヘッダーへ移す（header-actions.ts）。受信箱と「＋」だけ外に出し、残りは「⋯」メニュー。
+   ヘッダーは 28px の段なので、ボタンは 22px に収める。 */
+#new-session-bar.header-hosted {
+  position: static;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  background: none;
+  container-type: normal;
+  --nsb-size: 22px;
+}
+#new-session-bar.header-hosted > .ui-button > svg { width: 15px; height: 15px; }
+.header-more { position: relative; flex: 0 0 auto; }
+#new-session-bar.header-hosted .header-more-btn {
+  position: relative;
+  width: var(--nsb-size);
+  height: var(--nsb-size);
+  min-height: 0;
+  padding: 0;
+  line-height: 1;
+}
+.header-more-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--ui-shadow-modal);
+}
+.header-more-menu[hidden] { display: none; }
+header .header-more-menu > .ui-button {
+  flex: 0 0 auto;
+  width: 100%;
+  height: auto;
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  gap: var(--space-2);
+  justify-content: flex-start;
+  position: relative;
+}
+header .header-more-menu .ui-button > svg { width: 16px; height: 16px; flex: none; }
+.header-more-label { font-size: var(--fs-sm); white-space: nowrap; }
+.header-more-menu .memo-button-badge { position: static; margin-left: auto; }
+
 /* C1: 子役割の詳細設定アコーディオン内の役割×CLI×モデル表 */
 .spawn-orchestration-section { margin-top: 6px; }
 .spawn-role-table {
@@ -436,6 +488,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .spawn-remote-attach-row { display: flex; flex-direction: column; gap: var(--space-1, 4px); }
 .spawn-remote-attach-row[hidden] { display: none !important; }
 .spawn-remote-attach-row .spawn-select { min-width: 0; }
+.spawn-remote-attach-hint { font-size: 12px; opacity: 0.7; line-height: 1.5; }
 .spawn-textarea {
   width: 100%;
   box-sizing: border-box;

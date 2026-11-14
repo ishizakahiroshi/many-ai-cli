@@ -9,7 +9,7 @@ import { openLightbox } from './lightbox.js';
 import { isFetchableRemotePath, isRemoteViewablePath, openRemoteFileView } from './remote-file-view.js';
 import { STORAGE_SPAWN_KEY, setUserPref } from './user-prefs.js';
 // 注意: 添付の送り先の test（tests/attachments-*.test.ts）は import を 1 行ずつ外して読み込むので、import は複数行に分けない。
-import { MAX_PROFILE_NAME, MAX_REMOTE_PROFILES, REMOTE_LAST_KEY, REMOTE_PROFILES_KEY, isValidProfileName, isValidRemoteIdentity, isValidRemoteTarget, parseRemoteLast, parseRemoteProfiles, removeRemoteProfile, resolveLaunchChoice, serializeRemoteLast, serializeRemoteProfiles, upsertRemoteProfile, type RemoteAttachProfile } from './remote-attach-profiles.js';
+import { detectSshFromTitle, MAX_PROFILE_NAME, MAX_REMOTE_PROFILES, REMOTE_LAST_KEY, REMOTE_PROFILES_KEY, isValidProfileName, isValidRemoteIdentity, isValidRemoteTarget, parseRemoteLast, parseRemoteProfiles, removeRemoteProfile, resolveLaunchChoice, serializeRemoteLast, serializeRemoteProfiles, upsertRemoteProfile, type RemoteAttachProfile } from './remote-attach-profiles.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -660,9 +660,21 @@ function rememberFetchPath(path: string): void {
   recentFetchPaths.length = Math.min(recentFetchPaths.length, MAX_RECENT_FETCH_PATHS);
 }
 
+/**
+ * 読み取り専用の「開く」「取ってくる」が使う ssh 先。送り先を決めていればそれ、決めていなければセッション名が
+ * ssh のコマンドのときその先（鍵つき）。添付を送る先には使わない（利用者が選んだ送り先だけが添付を受ける）。
+ */
+function readOnlyRemote(sessionId: number): { target: string; identity: string } {
+  const chosen = remoteAttachTarget(sessionId);
+  if (chosen) return { target: chosen, identity: remoteAttachIdentity(sessionId) };
+  const session = sessions.get(sessionId);
+  if (!session || session.provider !== 'shell') return { target: '', identity: '' };
+  return detectSshFromTitle(String(session.label || session.auto_title || '')) || { target: '', identity: '' };
+}
+
 /** 成功したら true。失敗の理由（鍵・パス違い・大きすぎ）は利用者が直すものなので、Hub の detail をそのまま見せる。 */
 export async function fetchRemoteFile(sessionId: number, remotePath: string, anchor: HTMLElement | null = null): Promise<boolean> {
-  const target = remoteAttachTarget(sessionId);
+  const { target, identity } = readOnlyRemote(sessionId);
   const path = remotePath.trim();
   if (!target) {
     showToast(t('remote_fetch_no_target'), anchor);
@@ -675,7 +687,6 @@ export async function fetchRemoteFile(sessionId: number, remotePath: string, anc
   rememberFetchPath(path);
   showToast(t('remote_fetch_started', { target }), anchor);
   try {
-    const identity = remoteAttachIdentity(sessionId);
     const identityQuery = identity ? `&remote_identity=${encodeURIComponent(identity)}` : '';
     const res = await apiFetch(
       `/api/files-download?session=${encodeURIComponent(sessionId)}&remote_target=${encodeURIComponent(target)}&path=${encodeURIComponent(path)}${identityQuery}`
@@ -709,7 +720,8 @@ export async function fetchRemoteFile(sessionId: number, remotePath: string, anc
  * （remote-file-view.ts）。画面の「取ってくる」ボタンから同じファイルを保存もできる。
  */
 function openRemoteFile(sessionId: number, path: string): Promise<boolean> {
-  return openRemoteFileView(sessionId, remoteAttachTarget(sessionId), path, { identity: remoteAttachIdentity(sessionId), onFetch: () => { void fetchRemoteFile(sessionId, path); } });
+  const { target, identity } = readOnlyRemote(sessionId);
+  return openRemoteFileView(sessionId, target, path, { identity, onFetch: () => { void fetchRemoteFile(sessionId, path); } });
 }
 
 /**
@@ -718,7 +730,7 @@ function openRemoteFile(sessionId: number, path: string): Promise<boolean> {
  */
 export function remoteFetchMenuItems(sessionId: number | null, path: string): any[] {
   if (sessionId === null) return [];
-  const target = remoteAttachTarget(sessionId);
+  const { target } = readOnlyRemote(sessionId);
   if (!target || !isFetchableRemotePath(path)) return [];
   // メニューは押した時点で閉じる（取り終わるまで開いたままにしない）。経過と結果はトーストで出す。
   const items: any[] = [];

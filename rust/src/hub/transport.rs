@@ -268,11 +268,7 @@ async fn handle(
         && !(request.method == "DELETE"
             && (request.path == "/api/routines" || request.path.starts_with("/api/routines/")))
         && !(request.method == "DELETE" && request.path.starts_with("/api/providers/"))
-        && !(request.method == "DELETE"
-            && matches!(
-                request.path.as_str(),
-                "/api/nvidia-nim/key" | "/api/mobile-connect/tailscale/serve"
-            ))
+        && !(request.method == "DELETE" && request.path == "/api/mobile-connect/tailscale/serve")
         && !(request.method == "DELETE"
             && request.path == super::preference_media::AVATAR_UPLOAD_PATH)
         && !(request.method == "POST"
@@ -287,8 +283,6 @@ async fn handle(
                     | "/api/approval/enable"
                     | "/api/approval/disable"
                     | "/api/approval/dismiss"
-                    | "/api/nvidia-nim/test"
-                    | "/api/nvidia-nim/key"
                     | "/api/mobile-connect/tailscale/serve"
                     | "/api/shutdown"
                     | "/api/notify-generate-topic"
@@ -411,7 +405,6 @@ fn body_policy(path: &str) -> (usize, bool) {
         "/api/auth/launch" => (LAUNCH_BODY_LIMIT, true),
         super::iris_execution::PATH => (super::iris_execution_mcp::MAX_BYTES, false),
         "/api/logs/legacy-notice" => (1 << 16, true),
-        super::jev_routes::PATH => (8192, false),
         "/api/attach" => (11 * 1024 * 1024, false),
         "/api/memo-images" | "/api/memo-images/" => (10 * 1024 * 1024, false),
         "/api/user-prefs/avatar" => (5 * 1024 * 1024, false),

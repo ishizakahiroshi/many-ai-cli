@@ -12,6 +12,12 @@ Release artifacts are published at
 
 ### Added
 
+- **Open files on an ssh host without any setup.** When a shell session was
+  started as `ssh -i <key> user@host`, right-clicking an absolute path (`/…` or
+  `~/…`) in the terminal now offers "Open from user@host" (read-only modal) and
+  "Fetch" — no attachment destination needs to be set first. It is read-only and
+  never changes where attachments are sent. Connections that use `-p`, `-J`, `-F`
+  or `-l` are not detected; set the destination by hand for those.
 - **Start work the board's owner handed over.** When the owner of an MCP board
   (for example Many Iris) hands a piece of planned work to an AI, the Hub's
   sidebar shows "Work handed over from the board" for the projects listed in
@@ -88,6 +94,13 @@ Release artifacts are published at
   Settings → Voice offers `OFF` or `Browser`. If you used Whisper, a leftover
   `~/.many-ai-cli/whisper/` is reported by `many-ai-cli doctor` and removed by
   `many-ai-cli uninstall`; `voice.whisper.*` keys in `config.yaml` are ignored.
+- **The NVIDIA NIM route and the Jev rating are removed.** Settings no longer
+  has the "NVIDIA NIM for OpenCode" and "Jev evaluation" sections, the model
+  picker no longer lists an NVIDIA NIM group, and the `/api/nvidia-nim*` and
+  `/api/jev/evaluate` routes are gone. The Hub makes no request to NVIDIA or
+  TypeSafe any more. An existing `nvidia_nim` key in `config.yaml` is ignored,
+  and a key saved earlier stays in `~/.many-ai-cli/secrets/nvidia_api_key`
+  until you delete the file yourself.
 
 ### Fixed
 

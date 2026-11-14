@@ -689,11 +689,6 @@ fn validation_preserves_source_risk_fields_and_rejects_control_route_and_cleanup
     );
     body.label = "label-with-dashes".into();
     assert!(body.validate().is_ok());
-    body.route = "nvidia-nim".into();
-    assert_eq!(
-        body.validate().unwrap_err().detail,
-        "route is not available for this provider"
-    );
 }
 
 #[test]

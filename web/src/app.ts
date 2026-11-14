@@ -41,6 +41,7 @@ import './app/prompt-templates.js';
 import './app/routines.js';
 import './app/board-handoffs.js';
 import './app/memo-panel.js';
+import './app/header-actions.js';
 // 観測 sink の登録（既定ビルドでは空ファイルへ差し替えられる）。
 import './debug/index.js';
 import { setActiveTab } from './app/settings.js';

@@ -484,3 +484,31 @@ pub(super) fn whisper_leftover(owner: &Diagnostics) -> Vec<Check> {
     }
     checks
 }
+
+/// The NVIDIA NIM API key an older many-ai-cli saved as
+/// `~/.many-ai-cli/secrets/nvidia_api_key`. The NIM route is gone, so nothing
+/// reads or deletes it any more. Read-only: the content is never opened and
+/// nothing is deleted here; the fix text says how.
+pub(super) fn nvidia_key_leftover(owner: &Diagnostics) -> Vec<Check> {
+    let path = owner
+        .deps
+        .paths
+        .root()
+        .join("secrets")
+        .join("nvidia_api_key");
+    if std::fs::symlink_metadata(&path).is_err() {
+        return vec![];
+    }
+    vec![Check::new(
+        "residue",
+        "WARN",
+        format!(
+            "廃止した NVIDIA NIM の API キーが保存されたまま残っています: {}（中身は開いていません）",
+            path.display()
+        ),
+        &format!(
+            "もう使われません。Hub を止めてから、このファイルを削除してください: {}（many-ai-cli uninstall でも消えます）",
+            path.display()
+        ),
+    )]
+}

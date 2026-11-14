@@ -839,12 +839,6 @@ impl HubComposition {
             handoff,
         });
         let hints = Arc::new(crate::hub::runtime_routes::NetHints::default());
-        let jev = Arc::new(crate::hub::jev_routes::JevHttp::new(
-            super::context::environment_value(&context.environment, "TYPESAFE_API_KEY")
-                .unwrap_or("")
-                .to_owned(),
-            Arc::new(crate::hub::jev_routes::NativeJev::new(paths.clone())),
-        ));
         let links = crate::application::link_defaults::LinkDefaults::new(Arc::new(
             crate::application::link_defaults::NativeLinkIo::new(paths.clone())?,
         ));
@@ -936,16 +930,6 @@ impl HubComposition {
             cwd: context.cwd.clone(),
             environment: context.environment.clone(),
         });
-        let nvidia = crate::application::nvidia_nim::NvidiaNim::new(
-            crate::application::nvidia_nim::NvidiaDependencies {
-                paths: paths.clone(),
-                config: context.config.clone(),
-                environment: context.environment.clone(),
-                io: Arc::new(crate::application::nvidia_nim::NativeNvidiaIo {
-                    paths: paths.clone(),
-                }),
-            },
-        )?;
         let doctor = crate::application::diagnostics::Diagnostics::new(
             crate::application::diagnostics::DiagnosticsDependencies {
                 config: context.config.clone(),
@@ -956,13 +940,6 @@ impl HubComposition {
                 platform: std::env::consts::OS.into(),
                 io: diagnostic_io.clone(),
                 subscription_cli,
-                nvidia_key_configured: {
-                    let catalog_io = catalog_io.clone();
-                    Arc::new(move || {
-                        use super::model_catalog::CatalogIo;
-                        catalog_io.nvidia_key().map(|key| !key.is_empty())
-                    })
-                },
             },
         );
         let bug_report = crate::application::diagnostics::bug_report::BugReport::new(
@@ -1200,7 +1177,6 @@ impl HubComposition {
             doctor, bug_report,
         ))
         .with_mobile(Arc::new(crate::hub::mobile_routes::MobileHttp::new(mobile)))
-        .with_nvidia(crate::hub::nvidia_routes::NvidiaHttp::new(nvidia))
         .with_servers(Arc::new(crate::hub::server_routes::ServerHttp::new(
             servers.clone(),
         )))
@@ -1303,7 +1279,6 @@ impl HubComposition {
         .with_cli_versions(versions)
         .with_runtime_observations(hints, context.shell.clone())
         .with_link_defaults(links)
-        .with_jev(jev)
         .with_security(security.clone())
         .with_push(Arc::new(crate::hub::push_routes::PushHttp::new(
             push.clone(),

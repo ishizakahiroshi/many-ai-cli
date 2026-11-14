@@ -131,6 +131,7 @@ describe('端末のパスのメニュー（attachments.ts の remoteFetchMenuIte
       t: (key: string, vars?: Record<string, unknown>) => (vars ? `${key}|${JSON.stringify(vars)}` : key),
       remoteAttachTarget: (id: number) => (id === 7 ? 'dev@host' : ''),
       remoteAttachIdentity: () => 'D:/synthetic keys/id_ed25519',
+      readOnlyRemote: (id: number) => ({ target: id === 7 ? 'dev@host' : '', identity: 'D:/synthetic keys/id_ed25519' }),
       isFetchableRemotePath: f.api.isFetchableRemotePath,
       isRemoteViewablePath: f.api.isRemoteViewablePath,
       openRemoteFileView: async (...args: unknown[]) => { calls.push({ fn: 'open', args }); return true; },

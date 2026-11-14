@@ -36,6 +36,29 @@ export function isValidRemoteTarget(target: string): boolean {
   return host.length > 0 && target.length <= 255 && !host.startsWith('-') && /^[A-Za-z0-9._@:[\]-]+$/.test(host);
 }
 
+/**
+ * シェルのセッション名（`ssh -i 鍵 user@host` など）から ssh 先と鍵を読み取る。読み取り専用の「開く」の自動判定にだけ使う。
+ * 接続の意味が変わる指定（-p / -J / -F / -l）があるときは、間違った所へつなぐより出さないほうがよいので null を返す。
+ */
+export function detectSshFromTitle(title: string): { target: string; identity: string } | null {
+  const m = /(?:^|[\s/\\])ssh(?:\.exe)?\s+(.+)$/i.exec(String(title || ''));
+  if (!m) return null;
+  const tokens = m[1].split(/\s+/).map((s) => s.replace(/^["']|["']$/g, '')).filter(Boolean);
+  const withArg = new Set(['-b', '-c', '-D', '-E', '-e', '-I', '-L', '-m', '-O', '-o', '-Q', '-R', '-S', '-W', '-w', '-B']);
+  const unsafe = new Set(['-p', '-J', '-F', '-l']);
+  let identity = '';
+  for (let i = 0; i < tokens.length; i += 1) {
+    const tok = tokens[i];
+    if (unsafe.has(tok)) return null;
+    if (tok === '-i') { identity = tokens[i + 1] || ''; i += 1; continue; }
+    if (withArg.has(tok)) { i += 1; continue; }
+    if (tok.startsWith('-')) continue;
+    if (!isValidRemoteTarget(tok) || !isValidRemoteIdentity(identity)) return null;
+    return { target: tok, identity };
+  }
+  return null;
+}
+
 /** 空は「指定なし」で有効。 */
 export function isValidRemoteIdentity(identity: string): boolean {
   if (identity === '') return true;

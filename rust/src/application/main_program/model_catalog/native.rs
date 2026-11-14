@@ -92,22 +92,6 @@ impl CatalogIo for NativeCatalogIo {
             parsers::native(&output.output, provider)
         })
     }
-    fn nvidia<'a>(&'a self, key: &'a str) -> CoreFuture<'a, io::Result<Vec<Model>>> {
-        Box::pin(async move {
-            use crate::application::nvidia_nim::NvidiaIo;
-            let io = crate::application::nvidia_nim::NativeNvidiaIo {
-                paths: self.paths.clone(),
-            };
-            parsers::nvidia(
-                &io.catalog(key, true, &Cancellation::default())
-                    .await
-                    .map_err(|_| io::Error::other("NVIDIA catalog unavailable"))?,
-            )
-        })
-    }
-    fn nvidia_key(&self) -> io::Result<String> {
-        crate::application::nvidia_nim::resolve_key(&self.paths, &self.environment)
-    }
     fn local<'a>(
         &'a self,
         config: &'a Config,

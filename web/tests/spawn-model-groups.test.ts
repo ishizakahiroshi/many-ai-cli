@@ -21,7 +21,6 @@ const groups: SpawnModelGroup[] = [
   { label: 'Cursor Agent', provider: 'cursor-agent', route: '', models: [{ id: 'synth-cursor-a', label: 'Cursor A' }] },
   { label: 'Grok Build', provider: 'grok', route: '', models: [{ id: 'synth-grok-a', label: 'Grok A' }] },
   { label: 'OpenCode', provider: 'opencode', route: '', models: [{ id: 'synth-opencode-a', label: 'OpenCode A' }] },
-  { label: 'NVIDIA NIM', provider: 'opencode', route: 'nvidia-nim', hosted: true, trial: true, models: [{ id: 'nvidia/synthetic-model-a', label: 'Synthetic model A' }] },
   { label: 'Ollama Cloud', provider: '', route: 'ollama', models: [{ id: 'synth-ollama-cloud' }] },
   { label: 'Ollama Local', provider: '', route: 'ollama', models: [{ id: 'synth-ollama-local' }] },
   { label: 'LM Studio', provider: '', route: 'lm-studio', models: [{ id: 'synth-lmstudio-a' }] },
@@ -53,19 +52,12 @@ describe('getModelGroupsForProvider', () => {
   });
 
   test('opencode sees OpenCode plus empty-provider local groups', () => {
-    expect(labelsFor('opencode')).toEqual(['OpenCode', 'NVIDIA NIM', 'Ollama Cloud', 'Ollama Local', 'LM Studio']);
+    expect(labelsFor('opencode')).toEqual(['OpenCode', 'Ollama Cloud', 'Ollama Local', 'LM Studio']);
   });
 
-  test('NVIDIA NIM is an OpenCode-only hosted trial group with its route', () => {
-    const nim = getModelGroupsForProvider(groups, 'opencode').find((group) => group.label === 'NVIDIA NIM');
-    expect(nim).toMatchObject({ provider: 'opencode', route: 'nvidia-nim', hosted: true, trial: true });
-    expect(getModelGroupsForProvider(groups, 'codex').some((group) => group.label === 'NVIDIA NIM')).toBe(false);
-    expect(getModelGroupsForProvider(groups, 'claude').some((group) => group.label === 'NVIDIA NIM')).toBe(false);
-  });
-
-  test('NVIDIA picker label carries localized hosted and trial badges', () => {
-    const nim = groups.find((group) => group.label === 'NVIDIA NIM')!;
-    expect(spawnModelGroupPickerLabel(nim, { hosted: 'Hosted', trial: 'Trial' })).toBe('NVIDIA NIM · Hosted / Trial');
+  test('picker label carries localized hosted and trial badges when a group sets them', () => {
+    const hosted: SpawnModelGroup = { label: 'Synthetic Hosted', provider: 'opencode', route: '', hosted: true, trial: true, models: [{ id: 'synth-hosted-a' }] };
+    expect(spawnModelGroupPickerLabel(hosted, { hosted: 'Hosted', trial: 'Trial' })).toBe('Synthetic Hosted · Hosted / Trial');
     expect(spawnModelGroupPickerLabel(groups[0], { hosted: 'Hosted', trial: 'Trial' })).toBe('Anthropic');
   });
 
@@ -83,9 +75,9 @@ describe('isModelCompatibleWithProvider', () => {
     expect(isModelCompatibleWithProvider(groups, 'claude', 'synth-grok-a')).toBe(false);
   });
 
-  test('an NVIDIA NIM model is compatible only with OpenCode', () => {
-    expect(isModelCompatibleWithProvider(groups, 'opencode', 'nvidia/synthetic-model-a')).toBe(true);
-    expect(isModelCompatibleWithProvider(groups, 'codex', 'nvidia/synthetic-model-a')).toBe(false);
+  test('an OpenCode-only model is compatible only with OpenCode', () => {
+    expect(isModelCompatibleWithProvider(groups, 'opencode', 'synth-opencode-a')).toBe(true);
+    expect(isModelCompatibleWithProvider(groups, 'codex', 'synth-opencode-a')).toBe(false);
   });
 
   test('an empty model is compatible with every CLI', () => {

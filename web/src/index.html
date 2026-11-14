@@ -492,44 +492,6 @@
           </div>
         </div>
       </details>
-      <details class="settings-section" data-section="nvidia-nim" data-group="conn">
-        <summary class="settings-section-title"><span data-i18n="settings_nim_title">NVIDIA NIM for OpenCode</span><span class="settings-section-current" data-section="nvidia-nim"></span></summary>
-        <div class="settings-section-body">
-          <div class="settings-note" data-i18n="settings_nim_desc">NVIDIA NIM is available only through OpenCode's Chat Completions compatible provider.</div>
-          <div class="settings-note settings-note-warn" data-i18n="settings_nim_trial_notice">Hosted trial terms may limit use to internal evaluation, development, and testing. Do not send production, confidential, or sensitive data. NVIDIA may use prompts and outputs to improve its products and models.</div>
-          <div class="settings-note settings-note-warn" data-i18n="settings_nim_model_compatibility">The NVIDIA /v1/models catalog may include models that do not support Chat Completions. Coding-agent and tool-use compatibility is not guaranteed.</div>
-          <label class="settings-row"><input id="nvidia-nim-enabled" type="checkbox"><span data-i18n="settings_nim_enable">Enable NVIDIA NIM for OpenCode</span></label>
-          <div class="settings-row">
-            <label class="settings-label" for="nvidia-nim-api-key" data-i18n="settings_nim_api_key">NVIDIA API key</label>
-            <input id="nvidia-nim-api-key" class="ui-input settings-input-url" type="password" autocomplete="new-password" data-i18n-placeholder="settings_nim_api_key_placeholder" placeholder="Enter a key to save or replace it">
-          </div>
-          <div class="settings-note" id="nvidia-nim-key-state" role="status" aria-live="polite" data-i18n="settings_nim_key_loading">Checking key status…</div>
-          <div class="settings-note" id="nvidia-nim-env-note" data-i18n="settings_nim_env_managed" hidden>NVIDIA_API_KEY is managed by the Hub environment. Change it there; the Settings page cannot replace or delete it.</div>
-          <div class="settings-row">
-            <span class="settings-label" data-i18n="settings_nim_endpoint">Endpoint</span>
-            <code>https://integrate.api.nvidia.com/v1</code>
-          </div>
-          <div class="settings-row-actions">
-            <button id="nvidia-nim-save" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" type="button" data-i18n="settings_nim_save">Save settings</button>
-            <button id="nvidia-nim-test" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" type="button" data-i18n="settings_nim_test">Test connection</button>
-            <button id="nvidia-nim-delete-key" class="ui-button ui-button--danger ui-button--compact settings-inline-btn danger" type="button" data-i18n="settings_nim_delete_key">Delete saved key</button>
-          </div>
-          <div class="settings-note" id="nvidia-nim-test-result" role="status" aria-live="polite" hidden></div>
-        </div>
-      </details>
-      <details class="settings-section" data-section="jev" data-group="conn">
-        <summary class="settings-section-title"><span data-i18n="settings_jev_title">Jev evaluation (optional)</span><span class="settings-section-current" data-section="jev"></span></summary>
-        <div class="settings-section-body">
-          <div class="settings-note" data-i18n="settings_jev_desc">Evaluate text with TypeSafe Jev on request. The result is for display only and does not change AI selection.</div>
-          <div class="settings-note" data-i18n="settings_jev_key">Set TYPESAFE_API_KEY in the Hub process environment. The key stays on the Hub.</div>
-          <label class="settings-row jev-opt-in-row"><input id="jev-opt-in" type="checkbox"><span data-i18n="settings_jev_opt_in">Enable manual Jev evaluation on this browser</span></label>
-          <label class="settings-label" for="jev-text" data-i18n="settings_jev_text_label">Text to evaluate</label>
-          <textarea id="jev-text" class="ui-input jev-text" maxlength="4096" rows="4" data-i18n-placeholder="settings_jev_placeholder" placeholder="Enter only the text you want to send"></textarea>
-          <div class="settings-note settings-note-warn" data-i18n="settings_jev_notice">Pressing Evaluate sends the text above to TypeSafe and may incur usage charges. Do not enter secrets.</div>
-          <div class="settings-row-actions"><button id="jev-evaluate" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" type="button" disabled data-i18n="settings_jev_evaluate">Evaluate with Jev</button></div>
-          <div id="jev-result" class="settings-note" role="status" aria-live="polite"></div>
-        </div>
-      </details>
       <details class="settings-section" data-section="remote-auth" data-group="conn">
         <summary class="settings-section-title"><span data-i18n="settings_remote_auth">リモートアクセス保護</span><span class="settings-section-current" data-section="remote-auth"></span></summary>
         <div class="settings-section-body">
@@ -1323,7 +1285,7 @@
             <path d="M4 13h4l2 3h4l2-3h4"/>
             <path d="M6 5h12l2 8v6H4v-6z"/>
           </svg>
-          <span data-board-handoffs-count></span>
+          <span class="memo-button-badge" data-board-handoffs-count aria-hidden="true" hidden></span>
         </button>
         <!-- C3: plan_memo-panel.md — 自分用の作業メモ（プロジェクトに紐づく）。
              AI がセッション単位で書く引き継ぎ看板とは別物。ルーティンと新規セッションの間に置く。 -->
@@ -1419,6 +1381,7 @@
           <div class="spawn-remote-attach-row" id="spawn-remote-attach-row" hidden>
             <label class="spawn-field-label" for="spawn-remote-attach" data-i18n="spawn_remote_attach_label"></label>
             <select id="spawn-remote-attach" class="ui-input spawn-select"></select>
+            <div class="spawn-remote-attach-hint" data-i18n="spawn_remote_attach_hint"></div>
           </div>
 
           <!-- effort: /api/info の effort_levels に写像がある provider でのみ出す。
@@ -1468,8 +1431,6 @@
           <div id="spawn-copilot-note" class="settings-note" data-i18n="spawn_copilot_note" hidden>Uses the installed GitHub Copilot CLI. Authentication and permissions are managed by Copilot.</div>
           <div id="spawn-cursor-agent-note" class="settings-note" data-i18n="spawn_cursor_agent_note" hidden>Uses the installed Cursor Agent CLI. Authentication and permissions are managed by Cursor.</div>
           <div id="spawn-opencode-note" class="settings-note" data-i18n="spawn_opencode_note" hidden>Uses the installed OpenCode CLI. Run `opencode auth login` before starting. Free-tier models may take 1–2 minutes to respond.</div>
-          <div id="spawn-nvidia-nim-note" class="settings-note settings-note-warn" data-i18n="spawn_nim_trial_notice" hidden>NVIDIA NIM is a hosted trial service. Use only for internal evaluation, development, and testing; do not send production, confidential, or sensitive data. NVIDIA may use prompts and outputs to improve its products and models.</div>
-          <div id="spawn-nvidia-nim-compat-note" class="settings-note settings-note-warn" data-i18n="spawn_nim_model_compatibility" hidden>The NVIDIA /v1/models catalog may include models that do not support Chat Completions. Coding-agent and tool-use compatibility is not guaranteed.</div>
           <div id="spawn-grok-note" class="settings-note" data-i18n="spawn_grok_note" hidden>Uses the installed Grok Build CLI (xAI). Requires a SuperGrok or X Premium+ subscription — the base X Premium plan cannot use it. Sign-in and quota stay in Grok.</div>
           <div id="spawn-command-code-note" class="settings-note" data-i18n="spawn_command_code_note" hidden>Uses the installed Command Code CLI. Authentication and permissions are managed by Command Code. Permission mode is passed only when you choose it here.</div>
           <div id="spawn-shell-note" class="settings-note" data-i18n="spawn_shell_note" hidden>Opens the OS default shell (pwsh / bash). No AI-specific options apply.</div>

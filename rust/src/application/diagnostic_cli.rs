@@ -49,14 +49,6 @@ pub async fn run(
             .map_err(|e| e.to_string())?;
         return Err("flag: help requested".into());
     };
-    let catalog = Arc::new(
-        super::main_program::model_catalog::native::NativeCatalogIo::new(
-            context.paths.clone(),
-            context.environment.clone(),
-            context.cwd.clone(),
-            Arc::new(super::main_program::model_cache::LocalModelCache::default()),
-        ),
-    );
     let doctor = Diagnostics::new(DiagnosticsDependencies {
         config: context.config.clone(),
         paths: context.paths.clone(),
@@ -74,10 +66,6 @@ pub async fn run(
             context.cwd.clone(),
             context.environment.clone(),
         )),
-        nvidia_key_configured: Arc::new(move || {
-            use super::main_program::model_catalog::CatalogIo;
-            catalog.nvidia_key().map(|key| !key.is_empty())
-        }),
     });
     let report = doctor
         .run(cancel)

@@ -159,7 +159,6 @@ pub(super) fn fixture() -> Fixture {
         platform: "windows".into(),
         io: io.clone(),
         subscription_cli: io.clone(),
-        nvidia_key_configured: Arc::new(|| Ok(false)),
     });
     let core = Arc::new(SessionEngine::new(
         EngineOptions::default(),
@@ -192,14 +191,13 @@ async fn real_checks_have_source_order_bounded_probes_and_disabled_profile_never
         .map(|c| c.name.as_str())
         .collect::<Vec<_>>();
     assert_eq!(
-        &names[..10],
+        &names[..9],
         &[
             "provider",
             "port",
             "token",
             "ACL",
             "Ollama",
-            "NVIDIA NIM",
             "Tailscale",
             "log",
             "session log",
@@ -558,6 +556,36 @@ async fn retired_whisper_folder_is_reported_with_size_and_absent_folder_reports_
             .any(|c| c.message.contains("廃止した Whisper の残り"))
     );
     assert!(whisper.join("bin/whisper-server").exists());
+}
+#[tokio::test]
+async fn retired_nvidia_key_file_is_reported_without_reading_or_deleting_it() {
+    let f = fixture();
+    assert!(local::nvidia_key_leftover(&f.doctor).is_empty());
+    let secrets = f.paths.root().join("secrets");
+    std::fs::create_dir_all(&secrets).unwrap();
+    let key = secrets.join("nvidia_api_key");
+    std::fs::write(&key, b"SYNTHETIC_PLACEHOLDER").unwrap();
+    let checks = local::nvidia_key_leftover(&f.doctor);
+    assert_eq!(checks.len(), 1, "{checks:?}");
+    assert_eq!(checks[0].name, "residue");
+    assert_eq!(checks[0].level, "WARN");
+    assert!(
+        checks[0].message.contains("NVIDIA NIM の API キー"),
+        "{}",
+        checks[0].message
+    );
+    assert!(checks[0].fix.contains("削除"), "{}", checks[0].fix);
+    // The report never carries the key, and the full run deletes nothing.
+    let text = format!("{checks:?}");
+    assert!(!text.contains("SYNTHETIC_PLACEHOLDER"), "{text}");
+    let report = f.doctor.run(&Cancellation::default()).await.unwrap();
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|c| c.message.contains("NVIDIA NIM の API キー"))
+    );
+    assert!(key.exists());
 }
 
 #[cfg(windows)]

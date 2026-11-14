@@ -19,7 +19,6 @@ pub mod native;
 mod parsers;
 #[cfg(test)]
 mod tests;
-pub const NVIDIA_URL: &str = "https://integrate.api.nvidia.com/v1/models";
 /// Go io.LimitReader returns a prefix and then EOF, without inspecting the tail.
 /// Reaching the limit terminates reading; JSON validation applies to that prefix.
 pub(super) fn append_prefix(bytes: &mut Vec<u8>, chunk: &[u8], cap: usize) -> bool {
@@ -75,8 +74,6 @@ pub trait CatalogIo: Send + Sync {
         provider: &'a str,
         force: bool,
     ) -> CoreFuture<'a, io::Result<Vec<Model>>>;
-    fn nvidia<'a>(&'a self, key: &'a str) -> CoreFuture<'a, io::Result<Vec<Model>>>;
-    fn nvidia_key(&self) -> io::Result<String>;
     fn local<'a>(
         &'a self,
         config: &'a Config,
@@ -101,7 +98,6 @@ struct Cache<T> {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FlightMode {
     Shared,
-    GenerationWait,
     GenerationDetach,
 }
 struct CacheState<T> {
@@ -170,7 +166,7 @@ impl<T: Clone + Default> Cache<T> {
     {
         let mut fetch = Some(fetch);
         loop {
-            let (flight, starter, must_retry) = {
+            let (flight, starter) = {
                 let mut state = self.state.lock().unwrap();
                 // Source checks fresh entries before the in-flight slot. A
                 // different request may refresh without blocking this hit.
@@ -192,9 +188,7 @@ impl<T: Clone + Default> Cache<T> {
                     };
                 }
                 if let Some(flight) = &state.flight {
-                    let retry = self.mode == FlightMode::GenerationWait
-                        && (flight.generation != state.generation || flight.key != key);
-                    (flight.clone(), false, retry)
+                    (flight.clone(), false)
                 } else {
                     let flight = Arc::new(Flight {
                         generation: state.generation,
@@ -203,7 +197,7 @@ impl<T: Clone + Default> Cache<T> {
                         done: tokio::sync::Notify::new(),
                     });
                     state.flight = Some(flight.clone());
-                    (flight, true, false)
+                    (flight, true)
                 }
             };
             if starter {
@@ -270,7 +264,7 @@ impl<T: Clone + Default> Cache<T> {
                     }
                 };
                 match result {
-                    Some(Some(result)) if !must_retry => return result,
+                    Some(Some(result)) => return result,
                     Some(_) => break,
                     None => notified.await,
                 }
@@ -291,7 +285,6 @@ pub struct ModelsCatalog {
     cursor: Cache<Vec<Model>>,
     grok: Cache<Vec<Model>>,
     opencode: Cache<Vec<Model>>,
-    nvidia: Cache<Vec<Model>>,
 }
 impl ModelsCatalog {
     pub fn new(config: Arc<ConfigStore>, io: Arc<dyn CatalogIo>) -> Self {
@@ -302,7 +295,6 @@ impl ModelsCatalog {
             cursor: Cache::new(600, 180, FlightMode::GenerationDetach),
             grok: Cache::new(600, 180, FlightMode::GenerationDetach),
             opencode: Cache::new(600, 180, FlightMode::Shared),
-            nvidia: Cache::new(600, 60, FlightMode::GenerationWait),
         }
     }
     pub async fn response(
@@ -320,7 +312,7 @@ impl ModelsCatalog {
             .config;
         if force {
             self.io.invalidate_local().await?;
-            for cache in [&self.cursor, &self.grok, &self.nvidia] {
+            for cache in [&self.cursor, &self.grok] {
                 cache.invalidate();
             }
             self.defaults.invalidate();
@@ -410,26 +402,6 @@ impl ModelsCatalog {
         if !opencode.value.is_empty() {
             newest = max(newest, opencode.at);
             group("OpenCode", "opencode", "", opencode.value, false);
-        }
-        if cfg.nvidia_nim.enabled
-            && let Ok(key) = self.io.nvidia_key()
-            && !key.trim().is_empty()
-        {
-            use sha2::Digest;
-            let fingerprint = sha2::Sha256::digest(key.as_bytes()).to_vec();
-            let nim = self
-                .nvidia
-                .get(fingerprint, force, false, self.io.nvidia(&key))
-                .await;
-            response
-                .sources
-                .insert("nvidia_nim".into(), NVIDIA_URL.into());
-            if nim.failed {
-                response.warnings.push("nvidia_nim_unreachable".into());
-            } else if !nim.value.is_empty() {
-                newest = max(newest, nim.at);
-                group("NVIDIA NIM", "opencode", "nvidia-nim", nim.value, true);
-            }
         }
         let local = self
             .io

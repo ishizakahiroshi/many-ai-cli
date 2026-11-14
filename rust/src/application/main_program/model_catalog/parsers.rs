@@ -162,34 +162,6 @@ fn opencode(bytes: &[u8]) -> io::Result<Vec<Model>> {
     flush(&mut models, &mut seen, &mut pending);
     Ok(models)
 }
-pub(super) fn nvidia(bytes: &[u8]) -> io::Result<Vec<Model>> {
-    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| invalid())?;
-    let items = value["data"].as_array().ok_or_else(invalid)?;
-    let mut models = Vec::new();
-    let mut seen = BTreeSet::new();
-    for item in items {
-        let id = item["id"].as_str().ok_or_else(invalid)?.trim();
-        if id.is_empty()
-            || id.len() > 256
-            || id.split('/').any(|part| {
-                part.is_empty()
-                    || matches!(part, "." | "..")
-                    || !part.bytes().all(|byte| {
-                        byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
-                    })
-            })
-            || !seen.insert(id.to_owned())
-        {
-            return Err(invalid());
-        }
-        models.push(Model {
-            id: format!("nvidia/{id}"),
-            label: id.into(),
-            ..Default::default()
-        });
-    }
-    Ok(models)
-}
 pub(super) fn defaults(bytes: &[u8]) -> io::Result<BTreeMap<String, Vec<Model>>> {
     let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| invalid())?;
     if value.is_null() {

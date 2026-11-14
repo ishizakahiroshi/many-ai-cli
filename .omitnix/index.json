@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "a58ada85aaefb53af9474c8ab9fbe81e90550ad7",
+    "commit": "4b310ad2d2398bf67135563aff22b699fb9903c1",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2087,
-    "analyzed": 1625,
+    "discovered": 2082,
+    "analyzed": 1620,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 447,
@@ -24533,93 +24533,6 @@
       "unresolved": []
     },
     {
-      "path": "rust/src/application/nvidia_nim.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "Fixed NVIDIA authority and private key state; keys never enter protocol DTOs."
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "rust/src/application/nvidia_nim/native.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "rust/src/application/nvidia_nim/tests.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
       "path": "rust/src/application/orchestrate_cli.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -30958,35 +30871,6 @@
       "unresolved": []
     },
     {
-      "path": "rust/src/hub/jev_routes.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "Explicit display-only evaluation. Private input and upstream errors stay private."
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
       "path": "rust/src/hub/lifecycle.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -31162,35 +31046,6 @@
     },
     {
       "path": "rust/src/hub/notify_routes.rs",
-      "adapter": "rust",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "rust/src/hub/nvidia_routes.rs",
       "adapter": "rust",
       "status": "analyzed",
       "fields": {
@@ -45141,6 +44996,36 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/header-actions.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "PC（幅 721px 以上・マウス操作）では、サイドバー上端のアイコン列をヘッダーへ移す。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/history-lite.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -45328,36 +45213,6 @@
         "summary": {
           "state": "value",
           "value": "入力欄の下段ボタン列の旧並び順を復元する互換層。"
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "none_observed",
-          "value": []
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "web/src/app/jev-opt-in.ts",
-      "adapter": "tsjs",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
         },
         "authentication": {
           "state": "not_configured"

@@ -563,17 +563,6 @@ async fn actual_http_composition_keeps_relay_guards_and_trial_notification_denia
             expected
         );
     }
-    assert_eq!(
-        client
-            .post(endpoint("/api/jev/evaluate"))
-            .body("{")
-            .send()
-            .await
-            .unwrap()
-            .status()
-            .as_u16(),
-        503
-    );
     assert!(
         client
             .post(endpoint("/api/notify-config"))

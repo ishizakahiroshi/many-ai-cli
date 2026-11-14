@@ -79,7 +79,6 @@ pub struct SpawnPolicyDependencies {
     pub trusted: TrustObserver,
 }
 pub struct ConfigSpawnLaunchPolicy {
-    paths: RuntimePaths,
     config: Arc<ConfigStore>,
     dependencies: SpawnPolicyDependencies,
     subscriptions: SubscriptionLauncher,
@@ -123,7 +122,6 @@ impl ConfigSpawnLaunchPolicy {
                 dependencies.vendor_home.clone(),
                 dependencies.hub_cwd.clone(),
             ),
-            paths,
             config,
             dependencies,
         })
@@ -278,15 +276,9 @@ impl SpawnLaunchPolicy for ConfigSpawnLaunchPolicy {
             .path_environment
             .sanitize(base_environment)?;
         let route_cfg = self.config.snapshot().map_err(config_error)?.config;
-        let route_environment = routes::environment(
-            &self.paths,
-            &route_cfg,
-            &spec.provider,
-            &effective_route,
-            &spec.model,
-            &base_environment,
-        )
-        .map_err(|error| policy_failure(PolicyFailureStage::Route, error))?;
+        let route_environment =
+            routes::environment(&route_cfg, &spec.provider, &effective_route)
+                .map_err(|error| policy_failure(PolicyFailureStage::Route, error))?;
         // Only ordinary HTTP Start appends custom registry model templates.
         // The historical registration-wait path retains its --model argument.
         let ordinary_model_args = if custom && !resolved_model.is_empty() {

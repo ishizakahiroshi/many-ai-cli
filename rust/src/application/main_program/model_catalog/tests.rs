@@ -28,9 +28,7 @@ fn body_limit_is_json_prefix_eof_instead_of_oversize_rejection() {
 struct Fake {
     defaults: AtomicUsize,
     native: AtomicUsize,
-    nvidia: AtomicUsize,
     failed: AtomicBool,
-    key: Mutex<String>,
 }
 struct GatedIo {
     delegate: Arc<Fake>,
@@ -78,12 +76,6 @@ impl CatalogIo for GatedIo {
         } else {
             self.delegate.native(provider, force)
         }
-    }
-    fn nvidia<'a>(&'a self, _: &'a str) -> CoreFuture<'a, io::Result<Vec<Model>>> {
-        Box::pin(self.models())
-    }
-    fn nvidia_key(&self) -> io::Result<String> {
-        Ok(String::new())
     }
     fn local<'a>(
         &'a self,
@@ -171,71 +163,6 @@ async fn native_fresh_hit_does_not_wait_for_refresh_and_detached_old_generation_
         "observed-3"
     );
 }
-#[tokio::test]
-async fn nvidia_changed_generation_waits_then_fetches_own_key_and_dropped_fetch_owner_unstrands_waiter()
- {
-    let (_root, _config, delegate, _owner) = fixture();
-    let io = GatedIo::new(delegate);
-    let cache = Arc::new(Cache::new(600, 60, FlightMode::GenerationWait));
-    let first = {
-        let cache = cache.clone();
-        let io = io.clone();
-        tokio::spawn(async move {
-            cache
-                .get(
-                    b"old-key-fingerprint".to_vec(),
-                    false,
-                    false,
-                    io.nvidia("synthetic-old"),
-                )
-                .await
-        })
-    };
-    io.entered.notified().await;
-    cache.invalidate();
-    let second = cache.get(
-        b"new-key-fingerprint".to_vec(),
-        true,
-        false,
-        io.nvidia("synthetic-new"),
-    );
-    tokio::pin!(second);
-    assert!(futures_util::poll!(&mut second).is_pending());
-    assert_eq!(io.requests.load(Ordering::SeqCst), 1);
-    io.pause.store(false, Ordering::SeqCst);
-    io.release.add_permits(1);
-    first.await.unwrap();
-    assert_eq!(second.await.value[0].id, "observed-2");
-    cache.invalidate();
-    io.pause.store(true, Ordering::SeqCst);
-    let abandoned = {
-        let cache = cache.clone();
-        let io = io.clone();
-        tokio::spawn(async move {
-            cache
-                .get(
-                    b"next-key".to_vec(),
-                    false,
-                    false,
-                    io.nvidia("synthetic-next"),
-                )
-                .await
-        })
-    };
-    io.entered.notified().await;
-    let takeover = cache.get(
-        b"next-key".to_vec(),
-        false,
-        false,
-        io.nvidia("synthetic-next"),
-    );
-    tokio::pin!(takeover);
-    assert!(futures_util::poll!(&mut takeover).is_pending());
-    abandoned.abort();
-    assert!(abandoned.await.unwrap_err().is_cancelled());
-    io.pause.store(false, Ordering::SeqCst);
-    assert_eq!(takeover.await.value[0].id, "observed-4");
-}
 fn model(id: &str) -> Model {
     Model {
         id: id.into(),
@@ -277,15 +204,6 @@ impl CatalogIo for Fake {
             }
         })
     }
-    fn nvidia<'a>(&'a self, _: &'a str) -> CoreFuture<'a, io::Result<Vec<Model>>> {
-        Box::pin(async move {
-            self.nvidia.fetch_add(1, Ordering::SeqCst);
-            Ok(vec![model("nvidia/synthetic/model")])
-        })
-    }
-    fn nvidia_key(&self) -> io::Result<String> {
-        Ok(self.key.lock().unwrap().clone())
-    }
     fn local<'a>(
         &'a self,
         _: &'a Config,
@@ -323,7 +241,6 @@ fn fixture() -> (
     std::fs::create_dir(&runtime).unwrap();
     let paths = RuntimePaths::trial(&runtime, 49236, &root.path().join("installed")).unwrap();
     let mut config = Config::default();
-    config.nvidia_nim.enabled = true;
     config.local_models = vec![
         crate::config::LocalModel {
             id: "local".into(),
@@ -338,9 +255,7 @@ fn fixture() -> (
     let fake = Arc::new(Fake {
         defaults: AtomicUsize::new(0),
         native: AtomicUsize::new(0),
-        nvidia: AtomicUsize::new(0),
         failed: AtomicBool::new(false),
-        key: Mutex::new("synthetic-key".into()),
     });
     let owner = ModelsCatalog::new(config.clone(), fake.clone());
     (root, config, fake, owner)
@@ -363,16 +278,13 @@ async fn full_catalog_has_source_order_labels_fallback_routes_and_keyed_ttls() {
             "Cursor Agent",
             "Grok Build",
             "OpenCode",
-            "NVIDIA NIM",
             "Ollama Cloud",
             "Ollama Local",
             "LM Studio"
         ]
     );
-    assert_eq!(result.groups[6].route, "nvidia-nim");
-    assert!(result.groups[6].hosted && result.groups[6].trial);
     assert_eq!(
-        result.groups[8]
+        result.groups[7]
             .models
             .iter()
             .map(|model| (model.id.as_str(), model.label.as_str()))
@@ -384,61 +296,12 @@ async fn full_catalog_has_source_order_labels_fallback_routes_and_keyed_ttls() {
     owner.response(false, &cancel).await.unwrap();
     assert_eq!(fake.defaults.load(Ordering::SeqCst), 1);
     assert_eq!(fake.native.load(Ordering::SeqCst), 3);
-    *fake.key.lock().unwrap() = "synthetic-other-key".into();
-    owner.response(false, &cancel).await.unwrap();
-    assert_eq!(fake.nvidia.load(Ordering::SeqCst), 2);
     tokio::time::advance(Duration::from_secs(181)).await;
     owner.response(false, &cancel).await.unwrap();
     assert_eq!(fake.native.load(Ordering::SeqCst), 4);
     owner.response(true, &cancel).await.unwrap();
     assert_eq!(fake.defaults.load(Ordering::SeqCst), 2);
     assert_eq!(fake.native.load(Ordering::SeqCst), 7);
-}
-
-#[tokio::test(start_paused = true)]
-async fn models_get_fetches_nvidia_only_when_enabled_with_a_nonempty_key() {
-    let (_root, config, fake, owner) = fixture();
-    let request = crate::hub::http::Request {
-        method: "GET".into(),
-        path: "/api/models".into(),
-        ..Default::default()
-    };
-    for (enabled, key, expected_fetches, expected_group) in [
-        (false, "synthetic-key", 0, false),
-        (true, "", 0, false),
-        (true, "   ", 0, false),
-        (true, "synthetic-key", 1, true),
-        (false, "synthetic-key", 1, false),
-        (true, "", 1, false),
-        (true, "synthetic-key", 1, true),
-        (true, "synthetic-next-key", 2, true),
-    ] {
-        let mut snapshot = config.snapshot().unwrap();
-        snapshot.config.nvidia_nim.enabled = enabled;
-        let revision = config
-            .persist(snapshot.revision, snapshot.config)
-            .unwrap()
-            .revision;
-        *fake.key.lock().unwrap() = key.into();
-        let response = owner.handle(&request, &Cancellation::default()).await;
-        assert_eq!(response.status, 200);
-        let value: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
-        let group = value["groups"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|group| group["label"] == "NVIDIA NIM");
-        assert_eq!(group.is_some(), expected_group);
-        if let Some(group) = group {
-            assert_eq!(group["models"][0]["id"], "nvidia/synthetic/model");
-        }
-        assert_eq!(fake.nvidia.load(Ordering::SeqCst), expected_fetches);
-        assert_eq!(
-            config.snapshot().unwrap().revision,
-            revision,
-            "GET cannot persist config"
-        );
-    }
 }
 #[tokio::test(start_paused = true)]
 async fn remote_failure_keeps_last_actual_value_until_force_discards_it() {
@@ -458,7 +321,7 @@ async fn remote_failure_keeps_last_actual_value_until_force_discards_it() {
     assert_eq!(fake.defaults.load(Ordering::SeqCst), 3);
 }
 #[test]
-fn native_and_nvidia_parsers_retain_source_order_and_reject_unsafe_ids() {
+fn native_parsers_retain_source_order_and_reject_unsafe_ids() {
     assert_eq!(
         parsers::native(
             b"\x1b[32m* auto - Automatic\x1b[0m\nopus-4.1\nopus-4.1\nHeader text\n",
@@ -490,12 +353,6 @@ opencode/last
             .map(|model| model.id.as_str())
             .collect::<Vec<_>>(),
         ["opencode/first", "opencode/last"]
-    );
-    assert!(parsers::nvidia(br#"{"data":[{"id":"a/model"},{"id":"a/model"}]}"#).is_err());
-    assert!(parsers::nvidia(br#"{"data":[{"id":"a/../model"}]}"#).is_err());
-    assert_eq!(
-        parsers::nvidia(br#"{"data":[{"id":"a/model"}]}"#).unwrap()[0].id,
-        "nvidia/a/model"
     );
     assert!(parsers::defaults(br#"{"anthropic":[{"id":7}]}"#).is_err());
 }

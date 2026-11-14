@@ -192,20 +192,8 @@ impl OrdinarySpawnRequest {
         {
             return Err(SpawnError::bad("bad request"));
         }
-        if ![
-            "",
-            "anthropic",
-            "openai",
-            "ollama",
-            "lm-studio",
-            "nvidia-nim",
-        ]
-        .contains(&self.route.as_str())
-        {
+        if !["", "anthropic", "openai", "ollama", "lm-studio"].contains(&self.route.as_str()) {
             return Err(SpawnError::bad("invalid route"));
-        }
-        if self.route == "nvidia-nim" && self.provider != "opencode" {
-            return Err(SpawnError::bad("route is not available for this provider"));
         }
         if !valid_worktree_cleanup(&self.worktree_cleanup) {
             return Err(SpawnError::bad("invalid worktree cleanup policy"));

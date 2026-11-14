@@ -1,8 +1,6 @@
 /* Extracted from styles.css. Imported by /styles.css. */
 
 /* Settings panel */
-.jev-text { width: 100%; resize: vertical; min-height: 5rem; }
-.settings-row.jev-opt-in-row { justify-content: flex-start; gap: 0.5rem; }
 /* 設定パネル */
 #settings-panel {
   /* 画面全体を覆う設定画面。操作別の確認ダイアログとトーストは前面に出る。 */
@@ -50,6 +48,8 @@
 .env-badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 20px;
   min-height: 18px;
   max-width: 118px;
   padding: 1px 6px;

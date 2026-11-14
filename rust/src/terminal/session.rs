@@ -90,8 +90,6 @@ impl Default for EngineOptions {
                     ""
                 } else if model.contains(":cloud") {
                     "ollama"
-                } else if provider == "opencode" && model.trim().starts_with("nvidia/") {
-                    "nvidia-nim"
                 } else if provider == "claude" {
                     "anthropic"
                 } else if provider == "codex" {

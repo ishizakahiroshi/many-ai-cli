@@ -82,7 +82,6 @@ pub struct DiagnosticsDependencies {
     pub platform: String,
     pub io: Arc<dyn DiagnosticIo>,
     pub subscription_cli: Arc<dyn SubscriptionCli>,
-    pub nvidia_key_configured: Arc<dyn Fn() -> io::Result<bool> + Send + Sync>,
 }
 pub struct Diagnostics {
     deps: DiagnosticsDependencies,
@@ -109,7 +108,6 @@ impl Diagnostics {
             local::token(self, &cfg),
             local::acl(self),
             self.ollama(&cfg, cancel).await,
-            self.nvidia(&cfg),
             self.tailscale(&cfg, cancel).await,
             local::logs(self, &cfg),
             local::session_log(self, &cfg),
@@ -117,6 +115,7 @@ impl Diagnostics {
         ];
         checks.extend(supplemental::residue(self, &cfg, cancel).await);
         checks.extend(local::whisper_leftover(self));
+        checks.extend(local::nvidia_key_leftover(self));
         checks.extend(supplemental::approval_instructions(self, &cfg));
         checks.extend(self.command_code(cancel).await);
         checks.extend(supplemental::subscriptions(self, &cfg, cancel).await);
@@ -218,36 +217,6 @@ impl Diagnostics {
                 "Ollama の起動状態と base_url を確認してください",
             ),
             Ok(_) => Check::new("Ollama", "OK", "Ollama に接続できます", ""),
-        }
-    }
-    fn nvidia(&self, cfg: &Config) -> Check {
-        if !cfg.nvidia_nim.enabled {
-            return Check::new(
-                "NVIDIA NIM",
-                "OK",
-                "DISABLED: NVIDIA NIM route is turned off",
-                "",
-            );
-        }
-        match (self.deps.nvidia_key_configured)() {
-            Err(_) => Check::new(
-                "NVIDIA NIM",
-                "WARN",
-                "API key status is unavailable; details are hidden",
-                "Check the Hub settings directory permissions",
-            ),
-            Ok(false) => Check::new(
-                "NVIDIA NIM",
-                "WARN",
-                "NOT CONFIGURED: no NVIDIA API key is configured",
-                "Configure a key in Hub Settings → NVIDIA NIM",
-            ),
-            Ok(true) => Check::new(
-                "NVIDIA NIM",
-                "WARN",
-                "Configured; API connectivity was not checked by Doctor",
-                "Use Test connection in Hub Settings to check NVIDIA /v1/models",
-            ),
         }
     }
     async fn tailscale(&self, cfg: &Config, cancel: &Cancellation) -> Check {

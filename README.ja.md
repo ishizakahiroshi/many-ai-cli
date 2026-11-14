@@ -82,16 +82,6 @@ Terminal pane #1              Terminal pane #2
 
 Gemini CLI は意図的に対象外です。
 
-## NVIDIA NIM trial route（OpenCode 専用）
-
-Hub の設定画面から NVIDIA NIM を OpenCode 専用 provider として有効にできます。推論リクエストは OpenCode から NVIDIA の Chat Completions endpoint（`/v1/chat/completions`）へ直接送られ、Hub は推論を proxy しません。Hub が NVIDIA の `/v1/models` を使うのは、モデルピッカーの一覧取得と Settings の接続試験です。この route は Codex CLI と Claude Code では使えません。
-
-設定は **設定 → NVIDIA NIM** で行います。API key は many-ai-cli のユーザー用保護領域に保存するか、Hub 起動前に `NVIDIA_API_KEY` 環境変数で渡せます。UI は key の有無と取得元だけを表示し、key 自体を返しません。Hub の環境変数で管理する key は UI から置換・削除できません。
-
-NVIDIA API の trial 利用は、別途適用される subscription がない限り、内部評価・テスト向けであり production 利用向けではありません。confidential / controlled / sensitive な情報を送らないでください。Trial Terms では User Content と Generated Content が NVIDIA の製品（AI model を含む）の改善に使われる場合があります。この連携は production の可用性や SLA を保証しません。[NVIDIA API Trial Terms](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) を確認してください。
-
-モデルピッカーの一覧には Chat Completions 非対応のモデルが含まれる可能性があります。catalog に載っていることや `/v1/models` 接続試験の成功だけでは、個別モデルの prompt / streaming / tool-use / file edit / shell / resume 互換性を確認できません。特定モデルを使う前に、公開済みで機密情報を含まない検証用リポジトリで確認してください。[NVIDIA LLM API reference](https://docs.api.nvidia.com/nim/re/reference/llm-apis) に Chat Completions endpoint が記載されています。
-
 導入状況一覧（初回画面、および 設定 → AI CLI 連携）では、各 CLI のバージョンを確認し、その場で更新できます。実行するのはボタンを押したときだけで、Hub 起動時や定期実行では走りません。更新は各 provider の「バージョンと更新」設定に書かれたコマンドを実行し、実行前に確認ダイアログで実際のコマンドを見せます。実行中セッションがある CLI は、セッションが終わるまで更新できません。同梱の 7 本は既定の更新コマンドつきですが、Cursor Agent CLI と Command Code だけは既定で更新 OFF です（更新時に再ログインを求められることがあるため）。更新コマンドの変更や、追加した AI での更新の有効化は、設定 → AI CLI 連携 → 編集 → 「バージョンと更新」で行います。この機能が見えるのは Hub 自身が起動した、または `PATH` 上で見つけた CLI だけです。自分でターミナルを開いて動かしている CLI は対象外です。
 
 ---
@@ -1474,11 +1464,9 @@ Grok セッションでは、生成された子は親自身のセッションフ
 - **CLI のインストール手順リンクの取得（Hub 本体の通信）**: 初回画面や **設定 → AI CLI 連携** で導入状況一覧を出すとき、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/install-links/defaults.json`（各 CLI の公式インストール手順へのリンク）を取得し、24 時間キャッシュします。取得できないときは、リンク無しで一覧を出します。
 - **AI Usage Links の既定リンクの取得（Hub 本体の通信）**: ダッシュボードの画面を読み込むと、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json`（設定 → Usageに出す、各ベンダーの使用量ページへの既定のリンク）を取得し、24 時間キャッシュします。取得元 URL は変更できず、止める設定もありません。取得できないときは Hub に組み込んだリンクを使います。
 - **モデル候補の一覧の取得（Hub 本体の通信）**: 新規セッションの画面・派生ダイアログ・spawn 確認ダイアログが初めてモデル候補を出すときと、モデル欄の横の ↻ を押したとき、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/models/defaults.json`（Claude Code・Codex・Copilot のモデル候補と、Cursor Agent・Grok の予備の候補）を取得し、24 時間キャッシュします。取得元 URL は `config.yaml` の `models_source` で変更できます。取得できないときはこれらの候補が空になり、モデル名は手で入力できます。
-- **NVIDIA NIM のモデルカタログと接続試験（Hub 本体の通信 / opt-in のみ）**: NVIDIA NIM を設定している場合（上記の [NVIDIA NIM trial route](#nvidia-nim-trial-routeopencode-専用) 参照）、Hub は NVIDIA の `/v1/models` endpoint を呼び、モデルピッカーの一覧取得と設定画面の接続試験に使います。推論そのものは proxy されず、OpenCode から NVIDIA の Chat Completions endpoint へ直接送られます。
 - **Web Push 通知（Hub 本体の通信 / opt-in のみ）**: プッシュ通知を有効にした場合、Hub は暗号化された Web Push request をブラウザベンダーの push サービスへ HTTPS 送信します。承認 payload には OS 通知表示に必要なセッション ID / 名前、provider、承認質問・文脈の短い抜粋が含まれます。Workflow 完了 payload はセッション名と agent 集計件数だけです。Hub URL token、journal の result 本文、agent ID は含めません。VAPID 鍵と購読情報は `~/.many-ai-cli/push_store.json` にローカル保存されます。SSH トンネルが切れていても通知配送自体は届く場合がありますが、通知から Hub を開くにはトンネルと Hub に到達できる必要があります。
-- **Jev によるプロンプト評価（Hub 本体の通信 / opt-in のみ）**: Hub の環境に `TYPESAFE_API_KEY` があり、このブラウザで評価をオンにした場合だけ、評価ボタンを押すとプロンプトの文を最大 4096 バイト `api.typesafe.ai` へ送ります。TypeSafe 側でキーに課金されることがあります。結果は表示だけで、どの AI を動かすかは変えません。
 - **音声入力（使用時のみ）**: ブラウザ内蔵認識は Web Speech API を使用しており、Chrome / Edge では **マイク音声がブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます**。Hub 自身は音声を受け取らず、保存もしません。「音声入力」節の注意書きも参照。
-- **wrap 対象 CLI の API 通信（CLI 自身の通信）**: ラップ対象である Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI / opencode / Command Code 自身は、それぞれのバックエンドと HTTPS で直接通信します。公式 5 CLI はそれぞれのベンダー API（Anthropic / OpenAI / GitHub / Cursor / xAI）、opencode と Command Code は設定したモデルプロバイダー（opencode は NVIDIA NIM を含む。上記参照）です。`many-ai-cli` は PTY の入出力をローカル WebSocket で中継するだけで、これらの API 通信を傍受・記録・プロキシすることはありません。元の CLI のネットワーク挙動がそのまま適用されます。
+- **wrap 対象 CLI の API 通信（CLI 自身の通信）**: ラップ対象である Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI / opencode / Command Code 自身は、それぞれのバックエンドと HTTPS で直接通信します。公式 5 CLI はそれぞれのベンダー API（Anthropic / OpenAI / GitHub / Cursor / xAI）、opencode と Command Code は設定したモデルプロバイダーです。`many-ai-cli` は PTY の入出力をローカル WebSocket で中継するだけで、これらの API 通信を傍受・記録・プロキシすることはありません。元の CLI のネットワーク挙動がそのまま適用されます。
 
 ### ⚠️ wrap 対象 CLI のデータ保持について
 
@@ -1493,7 +1481,7 @@ Grok セッションでは、生成された子は親自身のセッションフ
 | **GitHub Copilot CLI**（GitHub: Product Specific Terms 2026/3 版） | **使われる**（プロンプトは保持され private モデルの fine-tune に利用） | 規約上の明示的な opt-out は不明（最新規約を要確認） | 明示なし |
 | **Cursor Agent CLI**（Cursor） | 最新規約を要確認 | 最新規約を要確認 | 最新規約を要確認 |
 | **Grok Build CLI**（xAI） | 最新規約を要確認 | 最新規約を要確認 | 最新規約を要確認 |
-| **opencode**（コミュニティ CLI。設定したバックエンド次第。NVIDIA NIM を含む） | 設定したバックエンド次第 | 設定したバックエンド次第 | 設定したバックエンド次第 |
+| **opencode**（コミュニティ CLI。設定したバックエンド次第） | 設定したバックエンド次第 | 設定したバックエンド次第 | 設定したバックエンド次第 |
 | **Command Code** | 最新規約を要確認 | 最新規約を要確認 | 最新規約を要確認 |
 
 ### ⚠️ 規約変更リスクについて

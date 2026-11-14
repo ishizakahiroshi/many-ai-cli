@@ -44,7 +44,6 @@ pub struct ServiceRouter {
     updates: Option<Arc<super::update_routes::UpdateHttp>>,
     runtime: Option<(Arc<super::runtime_routes::NetHints>, String)>,
     links: Option<Arc<crate::application::link_defaults::LinkDefaults>>,
-    jev: Option<Arc<super::jev_routes::JevHttp>>,
     push: Option<Arc<super::push_routes::PushHttp>>,
     security: Option<Arc<crate::application::push::security::SecurityNotifications>>,
     icons: Option<Arc<super::icon_routes::IconHttp>>,
@@ -52,7 +51,6 @@ pub struct ServiceRouter {
     agent_history: Option<Arc<super::agent_history_routes::AgentHistoryHttp>>,
     grid: Option<Arc<super::grid_spawn_routes::GridHttp>>,
     mobile: Option<Arc<super::mobile_routes::MobileHttp>>,
-    nvidia: Option<Arc<super::nvidia_routes::NvidiaHttp>>,
     patterns: Option<Arc<super::approval_pattern_routes::ApprovalPatternHttp>>,
     instruction_rules: Option<Arc<super::approval_status_routes::ApprovalStatusHttp>>,
     spawn: Option<(Arc<super::spawn_routes::SpawnHttp>, Arc<SpawnOffset>)>,
@@ -203,15 +201,6 @@ impl ServiceRouter {
         if let Some(icons) = &self.icons {
             icons.preflight_authenticated(request)?;
         }
-        if request.path == super::jev_routes::PATH
-            && self.jev.as_ref().is_some_and(|owner| !owner.configured())
-        {
-            return Err(Response::error(
-                503,
-                "jev_not_configured",
-                "Set TYPESAFE_API_KEY in the Hub process environment",
-            ));
-        }
         Ok(())
     }
     pub fn new(
@@ -254,7 +243,6 @@ impl ServiceRouter {
             updates: None,
             runtime: None,
             links: None,
-            jev: None,
             push: None,
             security: None,
             icons: None,
@@ -262,7 +250,6 @@ impl ServiceRouter {
             agent_history: None,
             grid: None,
             mobile: None,
-            nvidia: None,
             patterns: None,
             instruction_rules: None,
             spawn: None,
@@ -432,10 +419,6 @@ impl ServiceRouter {
         self.links = Some(links);
         self
     }
-    pub fn with_jev(mut self, owner: Arc<super::jev_routes::JevHttp>) -> Self {
-        self.jev = Some(owner);
-        self
-    }
     pub fn with_push(mut self, owner: Arc<super::push_routes::PushHttp>) -> Self {
         self.push = Some(owner);
         self
@@ -481,10 +464,6 @@ impl ServiceRouter {
     }
     pub fn with_mobile(mut self, owner: Arc<super::mobile_routes::MobileHttp>) -> Self {
         self.mobile = Some(owner);
-        self
-    }
-    pub fn with_nvidia(mut self, owner: Arc<super::nvidia_routes::NvidiaHttp>) -> Self {
-        self.nvidia = Some(owner);
         self
     }
     pub fn with_approval_patterns(
@@ -654,24 +633,6 @@ impl ServiceRouter {
                 _ = waiter.token().cancelled() => { cancel.cancel(); operation.await },
             };
             return Dispatch::response(response);
-        }
-        if super::nvidia_routes::NvidiaHttp::methods(&request.path).is_some() {
-            let Some(owner) = &self.nvidia else {
-                return Dispatch::response(Response::error(
-                    503,
-                    "nvidia_unavailable",
-                    "NVIDIA service unavailable",
-                ));
-            };
-            let cancel = crate::process::Cancellation::default();
-            let operation = owner.handle_authenticated(request, &cancel);
-            tokio::pin!(operation);
-            let response = tokio::select! {
-                response = &mut operation => response,
-                _ = cancellation.token().cancelled() => { cancel.cancel(); operation.await },
-                _ = waiter.token().cancelled() => { cancel.cancel(); operation.await },
-            };
-            return Dispatch::response(response.expect("recognized NVIDIA route"));
         }
         if request.path == "/api/kill-all" {
             let (Some(core), Some(sessions)) = (&self.core, &self.sessions) else {
@@ -874,19 +835,6 @@ impl ServiceRouter {
                     .handle_authenticated(request, at)
                     .expect("recognized update route"),
                 None => Response::error(503, "update_unavailable", "CLI updater unavailable"),
-            });
-        }
-        if request.path == super::jev_routes::PATH {
-            return Dispatch::response(match &self.jev {
-                Some(owner) => tokio::select! {
-                    response=owner.handle_authenticated(request,cancellation.token())=>response,
-                    _=waiter.token().cancelled()=>Response::error(502,"jev_failed","Jev evaluation failed or returned an unexpected response"),
-                },
-                None => Response::error(
-                    503,
-                    "jev_not_configured",
-                    "Set TYPESAFE_API_KEY in the Hub process environment",
-                ),
             });
         }
         if super::session_routes::MAINTENANCE_ROUTES.contains(&request.path.as_str())
@@ -1104,7 +1052,6 @@ impl ServiceRouter {
             updates: None,
             runtime: None,
             links: None,
-            jev: None,
             push: None,
             security: None,
             icons: None,
@@ -1112,7 +1059,6 @@ impl ServiceRouter {
             agent_history: None,
             grid: None,
             mobile: None,
-            nvidia: None,
             patterns: None,
             instruction_rules: None,
             spawn: None,
@@ -1261,7 +1207,7 @@ impl ServiceRouter {
                 return Dispatch::response(error);
             }
             return Dispatch::response(match &self.board_handoffs {
-                Some(owner) => owner.list_authenticated(request).await,
+                Some(owner) => owner.authenticated(request).await,
                 None => {
                     Response::error(503, "board_unavailable", "board service is not initialized")
                 }
@@ -1631,7 +1577,6 @@ pub(crate) fn needs_owned_request(path: &str) -> bool {
         || super::approval_pattern_routes::is_route(path)
         || super::approval_status_routes::methods(path).is_some()
         || super::mobile_routes::methods(path).is_some()
-        || super::nvidia_routes::NvidiaHttp::methods(path).is_some()
         || path == "/api/kill-all"
         || path == super::cli_version::PATH
         || path == "/api/models"
@@ -1641,7 +1586,6 @@ pub(crate) fn needs_owned_request(path: &str) -> bool {
         || super::subscription_routes::methods(path).is_some()
         || super::usage_routes::is_route(path)
         || super::update_routes::methods(path).is_some()
-        || path == super::jev_routes::PATH
         || super::session_routes::MAINTENANCE_ROUTES.contains(&path)
         || super::session_routes::LOG_MAINTENANCE_ROUTES.contains(&path)
         || matches!(
@@ -1714,9 +1658,6 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
         p if super::approval_pattern_routes::is_route(p) => {
             super::approval_pattern_routes::methods(p)
         }
-        p if super::nvidia_routes::NvidiaHttp::methods(p).is_some() => {
-            super::nvidia_routes::NvidiaHttp::methods(p).unwrap()
-        }
         p if super::mobile_routes::methods(p).is_some() => {
             super::mobile_routes::methods(p).unwrap()
         }
@@ -1743,7 +1684,6 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
         "/api/logs/purge" => &["POST"],
         "/api/logs/legacy-notice" => &["GET", "POST"],
         p if super::push_routes::methods(p).is_some() => super::push_routes::methods(p).unwrap(),
-        super::jev_routes::PATH => &["POST"],
         "/api/usage-link-defaults" | "/api/install-link-defaults" => &["GET"],
         "/api/net-hint" => &["POST"],
         "/api/encoding-check" => &["GET"],
@@ -1802,7 +1742,7 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
             &["GET", "POST", "PUT", "DELETE"]
         }
         p if p == "/api/routine-runs" || p.starts_with("/api/routine-runs/") => &["GET"],
-        super::board_handoff_routes::PATH => &["GET"],
+        super::board_handoff_routes::PATH => &["GET", "POST"],
         p if p == "/api/memos" || p.starts_with("/api/memos/") => {
             &["GET", "POST", "PATCH", "DELETE"]
         }

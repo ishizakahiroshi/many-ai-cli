@@ -116,8 +116,6 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
   const spawnClaudeModelBtn = document.getElementById('spawn-claude-model-btn');
   const spawnOpenCodeOpts = document.getElementById('spawn-opencode-opts');
   const spawnOpenCodeFullAllow = document.getElementById('spawn-opencode-full-allow') as HTMLInputElement | null;
-  const spawnNVIDIANIMNote = document.getElementById('spawn-nvidia-nim-note');
-  const spawnNVIDIANIMCompatNote = document.getElementById('spawn-nvidia-nim-compat-note');
   const spawnPermissionOpts = document.getElementById('spawn-permission-opts');
   const spawnPermissionMode = document.getElementById('spawn-permission-mode') as HTMLSelectElement | null;
   const spawnIsolateWorktree = document.getElementById('spawn-isolate-worktree') as HTMLInputElement | null;
@@ -625,7 +623,6 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
   function setSpawnModelValue(value) {
     spawnModelInput.value = value || '';
     syncModelClearButton();
-    syncNVIDIANIMNotice();
   }
 
   function clearIncompatibleModelForProvider(provider) {
@@ -654,7 +651,6 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
       spawnProviderEl.value,
       { hosted: t('spawn_model_badge_hosted'), trial: t('spawn_model_badge_trial') },
     );
-    syncNVIDIANIMNotice();
   }
 
   function resolveRoute(provider, model) {
@@ -677,13 +673,6 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
     if (provider === 'claude') return 'anthropic';
     if (provider === 'codex')  return 'openai';
     return '';
-  }
-
-  function syncNVIDIANIMNotice() {
-    const selectedNIMRoute = spawnProviderEl.value === 'opencode' &&
-      resolveRoute(spawnProviderEl.value, spawnModelInput.value) === 'nvidia-nim';
-    if (spawnNVIDIANIMNote) spawnNVIDIANIMNote.hidden = !selectedNIMRoute;
-    if (spawnNVIDIANIMCompatNote) spawnNVIDIANIMCompatNote.hidden = !selectedNIMRoute;
   }
 
   async function fetchModelGroups(force) {
@@ -1283,7 +1272,6 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
     if (p !== 'claude') claudeModelSelection = null;
     populateModelDatalist();
     clearIncompatibleModelForProvider(p);
-    syncNVIDIANIMNotice();
     // C2 (plan_spawn-form-per-provider-memory.md): 許可設定・worktree・委譲・
     // サブスクリプションの記憶を、切り替えた先の provider のぶんへ差し替える。
     restoreProviderMemory(p);
@@ -1321,13 +1309,11 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
     _savedModelValue = spawnModelInput.value;
     _modelInputDirty = false;
     spawnModelInput.value = '';
-    syncNVIDIANIMNotice();
   });
   spawnModelInput.addEventListener('input', () => {
     _modelInputDirty = true;
     clearModelSelectionState();
     syncModelClearButton();
-    syncNVIDIANIMNotice();
   });
   spawnModelInput.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {

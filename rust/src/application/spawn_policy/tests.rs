@@ -168,8 +168,8 @@ fn login_ignores_inferred_and_explicit_route_configuration_after_profile_resolut
     let mut request = spec(f.paths.root(), "opencode");
     request.subscription_login = true;
     request.subscription_profile_id = "main".into();
-    request.model = "nvidia/invalid-model".into();
-    request.route = "nvidia-nim".into();
+    request.model = "invalid-model".into();
+    request.route = "ollama".into();
     request.effort = "otherwise-invalid".into();
     let resolved = f.policy.resolve(&request, &[]).unwrap();
     assert_eq!(resolved.effective_route, "");
@@ -180,54 +180,6 @@ fn login_ignores_inferred_and_explicit_route_configuration_after_profile_resolut
     );
     request.subscription_profile_id = "missing".into();
     assert!(f.policy.resolve(&request, &[]).is_err());
-}
-#[test]
-fn nim_key_prefers_environment_and_runtime_config_merges_without_exposing_keys() {
-    let f = fixture(
-        |cfg| cfg.nvidia_nim.enabled = true,
-        LocalModelSnapshot::default(),
-    );
-    let secrets = f.paths.root().join("secrets");
-    std::fs::create_dir(&secrets).unwrap();
-    std::fs::write(secrets.join("nvidia_api_key"), "SYNTHETIC_FILE_PLACEHOLDER").unwrap();
-    let mut request = spec(f.paths.root(), "opencode");
-    request.model = "nvidia/synthetic/model".into();
-    let base = vec!["NVIDIA_API_KEY= SYNTHETIC_ENV_PLACEHOLDER ".into(), r#"OPENCODE_CONFIG_CONTENT={"provider":{"other":{"keep":true},"nvidia":{"options":{"extra":1},"models":{"old":{}}}},"keep":true}"#.into()];
-    let resolved = f.policy.resolve(&request, &base).unwrap();
-    assert_eq!(resolved.effective_route, "nvidia-nim");
-    assert_eq!(
-        resolved.route_environment[0],
-        "NVIDIA_API_KEY=SYNTHETIC_ENV_PLACEHOLDER"
-    );
-    let content = resolved.route_environment[1]
-        .strip_prefix("OPENCODE_CONFIG_CONTENT=")
-        .unwrap();
-    assert!(!content.contains("SYNTHETIC_ENV_PLACEHOLDER"));
-    let value: serde_json::Value = serde_json::from_str(content).unwrap();
-    assert_eq!(value["provider"]["other"]["keep"], true);
-    assert_eq!(value["provider"]["nvidia"]["options"]["extra"], 1);
-    assert!(value["provider"]["nvidia"]["models"]["old"].is_object());
-    let resolved = f.policy.resolve(&request, &[]).unwrap();
-    assert_eq!(
-        resolved.route_environment[0],
-        "NVIDIA_API_KEY=SYNTHETIC_FILE_PLACEHOLDER"
-    );
-    let invalid = ["NVIDIA_API_KEY=SYNTHETIC\nINVALID".into()];
-    let error = f
-        .policy
-        .resolve(&request, &invalid)
-        .err()
-        .unwrap()
-        .to_string();
-    assert!(!error.contains("SYNTHETIC"));
-    let invalid = ["OPENCODE_CONFIG_CONTENT=SYNTHETIC_INVALID_PRIVATE_TEXT".into()];
-    let error = f
-        .policy
-        .resolve(&request, &invalid)
-        .err()
-        .unwrap()
-        .to_string();
-    assert!(!error.contains("SYNTHETIC_INVALID"));
 }
 #[test]
 fn rejects_absent_provider_invalid_route_and_invalid_profile_without_fallback() {
@@ -250,8 +202,6 @@ fn rejects_absent_provider_invalid_route_and_invalid_profile_without_fallback() 
             .is_err()
     );
     let mut request = spec(f.paths.root(), "claude");
-    request.route = "nvidia-nim".into();
-    assert!(f.policy.resolve(&request, &[]).is_err());
     request.route = "unknown".into();
     assert!(f.policy.resolve(&request, &[]).is_err());
     request.route.clear();
@@ -446,8 +396,7 @@ fn ordinary_policy_failure_stage_distinguishes_subscription_from_route() {
     );
     request.subscription_profile_id.clear();
     request.provider = "opencode".into();
-    request.route = "nvidia-nim".into();
-    request.model = "nvidia/synthetic".into();
+    request.route = "unknown".into();
     let route = f.policy.resolve(&request, &[]).err().unwrap();
     assert_eq!(failure_stage(&route), Some(PolicyFailureStage::Route));
     let public = crate::application::ordinary_spawn::policy_error(route);

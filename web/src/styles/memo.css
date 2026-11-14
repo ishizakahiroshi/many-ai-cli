@@ -163,7 +163,7 @@
 }
 
 /* C4: 件数バッジ（ボタン本体・セッション一覧の行）。0 件のときは要素ごと hidden にする。 */
-[data-open-memo] { position: relative; }
+[data-open-memo], [data-open-board-handoffs] { position: relative; }
 .memo-input-dragover .memo-input.ui-input {
   --ui-input-border: var(--accent);
   --ui-input-border-style: dashed;

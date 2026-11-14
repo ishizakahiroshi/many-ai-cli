@@ -46,8 +46,6 @@ import { isRestoringProjectView, saveProjectView } from './project-view-store.js
 import { DeviceSessionViews, readViewPreference, resolveReadingMode, saveViewPreference, type ViewDevice, type ViewPreferenceStorage } from './session-view-preferences.js';
 import { captureTerminalView, restoreTerminalView, terminalViewFollows } from './session-view-position.js';
 import { detectSupport } from '../vendor/vtype-core/index.js';
-import type { NVIDIANIMSettingsStatus } from '../types/proto.js';
-import { invalidateSpawnModelGroups } from './spawn-model-groups.js';
 import { detachedTabName, isDetachedTabView } from './detached-view-mode.js';
 import { FILES_BESIDE_MIN_WIDTH_QUERY, shouldOpenFilesBeside, type FilesOpenSurface } from './files-open-mode.js';
 
@@ -2739,27 +2737,39 @@ window.addEventListener('many-binary-stale', (ev: Event) => {
       if (appleTitle) appleTitle.setAttribute('content', 'MANY-AI-CLI');
       const envBadgeEl = document.getElementById('env-badge');
       if (envBadgeEl) {
-        envBadgeEl.textContent = envLabel.toUpperCase();
+        // ヘッダーは L / W / V / T の 1 文字にして幅を空け、正式名はマウスオーバーで出す
+        // （2026-11-14 利用者決定。ローカルは「ローカル実行」と出す）。
+        const localTipKey = 'env_local_tip';
+        const localTip = (typeof window.t === 'function') ? window.t(localTipKey) : '';
+        const envTip = envKind === 'local' && localTip && localTip !== localTipKey ? localTip : envLabel;
+        envBadgeEl.textContent = envShort;
         envBadgeEl.hidden = false;
         envBadgeEl.dataset.envKind = envKind;
         envBadgeEl.style.setProperty('--env-color', envColor);
-        envBadgeEl.title = info.env_host_label || showHost || envLabel;
+        envBadgeEl.title = info.env_host_label || showHost || envTip;
+        envBadgeEl.setAttribute('aria-label', envBadgeEl.title);
       }
       const badgeEl = document.getElementById('runtime-badge');
       if (badgeEl && runtime) {
-        const baseText = runtime + connectionSuffix;
+        // Windows 単独は W 1 文字にする（WSL など他は従来どおり）。正式名はマウスオーバーで出す。
+        const fullText = runtime + connectionSuffix;
+        const baseText = runtimeMode === 'windows-native' ? `W${connectionSuffix}` : fullText;
         badgeEl.textContent = baseText;
         badgeEl.hidden = false;
         badgeEl.dataset.mode = runtimeMode;
         badgeEl.dataset.baseText = baseText;
         badgeEl.dataset.hostExpanded = '0';
         if (showHost) {
-          badgeEl.title = showHost;
+          badgeEl.title = baseText === fullText ? showHost : `${fullText} ${showHost}`;
           badgeEl.dataset.hostLabel = showHost;
+        } else if (baseText !== fullText) {
+          badgeEl.title = fullText;
+          delete badgeEl.dataset.hostLabel;
         } else {
           badgeEl.removeAttribute('title');
           delete badgeEl.dataset.hostLabel;
         }
+        if (baseText !== fullText) badgeEl.setAttribute('aria-label', badgeEl.title);
         if (!badgeEl.dataset.hostToggleAttached) {
           badgeEl.dataset.hostToggleAttached = '1';
           badgeEl.addEventListener('click', () => {
@@ -4437,146 +4447,4 @@ export function attachSummaryToggleListeners(): void {
     });
   });
 }
-
-// NVIDIA key controls stay on the Hub. The browser only receives configured
-// state and source; a saved key is never read back into an input or response.
-(function initNVIDIANIMSettings(): void {
-  if (typeof document === 'undefined') return;
-  const enabled = document.getElementById('nvidia-nim-enabled') as HTMLInputElement | null;
-  const apiKey = document.getElementById('nvidia-nim-api-key') as HTMLInputElement | null;
-  const keyState = document.getElementById('nvidia-nim-key-state');
-  const envNote = document.getElementById('nvidia-nim-env-note');
-  const saveBtn = document.getElementById('nvidia-nim-save') as HTMLButtonElement | null;
-  const testBtn = document.getElementById('nvidia-nim-test') as HTMLButtonElement | null;
-  const deleteBtn = document.getElementById('nvidia-nim-delete-key') as HTMLButtonElement | null;
-  const result = document.getElementById('nvidia-nim-test-result');
-  if (!enabled || !apiKey || !keyState || !envNote || !saveBtn || !testBtn || !deleteBtn || !result) return;
-
-  let current: NVIDIANIMSettingsStatus | null = null;
-  let busy = false;
-  const endpoint = (path: string): string => path;
-
-  function updateControls(): void {
-    const envManaged = current?.api_key_source === 'env';
-    apiKey.disabled = !!envManaged || busy;
-    deleteBtn.disabled = busy || current?.api_key_source !== 'file';
-    saveBtn.disabled = busy || (!!envManaged && apiKey.value.trim() !== '');
-    testBtn.disabled = busy || !current?.api_key_configured || apiKey.value.trim() !== '';
-  }
-
-  function showResult(key: string): void {
-    result.textContent = t(key);
-    result.hidden = false;
-  }
-
-  async function loadStatus(): Promise<void> {
-    try {
-      const res = await apiFetch(endpoint('/api/nvidia-nim'));
-      const data = await res.json().catch(() => ({})) as Partial<NVIDIANIMSettingsStatus>;
-      if (!res.ok || typeof data.enabled !== 'boolean' || typeof data.api_key_configured !== 'boolean') {
-        throw new Error('status unavailable');
-      }
-      current = data as NVIDIANIMSettingsStatus;
-      enabled.checked = current.enabled;
-      keyState.textContent = t(current.api_key_configured ? 'settings_nim_key_configured' : 'settings_nim_key_missing', {
-        source: t(`settings_nim_key_source_${current.api_key_source}`),
-      });
-      envNote.hidden = current.api_key_source !== 'env';
-      updateControls();
-    } catch (_) {
-      current = null;
-      keyState.textContent = t('settings_nim_key_status_failed');
-      envNote.hidden = true;
-      updateControls();
-    }
-  }
-
-  apiKey.addEventListener('input', updateControls);
-
-  saveBtn.addEventListener('click', async () => {
-    busy = true;
-    result.hidden = true;
-    updateControls();
-    try {
-      const res = await apiFetch(endpoint('/api/nvidia-nim'), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: enabled.checked, api_key: apiKey.value }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const code = data?.error === 'key_managed_by_environment' ? 'settings_nim_key_env_locked'
-          : data?.error === 'invalid_api_key' ? 'settings_nim_key_invalid'
-          : 'settings_nim_save_failed';
-        showResult(code);
-        return;
-      }
-      apiKey.value = '';
-      invalidateSpawnModelGroups();
-      await loadStatus();
-      showResult('settings_nim_saved');
-    } catch (_) {
-      showResult('settings_nim_save_failed');
-    } finally {
-      busy = false;
-      updateControls();
-    }
-  });
-
-  testBtn.addEventListener('click', async () => {
-    busy = true;
-    result.hidden = true;
-    updateControls();
-    try {
-      const res = await apiFetch(endpoint('/api/nvidia-nim/test'), { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data?.ok === true) {
-        showResult('settings_nim_test_ok');
-      } else {
-        if (data?.error === 'api_key_missing') {
-          showResult('settings_nim_test_api_key_missing');
-          return;
-        }
-        const code = typeof data?.code === 'string' ? data.code : '';
-        const known = ['unauthorized', 'payment_required', 'forbidden', 'not_found', 'timeout', 'rate_limited', 'server_error', 'request_rejected', 'connection_failed'];
-        showResult(known.includes(code) ? `settings_nim_test_${code}` : 'settings_nim_test_connection_failed');
-      }
-    } catch (_) {
-      showResult('settings_nim_test_connection_failed');
-    } finally {
-      busy = false;
-      updateControls();
-    }
-  });
-
-  deleteBtn.addEventListener('click', async () => {
-    const confirmed = await appConfirm({
-      title: t('settings_nim_delete_confirm_title'),
-      message: t('settings_nim_delete_confirm_message'),
-      action: 'delete',
-      kind: 'warn',
-    });
-    if (!confirmed) return;
-    busy = true;
-    updateControls();
-    try {
-      const res = await apiFetch(endpoint('/api/nvidia-nim/key'), { method: 'DELETE' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        showResult(data?.error === 'key_managed_by_environment' ? 'settings_nim_key_env_locked' : 'settings_nim_delete_failed');
-        return;
-      }
-      invalidateSpawnModelGroups();
-      await loadStatus();
-      showResult('settings_nim_deleted');
-    } catch (_) {
-      showResult('settings_nim_delete_failed');
-    } finally {
-      busy = false;
-      updateControls();
-    }
-  });
-
-  void loadStatus();
-})();
 

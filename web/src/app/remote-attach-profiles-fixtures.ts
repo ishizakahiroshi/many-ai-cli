@@ -5,6 +5,7 @@ import {
   LAUNCH_CHOICE_LAST,
   LAUNCH_CHOICE_LOCAL,
   MAX_REMOTE_PROFILES,
+  detectSshFromTitle,
   normalizeLaunchChoice,
   parseRemoteLast,
   parseRemoteProfiles,
@@ -97,4 +98,14 @@ test('normalizeLaunchChoice: 読めない保存値は「聞く」', () => {
   assert.equal(normalizeLaunchChoice('profile:開発'), 'profile:開発');
   assert.equal(normalizeLaunchChoice('profile:'), LAUNCH_CHOICE_ASK);
   assert.equal(normalizeLaunchChoice('x'), LAUNCH_CHOICE_ASK);
+});
+
+test('detectSshFromTitle: ssh コマンドから接続先と鍵を読む。接続の意味が変わる指定は読まない', () => {
+  assert.deepEqual(detectSshFromTitle('ssh -i D:/keys/id_a devuser@dev-host'), { target: 'devuser@dev-host', identity: 'D:/keys/id_a' });
+  assert.deepEqual(detectSshFromTitle('ssh devuser@dev-host'), { target: 'devuser@dev-host', identity: '' });
+  assert.deepEqual(detectSshFromTitle('ssh -o StrictHostKeyChecking=no -i ~/.ssh/k devuser@dev-host'), { target: 'devuser@dev-host', identity: '~/.ssh/k' });
+  assert.equal(detectSshFromTitle('ssh -p 2222 devuser@dev-host'), null);
+  assert.equal(detectSshFromTitle('ssh -J jump devuser@dev-host'), null);
+  assert.equal(detectSshFromTitle('bash'), null);
+  assert.equal(detectSshFromTitle('ssh -i key'), null);
 });
