@@ -522,6 +522,8 @@ struct Shelf {
     items: Mutex<Vec<serde_json::Value>>,
     events: Mutex<Vec<serde_json::Value>>,
     calls: AtomicUsize,
+    /// The bearer token of each `board_accept_handoff`.
+    accepted_with: Mutex<Vec<String>>,
 }
 impl Shelf {
     fn put(&self, item: serde_json::Value) {
@@ -557,9 +559,18 @@ fn plan_item(id: &str, source: &str) -> serde_json::Value {
 }
 async fn shelve(
     axum::extract::State(shelf): axum::extract::State<Arc<Shelf>>,
+    headers: axum::http::HeaderMap,
     axum::Json(body): axum::Json<serde_json::Value>,
 ) -> axum::Json<serde_json::Value> {
     shelf.calls.fetch_add(1, Ordering::SeqCst);
+    if body["params"]["name"] == "board_accept_handoff" {
+        let auth = headers
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_owned();
+        lock(&shelf.accepted_with).push(auth);
+    }
     let args = body["params"]["arguments"].clone();
     let reply = |content: serde_json::Value| {
         axum::Json(serde_json::json!({
@@ -1177,6 +1188,7 @@ async fn handed_over_work_is_listed_with_the_folder_to_start_in() {
             title: "Check the closing price".into(),
             requested_at: Some(1_700_000_000_000),
             folder: f.repo.clone(),
+            to: None,
         }]
     );
     assert!(lock(&f.warnings).is_empty(), "{:?}", lock(&f.warnings));
@@ -1726,4 +1738,68 @@ fn the_prompt_passes_the_title_as_data() {
     assert!(text.contains("看板（demo）"));
     assert!(text.contains("題名: Tidy the notes folder\n"));
     assert!(text.contains("push・公開・外への送信・削除はしないでください"));
+}
+
+// ---- The Hub's list follows the board's destinations. ----
+
+#[tokio::test]
+async fn the_list_shows_only_requests_this_machine_can_take() {
+    let (f, shelf) = linked().await;
+    let routed = |id: &str, request: &str, to: Option<&str>| {
+        let mut item = handed_item(id, request, "requested");
+        if let Some(to) = to {
+            item["handoff"]["to"] = to.into();
+        }
+        shelf.put(item);
+    };
+    routed("backlog/1", "REQ-20261115-00000001", None);
+    routed("backlog/2", "REQ-20261115-00000002", Some("devin"));
+    routed("backlog/3", "REQ-20261115-00000003", Some("hold"));
+    routed("backlog/4", "REQ-20261115-00000004", Some("local-claude"));
+    let ids = |work: Vec<HandedWork>| work.into_iter().map(|w| w.item_id).collect::<Vec<_>>();
+    // Without local_taker this machine has no key for local-claude.
+    assert_eq!(ids(f.sync.handed_work().await), ["backlog/1"]);
+    f.list_repo_with_taker(6);
+    let work = f.sync.handed_work().await;
+    assert_eq!(ids(work.clone()), ["backlog/1", "backlog/4"]);
+    assert_eq!(work[1].to.as_deref(), Some("local-claude"));
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn a_request_for_local_claude_started_from_the_list_is_taken_with_its_key() {
+    let (f, shelf) = linked().await;
+    f.list_repo_with_taker(6);
+    let mut item = handed_item("backlog/1", "REQ-20261115-0a0b0c0d", "requested");
+    item["handoff"]["to"] = "local-claude".into();
+    shelf.put(item);
+    let mut plain = handed_item("backlog/2", "REQ-20261115-11111111", "requested");
+    plain["title"] = "Another piece".into();
+    shelf.put(plain);
+    let work = f.sync.handed_work().await;
+    f.sync.claim("start-1", &work[0]);
+    f.sync.claim("start-2", &work[1]);
+    let first = started_for(51, &f.repo, 500, "start-1");
+    f.sync.session_started(&first);
+    let second = started_for(52, &f.repo, 501, "start-2");
+    f.sync.session_started(&second);
+    tokio::time::timeout(Duration::from_secs(20), async {
+        while lock(&shelf.accepted_with).len() < 2 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        *lock(&shelf.accepted_with),
+        [
+            "Bearer synthetic-local-claude-key-0123456789".to_owned(),
+            format!("Bearer {KEY}"),
+        ]
+    );
+    assert_eq!(
+        shelf.item("backlog/1").unwrap()["handoff"]["state"],
+        "accepted"
+    );
+    f.cancel.cancel();
 }

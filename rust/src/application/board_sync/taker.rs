@@ -74,7 +74,7 @@ fn default_mode() -> String {
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub(super) struct TakerConfig {
-    key_file: PathBuf,
+    pub(super) key_file: PathBuf,
     env_file: PathBuf,
     #[serde(default = "default_interval")]
     interval_secs: u64,

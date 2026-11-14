@@ -41,7 +41,9 @@
 //! starts a session for one (`claim` ties the start request to the item), the
 //! session takes the request with `board_accept_handoff` and its work is
 //! written onto that item instead of a new `session/<id>`. A request someone
-//! else took first leaves the session an ordinary one.
+//! else took first leaves the session an ordinary one. Only requests this
+//! machine can take are listed: one the board has not routed yet, and one for
+//! `local-claude` when `local_taker` is set up (taken with that writer's key).
 use crate::{
     files::branch::GitBranchSource,
     hub::task_owner::HubTaskHandle,
@@ -127,6 +129,9 @@ struct Seat {
     /// The request to take when the session starts: `target.item_id` is then
     /// the handed-over item.
     handoff: Option<String>,
+    /// The writer key that takes the request, when it is not `target.key_file`
+    /// (a request for `local-claude` is taken with the `local_taker` key).
+    handoff_key: Option<PathBuf>,
     /// The session's own item, used when the request cannot be taken.
     own_item: String,
 }
@@ -142,6 +147,9 @@ pub struct HandedWork {
     pub requested_at: Option<u64>,
     /// The listed folder of the project, where a session for it starts.
     pub folder: PathBuf,
+    /// The destination on the board: `None` (the board has not chosen yet) or
+    /// `local-claude` (listed only with `local_taker` set up).
+    pub to: Option<String>,
 }
 impl HandedWork {
     /// `dir` is the project's listed folder or a folder inside it.
@@ -155,6 +163,8 @@ struct Claim {
     project: String,
     item_id: String,
     request_id: String,
+    /// The `local_taker` key, for a request for `local-claude`.
+    accept_key: Option<PathBuf>,
 }
 
 #[derive(Deserialize)]
@@ -855,9 +865,9 @@ impl BoardSync {
                 .remove(request)
                 .filter(|claim| claim.project == project)
         };
-        let (item_id, handoff) = match claim {
-            Some(claim) => (claim.item_id, Some(claim.request_id)),
-            None => (own_item.clone(), None),
+        let (item_id, handoff, handoff_key) = match claim {
+            Some(claim) => (claim.item_id, Some(claim.request_id), claim.accept_key),
+            None => (own_item.clone(), None, None),
         };
         Some(Seat {
             target: Target {
@@ -870,6 +880,7 @@ impl BoardSync {
             provider: details.snapshot.provider.clone(),
             opening: title(details),
             handoff,
+            handoff_key,
             own_item,
         })
     }
@@ -889,6 +900,11 @@ impl BoardSync {
                 return found;
             }
         };
+        // This machine takes a request the board has not routed yet, and one
+        // for `local-claude` when `local_taker` holds that writer's key. A
+        // request for anyone else (devin, muse, owner, hold, ...) cannot be
+        // taken here and is not listed.
+        let local = config.local_taker.is_some();
         let mut asked: Vec<String> = Vec::new();
         for repo in &config.repos {
             let project = project_of(repo);
@@ -915,6 +931,13 @@ impl BoardSync {
                 if item.kind != "task" || handoff.state != "requested" || !id_ok(&item.item_id) {
                     continue;
                 }
+                let to = handoff.to.clone();
+                if to
+                    .as_deref()
+                    .is_some_and(|to| !(local && to == taker::DESTINATION))
+                {
+                    continue;
+                }
                 found.push(HandedWork {
                     project: project.clone(),
                     item_id: item.item_id,
@@ -922,6 +945,7 @@ impl BoardSync {
                     title: truncate(&clean_line(&item.title), TITLE_MAX),
                     requested_at: handoff.requested_at,
                     folder: repo.path.clone(),
+                    to,
                 });
                 if found.len() >= HANDED_MAX {
                     return found;
@@ -964,6 +988,12 @@ impl BoardSync {
     /// Remembers that the session about to register with `start_request` (its
     /// `client_request_id`) is started for `work`.
     pub fn claim(&self, start_request: &str, work: &HandedWork) {
+        // A request for `local-claude` is taken with that writer's key.
+        let accept_key = (work.to.as_deref() == Some(taker::DESTINATION))
+            .then(|| load(&self.file).ok().flatten())
+            .flatten()
+            .and_then(|config| config.local_taker)
+            .map(|taker| taker.key_file);
         let mut claims = lock(&self.claims);
         if claims.len() >= CLAIMS_MAX {
             // Starts that never registered; none of them is waited for.
@@ -975,6 +1005,7 @@ impl BoardSync {
                 project: work.project.clone(),
                 item_id: work.item_id.clone(),
                 request_id: work.request_id.clone(),
+                accept_key,
             },
         );
     }
@@ -1139,8 +1170,15 @@ impl BoardSync {
         let mut taken = false;
         if let Some(request) = seat.handoff.take() {
             let args = serde_json::json!({"item_id": seat.target.item_id, "request_id": request});
+            let taker = Target {
+                key_file: seat
+                    .handoff_key
+                    .clone()
+                    .unwrap_or_else(|| seat.target.key_file.clone()),
+                ..seat.target.clone()
+            };
             if self
-                .call(&seat.target, "board_accept_handoff", args)
+                .call(&taker, "board_accept_handoff", args)
                 .await
                 .is_some()
             {

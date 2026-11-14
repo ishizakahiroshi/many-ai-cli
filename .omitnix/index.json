@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "275b3ab98d430bee9e489e5f5fcdd515d71b209e",
+    "commit": "75b2d9c9adf200489ada65fca60eac869fee751a",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2085,
+    "discovered": 2083,
     "analyzed": 1621,
     "unresolved": 15,
     "unknown": 0,
-    "unclaimed": 449,
+    "unclaimed": 447,
     "skipped_by_config": 0
   },
   "files": [
@@ -300,22 +300,6 @@
     },
     {
       "path": "AGENTS.md",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.md'"
-    },
-    {
-      "path": "CHANGELOG.md",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.md'"
-    },
-    {
-      "path": "CHANGELOG.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},

@@ -12,6 +12,10 @@ Release artifacts are published at
 
 ### Added
 
+- **The board's handed-over list shows only work this PC can take.** A request
+  the board routed to someone else (devin, muse, owner, hold, ...) is no longer
+  listed; one for `local-claude` is listed when `local_taker` is set up, and a
+  session started for it takes the request with that writer's key.
 - **Run work the board's owner handed to this PC, unattended.** With
   `local_taker` in `board.json`, the Hub looks at the board every few minutes
   and takes a request for `local-claude` that the owner handed over and routed
