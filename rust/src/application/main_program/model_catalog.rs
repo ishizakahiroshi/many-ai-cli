@@ -107,7 +107,6 @@ struct CacheState<T> {
 }
 struct Flight<T> {
     generation: u64,
-    key: Vec<u8>,
     result: Mutex<FlightResult<T>>,
     done: tokio::sync::Notify,
 }
@@ -192,7 +191,6 @@ impl<T: Clone + Default> Cache<T> {
                 } else {
                     let flight = Arc::new(Flight {
                         generation: state.generation,
-                        key: key.clone(),
                         result: Mutex::new(FlightResult::Pending),
                         done: tokio::sync::Notify::new(),
                     });
