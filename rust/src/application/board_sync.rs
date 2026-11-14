@@ -94,6 +94,9 @@ struct FileConfig {
     url: String,
     key_file: PathBuf,
     repos: Vec<RepoEntry>,
+    /// Running work handed to `local-claude` with `claude -p` (see `taker`).
+    #[serde(default)]
+    local_taker: Option<taker::TakerConfig>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -162,6 +165,18 @@ struct ListedHandoff {
     request_id: Option<String>,
     #[serde(default)]
     requested_at: Option<u64>,
+    /// The destination (`local-claude`, `devin`, ...); `None` = the board chooses.
+    #[serde(default)]
+    to: Option<String>,
+    /// Who handed the work over (`page:owner` from the board page).
+    #[serde(default)]
+    requested_by: Option<String>,
+    /// Who set the current destination.
+    #[serde(default)]
+    to_set_by: Option<String>,
+    /// The title as it was when the work was handed over.
+    #[serde(default)]
+    title: Option<String>,
 }
 
 /// The piece of work a session is on. Owned by the worker.
@@ -353,6 +368,9 @@ fn load(file: &Path) -> Result<Option<FileConfig>, &'static str> {
         return Err(
             "board settings: repos need absolute paths (and projects of 1 to 80 characters)",
         );
+    }
+    if let Some(taker) = &config.local_taker {
+        taker::check(taker)?;
     }
     Ok(Some(config))
 }
@@ -741,6 +759,10 @@ pub struct BoardSync {
     warned: Mutex<Option<&'static str>>,
     /// Start requests for handed-over work, by the request id of the start.
     claims: Mutex<HashMap<String, Claim>>,
+    /// The `local-claude` taker: runs today and whether one is going.
+    taker: Mutex<taker::TakerState>,
+    /// How a taken piece of work is run; `None` = `claude -p` (tests set one).
+    taker_runner: Mutex<Option<Arc<taker::Runner>>>,
 }
 
 impl BoardSync {
@@ -784,6 +806,8 @@ impl BoardSync {
             running: AtomicBool::new(false),
             warned: Mutex::new(None),
             claims: Mutex::default(),
+            taker: Mutex::default(),
+            taker_runner: Mutex::new(None),
         }))
     }
 
@@ -1430,6 +1454,9 @@ impl BoardSync {
         Ok(result)
     }
 }
+
+mod taker;
+pub use taker::{RunOutcome, RunRequest, Runner, Taken};
 
 #[cfg(test)]
 mod tests;

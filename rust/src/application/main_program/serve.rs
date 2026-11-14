@@ -366,6 +366,9 @@ impl HubComposition {
             Some(files.branch_reader()),
         )
         .map_err(io::Error::other)?;
+        // Work the board's owner handed to `local-claude` (off without
+        // `local_taker` in board.json).
+        board.start_local_taker();
         let security = crate::application::push::security::SecurityNotifications::new(
             notifications.clone(),
             push.clone(),

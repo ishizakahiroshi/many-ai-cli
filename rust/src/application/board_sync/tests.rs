@@ -1382,3 +1382,348 @@ async fn a_start_is_tied_to_handed_over_work_only_when_the_board_and_the_folder_
     assert_eq!(refused.status, 503);
     f.cancel.cancel();
 }
+
+// ---- The local-claude taker: work the owner handed to this machine. ----
+
+fn local_item(id: &str, request: &str, by: &str, set_by: &str, to: &str) -> serde_json::Value {
+    serde_json::json!({
+        "item_id": id, "project": "demo", "kind": "task", "title": "Tidy the notes folder (renamed later)",
+        "state": "planned",
+        "handoff": {
+            "state": "requested", "request_id": request, "requested_at": 1_700_000_000_000u64,
+            "to": to, "requested_by": by, "to_set_by": set_by, "title": "Tidy the notes folder",
+        },
+    })
+}
+impl Fixture {
+    fn list_repo_with_taker(&self, runs: u32) {
+        let taker_key = self.root.path().join("local-claude.key");
+        std::fs::write(&taker_key, "synthetic-local-claude-key-0123456789\n").unwrap();
+        let env = self.root.path().join("claude.env");
+        std::fs::write(
+            &env,
+            "# synthetic\nOTHER=1\nexport ANTHROPIC_API_KEY=\"sk-ant-synthetic-000\"\n",
+        )
+        .unwrap();
+        let settings = serde_json::json!({
+            "schema_version": 1,
+            "url": self.url,
+            "key_file": self.root.path().join("writer.key"),
+            "repos": [{"path": self.repo, "project": "demo"}],
+            "local_taker": {"key_file": taker_key, "env_file": env, "max_runs_per_day": runs},
+        });
+        std::fs::write(self.root.path().join(FILE_NAME), settings.to_string()).unwrap();
+    }
+}
+struct Seen {
+    folder: PathBuf,
+    prompt: String,
+    api_key: String,
+    mode: String,
+}
+fn fake_runner(outcome: RunOutcome) -> (Arc<Runner>, Arc<Mutex<Vec<Seen>>>) {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let sink = seen.clone();
+    let runner: Arc<Runner> = Arc::new(move |run: RunRequest| {
+        lock(&sink).push(Seen {
+            folder: run.folder.clone(),
+            prompt: run.prompt.clone(),
+            api_key: run.api_key.clone(),
+            mode: run.permission_mode.clone(),
+        });
+        let outcome = outcome.clone();
+        Box::pin(async move { outcome })
+    });
+    (runner, seen)
+}
+
+#[tokio::test]
+async fn the_taker_runs_work_the_owner_handed_to_local_claude_and_writes_the_result() {
+    let (f, shelf) = linked().await;
+    f.list_repo_with_taker(6);
+    shelf.put(local_item(
+        "backlog/1",
+        "REQ-20261114-0a0b0c0d",
+        "page:owner",
+        "page:owner",
+        "local-claude",
+    ));
+    let (runner, seen) = fake_runner(RunOutcome::Done {
+        result: "Sorted the notes into three folders.".into(),
+        turns: Some(4),
+        cost_usd: Some(0.123),
+    });
+    f.sync.set_taker_runner(runner);
+    let taken = f.sync.take_local_once().await;
+    assert_eq!(
+        taken,
+        Taken::Ran {
+            item_id: "backlog/1".into(),
+            finished: true
+        }
+    );
+    let runs = lock(&seen);
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].folder, f.repo);
+    assert_eq!(runs[0].api_key, "sk-ant-synthetic-000");
+    assert_eq!(runs[0].mode, "acceptEdits");
+    // The title the owner handed over, not the one written later.
+    assert!(
+        runs[0].prompt.contains("題名: Tidy the notes folder\n"),
+        "{}",
+        runs[0].prompt
+    );
+    assert!(!runs[0].prompt.contains("renamed later"));
+    let item = shelf.item("backlog/1").unwrap();
+    assert_eq!(item["handoff"]["state"], "accepted");
+    assert_eq!(item["state"], "done");
+    assert_eq!(shelf.events_of("backlog/1", "session_start").len(), 1);
+    let note = &shelf.events_of("backlog/1", "note")[0]["text"];
+    assert_eq!(
+        note,
+        "[完了] Sorted the notes into three folders.（claude -p・4 ターン・$0.12）"
+    );
+    assert_eq!(shelf.events_of("backlog/1", "session_end").len(), 1);
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn the_taker_leaves_work_a_writer_handed_or_routed_and_work_for_others() {
+    let (f, shelf) = linked().await;
+    f.list_repo_with_taker(6);
+    shelf.put(local_item(
+        "backlog/1",
+        "REQ-20261114-11111111",
+        "muse",
+        "muse",
+        "local-claude",
+    ));
+    shelf.put(local_item(
+        "backlog/2",
+        "REQ-20261114-22222222",
+        "page:owner",
+        "muse",
+        "local-claude",
+    ));
+    shelf.put(local_item(
+        "backlog/3",
+        "REQ-20261114-33333333",
+        "page:owner",
+        "dispatcher",
+        "local-claude",
+    ));
+    shelf.put(local_item(
+        "backlog/4",
+        "REQ-20261114-44444444",
+        "page:owner",
+        "page:owner",
+        "devin",
+    ));
+    let mut untitled = local_item(
+        "backlog/5",
+        "REQ-20261114-55555555",
+        "page:owner",
+        "page:owner",
+        "local-claude",
+    );
+    untitled["handoff"]["title"] = serde_json::Value::Null;
+    shelf.put(untitled);
+    let (runner, seen) = fake_runner(RunOutcome::Failed("should not run".into()));
+    f.sync.set_taker_runner(runner);
+    assert_eq!(f.sync.take_local_once().await, Taken::Nothing);
+    assert!(lock(&seen).is_empty());
+    for id in [
+        "backlog/1",
+        "backlog/2",
+        "backlog/3",
+        "backlog/4",
+        "backlog/5",
+    ] {
+        assert_eq!(
+            shelf.item(id).unwrap()["handoff"]["state"],
+            "requested",
+            "{id}"
+        );
+    }
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn without_a_local_taker_nothing_is_taken() {
+    let (f, shelf) = linked().await;
+    shelf.put(local_item(
+        "backlog/1",
+        "REQ-20261114-0a0b0c0d",
+        "page:owner",
+        "page:owner",
+        "local-claude",
+    ));
+    let before = shelf.calls.load(Ordering::SeqCst);
+    assert_eq!(f.sync.take_local_once().await, Taken::Off);
+    assert_eq!(shelf.calls.load(Ordering::SeqCst), before);
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn a_failed_run_leaves_the_work_waiting_with_the_reason() {
+    let (f, shelf) = linked().await;
+    f.list_repo_with_taker(6);
+    shelf.put(local_item(
+        "backlog/1",
+        "REQ-20261114-0a0b0c0d",
+        "page:owner",
+        "page:owner",
+        "local-claude",
+    ));
+    let (runner, _) = fake_runner(RunOutcome::Failed(
+        "claude -p が 30 分で終わらなかったので止めた".into(),
+    ));
+    f.sync.set_taker_runner(runner);
+    assert_eq!(
+        f.sync.take_local_once().await,
+        Taken::Ran {
+            item_id: "backlog/1".into(),
+            finished: false
+        }
+    );
+    let item = shelf.item("backlog/1").unwrap();
+    assert_eq!(item["state"], "waiting");
+    assert_eq!(
+        item["waiting_reason"],
+        "手元の claude -p: claude -p が 30 分で終わらなかったので止めた"
+    );
+    assert_eq!(
+        shelf.events_of("backlog/1", "note")[0]["text"],
+        "[失敗] claude -p が 30 分で終わらなかったので止めた"
+    );
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn without_an_api_key_the_run_does_not_start() {
+    let (f, shelf) = linked().await;
+    f.list_repo_with_taker(6);
+    std::fs::write(f.root.path().join("claude.env"), "OTHER=1\n").unwrap();
+    shelf.put(local_item(
+        "backlog/1",
+        "REQ-20261114-0a0b0c0d",
+        "page:owner",
+        "page:owner",
+        "local-claude",
+    ));
+    let (runner, seen) = fake_runner(RunOutcome::Failed("should not run".into()));
+    f.sync.set_taker_runner(runner);
+    assert_eq!(
+        f.sync.take_local_once().await,
+        Taken::Ran {
+            item_id: "backlog/1".into(),
+            finished: false
+        }
+    );
+    assert!(lock(&seen).is_empty());
+    assert_eq!(shelf.item("backlog/1").unwrap()["state"], "waiting");
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn the_taker_stops_at_the_runs_of_the_day() {
+    let (f, shelf) = linked().await;
+    f.list_repo_with_taker(1);
+    shelf.put(local_item(
+        "backlog/1",
+        "REQ-20261114-0a0b0c0d",
+        "page:owner",
+        "page:owner",
+        "local-claude",
+    ));
+    shelf.put(local_item(
+        "backlog/2",
+        "REQ-20261114-11111111",
+        "page:owner",
+        "page:owner",
+        "local-claude",
+    ));
+    let (runner, seen) = fake_runner(RunOutcome::Done {
+        result: "ok".into(),
+        turns: None,
+        cost_usd: None,
+    });
+    f.sync.set_taker_runner(runner);
+    assert!(matches!(f.sync.take_local_once().await, Taken::Ran { .. }));
+    assert_eq!(f.sync.take_local_once().await, Taken::Capped);
+    assert_eq!(lock(&seen).len(), 1);
+    f.cancel.cancel();
+}
+
+#[test]
+fn the_taker_settings_are_checked() {
+    let parse = |extra: serde_json::Value| -> Result<(), &'static str> {
+        let mut base = serde_json::json!({"key_file": "/k/local.key", "env_file": "/k/claude.env"});
+        if cfg!(windows) {
+            base = serde_json::json!({"key_file": "C:\\k\\local.key", "env_file": "C:\\k\\claude.env"});
+        }
+        for (key, value) in extra.as_object().unwrap() {
+            base[key] = value.clone();
+        }
+        let config: taker::TakerConfig = serde_json::from_value(base).map_err(|_| "parse")?;
+        taker::check(&config)
+    };
+    assert!(parse(serde_json::json!({})).is_ok());
+    assert!(parse(serde_json::json!({"key_file": "relative.key"})).is_err());
+    assert!(parse(serde_json::json!({"interval_secs": 10})).is_err());
+    assert!(parse(serde_json::json!({"timeout_secs": 20_000})).is_err());
+    assert!(parse(serde_json::json!({"max_runs_per_day": 0})).is_err());
+    assert!(parse(serde_json::json!({"permission_mode": "bypassPermissions"})).is_err());
+    assert!(parse(serde_json::json!({"unknown": 1})).is_err());
+}
+
+#[test]
+fn the_api_key_is_the_only_value_read_from_the_env_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("claude.env");
+    std::fs::write(
+        &file,
+        "ANTHROPIC_BASE_URL=https://example.com\nANTHROPIC_API_KEY='sk-ant-synthetic-1'\n",
+    )
+    .unwrap();
+    assert_eq!(
+        taker::read_api_key(&file).as_deref(),
+        Some("sk-ant-synthetic-1")
+    );
+    std::fs::write(&file, "ANTHROPIC_API_KEY=\n").unwrap();
+    assert_eq!(taker::read_api_key(&file), None);
+    assert_eq!(taker::read_api_key(&dir.path().join("missing.env")), None);
+}
+
+#[test]
+fn a_run_result_is_read_from_the_json_of_claude_p() {
+    let done = br#"{"type":"result","subtype":"success","is_error":false,"result":" Done. ","num_turns":3,"total_cost_usd":0.5}"#;
+    assert_eq!(
+        taker::outcome_of(done, true),
+        RunOutcome::Done {
+            result: "Done.".into(),
+            turns: Some(3),
+            cost_usd: Some(0.5)
+        }
+    );
+    let failed = br#"{"type":"result","subtype":"error_max_turns","is_error":true,"result":""}"#;
+    assert!(
+        matches!(taker::outcome_of(failed, true), RunOutcome::Failed(reason) if reason.contains("error_max_turns"))
+    );
+    assert!(matches!(
+        taker::outcome_of(b"not json", true),
+        RunOutcome::Failed(_)
+    ));
+    assert!(matches!(
+        taker::outcome_of(done, false),
+        RunOutcome::Failed(_)
+    ));
+}
+
+#[test]
+fn the_prompt_passes_the_title_as_data() {
+    let text = taker::prompt("demo", "Tidy the notes folder");
+    assert!(text.contains("看板（demo）"));
+    assert!(text.contains("題名: Tidy the notes folder\n"));
+    assert!(text.contains("push・公開・外への送信・削除はしないでください"));
+}

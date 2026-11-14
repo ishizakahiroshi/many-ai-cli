@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "4b310ad2d2398bf67135563aff22b699fb9903c1",
+    "commit": "275b3ab98d430bee9e489e5f5fcdd515d71b209e",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2082,
-    "analyzed": 1620,
+    "discovered": 2085,
+    "analyzed": 1621,
     "unresolved": 15,
     "unknown": 0,
-    "unclaimed": 447,
+    "unclaimed": 449,
     "skipped_by_config": 0
   },
   "files": [
@@ -300,6 +300,22 @@
     },
     {
       "path": "AGENTS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "CHANGELOG.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -22391,6 +22407,35 @@
         "summary": {
           "state": "value",
           "value": "Optional progress writes to an MCP board (for example Many Iris)."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/application/board_sync/taker.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Running work the board's owner handed to `local-claude` with `claude -p` on"
         },
         "authentication": {
           "state": "not_configured"

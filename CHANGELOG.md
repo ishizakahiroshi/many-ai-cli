@@ -12,6 +12,14 @@ Release artifacts are published at
 
 ### Added
 
+- **Run work the board's owner handed to this PC, unattended.** With
+  `local_taker` in `board.json`, the Hub looks at the board every few minutes
+  and takes a request for `local-claude` that the owner handed over and routed
+  from the board page, runs it with `claude -p` (an Anthropic API key from an
+  env file, the title on stdin as data, in the project's listed folder), and
+  writes the start, a short masked result and `done` (or the reason and
+  `waiting`) onto the item. One run at a time, a daily cap and a timeout. Work a
+  writer handed over or routed is never run. See `docs/manual_board-sync.md`.
 - **Open files on an ssh host without any setup.** When a shell session was
   started as `ssh -i <key> user@host`, right-clicking an absolute path (`/…` or
   `~/…`) in the terminal now offers "Open from user@host" (read-only modal) and

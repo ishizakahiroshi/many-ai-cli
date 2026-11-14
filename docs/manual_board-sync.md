@@ -50,6 +50,40 @@ AI は、完了マーカーの要約の後ろに、次の2つを足せます（m
 - 一覧は 1 分おきと、画面へ戻ったときに読み直します。看板に届かない間は、ボタンは出ません。
 - 新規セッションの画面を取り消したり、別の入口から開き直したりすると、その起動は任された仕事とは結ばれません。
 - Hub を再起動すると、起動中だったセッションと任された項目の結び付きは失われ、その後の要約は `session/<番号>` の項目に載ります。
+
+## 手元の PC に任された仕事を、人がいなくても始める（`local_taker`）
+
+看板の持ち主が、行き先 `local-claude`（手元 PC の claude -p）を付けて仕事を任せると、Hub がそれを取りに行き、`claude -p` で作業して、結果を同じ項目に書き戻します。Hub が動いている間だけ動きます。`board.json` に `local_taker` を書いたときだけ働きます。
+
+```json
+"local_taker": {
+  "key_file": "C:\\keys\\board-local-claude.key",
+  "env_file": "C:\\keys\\claude-api.env",
+  "interval_secs": 300,
+  "timeout_secs": 1800,
+  "max_runs_per_day": 6,
+  "permission_mode": "acceptEdits"
+}
+```
+
+| 項目 | 内容 |
+|---|---|
+| `key_file` | 看板の書き込み用の鍵のうち、書き手 `local-claude` のもの（看板は、行き先 `local-claude` の依頼をこの書き手にしか渡しません）。`repos` 全体の `key_file` とは別の鍵です |
+| `env_file` | `ANTHROPIC_API_KEY=...` を書いたファイルの絶対パス。この 1 行だけを読み、`claude -p` にだけ渡します。人のいない実行なので、サブスクリプションではなく API の鍵で動かします |
+| `interval_secs` | 看板を見る間隔（60〜3600 秒。既定 300） |
+| `timeout_secs` | 1 回の `claude -p` の上限（60〜14400 秒。既定 1800）。超えたら止めます |
+| `max_runs_per_day` | 1 日に動かす回数の上限（1〜50。既定 6）。Hub を再起動すると数え直します |
+| `permission_mode` | `claude -p` の権限の段階。`default` / `acceptEdits`（既定）/ `plan` のどれか。確認を飛ばす段階は選べません |
+
+動かす依頼は、次をすべて満たすものだけです。書き手の鍵があれば題名も行き先も書けるので、人の見ていない所で手元のファイルに触る作業は、持ち主が自分で決めたものに限ります。
+
+- 行き先が `local-claude`
+- 看板の画面から持ち主が任せた（`handoff.requested_by` が `page:owner`）
+- 今の行き先も持ち主が決めた（`handoff.to_set_by` が `page:owner`。看板の自動の振り分けや書き手が付け替えたものは動かしません）
+- 任せた時点の題名がある（`handoff.title`。後で題名が書き換えられても、任せた時点の題名で動かします）
+
+1 回に 1 件だけ動かします。題名は `claude -p` の引数ではなく標準入力でデータとして渡し、`repos` のその案件の `path` で始めます。指示には「push・公開・外への送信・削除はしない」と書きます。看板には、開始、結果の短い要約（秘密に見える文字列は伏せます）と完了、または終わらなかった理由と「待ち」が載ります。
+
 ## 設定
 
 many-ai-cli のデータフォルダ（`config.yaml` と同じ場所。既定は `~/.many-ai-cli/`）に `board.json` を置きます。
@@ -82,7 +116,7 @@ many-ai-cli のデータフォルダ（`config.yaml` と同じ場所。既定は
 - `board_add_event`（`item_id`・`kind` が `session_start` / `note` / `session_end`・`text`。成果の URL があるときは `ref`）
 - `board_list`（`project`・`since_seq`。項目の一覧を読むために使い、出来事は読みません）
 
-任された仕事を扱う看板は、加えて `board_list` の各項目に `handoff`（`state` が `requested` / `accepted`、`request_id`、`requested_at`）を返し、`board_accept_handoff`（`item_id`・`request_id`。最初の 1 回だけ通す）を受け付けます。これらが無い看板では、任された仕事のボタンが出ないだけです。
+任された仕事を扱う看板は、加えて `board_list` の各項目に `handoff`（`state` が `requested` / `accepted`、`request_id`、`requested_at`。`local_taker` を使うときは `to`・`requested_by`・`to_set_by`・`title` も）を返し、`board_accept_handoff`（`item_id`・`request_id`。最初の 1 回だけ通す）を受け付けます。これらが無い看板では、任された仕事のボタンが出ないだけです。
 
 `board_list` に答えない看板でも、開始・要約・終了は今までどおり載ります（計画の下に並べることだけが働きません）。
 
