@@ -38,17 +38,19 @@ pub(super) fn moved_port_notice(configured: i64, port: u16) -> Option<String> {
 }
 
 fn startup_banner(version: &str, port: u16, token: &str, configured: i64) -> String {
-    // Use the connection launcher's logo shape as plain text without its
-    // colors, Windows-only runtime label, or connection-specific instructions.
-    // Plain text also respects terminals that disable ANSI colors.
-    const LOGO: &str = concat!(
-        "███╗   ███╗ █████╗ ███╗   ██╗██╗   ██╗       █████╗ ██╗\n",
-        "████╗ ████║██╔══██╗████╗  ██║╚██╗ ██╔╝      ██╔══██╗██║\n",
-        "██╔████╔██║███████║██╔██╗ ██║ ╚████╔╝ █████╗███████║██║\n",
-        "██║╚██╔╝██║██╔══██║██║╚██╗██║  ╚██╔╝  ╚════╝██╔══██║██║\n",
-        "██║ ╚═╝ ██║██║  ██║██║ ╚████║   ██║         ██║  ██║██║\n",
-        "╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝         ╚═╝  ╚═╝╚═╝\n",
-    );
+    // The logo is colored like the Go Hub and the connection launcher: white
+    // fill, yellow outline. Only the logo is colored (never the token URL),
+    // and NO_COLOR turns the colors off.
+    const LOGO_LINES: [&str; 6] = [
+        "███╗   ███╗ █████╗ ███╗   ██╗██╗   ██╗       █████╗ ██╗",
+        "████╗ ████║██╔══██╗████╗  ██║╚██╗ ██╔╝      ██╔══██╗██║",
+        "██╔████╔██║███████║██╔██╗ ██║ ╚████╔╝ █████╗███████║██║",
+        "██║╚██╔╝██║██╔══██║██║╚██╗██║  ╚██╔╝  ╚════╝██╔══██║██║",
+        "██║ ╚═╝ ██║██║  ██║██║ ╚████║   ██║         ██║  ██║██║",
+        "╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝         ╚═╝  ╚═╝╚═╝",
+    ];
+    let color = std::env::var_os("NO_COLOR").is_none_or(|v| v.is_empty());
+    let logo = colorize_logo(&LOGO_LINES, color);
     // Build metadata is not terminal markup. Escape control/non-ASCII input
     // before display; query encoding below separately protects the token URL.
     let version: String = version
@@ -71,15 +73,56 @@ fn startup_banner(version: &str, port: u16, token: &str, configured: i64) -> Str
         .map(|notice| format!("Note: {notice}\n\n"))
         .unwrap_or_default();
     format!(
-        "\n{LOGO}\nmany-ai-cli Hub {version}\nRuntime: Rust / {} ({})\nGitHub: https://github.com/ishizakahiroshi/many-ai-cli\n\n{moved}WebUI: {base}\nOpen: {base}?{query}\n\nKeep this terminal open while using the Hub.\nClosing this window stops this foreground Hub and disconnects the Web UI.\nExisting wrapper sessions can wait for Hub recovery within their configured reconnect grace period.\nRestart the Hub promptly to reconnect.\nStop: press Ctrl+C here, or run many-ai-cli stop from another terminal.\n\n",
+        "\n{logo}\nmany-ai-cli Hub {version}\nRuntime: Rust / {} ({})\nGitHub: https://github.com/ishizakahiroshi/many-ai-cli\n\n{moved}WebUI: {base}\nOpen: {base}?{query}\n\nKeep this terminal open while using the Hub.\nClosing this window stops this foreground Hub and disconnects the Web UI.\nExisting wrapper sessions can wait for Hub recovery within their configured reconnect grace period.\nRestart the Hub promptly to reconnect.\nStop: press Ctrl+C here, or run many-ai-cli stop from another terminal.\n\n",
         std::env::consts::OS,
         std::env::consts::ARCH,
     )
 }
 
+/// White fill (`█`), yellow outline (box-drawing); one trailing newline per line.
+fn colorize_logo(lines: &[&str], color: bool) -> String {
+    let mut out = String::new();
+    for line in lines {
+        if !color {
+            out.push_str(line);
+            out.push('\n');
+            continue;
+        }
+        let mut current = "";
+        for c in line.chars() {
+            let next = match c {
+                '█' => "\x1b[97m",
+                '╗' | '╔' | '╝' | '╚' | '║' | '═' => "\x1b[38;5;226m",
+                _ => "",
+            };
+            if next != current {
+                if !current.is_empty() {
+                    out.push_str("\x1b[0m");
+                }
+                out.push_str(next);
+                current = next;
+            }
+            out.push(c);
+        }
+        if !current.is_empty() {
+            out.push_str("\x1b[0m");
+        }
+        out.push('\n');
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn logo_outline_is_yellow_and_no_color_is_plain() {
+        let lines = ["█╗ ║"];
+        let colored = colorize_logo(&lines, true);
+        assert!(colored.contains("\x1b[97m█") && colored.contains("\x1b[38;5;226m╗"));
+        assert_eq!(colorize_logo(&lines, false), "█╗ ║\n");
+    }
 
     #[test]
     fn audit_n24_a_hub_that_could_not_have_its_port_says_so() {
