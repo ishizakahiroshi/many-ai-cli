@@ -488,7 +488,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .spawn-remote-attach-row { display: flex; flex-direction: column; gap: var(--space-1, 4px); }
 .spawn-remote-attach-row[hidden] { display: none !important; }
 .spawn-remote-attach-row .spawn-select { min-width: 0; }
-.spawn-remote-attach-hint { font-size: 12px; opacity: 0.7; line-height: 1.5; }
+.spawn-remote-attach-hint { font-size: var(--fs-sm); opacity: 0.7; line-height: 1.5; }
 .spawn-textarea {
   width: 100%;
   box-sizing: border-box;
