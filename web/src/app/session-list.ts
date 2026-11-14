@@ -97,9 +97,13 @@ function permissionModeLabel(mode: string): string {
   return ti18n(`permission_mode_${mode}`, known || mode);
 }
 
-// カードに出す「起動時: <モード>」チップ。**起動時の 1 点の値**であることを
-// 文言で言い切る（ライブ値を観測する経路はどの provider にも無い）。指定なしの
-// セッションは空文字＝チップごと出さない。
+// 上部のセッション情報チップに出す「起動時: <モード>」。**起動時の 1 点の値**
+// であることを文言で言い切る（ライブ値を観測する経路はどの provider にも無い。
+// claude の statusLine payload にも権限モードは無く、セッション中に CLI 側で
+// 切り替えても Hub には届かない。実測は docs/local/reference/reference_usage-display.md）。
+// 権限のフラグを 1 つも付けずに起動したセッションは値が空なので、空文字＝チップごと
+// 出さない（「不明」を出さない・C5, plan_cross-provider-agent-ux-adoption.md）。
+// 全許可（bypassPermissions）は取り違えると危ないので、modifier で色を変える。
 export function permissionModeChipHtml(rawMode: unknown): string {
   const mode = String(rawMode || '').trim();
   if (!mode) return '';
@@ -110,7 +114,8 @@ export function permissionModeChipHtml(rawMode: unknown): string {
     `Permission mode this session was started with: ${label}. It is the value at launch, not a live one — a change made inside the CLI afterwards is not shown here.`,
     { mode: label },
   );
-  return `<span class="card-permission-chip" data-tooltip="${escapeHtml(tip)}">${escapeHtml(text)}</span>`;
+  const cls = mode === 'bypassPermissions' ? 'session-permission-chip bypass' : 'session-permission-chip';
+  return `<span class="${cls}" data-tooltip="${escapeHtml(tip)}">${escapeHtml(text)}</span>`;
 }
 
 // 引き継ぎの後継を逆引きする（子 plan:
@@ -1333,15 +1338,9 @@ export function renderSessionList() {
       const headlessHtml = s.execution_mode === 'headless'
         ? `<span class="card-headless-chip" data-tooltip="${escapeHtml(ti18n('card_headless_tooltip', 'Headless: the provider runs non-interactively, so this terminal is read-only'))}">${escapeHtml(ti18n('card_headless', 'Headless'))}</span>`
         : '';
-      // 起動時の権限モード。値は wrapper の申告が正本で、権限のフラグを 1 つも
-      // 付けずに起動したセッションは空を送るので、そのときはチップを出さない
-      // （「不明」を出さない・C5, plan_cross-provider-agent-ux-adoption.md）。
-      //
-      // **ライブ値ではない。** セッション中に CLI 側で権限モードを切り替えても
-      // Hub には届かない（claude の statusLine payload にも権限モードは無い。
-      // 実測は docs/local/reference/reference_usage-display.md）。だからチップの
-      // 文言は必ず「起動時」と言い、今の状態だと読めないようにする。
-      const permissionModeHtml = permissionModeChipHtml(s.permission_mode);
+      // 起動時の権限モードはカードには出さない（セッション名と幅を取り合うため）。
+      // 上部のセッション情報チップ（settings.ts の renderSessionInfoChip）へ移した
+      // （plan_permission-mode-to-session-header.md）。
       // 引き継ぎのリンク。**画面上の親子は作らない**（後継は対等な新しい親）ので、
       // 表示だけの一方向リンクを両側のカードへ出す
       // （子 plan: docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C4）。
@@ -1365,7 +1364,7 @@ export function renderSessionList() {
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
       // 2 行目の文字情報を伸縮する領域へまとめ、ctx・子トグル・右端 branch の幅を守る。
       // サマリーの器は常設し、追加・消去でもカードの行数を変えない。
-      const metaExtra = `${noteHtml}${roleHtml}${headlessHtml}${permissionModeHtml}${branchRoleHtml}${boardPendingHtml}${handoffFromHtml}${handoffToHtml}`;
+      const metaExtra = `${noteHtml}${roleHtml}${headlessHtml}${branchRoleHtml}${boardPendingHtml}${handoffFromHtml}${handoffToHtml}`;
       // 作業終了のベルは既定が ON なので、OFF のときだけ 🔕 を出す（押すと ON に戻る）。
       // 切り替えの入口は ⋯ メニューにもある。
       const bellMutedTip = t('turn_end_bell_off_tooltip');

@@ -69,6 +69,11 @@ Release artifacts are published at
 
 ### Changed
 
+- **The "At launch: …" permission mode moved from the session card to the top
+  header.** It no longer takes room from the session name in the sidebar; it
+  now sits in the header next to the model and effort badges of the session you
+  have open. It is still the value the session was started with, not a live one,
+  and a full-allow ("bypass") launch is shown in a warning colour.
 - **The terminal is about two lines taller on a desktop screen.** With a mouse
   on a window 721px or wider, the top header is 28px instead of 44px (the name
   and icon are smaller; nothing moved), the tab row is 32px instead of 36px,

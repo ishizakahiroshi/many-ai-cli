@@ -291,6 +291,24 @@ body.pane-resizing .xterm { pointer-events: none; }
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
+/* 起動時の権限モード（plan_permission-mode-to-session-header.md）。起動時の 1 点の値で
+   押せない表示なので、対話チップと同じ破線の枠にして cursor も変えない。全許可は
+   取り違えると危ないので警告色にする。幅が狭いときも潰さない（flex-shrink 0）。 */
+.session-info-chip .session-permission-chip {
+  font-size: var(--header-font-size);
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed color-mix(in srgb, var(--muted) 40%, transparent);
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: default;
+  flex-shrink: 0;
+}
+.session-info-chip .session-permission-chip.bypass {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 55%, transparent);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
 /* 表示モード系タブ。ボタン部品は quiet（面と枠なし）を使い、タブの形はここで決める:
    選択は下線で示すので下の角は丸めない。文字はセッション情報チップと同じヘッダーの大きさ。 */
 .view-tab {

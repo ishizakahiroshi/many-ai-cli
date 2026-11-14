@@ -10,7 +10,7 @@ import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DES
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, openProjectKey, sessions, terminals } from './state.js';
 import { getDoneSummary } from './done-summary.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
-import { activateSession, cardSessionActions, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
+import { activateSession, cardSessionActions, openDetachedGridForSessions, patchSessionMeta, permissionModeChipHtml, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
 import { executionModeKind } from './session-launch-declaration.js';
 import { pathPopupEl } from './path-links.js';
 import { TERMINAL_SCROLLBACK_LINES, attachTerminal, dismissTerminalReadOverlays, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, refreshTerminalThemes, sendResize } from './terminal.js';
@@ -3225,10 +3225,14 @@ export function renderSessionInfoChip() {
   const modeLabel = t(modeKind === 'headless' ? 'session_mode_headless' : 'session_mode_interactive');
   const modeTip = t(modeKind === 'headless' ? 'session_mode_headless_tooltip' : 'session_mode_interactive_tooltip');
   const modeBadge = ` <span class="session-mode-chip ${modeKind}" data-tooltip="${escapeHtml(modeTip)}">${escapeHtml(modeLabel)}</span>`;
+  // 起動時の権限モード。起動時の 1 点の値で、今の値ではない（文言とツールチップで言い切る）。
+  // 指定なしで起動したセッションは空文字が返り、何も出ない。
+  const permissionHtml = permissionModeChipHtml(s.permission_mode);
+  const permissionBadge = permissionHtml ? ` ${permissionHtml}` : '';
   chip.innerHTML =
     `<span class="sid">#${s.id}</span>` +
     ` ${statePill} ` +
-    `${providerIconHtml(s.provider)} ${providerChipHtml}${modeBadge}${modelBadge}${effortBadge}${thinkBadge}${agentNameBadge}${subBadge}`;
+    `${providerIconHtml(s.provider)} ${providerChipHtml}${modeBadge}${modelBadge}${effortBadge}${thinkBadge}${agentNameBadge}${permissionBadge}${subBadge}`;
 }
 
 // D12: チャット件数バッジ更新
