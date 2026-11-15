@@ -10,120 +10,36 @@ Release artifacts are published at
 
 ## [Unreleased]
 
-### Added
+## [0.10.0-rc.2] - 2026-11-09
 
-- **The board's handed-over list shows only work this PC can take.** A request
-  the board routed to someone else (devin, muse, owner, hold, ...) is no longer
-  listed; one for `local-claude` is listed when `local_taker` is set up, and a
-  session started for it takes the request with that writer's key.
-- **Run work the board's owner handed to this PC, unattended.** With
-  `local_taker` in `board.json`, the Hub looks at the board every few minutes
-  and takes a request for `local-claude` that the owner handed over and routed
-  from the board page, runs it with `claude -p` (an Anthropic API key from an
-  env file, the title on stdin as data, in the project's listed folder), and
-  writes the start, a short masked result and `done` (or the reason and
-  `waiting`) onto the item. One run at a time, a daily cap and a timeout. Work a
-  writer handed over or routed is never run. See `docs/manual_board-sync.md`.
-- **Open files on an ssh host without any setup.** When a shell session was
-  started as `ssh -i <key> user@host`, right-clicking an absolute path (`/…` or
-  `~/…`) in the terminal now offers "Open from user@host" (read-only modal) and
-  "Fetch" — no attachment destination needs to be set first. It is read-only and
-  never changes where attachments are sent. Connections that use `-p`, `-J`, `-F`
-  or `-l` are not detected; set the destination by hand for those.
-- **Start work the board's owner handed over.** When the owner of an MCP board
-  (for example Many Iris) hands a piece of planned work to an AI, the Hub's
-  sidebar shows "Work handed over from the board" for the projects listed in
-  `board.json`. Choosing one opens the ordinary new-session form with the
-  project's folder and the work's title filled in; nothing starts until you
-  press Launch. The session then takes the request on the board
-  (`board_accept_handoff`), and its start, summaries and end are written onto
-  the handed-over item instead of a new `session/<id>` item. A request someone
-  else took first leaves the session an ordinary one. See
-  `docs/manual_board-sync.md`.- **A commit named in a finished-work summary links to its GitHub page on the
-  board.** When a summary has no `成果:` link but names a commit by its hash
-  (7 or more characters, for example "pushed 0a1b2c3d"), and that commit is on
-  a branch of `origin` on GitHub, the note on the board gets the commit's page
-  as its link. A commit that is not pushed gets no link, and the repository's
-  newest commit is never guessed: with several sessions in one repository it
-  may be another session's work.
-- **Input buttons live inside the progress band, and up to 10 quick commands.**
-  On a wide screen the buttons stay in the band that shows the working message.
-  Drag a button by its corner grip and drop it between others to reorder them
-  (the others slide aside, as on a phone home screen); they can no longer be
-  placed outside the band, and only the order is saved, so opening the sidebar
-  or resizing the window no longer leaves them behind. Drag the divider between
-  the message and the buttons to widen or narrow the button area (double-click
-  to reset). Right-click anywhere on the band to list your quick commands: tick
-  to show or hide a button (the command is kept), edit, delete, or add a new
-  one, up to 10 (hidden ones count). The same list is in Settings. Your earlier
-  free positions are converted to an order the first time, and your existing
-  five quick commands are unchanged.
-- **Note whether each subscription can use browser control.** Whether an AI can
-  drive Chrome through the browser extension depends on the account the
-  extension is signed in to, so one subscription may work and another may not.
-  In Settings, each subscription now has a "Browser use" choice (Unknown /
-  Works / Does not work), and the session launch form shows it next to the
-  subscription when you have set it. It is only a note you keep: many-ai-cli
-  does not detect it and never blocks a launch because of it. Unknown (the
-  default) shows nothing.
-- **Progress on an MCP board (opt-in).** Put a `board.json` next to
-  `config.yaml` to have sessions started in the repositories you list written
-  to an MCP board (for example a Many Iris board): an item when the session
-  starts, each DONE summary as a note, and `done` when it ends. Nothing is sent
-  without the file, for unlisted repositories, or in trial runtimes. The writer
-  key is read from a file you name and never logged. See
-  `docs/manual_board-sync.md`.
-- **Board work is named and filed under its plan.** With `board.json` in
-  place, a session's item is renamed from its first DONE summary (date,
-  provider, first sentence) instead of staying "claude: Claude". A summary may
-  end with `計画: <path or URL>` and `成果: <https URL>` (the approval rules,
-  now version 26, tell the AI about them): the work is put under the board
-  item whose source is that plan, a plan file that exists in the repository but
-  has no item yet gets one (title from its first heading; file contents are
-  never sent), and the outcome URL becomes the link of that note. When later
-  summaries name another plan, the work continues in a new item, so each plan
-  lists the work done for it. Without those lines everything is written as
-  before.
+A release candidate for 0.10.0, published on 2026-11-09 so installing and
+starting it the way users do could be checked before 0.10.0. npm served it
+only as `many-ai-cli@next`. It was not the default install, and winget and
+Homebrew were not updated. Fixes added after that tag are listed under 0.10.0.
+(The `v0.10.0-rc.1` tag published nothing: its release run stopped before
+signing, when the SBOM files were not uploaded.)
 
-### Changed
+## [0.10.0] - 2026-11-15
 
-- **The header strip is gone on desktop.** On a wide, mouse-driven screen the
-  logo, the inbox / New Session / `⋯` buttons now sit in one row at the top of
-  the sidebar, and the running / per-LLM counts (plus reconnect and microphone
-  state) sit next to the Settings button, so the terminal gets the 28 px back.
-  Narrow and touch layouts keep the header, and detached windows are unchanged.
-- **The Docker files are removed from the repository.** `deploy/docker/` (the
-  Dockerfile, compose files, per-user examples and the update script), its
-  input-pin check and the Docker workflow notice are gone, together with the
-  two Docker operation manuals and the Docker recipes in the README. Official
-  Docker images were already unsupported for v0.10.0; to run a remote Hub, use
-  the Linux binary over SSH. The old files stay in the Git history.
-- **The "At launch: …" permission mode moved from the session card to the top
-  header.** It no longer takes room from the session name in the sidebar; it
-  now sits in the header next to the model and effort badges of the session you
-  have open. It is still the value the session was started with, not a live one,
-  and a full-allow ("bypass") launch is shown in a warning colour.
-- **The terminal is about two lines taller on a desktop screen.** With a mouse
-  on a window 721px or wider, the top header is 28px instead of 44px (the name
-  and icon are smaller; nothing moved), the tab row is 32px instead of 36px,
-  and the spacing around the progress band and the input box is 16px tighter,
-  36px in total. Phone-width and touch screens are unchanged.
+This release replaces the Go implementation of many-ai-cli with a Rust one.
 
-### Removed
-
-- **The Whisper voice engine is removed.** The local whisper.cpp server, its
-  managed install, and the `/api/voice/transcribe` and `/api/whisper*` routes
-  are gone. Voice input now uses the browser's built-in recognition only, and
-  Settings → Voice offers `OFF` or `Browser`. If you used Whisper, a leftover
-  `~/.many-ai-cli/whisper/` is reported by `many-ai-cli doctor` and removed by
-  `many-ai-cli uninstall`; `voice.whisper.*` keys in `config.yaml` are ignored.
-- **The NVIDIA NIM route and the Jev rating are removed.** Settings no longer
-  has the "NVIDIA NIM for OpenCode" and "Jev evaluation" sections, the model
-  picker no longer lists an NVIDIA NIM group, and the `/api/nvidia-nim*` and
-  `/api/jev/evaluate` routes are gone. The Hub makes no request to NVIDIA or
-  TypeSafe any more. An existing `nvidia_nim` key in `config.yaml` is ignored,
-  and a key saved earlier stays in `~/.many-ai-cli/secrets/nvidia_api_key`
-  until you delete the file yourself.
+- **Same commands, same places for your data.** The command names, settings and
+  data locations are unchanged: the configuration stays in
+  `~/.many-ai-cli/config.yaml` and your data under `~/.many-ai-cli/`. Updating
+  carries over your settings and your session list (sessions older than the
+  retention period are removed at each start, as in v0.9.0). The text of past
+  conversations is not carried over: this version no longer stores it, and the
+  first start after the update deletes what v0.9.0 saved (see "Changed").
+- **Going back.** Before updating, copy `~/.many-ai-cli/`. To return to the Go
+  version, reinstall v0.9.0 and write the copy back. Steps:
+  [Upgrading to 0.10 (Rust)](https://github.com/ishizakahiroshi/many-ai-cli#upgrading-to-010-rust).
+- **No official Docker image.** Official Docker images, container builds and
+  automatic updates are not part of v0.10.0, and automatic image publishing is
+  stopped (see `deploy/docker/README.md`). Use the Linux binary instead.
+- **Known limitations.** Starting an AI CLI session usually shows its first
+  output in well under a second, but now and then it takes two to four seconds
+  (measured on one machine over 24 launches: median 0.34 s, 95th percentile
+  0.9 s, slowest 4.0 s). The cause has not been found.
 
 ### Fixed
 
@@ -218,15 +134,6 @@ Release artifacts are published at
   a reply with a long hexadecimal string could stop the whole dashboard,
   approval buttons included, for seconds. Relative paths are now matched up to
   255 characters (longer ones still link when they start with `./` or `/`).
-- **Managed Whisper is updated when its release changes.** An installed
-  `whisper-server` and its DLLs were never replaced, while the status reported
-  the version this build would install. Installing now records which release
-  was installed; an installation from another release (or one made before this
-  record existed) is downloaded again and replaced when you install, with the
-  old files put back if anything fails. The runtime files bundled with
-  many-ai-cli are replaced when they differ, before the server starts. The
-  status reports the installed version (`binary_version`) and the version this
-  build installs (`available_version`) separately.
 - **A save the Hub was stopped in the middle of is now reported, and the
   earlier content can be put back.** Saving in the Files tab keeps a copy of
   the file's earlier content until the new content is written. If the Hub was
@@ -247,10 +154,6 @@ Release artifacts are published at
   headless mode and the UTF-8 setting that followed could be handed to the
   provider as arguments instead of being applied. These arguments are now
   passed last, after `--`.
-- **Two voice-input requests at the same moment no longer stop the Whisper
-  server that is starting.** A request that arrived while another was still
-  starting the server judged it as ended, stopped it, and both failed. It now
-  waits for that start (up to 25 seconds) and uses the same server.
 - **Starting a Codex session no longer waits for its browser plugins to be
   installed.** The first start of a Codex profile ran `codex plugin add` for
   the bundled browser plugins and waited for it, up to the command's time
@@ -271,16 +174,728 @@ Release artifacts are published at
   engine of Chrome; measured with Node), during which the page does not
   respond. The same inputs now take under 20 milliseconds; the tidied text is
   unchanged.
-- **Managed Whisper (Windows x64) moves from whisper.cpp v1.8.6 to v1.9.5.**
-  v1.8.6 reads past the end of a recording of 200 samples or fewer (12.5
-  milliseconds at 16 kHz) when it pads the audio (fixed upstream in
-  whisper.cpp PR #3956), which can stop the Whisper server. The installer now
-  downloads the Windows x64 build of the v1.9.5 commit (upstream publishes it
-  as release `b5454`), SHA-256 verified as before. That build ships one CPU
-  library per processor generation (`ggml-cpu-*.dll`) and picks one when it
-  starts. An existing v1.8.6 install is downloaded again and replaced the next
-  time you install in Settings → Voice. The whisper.cpp built for the Docker
-  image is still v1.8.6.
+- Fix the Workflow progress display while a background Workflow runs: it no longer
+  reads the "Update installed" notice as a finished agent (which showed 1/1 and
+  100%), shows the real count from the Workflow journal instead, and the
+  "not progressing" warning is no longer shown while a background Workflow is
+  still running.
+- Fix Windows terminal disposal during process startup: terminate the owned Job
+  and observe the root exit and an empty Job before closing ConPTY, preventing
+  startup-close initialization errors. Ctrl+C input remains a separate operation.
+- Shell attachment destinations can specify an SSH private key file for uploads,
+  downloads, and remote file previews, including keys passed with `ssh -i` when
+  connecting in the terminal.
+- Keep all long pasted texts before sending, and retain the draft when an
+  attachment upload fails instead of sending an incomplete message.
+
+- **The retention settings take effect again.** `log.session_retention_days`
+  (default 7), `handoff.retention_days` (14) and `log.attachment_retention_days`
+  (7) were never read, so old session files, handoff records, history rows and
+  attachments stayed forever. The Hub now applies them once at each start;
+  zero or less keeps everything. Attachments wait one retention period after
+  the first start with this version, so nothing you attached earlier is removed
+  all at once.
+- **Secrets saved before the masking was added are masked on the next start.**
+  Existing `.log` files are masked once as a whole (so a key split across reads
+  or a multi-line private key is caught), and approval texts already in the
+  database are masked in place.
+- **The handoff directory no longer grows by repeating the same transcript path.**
+  A record was appended every time the transcript file changed, although the
+  path rarely did (133 MB of a 145 MB directory in one install). A path equal to
+  the previous one is skipped, and the Hub start folds the repeats already
+  written; the handoff note shows the same content.
+- **Sending an attachment from a shell session with no destination chosen now
+  asks first.** Images, files and long pastes used to be sent silently with a
+  path on this PC, which an AI running on the ssh machine could not open. A
+  window now appears before sending: enter the ssh destination and press Save,
+  or press "Read on this PC". Your input and attachments are kept.
+- **A session's dedicated worktree is removed once its branch is merged on the
+  remote, and one left behind is checked again at the next Hub start.** With
+  `worktree_cleanup: delete`, closing a session now also fetches the upstream of
+  the repository's current branch (`HEAD@{upstream}`, e.g. `origin/develop`) and
+  counts the branch as merged when it is there, not only in the local HEAD; a
+  worktree still unmerged when its session closed is judged again each time the
+  Hub starts, skipping any a running session uses. An unreachable remote keeps
+  the worktree and logs a warning, and the branch is never deleted. A squash or
+  rebase merge on GitHub creates new commits, so it is not recognized as merged.
+- **Commands an AI runs no longer write color codes into pipes and files.**
+  With "Always show colors (recommended)", sessions received `FORCE_COLOR=3`
+  and `CLICOLOR_FORCE=1`, and the AI CLI passes its environment to every
+  command it runs, so `gh … --json`, test runners and other tools colored
+  their output even when it was piped (JSON from `gh` could not be parsed).
+  The setting now removes inherited `NO_COLOR`, `FORCE_COLOR`,
+  `CLICOLOR_FORCE` and `CLICOLOR` instead and leaves color detection to the
+  terminal pane, which still reports `TERM=xterm-256color` and
+  `COLORTERM=truecolor`. "Follow the launch environment" and "No colors" are
+  unchanged. Applies to newly started sessions.
+
+- Approval rules now reach instruction files you reach through a link, such as
+  a worktree or profile folder that is a junction or symlink, or a `CLAUDE.md`
+  symlinked from your dotfiles. As in v0.9.0, the rules are written to the file
+  the link points to, and two profiles linking one file keep the rules until
+  the last of their sessions ends. Earlier Rust candidate builds silently gave these
+  sessions no rules, so their AI could not offer choices as dashboard buttons. Trial runs
+  still refuse links. `many-ai-cli doctor` (and Settings → doctor) now names
+  live sessions whose instruction file is missing the rules.
+- The ↑ up / ↓ down buttons that jump to the start or the end of a full-screen
+  (alternate-screen) CLI's history no longer stop partway. They now send four
+  scroll steps at a time instead of waiting for each step to be confirmed on
+  screen, and treat the edge as reached once the visible text stops changing.
+- Updated Tokio to 1.53.3 and the Web Push P-256 dependency to 0.14.0,
+  including crypto-bigint 0.7.8 and ctutils 0.4.5 security fixes. Unix PTY I/O
+  now explicitly registers its owned file descriptor under Tokio's lifetime
+  contract; Web Push retains its encryption and signature wire formats.
+- Windows file operations now hold the parent directory against replacement
+  before opening the selected file, preventing a renamed parent from redirecting
+  that open to a different file.
+- One-tap approval links now bind the session's incarnation as well as its
+  approval identity, so a link issued before a session is recreated cannot
+  approve the replacement. Normal wrapper reconnects retain valid links;
+  older token formats are rejected.
+- Updated vendored DOMPurify to 3.4.17, retaining upstream license terms and
+  matching the version shown in About and the frontend dependency list.
+- Updated the TLS verifier and bundled root certificate dependencies to
+  rustls-webpki 0.103.16 and webpki-root-certs 1.0.10, and pinned CI job Node.js
+  to the 22.23.4 security release with native-build version receipts.
+- Live status colors now follow the light or dark theme by default, with separate
+  background and text overrides for each mode. The palette shows the mode being
+  edited and can reset it without changing the other mode; legacy shared colors
+  remain available in dark mode only.
+- Remote browser connections now expire with their PIN session and disconnect
+  on logout or PIN changes. New input and UI data are rejected after revocation;
+  already accepted input drains while local screens and terminal sessions stay
+  connected. Failed PIN persistence keeps existing connections authorized.
+- Subscription probe and login cleanup now rechecks the exact session connection
+  while dismissing it, so cleanup from an older connection cannot remove a
+  reconnected session or emit a duplicate dismissal after removal.
+- Cancelling uninstall, closing its input, or failing to read confirmation now
+  leaves the running Hub untouched. Hub shutdown and data removal begin only
+  after explicit confirmation.
+- Windows release resource validation accepts the SDK's zero-to-one icon-plane
+  normalization while still requiring matching icon image bytes, directory
+  fields, image count, file version, and product version.
+- npm packages and Linux package documentation now retain the Web dependency
+  license notices from the canonical release ZIPs. Packaging rejects missing,
+  empty, or inconsistent Web notices before replacing any output.
+- Debug builds no longer collect temporary UI-freeze recorder events. Existing
+  diagnostic files are preserved; the underlying investigation remains open.
+- Windows desktop shortcuts now open the Hub and browser on the first launch,
+  while sign-in starts only the tray. Setup retains the selected home and port;
+  tray startup/action failures are shown instead of disappearing with the console.
+- npm staging checks all four native inputs before replacing package payloads
+  and verifies copied hashes. Package smoke checks require the correct Windows
+  executable name and nonempty binaries instead of accepting missing payloads.
+- In light mode, the footer and its detail panels now follow the light theme, <!-- doxguard: allow panel -->
+  and the live status bar refreshes its saved colors after preference sync.
+- The inline Usage meter now gives its remaining-quota bar the width left after
+  its value and reset text, so the fill is easier to read on narrow rows.
+- An approval question that the AI wrote without numbered options or
+  `(Y:1/N:0)` (for example a single "May I push this?") is now shown as a
+  Yes / No panel instead of the "corrupted structure" notice, and a plain report <!-- doxguard: allow panel -->
+  wrapped in the approval marker no longer leaves the session waiting for
+  approval. When the screen still cannot read an approval, the notice no longer
+  blames a terminal redraw.
+
+- The Git panel's read-only views (changed files, diffs and the commit-message <!-- doxguard: allow panel -->
+  suggestion) no longer take `.git/index.lock`. They now run `git status` with
+  `GIT_OPTIONAL_LOCKS=0` and compare HEAD with the work tree through
+  `git diff-index`, which never rewrites the index, so a read stopped at its
+  5-second limit can no longer leave a 0-byte `index.lock` that blocks your own
+  `git add` / `git commit`. Commit, push, pull and fetch are unchanged.
+- Session cards read the branch name from the repository's `.git/HEAD` file
+  instead of starting `git` for it on every refresh. Starting `git` sometimes
+  took longer than the 250 ms limit when many sessions were open, and the card
+  then showed "(no git)" for a repository. Git is still asked when HEAD is
+  detached, when the repository uses reftable, or when HEAD cannot be read. A
+  repository with no commit yet now shows its branch name instead of
+  "(no git)".
+- Relay's change count and the clean check before an automatic worktree is
+  removed no longer take `.git/index.lock` either: they ran `git status` without
+  `GIT_OPTIONAL_LOCKS=0` and are stopped after 3 and 5 seconds. Every `git` the
+  Hub starts (the Git panel, the branch display, relay, worktrees, turn records, <!-- doxguard: allow panel -->
+  the approval-rule location and `doctor`) is now planned in one place that
+  sets `GIT_OPTIONAL_LOCKS=0` and refuses a porcelain `git diff` against the
+  work tree, and a test fails when new code starts `git` without it.
+- Rust Hub keeps Codex sessions running through silent processing until the provider reports completion or interruption, and restores active turns outside the chat-history window after reconnection, preventing premature yellow unread-stop marks.
+- The Windows Hub no longer builds a machine-wide thread snapshot every time it
+  starts a child process (for example each `git` call that refreshes the branch
+  display), which took more than half of the Hub's CPU. It now looks only at the
+  child it just started, and releases that snapshot correctly so Hub handles do
+  not accumulate.
+- `orchestrate spawn` for a role that already has a live child is refused
+  right away with the existing 409, before the spawn confirmation dialog opens.
+  Previously the dialog opened, and the refusal came only after the user had
+  chosen options and approved. `--force` still opens the dialog.
+- Approval confirmations and mobile hold controls stay attached to the approval
+  originally displayed. Enter activates the focused confirmation button.
+  Read-only Markdown removes interactive controls, and browser policy blocks
+  native form submission.
+- Sending text, preparing attachments and completing voice input retain the
+  originating session and preserve newer drafts when asynchronous work finishes.
+- Windows terminal fallback passes its directory as data. Headless argument
+  prompts require a native executable or a provider with stdin prompt transport
+  when an unresolved Windows command shim would otherwise interpret the prompt.
+  Trial CLI updates validate the executable selected after shim resolution.
+- Instruction injection records cleanup intent before changing user files.
+  Probe recovery checks identity captured from the owned process at startup;
+  older or unverifiable records are retained with a warning for manual recovery.
+- The Rust TLS dependency resolves to rustls 0.23.46.
+- Web Push signs a normalized origin and a single contact URI. Unauthenticated
+  WebSockets have a bounded wait and connection count. Concurrent in-app file
+  saves report a conflict, and attachments rejected before journal acceptance
+  remove only the newly created file.
+- Files previews discard superseded responses and keep saves attached to the
+  file and editor that started them. Git and Review tabs only reconnect to a
+  matching repository, including when restoring tabs after a restart.
+- History viewers discard results from closed or replaced views. Completing
+  an earlier AI icon upload preserves a newly opened provider form. Memo editors
+  keep IME conversion Enter separate from submitting or saving text.
+- SVG files use external-open or download actions instead of an unsupported
+  in-app image preview.
+- **Editing a minified dependency no longer marks its unchanged text as a new
+  secret.** Staged scans retain the baseline only for occurrences entirely in
+  identical parts of a single-line replacement; new occurrences still block.
+- **Terminal text no longer blurs at browser zoom levels other than 100%.** At
+  zoom levels such as 90%, the terminal could draw every row slightly stretched,
+  so text looked smeared until the layout changed again (for example when a bar
+  above or below the terminal appeared or disappeared). The bundled xterm.js
+  WebGL addon (0.19.0) now carries the upstream fix
+  ([xtermjs/xterm.js#5607](https://github.com/xtermjs/xterm.js/pull/5607)), so
+  rows are always drawn at their exact pixel height.
+- Rust Hub attachment uploads now record history with the current session binding,
+  fixing HTTP 500 failures that prevented images and pasted text from reaching the
+  provider. WebSocket attachments also reject ended or stale session contexts.
+- Hide unfinished completion tags when a terminal redraw interrupts them, while
+  preserving cursor movement and the following output in the Rust trial UI.
+- **The Settings icon stays at the bottom while Settings is open.** The same
+  Settings, Usage and Hub buttons remain available, and the settings list can
+  scroll past them.
+- **Pasting into the work memo and other text fields stays in that field.**
+  Pasting five or more lines (or more than 300 characters) into the memo box,
+  the file editor, the commit message or any other text field turned the text
+  into a "Pasted text" chip on the input bar at the bottom instead, and an
+  image pasted into the memo box was also added to the input bar's
+  attachments. The input bar now collects only pastes aimed at itself or at no
+  text field.
+- **The Detached Grid launcher shows readable labels again.** Its title,
+  presets and buttons were shown as raw translation keys such as `dgl_title`.
+- **Renaming a session card no longer breaks routine completion tracking or
+  reattach matching.** The Hub now keys those lookups on a fixed launch-time
+  label instead of the editable display label. The card's right-click "Change
+  label" now opens an input dialog matching the New Session label field
+  (translated menu text, current value pre-filled, blank clears back to the
+  automatic title) instead of a plain browser prompt, and detached/Grid pane
+  headings pick up the new name immediately.
+- **Handoff allows continuing with the same CLI**, including Codex-to-Codex.
+  The source CLI is no longer omitted from the destination picker; launching
+  the successor and choosing a subscription remain explicit user actions.
+- **Hub restarts preserve input sequence numbers and the full 2 MiB replay
+  window from updated wrappers.** New instructions are no longer discarded as
+  duplicate input after reconnect, and retained terminal history is no longer
+  reduced to 64 KiB. Already discarded output cannot be recovered by this fix.
+- **Terminal link detection avoids repeated full scans on long output.** URL
+  suffixes with many unmatched brackets and Windows paths with long whitespace
+  runs are processed in linear passes. Rows containing many links use a compact
+  occupancy map and binary row lookup instead of scanning every earlier link
+  and row, preserving link priority, targets and clickable ranges.
+- **The prompt template picker is larger, and the mouse wheel now scrolls its
+  list.** The picker opens wider and taller, and scrolling the wheel over it
+  scrolls the list instead of the terminal behind it.
+- **Files API endpoints protect repository roots and version control directories (.git, .hg, .svn).**
+  Deleting, renaming, moving, creating, or editing paths within or targeting
+  version control directories and root directories is rejected with 403 Forbidden
+  or 409 Conflict.
+- **Approval risk classification recognizes PowerShell array subexpressions `@(...)`.**
+  Commands that embed arbitrary PowerShell statements via `@(...)` (such as
+  `cat @(...)` or `dir @(...)`) are classified as mid-risk instead of incorrectly
+  being treated as low-risk.
+- **Web UI requests use Cookie and Bearer authorization instead of query tokens.**
+  API calls across the web dashboard no longer include `?token=` in request URLs,
+  preventing token exposure in browser history, server access logs, and shared links.
+- **Dependency `golang.org/x/crypto` updated to v0.57.0**, eliminating upstream advisory GO-2025-3486.
+
+### Added
+
+- **The board's handed-over list shows only work this PC can take.** A request
+  the board routed to someone else (devin, muse, owner, hold, ...) is no longer
+  listed; one for `local-claude` is listed when `local_taker` is set up, and a
+  session started for it takes the request with that writer's key.
+- **Run work the board's owner handed to this PC, unattended.** With
+  `local_taker` in `board.json`, the Hub looks at the board every few minutes
+  and takes a request for `local-claude` that the owner handed over and routed
+  from the board page, runs it with `claude -p` (an Anthropic API key from an
+  env file, the title on stdin as data, in the project's listed folder), and
+  writes the start, a short masked result and `done` (or the reason and
+  `waiting`) onto the item. One run at a time, a daily cap and a timeout. Work a
+  writer handed over or routed is never run. See `docs/manual_board-sync.md`.
+- **Open files on an ssh host without any setup.** When a shell session was
+  started as `ssh -i <key> user@host`, right-clicking an absolute path (`/…` or
+  `~/…`) in the terminal now offers "Open from user@host" (read-only modal) and
+  "Fetch" — no attachment destination needs to be set first. It is read-only and
+  never changes where attachments are sent. Connections that use `-p`, `-J`, `-F`
+  or `-l` are not detected; set the destination by hand for those.
+- **Start work the board's owner handed over.** When the owner of an MCP board
+  (for example Many Iris) hands a piece of planned work to an AI, the Hub's
+  sidebar shows "Work handed over from the board" for the projects listed in
+  `board.json`. Choosing one opens the ordinary new-session form with the
+  project's folder and the work's title filled in; nothing starts until you
+  press Launch. The session then takes the request on the board
+  (`board_accept_handoff`), and its start, summaries and end are written onto
+  the handed-over item instead of a new `session/<id>` item. A request someone
+  else took first leaves the session an ordinary one. See
+  `docs/manual_board-sync.md`.- **A commit named in a finished-work summary links to its GitHub page on the
+  board.** When a summary has no `成果:` link but names a commit by its hash
+  (7 or more characters, for example "pushed 0a1b2c3d"), and that commit is on
+  a branch of `origin` on GitHub, the note on the board gets the commit's page
+  as its link. A commit that is not pushed gets no link, and the repository's
+  newest commit is never guessed: with several sessions in one repository it
+  may be another session's work.
+- **Input buttons live inside the progress band, and up to 10 quick commands.**
+  On a wide screen the buttons stay in the band that shows the working message.
+  Drag a button by its corner grip and drop it between others to reorder them
+  (the others slide aside, as on a phone home screen); they can no longer be
+  placed outside the band, and only the order is saved, so opening the sidebar
+  or resizing the window no longer leaves them behind. Drag the divider between
+  the message and the buttons to widen or narrow the button area (double-click
+  to reset). Right-click anywhere on the band to list your quick commands: tick
+  to show or hide a button (the command is kept), edit, delete, or add a new
+  one, up to 10 (hidden ones count). The same list is in Settings. Your earlier
+  free positions are converted to an order the first time, and your existing
+  five quick commands are unchanged.
+- **Note whether each subscription can use browser control.** Whether an AI can
+  drive Chrome through the browser extension depends on the account the
+  extension is signed in to, so one subscription may work and another may not.
+  In Settings, each subscription now has a "Browser use" choice (Unknown /
+  Works / Does not work), and the session launch form shows it next to the
+  subscription when you have set it. It is only a note you keep: many-ai-cli
+  does not detect it and never blocks a launch because of it. Unknown (the
+  default) shows nothing.
+- **Progress on an MCP board (opt-in).** Put a `board.json` next to
+  `config.yaml` to have sessions started in the repositories you list written
+  to an MCP board (for example a Many Iris board): an item when the session
+  starts, each DONE summary as a note, and `done` when it ends. Nothing is sent
+  without the file, for unlisted repositories, or in trial runtimes. The writer
+  key is read from a file you name and never logged. See
+  `docs/manual_board-sync.md`.
+- **Board work is named and filed under its plan.** With `board.json` in
+  place, a session's item is renamed from its first DONE summary (date,
+  provider, first sentence) instead of staying "claude: Claude". A summary may
+  end with `計画: <path or URL>` and `成果: <https URL>` (the approval rules,
+  now version 26, tell the AI about them): the work is put under the board
+  item whose source is that plan, a plan file that exists in the repository but
+  has no item yet gets one (title from its first heading; file contents are
+  never sent), and the outcome URL becomes the link of that note. When later
+  summaries name another plan, the work continues in a new item, so each plan
+  lists the work done for it. Without those lines everything is written as
+  before.
+
+- Record the current sidebar tab name on newly created work memos and show it with each memo.
+- Add an opt-in Many Iris MCP execution-contract boundary with separate bearer
+  authentication, a durable request journal, pinned grant revisions and exact
+  session-bound stop requests. Live provider execution stays disabled: existing
+  session termination does not prove process-tree cessation or task success.
+  See [the contract's current limits](docs/manual_iris-execution-contract.md).
+- Let the multi grid follow the sidebar tabs. A new "This tab only" scope, next
+  to "This project only" and "All", lays out just the sessions of the tab selected
+  in the sidebar; switching tabs swaps the grid, and the frame shrinks to fit the
+  number of sessions, so a tab with a single session fills the screen. Each tab
+  remembers the view it was last showing (multi or single) and returns to it when
+  you switch back; a tab you have never opened keeps the current view. The scope
+  stays one setting per device, and you can pin it to a single tab from the strip
+  above the grid. "This tab only" can also be the default for opening multi
+  (Settings, the multi layout popup, and the narrow-screen switcher).
+- Let the multi grid show one project at a time. The strip above the grid now
+  lists each project with its session count (plus "All"); clicking one lays out
+  only that project's sessions and opens the same project in the sidebar. When
+  you open multi from its tab it asks whether to show this project or everything,
+  with an option to remember the answer; the default (ask every time / this
+  project only / all) can also be changed from the multi button's layout popup
+  and in Settings. Pin a pane to keep it in the grid first; sessions that do not
+  fit are listed by number in the strip and swap into the focused pane when
+  clicked. An optional setting grows the grid (up to 6×3) instead. Before any
+  project has been opened, "this project only" uses the selected session's
+  project.
+- Add the separately selected `iris-owned-dispatch/1` HTTP profile for isolated
+  synthetic launch-port acceptance. Admission pins fixed operator policy before
+  the one-use dispatcher; lost responses retain the original request identity.
+  Native observations do not enable task success, effects proof or handoff, and
+  the normal Hub keeps live provider dispatch disabled.
+- Add trusted local, immutable fixed-payload verification records, pinned before
+  owner startup and bound to the exact artifact and execution. Comparisons stay
+  separate from task success, effects and live HTTP execution capabilities.
+- Draw the state symbol in each multi grid and detached grid pane header with
+  the same symbols and rules as the session card (including waiting for input,
+  starting, and finished-but-unread), and keep it in step with the card.
+- Right-click a file path or URL in the terminal to open the same menu as a
+  left click. The terminal's context menu is now installed the same way in the
+  single view, the multi grid and the detached grid. Right-clicking a selection
+  that contains the link still copies as before.
+- Allow editing quick commands by right-clicking their buttons.
+- Open the Files tab beside the terminal instead of replacing it. Clicking
+  Files while viewing a terminal now adds Files as a split pane next to the
+  CLI (drag the border to resize; close the pane to return to the full
+  terminal). A file chosen in that pane opens in the centered preview modal,
+  which can still be popped out to its own window. On narrow screens, and from
+  the chat/Git/other views, Files still switches the whole view as before.
+- Show a "starting" state for new in-window CLI launches until the correlated
+  terminal's first screen arrives, and no longer hold the display for saving
+  launch preferences. A launch from the single view stays in the single view
+  and opens the new session there; it no longer turns the view into a split
+  multi grid. A launch from a multi grid that is already open shows the state
+  in its own pane, and the other panes remain usable.
+  While the starting screen is up, the session card shows the green spinning
+  ring instead of a static dot.
+- Add a trusted internal Iris dispatch coordinator with one-use durable claims,
+  bounded startup queues and exact-session cancellation. Wrapper registration
+  and native root startup stay separate; live HTTP execution remains disabled.
+- Persist Windows PTY-owner local-tree cessation observations and independently
+  hashed, bound artifact reports across Hub disconnects. Add one-use durable
+  spawn claims, fixed operator grant manifests with revision checks, and
+  authenticated read-only owner evidence inspection. These records keep remote
+  effects and business outcome acceptance unverified; live dispatch stays off.
+- **Files on the ssh destination can be opened without downloading.** With a
+  destination set in a shell session, clicking a path the remote AI printed
+  offers "👁️ Open from <destination>" next to "⬇️ Fetch", and the "⬇ Fetch"
+  window gained an "Open" button. The Hub reads the file over the same ssh and
+  shows it in a read-only view: text files and Markdown up to 1 MB, images up
+  to 20 MB; anything else asks you to use Fetch. Paths inside the
+  destination's Markdown (relative, `/…`, `file:`) cannot be clicked, so no file
+  on this PC is opened by mistake; `http(s)` links work as before.
+
+- **The slash-command lists gained 22 commands and 5 refreshed descriptions.**
+  New in Claude Code: `/claude-in-chrome`, `/rate-limit-options`, `/slides`,
+  `/update-config`, `/usage-credits`, `/web-setup` and `/workflows`. New in
+  Codex: `/agents`, `/cd`, `/export`, `/pwd`, `/recap`, `/warnings` and
+  `/worktree`. New in OpenCode: `/copy`, `/fork`, `/rename`, `/timeline` and
+  `/update`. New in Command Code: `/learn` and `/rc`. New in Copilot:
+  `/sandbox`. The Claude Code descriptions of `/agents`, `/design-sync`,
+  `/fork`, `/import` and `/review` were updated
+  (`resources/slash-commands/`).
+- Foreground Hub startup displays its logo, build version, actual runtime and
+  connection instructions in an interactive terminal. Background launches and
+  redirected output do not receive the authentication URL. npm update guidance
+  now includes rerunning setup to refresh shortcuts after package paths change.
+- The authenticated Hub AI launch shell preference now controls new interactive AI wrapper sessions: `auto` preserves the existing launch path, while Windows `pwsh` and `cmd` choices wrap the resolved launch and preserve provider arguments as data. Explicit unavailable or unsupported routes fail with an explanation instead of silently falling back; headless, login, usage-probe, subscription-login, and Shell provider launches remain unchanged.
+- **Project headings can be dragged onto a session-list tab.** Dropping a
+  heading moves every root session of that project that currently belongs to the
+  selected tab, children included; the same project's roots in other tabs stay
+  put, and dropping on the already selected tab does nothing.
+- **Attachments reach the machine a shell session ssh'd into.** In a shell
+  session, the new "📤 Send to" button next to the attachment area takes an ssh
+  destination (a `~/.ssh/config` alias, `user@host` or `ssh://user@host:port`).
+  Images, files and long pastes are then also written to
+  `~/.many-ai-cli/remote-attachments/` on that machine over ssh, and the
+  destination's path is put in the input instead of a path on this PC. Key-based
+  login only (`BatchMode`); ssh's own error is shown when the transfer fails.
+  Files there that are 7 days old are removed by the next transfer. The setting
+  is kept per session in the browser; provider sessions are unchanged.
+- **Files can be fetched back from that machine.** With a destination set,
+  clicking a path the remote AI printed (starting with `/` or `~/`) offers
+  "⬇️ Fetch from <destination>", and the new "⬇ Fetch" button takes a pasted
+  path. The Hub reads the file over the same ssh and hands it to the browser as
+  a download; nothing is kept on this PC. Up to 50 MB per file; relative paths
+  are refused because the Hub cannot know the remote working directory.
+- Input controls can be placed independently across the app. On desktop they
+  start beside the live status display instead of occupying the composer;
+  existing saved positions are retained and Reset restores the new default.
+  Only the small grip on each control's top-right corner starts a move, so
+  clicking the control itself never drags it. Ctrl+wheel (⌘+wheel on macOS)
+  over a control resizes that control from 50% to 400%. A "⌂ Reset layout"
+  button left of Raw log restores default positions (sizes are kept); Settings
+  → Reset to default restores both. The ⇄ side-flip button in the input bar is
+  removed; each side is still chosen in Settings.
+- The persistent footer now has one Settings entry. Each open starts at General, which stays in the Settings navigation; the new Usage and Hub destinations there keep provider links, exposure status, QR connection, shutdown confirmations, and bug reporting.
+- Shared Web UI buttons, modal frames, focus styles and general SVG icons now reuse the existing themes. Hub confirmation actions use shared localized labels such as "更新しない / 更新する"; shutdown keeps its distinct choices and the token footer keeps its dedicated palette. A CI guard prevents new appearance and confirmation-label duplication.
+- Paths inside work memos now open the same context menu as paths in the CLI screen (right-click).
+- **Browser-local session-list tabs.** Group multiple
+  session cards into tabs, add and rename tabs, reorder by drag or keyboard menu,
+  and move root families using drag/drop or a destination chooser. Safe tab deletion
+  preserves sessions and history. Names, order, lifecycle identities, selection and
+  scroll offsets are stored separately from synchronized preferences. Inactive tabs
+  show live waiting/approval counts; touch holds and keyboard menus provide movement
+  alternatives. Missing ancestors defer a family move until reconnect resolves it.
+  Rust ordinary/grid/orchestration launches now carry an optional bounded request
+  correlation value through trusted registration and ordered live/snapshot updates.
+  The Web assigns only confirmed lifecycles to the tab captured at launch, preserves
+  manual moves on reconnect, and opens grids only for matching accepted starts.
+  Legacy callers can omit the field; Go and the frozen generated Rust message are unchanged.
+  Product/Windows UI acceptance remains a separate gate for this draft.
+- **Place input controls independently where you need them.** Send, microphone,
+  clear input, templates, quick commands and the other input toolbar buttons each
+  have a small grip. Drag it with a mouse or touch to move that control anywhere
+  within the input box. Positions are saved in this browser and kept inside the
+  box on resize. The input toolbar order reset restores all positions.
+- **Child limits now distinguish human approval from automatic creation.**
+  Individually approved children and children launched from the UI allow up to
+  256 per parent. Automatic creation defaults to 10, adjustable from 1 to 256
+  in Settings. Limit errors report the actual session/reservation count and
+  maximum instead of incorrectly blaming pending confirmations.
+- **Selecting text in a full-screen CLI now scrolls when you drag past the
+  edge.** CLIs that draw on the alternate screen (such as Claude Code in its
+  full-screen mode) keep their history themselves, so dragging a selection
+  below the bottom or above the top of the terminal used to stop at the edge.
+  The terminal now asks the CLI to scroll one step at a time while the pointer
+  stays past the edge, and keeps the lines that scroll out of view. Copy, the
+  right-click menu and "Add to input" include those lines, and a label at the
+  edge of the terminal shows how many lines the selection continues beyond the
+  screen. If the screen changes in a way that cannot be followed, the
+  selection is cleared with a notice instead of copying text with gaps.
+- **File paths can now be saved to the work memo from the path menu.** The
+  menu that opens on a path in the terminal, chat, Files tree and elsewhere has
+  a new "Save to work memo" item. It adds the full path as a memo, grouped under
+  the project of the session the path came from, and says so in a short notice
+  without opening the memo drawer. If the same path is already an unfinished
+  memo, nothing is added and the notice says it is already there.
+- **Tabs and the work memo can now open in their own window.** Right-click a
+  tab (Chat, Files, Git, Review, History, Approvals, Subagents, Multi) or the
+  work memo button and choose "Open in new window", so the view can stay on
+  another monitor. It opens as a separate browser window rather than a new
+  tab, so it can be dragged to another monitor right away; if the browser
+  blocks the pop-up, a message explains how to allow it. Session-specific
+  views follow the session selected in the main window by default, and can be
+  pinned to the current session instead.
+  The detached window does not resize the terminal or repeat notification
+  sounds, and actions that need the main window (opening a session, the new
+  session panel) are handed back to it.
+- **File previews can now open in their own window.** The file preview dialog
+  has a new 🗗 button, and the path menu has "Open in new window". Both open
+  the file in a separate browser window that you can move to another monitor.
+  Opening another file later reuses that window and only swaps its content,
+  so the window stays where you put it. A window in edit mode keeps its edits
+  and does not switch.
+- **Images can now be pasted into the work memo.** Press Ctrl+V or drop an
+  image file on the memo input to attach screenshots (PNG, JPEG, GIF, WebP;
+  up to 10 per memo, 10 MB each), and a memo can be saved with images only.
+  Saved memos show thumbnails that enlarge on click. The images are kept in
+  `~/.many-ai-cli/memo-images/`, separate from session attachments, so log
+  and attachment cleanup never removes them; they are deleted together with
+  their memo, and images pasted but never added to a memo are removed when the
+  Hub starts at least a day later. New images are refused once the folder reaches 500 MB.
+- **Empty Multi-pane slots can now be removed in one click.** A slot that sits
+  in a row (or column) with no view in it shows a "Remove this row" (or
+  "Remove this column") button. It shrinks the layout, for example from 2×2 to
+  2×1, and never removes a row or column that still holds a view.
+- **Usage for a profile whose login cannot be confirmed is now marked as not
+  current.** The last retrieved values are kept, and the Usage panel and the
+  active session's Usage row show that they may be out of date, with the time
+  they were last retrieved.
+- **Codex subscription usage can now be refreshed manually for each profile.**
+  The Hub reads ChatGPT limits through that profile's Codex App Server login,
+  shows the check time, and keeps the previous values if the check fails.
+- **The active session now shows its subscription Usage beside attachments.**
+  The compact meter keeps the existing attachment bar height, moves pending
+  thumbnails above it, and refreshes the selected profile through the existing
+  Usage source. Raw log and folder controls remain at the right edge.
+- **The active session Usage row now shows all available limit windows.**
+  Claude and Codex show both short and long limits when available, while Grok
+  shows its weekly limit. The file drop area is narrower to make room.
+- **Arrange Hub tabs and session cards in flexible panes.** Drag a tab or card
+  onto the current view to open a two-pane layout, or onto a Multi pane to
+  replace just that pane. Pane handles move or swap views, while the close
+  control removes a placement without ending its session. Browser-local layouts
+  are saved separately for all sessions and each open project. Touch devices
+  can choose a destination from a menu and switch visible panes on small screens.
+- **Saved routines are shared by the PC and phone connected to the same Hub.**
+  Review an instruction before starting it in a new session, or schedule it
+  daily/on weekdays with an explicit time zone. Run history retains each run's
+  instruction and received result; routine completion notifications reopen that
+  run. Overlapping runs and duplicate submissions are suppressed. Schedules
+  missed while the Hub is unavailable are recorded as skipped.
+- **Mobile sessions offer an explicit CLI / Chat switch.** The choice and reading
+  position are retained separately for desktop and mobile in each browser.
+- **Notification sound has a 0–100 volume slider**, independent of system volume.
+  It applies to the default beep, custom sounds and test playback. Zero mutes
+  the sound; 100 preserves the previous level. The setting is saved per browser.
+- **The letters and color of each AI's icon can now be changed in Settings → AI CLI integrations.**
+  Open an AI's edit dialog and use the new **Icon** fields (1–2 letters, and a
+  color). Saving changes that AI's icon everywhere at once (session cards,
+  sidebar, status bar, chat, Usage) without reloading, and it stays after a
+  reload. Leave a field empty to keep the shipped default; **Reset to
+  distributed default** restores it. The shape stays fixed, and the color must
+  be `#RRGGBB`.
+- **An AI's icon can also be a picture (PNG, JPEG, GIF or WebP, up to 512 KB).**
+  In the same **Icon** section, choose an image and save: it replaces the letters
+  everywhere at once, cut to the icon's shape with the colored ring kept, and
+  **Remove the image** brings the letters back. SVG is refused because it can
+  carry script. The picture is stored as
+  `~/.many-ai-cli/provider_icons/<id>.bin`, and is deleted together with a
+  custom AI or when a built-in AI is reset to its distributed default.
+- **The active session's Usage row now shows the AI's icon before its name.**
+  It is the same icon as on the session card, and the name now uses the same
+  spelling as the card (for example "Grok Build"). On narrow widths the name is
+  shortened with an ellipsis while the icon stays visible.
+- **The handoff session list now shows when each session started (and ended),
+  its branch, and its predecessor/successor link.** Rows display a relative
+  "N minutes/hours/days ago" time, an abbreviated branch name, and a clickable
+  "↪ #N" chip for the predecessor (if this session continued from a handoff)
+  and the successor (if one was launched from it) — clicking either jumps
+  straight to that session's preview. The model shows as a tooltip on the
+  provider name, and search now also matches the branch name.
+- **A personal memo drawer sits next to New Session.** Click the note icon to
+  jot next-step reminders, grouped by project with the active session's
+  project listed first; each memo can be checked off, edited in place, or
+  launched directly into a new session carrying its text as the initial
+  prompt. Paths written in a memo open in the existing file preview. Small
+  badges on the button and on matching session cards show each project's
+  open memo count.
+- **The Hub log says why the Hub stopped.** The Rust Hub writes
+  `MANY-AI-CLI stopping reason=...` when it begins to stop and adds the same
+  reason to the final `MANY-AI-CLI stopped` line: `stop_command`
+  (`many-ai-cli stop` or the tray), `web_ui` (the ⏻ button),
+  `stale_binary_restart` (automatic restart after a rebuild), `launcher`,
+  `signal` (Ctrl+C), `server_error`, or `api_unspecified` for a
+  `/api/shutdown` request that did not name its sender. Previously the log
+  ended with only the process ID, so an unexpected stop could not be traced.
+- **A leftover `.git/index.lock` is shown, and can be removed with one
+  button.** When a session ends while its `git commit` / `git add` is still
+  working, or the Hub stops a writing `git` (commit, pull, worktree cleanup) at
+  its time limit, the Hub looks at that repository 3 seconds later. A lock still
+  there and written after the work started appears in a notice at the bottom
+  right; until it goes, `git add` / `git commit` there fails with "File
+  exists". Nothing is removed on its own. "Remove lock" removes it only if it
+  has not changed since it was listed and no `git` process is working in that
+  repository; otherwise the notice says why it was kept. On macOS the lock is
+  listed but always kept, because running `git` processes cannot be checked
+  there yet.
+
+### Changed
+
+- **The header strip is gone on desktop.** On a wide, mouse-driven screen the
+  logo, the inbox / New Session / `⋯` buttons now sit in one row at the top of
+  the sidebar, and the running / per-LLM counts (plus reconnect and microphone
+  state) sit next to the Settings button, so the terminal gets the 28 px back.
+  Narrow and touch layouts keep the header, and detached windows are unchanged.
+- **The Docker files are removed from the repository.** `deploy/docker/` (the
+  Dockerfile, compose files, per-user examples and the update script), its
+  input-pin check and the Docker workflow notice are gone, together with the
+  two Docker operation manuals and the Docker recipes in the README. Official
+  Docker images were already unsupported for v0.10.0; to run a remote Hub, use
+  the Linux binary over SSH. The old files stay in the Git history.
+- **The "At launch: …" permission mode moved from the session card to the top
+  header.** It no longer takes room from the session name in the sidebar; it
+  now sits in the header next to the model and effort badges of the session you
+  have open. It is still the value the session was started with, not a live one,
+  and a full-allow ("bypass") launch is shown in a warning colour.
+- **The terminal is about two lines taller on a desktop screen.** With a mouse
+  on a window 721px or wider, the top header is 28px instead of 44px (the name
+  and icon are smaller; nothing moved), the tab row is 32px instead of 36px,
+  and the spacing around the progress band and the input box is 16px tighter,
+  36px in total. Phone-width and touch screens are unchanged.
+
+- **Conversation text is no longer stored in the SQLite history.** What you type
+  and what the AI prints used to be saved (after pattern-based masking, which
+  cannot catch a password written as plain text), so a secret could stay in the
+  database. Only session start/end, attachment names, card settings (title,
+  tags, pin, color, note, archive), parent/child links and the approval ledger
+  are kept; the first start after the update deletes the conversation text
+  already stored. Session search now finds attachment names only, and the
+  history view of a session that is not Claude or Codex has no text to show
+  (Claude and Codex keep using their own transcripts). A remote client can no
+  longer open a file just because the chat mentioned its path; a path written
+  in a memo still works.
+- **The session raw log (`.log`) masks secrets before writing.** Tokens, private
+  key blocks and `user:password@` URLs are masked, including ones split across
+  reads and ones that cross the 64 KiB point where a line without a newline is
+  written anyway. The headless run log is masked too. Plain-text passwords are
+  still not recognized, which is why session logging stays opt-in.
+- **Card titles, notes and summaries are masked before they are stored in the
+  SQLite history.** Known token shapes in what you type there are replaced with
+  `***`; the text itself is otherwise kept as you wrote it.
+- **Approval choices and the chosen answer are masked before they are stored.**
+  A choice such as "don't ask again for" a command could carry a token into the
+  approval ledger; the question and context already were masked, and the
+  choices and answer now are too, including rows saved by earlier versions.
+- **The Session log setting now says what it really does.** Its description
+  (English, Japanese, Vietnamese), `doctor` and the README state that only the
+  `.log` is written, that a plain-text password cannot be recognized, and that
+  the raw logs each AI CLI keeps for itself are not affected by the setting.
+- **The structured session history (`.jsonl`) is no longer written.** The `.log`
+  is the only per-session file now. Files from older versions stay until the
+  retention sweep removes them, and `log-clean` still reads them.
+
+- Official Docker images, container builds and automatic updates are excluded
+  from v0.10.0 support and its release gate. Automatic image publishing is stopped
+  while the current container build has a known failure. Existing images and
+  recipes are retained as historical references without an update guarantee.
+  Linux binaries and SSH remote operation remain in the v0.10.0 release scope.
+- **Development moved to the Rust version.** The `develop` branch now carries the
+  Rust implementation as the main line. The Go sources moved to `go/` unchanged
+  and are no longer built or tested; `make build` builds the Rust binaries.
+  Releases up to v0.9.0 were built from the Go version; v0.10.0 is the first
+  release built from the Rust version.
+- The first screen shown while no session is open (both the getting-started
+  guide and the guide shown when no AI CLI is found) now has the app icon above
+  its heading, and the getting-started title spells the product name as
+  MANY-AI-CLI in English, Japanese and Vietnamese.
+- On Windows, session cards count changed files and lines again only after a
+  file in the repository changes (2 seconds after the first change), and at
+  least once a minute in case a change notification was lost. Counts are no
+  longer taken with `git status` and `git diff-index` on every refresh, and
+  sessions in the same repository share one count. Changes inside `.git` other
+  than the index, HEAD and refs, and changes under paths Git ignores (such as
+  build output), do not trigger a count. While a session that has not ended
+  works in a repository, its folder and the folders above it cannot be renamed,
+  the same as with the session's own working directory; the Hub lets go of the
+  folder as soon as the last such session ends. macOS and Linux are unchanged.
+- While no browser is connected to the Hub, session cards are not refreshed, so
+  the Hub starts no `git` for their branch name and change counts. When a
+  browser connects again, every session is counted once right away.
+- Work memo rows are now a single compact line with an explicit edit (✎) button; clicking a text memo also starts editing.
+- **Daily local Rust builds use the repair worktree, including uncommitted Web
+  and Rust changes.** The local build helper no longer fetches an older trial copy
+  by default. Explicit source or branch selection remains available for candidate checks.
+- **The Settings, Usage and Hub buttons moved from the top-right header to a footer fixed at the bottom of the left panel.** Usage and Hub menus now open upward. The footer is hidden at 720 px and below (use the drawer buttons as before) and in detached windows. <!-- doxguard: allow panel -->
+- **Settings is now a full-screen screen with a left nav and a right pane, and the Basic/All switch is gone.** Pick one of the 24 items in the nav (grouped as General / Connections & plans / Input / Approvals & notifications / Maintenance, with current values and a search box) and only that item shows on the right. Close it with the Close button or Esc; at 720 px and below it becomes a list screen followed by a detail screen with a Back button. The last selected item is remembered.
+- **The header's Usage button now shows a single gauge icon** instead of a row of nine AI-colored icons, so the button stays narrow and does not grow as AIs are added. It keeps a translated accessible name and tooltip at narrow widths.
+- **The sidebar's new-session control is now a compact 32×32 px plus icon**, matching the neighboring icon buttons while retaining its translated accessible name and tooltip.
+- **Chat shows user messages and AI replies by default.** Tool-only records and
+  progress details stay hidden until “Show tool and progress details” is enabled;
+  Codex reply text remains visible even when its transcript phase is unclassified.
+- **Prompt templates are available on phones and refreshed across devices.**
+  Unrelated settings saves preserve the shared list, and concurrent template
+  edits require an explicit conflict resolution instead of silently overwriting
+  the other device's changes.
+- **AI explanations outside approval prompts are now asked to stay plain text
+  too.** The approval rules many-ai-cli writes for each CLI (now version 25)
+  already told it not to use tables, horizontal rules or leading bullets in the
+  preamble of an approval prompt, because the dashboard shows Markdown symbols
+  as-is. The same now
+  applies to ordinary explanations outside the markers: no bold, headings,
+  leading symbols or tables (`internal/wrapper/approval_rules.go`).
+- **Status bar moved under the terminal input.** The token/cost status bar now sits
+  at the bottom of the terminal column (under the Paste / drop row) instead of
+  spanning the whole window, and no longer repeats the session number, state,
+  provider/model and effort that the header above the terminal already shows. On
+  phones (720 px and below) it stays hidden and only shows a one-line warning above
+  the input when context, compaction or the rate limit is close to its limit. The
+  settings panel no longer lists the "AI / model" and "effort / thinking" segments, <!-- doxguard: allow panel -->
+  which now appear only in the details opened from the "…" button.
+
+### Removed
+- **The Whisper voice engine is removed.** The local whisper.cpp server, its
+  managed install, and the `/api/voice/transcribe` and `/api/whisper*` routes
+  are gone. Voice input now uses the browser's built-in recognition only, and
+  Settings → Voice offers `OFF` or `Browser`. If you used Whisper, a leftover
+  `~/.many-ai-cli/whisper/` is reported by `many-ai-cli doctor` and removed by
+  `many-ai-cli uninstall`; `voice.whisper.*` keys in `config.yaml` are ignored.
+- **The NVIDIA NIM route and the Jev rating are removed.** Settings no longer
+  has the "NVIDIA NIM for OpenCode" and "Jev evaluation" sections, the model
+  picker no longer lists an NVIDIA NIM group, and the `/api/nvidia-nim*` and
+  `/api/jev/evaluate` routes are gone. The Hub makes no request to NVIDIA or
+  TypeSafe any more. An existing `nvidia_nim` key in `config.yaml` is ignored,
+  and a key saved earlier stays in `~/.many-ai-cli/secrets/nvidia_api_key`
+  until you delete the file yourself.
+
+- **Official AI CLI catalog import.** The Hub no longer serves
+  `/api/provider-distributions/*`, and the note about it under
+  Settings → AI CLI integrations is gone. The import never worked in a release:
+  no signing keys were configured, so checking and accepting a catalog always
+  returned 503. Your own provider definitions and their history are unchanged.
+- **The "Attach to grid" option in New Session.** It was always disabled; the
+  "Hub tab" and "Detached window" choices remain.
+- **README descriptions of `hub.open_browser`.** The setting has never had an
+  effect (only `serve --open` opens the browser). An existing value in
+  `config.yaml` is still accepted and ignored.
 
 ### Security
 
@@ -666,22 +1281,6 @@ Release artifacts are published at
   hide a failed push run. It now judges push runs on `main`, `develop`,
   `release/*`, `hotfix/*` and the tag, and a branch push run must pass as well
   as the tag's own.
-- **The whisper-server build workflow cannot write to the repository.** It
-  built a whisper.cpp tag with a token that could push and edit releases, left
-  in the checkout's Git configuration while upstream CMake code ran. The build
-  now has read access only, keeps no credential, and stops unless the tag
-  points to the commit given with it; a separate job that runs no upstream code
-  uploads the result.
-- **Voice input is sent only to the Whisper server the Hub started.** The Hub
-  picked a free port, let it go, then started the managed Whisper server on
-  it, and took any successful connection as the server being ready. A program
-  of another user on the same machine that bound the port in between received
-  the recorded audio, and its reply was put into the input box. The Hub now
-  checks with the system that the server it started is alive and owns every
-  listener on that port (on Windows and Linux) before it uses or saves the
-  address, and checks again each time it reuses a running server; otherwise it
-  stops the server and reports that it could not start. On macOS only the
-  server being alive is checked.
 - **A worktree is never created through a link in the repository.** A
   repository could commit `.git-worktrees` or `.many-ai-cli` as a link to a
   folder elsewhere; a session started with its own worktree, or a child
@@ -758,669 +1357,6 @@ Release artifacts are published at
   release workflow build with Node.js 22.23.5 (2026-11-11) and 24.22.3
   (2026-11-10), the current security releases.
 
-## [0.10.0-rc.2] - 2026-11-09
-
-A release candidate for 0.10.0, published so that installing and starting it
-the way users do can be checked before 0.10.0 itself. It contains everything
-listed under Unreleased and 0.10.0 in CHANGELOG.md. npm installs it only with
-`npm install -g many-ai-cli@next` (a plain install still gets 0.9.0), and
-winget and Homebrew are not updated. (The `v0.10.0-rc.1` tag published
-nothing: its release run stopped before signing, when the SBOM files were not
-uploaded.)
-
-## [0.10.0] - Unreleased
-
-This release replaces the Go implementation of many-ai-cli with a Rust one.
-
-- **Same commands, same places for your data.** The command names, settings and
-  data locations are unchanged: the configuration stays in
-  `~/.many-ai-cli/config.yaml` and your data under `~/.many-ai-cli/`. Updating
-  carries over your settings and your session list (sessions older than the
-  retention period are removed at each start, as in v0.9.0). The text of past
-  conversations is not carried over: this version no longer stores it, and the
-  first start after the update deletes what v0.9.0 saved (see "Changed").
-- **Going back.** Before updating, copy `~/.many-ai-cli/`. To return to the Go
-  version, reinstall v0.9.0 and write the copy back. Steps:
-  [Upgrading to 0.10 (Rust)](https://github.com/ishizakahiroshi/many-ai-cli#upgrading-to-010-rust).
-- **No official Docker image.** Official Docker images, container builds and
-  automatic updates are not part of v0.10.0, and automatic image publishing is
-  stopped (see `deploy/docker/README.md`). Use the Linux binary instead.
-- **Known limitations.** Starting an AI CLI session usually shows its first
-  output in well under a second, but now and then it takes two to four seconds
-  (measured on one machine over 24 launches: median 0.34 s, 95th percentile
-  0.9 s, slowest 4.0 s). The cause has not been found.
-
-### Fixed
-- Fix the Workflow progress display while a background Workflow runs: it no longer
-  reads the "Update installed" notice as a finished agent (which showed 1/1 and
-  100%), shows the real count from the Workflow journal instead, and the
-  "not progressing" warning is no longer shown while a background Workflow is
-  still running.
-- Fix Windows terminal disposal during process startup: terminate the owned Job
-  and observe the root exit and an empty Job before closing ConPTY, preventing
-  startup-close initialization errors. Ctrl+C input remains a separate operation.
-- Shell attachment destinations can specify an SSH private key file for uploads,
-  downloads, and remote file previews, including keys passed with `ssh -i` when
-  connecting in the terminal.
-- Keep all long pasted texts before sending, and retain the draft when an
-  attachment upload fails instead of sending an incomplete message.
-
-- **The retention settings take effect again.** `log.session_retention_days`
-  (default 7), `handoff.retention_days` (14) and `log.attachment_retention_days`
-  (7) were never read, so old session files, handoff records, history rows and
-  attachments stayed forever. The Hub now applies them once at each start;
-  zero or less keeps everything. Attachments wait one retention period after
-  the first start with this version, so nothing you attached earlier is removed
-  all at once.
-- **Secrets saved before the masking was added are masked on the next start.**
-  Existing `.log` files are masked once as a whole (so a key split across reads
-  or a multi-line private key is caught), and approval texts already in the
-  database are masked in place.
-- **The handoff directory no longer grows by repeating the same transcript path.**
-  A record was appended every time the transcript file changed, although the
-  path rarely did (133 MB of a 145 MB directory in one install). A path equal to
-  the previous one is skipped, and the Hub start folds the repeats already
-  written; the handoff note shows the same content.
-- **Sending an attachment from a shell session with no destination chosen now
-  asks first.** Images, files and long pastes used to be sent silently with a
-  path on this PC, which an AI running on the ssh machine could not open. A
-  window now appears before sending: enter the ssh destination and press Save,
-  or press "Read on this PC". Your input and attachments are kept.
-- **A session's dedicated worktree is removed once its branch is merged on the
-  remote, and one left behind is checked again at the next Hub start.** With
-  `worktree_cleanup: delete`, closing a session now also fetches the upstream of
-  the repository's current branch (`HEAD@{upstream}`, e.g. `origin/develop`) and
-  counts the branch as merged when it is there, not only in the local HEAD; a
-  worktree still unmerged when its session closed is judged again each time the
-  Hub starts, skipping any a running session uses. An unreachable remote keeps
-  the worktree and logs a warning, and the branch is never deleted. A squash or
-  rebase merge on GitHub creates new commits, so it is not recognized as merged.
-- **Commands an AI runs no longer write color codes into pipes and files.**
-  With "Always show colors (recommended)", sessions received `FORCE_COLOR=3`
-  and `CLICOLOR_FORCE=1`, and the AI CLI passes its environment to every
-  command it runs, so `gh … --json`, test runners and other tools colored
-  their output even when it was piped (JSON from `gh` could not be parsed).
-  The setting now removes inherited `NO_COLOR`, `FORCE_COLOR`,
-  `CLICOLOR_FORCE` and `CLICOLOR` instead and leaves color detection to the
-  terminal pane, which still reports `TERM=xterm-256color` and
-  `COLORTERM=truecolor`. "Follow the launch environment" and "No colors" are
-  unchanged. Applies to newly started sessions.
-
-- Approval rules now reach instruction files you reach through a link, such as
-  a worktree or profile folder that is a junction or symlink, or a `CLAUDE.md`
-  symlinked from your dotfiles. As in v0.9.0, the rules are written to the file
-  the link points to, and two profiles linking one file keep the rules until
-  the last of their sessions ends. Earlier Rust candidate builds silently gave these
-  sessions no rules, so their AI could not offer choices as dashboard buttons. Trial runs
-  still refuse links. `many-ai-cli doctor` (and Settings → doctor) now names
-  live sessions whose instruction file is missing the rules.
-- The ↑ up / ↓ down buttons that jump to the start or the end of a full-screen
-  (alternate-screen) CLI's history no longer stop partway. They now send four
-  scroll steps at a time instead of waiting for each step to be confirmed on
-  screen, and treat the edge as reached once the visible text stops changing.
-- Updated Tokio to 1.53.3 and the Web Push P-256 dependency to 0.14.0,
-  including crypto-bigint 0.7.8 and ctutils 0.4.5 security fixes. Unix PTY I/O
-  now explicitly registers its owned file descriptor under Tokio's lifetime
-  contract; Web Push retains its encryption and signature wire formats.
-- Windows file operations now hold the parent directory against replacement
-  before opening the selected file, preventing a renamed parent from redirecting
-  that open to a different file.
-- One-tap approval links now bind the session's incarnation as well as its
-  approval identity, so a link issued before a session is recreated cannot
-  approve the replacement. Normal wrapper reconnects retain valid links;
-  older token formats are rejected.
-- Updated vendored DOMPurify to 3.4.17, retaining upstream license terms and
-  matching the version shown in About and the frontend dependency list.
-- Updated the TLS verifier and bundled root certificate dependencies to
-  rustls-webpki 0.103.16 and webpki-root-certs 1.0.10, and pinned CI job Node.js
-  to the 22.23.4 security release with native-build version receipts.
-- Whisper uploads through the Hub now recheck authorization before starting
-  transcription. Access that expires or is revoked during upload is rejected;
-  transcription already started may finish.
-- Live status colors now follow the light or dark theme by default, with separate
-  background and text overrides for each mode. The palette shows the mode being
-  edited and can reset it without changing the other mode; legacy shared colors
-  remain available in dark mode only.
-- Remote browser connections now expire with their PIN session and disconnect
-  on logout or PIN changes. New input and UI data are rejected after revocation;
-  already accepted input drains while local screens and terminal sessions stay
-  connected. Failed PIN persistence keeps existing connections authorized.
-- Subscription probe and login cleanup now rechecks the exact session connection
-  while dismissing it, so cleanup from an older connection cannot remove a
-  reconnected session or emit a duplicate dismissal after removal.
-- Cancelling uninstall, closing its input, or failing to read confirmation now
-  leaves the running Hub untouched. Hub shutdown and data removal begin only
-  after explicit confirmation.
-- Windows release resource validation accepts the SDK's zero-to-one icon-plane
-  normalization while still requiring matching icon image bytes, directory
-  fields, image count, file version, and product version.
-- npm packages and Linux package documentation now retain the Web dependency
-  license notices from the canonical release ZIPs. Packaging rejects missing,
-  empty, or inconsistent Web notices before replacing any output.
-- Debug builds no longer collect temporary UI-freeze recorder events. Existing
-  diagnostic files are preserved; the underlying investigation remains open.
-- Windows desktop shortcuts now open the Hub and browser on the first launch,
-  while sign-in starts only the tray. Setup retains the selected home and port;
-  tray startup/action failures are shown instead of disappearing with the console.
-- npm staging checks all four native inputs before replacing package payloads
-  and verifies copied hashes. Package smoke checks require the correct Windows
-  executable name and nonempty binaries instead of accepting missing payloads.
-- In light mode, the footer and its detail panels now follow the light theme,
-  and the live status bar refreshes its saved colors after preference sync.
-- The inline Usage meter now gives its remaining-quota bar the width left after
-  its value and reset text, so the fill is easier to read on narrow rows.
-- An approval question that the AI wrote without numbered options or
-  `(Y:1/N:0)` (for example a single "May I push this?") is now shown as a
-  Yes / No panel instead of the "corrupted structure" notice, and a plain report
-  wrapped in the approval marker no longer leaves the session waiting for
-  approval. When the screen still cannot read an approval, the notice no longer
-  blames a terminal redraw.
-
-### Added
-- Record the current sidebar tab name on newly created work memos and show it with each memo.
-- Add an opt-in Many Iris MCP execution-contract boundary with separate bearer
-  authentication, a durable request journal, pinned grant revisions and exact
-  session-bound stop requests. Live provider execution stays disabled: existing
-  session termination does not prove process-tree cessation or task success.
-  See [the contract's current limits](docs/manual_iris-execution-contract.md).
-- Let the multi grid follow the sidebar tabs. A new "This tab only" scope, next
-  to "This project only" and "All", lays out just the sessions of the tab selected
-  in the sidebar; switching tabs swaps the grid, and the frame shrinks to fit the
-  number of sessions, so a tab with a single session fills the screen. Each tab
-  remembers the view it was last showing (multi or single) and returns to it when
-  you switch back; a tab you have never opened keeps the current view. The scope
-  stays one setting per device, and you can pin it to a single tab from the strip
-  above the grid. "This tab only" can also be the default for opening multi
-  (Settings, the multi layout popup, and the narrow-screen switcher).
-- Let the multi grid show one project at a time. The strip above the grid now
-  lists each project with its session count (plus "All"); clicking one lays out
-  only that project's sessions and opens the same project in the sidebar. When
-  you open multi from its tab it asks whether to show this project or everything,
-  with an option to remember the answer; the default (ask every time / this
-  project only / all) can also be changed from the multi button's layout popup
-  and in Settings. Pin a pane to keep it in the grid first; sessions that do not
-  fit are listed by number in the strip and swap into the focused pane when
-  clicked. An optional setting grows the grid (up to 6×3) instead. Before any
-  project has been opened, "this project only" uses the selected session's
-  project.
-- Add the separately selected `iris-owned-dispatch/1` HTTP profile for isolated
-  synthetic launch-port acceptance. Admission pins fixed operator policy before
-  the one-use dispatcher; lost responses retain the original request identity.
-  Native observations do not enable task success, effects proof or handoff, and
-  the normal Hub keeps live provider dispatch disabled.
-- Add trusted local, immutable fixed-payload verification records, pinned before
-  owner startup and bound to the exact artifact and execution. Comparisons stay
-  separate from task success, effects and live HTTP execution capabilities.
-- Draw the state symbol in each multi grid and detached grid pane header with
-  the same symbols and rules as the session card (including waiting for input,
-  starting, and finished-but-unread), and keep it in step with the card.
-- Right-click a file path or URL in the terminal to open the same menu as a
-  left click. The terminal's context menu is now installed the same way in the
-  single view, the multi grid and the detached grid. Right-clicking a selection
-  that contains the link still copies as before.
-- Allow editing quick commands by right-clicking their buttons.
-- Open the Files tab beside the terminal instead of replacing it. Clicking
-  Files while viewing a terminal now adds Files as a split pane next to the
-  CLI (drag the border to resize; close the pane to return to the full
-  terminal). A file chosen in that pane opens in the centered preview modal,
-  which can still be popped out to its own window. On narrow screens, and from
-  the chat/Git/other views, Files still switches the whole view as before.
-- Show a "starting" state for new in-window CLI launches until the correlated
-  terminal's first screen arrives, and no longer hold the display for saving
-  launch preferences. A launch from the single view stays in the single view
-  and opens the new session there; it no longer turns the view into a split
-  multi grid. A launch from a multi grid that is already open shows the state
-  in its own pane, and the other panes remain usable.
-  While the starting screen is up, the session card shows the green spinning
-  ring instead of a static dot.
-- Add a trusted internal Iris dispatch coordinator with one-use durable claims,
-  bounded startup queues and exact-session cancellation. Wrapper registration
-  and native root startup stay separate; live HTTP execution remains disabled.
-- Persist Windows PTY-owner local-tree cessation observations and independently
-  hashed, bound artifact reports across Hub disconnects. Add one-use durable
-  spawn claims, fixed operator grant manifests with revision checks, and
-  authenticated read-only owner evidence inspection. These records keep remote
-  effects and business outcome acceptance unverified; live dispatch stays off.
-- **Files on the ssh destination can be opened without downloading.** With a
-  destination set in a shell session, clicking a path the remote AI printed
-  offers "👁️ Open from <destination>" next to "⬇️ Fetch", and the "⬇ Fetch"
-  window gained an "Open" button. The Hub reads the file over the same ssh and
-  shows it in a read-only view: text files and Markdown up to 1 MB, images up
-  to 20 MB; anything else asks you to use Fetch. Paths inside the
-  destination's Markdown (relative, `/…`, `file:`) cannot be clicked, so no file
-  on this PC is opened by mistake; `http(s)` links work as before.
-
-- **The slash-command lists gained 22 commands and 5 refreshed descriptions.**
-  New in Claude Code: `/claude-in-chrome`, `/rate-limit-options`, `/slides`,
-  `/update-config`, `/usage-credits`, `/web-setup` and `/workflows`. New in
-  Codex: `/agents`, `/cd`, `/export`, `/pwd`, `/recap`, `/warnings` and
-  `/worktree`. New in OpenCode: `/copy`, `/fork`, `/rename`, `/timeline` and
-  `/update`. New in Command Code: `/learn` and `/rc`. New in Copilot:
-  `/sandbox`. The Claude Code descriptions of `/agents`, `/design-sync`,
-  `/fork`, `/import` and `/review` were updated
-  (`resources/slash-commands/`).
-- Foreground Hub startup displays its logo, build version, actual runtime and
-  connection instructions in an interactive terminal. Background launches and
-  redirected output do not receive the authentication URL. npm update guidance
-  now includes rerunning setup to refresh shortcuts after package paths change.
-- The authenticated Hub AI launch shell preference now controls new interactive AI wrapper sessions: `auto` preserves the existing launch path, while Windows `pwsh` and `cmd` choices wrap the resolved launch and preserve provider arguments as data. Explicit unavailable or unsupported routes fail with an explanation instead of silently falling back; headless, login, usage-probe, subscription-login, and Shell provider launches remain unchanged.
-- **Project headings can be dragged onto a session-list tab.** Dropping a
-  heading moves every root session of that project that currently belongs to the
-  selected tab, children included; the same project's roots in other tabs stay
-  put, and dropping on the already selected tab does nothing.
-- **Attachments reach the machine a shell session ssh'd into.** In a shell
-  session, the new "📤 Send to" button next to the attachment area takes an ssh
-  destination (a `~/.ssh/config` alias, `user@host` or `ssh://user@host:port`).
-  Images, files and long pastes are then also written to
-  `~/.many-ai-cli/remote-attachments/` on that machine over ssh, and the
-  destination's path is put in the input instead of a path on this PC. Key-based
-  login only (`BatchMode`); ssh's own error is shown when the transfer fails.
-  Files there that are 7 days old are removed by the next transfer. The setting
-  is kept per session in the browser; provider sessions are unchanged.
-- **Files can be fetched back from that machine.** With a destination set,
-  clicking a path the remote AI printed (starting with `/` or `~/`) offers
-  "⬇️ Fetch from <destination>", and the new "⬇ Fetch" button takes a pasted
-  path. The Hub reads the file over the same ssh and hands it to the browser as
-  a download; nothing is kept on this PC. Up to 50 MB per file; relative paths
-  are refused because the Hub cannot know the remote working directory.
-- Input controls can be placed independently across the app. On desktop they
-  start beside the live status display instead of occupying the composer;
-  existing saved positions are retained and Reset restores the new default.
-  Only the small grip on each control's top-right corner starts a move, so
-  clicking the control itself never drags it. Ctrl+wheel (⌘+wheel on macOS)
-  over a control resizes that control from 50% to 400%. A "⌂ Reset layout"
-  button left of Raw log restores default positions (sizes are kept); Settings
-  → Reset to default restores both. The ⇄ side-flip button in the input bar is
-  removed; each side is still chosen in Settings.
-- The persistent footer now has one Settings entry. Each open starts at General, which stays in the Settings navigation; the new Usage and Hub destinations there keep provider links, exposure status, QR connection, shutdown confirmations, and bug reporting.
-- Shared Web UI buttons, modal frames, focus styles and general SVG icons now reuse the existing themes. Hub confirmation actions use shared localized labels such as "更新しない / 更新する"; shutdown keeps its distinct choices and the token footer keeps its dedicated palette. A CI guard prevents new appearance and confirmation-label duplication.
-- Paths inside work memos now open the same context menu as paths in the CLI screen (right-click).
-- **Browser-local session-list tabs.** Group multiple
-  session cards into tabs, add and rename tabs, reorder by drag or keyboard menu,
-  and move root families using drag/drop or a destination chooser. Safe tab deletion
-  preserves sessions and history. Names, order, lifecycle identities, selection and
-  scroll offsets are stored separately from synchronized preferences. Inactive tabs
-  show live waiting/approval counts; touch holds and keyboard menus provide movement
-  alternatives. Missing ancestors defer a family move until reconnect resolves it.
-  Rust ordinary/grid/orchestration launches now carry an optional bounded request
-  correlation value through trusted registration and ordered live/snapshot updates.
-  The Web assigns only confirmed lifecycles to the tab captured at launch, preserves
-  manual moves on reconnect, and opens grids only for matching accepted starts.
-  Legacy callers can omit the field; Go and the frozen generated Rust message are unchanged.
-  Product/Windows UI acceptance remains a separate gate for this draft.
-- **Place input controls independently where you need them.** Send, microphone,
-  clear input, templates, quick commands and the other input toolbar buttons each
-  have a small grip. Drag it with a mouse or touch to move that control anywhere
-  within the input box. Positions are saved in this browser and kept inside the
-  box on resize. The input toolbar order reset restores all positions.
-- **Child limits now distinguish human approval from automatic creation.**
-  Individually approved children and children launched from the UI allow up to
-  256 per parent. Automatic creation defaults to 10, adjustable from 1 to 256
-  in Settings. Limit errors report the actual session/reservation count and
-  maximum instead of incorrectly blaming pending confirmations.
-- **Selecting text in a full-screen CLI now scrolls when you drag past the
-  edge.** CLIs that draw on the alternate screen (such as Claude Code in its
-  full-screen mode) keep their history themselves, so dragging a selection
-  below the bottom or above the top of the terminal used to stop at the edge.
-  The terminal now asks the CLI to scroll one step at a time while the pointer
-  stays past the edge, and keeps the lines that scroll out of view. Copy, the
-  right-click menu and "Add to input" include those lines, and a label at the
-  edge of the terminal shows how many lines the selection continues beyond the
-  screen. If the screen changes in a way that cannot be followed, the
-  selection is cleared with a notice instead of copying text with gaps.
-- **File paths can now be saved to the work memo from the path menu.** The
-  menu that opens on a path in the terminal, chat, Files tree and elsewhere has
-  a new "Save to work memo" item. It adds the full path as a memo, grouped under
-  the project of the session the path came from, and says so in a short notice
-  without opening the memo drawer. If the same path is already an unfinished
-  memo, nothing is added and the notice says it is already there.
-- **Tabs and the work memo can now open in their own window.** Right-click a
-  tab (Chat, Files, Git, Review, History, Approvals, Subagents, Multi) or the
-  work memo button and choose "Open in new window", so the view can stay on
-  another monitor. It opens as a separate browser window rather than a new
-  tab, so it can be dragged to another monitor right away; if the browser
-  blocks the pop-up, a message explains how to allow it. Session-specific
-  views follow the session selected in the main window by default, and can be
-  pinned to the current session instead.
-  The detached window does not resize the terminal or repeat notification
-  sounds, and actions that need the main window (opening a session, the new
-  session panel) are handed back to it.
-- **File previews can now open in their own window.** The file preview dialog
-  has a new 🗗 button, and the path menu has "Open in new window". Both open
-  the file in a separate browser window that you can move to another monitor.
-  Opening another file later reuses that window and only swaps its content,
-  so the window stays where you put it. A window in edit mode keeps its edits
-  and does not switch.
-- **Images can now be pasted into the work memo.** Press Ctrl+V or drop an
-  image file on the memo input to attach screenshots (PNG, JPEG, GIF, WebP;
-  up to 10 per memo, 10 MB each), and a memo can be saved with images only.
-  Saved memos show thumbnails that enlarge on click. The images are kept in
-  `~/.many-ai-cli/memo-images/`, separate from session attachments, so log
-  and attachment cleanup never removes them; they are deleted together with
-  their memo, and images pasted but never added to a memo are removed when the
-  Hub starts at least a day later. New images are refused once the folder reaches 500 MB.
-- **Empty Multi-pane slots can now be removed in one click.** A slot that sits
-  in a row (or column) with no view in it shows a "Remove this row" (or
-  "Remove this column") button. It shrinks the layout, for example from 2×2 to
-  2×1, and never removes a row or column that still holds a view.
-- **Usage for a profile whose login cannot be confirmed is now marked as not
-  current.** The last retrieved values are kept, and the Usage panel and the
-  active session's Usage row show that they may be out of date, with the time
-  they were last retrieved.
-- **Codex subscription usage can now be refreshed manually for each profile.**
-  The Hub reads ChatGPT limits through that profile's Codex App Server login,
-  shows the check time, and keeps the previous values if the check fails.
-- **The active session now shows its subscription Usage beside attachments.**
-  The compact meter keeps the existing attachment bar height, moves pending
-  thumbnails above it, and refreshes the selected profile through the existing
-  Usage source. Raw log and folder controls remain at the right edge.
-- **The active session Usage row now shows all available limit windows.**
-  Claude and Codex show both short and long limits when available, while Grok
-  shows its weekly limit. The file drop area is narrower to make room.
-- **Arrange Hub tabs and session cards in flexible panes.** Drag a tab or card
-  onto the current view to open a two-pane layout, or onto a Multi pane to
-  replace just that pane. Pane handles move or swap views, while the close
-  control removes a placement without ending its session. Browser-local layouts
-  are saved separately for all sessions and each open project. Touch devices
-  can choose a destination from a menu and switch visible panes on small screens.
-- **Saved routines are shared by the PC and phone connected to the same Hub.**
-  Review an instruction before starting it in a new session, or schedule it
-  daily/on weekdays with an explicit time zone. Run history retains each run's
-  instruction and received result; routine completion notifications reopen that
-  run. Overlapping runs and duplicate submissions are suppressed. Schedules
-  missed while the Hub is unavailable are recorded as skipped.
-- **Mobile sessions offer an explicit CLI / Chat switch.** The choice and reading
-  position are retained separately for desktop and mobile in each browser.
-- **Notification sound has a 0–100 volume slider**, independent of system volume.
-  It applies to the default beep, custom sounds and test playback. Zero mutes
-  the sound; 100 preserves the previous level. The setting is saved per browser.
-- **The letters and color of each AI's icon can now be changed in Settings → AI CLI integrations.**
-  Open an AI's edit dialog and use the new **Icon** fields (1–2 letters, and a
-  color). Saving changes that AI's icon everywhere at once (session cards,
-  sidebar, status bar, chat, Usage) without reloading, and it stays after a
-  reload. Leave a field empty to keep the shipped default; **Reset to
-  distributed default** restores it. The shape stays fixed, and the color must
-  be `#RRGGBB`.
-- **An AI's icon can also be a picture (PNG, JPEG, GIF or WebP, up to 512 KB).**
-  In the same **Icon** section, choose an image and save: it replaces the letters
-  everywhere at once, cut to the icon's shape with the colored ring kept, and
-  **Remove the image** brings the letters back. SVG is refused because it can
-  carry script. The picture is stored as
-  `~/.many-ai-cli/provider_icons/<id>.bin`, and is deleted together with a
-  custom AI or when a built-in AI is reset to its distributed default.
-- **The active session's Usage row now shows the AI's icon before its name.**
-  It is the same icon as on the session card, and the name now uses the same
-  spelling as the card (for example "Grok Build"). On narrow widths the name is
-  shortened with an ellipsis while the icon stays visible.
-- **The handoff session list now shows when each session started (and ended),
-  its branch, and its predecessor/successor link.** Rows display a relative
-  "N minutes/hours/days ago" time, an abbreviated branch name, and a clickable
-  "↪ #N" chip for the predecessor (if this session continued from a handoff)
-  and the successor (if one was launched from it) — clicking either jumps
-  straight to that session's preview. The model shows as a tooltip on the
-  provider name, and search now also matches the branch name.
-- **A personal memo drawer sits next to New Session.** Click the note icon to
-  jot next-step reminders, grouped by project with the active session's
-  project listed first; each memo can be checked off, edited in place, or
-  launched directly into a new session carrying its text as the initial
-  prompt. Paths written in a memo open in the existing file preview. Small
-  badges on the button and on matching session cards show each project's
-  open memo count.
-- **The Hub log says why the Hub stopped.** The Rust Hub writes
-  `MANY-AI-CLI stopping reason=...` when it begins to stop and adds the same
-  reason to the final `MANY-AI-CLI stopped` line: `stop_command`
-  (`many-ai-cli stop` or the tray), `web_ui` (the ⏻ button),
-  `stale_binary_restart` (automatic restart after a rebuild), `launcher`,
-  `signal` (Ctrl+C), `server_error`, or `api_unspecified` for a
-  `/api/shutdown` request that did not name its sender. Previously the log
-  ended with only the process ID, so an unexpected stop could not be traced.
-- **A leftover `.git/index.lock` is shown, and can be removed with one
-  button.** When a session ends while its `git commit` / `git add` is still
-  working, or the Hub stops a writing `git` (commit, pull, worktree cleanup) at
-  its time limit, the Hub looks at that repository 3 seconds later. A lock still
-  there and written after the work started appears in a notice at the bottom
-  right; until it goes, `git add` / `git commit` there fails with "File
-  exists". Nothing is removed on its own. "Remove lock" removes it only if it
-  has not changed since it was listed and no `git` process is working in that
-  repository; otherwise the notice says why it was kept. On macOS the lock is
-  listed but always kept, because running `git` processes cannot be checked
-  there yet.
-
-### Changed
-- **Conversation text is no longer stored in the SQLite history.** What you type
-  and what the AI prints used to be saved (after pattern-based masking, which
-  cannot catch a password written as plain text), so a secret could stay in the
-  database. Only session start/end, attachment names, card settings (title,
-  tags, pin, color, note, archive), parent/child links and the approval ledger
-  are kept; the first start after the update deletes the conversation text
-  already stored. Session search now finds attachment names only, and the
-  history view of a session that is not Claude or Codex has no text to show
-  (Claude and Codex keep using their own transcripts). A remote client can no
-  longer open a file just because the chat mentioned its path; a path written
-  in a memo still works.
-- **The session raw log (`.log`) masks secrets before writing.** Tokens, private
-  key blocks and `user:password@` URLs are masked, including ones split across
-  reads and ones that cross the 64 KiB point where a line without a newline is
-  written anyway. The headless run log is masked too. Plain-text passwords are
-  still not recognized, which is why session logging stays opt-in.
-- **Card titles, notes and summaries are masked before they are stored in the
-  SQLite history.** Known token shapes in what you type there are replaced with
-  `***`; the text itself is otherwise kept as you wrote it.
-- **Approval choices and the chosen answer are masked before they are stored.**
-  A choice such as "don't ask again for" a command could carry a token into the
-  approval ledger; the question and context already were masked, and the
-  choices and answer now are too, including rows saved by earlier versions.
-- **The Session log setting now says what it really does.** Its description
-  (English, Japanese, Vietnamese), `doctor` and the README state that only the
-  `.log` is written, that a plain-text password cannot be recognized, and that
-  the raw logs each AI CLI keeps for itself are not affected by the setting.
-- **The structured session history (`.jsonl`) is no longer written.** The `.log`
-  is the only per-session file now. Files from older versions stay until the
-  retention sweep removes them, and `log-clean` still reads them.
-
-- Official Docker images, container builds and automatic updates are excluded
-  from v0.10.0 support and its release gate. Automatic image publishing is stopped
-  while the current container build has a known failure. Existing images and
-  recipes are retained as historical references without an update guarantee.
-  Linux binaries and SSH remote operation remain in the v0.10.0 release scope.
-- **Development moved to the Rust version.** The `develop` branch now carries the
-  Rust implementation as the main line. The Go sources moved to `go/` unchanged
-  and are no longer built or tested; `make build` builds the Rust binaries.
-  Releases up to v0.9.0 were built from the Go version; v0.10.0 is the first
-  release built from the Rust version.
-- The first screen shown while no session is open (both the getting-started
-  guide and the guide shown when no AI CLI is found) now has the app icon above
-  its heading, and the getting-started title spells the product name as
-  MANY-AI-CLI in English, Japanese and Vietnamese.
-- On Windows, session cards count changed files and lines again only after a
-  file in the repository changes (2 seconds after the first change), and at
-  least once a minute in case a change notification was lost. Counts are no
-  longer taken with `git status` and `git diff-index` on every refresh, and
-  sessions in the same repository share one count. Changes inside `.git` other
-  than the index, HEAD and refs, and changes under paths Git ignores (such as
-  build output), do not trigger a count. While a session that has not ended
-  works in a repository, its folder and the folders above it cannot be renamed,
-  the same as with the session's own working directory; the Hub lets go of the
-  folder as soon as the last such session ends. macOS and Linux are unchanged.
-- While no browser is connected to the Hub, session cards are not refreshed, so
-  the Hub starts no `git` for their branch name and change counts. When a
-  browser connects again, every session is counted once right away.
-- Work memo rows are now a single compact line with an explicit edit (✎) button; clicking a text memo also starts editing.
-- **Daily local Rust builds use the repair worktree, including uncommitted Web
-  and Rust changes.** The local build helper no longer fetches an older trial copy
-  by default. Explicit source or branch selection remains available for candidate checks.
-- **The Settings, Usage and Hub buttons moved from the top-right header to a footer fixed at the bottom of the left panel.** Usage and Hub menus now open upward. The footer is hidden at 720 px and below (use the drawer buttons as before) and in detached windows.
-- **Settings is now a full-screen screen with a left nav and a right pane, and the Basic/All switch is gone.** Pick one of the 24 items in the nav (grouped as General / Connections & plans / Input / Approvals & notifications / Maintenance, with current values and a search box) and only that item shows on the right. Close it with the Close button or Esc; at 720 px and below it becomes a list screen followed by a detail screen with a Back button. The last selected item is remembered.
-- **The header's Usage button now shows a single gauge icon** instead of a row of nine AI-colored icons, so the button stays narrow and does not grow as AIs are added. It keeps a translated accessible name and tooltip at narrow widths.
-- **The sidebar's new-session control is now a compact 32×32 px plus icon**, matching the neighboring icon buttons while retaining its translated accessible name and tooltip.
-- **Chat shows user messages and AI replies by default.** Tool-only records and
-  progress details stay hidden until “Show tool and progress details” is enabled;
-  Codex reply text remains visible even when its transcript phase is unclassified.
-- **Prompt templates are available on phones and refreshed across devices.**
-  Unrelated settings saves preserve the shared list, and concurrent template
-  edits require an explicit conflict resolution instead of silently overwriting
-  the other device's changes.
-- **AI explanations outside approval prompts are now asked to stay plain text
-  too.** The approval rules many-ai-cli writes for each CLI (now version 25)
-  already told it not to use tables, horizontal rules or leading bullets in the
-  preamble of an approval prompt, because the dashboard shows Markdown symbols
-  as-is. The same now
-  applies to ordinary explanations outside the markers: no bold, headings,
-  leading symbols or tables (`internal/wrapper/approval_rules.go`).
-- **Status bar moved under the terminal input.** The token/cost status bar now sits
-  at the bottom of the terminal column (under the Paste / drop row) instead of
-  spanning the whole window, and no longer repeats the session number, state,
-  provider/model and effort that the header above the terminal already shows. On
-  phones (720 px and below) it stays hidden and only shows a one-line warning above
-  the input when context, compaction or the rate limit is close to its limit. The
-  settings panel no longer lists the "AI / model" and "effort / thinking" segments,
-  which now appear only in the details opened from the "…" button.
-
-### Removed
-- **Official AI CLI catalog import.** The Hub no longer serves
-  `/api/provider-distributions/*`, and the note about it under
-  Settings → AI CLI integrations is gone. The import never worked in a release:
-  no signing keys were configured, so checking and accepting a catalog always
-  returned 503. Your own provider definitions and their history are unchanged.
-- **The "Attach to grid" option in New Session.** It was always disabled; the
-  "Hub tab" and "Detached window" choices remain.
-- **README descriptions of `hub.open_browser`.** The setting has never had an
-  effect (only `serve --open` opens the browser). An existing value in
-  `config.yaml` is still accepted and ignored.
-
-### Fixed
-- The Git panel's read-only views (changed files, diffs and the commit-message
-  suggestion) no longer take `.git/index.lock`. They now run `git status` with
-  `GIT_OPTIONAL_LOCKS=0` and compare HEAD with the work tree through
-  `git diff-index`, which never rewrites the index, so a read stopped at its
-  5-second limit can no longer leave a 0-byte `index.lock` that blocks your own
-  `git add` / `git commit`. Commit, push, pull and fetch are unchanged.
-- Session cards read the branch name from the repository's `.git/HEAD` file
-  instead of starting `git` for it on every refresh. Starting `git` sometimes
-  took longer than the 250 ms limit when many sessions were open, and the card
-  then showed "(no git)" for a repository. Git is still asked when HEAD is
-  detached, when the repository uses reftable, or when HEAD cannot be read. A
-  repository with no commit yet now shows its branch name instead of
-  "(no git)".
-- Relay's change count and the clean check before an automatic worktree is
-  removed no longer take `.git/index.lock` either: they ran `git status` without
-  `GIT_OPTIONAL_LOCKS=0` and are stopped after 3 and 5 seconds. Every `git` the
-  Hub starts (the Git panel, the branch display, relay, worktrees, turn records,
-  the approval-rule location and `doctor`) is now planned in one place that
-  sets `GIT_OPTIONAL_LOCKS=0` and refuses a porcelain `git diff` against the
-  work tree, and a test fails when new code starts `git` without it.
-- Rust Hub keeps Codex sessions running through silent processing until the provider reports completion or interruption, and restores active turns outside the chat-history window after reconnection, preventing premature yellow unread-stop marks.
-- The Windows Hub no longer builds a machine-wide thread snapshot every time it
-  starts a child process (for example each `git` call that refreshes the branch
-  display), which took more than half of the Hub's CPU. It now looks only at the
-  child it just started, and releases that snapshot correctly so Hub handles do
-  not accumulate.
-- `orchestrate spawn` for a role that already has a live child is refused
-  right away with the existing 409, before the spawn confirmation dialog opens.
-  Previously the dialog opened, and the refusal came only after the user had
-  chosen options and approved. `--force` still opens the dialog.
-- Approval confirmations and mobile hold controls stay attached to the approval
-  originally displayed. Enter activates the focused confirmation button.
-  Read-only Markdown removes interactive controls, and browser policy blocks
-  native form submission.
-- Sending text, preparing attachments and completing voice input retain the
-  originating session and preserve newer drafts when asynchronous work finishes.
-- Windows terminal fallback passes its directory as data. Headless argument
-  prompts require a native executable or a provider with stdin prompt transport
-  when an unresolved Windows command shim would otherwise interpret the prompt.
-  Trial CLI updates validate the executable selected after shim resolution.
-- Instruction injection records cleanup intent before changing user files.
-  Probe recovery checks identity captured from the owned process at startup;
-  older or unverifiable records are retained with a warning for manual recovery.
-- The Rust TLS dependency resolves to rustls 0.23.46.
-- Web Push signs a normalized origin and a single contact URI. Unauthenticated
-  WebSockets have a bounded wait and connection count. Concurrent in-app file
-  saves report a conflict, and attachments rejected before journal acceptance
-  remove only the newly created file.
-- Files previews discard superseded responses and keep saves attached to the
-  file and editor that started them. Git and Review tabs only reconnect to a
-  matching repository, including when restoring tabs after a restart.
-- History viewers discard results from closed or replaced views. Completing
-  an earlier AI icon upload preserves a newly opened provider form. Memo editors
-  keep IME conversion Enter separate from submitting or saving text.
-- SVG files use external-open or download actions instead of an unsupported
-  in-app image preview.
-- **Editing a minified dependency no longer marks its unchanged text as a new
-  secret.** Staged scans retain the baseline only for occurrences entirely in
-  identical parts of a single-line replacement; new occurrences still block.
-- **Terminal text no longer blurs at browser zoom levels other than 100%.** At
-  zoom levels such as 90%, the terminal could draw every row slightly stretched,
-  so text looked smeared until the layout changed again (for example when a bar
-  above or below the terminal appeared or disappeared). The bundled xterm.js
-  WebGL addon (0.19.0) now carries the upstream fix
-  ([xtermjs/xterm.js#5607](https://github.com/xtermjs/xterm.js/pull/5607)), so
-  rows are always drawn at their exact pixel height.
-- Rust Hub attachment uploads now record history with the current session binding,
-  fixing HTTP 500 failures that prevented images and pasted text from reaching the
-  provider. WebSocket attachments also reject ended or stale session contexts.
-- Hide unfinished completion tags when a terminal redraw interrupts them, while
-  preserving cursor movement and the following output in the Rust trial UI.
-- **The Settings icon stays at the bottom while Settings is open.** The same
-  Settings, Usage and Hub buttons remain available, and the settings list can
-  scroll past them.
-- **Pasting into the work memo and other text fields stays in that field.**
-  Pasting five or more lines (or more than 300 characters) into the memo box,
-  the file editor, the commit message or any other text field turned the text
-  into a "Pasted text" chip on the input bar at the bottom instead, and an
-  image pasted into the memo box was also added to the input bar's
-  attachments. The input bar now collects only pastes aimed at itself or at no
-  text field.
-- **The Detached Grid launcher shows readable labels again.** Its title,
-  presets and buttons were shown as raw translation keys such as `dgl_title`.
-- **Renaming a session card no longer breaks routine completion tracking or
-  reattach matching.** The Hub now keys those lookups on a fixed launch-time
-  label instead of the editable display label. The card's right-click "Change
-  label" now opens an input dialog matching the New Session label field
-  (translated menu text, current value pre-filled, blank clears back to the
-  automatic title) instead of a plain browser prompt, and detached/Grid pane
-  headings pick up the new name immediately.
-- **Handoff allows continuing with the same CLI**, including Codex-to-Codex.
-  The source CLI is no longer omitted from the destination picker; launching
-  the successor and choosing a subscription remain explicit user actions.
-- **Hub restarts preserve input sequence numbers and the full 2 MiB replay
-  window from updated wrappers.** New instructions are no longer discarded as
-  duplicate input after reconnect, and retained terminal history is no longer
-  reduced to 64 KiB. Already discarded output cannot be recovered by this fix.
-- **Terminal link detection avoids repeated full scans on long output.** URL
-  suffixes with many unmatched brackets and Windows paths with long whitespace
-  runs are processed in linear passes. Rows containing many links use a compact
-  occupancy map and binary row lookup instead of scanning every earlier link
-  and row, preserving link priority, targets and clickable ranges.
-- **The prompt template picker is larger, and the mouse wheel now scrolls its
-  list.** The picker opens wider and taller, and scrolling the wheel over it
-  scrolls the list instead of the terminal behind it.
-- **Files API endpoints protect repository roots and version control directories (.git, .hg, .svn).**
-  Deleting, renaming, moving, creating, or editing paths within or targeting
-  version control directories and root directories is rejected with 403 Forbidden
-  or 409 Conflict.
-- **Approval risk classification recognizes PowerShell array subexpressions `@(...)`.**
-  Commands that embed arbitrary PowerShell statements via `@(...)` (such as
-  `cat @(...)` or `dir @(...)`) are classified as mid-risk instead of incorrectly
-  being treated as low-risk.
-- **Web UI requests use Cookie and Bearer authorization instead of query tokens.**
-  API calls across the web dashboard no longer include `?token=` in request URLs,
-  preventing token exposure in browser history, server access logs, and shared links.
-- **Dependency `golang.org/x/crypto` updated to v0.57.0**, eliminating upstream advisory GO-2025-3486.
-
-### Security
-- **The Claude Code bundled in the Docker image is updated to 2.1.179.**
-  2.1.163 had a plugin hash-pin bypass (GHSA-pq7j-f95f-qfcv, high) that let a
-  plugin skip hash pinning. This only affects people who run `many-ai-cli` from
-  the Docker image, which ships the provider CLIs inside it.
-
-- **The `zip` library used to unpack the Whisper download is updated to 9.1.3.**
-  8.6.0 had three advisories (RUSTSEC-2026-0367, -0368, -0369; one rated
-  critical) about the library's own `extract()` creating symbolic links outside
-  the target and keeping SUID/SGID bits. Whisper's unpacking does not call that
-  function and already rejects symbolic links and paths that leave the target,
-  so this was not reachable, but the dependency audit now reports no
-  vulnerability.
-
 - **A start-failure note no longer copies secrets from the child's screen.**
   When a child session fails to start, the Hub writes the last lines of its
   screen to the orchestration board and to the parent session. A token printed
@@ -1446,7 +1382,6 @@ This release replaces the Go implementation of many-ai-cli with a Rust one.
   `ghcr.io/ishizakahiroshi/many-ai-cli` bundled a Node.js 22 release affected by the
   Brotli decoder vulnerability CVE-2026-111497, and image publishing has stopped,
   so they would never receive the fix. Use the Linux binary instead.
-
 
 ## [0.9.0] - 2026-09-27
 
@@ -4825,7 +4760,7 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.10.0...HEAD
 [0.10.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...v0.10.0
 [0.10.0-rc.2]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...v0.10.0-rc.2
 [0.9.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.8.0...v0.9.0
