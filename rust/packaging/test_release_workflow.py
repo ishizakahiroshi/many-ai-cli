@@ -408,6 +408,36 @@ class ReleaseWorkflowTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "symlink"):
                 MODULE.verify_linux_payloads(expected, deb, rpm)
 
+    def test_rpm_build_id_links_written_by_rpm_resolve_from_the_filesystem_root(self):
+        # rpm writes `../../../../usr/bin/x` (observed in the v0.10.0 release run):
+        # the fourth `..` leaves /usr and the path re-enters it.
+        expected, deb, rpm = (self.root / name for name in ("expected", "deb", "rpm"))
+        for directory in (expected, deb, rpm):
+            for name in ("bin/many-ai-cli", "bin/many-ai-cli-launcher", "share/doc/many-ai-cli/LICENSE"):
+                target = directory / "usr" / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(name.encode())
+        build_id_dir = rpm / "usr/lib/.build-id/9c"
+        build_id_dir.mkdir(parents=True)
+        try:
+            (build_id_dir / ("a" * 38)).symlink_to("../../../../usr/bin/many-ai-cli-launcher")
+        except (OSError, NotImplementedError):
+            self.skipTest("symlink creation unavailable")
+
+        original = Path.stat
+        def observed_stat(path, *args, **kwargs):
+            value = original(path, *args, **kwargs)
+            if path.name in ("many-ai-cli", "many-ai-cli-launcher") and path.parent.name == "bin":
+                values = list(value)
+                values[0] = (values[0] & ~0o777) | 0o755
+                return type(value)(values)
+            return value
+        with patch.object(Path, "stat", observed_stat):
+            MODULE.verify_linux_payloads(expected, deb, rpm)
+            (build_id_dir / ("b" * 38)).symlink_to("../../../../etc/passwd")
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                MODULE.verify_linux_payloads(expected, deb, rpm)
+
     def test_distribution_sbom_root_binds_opaque_payload_without_runtime_claim(self):
         asset = self.root / "many-ai-cli-1.0.0-linux-x64.deb"
         asset.write_bytes(b"synthetic container")

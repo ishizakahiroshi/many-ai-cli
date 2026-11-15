@@ -179,14 +179,14 @@ def verify_linux_payloads(expected: Path, deb: Path, rpm: Path) -> None:
                 or (separator and not re.fullmatch(r"[1-9][0-9]*", duplicate))):
             return None
 
-        target = PurePosixPath(os.readlink(path))
-        if target.is_absolute():
-            if target.parts[:2] != ("/", "usr"):
-                return None
-            relative_target = PurePosixPath(*target.parts[2:])
-        else:
-            parent = PurePosixPath(*relative[:-1])
-            relative_target = PurePosixPath(posixpath.normpath(str(parent / target)))
+        # `root` is the package's /usr. Resolve the link where it really lives
+        # (under /usr), because rpm writes `../../../../usr/bin/x`, whose last
+        # `..` leaves /usr. An absolute target simply replaces the parent.
+        parent = PurePosixPath("/usr", *relative[:-1])
+        resolved = PurePosixPath(posixpath.normpath(str(parent / os.readlink(path))))
+        if resolved.parts[:2] != ("/", "usr"):
+            return None
+        relative_target = PurePosixPath(*resolved.parts[2:])
         name = relative_target.as_posix()
         if name not in {"bin/many-ai-cli", "bin/many-ai-cli-launcher"}:
             return None
