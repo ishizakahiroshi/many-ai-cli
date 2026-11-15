@@ -663,6 +663,9 @@ async fn end_capture_materialization_has_an_independent_resolution_budget() {
 #[tokio::test]
 async fn end_reservation_release_and_warm_reconnect_preserve_the_capture_incarnation() {
     let f = fixture(false, false).await;
+    // This scenario checks reservation and reattach behavior, not cumulative
+    // wall-clock budgets. Keep each real Git command's full allowance.
+    f.files.pin_git_clock();
     f.observer.observe(&event(f.binding, false)).await.unwrap();
     let reservation = f.files.reserve_git_turn_end(f.binding).unwrap();
     assert!(f.files.reserve_git_turn_end(f.binding).is_none());

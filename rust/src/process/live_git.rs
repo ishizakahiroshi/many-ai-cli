@@ -307,7 +307,37 @@ mod platform {
 #[cfg(target_os = "linux")]
 mod platform {
     use super::GitProcess;
-    use std::{fs, io};
+    use std::{fs, io, path::Path};
+
+    /// A `/proc/<pid>` entry can disappear between reading `comm` and its
+    /// remaining files. A vanished process cannot still own an index lock;
+    /// other inspection failures remain unknown.
+    fn inspect(dir: &Path, pid: u32) -> Option<GitProcess> {
+        let comm = fs::read_to_string(dir.join("comm")).ok()?;
+        if comm.trim() != "git" {
+            return None;
+        }
+        let cwd = match fs::read_link(dir.join("cwd")) {
+            Ok(cwd) => Some(cwd),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return None,
+            Err(_) => None,
+        };
+        let command_line = match fs::read(dir.join("cmdline")) {
+            Ok(bytes) => Some(
+                String::from_utf8_lossy(&bytes)
+                    .split('\0')
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            ),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return None,
+            Err(_) => None,
+        };
+        Some(GitProcess {
+            pid,
+            cwd,
+            command_line,
+        })
+    }
 
     pub fn git_processes() -> io::Result<Vec<GitProcess>> {
         let me = std::process::id();
@@ -324,27 +354,30 @@ mod platform {
             if pid == me {
                 continue;
             }
-            let dir = entry.path();
-            let Ok(comm) = fs::read_to_string(dir.join("comm")) else {
-                continue;
-            };
-            if comm.trim() != "git" {
-                continue;
+            if let Some(process) = inspect(&entry.path(), pid) {
+                out.push(process);
             }
-            let cwd = fs::read_link(dir.join("cwd")).ok();
-            let command_line = fs::read(dir.join("cmdline")).ok().map(|bytes| {
-                String::from_utf8_lossy(&bytes)
-                    .split('\0')
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            });
-            out.push(GitProcess {
-                pid,
-                cwd,
-                command_line,
-            });
         }
         Ok(out)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::inspect;
+        use std::{fs, os::unix::fs::symlink};
+
+        #[test]
+        fn linux_lookup_drops_a_git_that_exited_during_inspection() {
+            let temp = tempfile::tempdir().unwrap();
+            let proc_entry = temp.path().join("42");
+            fs::create_dir(&proc_entry).unwrap();
+            fs::write(proc_entry.join("comm"), "git\n").unwrap();
+            symlink(temp.path(), proc_entry.join("cwd")).unwrap();
+
+            // Missing cmdline models the process exiting after `comm` and cwd
+            // were read but before the rest of its /proc entry was inspected.
+            assert!(inspect(&proc_entry, 42).is_none());
+        }
     }
 }
 
