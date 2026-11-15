@@ -6,13 +6,29 @@ use crate::{
 };
 use std::{sync::Arc, time::Duration};
 mod relay_callbacks;
+/// The hub binds this port later, so it cannot be held open here. Binding
+/// port 0 and dropping it let a parallel test's own `bind(0)` take the same
+/// ephemeral port first (`AddrInUse`, seen in the v0.10.0 release run). Pick
+/// from a range below every OS ephemeral range (Linux 32768+, macOS and
+/// Windows 49152+) instead, one distinct port per call and per process.
+async fn reserve_test_port() -> u16 {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    loop {
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let port =
+            20_000 + ((std::process::id().wrapping_mul(131) + n.wrapping_mul(17)) % 10_000) as u16;
+        if let Ok(socket) =
+            tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)).await
+        {
+            drop(socket);
+            return port;
+        }
+    }
+}
 async fn fixture_context(root: &tempfile::TempDir) -> MainContext {
-    let socket = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
-        .await
-        .unwrap();
-    let port = socket.local_addr().unwrap().port();
+    let port = reserve_test_port().await;
     assert_ne!(port, 47777);
-    drop(socket);
     let runtime = root.path().join("runtime");
     std::fs::create_dir(&runtime).unwrap();
     let paths =
