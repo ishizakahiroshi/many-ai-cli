@@ -4,6 +4,7 @@
 |---|---|---|
 | `/add-dir` | Add an allowed working directory. | Grant Copilot access to another local directory. |
 | `/agent` | Manage the active agent environment. | Switch or inspect agent setup. |
+| `/ahp` | Manage the hosts your sessions run on, and the sessions on them. | Work with Agent Host Protocol hosts. |
 | `/allow-all` | Allow all tool use for the session. | Temporarily run without per-tool prompts. |
 | `/app` | Show how to try the GitHub Copilot desktop app. | When you want to continue in the desktop app. |
 | `/ask` | Ask a side question without adding it to history, or show the last answer. | Get a quick answer without changing the main thread. |
@@ -22,6 +23,7 @@
 | `/diagnose` | Analyze the session log, including why permission prompts were needed. | Troubleshoot unexpected prompts or session behavior. |
 | `/diff` | Show working tree changes. | Review edits before committing or continuing. |
 | `/env` | Inspect environment information. | Debug local CLI/runtime configuration. |
+| `/environments` | Open the Environments screen for incoming and outgoing connections. | Manage connections to and from this CLI. |
 | `/exit` | Exit the CLI. | End the current session. |
 | `/experimental` | Manage experimental features. | Try or inspect preview capabilities. |
 | `/feedback` | Send feedback. | Report issues to GitHub. |
@@ -30,6 +32,7 @@
 | `/fork` | Fork the current session into a new one, optionally with a name. | Branch off an experiment while keeping the original session intact. |
 | `/help` | Show help. | Discover available commands. |
 | `/ide` | Connect IDE context. | Include editor state in the session. |
+| `/index` | Inspect and manage this worktree's shared search index, which is experimental. | Check or refresh the search index of a worktree. |
 | `/init` | Initialize project guidance. | Generate or refresh repo instructions. |
 | `/instructions` | Inspect instruction sources. | See guidance currently applied to the session. |
 | `/keep-alive` | Prevent the system from going to sleep. | During long unattended runs. |
