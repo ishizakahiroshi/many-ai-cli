@@ -289,6 +289,8 @@ header {
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
+  /* z-index は位置指定が無いと効かない。⋯ メニューが下のペインに潜らないよう relative にする。 */
+  position: relative;
   z-index: 100;
 }
 [data-theme="light"] header {
