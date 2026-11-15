@@ -204,7 +204,13 @@ def verify_linux_payloads(expected: Path, deb: Path, rpm: Path) -> None:
             if path.is_symlink():
                 target = rpm_build_id_target(path, root) if rpm_build_id_links else None
                 if target is None or expected_files is None or digest(root / target) != expected_files.get(target):
-                    raise ValueError("Linux payload contains an unexpected symlink")
+                    package = "RPM" if rpm_build_id_links else "DEB"
+                    relative = path.relative_to(root).as_posix()
+                    target = os.readlink(path)
+                    raise ValueError(
+                        f"Linux {package} payload contains an unexpected symlink: "
+                        f"{relative} -> {target}"
+                    )
                 continue
             if path.is_file():
                 files[path.relative_to(root).as_posix()] = digest(path)
