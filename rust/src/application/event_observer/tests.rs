@@ -521,6 +521,9 @@ async fn actual_capture_handoff_summary_broadcast_callback_order_and_next_input_
 #[tokio::test]
 async fn handoff_gate_is_independent_of_capture_and_summary_requires_both_gates() {
     let f = fixture(false, true).await;
+    // This scenario checks callback gates, not cumulative wall-clock budgets.
+    // Keep the real Git commands' full per-command allowance on busy runners.
+    f.files.pin_git_clock();
     f.observer.observe(&event(f.binding, false)).await.unwrap();
     std::fs::write(f.cwd.join("task.txt"), "after\n").unwrap();
     f.observer.observe(&event(f.binding, true)).await.unwrap();
