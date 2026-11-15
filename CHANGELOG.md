@@ -87,6 +87,11 @@ Release artifacts are published at
 
 ### Changed
 
+- **The header strip is gone on desktop.** On a wide, mouse-driven screen the
+  logo, the inbox / New Session / `⋯` buttons now sit in one row at the top of
+  the sidebar, and the running / per-LLM counts (plus reconnect and microphone
+  state) sit next to the Settings button, so the terminal gets the 28 px back.
+  Narrow and touch layouts keep the header, and detached windows are unchanged.
 - **The Docker files are removed from the repository.** `deploy/docker/` (the
   Dockerfile, compose files, per-user examples and the update script), its
   input-pin check and the Docker workflow notice are gone, together with the

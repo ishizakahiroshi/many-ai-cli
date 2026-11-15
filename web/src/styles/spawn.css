@@ -120,6 +120,7 @@
   box-shadow: var(--ui-shadow-modal);
 }
 .header-more-menu[hidden] { display: none; }
+#sidebar-head .header-more-menu > .ui-button,
 header .header-more-menu > .ui-button {
   flex: 0 0 auto;
   width: 100%;
@@ -130,9 +131,40 @@ header .header-more-menu > .ui-button {
   justify-content: flex-start;
   position: relative;
 }
+#sidebar-head .header-more-menu .ui-button > svg,
 header .header-more-menu .ui-button > svg { width: 16px; height: 16px; flex: none; }
 .header-more-label { font-size: var(--fs-sm); white-space: nowrap; }
 .header-more-menu .memo-button-badge { position: static; margin-left: auto; }
+
+/* PC ではヘッダー帯を無くし、ロゴと「＋」をサイドバー上端の 1 行に置く（header-actions.ts）。
+   サイドバーは 220〜520px で可変なので、狭いときはロゴの文字だけ畳んでアイコンを残す。 */
+html.header-folded body > header { display: none; }
+html.header-folded { --app-header-h: 0px; }
+#sidebar-head {
+  --ui-control-regular: 22px;
+  --ui-control-compact: 22px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  margin: -2px 0 6px;
+  container-type: inline-size;
+}
+#sidebar-head .ui-button { padding-top: 0; padding-bottom: 0; }
+#sidebar-head .ui-button.ui-button--icon { width: auto; }
+#sidebar-head > .header-logo { min-width: 0; }
+#sidebar-head > .header-logo > span:not(.env-badge) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#sidebar-head > #new-session-bar { margin-left: auto; }
+/* サイドバーの右端にあるので、メニューは左へ開いて端から切れないようにする。 */
+#sidebar-head .header-more-menu { left: auto; right: 0; }
+@container (max-width: 330px) {
+  #sidebar-head > .header-logo > span:not(.env-badge) { display: none; }
+}
+/* 件数（実行中・LLM 別）は「設定」ボタンの右の余白に出す。狭いときは件数だけに畳まれる（session-list.ts）。 */
+@media (min-width: 721px) {
+  html.header-folded .session-footer > #settings-btn { flex: 0 0 auto; }
+  html.header-folded .session-footer > #summary { padding-left: var(--space-1); }
+}
 
 /* C1: 子役割の詳細設定アコーディオン内の役割×CLI×モデル表 */
 .spawn-orchestration-section { margin-top: 6px; }

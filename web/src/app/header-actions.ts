@@ -92,14 +92,40 @@ function init(): void {
     if (event.key === 'Escape' && !menu.hidden) { setOpen(false); moreBtn.focus(); }
   });
 
+  // PC ではヘッダー帯そのものを無くす（縦を端末に返す・2026-11-15 利用者決定）。
+  // ロゴ・環境バッジ・「＋」などはサイドバー上端の 1 行へ、実行中の件数（#summary）と
+  // 再接続・聞き取り・マイクの表示は「設定」ボタンの行へ移す。同じ要素を移すだけで、
+  // id・クリック処理・件数の描画（session-list.ts）はそのまま効く。スマホ幅では元のヘッダーへ戻す。
+  const aside = document.getElementById('session-list');
+  const footer = document.getElementById('session-footer');
+  const logo = header.querySelector<HTMLElement>(':scope > .header-logo');
+  const runtimeBadge = document.getElementById('runtime-badge');
+  const summary = document.getElementById('summary');
+  const footerParts = ['reconnect-btn', 'global-wakeword-btn', 'mic-status-chip']
+    .map(id => document.getElementById(id))
+    .filter((el): el is HTMLElement => !!el);
+  const head = document.createElement('div');
+  head.id = 'sidebar-head';
+
+  // 別窓（?view=detached-grid / detached-tab）は同じ画面を使うが、サイドバーを出さず、
+  // ヘッダーに「Hub」ボタンを足す（detached-grid.ts）。ここではヘッダーを消さず、従来のまま。
+  const detachedView = (new URLSearchParams(window.location.search).get('view') ?? '').startsWith('detached');
+
   let hosted = false;
   const apply = (desktop: boolean): void => {
     if (desktop === hosted) return;
     hosted = desktop;
+    const fold = desktop && !detachedView;
     if (desktop) {
       for (const el of menuTargets) { menu.appendChild(el); decorate(el, true); }
       bar.replaceChildren(...[boardBtn, newBtn, more].filter((el): el is HTMLElement => !!el));
-      header.insertBefore(bar, header.querySelector(':scope > .header-sep'));
+      if (fold) {
+        head.append(...[logo, runtimeBadge, bar].filter((el): el is HTMLElement => !!el));
+        aside?.prepend(head);
+        if (footer) footer.append(...[summary, ...footerParts].filter((el): el is HTMLElement => !!el));
+      } else {
+        header.insertBefore(bar, header.querySelector(':scope > .header-sep'));
+      }
       refreshTip();
       refreshDot();
     } else {
@@ -107,8 +133,13 @@ function init(): void {
       for (const el of menuTargets) decorate(el, false);
       bar.replaceChildren(...originalOrder);
       anchor.after(bar);
+      if (logo) header.prepend(logo);
+      if (runtimeBadge) (logo ?? header).after(runtimeBadge);
+      header.append(...[summary, ...footerParts].filter((el): el is HTMLElement => !!el));
+      head.remove();
     }
     bar.classList.toggle('header-hosted', desktop);
+    document.documentElement.classList.toggle('header-folded', fold);
   };
 
   const mq = window.matchMedia(DESKTOP_QUERY);

@@ -1090,8 +1090,8 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 
 ### Layout
 
-- **Header**
-  - Status summary chips `[running][waiting][standby]` (the waiting chip blinks when > 0) and per-provider connection counts such as `Claude:N / Codex:N / Copilot:N / Cursor Agent:N / Grok:N`.
+- **Header** (narrow or touch layouts, and detached windows)
+  - Status summary chips `[running][waiting][standby]` (the waiting chip blinks when > 0) and per-provider connection counts such as `Claude:N / Codex:N / Copilot:N / Cursor Agent:N / Grok:N`. On a wide, mouse-driven screen there is no header strip: the logo and action buttons sit in the top row of the sidebar, and these chips sit beside the Settings button.
 - **Left sidebar (session list)**
   - Top: the card-outline-plus button opens the existing New Session dialog. The provider list ends with **Add AI CLI**, which opens the same dialog as **Settings → AI CLI integrations**.
   - **Session-list tabs** group multiple cards. First use starts with one localized **Tab 1** containing existing sessions; the tab-outline-plus button adds an empty tab. Switching a list tab leaves the active conversation and panes unchanged. Right-click, long-press, or press Shift+F10 on a tab to rename, delete, or move it left/right; arrow keys, Home and End navigate the strip. Drag tabs to reorder, drag a card onto a tab, or drag a project heading onto a tab to move that project's roots in the selected tab (children included). The card menu also offers a destination chooser. A root session and its children move together; moves wait if an ancestor is missing during reconnect. Deleting a populated tab asks where to move its sessions and never stops processes or removes history. The last tab cannot be deleted.

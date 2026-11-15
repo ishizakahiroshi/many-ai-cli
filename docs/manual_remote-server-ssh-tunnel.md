@@ -140,7 +140,7 @@ many-ai-cli-launcher.exe --ui      # 常に選択画面を表示
 
 ### 環境識別表示（操作対象を取り違えないために）
 
-Hub UI は `/api/info` の `env_kind` で、ブラウザタブ title・favicon・ヘッダー badge・Settings/About 表示を切り替えます。複数 Hub を同時に開くときは、タブの色と badge で操作対象を確認してください。
+Hub UI は `/api/info` の `env_kind` で、ブラウザタブ title・favicon・ヘッダー（PC 幅ではサイドバー最上段）の badge・Settings/About 表示を切り替えます。複数 Hub を同時に開くときは、タブの色と badge で操作対象を確認してください。
 
 | env_kind | 表示 | favicon | 主なケース |
 |---|---|---|---|
