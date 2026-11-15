@@ -89,6 +89,10 @@ const ID_MAX: usize = 200;
 
 pub type Warning = dyn Fn(&str, &str) + Send + Sync;
 
+/// Unknown fields are refused, so a Hub that predates a field cannot read a
+/// board.json that has it and stops writing to the board altogether: add a
+/// new field (for example `local_taker`) only after the Hub that reads it is
+/// running (2026-11-15).
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FileConfig {
