@@ -19,7 +19,7 @@ Homebrew were not updated. Fixes added after that tag are listed under 0.10.0.
 (The `v0.10.0-rc.1` tag published nothing: its release run stopped before
 signing, when the SBOM files were not uploaded.)
 
-## [0.10.0] - 2026-11-15
+## [0.10.0] - 2026-11-16
 
 This release replaces the Go implementation of many-ai-cli with a Rust one.
 
