@@ -77,6 +77,24 @@
   --nsb-size: 22px;
 }
 #new-session-bar.header-hosted > .ui-button > svg { width: 15px; height: 15px; }
+/* PC のヘッダーでは「新しいセッション」を文字付きにする。毎日いちばん使う操作なので、アイコンだけだと
+   初回の人に伝わらず、タブ追加より小さく見えていた。色は新しく足さず、既存の accent の薄い面・文字色を使う
+   （背景色を変えるテーマでも、accent は土台の色のまま）。枠線も付けて、色だけに頼らず区別する。
+   ラベルの文字に「+」が入っているので、アイコンは出さない。 */
+#new-session-bar.header-hosted > #new-session-btn {
+  width: auto;
+  padding: 0 10px;
+  --ui-button-border: color-mix(in srgb, var(--accent-text) 45%, transparent);
+}
+#new-session-bar.header-hosted > #new-session-btn > svg { display: none; }
+#new-session-bar.header-hosted .new-session-btn-label {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+}
 .header-more { position: relative; flex: 0 0 auto; }
 #new-session-bar.header-hosted .header-more-btn {
   position: relative;
