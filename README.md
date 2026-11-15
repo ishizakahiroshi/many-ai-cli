@@ -1650,9 +1650,9 @@ Rust mainline; see the [release procedure](docs/manual_release.md).
 
 ---
 
-## Remote server / Docker deployment
+## Remote server
 
-> **v0.10.0 support scope:** Official Docker images, container builds and automatic updates are unsupported. The current container build has a known failure. Automatic image publishing has stopped, and the former GHCR images were deleted on 2026-10-25 because they bundled a Node.js release affected by CVE-2026-111497; the recipes are retained as historical references, with no active publishing or update guarantee. Linux binaries and SSH remote operation remain in the v0.10.0 release scope. See the [Docker support policy](deploy/docker/README.md).
+> **Docker is not provided.** Official Docker images, container builds and the container recipes were removed from this repository. Linux binaries and SSH remote operation are the supported way to run a remote Hub; the old container files remain in the Git history.
 
 Docker is not required for remote-server use. For a small team, normal SSH plus `tmux`, `screen`, or `systemd` can work as long as each person signs in with their own AI CLI account and has a separate OS user, home directory, working directory, and Hub port. For v0.10.0 remote setups, run the Linux binary directly.
 
@@ -1662,82 +1662,6 @@ If you do not use Docker, pay attention to these points:
 - **Separate working directories and ports per person.** Example: user A uses `/srv/many-ai-cli/work/a` + `47777`, user B uses `/srv/many-ai-cli/work/b` + `47778`.
 - **Pin Python / Node / bun tooling per project.** Use `venv` / `uv`, `nvm` / `mise`, and project-local lockfiles to avoid version conflicts.
 - **Do not share one AI CLI account across users.** Each person must sign in with their own account; see "Do not share one account among multiple users" above.
-
-<details>
-<summary>Legacy / pre-v0.10 Docker recipes (unsupported for v0.10.0)</summary>
-
-The following build, compose and cron examples describe the former Docker setup. They are retained for historical reference and are not supported v0.10.0 setup or update instructions.
-
-Container assets remain under [`deploy/docker/`](deploy/docker/) (one user = one container; the Hub is published on `127.0.0.1` only and is meant to be reached through an SSH tunnel or similar). The former setup started from [`deploy/docker/users/example.yaml`](deploy/docker/users/example.yaml), copied it to `users/<user>.yaml`, and replaced the example user name and port before adding it to `compose.yaml`.
-
-The former GitHub Actions publisher built images after successful validation of `main` / `develop` pushes. Automatic publishing has stopped, and [`docker-image.yml`](.github/workflows/docker-image.yml) is now a manual, notice-only workflow (no image build, login or push). The GHCR package was deleted on 2026-10-25, so these former tag names can no longer be pulled:
-
-```
-ghcr.io/ishizakahiroshi/many-ai-cli:latest      # historical main tag
-ghcr.io/ishizakahiroshi/many-ai-cli:develop     # historical develop tag
-ghcr.io/ishizakahiroshi/many-ai-cli:sha-<hash>  # historical per-commit tag
-```
-
-### Always run the latest image
-
-Place [`deploy/docker/aac-update.sh`](deploy/docker/aac-update.sh) next to your `compose.yaml` and register it as a daily cron job. It pulls the configured tag and recreates containers **only when the image actually changed** (no-op otherwise):
-
-```cron
-# root crontab — daily at 04:30
-30 4 * * * /opt/many-ai-cli/aac-update.sh >> /var/log/aac-update.log 2>&1
-```
-
-### What an update restart does (and does not) reset
-
-On days with no new image the cron is a complete no-op — nothing restarts. When the image **did** change, the affected containers are recreated, which restarts the Hub. What that means for each user:
-
-| | Item | Why |
-|---|---|---|
-| ❌ Lost | Running AI sessions (claude / codex PTY processes) and their session cards in the Hub UI | processes die with the container |
-| ✅ Kept | Hub access token (`~/.many-ai-cli/config.yaml`) | the home volume persists it — **tunnel-mode launcher profiles keep working unchanged** |
-| ✅ Kept | AI CLI login state (Claude auth, etc.) | same (under home) |
-| ✅ Kept | Working repositories / files | bind-mounted work directory |
-| ✅ Kept | Session logs (`~/.many-ai-cli/logs/`) | same (under home) |
-| △ Recoverable | AI conversation history | provider CLIs keep history under home; resume with `--resume`-style options in a new session |
-
-Shutdown is graceful: `stop_grace_period: 40s` plus the entrypoint waiting up to 20 s for wrappers to exit.
-
-Operational tips (especially for multi-user servers — the cron recreates **every** user's container at once):
-
-- **Pick the cron time wisely.** If users run long overnight AI tasks, 04:30 may cut them off — choose a window nobody works in, and announce it to all users.
-- **Freeze before important runs.** `touch /opt/many-ai-cli/HOLD` skips the update (for all users); `rm HOLD` resumes it.
-- **Former tag behavior.** Under the old publisher, `AAC_TAG=develop` followed develop pushes and `latest` followed `main`. Neither tag now guarantees automatic updates.
-
-### Development bypass
-
-The image tag is selected by `AAC_TAG` in the compose project's `.env` file (defaults to `latest`). A `HOLD` file next to `compose.yaml` freezes the auto-update cron.
-
-| Mode | `.env` | Auto-update cron |
-|---|---|---|
-| Normal (follow `main`) | `AAC_TAG=latest` or unset | runs |
-| Follow `develop` | `AAC_TAG=develop` | runs (keeps pulling `develop`) |
-| Local build on the server | `AAC_TAG=dev` | freeze it with `touch HOLD` |
-
-Local-build example (when you need to test changes without going through GitHub):
-
-```bash
-cd /opt/many-ai-cli
-touch HOLD                            # freeze the auto-update cron
-docker build -t ghcr.io/ishizakahiroshi/many-ai-cli:dev \
-  -f src/deploy/docker/Dockerfile src # src/ = a checkout of this repo
-# set AAC_TAG=dev in .env, then:
-docker compose up -d
-
-# back to normal operation:
-# set AAC_TAG=latest in .env, then:
-docker compose up -d && rm HOLD
-```
-
-For a local Docker build, start from a clean checkout rather than a working home directory. The per-Dockerfile ignore file excludes credentials, AI-agent state, worktree metadata, logs, transcripts, and other local artifacts before the build context is sent to Docker. The Dockerfile pins official base images by manifest digest, verifies the Cursor archive SHA-256 before extraction, and installs the provider CLIs from the tracked exact-version npm lockfile. These checks protect the build input boundary; they do not claim bit-for-bit reproducibility because Ubuntu apt updates remain live and the Cursor archive hash is a literal HTTPS TOFU pin.
-
-The retained input-pin checks are static protection; passing them does not establish a successful container build, runtime compatibility or v0.10.0 Docker support.
-
-</details>
 
 ---
 

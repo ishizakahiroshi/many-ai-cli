@@ -27,7 +27,7 @@ Cùng một máy có thể kiêm **A và B** (vừa chạy AI local vừa nối 
 |---|---|---|---|---|
 | Chỉ chạy AI trên PC (không remote) | `many-ai-cli` (đầy đủ) | A | Có | README «Quick Start» / «Bắt đầu nhanh» |
 | Chạy AI trên PC **và** nối remote | Chỉ `many-ai-cli` (đầy đủ) ※ B đã nhúng | A＋B | Có | README «Quick Start» + các bước remote bên dưới |
-| Chỉ dùng AI remote · qua PC · **agent cấu hình tự động** | `many-ai-cli-launcher` | B | Có (tối thiểu) | [Server đơn (pnpm)](../manual_remote-server-agent-single.md) / [Docker](../manual_remote-server-agent-docker.md) |
+| Chỉ dùng AI remote · qua PC · **agent cấu hình tự động** | `many-ai-cli-launcher` | B | Có (tối thiểu) | [Server đơn (pnpm)](../manual_remote-server-agent-single.md) / Docker |
 | Chỉ dùng AI remote · qua PC · **nhập profile thủ công bằng nút UI** | `many-ai-cli-launcher` | B | Có (tối thiểu) | `docs/local/archive/v0.3.2/plan_server-profile-export-import.md` |
 | Chỉ dùng AI remote · **VPN thẳng từ điện thoại** | Không cài gì (PWA) | C | Không | Hub UI → «📱 Kết nối mobile» |
 
@@ -40,7 +40,7 @@ Cùng một máy có thể kiêm **A và B** (vừa chạy AI local vừa nối 
 
 Khi agent cấu hình tự động cho “dùng AI trên server”, có **hai** quy trình. Khác nhau **không** nằm ở kỹ thuật tunnel, mà ở **Hub remote đã chạy sẵn hay chưa**:
 
-| | [Server đơn (pnpm)](../manual_remote-server-agent-single.md) | [Docker](../manual_remote-server-agent-docker.md) |
+| | [Server đơn (pnpm)](../manual_remote-server-agent-single.md) | Docker |
 |---|---|---|
 | Cài remote | pnpm global install | Pull image GHCR bằng compose |
 | Khởi động Hub | `serve` (mỗi lần, hoặc systemd / tmux / nohup thường trú) | `restart: unless-stopped` thường trú |

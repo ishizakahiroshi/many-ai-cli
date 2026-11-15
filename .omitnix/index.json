@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "75b2d9c9adf200489ada65fca60eac869fee751a",
+    "commit": "063f8224263cc6dbcca6350c78a31025c09b2135",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2083,
-    "analyzed": 1621,
+    "discovered": 2066,
+    "analyzed": 1617,
     "unresolved": 15,
     "unknown": 0,
-    "unclaimed": 447,
+    "unclaimed": 434,
     "skipped_by_config": 0
   },
   "files": [
@@ -196,14 +196,6 @@
     },
     {
       "path": ".github/workflows/backport-to-develop.yml",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.yml'"
-    },
-    {
-      "path": ".github/workflows/docker-image.yml",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -473,124 +465,6 @@
       "fields": {},
       "unresolved": [],
       "reason": "no adapter claims '.png'"
-    },
-    {
-      "path": "deploy/docker/Dockerfile",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '(no extension)'"
-    },
-    {
-      "path": "deploy/docker/Dockerfile.dockerignore",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.dockerignore'"
-    },
-    {
-      "path": "deploy/docker/README.md",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.md'"
-    },
-    {
-      "path": "deploy/docker/aac-update.sh",
-      "adapter": "shell",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "any-ai-cli イメージ自動更新スクリプト（cron から日次実行）"
-        },
-        "authentication": {
-          "state": "out_of_scope"
-        },
-        "authorization": {
-          "state": "out_of_scope"
-        },
-        "reads": {
-          "state": "out_of_scope"
-        },
-        "writes": {
-          "state": "out_of_scope"
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "deploy/docker/compose.yaml",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.yaml'"
-    },
-    {
-      "path": "deploy/docker/entrypoint.sh",
-      "adapter": "shell",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "value",
-          "value": "any-ai-cli コンテナ entrypoint: Hub と socat 中継を併走させる。"
-        },
-        "authentication": {
-          "state": "out_of_scope"
-        },
-        "authorization": {
-          "state": "out_of_scope"
-        },
-        "reads": {
-          "state": "out_of_scope"
-        },
-        "writes": {
-          "state": "out_of_scope"
-        },
-        "screen_to_api": {
-          "state": "out_of_scope"
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "deploy/docker/provider-cli/package-lock.json",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.json'"
-    },
-    {
-      "path": "deploy/docker/provider-cli/package.json",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.json'"
-    },
-    {
-      "path": "deploy/docker/sshd-member.conf.template",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.template'"
-    },
-    {
-      "path": "deploy/docker/users/example.yaml",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.yaml'"
     },
     {
       "path": "docs/bot/README.md",
@@ -1306,14 +1180,6 @@
       "reason": "no adapter claims '.md'"
     },
     {
-      "path": "docs/manual_docker-multiuser.md",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.md'"
-    },
-    {
       "path": "docs/manual_iris-execution-contract.md",
       "adapter": null,
       "status": "unclaimed",
@@ -1347,14 +1213,6 @@
     },
     {
       "path": "docs/manual_release.md",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.md'"
-    },
-    {
-      "path": "docs/manual_remote-server-agent-docker.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -1418,14 +1276,6 @@
       "reason": "no adapter claims '.md'"
     },
     {
-      "path": "docs/vi/manual_docker-multiuser.vi.md",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.md'"
-    },
-    {
       "path": "docs/vi/manual_local-llm-hyperv-host.vi.md",
       "adapter": null,
       "status": "unclaimed",
@@ -1451,14 +1301,6 @@
     },
     {
       "path": "docs/vi/manual_release.vi.md",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.md'"
-    },
-    {
-      "path": "docs/vi/manual_remote-server-agent-docker.vi.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -41559,66 +41401,6 @@
         "summary": {
           "state": "value",
           "value": "CLAUDE.md が再び太らないようにするための検査。"
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "none_observed",
-          "value": []
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "scripts/check-docker-build-inputs.mjs",
-      "adapter": "tsjs",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
-        },
-        "authentication": {
-          "state": "not_configured"
-        },
-        "authorization": {
-          "state": "not_configured"
-        },
-        "reads": {
-          "state": "none_observed",
-          "value": []
-        },
-        "writes": {
-          "state": "none_observed",
-          "value": []
-        },
-        "screen_to_api": {
-          "state": "none_observed",
-          "value": []
-        }
-      },
-      "unresolved": []
-    },
-    {
-      "path": "scripts/check-docker-build-inputs.test.mjs",
-      "adapter": "tsjs",
-      "status": "analyzed",
-      "fields": {
-        "summary": {
-          "state": "none_observed",
-          "value": null
         },
         "authentication": {
           "state": "not_configured"

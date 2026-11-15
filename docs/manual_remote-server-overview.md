@@ -18,7 +18,7 @@ many-ai-cli は「自分の PC で AI を動かす人」と「リモートサー
 |---|---|---|---|---|
 | 自分の PC で AI を動かす（リモート無し） | `many-ai-cli`（フル） | A | あり | README「Quick Start」 |
 | 自分の PC でも動かす ＋ リモートにも繋ぐ | `many-ai-cli`（フル）だけ ※Bは内蔵 | A＋B | あり | README「Quick Start」＋下のリモート手順 |
-| リモートの AI だけ・PC 経由・**エージェントで自動設定** | `many-ai-cli-launcher` | B | あり（最小） | [単一サーバー(pnpm)](manual_remote-server-agent-single.md) / [Docker](manual_remote-server-agent-docker.md) |
+| リモートの AI だけ・PC 経由・**エージェントで自動設定** | `many-ai-cli-launcher` | B | あり（最小） | [単一サーバー(pnpm)](manual_remote-server-agent-single.md) |
 | リモートの AI だけ・PC 経由・**UI ボタンで手動取り込み** | `many-ai-cli-launcher` | B | あり（最小） | Hub 接続ダイアログの「リモートから取得」ボタンで SSH-pull |
 | リモートの AI だけ・**スマホ VPN 直結** | 何も入れない（PWA） | C | なし | Hub UI の「📱 モバイル接続」 |
 
@@ -29,16 +29,13 @@ many-ai-cli は「自分の PC で AI を動かす人」と「リモートサー
 
 ## リモート設定手順の選び方（serve / tunnel）
 
-「サーバーの AI を使う」人がエージェントで自動設定する場合、手順は2つ。違いは **接続技術ではなく「Hub がもう動いているか」**：
+「サーバーの AI を使う」人がエージェントで自動設定する場合の手順は、[単一サーバー（pnpm）](manual_remote-server-agent-single.md)です。
 
-| | [単一サーバー（pnpm）](manual_remote-server-agent-single.md) | [Docker](manual_remote-server-agent-docker.md) |
-|---|---|---|
-| リモート導入 | pnpm global install | GHCR イメージを compose で pull |
-| Hub の起動 | `serve`（都度 or systemd / tmux / nohup で常駐） | `restart: unless-stopped` で常駐 |
-| launcher モード | `serve`（トークン不要） | `tunnel`（`token_command` で自動取得） |
-| 向く人 | 単一ユーザー・隔離不要（**物理1台でも可**） | 複数ユーザー隔離・自動更新を仕組み化 |
+- リモート導入: pnpm global install
+- Hub の起動: `serve`（都度 or systemd / tmux / nohup で常駐）
+- launcher モード: `serve`（トークン不要）
 
-> **「常駐」は Docker 専用ではない。** 物理 Linux 1台でも `serve` を systemd / tmux で常駐させ、launcher を tunnel モードにすれば同じ運用ができる（その場合の `token_command` 例は[単一サーバー手順の「運用形態」節](manual_remote-server-agent-single.md#運用形態都度起動--常駐)を参照）。
+> 物理 Linux 1台でも `serve` を systemd / tmux で常駐させ、launcher を tunnel モードにすれば常駐運用ができる（その場合の `token_command` 例は[単一サーバー手順の「運用形態」節](manual_remote-server-agent-single.md#運用形態都度起動--常駐)を参照）。
 
 ## 関連
 

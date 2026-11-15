@@ -312,6 +312,4 @@ Lưu ý:
 
 - Muốn AI agent cấu hình trọn gói (dán vào AI trên PC local, cấu hình qua SSH):
   - Server đơn (pnpm): [manual_remote-server-agent-single.md](../manual_remote-server-agent-single.md)
-  - Docker: [manual_remote-server-agent-docker.md](../manual_remote-server-agent-docker.md)
-- Vận hành Docker đa user: [manual_docker-multiuser.md](../manual_docker-multiuser.md)
 - [README.ja.md: Bảo mật](../../README.ja.md#セキュリティ)

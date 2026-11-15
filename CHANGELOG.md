@@ -87,6 +87,12 @@ Release artifacts are published at
 
 ### Changed
 
+- **The Docker files are removed from the repository.** `deploy/docker/` (the
+  Dockerfile, compose files, per-user examples and the update script), its
+  input-pin check and the Docker workflow notice are gone, together with the
+  two Docker operation manuals and the Docker recipes in the README. Official
+  Docker images were already unsupported for v0.10.0; to run a remote Hub, use
+  the Linux binary over SSH. The old files stay in the Git history.
 - **The "At launch: …" permission mode moved from the session card to the top
   header.** It no longer takes room from the session name in the sidebar; it
   now sits in the header next to the model and effort badges of the session you

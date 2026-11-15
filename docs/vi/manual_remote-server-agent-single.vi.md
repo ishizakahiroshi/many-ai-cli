@@ -187,4 +187,3 @@ Lưu ý:
 
 - Lối vào (cài gì, đi quy trình nào): [manual_remote-server-overview.md](../manual_remote-server-overview.md)
 - Cơ chế & xử lý sự cố: [manual_remote-server-ssh-tunnel.md](../manual_remote-server-ssh-tunnel.md)
-- Task cấu hình bản Docker: [manual_remote-server-agent-docker.md](../manual_remote-server-agent-docker.md)

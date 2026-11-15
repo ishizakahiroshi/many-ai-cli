@@ -21,8 +21,6 @@
 | [`manual_slash_commands_update.md`](../manual_slash_commands_update.md) | [`manual_slash_commands_update.vi.md`](manual_slash_commands_update.vi.md) | Cập nhật slash-commands |
 | [`manual_remote-server-ssh-tunnel.md`](../manual_remote-server-ssh-tunnel.md) | [`manual_remote-server-ssh-tunnel.vi.md`](manual_remote-server-ssh-tunnel.vi.md) | Cơ chế & xử lý sự cố SSH tunnel |
 | [`manual_remote-server-agent-single.md`](../manual_remote-server-agent-single.md) | [`manual_remote-server-agent-single.vi.md`](manual_remote-server-agent-single.vi.md) | Agent setup server đơn (pnpm) |
-| [`manual_remote-server-agent-docker.md`](../manual_remote-server-agent-docker.md) | [`manual_remote-server-agent-docker.vi.md`](manual_remote-server-agent-docker.vi.md) | Agent setup Docker |
-| [`manual_docker-multiuser.md`](../manual_docker-multiuser.md) | [`manual_docker-multiuser.vi.md`](manual_docker-multiuser.vi.md) | Docker đa user |
 | [`manual_ollama-cloud-routing.md`](../manual_ollama-cloud-routing.md) | [`manual_ollama-cloud-routing.vi.md`](manual_ollama-cloud-routing.vi.md) | Ollama Cloud routing |
 | [`manual_local-llm-hyperv-host.md`](../manual_local-llm-hyperv-host.md) | [`manual_local-llm-hyperv-host.vi.md`](manual_local-llm-hyperv-host.vi.md) | Local LLM trên Hyper-V host |
 | [`manual_release.md`](../manual_release.md) | [`manual_release.vi.md`](manual_release.vi.md) | Quy trình release |

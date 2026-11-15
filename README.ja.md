@@ -1582,9 +1582,9 @@ runner で行います。手動実行の `rust-migration.yml` は未受入候補
 
 ---
 
-## リモートサーバー / Docker 運用
+## リモートサーバー運用
 
-> **v0.10.0 のサポート範囲:** 公式 Docker image・コンテナビルド・自動更新はサポート対象外です。現在のコンテナビルドには既知の失敗があります。image の自動公開は停止しました。GHCR に残していた旧 image は、CVE-2026-111497 の影響を受ける Node.js を含んでいたため 2026-10-25 に削除しました。資材は履歴として保持しますが、継続公開・自動更新は保証しません。Linux バイナリと SSH によるリモート運用は v0.10.0 の対象に残ります。[Docker のサポート方針](deploy/docker/README.md)も参照してください。
+> **Docker は提供していません。** 公式の Docker image・コンテナビルド・コンテナ運用の資材は、このリポジトリから削除しました。リモートで Hub を動かすには、Linux バイナリと SSH を使います。旧コンテナ資材は Git の履歴に残っています。
 
 Docker はリモートサーバー運用の必須条件ではありません。複数人で使う場合でも、各利用者が自分の AI CLI アカウントでログインし、OS ユーザー / ホームディレクトリ / 作業フォルダ / Hub ポートを分ければ、通常の SSH + `tmux` / `screen` / `systemd` でも運用できます。まずは自分たちのチームに合う方法を試してください。
 
@@ -1594,82 +1594,6 @@ Docker を使わない場合は、特に次の点に注意してください。
 - **作業フォルダとポートを利用者ごとに分ける。** 例: A さんは `/srv/many-ai-cli/work/a` + `47777`、B さんは `/srv/many-ai-cli/work/b` + `47778`
 - **Python / Node / bun などの実行環境をプロジェクト単位で固定する。** `venv` / `uv`、`nvm` / `mise`、プロジェクトローカルの lockfile を使うと衝突を避けやすくなります
 - **1 つの AI CLI アカウントを複数人で共有しない。** 必ず各利用者が自分のアカウントでログインしてください（詳細は上の「アカウントの複数人共有は禁止」参照）
-
-<details>
-<summary>旧版 / v0.10.0 より前の Docker 手順（サポート対象外）</summary>
-
-以下のビルド・compose・cron の例は、従来の Docker 運用を履歴として残したものです。v0.10.0 でサポートするセットアップ・更新手順ではありません。
-
-コンテナ運用一式は [`deploy/docker/`](deploy/docker/) に保持しています（1 ユーザー = 1 コンテナ。Hub の公開は `127.0.0.1` 限定で、SSH トンネル等を介して到達する前提です。前節「ローカル実行限定」の通り、外部公開は行わないでください）。従来は [`deploy/docker/users/example.yaml`](deploy/docker/users/example.yaml) を `users/<user>.yaml` にコピーし、ユーザー名とポートを置き換えて `compose.yaml` に追加していました。
-
-従来は `main` / `develop` の push に対する検証成功後、GitHub Actions が GHCR へ image を公開していました。自動公開は停止し、[`docker-image.yml`](.github/workflows/docker-image.yml) は、手動実行で案内を表示するだけの workflow になりました（image のビルド・ログイン・push は行いません）。GHCR のパッケージは 2026-10-25 に削除したため、以下の旧タグ名はもう pull できません:
-
-```
-ghcr.io/ishizakahiroshi/many-ai-cli:latest      # 旧 main タグ
-ghcr.io/ishizakahiroshi/many-ai-cli:develop     # 旧 develop タグ
-ghcr.io/ishizakahiroshi/many-ai-cli:sha-<hash>  # 旧コミット単位タグ
-```
-
-### 常に最新イメージで動かす
-
-[`deploy/docker/aac-update.sh`](deploy/docker/aac-update.sh) を `compose.yaml` と同じディレクトリに置き、日次 cron に登録します。設定中のタグを pull し、**イメージが実際に変わったコンテナだけ** 再作成します（変化なしなら無停止）:
-
-```cron
-# root crontab — 毎日 04:30 に実行
-30 4 * * * /opt/many-ai-cli/aac-update.sh >> /var/log/aac-update.log 2>&1
-```
-
-### 更新による再起動で消えるもの・残るもの
-
-新しいイメージが無い日は cron は完全に何もしません（無停止）。イメージが**変わった**日は該当コンテナが再作成され、Hub が再起動します。各ユーザーへの影響は次のとおりです。
-
-| | 項目 | 理由 |
-|---|---|---|
-| ❌ 消える | 動作中の AI セッション（claude / codex の PTY プロセス）と Hub UI 上のセッションカード | プロセスはコンテナと共に終了 |
-| ✅ 残る | Hub のアクセストークン（`~/.many-ai-cli/config.yaml`） | ホーム volume で永続化 — **tunnel モードのランチャープロファイルはそのまま使い続けられる** |
-| ✅ 残る | AI CLI のログイン状態（Claude 認証など） | 同上（ホーム配下） |
-| ✅ 残る | 作業中のリポジトリ・ファイル | work ディレクトリを bind mount |
-| ✅ 残る | セッションログ（`~/.many-ai-cli/logs/`） | 同上（ホーム配下） |
-| △ 復元可 | AI との会話履歴 | provider CLI がホーム配下に履歴を保持。新しいセッションで `--resume` 系の再開が可能 |
-
-終了は猶予付きの正常終了です（`stop_grace_period: 40s` + entrypoint が wrapper の終了を最大 20 秒待機）。
-
-運用ティップス（特にマルチユーザー運用 — cron は**全ユーザー**のコンテナを一斉に再作成します）:
-
-- **cron の時刻は慎重に選ぶ。** 深夜に長時間 AI タスクを走らせるユーザーがいると 04:30 で切られる可能性があります。誰も作業しない時間帯を選び、全ユーザーに周知してください。
-- **大事な実行の前は凍結する。** `touch /opt/many-ai-cli/HOLD` で更新をスキップ（全ユーザー対象）。終わったら `rm HOLD` で再開。
-- **従来のタグ動作。** 旧 publisher では `AAC_TAG=develop` が develop の push、`latest` が `main` に追従していました。現在はいずれも自動更新を保証しません。
-
-### 開発中のバイパス
-
-イメージタグは compose プロジェクトの `.env` の `AAC_TAG` で切り替えます（未設定なら `latest`）。`compose.yaml` と同じディレクトリに `HOLD` ファイルを置くと自動更新 cron が凍結されます。
-
-| モード | `.env` | 自動更新 cron |
-|---|---|---|
-| 通常運用（`main` 追従） | `AAC_TAG=latest` または未設定 | 動作する |
-| `develop` 追従 | `AAC_TAG=develop` | 動作する（`develop` の最新を追従） |
-| サーバー上でローカルビルド | `AAC_TAG=dev` | `touch HOLD` で凍結する |
-
-ローカルビルドの例（GitHub を経由せずに変更を試したいとき）:
-
-```bash
-cd /opt/many-ai-cli
-touch HOLD                            # 自動更新 cron を凍結
-docker build -t ghcr.io/ishizakahiroshi/many-ai-cli:dev \
-  -f src/deploy/docker/Dockerfile src # src/ = このリポジトリの checkout
-# .env に AAC_TAG=dev を設定してから:
-docker compose up -d
-
-# 通常運用へ戻す:
-# .env を AAC_TAG=latest に戻してから:
-docker compose up -d && rm HOLD
-```
-
-Docker をローカルビルドするときは、作業中のホームディレクトリではなく clean checkout から開始してください。Dockerfile 専用の ignore 設定が、Docker daemon へ送る前に認証情報、AI エージェントの状態、worktree メタデータ、ログ、transcript などのローカル作業物を除外します。Dockerfile は公式 base image を manifest digest で固定し、Cursor archive の SHA-256 を展開前に検証し、provider CLI は追跡した exact version の npm lockfile からインストールします。これは Docker build input の境界を守るための検査であり、Ubuntu apt は live 更新、Cursor の hash は公式 HTTPS byte に対する literal TOFU pin のため、bit-for-bit の完全再現を意味しません。
-
-保持している入力 pin の検査は静的な保護です。成功しても、コンテナビルド・実行時の互換性・v0.10.0 の Docker サポートが成立した証拠にはなりません。
-
-</details>
 
 ---
 

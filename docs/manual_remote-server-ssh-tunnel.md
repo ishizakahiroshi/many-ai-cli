@@ -303,6 +303,4 @@ ss -ltnp | grep ':47777'
 
 - AI エージェントに丸ごと設定させたい場合（手元 PC の AI に貼り付けて SSH 越しに設定）:
   - 単一サーバー版（pnpm）: [manual_remote-server-agent-single.md](manual_remote-server-agent-single.md)
-  - Docker 版: [manual_remote-server-agent-docker.md](manual_remote-server-agent-docker.md)
-- Docker マルチユーザー運用の詳細: [manual_docker-multiuser.md](manual_docker-multiuser.md)
 - [README.ja.md: セキュリティ](../README.ja.md#セキュリティ)

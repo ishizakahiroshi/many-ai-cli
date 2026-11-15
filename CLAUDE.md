@@ -136,7 +136,6 @@ docs/local/        設計書・plan 等（非公開）
 | 実装・コーディング（Rust / TypeScript）、共通UI部品・確認文言 | `CLAUDE/coding.md` / [docs/ui-components.md](docs/ui-components.md) / `scripts/check-ui-components.mjs`（Validate CI） |
 | Rust版のローカルビルド・起動・停止（手元の手順） | [reference_rust-local-build.md](docs/local/reference/reference_rust-local-build.md)（ローカルに存在する場合） |
 | ビルド・配布・クロスコンパイル | `CLAUDE/deployment.md` |
-| v0.10.0の公式Docker提供範囲（対象外） | [deploy/docker/README.md](deploy/docker/README.md) |
 | 全修正のビルド元への反映・context分割・docs命名・AI作業モデル・plan自走/停止条件 | `CLAUDE/development.md` |
 | Git・コミット・出力ルール | `CLAUDE/operations.md` |
 | Windows 開発環境固有設定 | `CLAUDE/windows_setup.md` |

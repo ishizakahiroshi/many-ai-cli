@@ -178,4 +178,3 @@ profiles:
 
 - 入口（どれを入れて、どの手順を使うか）: [manual_remote-server-overview.md](manual_remote-server-overview.md)
 - 仕組み・トラブル対処: [manual_remote-server-ssh-tunnel.md](manual_remote-server-ssh-tunnel.md)
-- Docker 版の設定タスク: [manual_remote-server-agent-docker.md](manual_remote-server-agent-docker.md)
