@@ -378,6 +378,36 @@ class ReleaseWorkflowTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "differ"):
                 MODULE.verify_linux_payloads(expected, deb, rpm)
 
+    def test_rpm_build_id_links_are_allowed_only_for_the_shipped_binaries(self):
+        expected, deb, rpm = (self.root / name for name in ("expected", "deb", "rpm"))
+        for directory in (expected, deb, rpm):
+            for name in ("bin/many-ai-cli", "bin/many-ai-cli-launcher", "share/doc/many-ai-cli/LICENSE"):
+                target = directory / "usr" / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(name.encode())
+        build_id_dir = rpm / "usr/lib/.build-id/ab"
+        build_id_dir.mkdir(parents=True)
+        build_id_link = build_id_dir / ("c" * 38)
+        try:
+            build_id_link.symlink_to("../../../bin/many-ai-cli")
+        except (OSError, NotImplementedError):
+            self.skipTest("symlink creation unavailable")
+
+        original = Path.stat
+        def observed_stat(path, *args, **kwargs):
+            value = original(path, *args, **kwargs)
+            if path.name in ("many-ai-cli", "many-ai-cli-launcher") and path.parent.name == "bin":
+                values = list(value)
+                values[0] = (values[0] & ~0o777) | 0o755
+                return type(value)(values)
+            return value
+        with patch.object(Path, "stat", observed_stat):
+            MODULE.verify_linux_payloads(expected, deb, rpm)
+            unexpected = rpm / "usr/share/doc/many-ai-cli/LICENSE-link"
+            unexpected.symlink_to("LICENSE")
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                MODULE.verify_linux_payloads(expected, deb, rpm)
+
     def test_distribution_sbom_root_binds_opaque_payload_without_runtime_claim(self):
         asset = self.root / "many-ai-cli-1.0.0-linux-x64.deb"
         asset.write_bytes(b"synthetic container")

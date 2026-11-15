@@ -10,7 +10,9 @@ import argparse
 import base64
 import hashlib
 import json
-from pathlib import Path
+import os
+import posixpath
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
@@ -166,13 +168,44 @@ def prepare_assets(bundle: Path, packages: Path, output: Path, tag: str) -> None
 
 
 def verify_linux_payloads(expected: Path, deb: Path, rpm: Path) -> None:
-    def inventory(root: Path) -> dict:
+    def rpm_build_id_target(path: Path, root: Path) -> str | None:
+        relative = path.relative_to(root).parts
+        if len(relative) != 4 or relative[:2] != ("lib", ".build-id"):
+            return None
+        if not re.fullmatch(r"[0-9a-f]{2}", relative[2]):
+            return None
+        identifier, separator, duplicate = relative[3].partition(".")
+        if (not re.fullmatch(r"[0-9a-f]{2,126}", identifier) or len(identifier) % 2
+                or (separator and not re.fullmatch(r"[1-9][0-9]*", duplicate))):
+            return None
+
+        target = PurePosixPath(os.readlink(path))
+        if target.is_absolute():
+            if target.parts[:2] != ("/", "usr"):
+                return None
+            relative_target = PurePosixPath(*target.parts[2:])
+        else:
+            parent = PurePosixPath(*relative[:-1])
+            relative_target = PurePosixPath(posixpath.normpath(str(parent / target)))
+        name = relative_target.as_posix()
+        if name not in {"bin/many-ai-cli", "bin/many-ai-cli-launcher"}:
+            return None
+        target_file = root.joinpath(*relative_target.parts)
+        if target_file.is_symlink() or not target_file.is_file():
+            return None
+        return name
+
+    def inventory(root: Path, *, rpm_build_id_links: bool = False,
+                  expected_files: dict | None = None) -> dict:
         if root.is_symlink() or not root.is_dir():
             raise ValueError("Linux payload root must be an actual directory")
         files = {}
         for path in root.rglob("*"):
             if path.is_symlink():
-                raise ValueError("Linux payload contains a symlink")
+                target = rpm_build_id_target(path, root) if rpm_build_id_links else None
+                if target is None or expected_files is None or digest(root / target) != expected_files.get(target):
+                    raise ValueError("Linux payload contains an unexpected symlink")
+                continue
             if path.is_file():
                 files[path.relative_to(root).as_posix()] = digest(path)
             elif not path.is_dir():
@@ -181,8 +214,9 @@ def verify_linux_payloads(expected: Path, deb: Path, rpm: Path) -> None:
     wanted = inventory(expected / "usr")
     if not {"bin/many-ai-cli", "bin/many-ai-cli-launcher"} <= set(wanted):
         raise ValueError("Linux package input lacks both binaries")
-    for output in (deb, rpm):
-        if inventory(output / "usr") != wanted:
+    for output, allow_rpm_build_id_links in ((deb, False), (rpm, True)):
+        if inventory(output / "usr", rpm_build_id_links=allow_rpm_build_id_links,
+                     expected_files=wanted) != wanted:
             raise ValueError("packaged Linux binaries/notices differ from canonical ZIP payload")
         if any(p.name != "usr" for p in output.iterdir()):
             raise ValueError("unexpected Linux package root entry")
