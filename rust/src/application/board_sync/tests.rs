@@ -984,6 +984,13 @@ fn declared_plans_are_kept_as_the_board_keeps_a_reference() {
     let found = tails(&format!("Done. 成果: {secret_url}"), root);
     assert_eq!(found.outcome, None);
     assert!(found.rest.contains("成果"), "{}", found.rest);
+    // A link cut short with an ellipsis ("…") is not a link: it would open a page
+    // that does not exist. It stays in the note text too.
+    let cut = "https://example.com/commit/a57f7…";
+    assert_eq!(plan_ref(cut, root), None);
+    let found = tails(&format!("Done. 成果: {cut}"), root);
+    assert_eq!(found.outcome, None);
+    assert!(found.rest.contains(cut), "{}", found.rest);
     assert_eq!(
         plan_item_id("demo", "docs/plan_x.md"),
         "plan/demo/docs/plan_x.md"

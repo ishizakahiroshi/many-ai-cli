@@ -526,7 +526,9 @@ fn https_ok(url: &str) -> bool {
         && url.chars().count() <= REF_MAX
         && !url
             .chars()
-            .any(|c| c.is_whitespace() || c.is_control() || c == '\\')
+            // `…` is what a cut-short text ends with; a link ending in it is
+            // not a page that exists.
+            .any(|c| c.is_whitespace() || c.is_control() || c == '\\' || c == '…')
         && mask_secrets(url) == url
         && reqwest::Url::parse(url).is_ok_and(|u| {
             u.host_str().is_some()
