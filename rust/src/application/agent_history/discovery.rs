@@ -29,7 +29,7 @@ pub struct Location {
     pub reason: String,
 }
 impl Location {
-    fn found(path: PathBuf, label: &str) -> Self {
+    pub(super) fn found(path: PathBuf, label: &str) -> Self {
         Self {
             available: true,
             path: path.to_string_lossy().into_owned(),
@@ -40,6 +40,12 @@ impl Location {
     fn missing(reason: &str) -> Self {
         Self {
             reason: reason.into(),
+            ..Default::default()
+        }
+    }
+    pub(super) fn missing_owned(reason: String) -> Self {
+        Self {
+            reason,
             ..Default::default()
         }
     }
@@ -205,7 +211,9 @@ pub fn claude_conversation_id(identity: &TranscriptSessionIdentity, raw: &str) -
     }
     Some(id.to_owned())
 }
-pub(super) fn command_dir(home: &str, cwd: &str) -> PathBuf {
+/// A working directory as a folder name: lower case letters and digits, every
+/// other run replaced by one `-`; `root` when nothing is left.
+pub(super) fn slug_alnum(cwd: &str) -> String {
     let mut slug = String::new();
     for c in simple_lower(super::trim_space(cwd)).chars() {
         if c.is_ascii_lowercase() || c.is_ascii_digit() {
@@ -215,9 +223,20 @@ pub(super) fn command_dir(home: &str, cwd: &str) -> PathBuf {
         }
     }
     let slug = slug.trim_matches('-');
+    if slug.is_empty() {
+        "root".into()
+    } else {
+        slug.into()
+    }
+}
+pub(super) fn trim_cwd(cwd: &str) -> Option<&str> {
+    (!cwd.is_empty()).then_some(cwd)
+}
+#[cfg(test)]
+pub(super) fn command_dir(home: &str, cwd: &str) -> PathBuf {
     Path::new(home)
         .join(".commandcode/projects")
-        .join(if slug.is_empty() { "root" } else { slug })
+        .join(slug_alnum(cwd))
 }
 fn exact(paths: &RuntimePaths, dir: &Path, id: &str) -> Option<PathBuf> {
     if !uuid(id) {
@@ -299,6 +318,9 @@ pub fn structured_path(
     if identity.cwd.is_empty() {
         return None;
     }
+    if let Some(t) = super::declared::declaration(&identity.provider) {
+        return super::declared::find(paths, identity, &t);
+    }
     match identity.provider.as_str() {
         "claude" => {
             let root = home(&identity.claude_dir, &identity.home_dir, ".claude")?;
@@ -334,19 +356,14 @@ pub fn structured_path(
                 .collect::<Vec<_>>();
             nearest(paths, &dirs, identity, "HistoryCodexMeta")
         }
-        "command-code" => {
-            if super::trim_space(&identity.home_dir).is_empty() {
-                return None;
-            }
-            let dir = command_dir(&identity.home_dir, &identity.cwd);
-            exact(paths, &dir, &identity.agent_session_id)
-                .or_else(|| nearest(paths, &[dir], identity, "HistoryCommandMeta"))
-        }
         _ => None,
     }
 }
 pub fn location(paths: &RuntimePaths, identity: &TranscriptSessionIdentity) -> Location {
     let missing = Location::missing;
+    if let Some(t) = super::declared::declaration(&identity.provider) {
+        return super::declared::location(paths, identity, &t);
+    }
     match identity.provider.as_str() {
         "claude" => {
             let Some(root) = home(&identity.claude_dir, &identity.home_dir, ".claude") else {
@@ -518,34 +535,57 @@ pub fn location(paths: &RuntimePaths, identity: &TranscriptSessionIdentity) -> L
                 })
             }
         }
-        "command-code" => {
-            if identity.home_dir.is_empty() || identity.cwd.is_empty() {
-                return missing("Command Code project directory is unavailable");
-            }
-            if let Some(path) = structured_path(paths, identity) {
-                return Location::found(path, "Command Code session transcript");
-            }
-            let dir = command_dir(&identity.home_dir, &identity.cwd);
-            if existing_dir(paths, &dir) {
-                Location::found(dir, "Command Code project transcripts")
-            } else {
-                missing("Command Code transcript not found yet")
-            }
-        }
-        "opencode" => {
-            if identity.home_dir.is_empty() {
-                return missing("opencode home directory is unavailable");
-            }
-            let path = Path::new(&identity.home_dir).join(".local/share/opencode/opencode.db");
-            if existing_file(paths, &path) {
-                Location::found(
-                    path,
-                    "opencode session store (shared across all sessions, not scoped to this one)",
-                )
-            } else {
-                missing("opencode session store not found")
-            }
-        }
         _ => missing("This provider's native transcript location is not supported yet"),
+    }
+}
+/// The hand-written lookups the declaration replaced, kept as an oracle so the
+/// tests can show that the declared lookup gives the same answers.
+#[cfg(test)]
+pub(super) mod legacy {
+    use super::*;
+    pub fn command_structured_path(
+        paths: &RuntimePaths,
+        identity: &TranscriptSessionIdentity,
+    ) -> Option<PathBuf> {
+        if identity.cwd.is_empty() || super::super::trim_space(&identity.home_dir).is_empty() {
+            return None;
+        }
+        let dir = command_dir(&identity.home_dir, &identity.cwd);
+        exact(paths, &dir, &identity.agent_session_id)
+            .or_else(|| nearest(paths, &[dir], identity, "HistoryCommandMeta"))
+    }
+    pub fn command_location(
+        paths: &RuntimePaths,
+        identity: &TranscriptSessionIdentity,
+    ) -> Location {
+        if identity.home_dir.is_empty() || identity.cwd.is_empty() {
+            return Location::missing("Command Code project directory is unavailable");
+        }
+        if let Some(path) = command_structured_path(paths, identity) {
+            return Location::found(path, "Command Code session transcript");
+        }
+        let dir = command_dir(&identity.home_dir, &identity.cwd);
+        if existing_dir(paths, &dir) {
+            Location::found(dir, "Command Code project transcripts")
+        } else {
+            Location::missing("Command Code transcript not found yet")
+        }
+    }
+    pub fn opencode_location(
+        paths: &RuntimePaths,
+        identity: &TranscriptSessionIdentity,
+    ) -> Location {
+        if identity.home_dir.is_empty() {
+            return Location::missing("opencode home directory is unavailable");
+        }
+        let path = Path::new(&identity.home_dir).join(".local/share/opencode/opencode.db");
+        if existing_file(paths, &path) {
+            Location::found(
+                path,
+                "opencode session store (shared across all sessions, not scoped to this one)",
+            )
+        } else {
+            Location::missing("opencode session store not found")
+        }
     }
 }

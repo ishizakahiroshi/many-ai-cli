@@ -527,3 +527,246 @@ async fn grok_history_preserves_missing_file_before_pagination_error_and_user_fi
     assert_eq!(response["messages"][0]["text"], "answer");
     assert!(!response.to_string().contains("PRIVATE"));
 }
+fn same_location(a: &discovery::Location, b: &discovery::Location) -> bool {
+    a.available == b.available && a.path == b.path && a.label == b.label && a.reason == b.reason
+}
+#[test]
+fn declared_command_code_and_opencode_lookups_equal_the_hand_written_ones() {
+    let f = fixture();
+    let home = f.paths.root().join("actor");
+    let base = TranscriptSessionIdentity {
+        provider: "command-code".into(),
+        cwd: "synthetic/workspace".into(),
+        home_dir: home.to_string_lossy().into_owned(),
+        started_at: "2026-10-05T00:00:00Z".into(),
+        ..Default::default()
+    };
+    let check = |identity: &TranscriptSessionIdentity| {
+        assert_eq!(
+            discovery::structured_path(&f.paths, identity),
+            discovery::legacy::command_structured_path(&f.paths, identity)
+        );
+        assert!(same_location(
+            &discovery::location(&f.paths, identity),
+            &discovery::legacy::command_location(&f.paths, identity)
+        ));
+    };
+    // Nothing on disk yet, then missing inputs.
+    check(&base);
+    for broken in [
+        TranscriptSessionIdentity {
+            home_dir: String::new(),
+            ..base.clone()
+        },
+        TranscriptSessionIdentity {
+            cwd: String::new(),
+            ..base.clone()
+        },
+        TranscriptSessionIdentity {
+            started_at: "bad".into(),
+            ..base.clone()
+        },
+    ] {
+        check(&broken);
+    }
+    // The project folder exists but holds nothing usable.
+    let dir = discovery::command_dir(&base.home_dir, &base.cwd);
+    write(&dir.join("not-a-session.jsonl"), "invalid\n");
+    write(&dir.join("other.txt"), "x");
+    check(&base);
+    // One matching file by time, a wrong type, a wrong folder, too far in time.
+    write(
+        &dir.join("a.jsonl"),
+        r#"{"type":"session","id":"one","cwd":"synthetic/workspace","timestamp":"2026-10-05T00:00:01Z"}"#,
+    );
+    write(
+        &dir.join("b.jsonl"),
+        r#"{"type":"message","cwd":"synthetic/workspace","timestamp":"2026-10-05T00:00:00Z"}"#,
+    );
+    write(
+        &dir.join("c.jsonl"),
+        r#"{"type":"session","cwd":"synthetic/elsewhere","timestamp":"2026-10-05T00:00:00Z"}"#,
+    );
+    write(
+        &dir.join("d.jsonl"),
+        r#"{"type":"session","cwd":"synthetic/workspace","timestamp":"2026-10-05T01:00:00Z"}"#,
+    );
+    check(&base);
+    assert!(discovery::structured_path(&f.paths, &base).is_some());
+    // A second candidate within a second makes it ambiguous.
+    write(
+        &dir.join("e.jsonl"),
+        r#"{"type":"session","cwd":"synthetic/workspace","timestamp":"2026-10-04T23:59:59.500Z"}"#,
+    );
+    check(&base);
+    assert!(discovery::structured_path(&f.paths, &base).is_none());
+    // The exact id wins, only when it is a UUID.
+    write(&dir.join(format!("{UUID}.jsonl")), "{}");
+    let exact = TranscriptSessionIdentity {
+        agent_session_id: UUID.into(),
+        ..base.clone()
+    };
+    check(&exact);
+    assert_eq!(
+        discovery::structured_path(&f.paths, &exact),
+        Some(dir.join(format!("{UUID}.jsonl")))
+    );
+    write(&dir.join("not-uuid.jsonl"), "{}");
+    check(&TranscriptSessionIdentity {
+        agent_session_id: "not-uuid".into(),
+        ..base.clone()
+    });
+
+    let op = TranscriptSessionIdentity {
+        provider: "opencode".into(),
+        ..base.clone()
+    };
+    let check_op = |identity: &TranscriptSessionIdentity| {
+        assert!(same_location(
+            &discovery::location(&f.paths, identity),
+            &discovery::legacy::opencode_location(&f.paths, identity)
+        ));
+    };
+    check_op(&op);
+    check_op(&TranscriptSessionIdentity {
+        home_dir: String::new(),
+        ..op.clone()
+    });
+    write(&home.join(".local/share/opencode/opencode.db"), "x");
+    check_op(&op);
+    assert!(discovery::structured_path(&f.paths, &op).is_none());
+}
+
+fn tool_like() -> crate::proto::provider::TranscriptDefinition {
+    serde_json::from_str(
+        r#"{"root":"{env:SYNTH_APPDATA}/tool/cli/transcripts","extension":"json","find":["index"],
+        "index":{"file":"{env:SYNTH_APPDATA}/tool/cli/sessions.db","table":"sessions","id_column":"id","cwd_column":"working_directory","time_column":"created_at"},
+        "label":"Tool transcript","not_found_reason":"Tool transcript not found yet",
+        "reader":{"format":"json","messages":"steps","role_key":"source","text_key":"message","time_key":"timestamp","roles":{"user":"user","agent":"assistant"}}}"#,
+    )
+    .unwrap()
+}
+#[test]
+fn a_declared_index_and_json_reader_locate_and_read_a_synthetic_session_file() {
+    let f = fixture();
+    let app = f.paths.root().join("appdata");
+    let env_app = app.to_string_lossy().into_owned();
+    let env = move |name: &str| (name == "SYNTH_APPDATA").then(|| env_app.clone());
+    let t = tool_like();
+    let identity = TranscriptSessionIdentity {
+        provider: "synthetic-tool".into(),
+        cwd: "synthetic/workspace".into(),
+        home_dir: f.paths.root().join("actor").to_string_lossy().into_owned(),
+        started_at: "2026-10-05T00:00:00Z".into(),
+        ..Default::default()
+    };
+    let started = crate::proto::time::parse_rfc3339(&identity.started_at)
+        .unwrap()
+        .unix_seconds();
+    // Before the index exists the location is "not found yet", not an error.
+    let missing = declared::location_with(&f.paths, &identity, &t, &env);
+    assert!(!missing.available);
+    assert_eq!(missing.reason, "Tool transcript not found yet");
+    let db = app.join("tool/cli/sessions.db");
+    std::fs::create_dir_all(db.parent().unwrap()).unwrap();
+    let c = rusqlite::Connection::open(&db).unwrap();
+    c.execute_batch("CREATE TABLE sessions (id TEXT, working_directory TEXT, created_at INTEGER);")
+        .unwrap();
+    let insert = |id: &str, cwd: &str, at: i64| {
+        c.execute(
+            "INSERT INTO sessions VALUES (?1, ?2, ?3)",
+            rusqlite::params![id, cwd, at],
+        )
+        .unwrap();
+    };
+    insert("old-session", "synthetic/workspace", started - 100_000);
+    insert("other-cwd", "synthetic/other", started + 2);
+    insert("mine-aaaa", "synthetic/workspace", started + 3);
+    let file = app.join("tool/cli/transcripts/mine-aaaa.json");
+    write(
+        &file,
+        r#"{"session_id":"mine-aaaa","steps":[
+        {"step_id":1,"timestamp":"2026-10-05T00:00:03Z","source":"system","message":"SYSTEM"},
+        {"step_id":2,"timestamp":"2026-10-05T00:00:04Z","source":"user","message":"first question"},
+        {"step_id":3,"timestamp":"2026-10-05T00:00:05Z","source":"agent","message":"answer ANTHROPIC_API_KEY=synthetic_secret","tool_calls":[]},
+        {"step_id":4,"timestamp":"2026-10-05T00:00:06Z","source":"user","message":"second"},
+        {"step_id":5,"source":"agent","message":""}]}"#,
+    );
+    let found = declared::location_with(&f.paths, &identity, &t, &env);
+    assert!(found.available, "{}", found.reason);
+    assert_eq!(PathBuf::from(&found.path), file);
+    assert_eq!(found.label, "Tool transcript");
+    // Two sessions of the same folder within a second make the answer ambiguous.
+    insert("mine-bbbb", "synthetic/workspace", started + 3);
+    write(&app.join("tool/cli/transcripts/mine-bbbb.json"), "{}");
+    assert!(!declared::location_with(&f.paths, &identity, &t, &env).available);
+    drop(c);
+    // Reading: roles map, system and empty steps are skipped, secrets are masked.
+    let reader = t.reader.clone().unwrap();
+    let all = declared::read_messages(&f.paths, &file, &reader).unwrap();
+    assert_eq!(all.len(), 3);
+    assert_eq!(all[0].role, "user");
+    assert_eq!(all[1].role, "assistant");
+    assert!(!all[1].text.contains("synthetic_secret"));
+    assert_eq!(all[2].ts, "2026-10-05T00:00:06Z");
+    let (latest, start, total) = declared::page(all.clone(), 2, None);
+    assert_eq!((latest.len(), start, total), (2, 1, 3));
+    let (older, start, _) = declared::page(all, 2, Some(start));
+    assert_eq!((older.len(), start), (1, 0));
+    assert_eq!(older[0].text, "first question");
+}
+#[test]
+fn the_declared_pattern_needs_every_part_and_never_escapes_its_root() {
+    let identity = TranscriptSessionIdentity {
+        cwd: "synthetic/workspace".into(),
+        home_dir: if cfg!(windows) {
+            "C:\\synthetic\\home"
+        } else {
+            "/synthetic/home"
+        }
+        .into(),
+        ..Default::default()
+    };
+    let none = |_: &str| None;
+    let var = if cfg!(windows) {
+        "C:\\synthetic\\var"
+    } else {
+        "/synthetic/var"
+    };
+    let some = |n: &str| (n == "VAR_A").then(|| var.to_owned());
+    assert!(declared::expand("{home}/a/{cwd_slug:alnum}", &identity, &none).is_some());
+    assert!(declared::expand("{env:VAR_A}/a", &identity, &none).is_none());
+    assert_eq!(
+        declared::expand("{env:VAR_A}/a/b", &identity, &some),
+        Some(PathBuf::from(var).join("a").join("b"))
+    );
+    let empty_home = TranscriptSessionIdentity {
+        home_dir: " ".into(),
+        ..identity.clone()
+    };
+    assert!(declared::expand("{home}/a", &empty_home, &none).is_none());
+    let no_cwd = TranscriptSessionIdentity {
+        cwd: String::new(),
+        ..identity
+    };
+    assert!(declared::expand("{home}/{cwd_slug:alnum}", &no_cwd, &none).is_none());
+    for bad in [
+        "",
+        "relative/a",
+        "{home}/../a",
+        "/abs/a",
+        "{home}x/a",
+        "{nope}/a",
+        "{home}/{env:lower}",
+        "a/{home}",
+        "{home}/a}",
+    ] {
+        assert!(
+            !crate::profile::validation::transcript_pattern_ok(bad),
+            "{bad}"
+        );
+    }
+    assert!(crate::profile::validation::transcript_pattern_ok(
+        "{home}/a/{cwd_slug:path}"
+    ));
+}

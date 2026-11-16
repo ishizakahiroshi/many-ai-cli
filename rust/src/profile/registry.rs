@@ -300,7 +300,8 @@ fn derive_capabilities(d: &Definition) -> CapabilitySummary {
         effort: d.launch.as_ref().is_some_and(|l| !l.effort_args.is_empty()),
         headless: d.launch.as_ref().is_some_and(|l| l.headless.is_some()),
         approval: available(&d.adapters.approval),
-        transcript: available(&d.adapters.transcript),
+        transcript: available(&d.adapters.transcript)
+            || d.transcript.as_ref().is_some_and(|t| t.reader.is_some()),
         usage: available(&d.adapters.usage),
         subscription: available(&d.adapters.subscription),
         permissions: available(&d.adapters.permissions),

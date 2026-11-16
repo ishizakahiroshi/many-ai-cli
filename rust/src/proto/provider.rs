@@ -233,6 +233,216 @@ pub struct Definition {
     pub routines: Option<RoutinesDefinition>,
     #[serde(rename = "screen", skip_serializing_if = "Option::is_none")]
     pub screen: Option<ScreenDefinition>,
+    #[serde(rename = "transcript", skip_serializing_if = "Option::is_none")]
+    pub transcript: Option<TranscriptDefinition>,
+}
+
+/// Where the raw conversation file of a provider lives, how a Hub session is
+/// matched to it, and (optionally) how to read it as a chat. Paths are written
+/// as patterns that start with `{home}` or `{env:NAME}`; `{cwd_slug:alnum}` and
+/// `{cwd_slug:path}` insert the session's working directory as a folder name.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TranscriptDefinition {
+    /// Directory that holds the conversation files.
+    #[serde(
+        rename = "root",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub root: String,
+    /// One file shared by every session (location only, never read as a chat).
+    #[serde(
+        rename = "file",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub file: String,
+    /// File extension without the dot (`json` by default).
+    #[serde(
+        rename = "extension",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub extension: String,
+    /// Ways to find the session's file, tried in order: `session_id` (the file
+    /// is `<agent session id>.<extension>`), `meta` (the first line of each file
+    /// names the working directory and start time), `index` (a SQLite table
+    /// maps working directory and start time to the file name).
+    #[serde(
+        rename = "find",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub find: Vec<String>,
+    /// `uuid` requires the session id to be a UUID; empty accepts a plain
+    /// file-name-safe id.
+    #[serde(
+        rename = "id_format",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub id_format: String,
+    /// When no file is found, point at `root` itself if it exists.
+    #[serde(
+        rename = "dir_fallback",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub dir_fallback: bool,
+    /// Text shown for the located file.
+    #[serde(
+        rename = "label",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub label: String,
+    /// Text shown when only the folder is located.
+    #[serde(
+        rename = "dir_label",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub dir_label: String,
+    /// Text shown when the pattern cannot be resolved for this session.
+    #[serde(
+        rename = "unavailable_reason",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub unavailable_reason: String,
+    /// Text shown when no file matches the session (yet).
+    #[serde(
+        rename = "not_found_reason",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub not_found_reason: String,
+    #[serde(rename = "meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<TranscriptMeta>,
+    #[serde(rename = "index", skip_serializing_if = "Option::is_none")]
+    pub index: Option<TranscriptIndex>,
+    #[serde(rename = "reader", skip_serializing_if = "Option::is_none")]
+    pub reader: Option<TranscriptReader>,
+}
+
+/// Keys (dotted paths) read from the first line of each candidate file. Only a
+/// line whose `kind_key` equals `kind_value` counts (both optional).
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TranscriptMeta {
+    #[serde(
+        rename = "kind_key",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub kind_key: String,
+    #[serde(
+        rename = "kind_value",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub kind_value: String,
+    #[serde(
+        rename = "cwd_key",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub cwd_key: String,
+    #[serde(
+        rename = "time_key",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub time_key: String,
+}
+
+/// SQLite table (opened read-only) that maps a session to its file name.
+/// `time_column` holds Unix seconds (`s`, default) or milliseconds (`ms`).
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TranscriptIndex {
+    #[serde(
+        rename = "file",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub file: String,
+    #[serde(
+        rename = "table",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub table: String,
+    #[serde(
+        rename = "id_column",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub id_column: String,
+    #[serde(
+        rename = "cwd_column",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub cwd_column: String,
+    #[serde(
+        rename = "time_column",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub time_column: String,
+    #[serde(
+        rename = "time_unit",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub time_unit: String,
+}
+
+/// How to read the file as a chat. `format` is `json` (one document; `messages`
+/// is the dotted path of the array) or `jsonl` (one message per line). `roles`
+/// maps the role value in the file to `user` or `assistant`; other roles are
+/// skipped.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TranscriptReader {
+    #[serde(
+        rename = "format",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub format: String,
+    #[serde(
+        rename = "messages",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub messages: String,
+    #[serde(
+        rename = "role_key",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub role_key: String,
+    #[serde(
+        rename = "text_key",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub text_key: String,
+    #[serde(
+        rename = "time_key",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub time_key: String,
+    #[serde(
+        rename = "roles",
+        deserialize_with = "go_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub roles: BTreeMap<String, String>,
 }
 
 /// Where the slash command candidates of a provider come from. At most one of
