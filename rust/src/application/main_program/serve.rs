@@ -599,6 +599,21 @@ impl HubComposition {
                 .iter()
                 .map(|provider| provider.id.clone())
                 .collect(),
+                // A provider added through providers.d / the Hub API after this
+                // point is custom too, same as a config.yaml entry.
+                custom_provider_lookup: {
+                    let registry = registry.clone();
+                    Some(Arc::new(move |provider: &str| {
+                        !crate::proto::provider::BUILTIN_PROVIDER_IDS.contains(&provider)
+                            && provider != "shell"
+                            && registry.snapshot().is_ok_and(|snapshot| {
+                                snapshot
+                                    .registry
+                                    .lookup(provider)
+                                    .is_some_and(|def| def.definition.launch.is_some())
+                            })
+                    }))
+                },
                 warning: warning.clone(),
                 approval_policy: Some(approval_rules.policy.live_callback()),
                 pending_shell: Some(crate::application::session_workers::pending_shell::lookup(

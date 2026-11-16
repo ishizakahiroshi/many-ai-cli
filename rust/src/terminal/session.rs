@@ -47,6 +47,7 @@ pub type LiveApprovalPolicy =
     Arc<dyn Fn(&str, &str, &proto::ApprovalSummary) -> bool + Send + Sync>;
 pub type EngineWarningHandler = Arc<dyn Fn(&str, &SessionError) + Send + Sync>;
 pub type DetectedModelRoute = Arc<dyn Fn(&str, &str) -> String + Send + Sync>;
+pub type CustomProviderLookup = Arc<dyn Fn(&str) -> bool + Send + Sync>;
 pub type SubscriptionName = Arc<dyn Fn(&str, &str) -> String + Send + Sync>;
 pub type BranchLookup = Arc<dyn Fn(String) -> CoreFuture<'static, String> + Send + Sync>;
 /// Reads the unanswered shell calls of a session's provider transcript. `None`
@@ -67,6 +68,9 @@ pub struct EngineOptions {
     pub idle_after: Duration,
     pub approval_phrases: BTreeMap<String, Vec<String>>,
     pub custom_providers: BTreeSet<String>,
+    /// Providers registered after the Hub started (`providers.d`) are custom
+    /// too; asked once per registration. Absence leaves only `custom_providers`.
+    pub custom_provider_lookup: Option<CustomProviderLookup>,
     /// Live policy lookup; absence means automatic approvals are disabled.
     pub approval_policy: Option<LiveApprovalPolicy>,
     /// Transcript evidence for heading-style shell prompts (audit U23). Absence
@@ -103,6 +107,7 @@ impl Default for EngineOptions {
             idle_after: Duration::from_secs(3),
             approval_phrases: BTreeMap::new(),
             custom_providers: BTreeSet::new(),
+            custom_provider_lookup: None,
             approval_policy: None,
             pending_shell: None,
             confirmation_executor: None,

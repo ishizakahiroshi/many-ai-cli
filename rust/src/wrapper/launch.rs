@@ -217,17 +217,104 @@ pub fn provider_registry_for_config(cfg: &Config) -> Result<Registry, LaunchErro
     ))
 }
 
+/// The registry the Hub serves: embedded + legacy + user (`providers.d`) +
+/// overrides + accepted distribution. Loaded once per wrapper launch, never per
+/// keystroke. A layer that cannot be read is skipped with a reason in the
+/// returned diagnostics, so built-in providers always keep launching.
+pub fn provider_registry_for_runtime(
+    cfg: &Config,
+    paths: &RuntimePaths,
+) -> Result<(Registry, Vec<String>), LaunchError> {
+    use crate::profile::store::{AcceptedDistributionStore, FileStore, HistoryStore};
+    let embedded = registry::embedded_definitions().map_err(|e| LaunchError(e.to_string()))?;
+    let (legacy, _) = config::legacy_provider_definitions(&cfg.custom_providers);
+    let mut diagnostics = Vec::new();
+    fn take(
+        layer: &str,
+        loaded: crate::profile::store::LoadedDefinitions,
+        diagnostics: &mut Vec<String>,
+    ) -> Vec<crate::proto::provider::Definition> {
+        for d in loaded.diagnostics.iter().filter(|d| d.is_error()) {
+            diagnostics.push(format!("{layer} provider definition skipped: {}", d.field));
+        }
+        loaded.definitions
+    }
+    let user = match FileStore::new(paths).load() {
+        Ok(loaded) => take("user", loaded, &mut diagnostics),
+        Err(_) => {
+            diagnostics.push("user provider definitions (providers.d) could not be read".into());
+            vec![]
+        }
+    };
+    let overrides = match HistoryStore::new(paths).load_overrides() {
+        Ok(loaded) => take("override", loaded, &mut diagnostics),
+        Err(_) => {
+            diagnostics.push("provider overrides could not be read".into());
+            vec![]
+        }
+    };
+    let accepted = take(
+        "distribution",
+        AcceptedDistributionStore::new(paths).load_definitions(),
+        &mut diagnostics,
+    );
+    let registry = Registry::build(
+        Layers {
+            embedded: Some(embedded),
+            legacy: Some(legacy),
+            user: Some(user),
+            overrides: Some(overrides),
+            accepted_distribution: Some(accepted),
+            ..Default::default()
+        },
+        &registry::default_adapters(),
+    );
+    Ok((registry, diagnostics))
+}
+
+/// Embedded + legacy only (no runtime directory is available). The wrapper's
+/// real entry point uses [`provider_registry_for_runtime`] instead.
 pub fn prepare_launch(
     cfg: &Config,
     provider: &str,
     args: WrapperArgs,
 ) -> Result<LaunchPlan, LaunchError> {
     let registry = provider_registry_for_config(cfg)?;
+    prepare_launch_with_registry(cfg, provider, args, &registry)
+}
+
+pub fn prepare_launch_with_registry(
+    cfg: &Config,
+    provider: &str,
+    args: WrapperArgs,
+    registry: &Registry,
+) -> Result<LaunchPlan, LaunchError> {
     prepare_launch_with_definition(cfg, provider, args, registry.lookup(provider).as_ref())
 }
 
+/// A provider registered outside config.yaml (a `providers.d` definition) is a
+/// custom provider exactly like a legacy `custom_providers` entry: its launch
+/// comes from the definition. Built-ins and `shell` are never custom.
+fn registry_custom_provider(
+    provider: &str,
+    definition: Option<&EffectiveDefinition>,
+) -> Option<config::CustomProvider> {
+    let def = definition?;
+    if crate::proto::provider::BUILTIN_PROVIDER_IDS.contains(&provider) || provider == "shell" {
+        return None;
+    }
+    def.definition.launch.as_ref()?;
+    Some(config::CustomProvider {
+        id: provider.into(),
+        label: def.definition.display_name.clone(),
+        approval_pattern_source: def.definition.approval_pattern_source.clone(),
+        ..Default::default()
+    })
+}
+
 /// Explicit definition injection is useful to registry callers and synthetic
-/// tests; ordinary wrap uses exactly embedded+legacy layers, like Go Run.
+/// tests. `prepare_launch` uses embedded+legacy; the wrapper runtime adds the
+/// user and override layers through [`provider_registry_for_runtime`].
 pub fn prepare_launch_with_definition(
     cfg: &Config,
     provider: &str,
@@ -236,7 +323,8 @@ pub fn prepare_launch_with_definition(
 ) -> Result<LaunchPlan, LaunchError> {
     let custom = config::effective_custom_providers(&cfg.custom_providers)
         .into_iter()
-        .find(|p| p.id == provider);
+        .find(|p| p.id == provider)
+        .or_else(|| registry_custom_provider(provider, definition));
     let login_mode = args.subscription_login;
     if login_mode && args.headless {
         return Err(LaunchError(
@@ -1310,6 +1398,136 @@ mod tests {
         ] {
             assert!(launch_prompt_file_owner(name).is_none());
         }
+    }
+    fn user_definition(id: &str) -> crate::proto::provider::Definition {
+        use crate::proto::provider::{Definition, HeadlessDefinition, LaunchDefinition};
+        Definition {
+            schema_version: 1,
+            id: id.into(),
+            display_name: "Fixture Agent X".into(),
+            launch: Some(LaunchDefinition {
+                executable: "fixture-agent-bin".into(),
+                args: argv(&["--base"]),
+                headless: Some(HeadlessDefinition {
+                    args: argv(&["-p"]),
+                    format: "text".into(),
+                    prompt_via: "arg".into(),
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+    fn runtime_plan(
+        cfg: &Config,
+        paths: &RuntimePaths,
+        provider: &str,
+        args: &[&str],
+    ) -> (LaunchPlan, Vec<String>) {
+        let (registry, diagnostics) = provider_registry_for_runtime(cfg, paths).unwrap();
+        (
+            prepare_launch_with_registry(cfg, provider, parse(args), &registry).unwrap(),
+            diagnostics,
+        )
+    }
+    #[test]
+    fn user_definition_reaches_wrapper_launch() {
+        // Was the reproduction: before the fix the wrapper saw only
+        // embedded+legacy, so custom_argv was None and the executable
+        // candidate was the provider id itself.
+        let (_root, _installed, paths) = trial();
+        crate::profile::store::FileStore::new(&paths)
+            .create_new(&user_definition("fixture-agent-x"))
+            .unwrap();
+        let (p, diagnostics) = runtime_plan(&Config::default(), &paths, "fixture-agent-x", &[]);
+        assert_eq!(p.custom_argv, Some(argv(&["fixture-agent-bin", "--base"])));
+        assert_eq!(p.executable_candidates, argv(&["fixture-agent-bin"]));
+        assert_eq!(p.display, "Fixture Agent X");
+        assert!(diagnostics.is_empty());
+    }
+    #[test]
+    fn user_definition_headless_definition_comes_from_launch_headless() {
+        let (_root, _installed, paths) = trial();
+        crate::profile::store::FileStore::new(&paths)
+            .create_new(&user_definition("fixture-agent-x"))
+            .unwrap();
+        let (p, _) = runtime_plan(
+            &Config::default(),
+            &paths,
+            "fixture-agent-x",
+            &["--headless"],
+        );
+        assert!(p.headless);
+        assert_eq!(
+            p.headless_definition,
+            Some(HeadlessDef {
+                args: argv(&["-p"]),
+                format: "text".into(),
+                prompt_via: "arg".into(),
+            })
+        );
+    }
+    #[test]
+    fn builtin_launch_is_unchanged_by_the_user_layer() {
+        let (_root, _installed, paths) = trial();
+        crate::profile::store::FileStore::new(&paths)
+            .create_new(&user_definition("fixture-agent-x"))
+            .unwrap();
+        for provider in ["claude", "codex", "copilot", "grok"] {
+            let (p, diagnostics) = runtime_plan(&Config::default(), &paths, provider, &[]);
+            let before = prepare_launch(&Config::default(), provider, parse(&[])).unwrap();
+            assert!(diagnostics.is_empty());
+            assert_eq!(p.custom_argv, None);
+            assert_eq!(p.custom_argv, before.custom_argv);
+            assert_eq!(p.executable_candidates, before.executable_candidates);
+            assert_eq!(p.display, before.display);
+            assert_eq!(p.required_hooks, before.required_hooks);
+            assert_eq!(p.headless_definition, before.headless_definition);
+        }
+    }
+    #[test]
+    fn legacy_config_provider_still_launches_the_same_way() {
+        let (_root, _installed, paths) = trial();
+        let mut cfg = Config::default();
+        cfg.custom_providers.push(config::CustomProvider {
+            id: "synthetic".into(),
+            label: "Synthetic Provider".into(),
+            command: "\"/synthetic/tool path\" --base one".into(),
+            ..Default::default()
+        });
+        let (p, diagnostics) = runtime_plan(&cfg, &paths, "synthetic", &["--", "tail"]);
+        let before = prepare_launch(&cfg, "synthetic", parse(&["--", "tail"])).unwrap();
+        assert!(diagnostics.is_empty());
+        assert_eq!(
+            p.custom_argv,
+            Some(argv(&["/synthetic/tool path", "--base", "one"]))
+        );
+        assert_eq!(p.custom_argv, before.custom_argv);
+        assert_eq!(p.executable_candidates, before.executable_candidates);
+        assert_eq!(p.display, "Synthetic Provider");
+        assert_eq!(p.provider_args, before.provider_args);
+    }
+    #[test]
+    fn unreadable_providers_d_keeps_builtins_launching_and_reports_it() {
+        let (_root, _installed, paths) = trial();
+        // A plain file where the providers.d directory should be.
+        std::fs::write(
+            paths.resource(Resource::ProviderDefinitions),
+            b"not a directory",
+        )
+        .unwrap();
+        let (p, diagnostics) = runtime_plan(&Config::default(), &paths, "claude", &[]);
+        assert_eq!(p.custom_argv, None);
+        assert_eq!(p.executable_candidates, argv(&["claude"]));
+        assert!(
+            diagnostics
+                .iter()
+                .any(|d| d.contains("providers.d") && d.contains("could not be read")),
+            "{diagnostics:?}"
+        );
+        // The unregistered id degrades to the old behaviour, not an abort.
+        let (p, _) = runtime_plan(&Config::default(), &paths, "fixture-agent-x", &[]);
+        assert_eq!(p.custom_argv, None);
     }
     #[test]
     fn trial_prompt_outside_root_is_neither_read_nor_deleted() {

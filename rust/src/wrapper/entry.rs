@@ -100,6 +100,7 @@ fn registration(
     context: &WrapperContext<'_>,
     launch: &LaunchPlan,
     session_shell: &str,
+    provider_revision: &str,
 ) -> io::Result<Message> {
     let skill_env = |key| {
         if context.paths.is_trial() {
@@ -112,10 +113,7 @@ fn registration(
         r#type: "register".into(),
         role: "wrapper".into(),
         provider: launch.provider.clone(),
-        provider_revision: launch::provider_registry_for_config(context.config)
-            .map_err(io::Error::other)?
-            .revision()
-            .into(),
+        provider_revision: provider_revision.into(),
         display_name: launch.display.clone(),
         cwd: context.cwd.to_string_lossy().into_owned(),
         label: launch.label.clone(),
@@ -344,8 +342,23 @@ pub async fn run_cli(
     args: &[String],
     cancel: &Cancellation,
 ) -> io::Result<WrapperResult> {
-    let launch = launch::prepare_launch(context.config, provider, WrapperArgs::parse(args))
-        .map_err(io::Error::other)?;
+    // One load per launch: embedded + legacy + providers.d + overrides, the same
+    // layers the Hub serves. An unreadable layer is reported, never fatal.
+    let (provider_registry, registry_diagnostics) =
+        launch::provider_registry_for_runtime(context.config, context.paths)
+            .map_err(io::Error::other)?;
+    let mut launch = launch::prepare_launch_with_registry(
+        context.config,
+        provider,
+        WrapperArgs::parse(args),
+        &provider_registry,
+    )
+    .map_err(io::Error::other)?;
+    for reason in &registry_diagnostics {
+        eprintln!("wrapper: {reason}");
+    }
+    launch.diagnostics.extend(registry_diagnostics);
+    let provider_revision = provider_registry.revision().to_owned();
     let port = effective_port(&context)?;
     let write_timeout = Duration::from_secs(
         u64::try_from(context.config.hub.wrapper_send_write_timeout_sec)
@@ -418,7 +431,7 @@ pub async fn run_cli(
         prepared_payload = Some(payload);
     }
     let session_shell = registration_shell(provider, selected_shell.as_ref(), command.as_ref());
-    let registration = registration(&context, &launch, &session_shell)?;
+    let registration = registration(&context, &launch, &session_shell, &provider_revision)?;
     let proof = env(context.environment, SPAWN_PROOF_ENV).map(str::to_owned);
     let mut owner_instruction_hash = None;
     let owner = match env(context.environment, super::iris_owner::OWNER_ENV) {
