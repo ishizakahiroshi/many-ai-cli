@@ -142,6 +142,31 @@ pub async fn discover(
     config: &Config,
     paths: &RuntimePaths,
 ) -> io::Result<Option<NativeHub>> {
+    discover_with(
+        environment,
+        config,
+        paths,
+        crate::process::listener::loopback_listener_is_own,
+    )
+    .await
+}
+
+/// Whether anything accepts a connection on the loopback port. Nothing is sent.
+async fn something_listens(port: u16) -> bool {
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        tokio::net::TcpStream::connect(("127.0.0.1", port)),
+    )
+    .await
+    .is_ok_and(|connected| connected.is_ok())
+}
+
+async fn discover_with(
+    environment: &[String],
+    config: &Config,
+    paths: &RuntimePaths,
+    listener_is_own: impl Fn(u16) -> io::Result<bool>,
+) -> io::Result<Option<NativeHub>> {
     let from_session = environment_value(environment, "MANY_AI_CLI_HUB_PORT")
         .and_then(|port| port.trim().parse::<u16>().ok())
         .filter(|port| *port > 0)
@@ -155,6 +180,20 @@ pub async fn discover(
         if paths.is_trial() && port != paths.port() {
             return Ok(None);
         }
+        // The token goes only to a listener this OS user holds. A dead port is
+        // "no Hub"; a listener someone else holds is an error: returning None
+        // would let the CLI write providers.d behind a Hub that may be running.
+        if !listener_is_own(port).unwrap_or(false) {
+            if something_listens(port).await {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!(
+                        "127.0.0.1:{port} is not held by this OS user's Hub; the token was not sent and providers.d was not changed"
+                    ),
+                ));
+            }
+            return Ok(None);
+        }
         NativeHub::new(port, token.to_owned(), proof)?
     } else {
         let Ok(port) = u16::try_from(config.hub.port) else {
@@ -163,7 +202,7 @@ pub async fn discover(
         if port == 0
             || config.token.is_empty()
             || (paths.is_trial() && port != paths.port())
-            || !crate::process::listener::loopback_listener_is_own(port).unwrap_or(false)
+            || !listener_is_own(port).unwrap_or(false)
         {
             return Ok(None);
         }
@@ -296,6 +335,39 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+    #[tokio::test]
+    async fn session_token_is_not_sent_to_a_listener_another_user_holds() {
+        let (_temp, paths) = trial();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let paths =
+            RuntimePaths::trial(paths.root(), port, &paths.root().join("../installed")).unwrap();
+        let environment = vec![
+            format!("MANY_AI_CLI_HUB_PORT={port}"),
+            "MANY_AI_CLI_HUB_TOKEN=synthetic-token".to_owned(),
+        ];
+        let peer = tokio::spawn(async move {
+            // Anyone may connect; what matters is that no request arrives.
+            let mut received = 0;
+            while let Ok(Ok((mut socket, _))) =
+                tokio::time::timeout(Duration::from_millis(500), listener.accept()).await
+            {
+                let mut buffer = [0; 1024];
+                if let Ok(Ok(n)) =
+                    tokio::time::timeout(Duration::from_millis(300), socket.read(&mut buffer)).await
+                {
+                    received += n;
+                }
+            }
+            received
+        });
+        let error = discover_with(&environment, &Config::default(), &paths, |_| Ok(false))
+            .await
+            .err()
+            .expect("a listener this user does not hold is an error, not no Hub");
+        assert!(!error.to_string().contains("synthetic-token"));
+        assert_eq!(peer.await.unwrap(), 0, "nothing may be sent to it");
     }
     #[tokio::test]
     async fn another_trial_port_is_never_contacted() {
