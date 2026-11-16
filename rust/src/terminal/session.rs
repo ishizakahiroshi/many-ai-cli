@@ -76,6 +76,10 @@ pub struct EngineOptions {
     pub confirmation_executor: Option<Arc<dyn confirmations::ConfirmationExecutor>>,
     /// Reports optional persistence degradation without copying user bodies.
     pub warning: EngineWarningHandler,
+    /// New sessions are numbered above this. The Hub passes the highest number
+    /// its handoff records already use, so a restart does not hand a recorded
+    /// number to a different session (#44). Reattaching wrappers keep theirs.
+    pub first_session_id: i64,
 }
 impl Default for EngineOptions {
     fn default() -> Self {
@@ -105,6 +109,7 @@ impl Default for EngineOptions {
             pending_shell: None,
             confirmation_executor: None,
             warning: Arc::new(|operation, error| eprintln!("session core {operation}: {error:?}")),
+            first_session_id: 0,
         }
     }
 }
@@ -271,12 +276,13 @@ impl SessionEngine {
         spawner: Arc<dyn WrappedSessionSpawner>,
         events: CoreEventBus,
     ) -> Self {
+        let first_session_id = options.first_session_id.max(0);
         Self {
             approval_phrases: RwLock::new(options.approval_phrases.clone()),
             options,
             ui_presence: tokio::sync::watch::channel(UiPresence::default()).0,
             state: Mutex::new(State {
-                next_id: 0,
+                next_id: first_session_id,
                 next_incarnation: 0,
                 next_reservation: 0,
                 auth_epoch: AuthEpoch(0),

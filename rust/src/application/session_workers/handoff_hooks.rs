@@ -52,7 +52,7 @@ impl HandoffHttpHooks for SessionWorkers {
         if self.paths.is_trial() {
             transcript_path::check_trial_path(&self.paths, &path)?;
         }
-        let records = match self.handoff.read_session(id.0) {
+        let records = match self.handoff.read_current_session(id.0) {
             Ok(records) => records,
             Err(_) => return Ok(()),
         };

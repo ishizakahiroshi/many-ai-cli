@@ -553,3 +553,27 @@ async fn audit_n05_a_note_or_summary_request_is_typed_only_once_the_approval_pro
         assert!(typed(&wrapper).starts_with(b"\x1b[200~"), "{request}");
     }
 }
+
+/// Issue #44: a wrapper that reattaches registers again under its number; that
+/// must not add a second session_start, which would hide its earlier history.
+#[tokio::test]
+async fn a_reattach_registration_does_not_start_the_record_again() {
+    use crate::orchestration::handoff::KIND_SESSION_START;
+    let fixture = Fixture::new(49679);
+    let binding = fixture.register().await;
+    let store = HandoffStore::new(fixture.paths.clone());
+    for _ in 0..2 {
+        fixture
+            .workers
+            .event(CoreEvent::Registered(binding))
+            .await
+            .unwrap();
+    }
+    let starts = store
+        .read_session(binding.session.0)
+        .unwrap()
+        .into_iter()
+        .filter(|record| record.kind == KIND_SESSION_START)
+        .count();
+    assert_eq!(starts, 1);
+}

@@ -411,6 +411,11 @@ impl SessionWorkers {
     }
     async fn event(&self, event: CoreEvent) -> Result<(), SessionError> {
         match event {
+            // A reattaching wrapper (Hub restart or reconnect) registers again
+            // under its existing number. New launches never get a number that
+            // already has records, so an existing file is the same launch and
+            // must not gain a second start that would cut its history (#44).
+            CoreEvent::Registered(binding) if self.handoff.has_records(binding.session.0) => Ok(()),
             CoreEvent::Registered(binding) => self.append_handoff(
                 binding,
                 Record {

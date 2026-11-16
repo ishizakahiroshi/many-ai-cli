@@ -32,6 +32,13 @@ Release artifacts are published at
 
 ### Fixed
 
+- **A session's handoff no longer mixes in other sessions that once had the same
+  number.** Session numbers restarted from 1 when the Hub restarted, so a new
+  session appended to an older session's handoff record. New sessions are now
+  numbered above every number a handoff record still uses, a reattaching session
+  no longer records a second start, and an existing mixed record shows only its
+  latest session (the older lines stay on disk). The model is taken from that
+  session's records, and an end time earlier than the start is not shown.
 - **An AI CLI registered through the dashboard or API now actually launches.**
   The launcher read only the built-in and `config.yaml` definitions, so a CLI
   in the provider registry was started by its id and failed with "not on

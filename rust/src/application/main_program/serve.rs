@@ -599,6 +599,7 @@ impl HubComposition {
                     paths.clone(),
                 )),
                 confirmation_executor: Some(child_executor.clone()),
+                first_session_id: HandoffStore::new(paths.clone()).highest_session_id(),
                 ..Default::default()
             },
             journal.clone(),

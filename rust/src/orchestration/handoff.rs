@@ -34,6 +34,10 @@ pub const FILES_MAX_COUNT: usize = 20;
 pub const RENDER_MAX_DONE_ENTRIES: usize = 8;
 pub const RENDER_MAX_GIT_TURN_ENTRIES: usize = 6;
 pub const MAX_RECORD_BYTES: u64 = 1 << 20;
+/// Session numbers above this found in handoff file names are ignored when the
+/// Hub picks its first session number, so one odd file name cannot exhaust the
+/// counter.
+pub const MAX_SEEDED_SESSION_ID: i64 = 1 << 31;
 static APPEND_LOCK: Mutex<()> = Mutex::new(());
 fn null_files<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
     Ok(Option::<Vec<String>>::deserialize(d)?.unwrap_or_default())
@@ -292,6 +296,41 @@ impl HandoffStore {
             other => other,
         }
     }
+    /// Records of the latest launch only. Files written before session numbers
+    /// survived a Hub restart can hold several launches under one number; the
+    /// older ones stay on disk untouched but are not this session's history.
+    pub fn read_current_session(&self, id: i64) -> io::Result<Vec<Record>> {
+        let mut records = self.read_session(id)?;
+        let start = current_segment_start(&records);
+        records.drain(..start);
+        Ok(records)
+    }
+    /// Whether a record file already exists for this number. The Hub never gives
+    /// a new launch a number that already has a file (see
+    /// `highest_session_id`), so an existing file means the same launch came back
+    /// (wrapper reattach), not a new session.
+    pub fn has_records(&self, id: i64) -> bool {
+        Dir::open(&self.directory())
+            .and_then(|directory| directory.metadata(&format!("s{id}.jsonl")))
+            .is_ok_and(|metadata| metadata.is_file())
+    }
+    /// The highest session number any handoff file is named after; 0 when there
+    /// are none. The Hub starts numbering new sessions above it, so a number is
+    /// not reused while its records exist (issue #44).
+    pub fn highest_session_id(&self) -> i64 {
+        let Ok(directory) = Dir::open(&self.directory()) else {
+            return 0;
+        };
+        let Ok(names) = directory.entries() else {
+            return 0;
+        };
+        names
+            .iter()
+            .filter_map(|name| session_id_from_file_name(name))
+            .filter(|id| *id <= MAX_SEEDED_SESSION_ID)
+            .max()
+            .unwrap_or(0)
+    }
     pub fn write_rendered(&self, id: i64) -> io::Result<(PathBuf, String)> {
         let path = self.rendered_path_for(id)?;
         // Hold the same directory for both the source and the replacement. A
@@ -384,6 +423,53 @@ fn drop_repeated_transcripts(bytes: &[u8]) -> Vec<u8> {
     }
     out
 }
+/// `s12.jsonl`, `s12_handoff.md`, `s12.note.md` and `s12.manual.note.md` all
+/// name session 12.
+pub fn session_id_from_file_name(name: &str) -> Option<i64> {
+    let rest = name.strip_prefix('s')?;
+    let digits = rest.len() - rest.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+    if digits == 0 {
+        return None;
+    }
+    let suffix = &rest[digits..];
+    if !matches!(
+        suffix,
+        ".jsonl" | "_handoff.md" | ".note.md" | ".manual.note.md"
+    ) {
+        return None;
+    }
+    rest[..digits].parse::<i64>().ok().filter(|id| *id > 0)
+}
+/// Index of the latest `session_start`; 0 when there is none. One file used to
+/// collect several launches when a session number was reused after a Hub
+/// restart, so only the records from the last start describe this session.
+pub fn current_segment_start(records: &[Record]) -> usize {
+    records
+        .iter()
+        .rposition(|record| record.kind == KIND_SESSION_START)
+        .unwrap_or(0)
+}
+/// The latest non-empty model in the records. A session's start is recorded
+/// before the model is known, so the start alone usually has none.
+pub fn latest_model(records: &[Record]) -> &str {
+    records
+        .iter()
+        .rev()
+        .map(|record| record.model.trim())
+        .find(|model| !model.is_empty())
+        .unwrap_or("")
+}
+/// An end that is recorded earlier than the start belongs to another launch or
+/// to a broken clock; it is not shown as this session's end.
+pub fn end_follows_start(start: &str, end: &str) -> bool {
+    match (
+        crate::proto::time::parse_rfc3339(start),
+        crate::proto::time::parse_rfc3339(end),
+    ) {
+        (Ok(start), Ok(end)) => end >= start,
+        _ => true,
+    }
+}
 pub fn is_handoff_file_name(name: &str) -> bool {
     name.ends_with(".jsonl") || name.ends_with("_handoff.md") || name.ends_with(".note.md")
 }
@@ -427,6 +513,8 @@ fn read_records(file: fs::File) -> io::Result<Vec<Record>> {
 /// Pure rendering; only recorded path strings are displayed, never opened.
 pub fn render_markdown(mut session_id: i64, records: &[Record]) -> String {
     use std::fmt::Write;
+    let records = &records[current_segment_start(records)..];
+    let model = latest_model(records);
     let mut start = None;
     let mut end = None;
     let (mut dones, mut git_turns, mut intents) = (vec![], vec![], vec![]);
@@ -434,7 +522,11 @@ pub fn render_markdown(mut session_id: i64, records: &[Record]) -> String {
     for record in records {
         match record.kind.as_str() {
             "session_start" => start = Some(record),
-            "session_end" => end = Some(record),
+            "session_end" => {
+                end = Some(record).filter(|end| {
+                    start.is_none_or(|start: &Record| end_follows_start(&start.ts, &end.ts))
+                })
+            }
             "done" => dones.push(record),
             "git_turn" => git_turns.push(record),
             "intent" => intents.push(record),
@@ -458,10 +550,10 @@ pub fn render_markdown(mut session_id: i64, records: &[Record]) -> String {
     let mut out = format!("# 引き継ぎ: セッション #{session_id}\n\n## セッションの素性\n");
     if let Some(start) = start {
         for (label, value) in [
-            ("provider", &start.provider),
+            ("provider", start.provider.as_str()),
             ("cwd", &start.cwd),
             ("branch", &start.branch),
-            ("model", &start.model),
+            ("model", model),
             ("subscription", &start.subscription_id),
             ("開始", &start.ts),
         ] {
@@ -658,5 +750,133 @@ mod quote_consumer_tests {
             git_turn_line(&record),
             "commit 0123456789ab \"\\U0002ebf0\""
         );
+    }
+}
+#[cfg(test)]
+mod session_reuse_tests {
+    //! Issue #44: one `s{id}.jsonl` used to collect several launches when the
+    //! Hub reused a session number after a restart.
+    use super::*;
+
+    fn store() -> (tempfile::TempDir, tempfile::TempDir, HandoffStore) {
+        let root = tempfile::tempdir().unwrap();
+        let installed = tempfile::tempdir().unwrap();
+        let paths = RuntimePaths::trial(root.path(), 49121, installed.path()).unwrap();
+        (root, installed, HandoffStore::new(paths))
+    }
+    /// A file as older versions left it: two launches under number 6, the
+    /// first ended later than the second started, the model only on the ends.
+    const MIXED: &[&str] = &[
+        r#"{"version":1,"ts":"2026-10-01T09:00:00Z","session_id":6,"kind":"session_start","provider":"codex","cwd":"/old/project"}"#,
+        r#"{"version":1,"ts":"2026-10-01T10:00:00Z","session_id":6,"kind":"done","text":"OLD-DONE-SENTINEL"}"#,
+        r#"{"version":1,"ts":"2026-10-01T10:05:00Z","session_id":6,"kind":"git_turn","commit":"aaaaaaaaaaaa","commit_subject":"OLD-COMMIT-SENTINEL"}"#,
+        r#"{"version":1,"ts":"2026-10-01T10:06:00Z","session_id":6,"kind":"intent","text":"OLD-INTENT-SENTINEL"}"#,
+        r#"{"version":1,"ts":"2026-10-01T10:07:00Z","session_id":6,"kind":"transcript","transcript":"/old/transcript.jsonl"}"#,
+        r#"{"version":1,"ts":"2026-10-30T12:00:00Z","session_id":6,"kind":"session_end","model":"old-model","text":"exit"}"#,
+        "not json at all",
+        r#"{"version":1,"ts":"2026-11-02T08:00:00Z","session_id":6,"kind":"session_start","provider":"claude","cwd":"/new/project"}"#,
+        r#"{"version":1,"ts":"2026-11-02T08:30:00Z","session_id":6,"kind":"done","model":"new-model","text":"NEW-DONE"}"#,
+    ];
+    fn write_mixed(store: &HandoffStore) {
+        let path = store.path_for(6).unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, MIXED.join("\n") + "\n").unwrap();
+    }
+
+    #[test]
+    fn a_reused_number_renders_only_the_latest_launch() {
+        let (_root, _installed, store) = store();
+        write_mixed(&store);
+        let before = std::fs::read(store.path_for(6).unwrap()).unwrap();
+        let (_, markdown) = store.write_rendered(6).unwrap();
+        for old in [
+            "OLD-DONE-SENTINEL",
+            "OLD-COMMIT-SENTINEL",
+            "OLD-INTENT-SENTINEL",
+            "/old/transcript.jsonl",
+            "/old/project",
+            "old-model",
+            "2026-10-30T12:00:00Z",
+        ] {
+            assert!(!markdown.contains(old), "{old} leaked into:\n{markdown}");
+        }
+        assert!(markdown.contains("- provider: claude"));
+        assert!(markdown.contains("- cwd: /new/project"));
+        assert!(markdown.contains("- model: new-model"), "{markdown}");
+        assert!(markdown.contains("NEW-DONE"));
+        assert!(markdown.contains("- 終了: (未終了"), "{markdown}");
+        // Reading never rewrites or drops the older launches.
+        assert_eq!(std::fs::read(store.path_for(6).unwrap()).unwrap(), before);
+        assert_eq!(store.read_session(6).unwrap().len(), MIXED.len() - 1);
+        let current = store.read_current_session(6).unwrap();
+        assert_eq!(current.len(), 2);
+        assert_eq!(current[0].provider, "claude");
+    }
+
+    #[test]
+    fn an_end_recorded_before_the_start_is_not_shown() {
+        let records = [
+            Record {
+                kind: KIND_SESSION_START.into(),
+                ts: "2026-11-02T08:00:00Z".into(),
+                ..Record::default()
+            },
+            Record {
+                kind: KIND_SESSION_END.into(),
+                ts: "2026-11-01T08:00:00Z".into(),
+                ..Record::default()
+            },
+        ];
+        let markdown = render_markdown(3, &records);
+        assert!(!markdown.contains("2026-11-01T08:00:00Z"), "{markdown}");
+        assert!(markdown.contains("- 終了: (未終了"));
+        let ended = [
+            records[0].clone(),
+            Record {
+                ts: "2026-11-02T09:00:00Z".into(),
+                ..records[1].clone()
+            },
+        ];
+        assert!(render_markdown(3, &ended).contains("- 終了: 2026-11-02T09:00:00Z"));
+    }
+
+    #[test]
+    fn records_without_a_start_still_render() {
+        let records = [Record {
+            kind: KIND_DONE.into(),
+            text: "only-done".into(),
+            model: "m1".into(),
+            ..Record::default()
+        }];
+        let markdown = render_markdown(4, &records);
+        assert!(markdown.contains("only-done"));
+        assert!(markdown.contains("記録なし（session_start が看板に無い）"));
+    }
+
+    #[test]
+    fn the_highest_recorded_number_seeds_new_sessions() {
+        let (_root, _installed, store) = store();
+        assert_eq!(store.highest_session_id(), 0);
+        assert!(!store.has_records(6));
+        write_mixed(&store);
+        let dir = store.directory();
+        for name in [
+            "s9_handoff.md",
+            "s12.manual.note.md",
+            "s3.note.md",
+            "s99999999999.jsonl",
+            "sx.jsonl",
+            "s.jsonl",
+            "s40.txt",
+            "notes.jsonl",
+        ] {
+            std::fs::write(dir.join(name), "").unwrap();
+        }
+        assert!(store.has_records(6));
+        assert!(!store.has_records(12));
+        assert_eq!(store.highest_session_id(), 12);
+        assert_eq!(session_id_from_file_name("s7.jsonl"), Some(7));
+        assert_eq!(session_id_from_file_name("s0.jsonl"), None);
+        assert_eq!(session_id_from_file_name("s7.jsonl.bak"), None);
     }
 }

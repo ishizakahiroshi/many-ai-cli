@@ -707,3 +707,39 @@ async fn builtin_provider_native_approval_is_unchanged() {
     let binding = register_as(&core, 2105, "claude", false).await;
     assert!(approval_opened(&output(&core, binding, GATE.to_vec())));
 }
+
+/// Issue #44: after a Hub restart new sessions are numbered above the numbers
+/// the handoff records already use, while a reattaching wrapper keeps its own.
+#[tokio::test]
+async fn new_sessions_are_numbered_above_the_first_session_id() {
+    let (_root, core) = fixture_with(EngineOptions {
+        first_session_id: 41,
+        ..Default::default()
+    });
+    let first = register(&core, 4401).await;
+    assert_eq!(first.session, LiveSessionId(42));
+    let returning = core
+        .reattach(
+            ReattachRequest {
+                restored_metadata: None,
+                message: proto::Message {
+                    session_id: 7,
+                    provider: "claude".into(),
+                    pid: 4402,
+                    cwd: "synthetic-observation-cwd".into(),
+                    cols: 120,
+                    rows: 30,
+                    ..Default::default()
+                },
+            },
+            WrapperConnectionId(4402),
+            now(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(returning.binding.session, LiveSessionId(7));
+    // Retained persistence effects reserve the ordered lane used by register.
+    drop(returning);
+    let next = register(&core, 4403).await;
+    assert_eq!(next.session, LiveSessionId(43));
+}
