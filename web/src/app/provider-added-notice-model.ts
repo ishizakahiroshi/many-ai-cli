@@ -35,6 +35,19 @@ export function idsToAnnounce(
   return detail.ids.filter((id) => !consumeOwnCreation(id, now, marks));
 }
 
+// 取り消しが断られたときに出す文言の鍵。取り消しは「知らせた時点の登録の版」を添えて送る
+// ので、Hub が版の食い違い（409）で断ったなら、知らせたあとに登録が変わっている
+// （同じ id が足し直された等）。その新しい登録を消さず、そう伝える。
+export function undoFailureMessageKey(failure: {
+  ok?: boolean;
+  kind?: string;
+  status?: number;
+}): 'provider_added_undo_changed' | 'provider_added_undo_failed' {
+  return failure.kind === 'http' && failure.status === 409
+    ? 'provider_added_undo_changed'
+    : 'provider_added_undo_failed';
+}
+
 function quoteIfNeeded(part: string): string {
   return part === '' || /\s/.test(part) ? JSON.stringify(part) : part;
 }

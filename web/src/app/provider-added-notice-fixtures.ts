@@ -5,7 +5,15 @@ import {
   consumeOwnCreation,
   idsToAnnounce,
   launchCommandLine,
+  undoFailureMessageKey,
 } from './provider-added-notice-model.js';
+
+test('undoFailureMessageKey: 版の食い違い（409）は「足したあとに変わった」、それ以外は取り消せなかった', () => {
+  assert.equal(undoFailureMessageKey({ kind: 'http', status: 409 }), 'provider_added_undo_changed');
+  assert.equal(undoFailureMessageKey({ kind: 'http', status: 404 }), 'provider_added_undo_failed');
+  assert.equal(undoFailureMessageKey({ kind: 'http', status: 500 }), 'provider_added_undo_failed');
+  assert.equal(undoFailureMessageKey({ kind: 'network' }), 'provider_added_undo_failed');
+});
 
 const created = (...ids: string[]) => ({ ids, action: 'created' });
 

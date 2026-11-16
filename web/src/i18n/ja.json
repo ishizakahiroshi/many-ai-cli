@@ -621,6 +621,7 @@
   "provider_added_undo": "取り消す",
   "provider_added_undone": "{name} を取り消しました",
   "provider_added_undo_failed": "{name} を取り消せませんでした。設定の「AI CLI連携」から消してください。",
+  "provider_added_undo_changed": "{name} はこの知らせのあとに変わっていたため、消していません。設定の「AI CLI連携」で確かめてください。",
   "toast_input_deferred": "セッション #{id}: wrapper 未接続のため入力を保留しました。再接続時に自動送信します。",
   "toast_input_deferred_initial": "セッション #{id}: 最初の指示を送り終えるまで入力を預かっています。送り終えたら順に届けます。",
   "toast_input_send_failed": "接続できないため入力を送信できませんでした。再接続後、同じ内容をもう一度送信してください。",

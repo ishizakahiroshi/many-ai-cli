@@ -8,7 +8,11 @@
 // 自分のこの画面で足した場合（設定の「AI CLI を追加」）は、本人が押した操作なので知らせない。
 // Hub の通知は保存の応答より先に届くことがあるため、保存を送る前に印を付ける。
 import { t } from '../i18n.js';
-import { idsToAnnounce, launchCommandLine } from './provider-added-notice-model.js';
+import {
+  idsToAnnounce,
+  launchCommandLine,
+  undoFailureMessageKey,
+} from './provider-added-notice-model.js';
 import { PROVIDERS_UPDATED_EVENT, type ProvidersUpdatedDetail } from './providers-updated.js';
 import { loadProviderDetail, removeProvider } from './provider-store.js';
 import { showToast } from './util.js';
@@ -29,25 +33,19 @@ function clearUndo(): void {
   undoButton = null;
 }
 
-async function undo(id: string, name: string): Promise<void> {
+async function undo(id: string, name: string, noticeRevision: string): Promise<void> {
   clearUndo();
-  // 取り消す時点の登録の版を取り直す（知らせたあとに変わっていてもよいように）。
-  const detail = await loadProviderDetail(id);
-  if (!detail.ok) {
-    showToast(t('provider_added_undo_failed', { name }), undefined, 4000);
+  // 知らせた時点の登録の版を添えて消す。取り直した版を使うと、知らせたあとに同じ id が
+  // 足し直されていても、その新しい登録を消してしまう。版が変わっていれば Hub が 409 で断る。
+  const removed = await removeProvider(id, noticeRevision);
+  if (removed.ok) {
+    showToast(t('provider_added_undone', { name }), undefined, 2500);
     return;
   }
-  const removed = await removeProvider(id, detail.revision);
-  showToast(
-    removed.ok
-      ? t('provider_added_undone', { name })
-      : t('provider_added_undo_failed', { name }),
-    undefined,
-    removed.ok ? 2500 : 4000,
-  );
+  showToast(t(undoFailureMessageKey(removed), { name }), undefined, 4000);
 }
 
-function announce(id: string, name: string, command: string): void {
+function announce(id: string, name: string, command: string, noticeRevision: string): void {
   clearUndo();
   showToast(addedNoticeText(name, command), undefined, NOTICE_DURATION_MS);
   // #toast は pointer-events:none。取り消すだけをクリックできるようにする既存の形
@@ -58,7 +56,7 @@ function announce(id: string, name: string, command: string): void {
   button.type = 'button';
   button.className = 'ui-button ui-button--secondary ui-button--regular aqt-undo-toast-btn';
   button.textContent = t('provider_added_undo');
-  button.addEventListener('click', () => { void undo(id, name); });
+  button.addEventListener('click', () => { void undo(id, name, noticeRevision); });
   toast.appendChild(button);
   undoButton = button;
   undoTimer = setTimeout(clearUndo, NOTICE_DURATION_MS);
@@ -69,7 +67,7 @@ async function onProvidersUpdated(detail: ProvidersUpdatedDetail): Promise<void>
     const result = await loadProviderDetail(id);
     if (!result.ok) continue;
     const name = result.provider.display_name || id;
-    announce(id, name, launchCommandLine(result.provider.launch));
+    announce(id, name, launchCommandLine(result.provider.launch), result.revision);
   }
 }
 
