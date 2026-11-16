@@ -28,11 +28,18 @@ pub const ORCHESTRATION_PROVIDERS: &[&str] = &[
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RegisteredProviders {
     headless: BTreeMap<String, bool>,
+    /// Whether the definition maps `--model` (`launch.model_args`) / effort
+    /// (`launch.effort_args`) to flags. Without a mapping the value would be
+    /// carried into the session without ever reaching the CLI.
+    takes_model: BTreeMap<String, bool>,
+    takes_effort: BTreeMap<String, bool>,
 }
 
 impl RegisteredProviders {
     pub fn from_registry(registry: &crate::profile::registry::Registry) -> Self {
         let mut headless = BTreeMap::new();
+        let mut takes_model = BTreeMap::new();
+        let mut takes_effort = BTreeMap::new();
         for summary in registry.list() {
             if summary.id == "shell" || ORCHESTRATION_PROVIDERS.contains(&summary.id.as_str()) {
                 continue;
@@ -46,9 +53,23 @@ impl RegisteredProviders {
             let Some(launch) = entry.definition.launch.as_ref() else {
                 continue;
             };
+            takes_model.insert(summary.id.clone(), !launch.model_args.is_empty());
+            takes_effort.insert(summary.id.clone(), !launch.effort_args.is_empty());
             headless.insert(summary.id, launch.headless.is_some());
         }
-        Self { headless }
+        Self {
+            headless,
+            takes_model,
+            takes_effort,
+        }
+    }
+    /// A registered provider whose definition has no `model_args`.
+    fn ignores_model(&self, provider: &str) -> bool {
+        self.takes_model.get(provider) == Some(&false)
+    }
+    /// A registered provider whose definition has no effort mapping.
+    fn ignores_effort(&self, provider: &str) -> bool {
+        self.takes_effort.get(provider) == Some(&false)
     }
     /// Built-in seven, or a usable registered provider.
     pub fn is_valid(&self, provider: &str) -> bool {
@@ -324,6 +345,18 @@ pub fn prepare_with(
 ) -> Result<ResolvedChildSpawn, ConfigError> {
     let mode = execution_mode(body.request(), body.origin(), cfg, providers)?;
     body.request_mut().execution_mode = mode;
+    // A registered CLI can only be told a model or an effort it has a flag for.
+    // Otherwise the request would show a model in the session that never reached
+    // the program.
+    let provider = body.request().provider.trim().to_owned();
+    if is_registered_child_provider(&provider) {
+        if providers.ignores_model(&provider) {
+            body.request_mut().model.clear();
+        }
+        if providers.ignores_effort(&provider) {
+            body.request_mut().effort.clear();
+        }
+    }
     let permission = resolve_permission(
         &body.request().provider,
         &body.request().permission_preset,
@@ -722,6 +755,56 @@ mod tests {
         assert_eq!(
             RegisteredProviders::default().valid_ids(),
             ORCHESTRATION_PROVIDERS
+        );
+    }
+
+    #[test]
+    fn a_registered_child_keeps_only_the_model_and_effort_its_definition_maps_to_flags() {
+        let mut flagged = user_definition("fixture-flags", true, true);
+        let launch = flagged.launch.as_mut().unwrap();
+        launch.model_args = vec!["--model".into(), "{model}".into()];
+        launch.effort_args = vec!["--effort".into(), "{effort}".into()];
+        let mut model_only = user_definition("fixture-model", true, true);
+        model_only.launch.as_mut().unwrap().model_args = vec!["-m".into(), "{model}".into()];
+        let providers = RegisteredProviders::from_registry(&registry_with(vec![
+            flagged,
+            model_only,
+            user_definition("fixture-plain", false, true),
+        ]));
+        let cfg = Config::default();
+        let prepared = |provider: &str| {
+            let body = ChildSpawnRequest {
+                provider: provider.into(),
+                claimed_origin: "ui".into(),
+                model: "synthetic-model".into(),
+                effort: "high".into(),
+                ..Default::default()
+            };
+            let resolved = ResolvedChildSpawn::from_request(
+                body,
+                Some(proof()),
+                InternalSpawnGrants::from_config(vec![]),
+            )
+            .unwrap();
+            let prepared = prepare_with(resolved, &cfg, &providers).unwrap();
+            (
+                prepared.request().model.clone(),
+                prepared.request().effort.clone(),
+            )
+        };
+        assert_eq!(
+            prepared("fixture-flags"),
+            ("synthetic-model".into(), "high".into())
+        );
+        assert_eq!(
+            prepared("fixture-model"),
+            ("synthetic-model".into(), String::new())
+        );
+        assert_eq!(prepared("fixture-plain"), (String::new(), String::new()));
+        // Built-ins carry their own flags and are untouched.
+        assert_eq!(
+            prepared("claude"),
+            ("synthetic-model".into(), "high".into())
         );
     }
 
