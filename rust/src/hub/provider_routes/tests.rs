@@ -649,3 +649,104 @@ fn empty_history_provider_uses_source_invalid_id_response() {
     assert_eq!(value(&result)["error"], "history_not_found");
     assert_eq!(value(&result)["detail"], "id is required");
 }
+
+fn change(
+    request: &Request,
+    store: &ProviderRegistryStore,
+    paths: &RuntimePaths,
+) -> Option<(String, &'static str)> {
+    let response = response(request, store, paths);
+    change_of(request, &response).map(|c| (c.id, c.action))
+}
+
+#[test]
+fn only_successful_registry_mutations_produce_a_change_notice() {
+    let (_temp, paths, store) = setup();
+    let create = request(
+        "POST",
+        "/api/providers",
+        serde_json::to_value(definition("notice-cli")).unwrap(),
+    );
+    assert_eq!(
+        change(&create, &store, &paths),
+        Some(("notice-cli".into(), "created"))
+    );
+    // Duplicate id (409), reserved id, bad json, validate-only and reads: none.
+    assert_eq!(change(&create, &store, &paths), None);
+    let reserved = request(
+        "POST",
+        "/api/providers",
+        serde_json::to_value(definition("claude")).unwrap(),
+    );
+    assert_eq!(change(&reserved, &store, &paths), None);
+    let validate = request(
+        "POST",
+        "/api/providers/validate",
+        serde_json::to_value(definition("notice-cli")).unwrap(),
+    );
+    assert_eq!(response(&validate, &store, &paths).status, 200);
+    assert_eq!(change(&validate, &store, &paths), None);
+    assert_eq!(
+        change(
+            &request("GET", "/api/providers", json!(null)),
+            &store,
+            &paths
+        ),
+        None
+    );
+    let stale = request(
+        "PATCH",
+        "/api/providers/notice-cli",
+        json!({"expected_revision":"stale","definition":definition("notice-cli")}),
+    );
+    assert_eq!(change(&stale, &store, &paths), None);
+    let mut renamed = definition("notice-cli");
+    renamed.display_name = "Renamed".into();
+    let patch = request(
+        "PATCH",
+        "/api/providers/notice-cli",
+        json!({"expected_revision":store.snapshot().unwrap().registry.revision(),"definition":renamed}),
+    );
+    assert_eq!(
+        change(&patch, &store, &paths),
+        Some(("notice-cli".into(), "updated"))
+    );
+    let mut delete = request("DELETE", "/api/providers/notice-cli", json!(null));
+    delete.query = "expected_revision=stale".into();
+    assert_eq!(change(&delete, &store, &paths), None);
+    delete.query = format!(
+        "expected_revision={}",
+        store.snapshot().unwrap().registry.revision()
+    );
+    assert_eq!(
+        change(&delete, &store, &paths),
+        Some(("notice-cli".into(), "removed"))
+    );
+    // A built-in is disabled, not removed (its revision is the history head).
+    let mut edited = store
+        .snapshot()
+        .unwrap()
+        .registry
+        .lookup("codex")
+        .unwrap()
+        .definition;
+    edited.display_name = "Edited Codex".into();
+    let edit = request(
+        "PATCH",
+        "/api/providers/codex",
+        json!({"expected_revision":"","definition":edited}),
+    );
+    assert_eq!(
+        change(&edit, &store, &paths),
+        Some(("codex".into(), "updated"))
+    );
+    let mut disable = request("DELETE", "/api/providers/codex", json!(null));
+    disable.query = format!(
+        "expected_revision={}",
+        store.history.current("codex").unwrap().revision
+    );
+    assert_eq!(
+        change(&disable, &store, &paths),
+        Some(("codex".into(), "disabled"))
+    );
+}

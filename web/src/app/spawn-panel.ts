@@ -25,6 +25,7 @@ import {
   isModelCompatibleWithProvider,
   loadSpawnModelGroups,
 } from './spawn-model-groups.js';
+import { PROVIDERS_UPDATED_EVENT } from './providers-updated.js';
 import { PROVIDER_ORDER_CHANGED_EVENT, clearProviderOrder, saveProviderOrder, sortByProviderOrder } from './provider-order.js';
 import {
   LAUNCH_CHOICE_ASK,
@@ -1008,6 +1009,12 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
     // 開くたびに Hub の登録を読み直す。別のタブ・API・CLI で足した AI CLI も、
     // ページを再読み込みせずにここへ出る（plan_ai-cli-registration.md）。
     // 項目が増減したら、開いたままの一覧の高さと位置を測り直す。
+    refreshSpawnProviderList();
+  }
+
+  // 登録を読み直し、一覧が開いていれば高さと位置を測り直す。開くたびと、Hub からの
+  // 「登録が変わった」通知（providers-updated）の両方がここを通る。
+  function refreshSpawnProviderList() {
     void injectCustomProviderOptions().then(() => {
       if (!spawnProviderOpen) return;
       measureSpawnProviderListContent();
@@ -1307,6 +1314,12 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
   // それを起動するだけ）。
   document.addEventListener('provider-enrollment-deleted', () => {
     void injectCustomProviderOptions();
+  });
+  // 別のタブ・別の端末・API・CLI での登録変更。Hub が全画面へ送る（ws-client.ts）。
+  // 同じページの保存・削除は上の 2 つのイベントでも読み直すが、注入は世代番号で最新の
+  // 1 回だけが反映され、差分計算も何度回しても同じ結果になるので、option は二重にならない。
+  document.addEventListener(PROVIDERS_UPDATED_EVENT, () => {
+    refreshSpawnProviderList();
   });
 
   // フォーカス時に入力値を一時クリアして datalist の全候補を表示し、

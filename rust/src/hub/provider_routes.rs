@@ -724,6 +724,45 @@ fn delete(
         changed(store, 200, Some(("removed", true)), id, warnings)
     }
 }
+/// A successful registry mutation, derived from the request and its response
+/// so that route code stays free of any UI plumbing. Failed, conflicting and
+/// read-only requests (including `validate`) never produce one.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ProviderChange {
+    pub id: String,
+    pub action: &'static str,
+}
+pub fn change_of(request: &Request, response: &Response) -> Option<ProviderChange> {
+    if !matches!(response.status, 200 | 201) {
+        return None;
+    }
+    let body: serde_json::Value = serde_json::from_slice(&response.body).ok()?;
+    if body["ok"] != true {
+        return None;
+    }
+    let path = request.path.strip_prefix("/api/providers")?;
+    let (id, action) = match (request.method.as_str(), path) {
+        ("POST", "") => {
+            let created: serde_json::Value = serde_json::from_slice(&request.body).ok()?;
+            (created["id"].as_str()?.to_owned(), "created")
+        }
+        (method, rest) => {
+            let parts = rest.strip_prefix('/')?.split('/').collect::<Vec<_>>();
+            let id = (*parts.first()?).to_owned();
+            let action = match (method, parts.as_slice()) {
+                ("PATCH", [_]) => "updated",
+                ("DELETE", [_]) if body["disabled"] == true => "disabled",
+                ("DELETE", [_]) if body["removed"] == true => "removed",
+                ("POST", [_, "reset"]) => "reset",
+                ("POST", [_, "restore"] | [_, "backups", _, "restore"]) => "restored",
+                ("POST", [_, "recovery"]) => "recovered",
+                _ => return None,
+            };
+            (id, action)
+        }
+    };
+    (!id.is_empty()).then_some(ProviderChange { id, action })
+}
 #[cfg(test)]
 #[path = "provider_routes/tests.rs"]
 mod tests;

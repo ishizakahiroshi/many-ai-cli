@@ -187,3 +187,161 @@ fn provider_prefix_retains_source_path_method_and_auth_order() {
     assert!(router.preflight(&request, 1).is_ok());
     assert_eq!(router.handle(&request, 1).response.status, 404);
 }
+
+struct Idle;
+impl crate::hub::sockets::OrderedEventObserver for Idle {
+    fn observe<'a>(
+        &'a self,
+        _: &'a crate::proto::core::CoreEvent,
+    ) -> CoreFuture<'a, Result<(), crate::proto::core::SessionError>> {
+        Box::pin(async { Ok(()) })
+    }
+}
+impl crate::proto::core::WrappedSessionSpawner for Idle {
+    fn spawn_and_wait<'a>(
+        &'a self,
+        _: crate::proto::core::WrappedSpawnSpec,
+        _: Duration,
+        _: &'a crate::proto::core::HttpWaitCancellation,
+    ) -> CoreFuture<'a, crate::proto::core::SpawnWaitOutcome> {
+        Box::pin(async { panic!("provider routes never spawn") })
+    }
+}
+struct NullUi;
+impl crate::hub::sockets::FrameWriter for NullUi {
+    fn write<'a>(
+        &'a mut self,
+        _: crate::hub::sockets::WireFrame,
+    ) -> CoreFuture<'a, Result<(), crate::proto::core::SessionError>> {
+        Box::pin(async { Ok(()) })
+    }
+}
+/// With one primed dashboard attached, one Hub broadcast reaches it as one send.
+fn broadcasts(effects: &CoreEffects) -> Vec<crate::proto::Message> {
+    effects
+        .0
+        .iter()
+        .filter_map(|effect| match effect {
+            crate::proto::core::CoreEffect::SendUiBestEffort { message, .. } => {
+                Some(message.clone())
+            }
+            _ => None,
+        })
+        .collect()
+}
+#[test]
+fn registry_mutations_broadcast_one_providers_updated_and_failures_none() {
+    use crate::{
+        hub::sockets::{EffectDriver, SocketRegistry},
+        proto::core::SessionCore,
+        terminal::{
+            events::CoreEventBus,
+            journal::{JournalOptions, SessionJournal},
+            session::{EngineOptions, SessionEngine},
+        },
+    };
+    let root = tempfile::tempdir().unwrap();
+    let paths = RuntimePaths::trial(
+        root.path(),
+        49893,
+        &root.path().join("../installed-provider-broadcast"),
+    )
+    .unwrap();
+    let config = Arc::new(
+        ConfigStore::new(
+            paths.clone(),
+            Config {
+                token: "synthetic-broadcast-token".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap(),
+    );
+    let sockets = Arc::new(SocketRegistry::default());
+    let journal = Arc::new(SessionJournal::new(
+        paths.clone(),
+        None,
+        JournalOptions::default(),
+    ));
+    let events = CoreEventBus::new(16).unwrap();
+    let effects = Arc::new(EffectDriver::new(
+        sockets.clone(),
+        journal.clone(),
+        Arc::new(events.clone()),
+        Arc::new(Idle),
+    ));
+    let core = Arc::new(SessionEngine::new(
+        EngineOptions::default(),
+        journal,
+        sockets.clone(),
+        effects,
+        Arc::new(Idle),
+        events,
+    ));
+    let trait_core: Arc<dyn SessionCore> = core.clone();
+    sockets.bind_core(Arc::downgrade(&trait_core)).unwrap();
+    let ui = crate::proto::core::UiBinding {
+        connection: sockets.next_ui().unwrap(),
+        auth_epoch: core.auth_epoch(),
+    };
+    sockets.insert_ui(ui, Box::new(NullUi)).unwrap();
+    core.attach_ui(ui, None, None).unwrap();
+    assert!(core.finish_ui_priming(ui).unwrap().0.is_empty());
+    let store = Arc::new(ProviderRegistryStore::new(&paths, config.clone()).unwrap());
+    let router = ServiceRouter::new(config, paths, trait_core.clone(), 49893)
+        .unwrap()
+        .with_provider_routes(
+            store.clone(),
+            Arc::new(|_| true),
+            Arc::new(|_, _, _| panic!("unexpected provider warning")),
+        );
+    let call = |method: &str, path: &str, query: &str, body: Value| {
+        let request = Request {
+            method: method.into(),
+            path: path.into(),
+            query: format!("token=synthetic-broadcast-token&{query}"),
+            host: "127.0.0.1:49893".into(),
+            remote_addr: "127.0.0.1:50000".into(),
+            body: serde_json::to_vec(&body).unwrap(),
+            ..Default::default()
+        };
+        router.handle(&request, 1)
+    };
+    let definition = json!({"schema_version":1,"id":"fixture-bcast","display_name":"Broadcast fixture","launch":{"executable":"fixture-only-no-execution"}});
+
+    let created = call("POST", "/api/providers", "", definition.clone());
+    assert_eq!(created.response.status, 201);
+    let sent = broadcasts(&created.effects);
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].r#type, "providers_updated");
+    assert_eq!(sent[0].providers, ["fixture-bcast"]);
+    assert_eq!(sent[0].reason, "created");
+
+    let duplicate = call("POST", "/api/providers", "", definition.clone());
+    assert_eq!(duplicate.response.status, 409);
+    assert!(duplicate.effects.0.is_empty());
+    let validated = call("POST", "/api/providers/validate", "", definition);
+    assert_eq!(validated.response.status, 200);
+    assert!(validated.effects.0.is_empty());
+    let stale = call(
+        "DELETE",
+        "/api/providers/fixture-bcast",
+        "expected_revision=stale",
+        json!(null),
+    );
+    assert_eq!(stale.response.status, 409);
+    assert!(stale.effects.0.is_empty());
+
+    let revision = store.snapshot().unwrap().registry.revision().to_owned();
+    let removed = call(
+        "DELETE",
+        "/api/providers/fixture-bcast",
+        &format!("expected_revision={revision}"),
+        json!(null),
+    );
+    assert_eq!(removed.response.status, 200);
+    let sent = broadcasts(&removed.effects);
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].providers, ["fixture-bcast"]);
+    assert_eq!(sent[0].reason, "removed");
+}

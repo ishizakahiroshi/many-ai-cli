@@ -41,6 +41,8 @@ export type MessageType =
   | 'approval_snapshot'
 	| 'auto_approval_applied'
   | 'approval_patterns_updated'
+  // AI CLI の登録が変わった。providers に id、reason に created/updated/disabled/removed/restored/reset/recovered。
+  | 'providers_updated'
   | 'binary_stale'
   | 'commit_msg_suggested'
   | 'commit_msg_error'

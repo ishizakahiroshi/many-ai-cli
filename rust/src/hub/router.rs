@@ -1555,6 +1555,18 @@ impl ServiceRouter {
                         .revoke_invalid_uis(&self.config, core.as_ref(), now)
                 })
                 .unwrap_or_default()
+        } else if let (Some(core), Some(change)) = (
+            &self.core,
+            super::provider_routes::change_of(request, &response),
+        ) {
+            // The registry was just reloaded: tell every open dashboard so its
+            // AI list refreshes without F5 (same shape as approval_patterns_updated).
+            core.broadcast_ui(crate::proto::Message {
+                r#type: "providers_updated".into(),
+                providers: vec![change.id],
+                reason: change.action.into(),
+                ..Default::default()
+            })
         } else {
             CoreEffects::default()
         };

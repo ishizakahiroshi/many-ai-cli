@@ -2,6 +2,7 @@ import { noteSpawnCorrelation, noteSpawnDisconnected, noteSpawnSessions, noteSpa
 import { noteSessionListTurnEnd, preserveSessionListSelection } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
+import { PROVIDERS_UPDATED_EVENT, providersUpdatedDetail } from './providers-updated.js';
 import { showToast, token, webSocketTicketQuery } from './util.js';
 import { isDetachedTabView } from './detached-view-mode.js';
 import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, autoDismissTimers, chatHistory, deriveProjectKeyFromCwd, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
@@ -429,6 +430,13 @@ export function _connectWs() {
     if (window.approvalPatternsUI && typeof window.approvalPatternsUI.onOfficialUpdated === 'function') {
       window.approvalPatternsUI.onOfficialUpdated(Array.isArray(m.providers) ? m.providers : []);
     }
+    return;
+  }
+
+  if (m.type === 'providers_updated') {
+    // AI CLI の登録が変わった（別のタブ・端末・API・CLI を含む）。新しいセッションの一覧と
+    // 設定の一覧が、このイベントで Hub の登録を読み直す。お知らせは出さない。
+    try { document.dispatchEvent(new CustomEvent(PROVIDERS_UPDATED_EVENT, { detail: providersUpdatedDetail(m) })); } catch (_) {}
     return;
   }
 

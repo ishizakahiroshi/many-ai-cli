@@ -26,6 +26,7 @@ import {
   type ProviderRequestFailureLike,
   type ProviderUpdateFormValues,
 } from './provider-manager-view.js';
+import { PROVIDERS_UPDATED_EVENT } from './providers-updated.js';
 import {
   createProvider,
   loadProviderBackups,
@@ -1168,6 +1169,8 @@ function initProviderManager(): void {
   updateArgsInput.addEventListener('input', syncUpdateAvailability);
   document.addEventListener('provider-enrollment-open', () => showForm());
   document.addEventListener('i18n-ready', () => { void load(); });
+  // Hub からの「登録が変わった」通知（別のタブ・API・CLI での変更）。一覧を読み直す。
+  document.addEventListener(PROVIDERS_UPDATED_EVENT, () => { void load(); });
   void load();
 }
 
