@@ -235,6 +235,172 @@ pub struct Definition {
     pub screen: Option<ScreenDefinition>,
     #[serde(rename = "transcript", skip_serializing_if = "Option::is_none")]
     pub transcript: Option<TranscriptDefinition>,
+    #[serde(rename = "approval", skip_serializing_if = "Option::is_none")]
+    pub approval: Option<ApprovalDefinition>,
+}
+
+/// How the native approval prompt of a provider is recognised on its screen.
+/// Every field is optional; a provider that declares nothing gets the plain
+/// numbered-option detection (`1. Yes` / `2. No`). Sent keys are in `send`
+/// (empty = the key text itself).
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ApprovalDefinition {
+    /// `numbered` (default: lines like `1. Yes`) or `buttons` (one line of
+    /// wording-matched buttons chosen with the right arrow key).
+    #[serde(
+        rename = "style",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub style: String,
+    /// Extra option line shapes, tried after `numbered` in this order:
+    /// `paren_marker` (`1 (•) Yes`), `bracket_keys` (`Run once (y)` looked up in
+    /// `bracket_keys`), `key_lines` (`Approve (y)` looked up in `keys`).
+    #[serde(
+        rename = "line_extras",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub line_extras: Vec<String>,
+    /// Single keys that answer the prompt. A numbered option whose label is, or
+    /// ends with, `(key)` gets the key as its send text; with `key_lines` a
+    /// line `label (key)` is an option of its own (numbered by `num`).
+    #[serde(
+        rename = "keys",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub keys: Vec<ApprovalKey>,
+    /// Lines `label (key)` whose key is any of the listed spellings (compared
+    /// in lower case), for providers that show their keys in free wording.
+    #[serde(
+        rename = "bracket_keys",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub bracket_keys: Vec<ApprovalKey>,
+    /// Button rows for `style: buttons`, tried from the last matching line up.
+    #[serde(
+        rename = "buttons",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub buttons: Vec<ApprovalButtons>,
+    /// The options are chosen by moving the cursor: each option's send text is
+    /// the arrow keys from the highlighted option, then Enter.
+    #[serde(
+        rename = "arrow_send",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub arrow_send: bool,
+    /// The provider shows a one-line `1 to review, 2 to send, 0 to dismiss`
+    /// feedback survey that counts as a prompt.
+    #[serde(
+        rename = "feedback_survey",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub feedback_survey: bool,
+    /// A prompt that carries send keys is of kind `native_<id>_shortcut`.
+    #[serde(
+        rename = "shortcut_kind",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub shortcut_kind: bool,
+    /// Lower case wording that, anywhere in the prompt's text, shows that it asks
+    /// for an approval.
+    #[serde(
+        rename = "hint_phrases",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub hint_phrases: Vec<String>,
+    /// Lower case wording of screens that look like a prompt but only choose a
+    /// model: a line with one of these never counts as an approval hint.
+    #[serde(
+        rename = "not_approval_phrases",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub not_approval_phrases: Vec<String>,
+    /// Screens that are never a prompt: all of `all` and any of `any` appear.
+    #[serde(
+        rename = "suppress_screens",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub suppress_screens: Vec<ApprovalSuppress>,
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ApprovalKey {
+    #[serde(
+        rename = "keys",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub keys: Vec<String>,
+    #[serde(rename = "num", deserialize_with = "null_default")]
+    pub num: i64,
+    #[serde(
+        rename = "send",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub send: String,
+}
+
+/// A row of buttons: the last line holding every `line_all` word starts a
+/// prompt whose first line is the nearest line (up to 12 lines above) holding
+/// `start_line` (required, or else 12 lines above is used).
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ApprovalButtons {
+    #[serde(
+        rename = "line_all",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub line_all: Vec<String>,
+    #[serde(
+        rename = "start_line",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub start_line: String,
+    #[serde(
+        rename = "start_required",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub start_required: bool,
+    #[serde(
+        rename = "labels",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub labels: Vec<String>,
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ApprovalSuppress {
+    #[serde(
+        rename = "all",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub all: Vec<String>,
+    #[serde(
+        rename = "any",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub any: Vec<String>,
 }
 
 /// Where the raw conversation file of a provider lives, how a Hub session is

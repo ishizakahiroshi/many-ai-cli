@@ -95,6 +95,10 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
                 name: "transcript",
                 kind: "*TranscriptDefinition",
             },
+            Field {
+                name: "approval",
+                kind: "*ApprovalDefinition",
+            },
         ],
     },
     Schema {
@@ -340,6 +344,106 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
             Field {
                 name: "roles",
                 kind: "map[string]string",
+            },
+        ],
+    },
+    Schema {
+        name: "ApprovalDefinition",
+        fields: &[
+            Field {
+                name: "style",
+                kind: "string",
+            },
+            Field {
+                name: "line_extras",
+                kind: "[]string",
+            },
+            Field {
+                name: "keys",
+                kind: "[]ApprovalKey",
+            },
+            Field {
+                name: "bracket_keys",
+                kind: "[]ApprovalKey",
+            },
+            Field {
+                name: "buttons",
+                kind: "[]ApprovalButtons",
+            },
+            Field {
+                name: "arrow_send",
+                kind: "bool",
+            },
+            Field {
+                name: "feedback_survey",
+                kind: "bool",
+            },
+            Field {
+                name: "shortcut_kind",
+                kind: "bool",
+            },
+            Field {
+                name: "hint_phrases",
+                kind: "[]string",
+            },
+            Field {
+                name: "not_approval_phrases",
+                kind: "[]string",
+            },
+            Field {
+                name: "suppress_screens",
+                kind: "[]ApprovalSuppress",
+            },
+        ],
+    },
+    Schema {
+        name: "ApprovalKey",
+        fields: &[
+            Field {
+                name: "keys",
+                kind: "[]string",
+            },
+            Field {
+                name: "num",
+                kind: "int",
+            },
+            Field {
+                name: "send",
+                kind: "string",
+            },
+        ],
+    },
+    Schema {
+        name: "ApprovalButtons",
+        fields: &[
+            Field {
+                name: "line_all",
+                kind: "[]string",
+            },
+            Field {
+                name: "start_line",
+                kind: "string",
+            },
+            Field {
+                name: "start_required",
+                kind: "bool",
+            },
+            Field {
+                name: "labels",
+                kind: "[]string",
+            },
+        ],
+    },
+    Schema {
+        name: "ApprovalSuppress",
+        fields: &[
+            Field {
+                name: "all",
+                kind: "[]string",
+            },
+            Field {
+                name: "any",
+                kind: "[]string",
             },
         ],
     },
@@ -772,6 +876,22 @@ impl GoWire for TranscriptIndex {
 }
 impl GoWire for TranscriptReader {
     const GO_TYPE: &'static str = "TranscriptReader";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for ApprovalDefinition {
+    const GO_TYPE: &'static str = "ApprovalDefinition";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for ApprovalKey {
+    const GO_TYPE: &'static str = "ApprovalKey";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for ApprovalButtons {
+    const GO_TYPE: &'static str = "ApprovalButtons";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for ApprovalSuppress {
+    const GO_TYPE: &'static str = "ApprovalSuppress";
     const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
 }
 impl GoWire for ModelListDefinition {

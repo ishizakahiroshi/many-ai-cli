@@ -383,6 +383,7 @@ pub fn validate_definition(
                 "routines",
                 "screen",
                 "transcript",
+                "approval",
             ]
             .contains(&field.as_str())
             {
@@ -691,6 +692,11 @@ fn declared_sections(def: &Definition) -> Vec<Diagnostic> {
             }
         }
     }
+    if let Some(a) = &def.approval {
+        for (field, message) in approval_problems(a) {
+            out.push(diag("invalid_declaration", "error", &field, &message));
+        }
+    }
     if let Some(t) = &def.transcript {
         for (field, message) in transcript_problems(t) {
             out.push(diag("invalid_declaration", "error", &field, &message));
@@ -949,6 +955,88 @@ fn transcript_problems(t: &TranscriptDefinition) -> Vec<(String, String)> {
             bad(
                 "transcript.reader",
                 "a reader needs a root (a shared file is never read as a chat)",
+            );
+        }
+    }
+    out
+}
+
+/// Problems of an `approval` declaration as (field, message).
+fn approval_problems(a: &ApprovalDefinition) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = vec![];
+    let mut bad = |field: &str, message: &str| out.push((field.to_owned(), message.to_owned()));
+    if !matches!(a.style.as_str(), "" | "numbered" | "buttons") {
+        bad("approval.style", "style must be numbered or buttons");
+    }
+    for extra in &a.line_extras {
+        if !matches!(
+            extra.as_str(),
+            "paren_marker" | "bracket_keys" | "key_lines"
+        ) {
+            bad(
+                "approval.line_extras",
+                "line_extras entries must be paren_marker, bracket_keys or key_lines",
+            );
+        }
+    }
+    let phrase = |p: &String| !p.is_empty() && p.len() <= 100 && !control(p);
+    for (name, list) in [
+        ("hint_phrases", &a.hint_phrases),
+        ("not_approval_phrases", &a.not_approval_phrases),
+    ] {
+        if list.len() > 64 || !list.iter().all(phrase) {
+            bad(
+                &format!("approval.{name}"),
+                "at most 64 phrases of 1 to 100 characters without control characters",
+            );
+        }
+    }
+    for (name, table) in [("keys", &a.keys), ("bracket_keys", &a.bracket_keys)] {
+        if table.len() > 32 {
+            bad(&format!("approval.{name}"), "too many entries");
+        }
+        for (i, k) in table.iter().enumerate() {
+            let field = format!("approval.{name}[{i}]");
+            if k.keys.is_empty() || !k.keys.iter().all(|s| phrase(s) && !s.contains(['(', ')'])) {
+                bad(
+                    &field,
+                    "keys must be 1 to 100 character spellings without parentheses",
+                );
+            }
+            if !(0..=20).contains(&k.num) {
+                bad(&field, "num must be between 0 and 20");
+            }
+            if k.send.len() > 16 {
+                bad(&field, "send is too long");
+            }
+        }
+    }
+    if a.style == "buttons" && a.buttons.is_empty() {
+        bad("approval.buttons", "style buttons needs buttons");
+    }
+    if a.buttons.len() > 8 {
+        bad("approval.buttons", "too many button rows");
+    }
+    for (i, b) in a.buttons.iter().enumerate() {
+        let field = format!("approval.buttons[{i}]");
+        if b.line_all.is_empty() || !b.line_all.iter().all(phrase) {
+            bad(&field, "line_all needs 1 to 100 character words");
+        }
+        if !b.start_line.is_empty() && !phrase(&b.start_line) {
+            bad(&field, "start_line is too long or has a control character");
+        }
+        if b.labels.is_empty() || b.labels.len() > 8 || !b.labels.iter().all(phrase) {
+            bad(&field, "labels needs 1 to 8 entries");
+        }
+    }
+    if a.suppress_screens.len() > 8 {
+        bad("approval.suppress_screens", "too many entries");
+    }
+    for (i, s) in a.suppress_screens.iter().enumerate() {
+        if !s.all.iter().chain(&s.any).all(phrase) || (s.all.is_empty() && s.any.is_empty()) {
+            bad(
+                &format!("approval.suppress_screens[{i}]"),
+                "all and any need phrases (at least one list is not empty)",
             );
         }
     }
