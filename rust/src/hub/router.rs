@@ -65,10 +65,14 @@ pub type SpawnOffset = dyn Fn() -> i32 + Send + Sync;
 pub type SettingsPublished = dyn Fn(&str, &crate::config::Config) + Send + Sync;
 pub type ProviderWarning =
     dyn Fn(&'static str, &str, &crate::profile::store::StoreError) + Send + Sync;
+/// Called after a registry mutation succeeded and the registry was reloaded
+/// (the same moment `providers_updated` is broadcast).
+pub type ProviderChanged = dyn Fn(&super::provider_routes::ProviderChange) + Send + Sync;
 struct ProviderRoutes {
     store: Arc<crate::profile::store::ProviderRegistryStore>,
     command_found: Arc<ProviderCommandFound>,
     warning: Arc<ProviderWarning>,
+    changed: Option<Arc<ProviderChanged>>,
 }
 pub type InfoFactory = dyn Fn(&super::session_routes::SessionHttp, &crate::config::Config) -> Result<Dispatch, Response>
     + Send
@@ -270,7 +274,16 @@ impl ServiceRouter {
             store,
             command_found,
             warning,
+            changed: None,
         });
+        self
+    }
+    /// Must follow `with_provider_routes`. Lets another owner (approval phrases)
+    /// follow a registration made while the Hub runs.
+    pub fn with_provider_changed(mut self, changed: Arc<ProviderChanged>) -> Self {
+        if let Some(providers) = self.providers.as_mut() {
+            providers.changed = Some(changed);
+        }
         self
     }
     pub fn with_cli_versions(mut self, versions: Arc<super::cli_version::CliVersionHttp>) -> Self {
@@ -1561,6 +1574,9 @@ impl ServiceRouter {
         ) {
             // The registry was just reloaded: tell every open dashboard so its
             // AI list refreshes without F5 (same shape as approval_patterns_updated).
+            if let Some(changed) = self.providers.as_ref().and_then(|p| p.changed.as_ref()) {
+                changed(&change);
+            }
             core.broadcast_ui(crate::proto::Message {
                 r#type: "providers_updated".into(),
                 providers: vec![change.id],

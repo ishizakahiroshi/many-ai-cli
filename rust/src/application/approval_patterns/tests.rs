@@ -488,3 +488,60 @@ fn oversized_legacy_migration_preserves_whole_file_and_rejects_profile_assets() 
         bytes
     );
 }
+
+struct FileSource;
+impl SlashIo for FileSource {
+    fn read<'a>(&'a self, source: &'a str) -> CoreFuture<'a, io::Result<Vec<u8>>> {
+        Box::pin(async move { std::fs::read(source) })
+    }
+    fn skills(&self, _: &str, _: &SearchContext) -> Vec<SlashCmd> {
+        vec![]
+    }
+}
+#[tokio::test]
+async fn registry_user_provider_phrases_are_read_when_the_registry_changes_and_dropped_when_removed()
+ {
+    let fixture = fixture();
+    let phrases = tempfile::tempdir().unwrap();
+    let file = phrases.path().join("fixture-cli.md");
+    std::fs::write(&file, "# Fixture\n\n- `Allow once`\n- `Deny`\n").unwrap();
+    let sources = Arc::new(Mutex::new(vec![(
+        "fixture-cli".to_owned(),
+        file.to_string_lossy().into_owned(),
+    )]));
+    let shared = sources.clone();
+    fixture
+        .owner
+        .set_registry_sources(Arc::new(move || shared.lock().unwrap().clone()));
+    let source: Arc<dyn SlashIo> = Arc::new(FileSource);
+    let cancel = Cancellation::default();
+    fixture
+        .owner
+        .registry_changed(source.clone(), &cancel, fixture.effects.as_ref())
+        .await;
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(
+            &fixture.owner.asset("fixture-cli.json").unwrap()
+        )
+        .unwrap(),
+        serde_json::json!(["Allow once", "Deny"])
+    );
+    let messages = fixture.recording.messages();
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].r#type, "approval_patterns_updated");
+    assert_eq!(messages[0].providers, ["fixture-cli"]);
+    // An unchanged file is not announced twice.
+    fixture
+        .owner
+        .registry_changed(source.clone(), &cancel, fixture.effects.as_ref())
+        .await;
+    assert_eq!(fixture.recording.messages().len(), 1);
+    // Removed from the registry: the mirror is no longer served.
+    sources.lock().unwrap().clear();
+    fixture
+        .owner
+        .registry_changed(source, &cancel, fixture.effects.as_ref())
+        .await;
+    assert!(fixture.owner.asset("fixture-cli.json").is_err());
+    assert!(fixture.warnings.lock().unwrap().is_empty());
+}

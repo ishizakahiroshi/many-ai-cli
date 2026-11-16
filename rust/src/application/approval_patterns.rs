@@ -22,12 +22,41 @@ pub const PROVIDERS: &[&str] = &[
     "common",
 ];
 pub type Warning = dyn Fn(&'static str) + Send + Sync;
+/// `(provider id, approval_pattern_source)` of every AI CLI registered in the
+/// registry's user layer (`providers.d`). Read each time, so a registration
+/// made while the Hub runs is seen without a restart.
+pub type RegistrySources = dyn Fn() -> Vec<(String, String)> + Send + Sync;
+/// The sources of the registry's user-layer providers, for `ApprovalPatterns::
+/// set_registry_sources`. Built-ins and the legacy `custom_providers` layer are
+/// not listed: they have their own paths.
+pub fn registry_user_sources(
+    store: &crate::profile::store::ProviderRegistryStore,
+) -> Vec<(String, String)> {
+    let Ok(snapshot) = store.snapshot() else {
+        return vec![];
+    };
+    snapshot
+        .registry
+        .list()
+        .into_iter()
+        .filter(|summary| summary.origin.as_str() == crate::proto::provider::ORIGIN_USER)
+        .map(|summary| {
+            let source = snapshot
+                .registry
+                .lookup(&summary.id)
+                .map(|found| found.definition.approval_pattern_source)
+                .unwrap_or_default();
+            (summary.id, source)
+        })
+        .collect()
+}
 pub struct ApprovalPatterns {
     dir: Dir,
     config: Arc<ConfigStore>,
     core: Weak<SessionEngine>,
     gate: Mutex<()>,
     warning: Arc<Warning>,
+    registry: std::sync::OnceLock<Arc<RegistrySources>>,
 }
 fn defaults(provider: &str) -> Vec<String> {
     let mut map: BTreeMap<String, Vec<String>> =
@@ -66,7 +95,19 @@ impl ApprovalPatterns {
             core,
             gate: Mutex::new(()),
             warning,
+            registry: std::sync::OnceLock::new(),
         }))
+    }
+    /// Lets a provider registered in `providers.d` carry approval phrases like a
+    /// legacy `custom_providers` entry does. Set once, before the Hub serves.
+    pub fn set_registry_sources(&self, sources: Arc<RegistrySources>) {
+        let _ = self.registry.set(sources);
+    }
+    fn registry_sources(&self) -> Vec<(String, String)> {
+        self.registry.get().map(|f| f()).unwrap_or_default()
+    }
+    fn is_registry_provider(&self, id: &str) -> bool {
+        self.registry_sources().iter().any(|(known, _)| known == id)
     }
     fn read_file(&self, name: &str) -> io::Result<Vec<u8>> {
         const CAP: usize = 2 * 1024 * 1024;
@@ -166,6 +207,7 @@ impl ApprovalPatterns {
                     .map(|p| p.id),
             );
         }
+        providers.extend(self.registry_sources().into_iter().map(|(id, _)| id));
         for provider in providers {
             if set.contains_key(&provider) {
                 continue;
@@ -217,7 +259,8 @@ impl ApprovalPatterns {
             .config
             .snapshot()
             .ok()
-            .is_some_and(|s| s.config.is_custom_provider_id(raw_provider));
+            .is_some_and(|s| s.config.is_custom_provider_id(raw_provider))
+            || self.is_registry_provider(raw_provider);
         if !known(provider) && !custom {
             return Err(io::Error::from(io::ErrorKind::NotFound));
         }
@@ -244,17 +287,45 @@ impl ApprovalPatterns {
                     .map(|s| ((*p).into(), s.into(), true))
             })
             .collect();
-        let custom = crate::config::effective_custom_providers(&snapshot.config.custom_providers)
-            .into_iter()
-            .filter(|p| !p.approval_pattern_source.trim().is_empty())
-            .map(|p| (p.id, p.approval_pattern_source, false))
-            .collect();
+        let custom = self.custom_targets(&snapshot.config);
         // Go starts both independent owners together. Every configured custom
         // source starts before its own deadline; builtin work cannot starve it.
         tokio::join!(
             self.remote_batch(builtin, io.clone(), cancel, effects, &snapshot.config),
             self.remote_batch(custom, io, cancel, effects, &snapshot.config)
         );
+    }
+    /// Custom providers' sources: the legacy `custom_providers` first, then the
+    /// registry's user layer (a legacy entry with the same id wins).
+    fn custom_targets(&self, config: &crate::config::Config) -> Vec<(String, String, bool)> {
+        let mut targets: Vec<(String, String, bool)> =
+            crate::config::effective_custom_providers(&config.custom_providers)
+                .into_iter()
+                .filter(|p| !p.approval_pattern_source.trim().is_empty())
+                .map(|p| (p.id, p.approval_pattern_source, false))
+                .collect();
+        for (id, source) in self.registry_sources() {
+            if !source.trim().is_empty() && !targets.iter().any(|(known, _, _)| *known == id) {
+                targets.push((id, source, false));
+            }
+        }
+        targets
+    }
+    /// The registry changed while the Hub runs: read the new provider's phrases
+    /// (and drop a removed one's) without re-fetching the built-in sources.
+    pub async fn registry_changed(
+        &self,
+        io: Arc<dyn super::slash_commands::SlashIo>,
+        cancel: &crate::process::Cancellation,
+        effects: &dyn crate::proto::core::CoreEffectSink,
+    ) {
+        let Ok(snapshot) = self.config.snapshot() else {
+            return;
+        };
+        self.reload();
+        let custom = self.custom_targets(&snapshot.config);
+        self.remote_batch(custom, io, cancel, effects, &snapshot.config)
+            .await;
     }
     async fn remote_batch(
         &self,

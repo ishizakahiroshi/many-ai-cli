@@ -59,6 +59,8 @@ import {
   providerIconPreviewHtml,
 } from './provider-icon.js';
 import { appConfirm } from './settings.js';
+import { initProviderAddedNotice } from './provider-added-notice.js';
+import { markProviderCreating } from './provider-added-notice-model.js';
 
 type ProviderFormState = { id: string; revision: string; isBuiltin: boolean; pending: boolean } | null;
 
@@ -115,6 +117,7 @@ function definitionForAdvancedPreview(definition: ProviderEffectiveDefinition): 
 }
 
 function initProviderManager(): void {
+  initProviderAddedNotice();
   const list = document.getElementById('provider-manager-list');
   const cliMaintenancePanel = document.getElementById('cli-maintenance-panel');
   const cliMaintenanceMissing = document.getElementById('cli-maintenance-missing');
@@ -1004,7 +1007,12 @@ function initProviderManager(): void {
 
     const mutation: ProviderMutationResult = submittedEditing
       ? await saveProviderDefinition(submittedEditing.id, submittedEditing.revision, definition)
-      : await createProvider(definition);
+      : await (async () => {
+          // Hub の「足された」通知は保存の応答より先に届くことがある。この画面で足したものは
+          // 知らせない（本人が押した操作）ので、送る前に印を付ける。
+          markProviderCreating(savedId);
+          return createProvider(definition);
+        })();
     if (!detailGuard.isCurrent(requestToken)) {
       saving = false;
       setFormBusy(false);

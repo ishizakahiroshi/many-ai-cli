@@ -530,6 +530,7 @@ async fn run() -> Result<(), String> {
             print!(
                 "{}",
                 many_ai_cli::application::maintenance_entry::provider(&context, &args)
+                    .await
                     .map_err(|e| e.to_string())?
             );
         }

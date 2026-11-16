@@ -20,7 +20,7 @@ fn expected(args: &[String], allow_empty: bool) -> io::Result<&str> {
 pub fn provider_command(store: &Arc<ProviderRegistryStore>, args: &[String]) -> io::Result<String> {
     let command = args
         .first()
-        .ok_or_else(|| error("provider <backup|reset|recover>"))?;
+        .ok_or_else(|| error("provider <add|list|remove|test|backup|reset|recover> (see: many-ai-cli provider --help)"))?;
     let _guard = store
         .mutation_gate
         .lock()
@@ -120,4 +120,43 @@ pub fn provider_command(store: &Arc<ProviderRegistryStore>, args: &[String]) -> 
     };
     result.map_err(io::Error::other)?;
     Ok(output)
+}
+
+/// What `many-ai-cli provider ...` asks for, parsed without touching a Hub or
+/// the registry (so `--help` and a refused argument never contact anything).
+pub enum ProviderCommand {
+    Text(&'static str),
+    Add(super::provider_args::AddArgs),
+    List,
+    Remove(String),
+    Test(super::provider_args::TestArgs),
+    /// backup / reset / recover: through the Hub when one runs, else in process.
+    History,
+}
+pub fn parse_command(args: &[String]) -> io::Result<ProviderCommand> {
+    use super::{provider_args as parse, provider_args::Parse, provider_help as help};
+    let rest = args.get(1..).unwrap_or(&[]);
+    match args.first().map(String::as_str) {
+        None => Err(error(
+            "provider <add|list|remove|test|backup|reset|recover> (see: many-ai-cli provider --help)",
+        )),
+        Some("--help" | "-h" | "help") => Ok(ProviderCommand::Text(help::OVERVIEW)),
+        Some("add") => Ok(match parse::parse_add(rest).map_err(error)? {
+            Parse::Help => ProviderCommand::Text(help::ADD),
+            Parse::Args(add) => ProviderCommand::Add(add),
+        }),
+        Some("list") => Ok(match parse::parse_list(rest).map_err(error)? {
+            Parse::Help => ProviderCommand::Text(help::LIST),
+            Parse::Args(()) => ProviderCommand::List,
+        }),
+        Some("remove") => Ok(match parse::parse_remove(rest).map_err(error)? {
+            Parse::Help => ProviderCommand::Text(help::REMOVE),
+            Parse::Args(id) => ProviderCommand::Remove(id),
+        }),
+        Some("test") => Ok(match parse::parse_test(rest).map_err(error)? {
+            Parse::Help => ProviderCommand::Text(help::TEST),
+            Parse::Args(test) => ProviderCommand::Test(test),
+        }),
+        Some(_) => Ok(ProviderCommand::History),
+    }
 }

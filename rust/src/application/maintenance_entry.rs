@@ -89,12 +89,54 @@ pub fn log_clean(context: &MainContext, args: &[String]) -> Result<PathBuf, Stri
     let (input, output) = parse_log_clean(args)?;
     maintenance_cli::log_clean(&context.paths, &input, output.as_deref()).map_err(|e| e.to_string())
 }
-pub fn provider(context: &MainContext, args: &[String]) -> io::Result<String> {
+pub async fn provider(context: &MainContext, args: &[String]) -> io::Result<String> {
+    use maintenance_cli::{ProviderCommand, provider_hub};
+    let command = maintenance_cli::parse_command(args)?;
+    if let ProviderCommand::Text(text) = command {
+        return Ok(text.to_owned());
+    }
     let store = Arc::new(
         crate::profile::store::ProviderRegistryStore::new(&context.paths, context.config.clone())
             .map_err(io::Error::other)?,
     );
-    maintenance_cli::provider_command(&store, args)
+    let config = context.config.snapshot().map_err(io::Error::other)?.config;
+    let hub = provider_hub::discover(&context.environment, &config, &context.paths).await?;
+    match &hub {
+        Some(hub) => run_provider(context, &store, &config, Some(hub), command, args).await,
+        None => {
+            run_provider::<provider_hub::NativeHub>(context, &store, &config, None, command, args)
+                .await
+        }
+    }
+}
+async fn run_provider<H: maintenance_cli::provider_hub::HubApi>(
+    context: &MainContext,
+    store: &Arc<crate::profile::store::ProviderRegistryStore>,
+    config: &crate::config::Config,
+    hub: Option<&H>,
+    command: maintenance_cli::ProviderCommand,
+    args: &[String],
+) -> io::Result<String> {
+    use maintenance_cli::ProviderCommand;
+    let registry = maintenance_cli::provider_registry::Registry {
+        hub,
+        store,
+        paths: &context.paths,
+        config,
+        environment: &context.environment,
+        cwd: &context.cwd,
+    };
+    match command {
+        ProviderCommand::Text(text) => Ok(text.to_owned()),
+        ProviderCommand::Add(add) => registry.add(&add).await,
+        ProviderCommand::List => registry.list().await,
+        ProviderCommand::Remove(id) => registry.remove(&id).await,
+        ProviderCommand::Test(test) => registry.test(&test).await,
+        ProviderCommand::History => match registry.history_via_hub(args).await? {
+            Some(output) => Ok(output),
+            None => maintenance_cli::provider_command(store, args),
+        },
+    }
 }
 #[cfg(test)]
 mod tests {

@@ -1,9 +1,13 @@
 //! Source CLI maintenance operations with explicit runtime and filesystem owners.
 mod provider;
+mod provider_args;
+mod provider_help;
+pub mod provider_hub;
+pub mod provider_registry;
 pub mod stop;
 pub mod transcript;
 use crate::{config::RuntimePaths, files::safe_fs::Dir};
-pub use provider::provider_command;
+pub use provider::{ProviderCommand, parse_command, provider_command};
 use std::{
     io::{self, BufReader},
     path::{Path, PathBuf},

@@ -288,13 +288,23 @@ fn registry_mutations_broadcast_one_providers_updated_and_failures_none() {
     core.attach_ui(ui, None, None).unwrap();
     assert!(core.finish_ui_priming(ui).unwrap().0.is_empty());
     let store = Arc::new(ProviderRegistryStore::new(&paths, config.clone()).unwrap());
+    let changed: Arc<std::sync::Mutex<Vec<(String, &'static str)>>> = Default::default();
     let router = ServiceRouter::new(config, paths, trait_core.clone(), 49893)
         .unwrap()
         .with_provider_routes(
             store.clone(),
             Arc::new(|_| true),
             Arc::new(|_, _, _| panic!("unexpected provider warning")),
-        );
+        )
+        .with_provider_changed({
+            let changed = changed.clone();
+            Arc::new(move |change| {
+                changed
+                    .lock()
+                    .unwrap()
+                    .push((change.id.clone(), change.action));
+            })
+        });
     let call = |method: &str, path: &str, query: &str, body: Value| {
         let request = Request {
             method: method.into(),
@@ -344,4 +354,13 @@ fn registry_mutations_broadcast_one_providers_updated_and_failures_none() {
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].providers, ["fixture-bcast"]);
     assert_eq!(sent[0].reason, "removed");
+    // The change hook ran once per successful mutation, never for a refusal or a
+    // validate-only call.
+    assert_eq!(
+        *changed.lock().unwrap(),
+        [
+            ("fixture-bcast".to_owned(), "created"),
+            ("fixture-bcast".to_owned(), "removed")
+        ]
+    );
 }

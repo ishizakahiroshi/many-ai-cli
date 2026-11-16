@@ -1098,6 +1098,12 @@ impl HubComposition {
                 Arc::new(move |operation| logger.write("WARN", operation, "approval patterns"))
             },
         )?;
+        {
+            let registry = registry.clone();
+            approval_patterns.set_registry_sources(Arc::new(move || {
+                crate::application::approval_patterns::registry_user_sources(&registry)
+            }));
+        }
         if approval_patterns.sync().is_err() {
             logger.write(
                 "WARN",
@@ -1270,6 +1276,29 @@ impl HubComposition {
                 })
             },
         )
+        .with_provider_changed({
+            // A provider registered or removed while the Hub runs: read its
+            // approval phrases (written by `provider add --approval-option`)
+            // now, not at the next start.
+            let patterns = approval_patterns.clone();
+            let io = approval_pattern_io.clone();
+            let effects = effects.clone();
+            let tasks = tasks.clone();
+            Arc::new(move |_change| {
+                if let Ok(permit) = tasks.effect_permit() {
+                    let (patterns, io, effects) = (patterns.clone(), io.clone(), effects.clone());
+                    drop(permit.start(async move {
+                        patterns
+                            .registry_changed(
+                                io,
+                                &crate::process::Cancellation::default(),
+                                effects.as_ref(),
+                            )
+                            .await;
+                    }));
+                }
+            })
+        })
         .with_subscriptions(Arc::new(
             crate::hub::subscription_routes::SubscriptionHttp::new(subscriptions.clone()),
         ))
