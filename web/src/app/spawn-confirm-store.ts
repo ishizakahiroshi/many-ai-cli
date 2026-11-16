@@ -315,6 +315,16 @@ export function folderTrustDecision(offered: boolean, checked: boolean, approved
   return checked;
 }
 
+// 決定の本文に載せる subscription_profile_id（issue #43）。承認し、契約の欄を
+// 出していて（有効な契約が 2 件以上の CLI）、「既定」以外を選んだときだけ値を返す。
+// それ以外は undefined で、呼び出し側は欄ごと送らない: 契約を指定しない今までの
+// 起動と同じにするため、空文字も送らない。
+export function subscriptionDecision(shown: boolean, selected: string, approved: boolean): string | undefined {
+  const id = String(selected || '').trim();
+  if (!approved || !shown || !id) return undefined;
+  return id;
+}
+
 // 旧 Hub から届いた（このフィールドを持たない）メッセージでも落ちないよう、
 // 欠けていれば空の表として扱う。呼び出し側は「エントリが無い＝不明」ではなく
 // 「何も足されない」と読める形に寄せている。

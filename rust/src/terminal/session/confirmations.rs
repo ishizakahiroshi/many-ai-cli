@@ -246,10 +246,11 @@ impl SpawnConfirmations for SessionEngine {
         };
         // Snapshot/validation can call application code. Revalidate the exact
         // entry after returning so replacement or auth rotation cannot be lost.
-        executor.presentation()?;
+        let presentation = executor.presentation()?;
         let body = if response.approved {
             let mut body = body.approve(&response, proof.clone())?;
             validate_launch_options(&mut body)?;
+            validate_chosen_subscription(&body, &response, &presentation.config)?;
             Some(body)
         } else {
             None
@@ -346,6 +347,40 @@ fn validate_launch_options(body: &mut ResolvedChildSpawn) -> Result<(), SessionE
         .and_then(|()| config::validate_execution_mode(&body.execution_mode))
         .and_then(|()| config::validate_permission_preset(&body.permission_preset))
         .map_err(|error| SessionError::InvalidRequest(error.to_string()))
+}
+/// A profile the human picked in the dialog must be one the chosen CLI can
+/// launch with, checked before the decision is committed: an unknown, disabled
+/// or other-CLI ID answers 400 and leaves the confirmation pending instead of
+/// launching the child on another login (issue #43). The launch still applies
+/// the same rule again when it builds the environment.
+fn validate_chosen_subscription(
+    body: &ResolvedChildSpawn,
+    response: &SpawnConfirmationResponse,
+    cfg: &config::Config,
+) -> Result<(), SessionError> {
+    let raw = response
+        .subscription_profile_id
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or("");
+    if raw.is_empty() {
+        return Ok(());
+    }
+    let provider = &body.request().provider;
+    let id = config::normalize_subscription_id(raw);
+    let selectable = crate::profile::subscriptions::selectable(cfg, provider);
+    let known = if id == "auto" {
+        !selectable.is_empty()
+    } else {
+        selectable.contains(&id)
+    };
+    if known {
+        Ok(())
+    } else {
+        Err(SessionError::InvalidRequest(format!(
+            "subscription profile {id:?} is not an enabled profile of {provider}"
+        )))
+    }
 }
 fn requested_message(
     parent: LiveSessionId,

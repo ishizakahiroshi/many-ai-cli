@@ -2218,6 +2218,11 @@ pub struct SpawnConfirmationResponse {
     pub remember_permission: Option<bool>,
     #[serde(rename = "grant_folder_trust")]
     pub grant_folder_trust: Option<bool>,
+    /// The subscription profile the human picked in the dialog. Absent or blank
+    /// keeps the request as it was (the unspecified launch), so the dialog only
+    /// sends it when it showed the field and a profile was chosen (issue #43).
+    #[serde(rename = "subscription_profile_id")]
+    pub subscription_profile_id: Option<String>,
 }
 
 /// Produced only by the server after same-origin/capability and auth checks.
@@ -2294,6 +2299,7 @@ impl ChildSpawnRequest {
         decision: &SpawnConfirmationResponse,
         _proof: &VerifiedConfirmationRequest,
     ) {
+        let requested_provider = self.provider.clone();
         if !decision.provider.trim().is_empty() {
             self.provider = decision.provider.trim().to_owned();
         }
@@ -2311,6 +2317,18 @@ impl ChildSpawnRequest {
         }
         if let Some(value) = decision.remember_permission {
             self.remember_permission = Some(value);
+        }
+        let chosen = decision
+            .subscription_profile_id
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("");
+        if !chosen.is_empty() {
+            self.subscription_profile_id = chosen.to_owned();
+        } else if requested_provider != self.provider {
+            // A profile the AI asked for belongs to the provider it asked for.
+            // After the human switches CLI it would name another CLI's profile.
+            self.subscription_profile_id.clear();
         }
     }
 }
@@ -3068,6 +3086,54 @@ mod internal_contract_tests {
             body.claimed_origin.is_empty(),
             "confirmation must not turn autonomous launch origin into UI"
         );
+    }
+
+    #[test]
+    fn human_subscription_choice_overrides_and_provider_switch_drops_the_requested_one() {
+        let proof = VerifiedConfirmationRequest::after_server_authentication(AuthEpoch(2));
+        let requested = ChildSpawnRequest {
+            provider: "codex".into(),
+            subscription_profile_id: "asked".into(),
+            ..Default::default()
+        };
+        let mut body = requested.clone();
+        body.apply_human_decision(&SpawnConfirmationResponse::default(), &proof);
+        assert_eq!(body.subscription_profile_id, "asked");
+        body.apply_human_decision(
+            &SpawnConfirmationResponse {
+                subscription_profile_id: Some(" ".into()),
+                ..Default::default()
+            },
+            &proof,
+        );
+        assert_eq!(body.subscription_profile_id, "asked");
+        body.apply_human_decision(
+            &SpawnConfirmationResponse {
+                subscription_profile_id: Some(" work ".into()),
+                ..Default::default()
+            },
+            &proof,
+        );
+        assert_eq!(body.subscription_profile_id, "work");
+        let mut switched = requested.clone();
+        switched.apply_human_decision(
+            &SpawnConfirmationResponse {
+                provider: "claude".into(),
+                ..Default::default()
+            },
+            &proof,
+        );
+        assert!(switched.subscription_profile_id.is_empty());
+        let mut switched = requested;
+        switched.apply_human_decision(
+            &SpawnConfirmationResponse {
+                provider: "claude".into(),
+                subscription_profile_id: Some("other".into()),
+                ..Default::default()
+            },
+            &proof,
+        );
+        assert_eq!(switched.subscription_profile_id, "other");
     }
 
     #[test]

@@ -52,6 +52,10 @@ impl GoWire for SpawnConfirmationResponse {
                 name: "grant_folder_trust",
                 kind: "*bool",
             },
+            Field {
+                name: "subscription_profile_id",
+                kind: "*string",
+            },
         ],
     }];
 }
@@ -153,6 +157,14 @@ mod tests {
         assert_eq!(response.effort, None);
         assert_eq!(response.permission_preset, Some(String::new()));
         assert_eq!(response.grant_folder_trust, Some(false));
+        assert_eq!(response.subscription_profile_id, None);
+        let chosen = Request {
+            body: br#"{"confirmation_id":"c","approved":true,"subscription_profile_id":"work"}"#
+                .to_vec(),
+            ..Default::default()
+        };
+        let response: SpawnConfirmationResponse = decode_json(&chosen).unwrap();
+        assert_eq!(response.subscription_profile_id.as_deref(), Some("work"));
         let invalid = Request {
             body: br#"{"approved":7,"approved":true}"#.to_vec(),
             ..Default::default()

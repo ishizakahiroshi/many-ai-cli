@@ -22,6 +22,7 @@ import {
 import { activeSessionId, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
 import { loadProviderSummaries } from './provider-store.js';
+import { loadSubscriptions, selectableProfiles } from './subscriptions.js';
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import {
   clearAllSpawnConfirmationsForHubRestart,
@@ -43,6 +44,7 @@ import {
   headlessUnsupportedForSelection,
   folderTrustOffered,
   folderTrustDecision,
+  subscriptionDecision,
   isRegisteredChildProvider,
   registeredChildProviderChoices,
   type RegisteredChildProviderChoice,
@@ -151,6 +153,24 @@ export function permissionPresetLabel(preset: string): string {
     default:
       return preset;
   }
+}
+
+// 契約の欄。有効な profile が 2 件以上ある CLI のときだけ出す（派生ダイアログ・
+// 新規起動画面と同じ規則。1 件以下なら選ぶ意味が無く、既定のログインで起動する）。
+// 先頭の「既定」は値を持たず、承認時に何も送らない＝契約を指定しない起動と同じ。
+function subscriptionOptionsHtml(provider: string, selected: string): string {
+  const profiles = selectableProfiles(provider);
+  const keep = profiles.some((p) => p.id === selected) ? selected : '';
+  const option = (value: string, label: string) =>
+    `<option value="${escapeHtml(value)}"${value === keep ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+  return [
+    option('', t('spawn_subscription_default')),
+    ...profiles.map((p) => option(p.id, p.name ? `${p.name} (${p.id})` : p.id)),
+  ].join('');
+}
+
+function subscriptionFieldHidden(provider: string): boolean {
+  return selectableProfiles(provider).length < 2;
 }
 
 function effortOptionsHtml(provider: string, selected: string): string {
@@ -320,6 +340,10 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
           <select name="provider" class="ui-input spawn-select">${optionsHtml}</select>
         </span>
       </label>
+      <label class="spawn-confirm-field" data-spawn-confirm-subscription-field${subscriptionFieldHidden(provider) ? ' hidden' : ''}>
+        <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_role_table_subscription'))}</span>
+        <select name="subscription" class="ui-input spawn-select" data-spawn-confirm-subscription>${subscriptionOptionsHtml(provider, '')}</select>
+      </label>
       <label class="spawn-confirm-field" data-spawn-confirm-model-field>
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_role_table_model'))}</span>
         <input name="model" class="ui-input spawn-input" list="spawn-confirm-model-datalist-${escapeHtml(record.id)}" value="${escapeHtml(record.model)}" placeholder="${escapeHtml(t('spawn_confirm_model_placeholder'))}" spellcheck="false" autocomplete="off">
@@ -377,6 +401,26 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   const trustField = dialog.querySelector('[data-spawn-confirm-trust]') as HTMLElement | null;
   const trustText = dialog.querySelector('[data-spawn-confirm-trust-text]') as HTMLElement | null;
   const trustInput = dialog.querySelector('[name=grant_folder_trust]') as HTMLInputElement | null;
+  const subscriptionField = dialog.querySelector('[data-spawn-confirm-subscription-field]') as HTMLElement | null;
+  const subscriptionSelect = dialog.querySelector('[data-spawn-confirm-subscription]') as HTMLSelectElement | null;
+
+  // CLI を差し替えたら、その CLI の契約一覧に引き直す。別 CLI の契約は残さない
+  // （残すと Hub が「その CLI の契約ではない」として承認を断る）。
+  function refreshSubscriptionChoices(): void {
+    if (!subscriptionSelect) return;
+    const provider = providerSelect?.value || record.provider;
+    subscriptionSelect.innerHTML = subscriptionOptionsHtml(provider, subscriptionSelect.value);
+    if (subscriptionField) subscriptionField.hidden = subscriptionFieldHidden(provider);
+  }
+  async function loadSubscriptionChoices(): Promise<void> {
+    try {
+      await loadSubscriptions();
+    } catch (_) {
+      // 読めなければ欄は出ないまま。今までどおり既定のログインで承認できる。
+    }
+    if (!dialog.isConnected || state !== 'open') return;
+    refreshSubscriptionChoices();
+  }
 
   // 信頼の登録は、選んでいる provider が Hub の一覧にあるときだけ出す。provider を
   // 差し替えたら、出すかどうかと文言の CLI 名を引き直す。チェックの状態は保つ。
@@ -453,6 +497,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       refreshApprovalDisplay();
       refreshFolderTrust();
       refreshRegisteredFields();
+      refreshSubscriptionChoices();
       // effort の候補も provider ごとに違う。写像が無い provider を選んだら欄を隠し、
       // 前の provider の値を送ってしまわないよう選択も空へ戻す（Hub はその値を
       // 400 で弾くので、残ったままだと承認できなくなる）。
@@ -557,7 +602,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     state = 'deciding';
     if (providerSelect) providerSelect.disabled = true;
     if (modelInput) modelInput.disabled = true;
-    for (const name of ['effort', 'execution_mode', 'permission_preset']) {
+    for (const name of ['effort', 'execution_mode', 'permission_preset', 'subscription']) {
       const el = dialog.querySelector(`[name=${name}]`) as HTMLSelectElement | null;
       if (el) el.disabled = true;
     }
@@ -588,6 +633,10 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       permission_preset: permissionPresetVal,
     };
     if (approved && !registered) payload.remember_permission = !!rememberInput?.checked;
+    // 契約は欄を出していて、既定以外を選んで承認したときだけ送る。欄が無い CLI や
+    // 「既定」のままなら JSON に載せず、契約を指定しない今までの起動と同じにする。
+    const subscriptionId = subscriptionDecision(!!subscriptionField && !subscriptionField.hidden, subscriptionSelect?.value || '', approved);
+    if (subscriptionId !== undefined) payload.subscription_profile_id = subscriptionId;
     // 信頼の登録は、チェックボックスを出しているときに承認した場合だけ送る。
     const grantFolderTrust = folderTrustDecision(!!trustField && !trustField.hidden, !!trustInput?.checked, approved);
     if (grantFolderTrust !== undefined) payload.grant_folder_trust = grantFolderTrust;
@@ -667,5 +716,6 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   refreshRegisteredFields();
   void refreshRegisteredProviders();
   void refreshModelChoices();
+  void loadSubscriptionChoices();
   dialog.showModal();
 }
