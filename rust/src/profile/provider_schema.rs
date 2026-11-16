@@ -59,6 +59,149 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
                 name: "update",
                 kind: "*UpdateDefinition",
             },
+            Field {
+                name: "connection",
+                kind: "string",
+            },
+            Field {
+                name: "slash_commands",
+                kind: "*SlashCommandsDefinition",
+            },
+            Field {
+                name: "permissions",
+                kind: "*PermissionsDefinition",
+            },
+            Field {
+                name: "login",
+                kind: "*LoginDefinition",
+            },
+            Field {
+                name: "links",
+                kind: "*LinksDefinition",
+            },
+            Field {
+                name: "input",
+                kind: "*InputDefinition",
+            },
+            Field {
+                name: "routines",
+                kind: "*RoutinesDefinition",
+            },
+            Field {
+                name: "screen",
+                kind: "*ScreenDefinition",
+            },
+        ],
+    },
+    Schema {
+        name: "SlashCommandsDefinition",
+        fields: &[
+            Field {
+                name: "source",
+                kind: "string",
+            },
+            Field {
+                name: "items",
+                kind: "[]SlashCommandItem",
+            },
+            Field {
+                name: "skill_prefix",
+                kind: "string",
+            },
+        ],
+    },
+    Schema {
+        name: "SlashCommandItem",
+        fields: &[
+            Field {
+                name: "cmd",
+                kind: "string",
+            },
+            Field {
+                name: "desc",
+                kind: "string",
+            },
+        ],
+    },
+    Schema {
+        name: "PermissionsDefinition",
+        fields: &[
+            Field {
+                name: "modes",
+                kind: "map[string][]string",
+            },
+            Field {
+                name: "allowed_tools_args",
+                kind: "[]string",
+            },
+        ],
+    },
+    Schema {
+        name: "LoginDefinition",
+        fields: &[Field {
+            name: "args",
+            kind: "[]string",
+        }],
+    },
+    Schema {
+        name: "LinksDefinition",
+        fields: &[Field {
+            name: "usage_url",
+            kind: "string",
+        }],
+    },
+    Schema {
+        name: "InputDefinition",
+        fields: &[
+            Field {
+                name: "slow_paste",
+                kind: "bool",
+            },
+            Field {
+                name: "interrupt_key",
+                kind: "string",
+            },
+            Field {
+                name: "attach_format",
+                kind: "string",
+            },
+            Field {
+                name: "slash_submit",
+                kind: "string",
+            },
+        ],
+    },
+    Schema {
+        name: "RoutinesDefinition",
+        fields: &[
+            Field {
+                name: "enabled",
+                kind: "*bool",
+            },
+            Field {
+                name: "completion_mode",
+                kind: "string",
+            },
+        ],
+    },
+    Schema {
+        name: "ScreenDefinition",
+        fields: &[Field {
+            name: "ready_markers",
+            kind: "[]string",
+        }],
+    },
+    Schema {
+        name: "ModelListDefinition",
+        fields: &[
+            Field {
+                name: "args",
+                kind: "[]string",
+            },
+            Field {
+                name: "timeout_seconds",
+                kind: "int",
+            },
         ],
     },
     Schema {
@@ -96,6 +239,10 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
                 name: "headless",
                 kind: "*HeadlessDefinition",
             },
+            Field {
+                name: "config_dir_env",
+                kind: "string",
+            },
         ],
     },
     Schema {
@@ -112,6 +259,14 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
             Field {
                 name: "source",
                 kind: "string",
+            },
+            Field {
+                name: "list",
+                kind: "*ModelListDefinition",
+            },
+            Field {
+                name: "context_limit",
+                kind: "int",
             },
         ],
     },
@@ -155,6 +310,14 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
             Field {
                 name: "color",
                 kind: "string",
+            },
+            Field {
+                name: "letter",
+                kind: "string",
+            },
+            Field {
+                name: "order",
+                kind: "int",
             },
         ],
     },
@@ -385,6 +548,42 @@ impl GoWire for PresentationDefinition {
 }
 impl GoWire for UpdateDefinition {
     const GO_TYPE: &'static str = "UpdateDefinition";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for SlashCommandsDefinition {
+    const GO_TYPE: &'static str = "SlashCommandsDefinition";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for SlashCommandItem {
+    const GO_TYPE: &'static str = "SlashCommandItem";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for PermissionsDefinition {
+    const GO_TYPE: &'static str = "PermissionsDefinition";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for LoginDefinition {
+    const GO_TYPE: &'static str = "LoginDefinition";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for LinksDefinition {
+    const GO_TYPE: &'static str = "LinksDefinition";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for InputDefinition {
+    const GO_TYPE: &'static str = "InputDefinition";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for RoutinesDefinition {
+    const GO_TYPE: &'static str = "RoutinesDefinition";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for ScreenDefinition {
+    const GO_TYPE: &'static str = "ScreenDefinition";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for ModelListDefinition {
+    const GO_TYPE: &'static str = "ModelListDefinition";
     const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
 }
 impl GoWire for AdapterRefs {

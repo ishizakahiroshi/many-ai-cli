@@ -60,6 +60,11 @@ pub fn default_adapters() -> AdapterCatalog {
 #[derive(Clone, Default)]
 pub struct Registry {
     definitions: BTreeMap<String, EffectiveDefinition>,
+    /// What the Hub reads for the declarative sections: each definition with the
+    /// sections it leaves empty filled from the built-in declarations. Kept
+    /// apart from `definitions` so the registry revision (an oracle value) is
+    /// computed from the definitions alone.
+    declared: BTreeMap<String, Definition>,
     order: Vec<String>,
     summaries: Vec<Summary>,
     diagnostics: Vec<Diagnostic>,
@@ -68,6 +73,11 @@ pub struct Registry {
 impl Registry {
     pub fn lookup(&self, id: &str) -> Option<EffectiveDefinition> {
         self.definitions.get(id).cloned()
+    }
+    /// The definition of `id` with its declarative sections resolved (own value
+    /// first, then the built-in declaration). `None` for an unknown id.
+    pub fn declared(&self, id: &str) -> Option<Definition> {
+        self.declared.get(id).cloned()
     }
     pub fn list(&self) -> Vec<Summary> {
         self.summaries.clone()
@@ -173,6 +183,7 @@ impl Registry {
                 id.clone(),
             )
         });
+        let builtin_declarations = super::declared::builtin_declarations();
         for id in &registry.order {
             let (value, source, fields) = merged.remove(id).unwrap();
             let raw = serde_json::to_vec(&value).expect("JSON value");
@@ -186,6 +197,15 @@ impl Registry {
                         def.enabled = Some(true);
                     }
                     let capabilities = derive_capabilities(&def);
+                    // Only a built-in id may borrow a built-in declaration; a
+                    // user definition never inherits another provider's values.
+                    let builtin = BUILTIN_PROVIDER_IDS
+                        .contains(&id.as_str())
+                        .then(|| builtin_declarations.get(id.as_str()))
+                        .flatten();
+                    registry
+                        .declared
+                        .insert(id.clone(), super::declared::resolve(&def, builtin));
                     registry.definitions.insert(
                         id.clone(),
                         EffectiveDefinition {

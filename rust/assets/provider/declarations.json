@@ -1,0 +1,9 @@
+{
+  "claude": {"schema_version":1,"id":"claude","launch":{"config_dir_env":"CLAUDE_CONFIG_DIR"},"login":{"args":["auth","login"]},"links":{"usage_url":"https://claude.ai/settings/usage"}},
+  "codex": {"schema_version":1,"id":"codex","launch":{"config_dir_env":"CODEX_HOME"},"login":{"args":["login"]},"links":{"usage_url":"https://chatgpt.com/codex/cloud/settings/analytics#usage"},"input":{"slow_paste":true},"routines":{"completion_mode":"native_or_marker"}},
+  "copilot": {"schema_version":1,"id":"copilot","links":{"usage_url":"https://github.com/settings/billing"}},
+  "cursor-agent": {"schema_version":1,"id":"cursor-agent","links":{"usage_url":"https://cursor.com/dashboard"}},
+  "opencode": {"schema_version":1,"id":"opencode","launch":{"config_dir_env":"XDG_DATA_HOME"},"login":{"args":["providers","login"]},"links":{"usage_url":"https://opencode.ai/go"},"input":{"slow_paste":true}},
+  "grok": {"schema_version":1,"id":"grok","launch":{"config_dir_env":"GROK_HOME"},"login":{"args":["login"]},"links":{"usage_url":"https://grok.com/?_s=usage"},"input":{"interrupt_key":"ctrl-c"}},
+  "command-code": {"schema_version":1,"id":"command-code","links":{"usage_url":"https://commandcode.ai/usage"}}
+}

@@ -1,4 +1,5 @@
 //! Provider configuration/profile services. Vendor defaults are read-only inputs.
+pub mod declared;
 pub mod persistence;
 pub(crate) mod provider_schema;
 pub mod registry;

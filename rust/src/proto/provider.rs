@@ -205,6 +205,198 @@ pub struct Definition {
     pub source: SourceRef,
     #[serde(rename = "update", skip_serializing_if = "Option::is_none")]
     pub update: Option<UpdateDefinition>,
+    // Declarative sections (Rust only; the frozen Go baseline has none of them).
+    // Every field is skipped when empty, so a definition that does not use them
+    // serializes, hashes and diffs exactly as before. The embedded manifests
+    // leave them empty; the values of the seven built-ins live in
+    // `profile::declared` so the Go oracle revision of the embedded layer is
+    // unchanged.
+    /// `""` or `"pty"` (the default) or `"acp"`. An `acp` provider is never
+    /// reachable from an automated path.
+    #[serde(
+        rename = "connection",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub connection: String,
+    #[serde(rename = "slash_commands", skip_serializing_if = "Option::is_none")]
+    pub slash_commands: Option<SlashCommandsDefinition>,
+    #[serde(rename = "permissions", skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<PermissionsDefinition>,
+    #[serde(rename = "login", skip_serializing_if = "Option::is_none")]
+    pub login: Option<LoginDefinition>,
+    #[serde(rename = "links", skip_serializing_if = "Option::is_none")]
+    pub links: Option<LinksDefinition>,
+    #[serde(rename = "input", skip_serializing_if = "Option::is_none")]
+    pub input: Option<InputDefinition>,
+    #[serde(rename = "routines", skip_serializing_if = "Option::is_none")]
+    pub routines: Option<RoutinesDefinition>,
+    #[serde(rename = "screen", skip_serializing_if = "Option::is_none")]
+    pub screen: Option<ScreenDefinition>,
+}
+
+/// Where the slash command candidates of a provider come from. At most one of
+/// `source` (an https URL that serves a Markdown table) and `items` is needed;
+/// `items` wins when both are present.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SlashCommandsDefinition {
+    #[serde(
+        rename = "source",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub source: String,
+    #[serde(
+        rename = "items",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub items: Vec<SlashCommandItem>,
+    /// Prefix that starts a skill invocation (`/` by default, `$` for codex).
+    #[serde(
+        rename = "skill_prefix",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub skill_prefix: String,
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SlashCommandItem {
+    #[serde(rename = "cmd", deserialize_with = "null_default")]
+    pub cmd: String,
+    #[serde(
+        rename = "desc",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub desc: String,
+}
+
+/// Permission mode name -> extra launch arguments, and how an allowed tool list
+/// is turned into arguments (`{tools}` is replaced by the comma separated list).
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PermissionsDefinition {
+    #[serde(
+        rename = "modes",
+        deserialize_with = "go_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub modes: BTreeMap<String, Vec<String>>,
+    #[serde(
+        rename = "allowed_tools_args",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub allowed_tools_args: Vec<String>,
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LoginDefinition {
+    #[serde(
+        rename = "args",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub args: Vec<String>,
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LinksDefinition {
+    /// https URL of the provider's usage / billing page.
+    #[serde(
+        rename = "usage_url",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub usage_url: String,
+}
+
+/// Terminal input habits of the inner CLI.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InputDefinition {
+    /// The CLI drops a quickly pasted body: wait longer before the Enter.
+    #[serde(
+        rename = "slow_paste",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub slow_paste: bool,
+    /// `esc` (default) or `ctrl-c`: the key that interrupts a running turn.
+    #[serde(
+        rename = "interrupt_key",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub interrupt_key: String,
+    /// How an attached file is written into the prompt: `at-path` (`@path`,
+    /// default) or `at-path-slash` (`@path` with `/` separators).
+    #[serde(
+        rename = "attach_format",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub attach_format: String,
+    /// How a one-line `/command` is submitted: `once` (default) or `paste`
+    /// (paste the body, then a separate Enter).
+    #[serde(
+        rename = "slash_submit",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub slash_submit: String,
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RoutinesDefinition {
+    /// Whether a routine (scheduled run) may use this provider. Absent = yes
+    /// for a provider with a `launch` definition and a PTY connection.
+    #[serde(rename = "enabled", skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    /// `marker` (default) or `native_or_marker`.
+    #[serde(
+        rename = "completion_mode",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub completion_mode: String,
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScreenDefinition {
+    /// Text that appears on the screen when the CLI is ready for a prompt.
+    #[serde(
+        rename = "ready_markers",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub ready_markers: Vec<String>,
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ModelListDefinition {
+    /// Arguments of the command that prints the model list.
+    #[serde(
+        rename = "args",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub args: Vec<String>,
+    #[serde(
+        rename = "timeout_seconds",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_zero"
+    )]
+    pub timeout_seconds: i64,
 }
 
 /// Source: `internal/provider/schema.go`, `LaunchDefinition`.
@@ -255,6 +447,14 @@ pub struct LaunchDefinition {
     pub allowed_env: Vec<String>,
     #[serde(rename = "headless", skip_serializing_if = "Option::is_none")]
     pub headless: Option<HeadlessDefinition>,
+    /// Name of the environment variable that moves the CLI's config directory
+    /// (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, ...). Rust-only declarative field.
+    #[serde(
+        rename = "config_dir_env",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub config_dir_env: String,
 }
 
 /// Source: `internal/provider/schema.go`, `ModelsDefinition`.
@@ -279,6 +479,16 @@ pub struct ModelsDefinition {
         skip_serializing_if = "String::is_empty"
     )]
     pub source: String,
+    /// Command that prints the model list. Rust-only declarative field.
+    #[serde(rename = "list", skip_serializing_if = "Option::is_none")]
+    pub list: Option<ModelListDefinition>,
+    /// Default context window in tokens (0 = unknown). Rust-only declarative field.
+    #[serde(
+        rename = "context_limit",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_zero"
+    )]
+    pub context_limit: i64,
 }
 
 /// Source: `internal/provider/schema.go`, `ModelDefinition`.
@@ -339,6 +549,20 @@ pub struct PresentationDefinition {
         skip_serializing_if = "String::is_empty"
     )]
     pub color: String,
+    /// One-letter badge used by the pane and session list. Rust-only.
+    #[serde(
+        rename = "letter",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub letter: String,
+    /// Position in the provider list (smaller first; 0 = after the others).
+    #[serde(
+        rename = "order",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_zero"
+    )]
+    pub order: i64,
 }
 
 /// Source: `internal/provider/schema.go`, `UpdateDefinition`.

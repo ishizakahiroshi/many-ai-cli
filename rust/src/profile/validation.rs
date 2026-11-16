@@ -297,10 +297,21 @@ pub fn sanitize_presentation(p: Option<&PresentationDefinition>) -> Option<Prese
     } else {
         String::new()
     };
-    if icon_text.is_empty() && color.is_empty() {
+    let letter = if valid_icon(&p.letter) {
+        p.letter.clone()
+    } else {
+        String::new()
+    };
+    let order = p.order.max(0);
+    if icon_text.is_empty() && color.is_empty() && letter.is_empty() && order == 0 {
         None
     } else {
-        Some(PresentationDefinition { icon_text, color })
+        Some(PresentationDefinition {
+            icon_text,
+            color,
+            letter,
+            order,
+        })
     }
 }
 
@@ -334,6 +345,14 @@ pub fn validate_definition(
                 "approval_pattern_source",
                 "source",
                 "update",
+                "connection",
+                "slash_commands",
+                "permissions",
+                "login",
+                "links",
+                "input",
+                "routines",
+                "screen",
             ]
             .contains(&field.as_str())
             {
@@ -457,8 +476,229 @@ pub fn validate_definition(
     if let Some(v) = &def.update {
         out.extend(update(v));
     }
+    out.extend(declared_sections(&def));
     sort_diagnostics(&mut out);
     Ok((def, out))
+}
+
+fn https_url(value: &str) -> bool {
+    value.len() <= 512
+        && !control(value)
+        && value
+            .strip_prefix("https://")
+            .is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/') && !rest.contains(' '))
+}
+fn one_of(value: &str, field: &str, allowed: &[&str], out: &mut Vec<Diagnostic>) {
+    if !value.is_empty() && !allowed.contains(&value) {
+        out.push(diag(
+            "invalid_declaration",
+            "error",
+            field,
+            &format!("{field} must be one of: {}", allowed.join(", ")),
+        ));
+    }
+}
+fn env_name(value: &str) -> bool {
+    let mut chars = value.chars();
+    value.len() <= 64
+        && chars
+            .next()
+            .is_some_and(|c| c.is_ascii_uppercase() || c == '_')
+        && chars.all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+}
+
+/// The Rust-only declarative sections (connection, slash commands, permissions,
+/// login, links, input, routines, screen and the extra launch / models /
+/// presentation fields). Every problem is an error: a definition with a bad
+/// declaration is refused for new input instead of being half applied.
+fn declared_sections(def: &Definition) -> Vec<Diagnostic> {
+    let mut out = vec![];
+    one_of(&def.connection, "connection", &["pty", "acp"], &mut out);
+    if let Some(s) = &def.slash_commands {
+        if !s.source.is_empty() && !https_url(&s.source) {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "slash_commands.source",
+                "slash_commands.source must be an https URL",
+            ));
+        }
+        if s.items.len() > 2000 {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "slash_commands.items",
+                "too many slash command items",
+            ));
+        }
+        for (i, item) in s.items.iter().enumerate() {
+            let field = format!("slash_commands.items[{i}]");
+            let first = item.cmd.chars().next();
+            if !matches!(first, Some('/') | Some('$'))
+                || item.cmd.len() > 64
+                || item.cmd.contains(char::is_whitespace)
+                || control(&item.cmd)
+                || item.desc.len() > 256
+                || control(&item.desc)
+            {
+                out.push(diag(
+                    "invalid_declaration",
+                    "error",
+                    &field,
+                    "a slash command starts with / or $, has no whitespace, and has a short description",
+                ));
+            }
+        }
+        if !s.skill_prefix.is_empty() && !matches!(s.skill_prefix.as_str(), "/" | "$") {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "slash_commands.skill_prefix",
+                "slash_commands.skill_prefix must be / or $",
+            ));
+        }
+    }
+    if let Some(p) = &def.permissions {
+        if p.modes.len() > 32 {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "permissions.modes",
+                "too many permission modes",
+            ));
+        }
+        for (name, values) in &p.modes {
+            let field = format!("permissions.modes.{name}");
+            if name.is_empty() || name.len() > 64 || control(name) {
+                out.push(diag(
+                    "invalid_declaration",
+                    "error",
+                    &field,
+                    "permission mode name is empty, too long, or contains a control character",
+                ));
+            }
+            out.extend(args(&field, values, false));
+        }
+        let tools: Vec<String> = p
+            .allowed_tools_args
+            .iter()
+            .map(|v| v.replace("{tools}", "x"))
+            .collect();
+        out.extend(args("permissions.allowed_tools_args", &tools, false));
+    }
+    if let Some(l) = &def.login {
+        out.extend(args("login.args", &l.args, false));
+    }
+    if let Some(l) = &def.links
+        && !l.usage_url.is_empty()
+        && !https_url(&l.usage_url)
+    {
+        out.push(diag(
+            "invalid_declaration",
+            "error",
+            "links.usage_url",
+            "links.usage_url must be an https URL",
+        ));
+    }
+    if let Some(i) = &def.input {
+        one_of(
+            &i.interrupt_key,
+            "input.interrupt_key",
+            &["esc", "ctrl-c"],
+            &mut out,
+        );
+        one_of(
+            &i.attach_format,
+            "input.attach_format",
+            &["at-path", "at-path-slash"],
+            &mut out,
+        );
+        one_of(
+            &i.slash_submit,
+            "input.slash_submit",
+            &["once", "paste"],
+            &mut out,
+        );
+    }
+    if let Some(r) = &def.routines {
+        one_of(
+            &r.completion_mode,
+            "routines.completion_mode",
+            &["marker", "native_or_marker"],
+            &mut out,
+        );
+    }
+    if let Some(s) = &def.screen {
+        if s.ready_markers.len() > 32 {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "screen.ready_markers",
+                "too many ready markers",
+            ));
+        }
+        for (i, marker) in s.ready_markers.iter().enumerate() {
+            if marker.is_empty() || marker.len() > 128 || control(marker) {
+                out.push(diag(
+                    "invalid_declaration",
+                    "error",
+                    &format!("screen.ready_markers[{i}]"),
+                    "a ready marker is empty, too long, or contains a control character",
+                ));
+            }
+        }
+    }
+    if let Some(l) = &def.launch
+        && !l.config_dir_env.is_empty()
+        && !env_name(&l.config_dir_env)
+    {
+        out.push(diag(
+            "invalid_declaration",
+            "error",
+            "launch.config_dir_env",
+            "launch.config_dir_env must be an upper case environment variable name",
+        ));
+    }
+    if let Some(m) = &def.models {
+        if m.context_limit < 0 {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "models.context_limit",
+                "models.context_limit must not be negative",
+            ));
+        }
+        if let Some(list) = &m.list {
+            out.extend(args("models.list.args", &list.args, false));
+            if !(0..=600).contains(&list.timeout_seconds) {
+                out.push(diag(
+                    "invalid_declaration",
+                    "error",
+                    "models.list.timeout_seconds",
+                    "models.list.timeout_seconds must be between 0 and 600",
+                ));
+            }
+        }
+    }
+    if let Some(p) = &def.presentation {
+        if !p.letter.is_empty() && !valid_icon(&p.letter) {
+            out.push(diag(
+                "invalid_presentation",
+                "error",
+                "presentation.letter",
+                "presentation.letter must be 1 to 2 visible characters without surrounding whitespace",
+            ));
+        }
+        if p.order < 0 {
+            out.push(diag(
+                "invalid_presentation",
+                "error",
+                "presentation.order",
+                "presentation.order must not be negative",
+            ));
+        }
+    }
+    out
 }
 
 /// Fixed Go spawnValidModelLabel, shared by child and ordinary launch paths.

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "7ef63bd06b49154b4e43c1762f5a840eb062d374",
+    "commit": "48700933336fd5029a71aef0d6c72ab565fbdd7b",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2076,
-    "analyzed": 1627,
+    "discovered": 2078,
+    "analyzed": 1628,
     "unresolved": 15,
     "unknown": 0,
-    "unclaimed": 434,
+    "unclaimed": 435,
     "skipped_by_config": 0
   },
   "files": [
@@ -21253,6 +21253,14 @@
       ]
     },
     {
+      "path": "rust/assets/provider/declarations.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
       "path": "rust/assets/provider/manifests/claude.json",
       "adapter": null,
       "status": "unclaimed",
@@ -34287,6 +34295,35 @@
         "summary": {
           "state": "value",
           "value": "Suspended wrapper creation with an explicit inherited-handle allowlist."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/profile/declared.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Declarative values of the seven built-in providers and the rule that merges"
         },
         "authentication": {
           "state": "not_configured"
