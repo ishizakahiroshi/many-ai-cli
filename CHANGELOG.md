@@ -32,6 +32,13 @@ Release artifacts are published at
 
 ### Fixed
 
+- **A session's handoff now shows only the latest launch in a mixed record
+  file.** Session numbers can be reused after a Hub restart, so one
+  `s{id}.jsonl` may hold several launches. Rendering now starts at the last
+  `session_start`; earlier completions, changes, intents and end records are
+  ignored, the model is taken from that session's start or end, and an end
+  time earlier than the start is shown as unfinished. The older lines stay
+  on disk. (#46)
 - **The child spawn confirmation now lets you pick the subscription profile.**
   When the chosen CLI has two or more enabled profiles, the dialog shows the
   same Subscription field as the derive dialog and the new-session panel, and
