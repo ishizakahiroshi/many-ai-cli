@@ -291,6 +291,11 @@ pub trait ChildLaunchServices: Send + Sync {
         role: &str,
     ) -> Result<Option<String>, SessionError>;
     fn trust_grant_providers(&self) -> Result<Vec<String>, SessionError>;
+    /// The AI CLIs registered in the Hub's current registry that a child may use
+    /// besides the built-in seven. A service without a registry reports none.
+    fn registered_child_providers(&self) -> super::child_options::RegisteredProviders {
+        super::child_options::RegisteredProviders::default()
+    }
     fn apply_effects<'a>(
         &'a self,
         effects: CoreEffects,
@@ -469,14 +474,14 @@ impl ChildLaunchExecutor {
                 &option_note,
             );
         }
-        if !super::child_options::ORCHESTRATION_PROVIDERS.contains(&raw.provider.as_str()) {
+        let registered = self.services.registered_child_providers();
+        if !registered.is_valid(&raw.provider) {
             return Err(ChildLaunchError::new(
                 400,
                 "bad_request",
-                format!(
-                    "invalid provider {}; valid providers are: {}",
-                    go_quote(&raw.provider),
-                    super::child_options::ORCHESTRATION_PROVIDERS.join(", ")
+                super::child_options::invalid_provider_message(
+                    &go_quote(&raw.provider),
+                    &registered,
                 ),
             )
             .into());
@@ -499,7 +504,7 @@ impl ChildLaunchExecutor {
         let parent_binding = details.binding;
         let parent = details.snapshot;
         let cfg = self.cfg()?;
-        let resolved = super::child_options::prepare(request.body, &cfg)
+        let resolved = super::child_options::prepare_with(request.body, &cfg, &registered)
             .map_err(|e| ChildLaunchError::new(400, "bad_request", e.to_string()))?;
         let body = resolved.request();
         if parent.depth >= cfg.orchestration.max_depth {
@@ -627,7 +632,15 @@ impl ChildLaunchExecutor {
         } else {
             None
         };
-        let subscription = resolve_subscription(body, &parent, role_subscription, &cfg);
+        // A registered AI CLI has no subscription profiles, so nothing is inherited
+        // from the role, the parent or the saved defaults; only an explicit request
+        // reaches the policy, which rejects it as a new session does.
+        let subscription =
+            if super::child_options::ORCHESTRATION_PROVIDERS.contains(&body.provider.as_str()) {
+                resolve_subscription(body, &parent, role_subscription, &cfg)
+            } else {
+                body.subscription_profile_id.trim().to_owned()
+            };
         let spec = WrappedSpawnSpec {
             registration_metadata: SpawnRegistrationMetadata {
                 parent: parent.id,

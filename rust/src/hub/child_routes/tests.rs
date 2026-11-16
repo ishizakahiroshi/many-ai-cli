@@ -27,6 +27,7 @@ struct Io {
     release: Semaphore,
     starts: AtomicUsize,
     sent: Mutex<Vec<Vec<u8>>>,
+    specs: Mutex<Vec<WrappedSpawnSpec>>,
 }
 impl WrapperTransport for Io {
     fn send<'a>(
@@ -69,6 +70,7 @@ impl WrappedSessionSpawner for Io {
     ) -> CoreFuture<'a, SpawnWaitOutcome> {
         Box::pin(async move {
             let number = self.starts.fetch_add(1, Ordering::SeqCst) + 100;
+            self.specs.lock().unwrap().push(spec.clone());
             self.entered.add_permits(1);
             self.release.acquire().await.unwrap().forget();
             let core = self.core.lock().unwrap().upgrade().unwrap();
@@ -137,6 +139,18 @@ struct Fixture {
     _root: tempfile::TempDir,
 }
 async fn fixture(confirm: &str, limit: i64) -> Fixture {
+    fixture_with_registry(
+        confirm,
+        limit,
+        Arc::new(|| Err(std::io::Error::other("synthetic fixture forbids providers"))),
+    )
+    .await
+}
+async fn fixture_with_registry(
+    confirm: &str,
+    limit: i64,
+    registry: crate::application::spawn_policy::RegistrySnapshot,
+) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let runtime = root.path().join("trial");
     std::fs::create_dir(&runtime).unwrap();
@@ -154,6 +168,7 @@ async fn fixture(confirm: &str, limit: i64) -> Fixture {
         release: Semaphore::new(0),
         starts: AtomicUsize::new(0),
         sent: Mutex::new(Vec::new()),
+        specs: Mutex::new(Vec::new()),
     });
     let effects: Arc<dyn CoreEffectSink> = io.clone();
     let bound = Arc::new(BoundExecutor::default());
@@ -207,7 +222,7 @@ async fn fixture(confirm: &str, limit: i64) -> Fixture {
         effects: Arc::downgrade(&effects),
         config: config.clone(),
         paths: paths.clone(),
-        registry: Arc::new(|| Err(std::io::Error::other("synthetic fixture forbids providers"))),
+        registry,
         environment: vec![],
         hub_cwd: project.clone(),
         workers,
@@ -662,4 +677,117 @@ async fn children_query_includes_terminal_children_and_unknown_parent_is_empty()
     )
     .unwrap();
     assert!(json["children"].as_array().unwrap().is_empty());
+}
+
+fn registered_registry() -> crate::application::spawn_policy::RegistrySnapshot {
+    use crate::proto::provider::{Definition, HeadlessDefinition, LaunchDefinition, Layers};
+    let definition = |id: &str, headless: bool| Definition {
+        schema_version: 1,
+        id: id.into(),
+        display_name: "Fixture Agent".into(),
+        launch: Some(LaunchDefinition {
+            executable: "fixture-agent-bin".into(),
+            headless: headless.then(|| HeadlessDefinition {
+                args: vec!["-p".into()],
+                format: "text".into(),
+                prompt_via: "arg".into(),
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let registry = crate::profile::registry::Registry::build(
+        Layers {
+            embedded: Some(crate::profile::registry::embedded_definitions().unwrap()),
+            user: Some(vec![
+                definition("fixture-headless", true),
+                definition("fixture-plain", false),
+            ]),
+            ..Default::default()
+        },
+        &crate::profile::registry::default_adapters(),
+    );
+    Arc::new(move || Ok(registry.clone()))
+}
+fn child_request(parent: SessionBinding, body: serde_json::Value) -> Request {
+    let mut request = request(parent, "");
+    request.body = serde_json::to_vec(&body).unwrap();
+    request
+}
+#[tokio::test]
+async fn unknown_provider_is_refused_with_built_ins_and_registered_ids() {
+    let f = fixture_with_registry("off", 4, registered_registry()).await;
+    let response = f
+        .route
+        .spawn_authenticated(
+            &child_request(
+                f.parent,
+                serde_json::json!({"role":"worker","provider":"nope","same_tree":true}),
+            ),
+            None,
+            &HttpWaitCancellation::default(),
+            Timestamp::now(),
+        )
+        .await;
+    assert_eq!(response.status, 400);
+    let body = String::from_utf8(response.body).unwrap();
+    assert!(
+        body.contains(
+            "valid providers are: claude, codex, copilot, cursor-agent, opencode, grok, command-code, fixture-headless, fixture-plain"
+        ),
+        "{body}"
+    );
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+}
+#[tokio::test]
+async fn registered_headless_provider_starts_a_child_without_built_in_flags() {
+    let f = fixture_with_registry("off", 4, registered_registry()).await;
+    let route = f.route.clone();
+    let req = child_request(
+        f.parent,
+        serde_json::json!({"role":"worker","provider":"fixture-headless","execution_mode":"headless","permission_preset":"full","same_tree":true}),
+    );
+    let launch = tokio::spawn(async move {
+        route
+            .spawn_authenticated(
+                &req,
+                None,
+                &HttpWaitCancellation::default(),
+                Timestamp::now(),
+            )
+            .await
+    });
+    bounded(f.io.entered.acquire()).await.unwrap().forget();
+    f.io.release.add_permits(1);
+    assert_eq!(bounded(launch).await.unwrap().status, 200);
+    let specs = f.io.specs.lock().unwrap();
+    assert_eq!(specs.len(), 1);
+    assert_eq!(specs[0].provider, "fixture-headless");
+    assert_eq!(specs[0].execution_mode, "headless");
+    assert!(specs[0].permission_mode.is_empty());
+    assert!(specs[0].sandbox.is_empty());
+    assert!(!specs[0].risk_confirmed);
+}
+#[tokio::test]
+async fn registered_provider_without_headless_definition_is_refused_for_headless() {
+    let f = fixture_with_registry("off", 4, registered_registry()).await;
+    let response = f
+        .route
+        .spawn_authenticated(
+            &child_request(
+                f.parent,
+                serde_json::json!({"role":"worker","provider":"fixture-plain","execution_mode":"headless","same_tree":true}),
+            ),
+            None,
+            &HttpWaitCancellation::default(),
+            Timestamp::now(),
+        )
+        .await;
+    assert_eq!(response.status, 400);
+    let body = String::from_utf8(response.body).unwrap();
+    assert!(
+        body.contains("headless is not supported for this provider"),
+        "{body}"
+    );
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
 }

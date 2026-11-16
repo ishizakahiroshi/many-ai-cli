@@ -2474,3 +2474,96 @@ async fn relay_instruction_is_held_while_the_child_waits_on_an_approval() {
     assert!(held(&f).is_empty());
     assert!(board_text(&f, &initial).contains("held instruction typed"));
 }
+
+fn registered_providers() -> crate::orchestration::child_options::RegisteredProviders {
+    use crate::proto::provider::{Definition, HeadlessDefinition, LaunchDefinition};
+    let definition = |id: &str, headless: bool| Definition {
+        schema_version: 1,
+        id: id.into(),
+        display_name: "Fixture Agent".into(),
+        launch: Some(LaunchDefinition {
+            executable: "fixture-agent-bin".into(),
+            headless: headless.then(|| HeadlessDefinition {
+                args: vec!["-p".into()],
+                format: "text".into(),
+                prompt_via: "arg".into(),
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    crate::orchestration::child_options::RegisteredProviders::from_registry(&Registry::build(
+        Layers {
+            embedded: Some(embedded_definitions().unwrap()),
+            user: Some(vec![
+                definition("fixture-headless", true),
+                definition("fixture-plain", false),
+            ]),
+            ..Default::default()
+        },
+        &default_adapters(),
+    ))
+}
+fn relay_roles(provider: &str, mode: &str) -> BTreeMap<String, Role> {
+    [IMPLEMENTATION, REVIEW]
+        .into_iter()
+        .map(|role| {
+            (
+                role.to_owned(),
+                Role {
+                    provider: provider.into(),
+                    model: "synthetic".into(),
+                    execution_mode: mode.into(),
+                    ..Default::default()
+                },
+            )
+        })
+        .collect()
+}
+#[test]
+fn relay_accepts_registered_providers_by_the_same_rule_as_orchestrate_spawn() {
+    let providers = registered_providers();
+    let cfg = Config::default();
+    // A registered provider with its own headless definition runs headless.
+    let roles = validate_roles(
+        relay_roles("fixture-headless", "headless"),
+        &cfg,
+        &providers,
+    )
+    .unwrap();
+    assert_eq!(roles[IMPLEMENTATION].execution_mode, "headless");
+    // Without one, headless is refused and auto falls back to interactive.
+    let error = validate_roles(relay_roles("fixture-plain", "headless"), &cfg, &providers)
+        .err()
+        .unwrap();
+    assert_eq!(error.code, "relay_execution_mode");
+    let roles = validate_roles(relay_roles("fixture-plain", "auto"), &cfg, &providers).unwrap();
+    assert_eq!(roles[IMPLEMENTATION].execution_mode, "interactive");
+    // Built-ins are unchanged.
+    assert!(validate_roles(relay_roles("claude", "headless"), &cfg, &providers).is_ok());
+}
+#[test]
+fn relay_refuses_an_unknown_provider_and_lists_the_accepted_ones() {
+    let providers = registered_providers();
+    let error = validate_roles(relay_roles("nope", "auto"), &Config::default(), &providers)
+        .err()
+        .unwrap();
+    assert_eq!(error.code, "relay_roles_missing");
+    assert!(
+        error.detail.contains(
+            "valid providers are: claude, codex, copilot, cursor-agent, opencode, grok, command-code, fixture-headless, fixture-plain"
+        ),
+        "{}",
+        error.detail
+    );
+    // Without registry knowledge the registered ids are refused too.
+    let none = crate::orchestration::child_options::RegisteredProviders::default();
+    assert!(
+        validate_roles(
+            relay_roles("fixture-headless", "auto"),
+            &Config::default(),
+            &none
+        )
+        .is_err()
+    );
+}

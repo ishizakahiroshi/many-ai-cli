@@ -21,6 +21,7 @@ import {
 } from './spawn-model-groups.js';
 import { activeSessionId, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
+import { loadProviderSummaries } from './provider-store.js';
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import {
   clearAllSpawnConfirmationsForHubRestart,
@@ -42,11 +43,22 @@ import {
   headlessUnsupportedForSelection,
   folderTrustOffered,
   folderTrustDecision,
+  isRegisteredChildProvider,
+  registeredChildProviderChoices,
+  type RegisteredChildProviderChoice,
   type ChildApproval,
   type SpawnConfirmationRecord,
 } from './spawn-confirm-store.js';
 
 export { clearAllSpawnConfirmationsForHubRestart, closeSpawnConfirmation, noteSpawnConfirmationRequested, pendingSpawnConfirmationCount };
+
+// 子に選べる、利用者が登録した AI（組み込みの 7 種以外）。ダイアログを開くたびに
+// Hub の登録から読み直す。読めるまでは前回の値で、選択中の AI は id のまま出す。
+let registeredChildProviders: RegisteredChildProviderChoice[] = [];
+
+function registeredProviderLabel(id: string): string {
+  return registeredChildProviders.find((choice) => choice.value === id)?.label || id;
+}
 
 const SPAWN_CONFIRM_PROMPT_LIMIT = 4000;
 // 経過時間表示の更新間隔。秒単位で動かしても読む側には分単位でしか見えないので、
@@ -264,10 +276,17 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   const knownProvider = providerOptions.some((o) => o.value === provider);
   const optionHtml = (value: string, label: string) =>
     `<option value="${escapeHtml(value)}"${value === provider ? ' selected' : ''}>${escapeHtml(label)}</option>`;
-  const optionsHtml = [
-    ...(provider && !knownProvider ? [optionHtml(provider, provider)] : []),
-    ...providerOptions.map((o) => optionHtml(o.value, o.label || t(o.labelKey || ''))),
-  ].join('');
+  const providerOptionsHtml = (): string => {
+    const registered = [...registeredChildProviders];
+    if (provider && !knownProvider && !registered.some((choice) => choice.value === provider)) {
+      registered.unshift({ value: provider, label: provider });
+    }
+    return [
+      ...providerOptions.map((o) => optionHtml(o.value, o.label || t(o.labelKey || ''))),
+      ...registered.map((choice) => optionHtml(choice.value, choice.label)),
+    ].join('');
+  };
+  const optionsHtml = providerOptionsHtml();
 
   const repoLabel = repoNameFromParent(parent) || '—';
   const branchStr = String(parent?.branch || '').trim();
@@ -287,8 +306,8 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       <dd>${escapeHtml(spawnConfirmRoleLabel(record.role))}</dd>
       <dt>${escapeHtml(t('spawn_confirm_cwd'))}</dt>
       <dd class="spawn-confirm-path">${cwdDisplayHtml(record, parent)}</dd>
-      <dt>${escapeHtml(t('spawn_confirm_approval'))}</dt>
-      <dd class="spawn-confirm-approval" data-spawn-confirm-approval>${approvalDisplayHtml(approvalForSelection(record.approval, provider, record.permissionPreset))}</dd>
+      <dt data-spawn-confirm-approval-row>${escapeHtml(t('spawn_confirm_approval'))}</dt>
+      <dd class="spawn-confirm-approval" data-spawn-confirm-approval data-spawn-confirm-approval-row>${approvalDisplayHtml(approvalForSelection(record.approval, provider, record.permissionPreset))}</dd>
       <dt>${escapeHtml(t('spawn_confirm_elapsed_label'))}</dt>
       <dd data-spawn-confirm-elapsed>${escapeHtml(formatElapsed(record.requestedAtMs))}</dd>
     </dl>
@@ -301,7 +320,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
           <select name="provider" class="ui-input spawn-select">${optionsHtml}</select>
         </span>
       </label>
-      <label class="spawn-confirm-field">
+      <label class="spawn-confirm-field" data-spawn-confirm-model-field>
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_role_table_model'))}</span>
         <input name="model" class="ui-input spawn-input" list="spawn-confirm-model-datalist-${escapeHtml(record.id)}" value="${escapeHtml(record.model)}" placeholder="${escapeHtml(t('spawn_confirm_model_placeholder'))}" spellcheck="false" autocomplete="off">
         <datalist id="spawn-confirm-model-datalist-${escapeHtml(record.id)}"></datalist>
@@ -314,11 +333,11 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_confirm_execution_mode'))}</span>
         <select name="execution_mode" class="ui-input spawn-select">${executionModeOptionsHtml(record.executionMode)}</select>
       </label>
-      <label class="spawn-confirm-field">
+      <label class="spawn-confirm-field" data-spawn-confirm-permission-field>
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_confirm_permission_preset'))}</span>
         <select name="permission_preset" class="ui-input spawn-select">${permissionPresetOptionsHtml(record.permissionPreset)}</select>
       </label>
-      <label class="spawn-confirm-remember">
+      <label class="spawn-confirm-remember" data-spawn-confirm-remember>
         <input type="checkbox" name="remember_permission"${record.rememberPermission ? ' checked' : ''}>
         <span>${escapeHtml(t('spawn_confirm_remember_permission'))}</span>
       </label>
@@ -382,6 +401,36 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     );
   }
 
+  // 登録した AI（組み込みでない）を選んでいる間は、権限の欄・モデルの欄・「次回もこの段」
+  // を出さない。Hub はその AI に組み込みの権限・モデルの引数を渡さないので、見せると
+  // 効かない設定を選ばせることになる（新しいセッションの画面と同じ扱い）。
+  function registeredSelected(): boolean {
+    return isRegisteredChildProvider(providerSelect?.value || record.provider);
+  }
+  function refreshRegisteredFields(): void {
+    const hide = registeredSelected();
+    for (const selector of [
+      '[data-spawn-confirm-model-field]',
+      '[data-spawn-confirm-permission-field]',
+      '[data-spawn-confirm-remember]',
+      '[data-spawn-confirm-approval-row]',
+    ]) {
+      dialog.querySelectorAll<HTMLElement>(selector).forEach((el) => { el.hidden = hide; });
+    }
+  }
+  // Hub の登録から、子に選べる登録済みの AI を読み直して選択肢へ反映する。
+  // 選んでいる値は動かさない。
+  async function refreshRegisteredProviders(): Promise<void> {
+    const response = await loadProviderSummaries();
+    if (!response || !providerSelect) return;
+    registeredChildProviders = registeredChildProviderChoices(response.providers);
+    const selected = providerSelect.value;
+    providerSelect.innerHTML = providerOptionsHtml();
+    providerSelect.value = selected;
+    if (providerIcon) providerIcon.innerHTML = providerIconHtml(providerSelect.value);
+    refreshRegisteredFields();
+  }
+
   async function refreshModelChoices(): Promise<void> {
     const provider = providerSelect?.value || record.provider;
     try {
@@ -403,6 +452,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       // 前の provider のまま残ると、承認する人が見ている情報が実物と食い違う。
       refreshApprovalDisplay();
       refreshFolderTrust();
+      refreshRegisteredFields();
       // effort の候補も provider ごとに違う。写像が無い provider を選んだら欄を隠し、
       // 前の provider の値を送ってしまわないよう選択も空へ戻す（Hub はその値を
       // 400 で弾くので、残ったままだと承認できなくなる）。
@@ -496,7 +546,8 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   async function decide(approved: boolean): Promise<void> {
     if (state !== 'open') return;
     const providerVal = providerSelect?.value || '';
-    const rawModel = (modelInput?.value || '').trim();
+    const registered = registeredSelected();
+    const rawModel = registered ? '' : (modelInput?.value || '').trim();
     const groups = getCachedSpawnModelGroups();
     if (approved && rawModel && !isModelCompatibleWithProvider(groups, providerVal, rawModel)) {
       if (modelInput) modelInput.value = '';
@@ -524,7 +575,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     };
     const effortVal = effortField?.hidden ? '' : selectValue('effort');
     const executionModeVal = selectValue('execution_mode');
-    const permissionPresetVal = selectValue('permission_preset');
+    const permissionPresetVal = registered ? '' : selectValue('permission_preset');
     // 「次回もこの段」は承認したときだけ送る。拒否は何も起きなかったのと同じなので、
     // 記憶を消す（false を送る）指示にしない — 欄ごと送らなければ Hub は記憶を触らない。
     const payload: Record<string, unknown> = {
@@ -536,7 +587,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       execution_mode: executionModeVal,
       permission_preset: permissionPresetVal,
     };
-    if (approved) payload.remember_permission = !!rememberInput?.checked;
+    if (approved && !registered) payload.remember_permission = !!rememberInput?.checked;
     // 信頼の登録は、チェックボックスを出しているときに承認した場合だけ送る。
     const grantFolderTrust = folderTrustDecision(!!trustField && !trustField.hidden, !!trustInput?.checked, approved);
     if (grantFolderTrust !== undefined) payload.grant_folder_trust = grantFolderTrust;
@@ -613,6 +664,8 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   });
 
   document.body.appendChild(dialog);
+  refreshRegisteredFields();
+  void refreshRegisteredProviders();
   void refreshModelChoices();
   dialog.showModal();
 }

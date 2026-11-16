@@ -20,6 +20,74 @@ pub const ORCHESTRATION_PROVIDERS: &[&str] = &[
     "command-code",
 ];
 
+/// AI CLIs registered by the user (providers.d, the Hub's registration API, or
+/// config.yaml) that an orchestrate child may use besides the built-in seven.
+/// A provider qualifies when the Hub's current registry has it enabled with a
+/// `launch` definition; the flag says whether it also has `launch.headless`.
+/// The default value holds no registered provider, so only built-ins are valid.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RegisteredProviders {
+    headless: BTreeMap<String, bool>,
+}
+
+impl RegisteredProviders {
+    pub fn from_registry(registry: &crate::profile::registry::Registry) -> Self {
+        let mut headless = BTreeMap::new();
+        for summary in registry.list() {
+            if summary.id == "shell" || ORCHESTRATION_PROVIDERS.contains(&summary.id.as_str()) {
+                continue;
+            }
+            let Some(entry) = registry.lookup(&summary.id) else {
+                continue;
+            };
+            if !entry.definition.enabled.unwrap_or(true) {
+                continue;
+            }
+            let Some(launch) = entry.definition.launch.as_ref() else {
+                continue;
+            };
+            headless.insert(summary.id, launch.headless.is_some());
+        }
+        Self { headless }
+    }
+    /// Built-in seven, or a usable registered provider.
+    pub fn is_valid(&self, provider: &str) -> bool {
+        ORCHESTRATION_PROVIDERS.contains(&provider) || self.headless.contains_key(provider)
+    }
+    pub fn is_registered(&self, provider: &str) -> bool {
+        self.headless.contains_key(provider)
+    }
+    /// Registered provider with a `launch.headless` definition.
+    pub fn has_headless(&self, provider: &str) -> bool {
+        self.headless.get(provider).copied().unwrap_or(false)
+    }
+    /// Whether `execution_mode: headless` can run for this provider: a built-in
+    /// or config.yaml headless definition, or a registered `launch.headless`.
+    pub fn headless_capable(&self, provider: &str, cfg: &Config) -> bool {
+        self.has_headless(provider) || config::headless_def_for(provider, Some(cfg)).is_some()
+    }
+    /// Every id the Hub accepts for `--provider`, built-ins first.
+    pub fn valid_ids(&self) -> Vec<String> {
+        ORCHESTRATION_PROVIDERS
+            .iter()
+            .map(|id| (*id).to_owned())
+            .chain(self.headless.keys().cloned())
+            .collect()
+    }
+    pub fn valid_list(&self) -> String {
+        self.valid_ids().join(", ")
+    }
+}
+
+/// The 400 text for an unknown child provider. `quoted` is the already-quoted
+/// requested id.
+pub fn invalid_provider_message(quoted: &str, providers: &RegisteredProviders) -> String {
+    format!(
+        "invalid provider {quoted}; valid providers are: {}",
+        providers.valid_list()
+    )
+}
+
 #[derive(Clone, Copy)]
 struct Fields {
     permission_mode: &'static str,
@@ -112,6 +180,12 @@ const FALLBACK: Row = Row {
     full: BYPASS,
 };
 
+/// Neither a built-in child provider nor the shell: a registered AI CLI.
+fn is_registered_child_provider(provider: &str) -> bool {
+    let provider = provider.trim();
+    !provider.is_empty() && provider != "shell" && !ORCHESTRATION_PROVIDERS.contains(&provider)
+}
+
 fn launch_origin(origin: &VerifiedSpawnOrigin) -> &'static str {
     match origin {
         VerifiedSpawnOrigin::HumanUi(_) => config::LAUNCH_ORIGIN_UI,
@@ -137,6 +211,14 @@ fn resolve_permission_for_origin(
     origin: &str,
     cfg: &OrchestrationConfig,
 ) -> ChildApproval {
+    // A registered (non built-in) AI CLI gets no built-in permission flags,
+    // exactly like a new session of it: nothing is attached and nothing is asked.
+    if is_registered_child_provider(provider) {
+        return ChildApproval {
+            tier: config::PERMISSION_PRESET_ATTENDED.into(),
+            ..Default::default()
+        };
+    }
     let requested = if !cfg.child_full_bypass_enabled() {
         config::PERMISSION_PRESET_ATTENDED.to_owned()
     } else if !preset.trim().is_empty() {
@@ -192,13 +274,15 @@ fn execution_mode(
     body: &ChildSpawnRequest,
     origin: &VerifiedSpawnOrigin,
     cfg: &Config,
+    providers: &RegisteredProviders,
 ) -> Result<String, ConfigError> {
-    execution_mode_for_origin(body, launch_origin(origin), cfg)
+    execution_mode_for_origin(body, launch_origin(origin), cfg, providers)
 }
 fn execution_mode_for_origin(
     body: &ChildSpawnRequest,
     origin: &str,
     cfg: &Config,
+    providers: &RegisteredProviders,
 ) -> Result<String, ConfigError> {
     let mut requested = config::normalize_execution_mode(&body.execution_mode);
     if requested.is_empty() {
@@ -206,7 +290,7 @@ fn execution_mode_for_origin(
     }
     config::resolve_execution_mode(
         &requested,
-        config::headless_def_for(&body.provider, Some(cfg)).is_some(),
+        providers.headless_capable(&body.provider, cfg),
         origin,
         false,
     )
@@ -228,11 +312,17 @@ fn fill_request(body: &mut ChildSpawnRequest, permission: &ChildApproval) {
 /// Only server-resolved provenance can reach the actual launch preparation.
 /// Configuration adds bounded tools through the internal grant field; request
 /// JSON cannot manufacture that list or a folder-trust grant.
-pub fn prepare(
+pub fn prepare(body: ResolvedChildSpawn, cfg: &Config) -> Result<ResolvedChildSpawn, ConfigError> {
+    prepare_with(body, cfg, &RegisteredProviders::default())
+}
+/// Like [`prepare`], with the registered AI CLIs the Hub currently knows, so a
+/// registered provider's own `launch.headless` counts for `execution_mode`.
+pub fn prepare_with(
     mut body: ResolvedChildSpawn,
     cfg: &Config,
+    providers: &RegisteredProviders,
 ) -> Result<ResolvedChildSpawn, ConfigError> {
-    let mode = execution_mode(body.request(), body.origin(), cfg)?;
+    let mode = execution_mode(body.request(), body.origin(), cfg, providers)?;
     body.request_mut().execution_mode = mode;
     let permission = resolve_permission(
         &body.request().provider,
@@ -291,8 +381,9 @@ fn preview_for(
             if !tier.is_empty() {
                 request.permission_preset.clone_from(&tier);
             }
-            request.execution_mode = execution_mode_for_origin(&request, origin, cfg)
-                .unwrap_or_else(|_| config::normalize_execution_mode(&body.execution_mode));
+            request.execution_mode =
+                execution_mode_for_origin(&request, origin, cfg, &RegisteredProviders::default())
+                    .unwrap_or_else(|_| config::normalize_execution_mode(&body.execution_mode));
             let mut permission = resolve_permission_for_origin(
                 provider,
                 &request.permission_preset,
@@ -454,6 +545,12 @@ mod tests {
                 expected = full;
                 expected["fallback_from"] = config::PERMISSION_PRESET_BOUNDED.into();
             }
+            // A registered AI CLI is not a built-in: no built-in permission flags
+            // are attached or disclosed, whatever tier was asked for (the oracle
+            // case records the old custom-provider fallback to bypass).
+            if body.provider == "synthetic-custom" {
+                expected = serde_json::json!({"tier": "attended"});
+            }
             assert_eq!(
                 serde_json::to_value(&actual).unwrap(),
                 expected,
@@ -556,5 +653,183 @@ mod tests {
             assert_eq!(approval.permission_mode, "bypassPermissions", "{provider}");
             assert!(approval.allowed_tools.is_empty(), "{provider}");
         }
+    }
+
+    fn registry_with(
+        definitions: Vec<crate::proto::provider::Definition>,
+    ) -> crate::profile::registry::Registry {
+        use crate::profile::registry::{Registry, default_adapters, embedded_definitions};
+        use crate::proto::provider::Layers;
+        Registry::build(
+            Layers {
+                embedded: Some(embedded_definitions().unwrap()),
+                user: Some(definitions),
+                ..Default::default()
+            },
+            &default_adapters(),
+        )
+    }
+    fn user_definition(
+        id: &str,
+        headless: bool,
+        enabled: bool,
+    ) -> crate::proto::provider::Definition {
+        use crate::proto::provider::{Definition, HeadlessDefinition, LaunchDefinition};
+        Definition {
+            schema_version: 1,
+            id: id.into(),
+            display_name: "Fixture Agent".into(),
+            enabled: (!enabled).then_some(false),
+            launch: Some(LaunchDefinition {
+                executable: "fixture-agent-bin".into(),
+                args: vec!["--base".into()],
+                headless: headless.then(|| HeadlessDefinition {
+                    args: vec!["-p".into()],
+                    format: "text".into(),
+                    prompt_via: "arg".into(),
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+    fn registered() -> RegisteredProviders {
+        RegisteredProviders::from_registry(&registry_with(vec![
+            user_definition("fixture-headless", true, true),
+            user_definition("fixture-plain", false, true),
+            user_definition("fixture-off", true, false),
+        ]))
+    }
+
+    #[test]
+    fn registered_providers_are_enabled_launchable_non_builtin_entries() {
+        let providers = registered();
+        assert!(providers.is_valid("claude"));
+        assert!(providers.is_valid("fixture-headless"));
+        assert!(providers.is_valid("fixture-plain"));
+        assert!(!providers.is_valid("fixture-off"), "disabled");
+        assert!(!providers.is_valid("fixture-unknown"));
+        assert!(!providers.is_valid("shell"));
+        assert!(!providers.is_valid(""));
+        assert!(providers.has_headless("fixture-headless"));
+        assert!(!providers.has_headless("fixture-plain"));
+        // Built-ins are never listed twice.
+        assert_eq!(
+            providers.valid_list(),
+            "claude, codex, copilot, cursor-agent, opencode, grok, command-code, fixture-headless, fixture-plain"
+        );
+        // No registry reading leaves exactly the built-ins.
+        assert_eq!(
+            RegisteredProviders::default().valid_ids(),
+            ORCHESTRATION_PROVIDERS
+        );
+    }
+
+    #[test]
+    fn unknown_provider_message_lists_built_ins_and_registered_ids() {
+        let message = invalid_provider_message("\"nope\"", &registered());
+        assert_eq!(
+            message,
+            "invalid provider \"nope\"; valid providers are: claude, codex, copilot, cursor-agent, opencode, grok, command-code, fixture-headless, fixture-plain"
+        );
+    }
+
+    #[test]
+    fn headless_child_of_a_registered_provider_needs_its_own_headless_definition() {
+        let providers = registered();
+        let cfg = Config::default();
+        let headless = |provider: &str, mode: &str| {
+            prepare_with(
+                request(&serde_json::json!({"provider":provider,"mode":mode,"confirmed":true})),
+                &cfg,
+                &providers,
+            )
+        };
+        let mode = |provider: &str, mode: &str| {
+            headless(provider, mode)
+                .unwrap()
+                .request()
+                .execution_mode
+                .clone()
+        };
+        assert_eq!(mode("fixture-headless", "headless"), "headless");
+        // auto becomes headless for an unattended child that can run headless,
+        // and interactive for one that cannot.
+        assert_eq!(mode("fixture-headless", "auto"), "headless");
+        assert_eq!(mode("fixture-plain", "auto"), "interactive");
+        let error = headless("fixture-plain", "headless")
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(
+            error.contains("headless is not supported for this provider"),
+            "{error}"
+        );
+        // The plain prepare() knows no registry, so it keeps rejecting.
+        assert!(
+            prepare(
+                request(&serde_json::json!({"provider":"fixture-headless","mode":"headless"})),
+                &cfg,
+            )
+            .is_err()
+        );
+        // Built-ins are unchanged.
+        assert_eq!(mode("claude", "headless"), "headless");
+    }
+
+    #[test]
+    fn registered_child_gets_no_built_in_permission_fields() {
+        let providers = registered();
+        let cfg = Config::default();
+        for preset in ["", "attended", "bounded", "full"] {
+            let prepared = prepare_with(
+                request(&serde_json::json!({"provider":"fixture-headless","mode":"headless","preset":preset,"confirmed":true})),
+                &cfg,
+                &providers,
+            )
+            .unwrap();
+            let body = prepared.request();
+            assert!(body.permission_mode.is_empty(), "{preset}");
+            assert!(body.sandbox.is_empty(), "{preset}");
+            assert!(body.ask_for_approval.is_empty(), "{preset}");
+            assert!(!body.risk_confirmed, "{preset}");
+            assert!(prepared.grants().allowed_tools().is_empty(), "{preset}");
+        }
+        // The confirmation dialog's table shows no flags for it either.
+        let preview = preview_for(
+            &ChildSpawnRequest {
+                provider: "fixture-headless".into(),
+                ..Default::default()
+            },
+            config::LAUNCH_ORIGIN_UI,
+            &[],
+            &cfg,
+        );
+        for approval in preview["fixture-headless"].values() {
+            assert!(approval.permission_mode.is_empty());
+            assert!(approval.sandbox.is_empty());
+            assert!(!approval.risk_confirmed);
+        }
+    }
+
+    #[test]
+    fn registered_headless_definition_builds_the_expected_argv() {
+        let registry = registry_with(vec![user_definition("fixture-headless", true, true)]);
+        let definition = registry.lookup("fixture-headless").unwrap();
+        let headless = definition
+            .definition
+            .launch
+            .as_ref()
+            .and_then(|launch| launch.headless.as_ref())
+            .map(|h| config::HeadlessDef {
+                args: h.args.clone(),
+                format: h.format.clone(),
+                prompt_via: h.prompt_via.clone(),
+            })
+            .unwrap();
+        assert_eq!(
+            crate::orchestration::headless::build_argv(&headless, &[], "1+1"),
+            vec!["-p".to_owned(), "1+1".to_owned()]
+        );
     }
 }

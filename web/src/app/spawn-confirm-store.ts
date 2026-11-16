@@ -153,6 +153,46 @@ export function rememberedRolePermission(role: string): string {
   return tier && isPermissionPresetAvailable(tier) ? tier : '';
 }
 
+// 組み込みの 7 種（Hub の ORCHESTRATION_PROVIDERS と同じ）。これ以外で shell でもない id は、
+// 利用者が登録した AI CLI。登録した AI には組み込みの権限・モデルの引数を渡さない
+// （新しいセッションの画面と同じ扱い）ので、確認の画面もその欄を出さない。
+const BUILTIN_CHILD_PROVIDER_IDS: readonly string[] = [
+  'claude',
+  'codex',
+  'copilot',
+  'cursor-agent',
+  'opencode',
+  'grok',
+  'command-code',
+];
+
+export function isRegisteredChildProvider(provider: string): boolean {
+  const id = String(provider ?? '').trim();
+  return id !== '' && id !== 'shell' && !BUILTIN_CHILD_PROVIDER_IDS.includes(id);
+}
+
+export interface RegisteredChildProviderChoice {
+  value: string;
+  label: string;
+}
+
+// /api/providers の一覧から、子に選べる登録済みの AI を取り出す。有効で、起動の定義を
+// 持つものだけ（Hub が受け付ける条件と同じ）。表示名が無ければ id を見せる。
+export function registeredChildProviderChoices(
+  entries: ReadonlyArray<{ id?: unknown; display_name?: unknown; enabled?: unknown; capabilities?: { launch?: unknown } | null }>,
+): RegisteredChildProviderChoice[] {
+  const out: RegisteredChildProviderChoice[] = [];
+  for (const entry of entries) {
+    const value = typeof entry?.id === 'string' ? entry.id.trim() : '';
+    if (!isRegisteredChildProvider(value)) continue;
+    if (entry.enabled === false || entry.capabilities?.launch === false) continue;
+    if (out.some((choice) => choice.value === value)) continue;
+    const name = typeof entry.display_name === 'string' ? entry.display_name.trim() : '';
+    out.push({ value, label: name || value });
+  }
+  return out;
+}
+
 // この provider を headless で起動できるか。
 //
 // 返り値は 3 値ではなく 2 値だが、「分からない」は false ではなく **true** 側へ倒す:

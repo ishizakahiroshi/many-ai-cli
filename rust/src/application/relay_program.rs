@@ -610,7 +610,7 @@ impl RelayProgram {
                 "relay children default to full permission bypass; set acknowledge_child_full_bypass:true to confirm (or set orchestration.child_full_bypass:false / child_permission_default / per-role permission_preset)",
             ));
         }
-        let roles = validate_roles(roles, &cfg)?;
+        let roles = validate_roles(roles, &cfg, &self.deps.orchestration.child_providers())?;
         if parent.snapshot.depth >= cfg.orchestration.max_depth {
             return Err(RelayError::new(
                 429,
@@ -1388,6 +1388,7 @@ pub fn requires_bypass_ack(
 fn validate_roles(
     mut roles: BTreeMap<String, Role>,
     cfg: &config::Config,
+    providers: &crate::orchestration::child_options::RegisteredProviders,
 ) -> Result<BTreeMap<String, Role>, RelayError> {
     roles.retain(|role, _| ROLES.contains(&role.as_str()));
     for role in [IMPLEMENTATION, REVIEW, STRONG] {
@@ -1403,8 +1404,22 @@ fn validate_roles(
         };
         assignment.provider = assignment.provider.trim().into();
         assignment.model = assignment.model.trim().into();
-        if !crate::orchestration::child_options::ORCHESTRATION_PROVIDERS
-            .contains(&assignment.provider.as_str())
+        // A relay launches its children through the same path as `orchestrate
+        // spawn`, so a registered AI CLI is valid here under the same rule.
+        if !providers.is_valid(&assignment.provider) && !assignment.provider.is_empty() {
+            return Err(RelayError::new(
+                400,
+                "relay_roles_missing",
+                format!(
+                    "role {role}: {}",
+                    crate::orchestration::child_options::invalid_provider_message(
+                        &crate::proto::go_quote::quote(&assignment.provider),
+                        providers,
+                    )
+                ),
+            ));
+        }
+        if !providers.is_valid(&assignment.provider)
             || assignment.model.starts_with('-')
             || !crate::profile::validation::valid_spawn_model_label(&assignment.model)
         {
@@ -1420,7 +1435,7 @@ fn validate_roles(
         }
         assignment.execution_mode = config::resolve_execution_mode(
             &mode,
-            config::headless_def_for(&assignment.provider, Some(cfg)).is_some(),
+            providers.headless_capable(&assignment.provider, cfg),
             config::LAUNCH_ORIGIN_CONDUCTOR,
             true,
         )

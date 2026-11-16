@@ -1034,3 +1034,48 @@ async fn request_resolution_uses_runtime_mapping_even_with_explicit_provider_and
     assert_eq!(body.model, "mapped-model");
     assert!(body.permission_preset.is_empty());
 }
+
+#[tokio::test]
+async fn conductor_guide_names_registered_providers_and_how_to_add_one() {
+    let f = fixture().await;
+    let id = f
+        .owner
+        .reserve_conductor(&mut String::new(), None, Timestamp::now())
+        .unwrap();
+    let mut roles = BTreeMap::new();
+    roles.insert(
+        "review".to_owned(),
+        Some(RoleSettings {
+            provider: "codex".into(),
+            model: "gpt-test".into(),
+            ..Default::default()
+        }),
+    );
+    let mapped = f
+        .owner
+        .reserve_conductor(&mut String::new(), Some(&roles), Timestamp::now())
+        .unwrap();
+    for prompt in [
+        f.owner.conductor_prompt(&id),
+        f.owner.conductor_prompt(&mapped),
+    ] {
+        assert!(
+            prompt.contains("any AI CLI registered in this Hub"),
+            "{prompt}"
+        );
+        assert!(
+            prompt.contains("To add a new AI CLI, run `<MANY_AI_CLI_BIN> provider add --help`."),
+            "{prompt}"
+        );
+    }
+    assert!(crate::wrapper::hooks::DELEGATION_PROMPT.contains("many-ai-cli provider add --help"));
+    assert!(crate::wrapper::hooks::DELEGATION_PROMPT.contains("any AI CLI registered in"));
+}
+#[tokio::test]
+async fn unreadable_registry_leaves_only_the_built_in_child_providers() {
+    let f = fixture().await;
+    assert_eq!(
+        f.owner.child_providers(),
+        crate::orchestration::child_options::RegisteredProviders::default()
+    );
+}

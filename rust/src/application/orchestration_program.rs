@@ -428,6 +428,23 @@ impl OrchestrationProgram {
     fn core(&self) -> Result<Arc<SessionEngine>, SessionError> {
         self.deps.core.upgrade().ok_or(SessionError::Shutdown)
     }
+    /// The registered AI CLIs a child may use besides the built-in seven, read
+    /// from the Hub's current registry on every call so a provider added a moment
+    /// ago is usable at once. An unreadable registry leaves only the built-ins.
+    pub fn child_providers(&self) -> crate::orchestration::child_options::RegisteredProviders {
+        match (self.deps.registry)() {
+            Ok(registry) => {
+                crate::orchestration::child_options::RegisteredProviders::from_registry(&registry)
+            }
+            Err(_) => {
+                self.warning(
+                    "child provider registry",
+                    &SessionError::Transport("provider registry unavailable".into()),
+                );
+                Default::default()
+            }
+        }
+    }
     fn config(&self) -> Result<crate::config::Config, SessionError> {
         self.deps
             .config
@@ -442,12 +459,10 @@ impl OrchestrationProgram {
         now: Timestamp,
     ) -> Result<OrchestrationId, SessionError> {
         let mut assigned = BTreeMap::new();
+        let providers = self.child_providers();
         for (role, settings) in roles.into_iter().flatten() {
             if let Some(settings) = settings {
-                if !settings.provider.is_empty()
-                    && !crate::orchestration::child_options::ORCHESTRATION_PROVIDERS
-                        .contains(&settings.provider.as_str())
-                {
+                if !settings.provider.is_empty() && !providers.is_valid(&settings.provider) {
                     return Err(SessionError::InvalidRequest(
                         "invalid orchestration role provider".into(),
                     ));
@@ -509,9 +524,8 @@ impl OrchestrationProgram {
             .as_ref()
             .map(|role| role.provider.as_str())
             .unwrap_or("");
-        let valid = |provider: &str| {
-            crate::orchestration::child_options::ORCHESTRATION_PROVIDERS.contains(&provider)
-        };
+        let providers = self.child_providers();
+        let valid = |provider: &str| providers.is_valid(provider);
         let (provider, source) = if !body.provider.trim().is_empty() {
             (body.provider.clone(), "explicit")
         } else if !mapped.trim().is_empty() {
@@ -979,6 +993,11 @@ impl ChildLaunchServices for OrchestrationProgram {
             .get(role)
             .map(|settings| settings.subscription.clone())
             .filter(|value| !value.trim().is_empty()))
+    }
+    fn registered_child_providers(
+        &self,
+    ) -> crate::orchestration::child_options::RegisteredProviders {
+        self.child_providers()
     }
     fn trust_grant_providers(&self) -> Result<Vec<String>, SessionError> {
         Ok(crate::orchestration::child_options::ORCHESTRATION_PROVIDERS

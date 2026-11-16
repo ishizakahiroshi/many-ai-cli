@@ -21,6 +21,8 @@ import {
   isPermissionPresetAvailable,
   rememberedRolePermission,
   folderTrustOffered,
+  isRegisteredChildProvider,
+  registeredChildProviderChoices,
   folderTrustDecision,
   spawnConfirmDecisionFromHttp,
   SPAWN_CONFIRM_CLOSED_FALLBACK_MS,
@@ -516,5 +518,30 @@ describe('folder trust', () => {
     const record = recordFromMessage(requestedMessage({ trust_grant_providers: ['claude', 'codex'] }));
     expect(folderTrustDecision(folderTrustOffered(record, 'claude'), true, true)).toBe(true);
     expect(folderTrustDecision(folderTrustOffered(record, 'copilot'), true, true)).toBeUndefined();
+  });
+});
+
+describe('登録した AI CLI を子に選ぶ', () => {
+  test('組み込み 7 種と shell と空は「登録した AI」ではない', () => {
+    for (const id of ['claude', 'codex', 'copilot', 'cursor-agent', 'opencode', 'grok', 'command-code', 'shell', '', '  ']) {
+      expect(isRegisteredChildProvider(id)).toBe(false);
+    }
+    expect(isRegisteredChildProvider('devin-cli')).toBe(true);
+  });
+
+  test('選択肢には有効で起動の定義がある登録済みの AI だけが、表示名つきで並ぶ', () => {
+    const choices = registeredChildProviderChoices([
+      { id: 'claude', display_name: 'Claude Code', enabled: true, capabilities: { launch: true } },
+      { id: 'devin-cli', display_name: 'Devin CLI', enabled: true, capabilities: { launch: true } },
+      { id: 'devin-cli', display_name: 'dup', enabled: true },
+      { id: 'no-name', display_name: '', enabled: true },
+      { id: 'off', display_name: 'Off', enabled: false },
+      { id: 'no-launch', display_name: 'No Launch', enabled: true, capabilities: { launch: false } },
+      { id: 'shell', display_name: 'Shell', enabled: true },
+    ]);
+    expect(choices).toEqual([
+      { value: 'devin-cli', label: 'Devin CLI' },
+      { value: 'no-name', label: 'no-name' },
+    ]);
   });
 });

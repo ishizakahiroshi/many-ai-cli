@@ -172,16 +172,14 @@ impl ChildHttp {
         {
             return session_error(error);
         }
-        if !crate::orchestration::child_options::ORCHESTRATION_PROVIDERS
-            .contains(&body.provider.as_str())
-        {
+        let providers = self.program.child_providers();
+        if !providers.is_valid(&body.provider) {
             return Response::error(
                 400,
                 "bad_request",
-                &format!(
-                    "invalid provider {}; valid providers are: {}",
-                    crate::proto::go_quote::quote(&body.provider),
-                    crate::orchestration::child_options::ORCHESTRATION_PROVIDERS.join(", ")
+                &crate::orchestration::child_options::invalid_provider_message(
+                    &crate::proto::go_quote::quote(&body.provider),
+                    &providers,
                 ),
             );
         }
