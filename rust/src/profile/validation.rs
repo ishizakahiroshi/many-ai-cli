@@ -303,7 +303,13 @@ pub fn sanitize_presentation(p: Option<&PresentationDefinition>) -> Option<Prese
         String::new()
     };
     let order = p.order.max(0);
-    if icon_text.is_empty() && color.is_empty() && letter.is_empty() && order == 0 {
+    let handoff_order = p.handoff_order.max(0);
+    if icon_text.is_empty()
+        && color.is_empty()
+        && letter.is_empty()
+        && order == 0
+        && handoff_order == 0
+    {
         None
     } else {
         Some(PresentationDefinition {
@@ -311,6 +317,7 @@ pub fn sanitize_presentation(p: Option<&PresentationDefinition>) -> Option<Prese
             color,
             letter,
             order,
+            handoff_order,
         })
     }
 }
@@ -689,12 +696,12 @@ fn declared_sections(def: &Definition) -> Vec<Diagnostic> {
                 "presentation.letter must be 1 to 2 visible characters without surrounding whitespace",
             ));
         }
-        if p.order < 0 {
+        if p.order < 0 || p.handoff_order < 0 {
             out.push(diag(
                 "invalid_presentation",
                 "error",
                 "presentation.order",
-                "presentation.order must not be negative",
+                "presentation.order and presentation.handoff_order must not be negative",
             ));
         }
     }

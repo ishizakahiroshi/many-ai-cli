@@ -79,6 +79,13 @@ impl Registry {
     pub fn declared(&self, id: &str) -> Option<Definition> {
         self.declared.get(id).cloned()
     }
+    /// Every definition with its declarative sections resolved, in registry order.
+    pub fn declared_list(&self) -> Vec<Definition> {
+        self.order
+            .iter()
+            .filter_map(|id| self.declared.get(id).cloned())
+            .collect()
+    }
     pub fn list(&self) -> Vec<Summary> {
         self.summaries.clone()
     }

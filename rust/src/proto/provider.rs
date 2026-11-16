@@ -563,6 +563,14 @@ pub struct PresentationDefinition {
         skip_serializing_if = "is_zero"
     )]
     pub order: i64,
+    /// Position in the "hand this session to" list (smaller first; 0 = after the
+    /// others). Rust-only.
+    #[serde(
+        rename = "handoff_order",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_zero"
+    )]
+    pub handoff_order: i64,
 }
 
 /// Source: `internal/provider/schema.go`, `UpdateDefinition`.

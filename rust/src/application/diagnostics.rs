@@ -150,8 +150,17 @@ impl Diagnostics {
     }
     async fn providers(&self, cancel: &Cancellation) -> Check {
         let mut found = vec![];
-        for name in crate::proto::provider::BUILTIN_PROVIDER_IDS {
-            let Ok(exe) = self.deps.io.look_path(name) else {
+        // Every provider the registry knows: the built-ins and the AI CLIs the
+        // user registered. A registered one is only checked for being on PATH.
+        for def in crate::profile::declared::declared_all() {
+            let name = def.id.as_str();
+            let command = def
+                .launch
+                .as_ref()
+                .map(|l| l.executable.as_str())
+                .filter(|e| !e.is_empty())
+                .unwrap_or(name);
+            let Ok(exe) = self.deps.io.look_path(command) else {
                 continue;
             };
             let output = self

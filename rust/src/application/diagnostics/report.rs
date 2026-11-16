@@ -54,15 +54,9 @@ pub fn redact(text: &str) -> String {
         .replace_all(&text, "<REDACTED_HOST>")
         .into_owned()
 }
-const PROVIDERS: &[&str] = &[
-    "claude",
-    "codex",
-    "copilot",
-    "cursor-agent",
-    "opencode",
-    "grok",
-    "command-code",
-];
+/// A closed allowlist on purpose: an issue report never names a provider id the
+/// user chose, so only the built-ins are listed.
+const PROVIDERS: &[&str] = crate::proto::provider::BUILTIN_PROVIDER_IDS;
 pub struct Environment {
     pub version: String,
     pub platform: String,

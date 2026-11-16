@@ -204,7 +204,8 @@ impl LinkDefaults {
             }),
             Ok(bytes) => crate::proto::wire::decode::<Usage>(&bytes)
                 .and_then(serde_json::to_value)
-                .map(https_only),
+                .map(https_only)
+                .map(with_declared_usage),
             Err(_) => {
                 cache.failed = Some(tokio::time::Instant::now());
                 return cache.data.clone().unwrap_or_else(|| fallback(install));
@@ -242,11 +243,47 @@ fn https_only(mut links: serde_json::Value) -> serde_json::Value {
     }
     links
 }
+/// The usage page of Ollama, which is a link target of the dashboard but not an
+/// AI CLI provider, so no definition declares it.
+const OLLAMA_USAGE_URL: &str = "https://ollama.com/settings";
+/// Usage links the Hub knows without asking the repository: the `links.usage_url`
+/// of every provider the registry declares (the seven built-ins carry theirs in
+/// `assets/provider/declarations.json`) plus the Ollama page.
+fn declared_usage_links() -> serde_json::Value {
+    usage_links_of(&crate::profile::declared::declared_all())
+}
+fn usage_links_of(defs: &[crate::proto::provider::Definition]) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    for def in defs {
+        if let Some(url) = def
+            .links
+            .as_ref()
+            .map(|l| l.usage_url.as_str())
+            .filter(|u| !u.is_empty())
+        {
+            map.insert(def.id.clone(), url.into());
+        }
+    }
+    map.insert("ollama".into(), OLLAMA_USAGE_URL.into());
+    serde_json::Value::Object(map)
+}
+/// A fetched answer, completed with the links the registry declares for the
+/// providers the repository file does not list (a registered AI CLI).
+fn with_declared_usage(mut fetched: serde_json::Value) -> serde_json::Value {
+    if let (Some(map), serde_json::Value::Object(declared)) =
+        (fetched.as_object_mut(), declared_usage_links())
+    {
+        for (key, value) in declared {
+            map.entry(key).or_insert(value);
+        }
+    }
+    fetched
+}
 fn fallback(install: bool) -> serde_json::Value {
     if install {
         serde_json::json!({})
     } else {
-        serde_json::json!({"claude":"https://claude.ai/settings/usage","codex":"https://chatgpt.com/codex/cloud/settings/analytics#usage","command-code":"https://commandcode.ai/usage","copilot":"https://github.com/settings/billing","cursor-agent":"https://cursor.com/dashboard","grok":"https://grok.com/?_s=usage","ollama":"https://ollama.com/settings","opencode":"https://opencode.ai/go"})
+        declared_usage_links()
     }
 }
 #[cfg(test)]
@@ -324,5 +361,26 @@ mod tests {
             got,
             serde_json::json!({"Claude":"https://example.com/install"})
         );
+    }
+    #[test]
+    fn declared_usage_links_equal_the_table_the_code_used_to_hard_code() {
+        // The values of the fixed fallback table before it moved into
+        // `assets/provider/declarations.json`.
+        let expected = serde_json::json!({"claude":"https://claude.ai/settings/usage","codex":"https://chatgpt.com/codex/cloud/settings/analytics#usage","command-code":"https://commandcode.ai/usage","copilot":"https://github.com/settings/billing","cursor-agent":"https://cursor.com/dashboard","grok":"https://grok.com/?_s=usage","ollama":"https://ollama.com/settings","opencode":"https://opencode.ai/go"});
+        assert_eq!(fallback(false), expected);
+    }
+    #[test]
+    fn a_registered_provider_usage_link_comes_from_its_own_declaration() {
+        let mut def = crate::proto::provider::Definition::default();
+        def.id = "demo".into();
+        def.links = Some(crate::proto::provider::LinksDefinition {
+            usage_url: "https://example.com/usage".into(),
+        });
+        let mut all = crate::profile::declared::declared_all();
+        all.push(def);
+        let links = usage_links_of(&all);
+        assert_eq!(links["demo"], "https://example.com/usage");
+        assert_eq!(links["opencode"], "https://opencode.ai/go");
+        assert_eq!(links["claude"], "https://claude.ai/settings/usage");
     }
 }

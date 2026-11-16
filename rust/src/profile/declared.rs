@@ -10,6 +10,81 @@
 //! field by field; a section it does not write falls back to the built-in one.
 use crate::proto::provider::*;
 use std::collections::BTreeMap;
+use std::sync::{Arc, OnceLock, RwLock};
+
+/// Where the running process reads the current provider registry from. The Hub
+/// and the wrapper install one at startup; until then (and in unit tests) the
+/// built-in declarations alone answer.
+pub type RegistrySource =
+    Arc<dyn Fn() -> Option<Arc<crate::profile::registry::Registry>> + Send + Sync>;
+static SOURCE: RwLock<Option<RegistrySource>> = RwLock::new(None);
+
+pub fn install_registry_source(source: RegistrySource) {
+    *SOURCE.write().unwrap_or_else(|e| e.into_inner()) = Some(source);
+}
+
+fn current_registry() -> Option<Arc<crate::profile::registry::Registry>> {
+    let source = SOURCE.read().unwrap_or_else(|e| e.into_inner()).clone()?;
+    source()
+}
+
+/// The seven built-ins as the registry would resolve them (manifest plus
+/// declaration), for a process that has no registry installed yet.
+fn builtin_cached() -> &'static BTreeMap<String, Definition> {
+    static CACHE: OnceLock<BTreeMap<String, Definition>> = OnceLock::new();
+    CACHE.get_or_init(|| {
+        let declared = builtin_declarations();
+        crate::profile::registry::embedded_definitions()
+            .unwrap_or_default()
+            .iter()
+            .map(|manifest| {
+                (
+                    manifest.id.clone(),
+                    resolve(manifest, declared.get(&manifest.id)),
+                )
+            })
+            .collect()
+    })
+}
+
+/// The resolved declarations of a built-in provider, whatever the running
+/// registry holds. For code that must give the same answer in every process.
+pub fn builtin(id: &str) -> Option<Definition> {
+    builtin_cached().get(id).cloned()
+}
+
+/// The slash command source a built-in provider ships with.
+pub fn builtin_slash_source(id: &str) -> String {
+    builtin(id)
+        .and_then(|d| d.slash_commands)
+        .map(|s| s.source)
+        .unwrap_or_default()
+}
+
+/// The resolved declarations of `id` from the running registry, or (before a
+/// registry is installed, or when it does not know `id`) from the built-in
+/// declarations. `None` for an id nobody declares.
+pub fn declared(id: &str) -> Option<Definition> {
+    if let Some(def) = current_registry().and_then(|r| r.declared(id)) {
+        return Some(def);
+    }
+    builtin_cached().get(id).cloned()
+}
+
+/// Every provider the running registry knows, built-ins first; the seven
+/// built-ins alone when no registry is installed.
+pub fn declared_all() -> Vec<Definition> {
+    if let Some(registry) = current_registry() {
+        let list = registry.declared_list();
+        if !list.is_empty() {
+            return list;
+        }
+    }
+    BUILTIN_PROVIDER_IDS
+        .iter()
+        .filter_map(|id| builtin_cached().get(*id).cloned())
+        .collect()
+}
 
 /// One JSON object: provider id -> a partial definition that carries only the
 /// declarative sections.
@@ -94,6 +169,9 @@ pub fn resolve(def: &Definition, builtin: Option<&Definition>) -> Definition {
             if p.order == 0 {
                 p.order = bp.order;
             }
+            if p.handoff_order == 0 {
+                p.handoff_order = bp.handoff_order;
+            }
         }
         (None, Some(bp)) => out.presentation = Some(bp.clone()),
         _ => {}
@@ -105,6 +183,51 @@ pub fn resolve(def: &Definition, builtin: Option<&Definition>) -> Definition {
 /// routine, a board, an automatic approval or retry). Only a PTY provider may.
 pub fn automation_allowed(def: &Definition) -> bool {
     !matches!(def.connection.as_str(), "acp")
+}
+
+/// The providers a session can be handed to: enabled PTY providers with a
+/// `launch` definition, ordered by `presentation.handoff_order` (0 = after the
+/// others, registry order kept among equals).
+pub fn handoff_candidates_of(defs: &[Definition]) -> Vec<String> {
+    let mut list: Vec<(usize, &Definition)> = defs
+        .iter()
+        .enumerate()
+        .filter(|(_, d)| d.enabled.unwrap_or(true) && d.launch.is_some() && automation_allowed(d))
+        .collect();
+    let rank = |d: &Definition| {
+        d.presentation
+            .as_ref()
+            .map(|p| p.handoff_order)
+            .filter(|o| *o > 0)
+            .unwrap_or(i64::MAX)
+    };
+    list.sort_by_key(|(index, d)| (rank(d), *index));
+    list.into_iter().map(|(_, d)| d.id.clone()).collect()
+}
+
+pub fn handoff_candidates() -> Vec<String> {
+    handoff_candidates_of(&declared_all())
+}
+
+/// Whether a routine (scheduled run) may use this provider: an enabled PTY
+/// provider that has a `launch` definition and does not opt out.
+pub fn routines_allowed(def: &Definition) -> bool {
+    automation_allowed(def)
+        && def.enabled.unwrap_or(true)
+        && def.launch.is_some()
+        && def
+            .routines
+            .as_ref()
+            .and_then(|r| r.enabled)
+            .unwrap_or(true)
+}
+
+/// How a routine run is judged complete: `marker` (default) or `native_or_marker`.
+pub fn completion_mode(def: &Definition) -> &str {
+    match def.routines.as_ref().map(|r| r.completion_mode.as_str()) {
+        Some(mode) if !mode.is_empty() => mode,
+        _ => "marker",
+    }
 }
 
 #[cfg(test)]
@@ -253,5 +376,93 @@ mod tests {
         );
         assert_eq!(def.connection, "acp");
         assert!(!automation_allowed(&def));
+    }
+
+    /// The values of the per-provider tables that C2 removed from the code,
+    /// copied here as they were.
+    #[test]
+    fn declared_values_equal_the_tables_the_code_used_to_hard_code() {
+        // routine/validation.rs: only codex used `native_or_marker`.
+        for id in BUILTIN_PROVIDER_IDS {
+            let def = builtin(id).unwrap();
+            assert!(routines_allowed(&def), "{id} must allow routines");
+            let expected = if *id == "codex" {
+                "native_or_marker"
+            } else {
+                "marker"
+            };
+            assert_eq!(completion_mode(&def), expected, "{id}");
+        }
+        // slash_commands settings: one raw.githubusercontent URL per provider.
+        for id in BUILTIN_PROVIDER_IDS {
+            assert_eq!(
+                builtin_slash_source(id),
+                format!(
+                    "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{id}.md"
+                )
+            );
+        }
+        assert_eq!(
+            crate::config::SlashCmdSources::defaults().claude,
+            builtin_slash_source("claude")
+        );
+        // slash_commands/skills.rs: codex skills start with `$`, the others `/`.
+        for id in BUILTIN_PROVIDER_IDS {
+            let prefix = builtin(id)
+                .and_then(|d| d.slash_commands)
+                .map(|s| s.skill_prefix)
+                .unwrap_or_default();
+            assert_eq!(prefix, if *id == "codex" { "$" } else { "" }, "{id}");
+        }
+        // hub/handoff_routes.rs: the order of the candidate list.
+        assert_eq!(
+            handoff_candidates_of(&declared_all()),
+            [
+                "claude",
+                "codex",
+                "grok",
+                "copilot",
+                "cursor-agent",
+                "opencode",
+                "command-code"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_registered_provider_is_routable_through_the_same_functions() {
+        let mut def = Definition {
+            id: "synthetic-cli".into(),
+            launch: Some(LaunchDefinition::default()),
+            ..Default::default()
+        };
+        assert!(routines_allowed(&def));
+        assert_eq!(completion_mode(&def), "marker");
+        def.routines = Some(RoutinesDefinition {
+            enabled: None,
+            completion_mode: "native_or_marker".into(),
+        });
+        assert_eq!(completion_mode(&def), "native_or_marker");
+        let mut off = def.clone();
+        off.routines = Some(RoutinesDefinition {
+            enabled: Some(false),
+            completion_mode: String::new(),
+        });
+        assert!(!routines_allowed(&off));
+        let mut acp = def.clone();
+        acp.connection = "acp".into();
+        assert!(!routines_allowed(&acp));
+        let mut disabled = def.clone();
+        disabled.enabled = Some(false);
+        assert!(!routines_allowed(&disabled));
+        assert!(!routines_allowed(&Definition::default()), "no launch");
+        // The handoff list: built-ins in their order, then the registered one;
+        // an ACP provider is never offered.
+        let mut all = declared_all();
+        all.push(def);
+        all.push(acp);
+        let list = handoff_candidates_of(&all);
+        assert_eq!(list.len(), 8);
+        assert_eq!(list.last().unwrap(), "synthetic-cli");
     }
 }

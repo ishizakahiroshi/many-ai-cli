@@ -11,16 +11,15 @@ use std::{
 };
 #[cfg(test)]
 mod tests;
-pub const PROVIDERS: &[&str] = &[
-    "claude",
-    "codex",
-    "copilot",
-    "cursor-agent",
-    "opencode",
-    "grok",
-    "command-code",
-    "common",
-];
+/// The built-in providers (one list, in `proto::provider`) and the shared
+/// `common` profile. A registered AI CLI has its own path (`registry_sources`).
+pub static PROVIDERS: std::sync::LazyLock<Vec<&'static str>> = std::sync::LazyLock::new(|| {
+    crate::proto::provider::BUILTIN_PROVIDER_IDS
+        .iter()
+        .copied()
+        .chain(["common"])
+        .collect()
+});
 pub type Warning = dyn Fn(&'static str) + Send + Sync;
 /// `(provider id, approval_pattern_source)` of every AI CLI registered in the
 /// registry's user layer (`providers.d`). Read each time, so a registration
@@ -152,7 +151,7 @@ impl ApprovalPatterns {
     }
     pub fn sync(&self) -> io::Result<()> {
         let _guard = self.gate.lock().unwrap_or_else(|e| e.into_inner());
-        for provider in PROVIDERS {
+        for provider in PROVIDERS.iter() {
             let legacy = format!("{provider}.json");
             let custom = format!("{provider}.custom.json");
             if self.dir.metadata(&legacy).is_ok() {
@@ -183,7 +182,7 @@ impl ApprovalPatterns {
     }
     fn refresh_inner(&self) -> io::Result<()> {
         let snapshot = self.config.snapshot().map_err(io::Error::other)?;
-        for provider in PROVIDERS {
+        for provider in PROVIDERS.iter() {
             let list = self.read(
                 provider,
                 snapshot.config.approval_profiles.for_provider(provider),

@@ -24,15 +24,8 @@ use std::{
     sync::{Arc, Mutex, Weak},
     time::Duration,
 };
-pub const PROVIDERS: &[&str] = &[
-    "claude",
-    "codex",
-    "copilot",
-    "cursor-agent",
-    "opencode",
-    "grok",
-    "command-code",
-];
+/// The built-in providers, whose sources are the user-editable settings.
+pub const PROVIDERS: &[&str] = crate::proto::provider::BUILTIN_PROVIDER_IDS;
 #[derive(Clone, Default, Debug, PartialEq, Serialize)]
 pub struct SlashCmd {
     pub cmd: String,
@@ -257,16 +250,54 @@ impl SlashCommands {
         force: bool,
         now: Timestamp,
     ) -> Result<SlashResponse, SlashFailure> {
-        if !PROVIDERS.contains(&provider) {
+        // A built-in reads its (user editable) source from the settings. A
+        // registered AI CLI is valid when the registry knows it, and reads the
+        // source or the list its definition declares (`slash_commands`).
+        let declared = if PROVIDERS.contains(&provider) {
+            None
+        } else {
+            crate::profile::declared::declared(provider)
+        };
+        self.commands_declared(provider, declared, context, force, now)
+            .await
+    }
+    /// [`Self::commands`] with the definition of a non-built-in provider passed
+    /// in (`None` for a built-in).
+    pub async fn commands_declared(
+        self: &Arc<Self>,
+        provider: &str,
+        declared: Option<crate::proto::provider::Definition>,
+        context: SearchContext,
+        force: bool,
+        now: Timestamp,
+    ) -> Result<SlashResponse, SlashFailure> {
+        if declared.is_none() && !PROVIDERS.contains(&provider) {
             return Err(SlashFailure::InvalidProvider);
         }
-        let key = cache_key(provider, &context);
-        let entry = self
-            .cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(&key)
-            .cloned();
+        if declared
+            .as_ref()
+            .is_some_and(|def| !def.enabled.unwrap_or(true))
+        {
+            return Err(SlashFailure::InvalidProvider);
+        }
+        let direct = declared
+            .as_ref()
+            .and_then(|def| def.slash_commands.as_ref())
+            .is_some_and(|slash| !slash.items.is_empty());
+        let mut key = cache_key(provider, &context);
+        if let Some(slash) = declared.as_ref().and_then(|d| d.slash_commands.as_ref()) {
+            // A changed definition must not be answered from the old entry.
+            key = format!("{key}|{}", slash.source);
+        }
+        let entry = if direct {
+            None
+        } else {
+            self.cache
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&key)
+                .cloned()
+        };
         if !force
             && let Some(entry) = &entry
             && now
@@ -282,9 +313,45 @@ impl SlashCommands {
         {
             return Ok(entry.response());
         }
-        let source = self.sources().map_err(|_| SlashFailure::Unavailable)?;
-        let source = source_fields(&source)[PROVIDERS.iter().position(|p| *p == provider).unwrap()]
-            .to_owned();
+        let source = match &declared {
+            None => {
+                let source = self.sources().map_err(|_| SlashFailure::Unavailable)?;
+                source_fields(&source)[PROVIDERS.iter().position(|p| *p == provider).unwrap()]
+                    .to_owned()
+            }
+            Some(def) => {
+                let slash = def.slash_commands.clone().unwrap_or_default();
+                if !slash.items.is_empty() {
+                    // A list written into the definition needs no fetch.
+                    let skills = self.io.skills(provider, &context);
+                    let cmds = merge(
+                        provider,
+                        slash
+                            .items
+                            .iter()
+                            .map(|item| SlashCmd {
+                                cmd: item.cmd.clone(),
+                                desc: item.desc.clone(),
+                                ..Default::default()
+                            })
+                            .collect(),
+                        skills,
+                    );
+                    let entry = Entry {
+                        cmds: if cmds.is_empty() { None } else { Some(cmds) },
+                        fetched: now,
+                        source: String::new(),
+                    };
+                    let response = entry.response();
+                    self.cache
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .insert(key, entry);
+                    return Ok(response);
+                }
+                slash.source
+            }
+        };
         if source.is_empty() {
             return Err(SlashFailure::NotConfigured);
         }

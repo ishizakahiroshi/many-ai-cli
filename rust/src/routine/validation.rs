@@ -19,18 +19,12 @@ pub fn validate(item: &mut Definition, home: &Path, now: Timestamp) -> Result<()
     {
         return Err("prompt is empty, too long, or contains unsupported control characters".into());
     }
-    if !matches!(
-        item.provider.as_str(),
-        "claude" | "codex" | "copilot" | "cursor-agent" | "opencode" | "grok" | "command-code"
-    ) {
+    let Some(provider) = crate::profile::declared::declared(&item.provider)
+        .filter(crate::profile::declared::routines_allowed)
+    else {
         return Err("unsupported AI provider".into());
-    }
-    item.completion_mode = if item.provider == "codex" {
-        "native_or_marker"
-    } else {
-        "marker"
-    }
-    .into();
+    };
+    item.completion_mode = crate::profile::declared::completion_mode(&provider).into();
     if item.model.starts_with('-')
         || item
             .model

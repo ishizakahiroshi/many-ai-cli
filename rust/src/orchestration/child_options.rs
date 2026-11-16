@@ -10,15 +10,9 @@ use crate::{
 };
 use std::collections::BTreeMap;
 
-pub const ORCHESTRATION_PROVIDERS: &[&str] = &[
-    "claude",
-    "codex",
-    "copilot",
-    "cursor-agent",
-    "opencode",
-    "grok",
-    "command-code",
-];
+/// The built-in children. The id list lives in one place (`proto::provider`);
+/// a registered AI CLI joins through `RegisteredProviders`.
+pub const ORCHESTRATION_PROVIDERS: &[&str] = crate::proto::provider::BUILTIN_PROVIDER_IDS;
 
 /// AI CLIs registered by the user (providers.d, the Hub's registration API, or
 /// config.yaml) that an orchestrate child may use besides the built-in seven.
@@ -48,6 +42,13 @@ impl RegisteredProviders {
                 continue;
             };
             if !entry.definition.enabled.unwrap_or(true) {
+                continue;
+            }
+            // A provider that is reached over ACP is driven by a person only.
+            if registry
+                .declared(&summary.id)
+                .is_some_and(|d| !crate::profile::declared::automation_allowed(&d))
+            {
                 continue;
             }
             let Some(launch) = entry.definition.launch.as_ref() else {

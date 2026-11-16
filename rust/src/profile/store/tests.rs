@@ -118,7 +118,7 @@ fn new_user_ids_cannot_name_an_approval_pattern_file() {
     for id in ["fixture-cli", "my_cli2", "a-b"] {
         assert!(validate_user_id(id).is_ok(), "{id} must stay accepted");
     }
-    for id in crate::application::approval_patterns::PROVIDERS {
+    for id in crate::application::approval_patterns::PROVIDERS.iter() {
         assert!(
             validate_user_id(id).is_err(),
             "every approval-patterns provider name is reserved: {id}"

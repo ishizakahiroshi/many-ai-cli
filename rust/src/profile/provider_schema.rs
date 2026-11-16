@@ -319,6 +319,10 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
                 name: "order",
                 kind: "int",
             },
+            Field {
+                name: "handoff_order",
+                kind: "int",
+            },
         ],
     },
     Schema {

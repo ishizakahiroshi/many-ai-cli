@@ -347,6 +347,14 @@ pub async fn run_cli(
     let (provider_registry, registry_diagnostics) =
         launch::provider_registry_for_runtime(context.config, context.paths)
             .map_err(io::Error::other)?;
+    {
+        // The wrapper is its own process: its declarations come from the registry
+        // it just loaded.
+        let shared = std::sync::Arc::new(provider_registry.clone());
+        crate::profile::declared::install_registry_source(std::sync::Arc::new(move || {
+            Some(shared.clone())
+        }));
+    }
     let mut launch = launch::prepare_launch_with_registry(
         context.config,
         provider,

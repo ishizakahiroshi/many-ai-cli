@@ -241,6 +241,14 @@ impl HubComposition {
         let registry = Arc::new(
             ProviderRegistryStore::new(&paths, context.config.clone()).map_err(io::Error::other)?,
         );
+        {
+            // Code that reads a provider's declarations without holding a registry
+            // (routine validation, slash commands, handoff) asks this one.
+            let store = registry.clone();
+            crate::profile::declared::install_registry_source(Arc::new(move || {
+                store.snapshot().ok().map(|snapshot| snapshot.registry)
+            }));
+        }
         let registry_copy = registry.clone();
         let registry_snapshot: RegistrySnapshot = Arc::new(move || {
             registry_copy

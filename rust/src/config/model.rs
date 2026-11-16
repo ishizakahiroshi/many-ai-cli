@@ -2545,15 +2545,7 @@ fn source_url(group: &str, provider: &str) -> String {
 }
 impl SlashCmdSources {
     pub fn defaults() -> Self {
-        Self {
-            claude: source_url("slash-commands", "claude"),
-            codex: source_url("slash-commands", "codex"),
-            copilot: source_url("slash-commands", "copilot"),
-            cursor_agent: source_url("slash-commands", "cursor-agent"),
-            opencode: source_url("slash-commands", "opencode"),
-            grok: source_url("slash-commands", "grok"),
-            command_code: source_url("slash-commands", "command-code"),
-        }
+        Self::default().effective()
     }
     pub fn effective(mut self) -> Self {
         if self.claude == "https://code.claude.com/docs/en/commands.md" {
@@ -2569,7 +2561,7 @@ impl SlashCmdSources {
             ("command-code", &mut self.command_code),
         ] {
             if field.is_empty() {
-                *field = source_url("slash-commands", provider);
+                *field = crate::profile::declared::builtin_slash_source(provider);
             }
         }
         self
