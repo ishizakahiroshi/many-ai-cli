@@ -1178,6 +1178,12 @@ impl HubComposition {
         .with_agent_history(Arc::new(
             crate::hub::agent_history_routes::AgentHistoryHttp::new(agent_history),
         ))
+        .with_acp_sessions(crate::hub::acp_routes::AcpHttp::new(
+            crate::application::acp_sessions::AcpSessions::new(
+                crate::application::acp_sessions::native_connector(context.environment.clone()),
+                Some(paths.resource(Resource::Logs).as_path()),
+            ),
+        ))
         .with_approval_patterns(
             crate::hub::approval_pattern_routes::ApprovalPatternHttp::new(
                 approval_patterns.clone(),

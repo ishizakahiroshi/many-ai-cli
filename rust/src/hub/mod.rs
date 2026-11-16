@@ -23,6 +23,7 @@ pub mod approval_actions;
 
 pub mod task_owner;
 
+pub mod acp_routes;
 pub mod agent_history_routes;
 pub mod approval_pattern_routes;
 pub mod approval_status_routes;
