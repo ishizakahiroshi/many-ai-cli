@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "5448f5c4d8f23d2b38bd30191c41f4ab4e8ea57b",
+    "commit": "bac23c1a5599275c7082ed314356c63e63d89998",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2100,
-    "analyzed": 1647,
+    "discovered": 2105,
+    "analyzed": 1652,
     "unresolved": 17,
     "unknown": 0,
     "unclaimed": 436,
@@ -43552,6 +43552,96 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/agent-session-model-fixtures.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "agent-session-model.ts を、疑似サーバー（Hub の C11 の events の形）の流れを再現して固定する。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/agent-session-model.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "「エージェントセッション」画面（PTY ではない、人が直接操作する会話）の、画面に依存しない部分。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/agent-session.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "「エージェントセッション」画面。PTY（端末）ではなく、人が直接操作する会話（Hub の /api/acp/*）。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/alt-drag-select-fixtures.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -49838,6 +49928,32 @@
       "unresolved": []
     },
     {
+      "path": "web/src/styles/agent-session.css",
+      "adapter": "css",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "out_of_scope"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/styles/approval-queue-tab.css",
       "adapter": "css",
       "status": "analyzed",
@@ -50950,6 +51066,36 @@
     },
     {
       "path": "web/src/types/window.d.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/agent-session-source.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

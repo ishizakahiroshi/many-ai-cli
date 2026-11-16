@@ -10,7 +10,7 @@ import { activateSession, providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 import { browserUseHint, loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 import { hasProviderCapability, loadProviderSummaries } from './provider-store.js';
-import { providerIsBuiltin, providerPermissionChoices } from './provider-declarations.js';
+import { providerIsAcp, providerIsBuiltin, providerPermissionChoices } from './provider-declarations.js';
 import { commandMissingIds, isAiLaunchProvider, spawnLaunchBlockReason } from './cli-availability.js';
 import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
 import { orchestrationCliOptions, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
@@ -842,7 +842,7 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
       if (generation !== providerOptionsGeneration) return;
       const list = providerResponse
         ? providerResponse.providers
-          .filter((entry) => !providerIsBuiltin(entry.id))
+          .filter((entry) => !providerIsBuiltin(entry.id) && !providerIsAcp(entry.id))
           .map((entry) => ({ id: entry.id, label: entry.display_name }))
         : (Array.isArray(info?.custom_providers) ? info.custom_providers : []);
       const select = spawnProviderEl as HTMLSelectElement;

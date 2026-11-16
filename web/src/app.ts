@@ -41,6 +41,7 @@ import './app/orchestration-dashboard.js';
 import './app/relay-dialog.js';
 import './app/prompt-templates.js';
 import './app/routines.js';
+import './app/agent-session.js';
 import './app/board-handoffs.js';
 import './app/memo-panel.js';
 import './app/header-actions.js';
