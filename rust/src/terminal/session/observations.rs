@@ -873,6 +873,9 @@ impl Session {
     }
 }
 #[cfg(test)]
+#[path = "acp_gate_tests.rs"]
+mod acp_gate_tests;
+#[cfg(test)]
 #[path = "observer_tests.rs"]
 mod observer_tests;
 #[cfg(test)]

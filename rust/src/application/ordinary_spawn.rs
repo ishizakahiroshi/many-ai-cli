@@ -196,6 +196,17 @@ impl OrdinarySpawnService {
         {
             return Err(SpawnError::bad("invalid provider"));
         }
+        // A provider reached over ACP is never started as a terminal session.
+        if registry
+            .declared(&body.provider)
+            .is_some_and(|d| !crate::profile::declared::automation_allowed(&d))
+        {
+            return Err(SpawnError {
+                status: 400,
+                code: "acp_provider",
+                detail: "this AI is reached over ACP and cannot start as a terminal session",
+            });
+        }
         let lease = self
             .core
             .begin_provider_spawn(&body.provider)

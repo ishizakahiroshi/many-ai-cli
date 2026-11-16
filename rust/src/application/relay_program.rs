@@ -610,6 +610,19 @@ impl RelayProgram {
                 "relay children default to full permission bypass; set acknowledge_child_full_bypass:true to confirm (or set orchestration.child_full_bypass:false / child_permission_default / per-role permission_preset)",
             ));
         }
+        // A relay types into its parent on its own, so an ACP parent is refused.
+        if self
+            .deps
+            .orchestration
+            .child_providers()
+            .is_acp(&parent.snapshot.provider)
+        {
+            return Err(RelayError::new(
+                403,
+                "automation_refused",
+                crate::profile::declared::ACP_HUMAN_ONLY,
+            ));
+        }
         let roles = validate_roles(roles, &cfg, &self.deps.orchestration.child_providers())?;
         if parent.snapshot.depth >= cfg.orchestration.max_depth {
             return Err(RelayError::new(
@@ -1404,6 +1417,13 @@ fn validate_roles(
         };
         assignment.provider = assignment.provider.trim().into();
         assignment.model = assignment.model.trim().into();
+        if providers.is_acp(&assignment.provider) {
+            return Err(RelayError::new(
+                403,
+                "automation_refused",
+                crate::profile::declared::ACP_HUMAN_ONLY,
+            ));
+        }
         // A relay launches its children through the same path as `orchestrate
         // spawn`, so a registered AI CLI is valid here under the same rule.
         if !providers.is_valid(&assignment.provider) && !assignment.provider.is_empty() {

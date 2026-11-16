@@ -231,6 +231,10 @@ impl ApprovalActionHttp {
             .pending_native_approval_actions()
             .into_iter()
             .filter(|item| {
+                // An ACP provider's permissions are answered by a person only.
+                if crate::profile::declared::is_acp(&item.provider) {
+                    return false;
+                }
                 // Preserve Go's OR, even for deny_session with a supplied signature:
                 // that request can match other sessions as well as the requested ID.
                 (request.action == "deny_session"

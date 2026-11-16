@@ -23,7 +23,46 @@ pub fn install_registry_source(source: RegistrySource) {
     *SOURCE.write().unwrap_or_else(|e| e.into_inner()) = Some(source);
 }
 
+#[cfg(test)]
+thread_local! {
+    static TEST_REGISTRY: std::cell::RefCell<Option<Arc<crate::profile::registry::Registry>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Test only: lookups on this thread see the installed registry until the guard
+/// drops (the process-wide source is shared by parallel tests, so it is not used).
+#[cfg(test)]
+pub struct TestRegistryGuard;
+#[cfg(test)]
+impl Drop for TestRegistryGuard {
+    fn drop(&mut self) {
+        TEST_REGISTRY.with(|r| *r.borrow_mut() = None);
+    }
+}
+#[cfg(test)]
+pub fn install_test_registry(registry: crate::profile::registry::Registry) -> TestRegistryGuard {
+    TEST_REGISTRY.with(|r| *r.borrow_mut() = Some(Arc::new(registry)));
+    TestRegistryGuard
+}
+
+/// Why an automated path may not use a provider reached over ACP.
+pub const ACP_HUMAN_ONLY: &str = "this AI is reached over ACP and is driven by a person only; an automated path (child, relay, routine, board, automatic approval or retry, usage polling, another session) cannot use it";
+
+/// Whether `id` is declared `connection: acp` in the running registry.
+pub fn is_acp(id: &str) -> bool {
+    with_declared(id, |d| !automation_allowed(d)).unwrap_or(false)
+}
+
+/// `Some(reason)` when an automated path must refuse `id`.
+pub fn automation_refusal(id: &str) -> Option<&'static str> {
+    is_acp(id).then_some(ACP_HUMAN_ONLY)
+}
+
 fn current_registry() -> Option<Arc<crate::profile::registry::Registry>> {
+    #[cfg(test)]
+    if let Some(r) = TEST_REGISTRY.with(|r| r.borrow().clone()) {
+        return Some(r);
+    }
     let source = SOURCE.read().unwrap_or_else(|e| e.into_inner()).clone()?;
     source()
 }

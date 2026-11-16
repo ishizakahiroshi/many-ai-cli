@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "e12221e7218e0396d947990dac6b97e391155473",
+    "commit": "a7284a87cfdc86a45133954a0d652e292a63d3cb",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2088,
-    "analyzed": 1638,
+    "discovered": 2089,
+    "analyzed": 1639,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 435,
@@ -36236,6 +36236,35 @@
         "summary": {
           "state": "value",
           "value": "The single Hub session state owner. Registration explicitly initializes"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/terminal/session/acp_gate_tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "A provider declared `connection: acp` is driven by a person only: the"
         },
         "authentication": {
           "state": "not_configured"
