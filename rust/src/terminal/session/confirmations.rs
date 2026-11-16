@@ -17,6 +17,9 @@ pub struct ConfirmedChildRequest {
 pub struct ConfirmationPresentation {
     pub config: config::Config,
     pub trust_grant_providers: Vec<String>,
+    /// The registered AI CLIs the launch will consult, so the dialog's preview
+    /// resolves a registered provider's execution mode the same way.
+    pub child_providers: child_options::RegisteredProviders,
 }
 
 /// No default implementation: unavailable preparation/board ownership cannot
@@ -371,10 +374,14 @@ fn requested_message(
         initial_prompt: body.initial_prompt.clone(),
         // Go's UnixMilli uses floor division for pre-epoch timestamps.
         spawn_requested_at_ms: requested_at.unix_nanos().div_euclid(1_000_000) as i64,
-        spawn_child_approval: child_options::preview_tiers(resolved, &disclosure.config)
-            .into_iter()
-            .map(|(provider, tiers)| (provider, Some(tiers)))
-            .collect(),
+        spawn_child_approval: child_options::preview_tiers(
+            resolved,
+            &disclosure.config,
+            &disclosure.child_providers,
+        )
+        .into_iter()
+        .map(|(provider, tiers)| (provider, Some(tiers)))
+        .collect(),
         trust_grant_providers: disclosure.trust_grant_providers.clone(),
         ..Default::default()
     }

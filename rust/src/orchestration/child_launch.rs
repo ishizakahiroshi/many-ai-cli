@@ -823,6 +823,7 @@ impl ConfirmationExecutor for ChildLaunchExecutor {
         Ok(ConfirmationPresentation {
             config: self.cfg()?,
             trust_grant_providers: self.services.trust_grant_providers()?,
+            child_providers: self.services.registered_child_providers(),
         })
     }
     fn spawn<'a>(

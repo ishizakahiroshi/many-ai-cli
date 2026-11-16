@@ -372,15 +372,20 @@ pub fn prepare_with(
 /// The dialog enumerates every provider/tier using the same table and ordering
 /// as preparation. Unsupported explicit headless requests remain visible here;
 /// actual preparation returns the source error instead of silently downgrading.
+/// `providers` must be the same registry reading the launch uses, so a
+/// registered provider's own `launch.headless` counts here exactly as it does in
+/// [`prepare_with`]; otherwise the dialog would approve a different mode.
 pub fn preview_tiers(
     body: &ResolvedChildSpawn,
     cfg: &Config,
+    providers: &RegisteredProviders,
 ) -> BTreeMap<String, BTreeMap<String, ChildApproval>> {
     preview_for(
         body.request(),
         launch_origin(body.origin()),
         body.grants().allowed_tools(),
         cfg,
+        providers,
     )
 }
 /// Pure /api/info disclosure. This returns data, never a UI-origin capability
@@ -391,6 +396,7 @@ pub fn preview_ui_tiers(cfg: &Config) -> BTreeMap<String, BTreeMap<String, Child
         config::LAUNCH_ORIGIN_UI,
         &[],
         cfg,
+        &RegisteredProviders::default(),
     )
 }
 fn preview_for(
@@ -398,6 +404,7 @@ fn preview_for(
     origin: &str,
     allowed_tools: &[String],
     cfg: &Config,
+    registered: &RegisteredProviders,
 ) -> BTreeMap<String, BTreeMap<String, ChildApproval>> {
     let mut providers: Vec<&str> = ORCHESTRATION_PROVIDERS.to_vec();
     let requested_provider = body.provider.trim();
@@ -414,9 +421,8 @@ fn preview_for(
             if !tier.is_empty() {
                 request.permission_preset.clone_from(&tier);
             }
-            request.execution_mode =
-                execution_mode_for_origin(&request, origin, cfg, &RegisteredProviders::default())
-                    .unwrap_or_else(|_| config::normalize_execution_mode(&body.execution_mode));
+            request.execution_mode = execution_mode_for_origin(&request, origin, cfg, registered)
+                .unwrap_or_else(|_| config::normalize_execution_mode(&body.execution_mode));
             let mut permission = resolve_permission_for_origin(
                 provider,
                 &request.permission_preset,
@@ -519,7 +525,7 @@ mod tests {
                 ..Default::default()
             };
             let body = request(input);
-            let preview = preview_tiers(&body, &cfg);
+            let preview = preview_tiers(&body, &cfg, &RegisteredProviders::default());
             let prepared = prepare(body, &cfg);
             if let Some(expected) = case["error"].as_str() {
                 match prepared {
@@ -887,6 +893,7 @@ mod tests {
             config::LAUNCH_ORIGIN_UI,
             &[],
             &cfg,
+            &providers,
         );
         for approval in preview["fixture-headless"].values() {
             assert!(approval.permission_mode.is_empty());
