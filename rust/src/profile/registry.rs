@@ -79,6 +79,10 @@ impl Registry {
     pub fn declared(&self, id: &str) -> Option<Definition> {
         self.declared.get(id).cloned()
     }
+    /// [`Self::declared`] without the copy, for a caller on a hot path.
+    pub fn declared_ref(&self, id: &str) -> Option<&Definition> {
+        self.declared.get(id)
+    }
     /// Every definition with its declarative sections resolved, in registry order.
     pub fn declared_list(&self) -> Vec<Definition> {
         self.order

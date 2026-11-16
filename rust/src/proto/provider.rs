@@ -275,8 +275,11 @@ pub struct SlashCommandItem {
     pub desc: String,
 }
 
-/// Permission mode name -> extra launch arguments, and how an allowed tool list
-/// is turned into arguments (`{tools}` is replaced by the comma separated list).
+/// Permission mode name -> extra launch arguments. The mode `*` is used for a
+/// mode that is not listed, and `{mode}` in an argument is replaced by the mode
+/// name. `allowed_tools_args` turns an allowed tool list into arguments: an
+/// entry that is exactly `{tools}` becomes every tool as its own argument, an
+/// entry that contains `{tool}` is repeated once per tool.
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PermissionsDefinition {
@@ -335,8 +338,9 @@ pub struct InputDefinition {
         skip_serializing_if = "String::is_empty"
     )]
     pub interrupt_key: String,
-    /// How an attached file is written into the prompt: `at-path` (`@path`,
-    /// default) or `at-path-slash` (`@path` with `/` separators).
+    /// How an attached file is written into the prompt: `path` (the bare path,
+    /// default), `at-path` (`@path`) or `at-path-slash` (`@path` with `/`
+    /// separators).
     #[serde(
         rename = "attach_format",
         deserialize_with = "null_default",
@@ -397,6 +401,13 @@ pub struct ModelListDefinition {
         skip_serializing_if = "is_zero"
     )]
     pub timeout_seconds: i64,
+    /// Extra arguments appended when the user asks for a refresh.
+    #[serde(
+        rename = "refresh_args",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub refresh_args: Vec<String>,
 }
 
 /// Source: `internal/provider/schema.go`, `LaunchDefinition`.
@@ -489,6 +500,21 @@ pub struct ModelsDefinition {
         skip_serializing_if = "is_zero"
     )]
     pub context_limit: i64,
+    /// Regular expression (one capture group: the model) that matches the line
+    /// the CLI prints when the model is changed in the session. Rust-only.
+    #[serde(
+        rename = "change_pattern",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub change_pattern: String,
+    /// The captured model may end in `with <effort> effort`; split it off.
+    #[serde(
+        rename = "change_effort_suffix",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub change_effort_suffix: bool,
 }
 
 /// Source: `internal/provider/schema.go`, `ModelDefinition`.

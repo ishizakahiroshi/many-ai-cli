@@ -53,6 +53,74 @@ pub fn builtin(id: &str) -> Option<Definition> {
     builtin_cached().get(id).cloned()
 }
 
+/// The declarations that apply to a launch of `provider`: its own definition
+/// (when one is at hand) with the built-in declaration filling what it leaves
+/// out, or the built-in declaration alone.
+pub fn resolved_for(provider: &str, definition: Option<&Definition>) -> Option<Definition> {
+    let builtin = builtin(provider);
+    match definition {
+        Some(def) => Some(resolve(def, builtin.as_ref())),
+        None => builtin,
+    }
+}
+
+/// Launch arguments for a permission mode, from `permissions.modes`: the entry
+/// of that mode, else the `*` entry (with `{mode}` replaced). The second value
+/// is the mode that was applied (empty when no argument was added).
+pub fn permission_args(def: Option<&Definition>, mode: &str) -> (Vec<String>, String) {
+    let modes = def.and_then(|d| d.permissions.as_ref()).map(|p| &p.modes);
+    let values: Vec<String> = match modes {
+        Some(modes) if !mode.is_empty() => modes
+            .get(mode)
+            .or_else(|| modes.get("*"))
+            .map(|args| args.iter().map(|a| a.replace("{mode}", mode)).collect())
+            .unwrap_or_default(),
+        _ => vec![],
+    };
+    let applied = if values.is_empty() {
+        String::new()
+    } else {
+        mode.into()
+    };
+    (values, applied)
+}
+
+/// Launch arguments for an allowed tool list, from
+/// `permissions.allowed_tools_args` (see [`PermissionsDefinition`]).
+pub fn allowed_tool_args(def: Option<&Definition>, values: &[String]) -> Vec<String> {
+    let Some(template) = def
+        .and_then(|d| d.permissions.as_ref())
+        .map(|p| &p.allowed_tools_args)
+        .filter(|t| !t.is_empty())
+    else {
+        return vec![];
+    };
+    if values.is_empty() {
+        return vec![];
+    }
+    let mut out = vec![];
+    for entry in template {
+        if entry == "{tools}" {
+            out.extend(values.iter().cloned());
+        } else if entry.contains("{tool}") {
+            out.extend(values.iter().map(|v| entry.replace("{tool}", v)));
+        } else {
+            out.push(entry.clone());
+        }
+    }
+    out
+}
+
+/// The environment variable that moves a built-in provider's config directory.
+/// Subscription profiles and folder trust stay limited to the built-ins, so this
+/// never reads a registered provider's declaration.
+pub fn builtin_config_dir_env(provider: &str) -> Option<String> {
+    builtin(provider)
+        .and_then(|d| d.launch)
+        .map(|l| l.config_dir_env)
+        .filter(|e| !e.is_empty())
+}
+
 /// The slash command source a built-in provider ships with.
 pub fn builtin_slash_source(id: &str) -> String {
     builtin(id)
@@ -69,6 +137,23 @@ pub fn declared(id: &str) -> Option<Definition> {
         return Some(def);
     }
     builtin_cached().get(id).cloned()
+}
+
+/// Reads the declarations of `id` without copying them (a hot path such as a
+/// keystroke). `None` for an id nobody declares.
+pub fn with_declared<R>(id: &str, read: impl FnOnce(&Definition) -> R) -> Option<R> {
+    if let Some(registry) = current_registry()
+        && let Some(def) = registry.declared_ref(id)
+    {
+        return Some(read(def));
+    }
+    builtin_cached().get(id).map(read)
+}
+
+/// Whether the CLI drops a quickly pasted body, so the Enter waits longer
+/// (`input.slow_paste`).
+pub fn slow_paste(id: &str) -> bool {
+    with_declared(id, |d| d.input.as_ref().is_some_and(|i| i.slow_paste)).unwrap_or(false)
 }
 
 /// Every provider the running registry knows, built-ins first; the seven
@@ -145,11 +230,19 @@ pub fn resolve(def: &Definition, builtin: Option<&Definition>) -> Definition {
             if models.context_limit == 0 {
                 models.context_limit = bm.context_limit;
             }
+            if models.change_pattern.is_empty() {
+                models.change_pattern = bm.change_pattern.clone();
+                models.change_effort_suffix = bm.change_effort_suffix;
+            }
         }
-        (None, Some(bm)) if bm.list.is_some() || bm.context_limit != 0 => {
+        (None, Some(bm))
+            if bm.list.is_some() || bm.context_limit != 0 || !bm.change_pattern.is_empty() =>
+        {
             out.models = Some(ModelsDefinition {
                 list: bm.list.clone(),
                 context_limit: bm.context_limit,
+                change_pattern: bm.change_pattern.clone(),
+                change_effort_suffix: bm.change_effort_suffix,
                 ..Default::default()
             });
         }
@@ -464,5 +557,216 @@ mod tests {
         let list = handoff_candidates_of(&all);
         assert_eq!(list.len(), 8);
         assert_eq!(list.last().unwrap(), "synthetic-cli");
+    }
+
+    /// The permission table of `wrapper/launch.rs` before C3, as it was.
+    fn old_permission_args(provider: &str, mode: &str) -> (Vec<String>, String) {
+        let strings = |v: &[&str]| -> Vec<String> { v.iter().map(|s| (*s).into()).collect() };
+        let values = match (provider, mode) {
+            ("claude" | "grok", "" | "default" | "bounded") => vec![],
+            ("claude" | "grok", mode) => vec!["--permission-mode".into(), mode.into()],
+            ("copilot", "bypassPermissions") => strings(&["--allow-all"]),
+            ("copilot", "bounded") => strings(&["--no-ask-user"]),
+            ("copilot", "auto") => strings(&["--autopilot"]),
+            ("cursor-agent", "bypassPermissions") => strings(&["--force"]),
+            ("cursor-agent", "auto") => strings(&["--auto-review"]),
+            ("opencode", "bounded" | "bypassPermissions") => strings(&["--auto"]),
+            ("command-code", "plan") => strings(&["--permission-mode", "plan"]),
+            ("command-code", "acceptEdits" | "auto") => strings(&["--auto-accept"]),
+            ("command-code", "bypassPermissions") => strings(&["--yolo"]),
+            _ => vec![],
+        };
+        let declared = if values.is_empty() {
+            String::new()
+        } else {
+            mode.into()
+        };
+        (values, declared)
+    }
+
+    #[test]
+    fn launch_declarations_equal_the_tables_the_code_used_to_hard_code() {
+        let modes = [
+            "",
+            "default",
+            "bounded",
+            "auto",
+            "plan",
+            "acceptEdits",
+            "bypassPermissions",
+            "dontAsk",
+            "weird",
+        ];
+        for provider in BUILTIN_PROVIDER_IDS
+            .iter()
+            .chain(["shell", "synthetic"].iter())
+        {
+            for mode in modes {
+                assert_eq!(
+                    permission_args(builtin(provider).as_ref(), mode),
+                    old_permission_args(provider, mode),
+                    "{provider} {mode}"
+                );
+            }
+        }
+        // Allowed tools: claude `--allowedTools a b`, copilot `--allow-tool=a` each.
+        let tools = vec!["Read".to_owned(), "Bash(git log *)".to_owned()];
+        assert_eq!(
+            allowed_tool_args(builtin("claude").as_ref(), &tools),
+            ["--allowedTools", "Read", "Bash(git log *)"]
+        );
+        assert_eq!(
+            allowed_tool_args(builtin("copilot").as_ref(), &tools),
+            ["--allow-tool=Read", "--allow-tool=Bash(git log *)"]
+        );
+        for provider in ["codex", "grok", "opencode", "cursor-agent", "command-code"] {
+            assert!(allowed_tool_args(builtin(provider).as_ref(), &tools).is_empty());
+        }
+        assert!(allowed_tool_args(builtin("claude").as_ref(), &[]).is_empty());
+        // Login arguments and the config directory variable.
+        let login = |id: &str| builtin(id).and_then(|d| d.login).map(|l| l.args);
+        assert_eq!(login("claude"), Some(vec!["auth".into(), "login".into()]));
+        assert_eq!(login("codex"), Some(vec!["login".into()]));
+        assert_eq!(login("grok"), Some(vec!["login".into()]));
+        assert_eq!(
+            login("opencode"),
+            Some(vec!["providers".into(), "login".into()])
+        );
+        for id in ["copilot", "cursor-agent", "command-code"] {
+            assert_eq!(login(id), None, "{id}");
+        }
+        for (id, env) in [
+            ("claude", Some("CLAUDE_CONFIG_DIR")),
+            ("codex", Some("CODEX_HOME")),
+            ("opencode", Some("XDG_DATA_HOME")),
+            ("grok", Some("GROK_HOME")),
+            ("copilot", None),
+            ("cursor-agent", None),
+            ("command-code", None),
+        ] {
+            assert_eq!(builtin_config_dir_env(id).as_deref(), env, "{id}");
+        }
+        // Model list commands (and their timeouts) of the native catalog.
+        let list = |id: &str| builtin(id).and_then(|d| d.models).and_then(|m| m.list);
+        let cursor = list("cursor-agent").unwrap();
+        assert_eq!(
+            (cursor.args, cursor.timeout_seconds),
+            (vec!["--list-models".to_owned()], 15)
+        );
+        let grok = list("grok").unwrap();
+        assert_eq!(
+            (grok.args, grok.timeout_seconds),
+            (vec!["models".to_owned()], 15)
+        );
+        let opencode = list("opencode").unwrap();
+        assert_eq!(opencode.args, ["models", "opencode", "--verbose"]);
+        assert_eq!(
+            (opencode.timeout_seconds, opencode.refresh_args),
+            (30, vec!["--refresh".to_owned()])
+        );
+        for id in ["claude", "codex", "copilot", "command-code"] {
+            assert!(list(id).is_none(), "{id}");
+        }
+        // Input: only codex and opencode need the slow paste.
+        for id in BUILTIN_PROVIDER_IDS {
+            assert_eq!(slow_paste(id), matches!(*id, "codex" | "opencode"), "{id}");
+        }
+        assert!(!slow_paste("synthetic"));
+        // Ready screens and the model change line.
+        let marker = |id: &str| {
+            builtin(id)
+                .and_then(|d| d.screen)
+                .map(|s| s.ready_markers)
+                .unwrap_or_default()
+        };
+        assert_eq!(marker("claude"), ["shift+tab to cycle"]);
+        assert_eq!(marker("codex"), ["Ask Codex to do anything"]);
+        assert!(marker("grok").is_empty());
+        let change = |id: &str| {
+            builtin(id)
+                .and_then(|d| d.models)
+                .map(|m| (m.change_pattern, m.change_effort_suffix))
+                .filter(|(pattern, _)| !pattern.is_empty())
+        };
+        assert_eq!(
+            change("claude"),
+            Some((r"Set model to ([^\r\n]+)".to_owned(), true))
+        );
+        assert_eq!(
+            change("codex"),
+            Some((r"Model changed to ([^\r\n]+)".to_owned(), false))
+        );
+        assert_eq!(change("opencode"), None);
+        // Attachments: claude `@path`, codex `@path` with slashes, the rest bare.
+        let attach = |id: &str| {
+            builtin(id)
+                .and_then(|d| d.input)
+                .map(|i| i.attach_format)
+                .unwrap_or_default()
+        };
+        assert_eq!(attach("claude"), "at-path");
+        assert_eq!(attach("codex"), "at-path-slash");
+        for id in [
+            "copilot",
+            "cursor-agent",
+            "opencode",
+            "grok",
+            "command-code",
+        ] {
+            assert_eq!(attach(id), "", "{id}");
+        }
+        // Display names come from the manifests (the launch used a fixed table).
+        for (id, name) in [
+            ("claude", "Claude"),
+            ("codex", "Codex"),
+            ("copilot", "GitHub Copilot"),
+            ("cursor-agent", "Cursor Agent"),
+            ("opencode", "OpenCode"),
+            ("grok", "Grok Build"),
+            ("command-code", "Command Code"),
+        ] {
+            assert_eq!(builtin(id).unwrap().display_name, name, "{id}");
+        }
+    }
+
+    #[test]
+    fn a_registered_provider_gets_its_launch_arguments_from_its_own_declaration() {
+        let mut def = Definition {
+            id: "synthetic-cli".into(),
+            launch: Some(LaunchDefinition::default()),
+            ..Default::default()
+        };
+        def.permissions = Some(PermissionsDefinition {
+            modes: BTreeMap::from([
+                ("auto".to_owned(), vec!["--yolo".to_owned()]),
+                ("*".to_owned(), vec!["--mode={mode}".to_owned()]),
+            ]),
+            allowed_tools_args: vec!["--allow".into(), "{tools}".into(), "--each={tool}".into()],
+        });
+        assert_eq!(
+            permission_args(Some(&def), "auto"),
+            (vec!["--yolo".to_owned()], "auto".to_owned())
+        );
+        assert_eq!(
+            permission_args(Some(&def), "plan"),
+            (vec!["--mode=plan".to_owned()], "plan".to_owned())
+        );
+        assert_eq!(permission_args(Some(&def), ""), (vec![], String::new()));
+        assert_eq!(
+            allowed_tool_args(Some(&def), &["a".into(), "b".into()]),
+            ["--allow", "a", "b", "--each=a", "--each=b"]
+        );
+        // Nothing declared: no argument is invented.
+        assert_eq!(permission_args(None, "auto"), (vec![], String::new()));
+        assert_eq!(
+            permission_args(Some(&Definition::default()), "auto"),
+            (vec![], String::new())
+        );
+        // A launch resolves the definition's own section; an id with no built-in
+        // declaration and no definition resolves to nothing.
+        let resolved = resolved_for("synthetic-cli", Some(&def)).unwrap();
+        assert!(resolved.permissions.is_some());
+        assert!(resolved_for("synthetic-cli", None).is_none());
+        assert!(builtin_config_dir_env("synthetic-cli").is_none());
     }
 }

@@ -162,14 +162,10 @@ pub fn selectable(cfg: &Config, provider: &str) -> Vec<String> {
         })
         .collect()
 }
-fn adapter(provider: &str) -> Option<&'static str> {
-    match provider {
-        "claude" => Some("CLAUDE_CONFIG_DIR"),
-        "codex" => Some("CODEX_HOME"),
-        "opencode" => Some("XDG_DATA_HOME"),
-        "grok" => Some("GROK_HOME"),
-        _ => None,
-    }
+/// The environment variable that moves the provider's config directory (the
+/// subscription profiles are limited to the providers that declare one).
+fn adapter(provider: &str) -> Option<String> {
+    crate::profile::declared::builtin_config_dir_env(provider)
 }
 fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
@@ -260,7 +256,7 @@ fn default_dir(
     provider: &str,
 ) -> io::Result<PathBuf> {
     let key = adapter(provider).ok_or_else(|| invalid("unsupported seed provider"))?;
-    let explicit = env_value(environment, key).unwrap_or("").trim();
+    let explicit = env_value(environment, &key).unwrap_or("").trim();
     let path = clean(Path::new(explicit));
     let default =
         if !explicit.is_empty() && !path.starts_with(paths.resource(Resource::Subscriptions)) {

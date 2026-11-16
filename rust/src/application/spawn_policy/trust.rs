@@ -76,12 +76,18 @@ impl NativeFolderTrust {
         Ok(result)
     }
     fn config_path(&self, provider: &str, environment: &[String]) -> io::Result<PathBuf> {
-        let (key, fallback, filename) = match provider {
-            "claude" => ("CLAUDE_CONFIG_DIR", self.home.clone(), ".claude.json"),
-            "codex" => ("CODEX_HOME", self.home.join(".codex"), "config.toml"),
+        // The file layout is each CLI's own (named after it); only the variable
+        // name is declared.
+        let (fallback, filename) = match provider {
+            "claude" => (self.home.clone(), format!(".{provider}.json")),
+            "codex" => (
+                self.home.join(format!(".{provider}")),
+                "config.toml".to_owned(),
+            ),
             _ => return Err(invalid("unsupported folder trust provider")),
         };
-        let directory = env_value(environment, key).unwrap_or("").trim();
+        let key = crate::profile::declared::builtin_config_dir_env(provider).unwrap_or_default();
+        let directory = env_value(environment, &key).unwrap_or("").trim();
         Ok(project::clean(
             &if directory.is_empty() {
                 fallback

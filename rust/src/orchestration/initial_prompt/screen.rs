@@ -7,12 +7,22 @@ pub(super) fn collapse_whitespace(text: &str) -> String {
     text.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
-pub(super) fn composer_signals(provider: &str) -> &'static [&'static str] {
-    match provider {
-        "codex" => &["AskCodextodoanything"],
-        "claude" => &["shift+tabtocycle"],
-        _ => &[],
-    }
+/// What the screen shows once the CLI is ready for a prompt, with whitespace
+/// removed like the screen text it is compared with (`screen.ready_markers`).
+pub fn composer_signals(provider: &str) -> Vec<String> {
+    crate::profile::declared::with_declared(provider, |def| {
+        def.screen
+            .as_ref()
+            .map(|screen| {
+                screen
+                    .ready_markers
+                    .iter()
+                    .map(|marker| collapse_whitespace(marker))
+                    .collect()
+            })
+            .unwrap_or_default()
+    })
+    .unwrap_or_default()
 }
 
 pub(super) fn blocker(provider: &str, collapsed: &str) -> Option<&'static str> {

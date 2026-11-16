@@ -202,6 +202,10 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
                 name: "timeout_seconds",
                 kind: "int",
             },
+            Field {
+                name: "refresh_args",
+                kind: "[]string",
+            },
         ],
     },
     Schema {
@@ -267,6 +271,14 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
             Field {
                 name: "context_limit",
                 kind: "int",
+            },
+            Field {
+                name: "change_pattern",
+                kind: "string",
+            },
+            Field {
+                name: "change_effort_suffix",
+                kind: "bool",
             },
         ],
     },

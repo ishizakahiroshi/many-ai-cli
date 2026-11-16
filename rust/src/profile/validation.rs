@@ -584,12 +584,13 @@ fn declared_sections(def: &Definition) -> Vec<Diagnostic> {
                     "permission mode name is empty, too long, or contains a control character",
                 ));
             }
-            out.extend(args(&field, values, false));
+            let values: Vec<String> = values.iter().map(|v| v.replace("{mode}", "x")).collect();
+            out.extend(args(&field, &values, false));
         }
         let tools: Vec<String> = p
             .allowed_tools_args
             .iter()
-            .map(|v| v.replace("{tools}", "x"))
+            .map(|v| v.replace("{tools}", "x").replace("{tool}", "x"))
             .collect();
         out.extend(args("permissions.allowed_tools_args", &tools, false));
     }
@@ -617,7 +618,7 @@ fn declared_sections(def: &Definition) -> Vec<Diagnostic> {
         one_of(
             &i.attach_format,
             "input.attach_format",
-            &["at-path", "at-path-slash"],
+            &["path", "at-path", "at-path-slash"],
             &mut out,
         );
         one_of(
@@ -675,8 +676,21 @@ fn declared_sections(def: &Definition) -> Vec<Diagnostic> {
                 "models.context_limit must not be negative",
             ));
         }
+        if !m.change_pattern.is_empty() {
+            let one_group = m.change_pattern.len() <= 200
+                && regex::Regex::new(&m.change_pattern).is_ok_and(|re| re.captures_len() == 2);
+            if !one_group {
+                out.push(diag(
+                    "invalid_declaration",
+                    "error",
+                    "models.change_pattern",
+                    "models.change_pattern must be a regular expression with exactly one capture group",
+                ));
+            }
+        }
         if let Some(list) = &m.list {
             out.extend(args("models.list.args", &list.args, false));
+            out.extend(args("models.list.refresh_args", &list.refresh_args, false));
             if !(0..=600).contains(&list.timeout_seconds) {
                 out.push(diag(
                     "invalid_declaration",

@@ -382,11 +382,8 @@ impl OrchestrationProgram {
             .chars()
             .filter(|c| !c.is_whitespace())
             .collect();
-        let signals: &[&str] = match details.snapshot.provider.as_str() {
-            "codex" => &["AskCodextodoanything"],
-            "claude" => &["shift+tabtocycle"],
-            _ => &[],
-        };
+        let signals =
+            crate::orchestration::initial_prompt::composer_signals(&details.snapshot.provider);
         Ok(!signals.iter().any(|signal| screen.contains(signal)))
     }
     pub fn append_conductor_instruction(

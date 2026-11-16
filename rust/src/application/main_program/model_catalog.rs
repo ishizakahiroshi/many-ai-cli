@@ -26,6 +26,33 @@ pub(super) fn append_prefix(bytes: &mut Vec<u8>, chunk: &[u8], cap: usize) -> bo
     bytes.extend_from_slice(&chunk[..remaining.min(chunk.len())]);
     bytes.len() == cap
 }
+/// The name the provider's definition gives itself.
+fn display_name(provider: &str) -> String {
+    crate::profile::declared::declared(provider)
+        .map(|d| d.display_name)
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| provider.into())
+}
+/// The command line that prints the provider's model list, as shown in the
+/// catalog's `sources`.
+fn native_command_text(provider: &str) -> String {
+    let def = crate::profile::declared::declared(provider);
+    let executable = def
+        .as_ref()
+        .and_then(|d| d.launch.as_ref())
+        .map(|l| l.executable.clone())
+        .filter(|e| !e.is_empty())
+        .unwrap_or_else(|| provider.into());
+    let args = def
+        .and_then(|d| d.models)
+        .and_then(|m| m.list)
+        .map(|l| l.args)
+        .unwrap_or_default();
+    std::iter::once(executable)
+        .chain(args)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct Model {
@@ -361,17 +388,18 @@ impl ModelsCatalog {
             false,
         );
         if let Some(models) = defaults.get("copilot").filter(|models| !models.is_empty()) {
-            group("GitHub Copilot", "copilot", "", models.clone(), false);
+            group(
+                &display_name("copilot"),
+                "copilot",
+                "",
+                models.clone(),
+                false,
+            );
         }
-        for (provider, label, command, cache) in [
-            (
-                "cursor-agent",
-                "Cursor Agent",
-                "cursor-agent --list-models",
-                &self.cursor,
-            ),
-            ("grok", "Grok Build", "grok models", &self.grok),
-        ] {
+        for (provider, cache) in [("cursor-agent", &self.cursor), ("grok", &self.grok)] {
+            let label = display_name(provider);
+            let command = native_command_text(provider);
+            let label = label.as_str();
             let native = cache
                 .get(Vec::new(), force, false, self.io.native(provider, force))
                 .await;
@@ -393,13 +421,18 @@ impl ModelsCatalog {
             .opencode
             .get(Vec::new(), force, false, self.io.native("opencode", force))
             .await;
-        response.sources.insert(
-            "opencode".into(),
-            "opencode models opencode --verbose".into(),
-        );
+        response
+            .sources
+            .insert("opencode".into(), native_command_text("opencode"));
         if !opencode.value.is_empty() {
             newest = max(newest, opencode.at);
-            group("OpenCode", "opencode", "", opencode.value, false);
+            group(
+                &display_name("opencode"),
+                "opencode",
+                "",
+                opencode.value,
+                false,
+            );
         }
         let local = self
             .io

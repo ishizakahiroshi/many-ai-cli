@@ -243,7 +243,7 @@ impl SessionEngine {
             state.session(binding)?.snapshot.provider.clone()
         };
         let t = self.options.submit_timing;
-        let minimum = if matches!(provider.as_str(), "codex" | "opencode") {
+        let minimum = if crate::profile::declared::slow_paste(&provider) {
             t.slow_minimum
         } else {
             t.minimum

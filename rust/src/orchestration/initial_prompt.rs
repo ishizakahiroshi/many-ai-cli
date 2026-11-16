@@ -18,7 +18,7 @@ use std::{
 use tokio::time::Instant;
 
 mod screen;
-pub use screen::launch_arg_startup_screen;
+pub use screen::{composer_signals, launch_arg_startup_screen};
 #[cfg(test)]
 mod tests;
 

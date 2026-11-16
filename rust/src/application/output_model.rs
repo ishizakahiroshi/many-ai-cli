@@ -40,24 +40,50 @@ pub fn split_claude(line: &str) -> DetectedModel {
     }
     detected(rest, "")
 }
+/// A declared pattern, compiled once. The pattern was checked when the
+/// definition was accepted (one capture group); one that still fails to compile
+/// is cached as "never matches".
+fn declared_re(pattern: &str) -> Option<Regex> {
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<Regex>>>> = OnceLock::new();
+    let mut cache = CACHE.get_or_init(Default::default).lock().unwrap();
+    cache
+        .entry(pattern.to_owned())
+        .or_insert_with(|| Regex::new(pattern).ok())
+        .clone()
+}
 pub fn change(provider: &str, chunk: &[u8], clean: &str) -> Option<DetectedModel> {
-    if ![b"Set model to ".as_slice(), b"Model changed to ".as_slice()]
+    // The line a CLI prints when the model is changed is its own declaration
+    // (`models.change_pattern`); a provider without one never reports a change.
+    let (pattern, split_effort) = crate::profile::declared::with_declared(provider, |def| {
+        def.models
+            .as_ref()
+            .map(|m| (m.change_pattern.clone(), m.change_effort_suffix))
+    })
+    .flatten()
+    .filter(|(pattern, _)| !pattern.is_empty())?;
+    change_with(&pattern, split_effort, chunk, clean)
+}
+/// `change` for a pattern that is already known.
+pub fn change_with(
+    pattern: &str,
+    split_effort: bool,
+    chunk: &[u8],
+    clean: &str,
+) -> Option<DetectedModel> {
+    // Cheap pre-check on the raw bytes: the text before the capture group.
+    let literal = pattern.split('(').next().unwrap_or("").as_bytes();
+    let plain = literal
         .iter()
-        .any(|token| chunk.windows(token.len()).any(|w| w == *token))
-    {
+        .all(|b| b.is_ascii_alphanumeric() || b" :-_".contains(b));
+    if plain && !literal.is_empty() && !chunk.windows(literal.len()).any(|w| w == literal) {
         return None;
     }
-    let pattern = match provider {
-        "claude" => r"Set model to ([^\r\n]+)",
-        "codex" => r"Model changed to ([^\r\n]+)",
-        _ => return None,
-    };
-    let m = re(pattern).captures(clean)?;
+    let m = declared_re(pattern)?.captures(clean)?;
     let value = trim(&m[1]);
     if value.is_empty() {
         return None;
     }
-    Some(if provider == "claude" {
+    Some(if split_effort {
         split_claude(value)
     } else {
         detected(value, "")

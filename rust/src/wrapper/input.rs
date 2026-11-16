@@ -92,7 +92,7 @@ pub fn input_steps(provider: &str, mut bytes: &[u8]) -> Vec<InputStep> {
         trailing(
             &mut out,
             bytes,
-            if matches!(provider, "codex" | "opencode") {
+            if crate::profile::declared::slow_paste(provider) {
                 180
             } else {
                 20
