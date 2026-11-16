@@ -16,6 +16,7 @@ pub mod runtime_context;
 
 pub mod wrapped_spawn;
 
+pub mod acp_sessions;
 pub mod approval_patterns;
 pub mod approval_rules;
 pub mod board_sync;

@@ -26,6 +26,8 @@ pub struct MockConfig {
     pub auth_required: bool,
     /// Advertise no optional session capability.
     pub bare_capabilities: bool,
+    /// Advertise `session/load` but not `session/resume`.
+    pub no_resume: bool,
 }
 
 #[derive(Clone, Default)]
@@ -101,6 +103,9 @@ pub fn connect(config: MockConfig) -> (AcpClient, AcpEvents, MockHandle) {
                             "promptCapabilities": {"image": true, "embeddedContext": true},
                             "sessionCapabilities": {"list": {}, "resume": {}, "close": {}},
                         });
+                        if config.no_resume {
+                            caps["sessionCapabilities"] = json!({"list": {}, "close": {}});
+                        }
                         if config.bare_capabilities {
                             caps = json!({"promptCapabilities": {}});
                         }

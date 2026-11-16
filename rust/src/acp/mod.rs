@@ -27,7 +27,7 @@ mod spawn;
 mod types;
 
 #[cfg(test)]
-mod mock_agent;
+pub(crate) mod mock_agent;
 #[cfg(test)]
 mod tests;
 
