@@ -77,8 +77,9 @@ impl SessionEngine {
                     at: now,
                 }));
         }
+        // Custom providers are detected too (the frozen Go build did the same:
+        // `isAIProvider || customProviderSession`); only probes and shells are not.
         let eligible = !s.usage_probe
-            && !s.custom_provider
             && s.snapshot.provider != "shell"
             && !terminal(&s.snapshot.state)
             && s.resize_debounce.is_none_or(|until| now > until);

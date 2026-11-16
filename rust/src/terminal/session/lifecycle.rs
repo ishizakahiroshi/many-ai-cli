@@ -358,12 +358,6 @@ impl SessionEngine {
             output_generation: 0,
             usage_probe: m.usage_probe,
             subscription_login: m.subscription_login,
-            custom_provider: self.options.custom_providers.contains(&m.provider)
-                || self
-                    .options
-                    .custom_provider_lookup
-                    .as_ref()
-                    .is_some_and(|is_custom| is_custom(&m.provider)),
             native_tail: String::new(),
             native_prompt_visible: false,
             pending_shell: None,

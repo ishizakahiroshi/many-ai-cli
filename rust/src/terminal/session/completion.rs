@@ -166,7 +166,6 @@ impl SessionEngine {
                 let question = if source == "transcript" {
                     held
                 } else if s.usage_probe
-                    || s.custom_provider
                     || !s.ai_provider()
                     || s.resize_debounce.is_some_and(|until| now < until)
                     || crate::approval::marker::extract_vt(&s.vt).is_some()

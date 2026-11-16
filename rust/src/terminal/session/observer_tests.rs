@@ -32,12 +32,15 @@ pub(super) fn now() -> Timestamp {
     Timestamp::from_unix(1791158400, 0).unwrap()
 }
 fn fixture() -> (tempfile::TempDir, SessionEngine) {
+    fixture_with(EngineOptions::default())
+}
+fn fixture_with(options: EngineOptions) -> (tempfile::TempDir, SessionEngine) {
     let root = tempfile::tempdir().unwrap();
     let runtime = root.path().join("trial");
     std::fs::create_dir(&runtime).unwrap();
     let paths = RuntimePaths::trial(&runtime, 49688, &root.path().join("installed")).unwrap();
     let core = SessionEngine::new(
-        EngineOptions::default(),
+        options,
         Arc::new(SessionJournal::new(paths, None, JournalOptions::default())),
         Arc::new(Io),
         Arc::new(Io),
@@ -610,4 +613,98 @@ async fn partial_profile_mirror_failure_reloads_successful_phrase_into_actual_de
     let after = register(&core, 2042).await;
     let effects = output(&core, after, prompt.to_vec());
     assert!(effects.0.iter().any(|effect|matches!(effect,CoreEffect::Notify(CoreEvent::ApprovalOpened { session,record }) if *session==after.session && record.data().question=="synthetic decisive gate")));
+}
+
+async fn register_as(
+    core: &SessionEngine,
+    pid: i64,
+    provider: &str,
+    usage_probe: bool,
+) -> SessionBinding {
+    core.register(
+        RegisterRequest {
+            message: proto::Message {
+                provider: provider.into(),
+                pid,
+                cwd: "synthetic-observation-cwd".into(),
+                cols: 120,
+                rows: 30,
+                usage_probe,
+                ..Default::default()
+            },
+            spawn_proof: None,
+        },
+        WrapperConnectionId(pid as u64),
+        now(),
+    )
+    .await
+    .unwrap()
+    .binding
+}
+fn approval_opened(effects: &CoreEffects) -> bool {
+    effects
+        .0
+        .iter()
+        .any(|effect| matches!(effect, CoreEffect::Notify(CoreEvent::ApprovalOpened { .. })))
+}
+fn custom_options() -> EngineOptions {
+    EngineOptions {
+        custom_providers: ["fixture-agent-x".to_owned()].into(),
+        approval_phrases: [(
+            "fixture-agent-x".to_owned(),
+            vec!["synthetic decisive gate".to_owned()],
+        )]
+        .into(),
+        ..Default::default()
+    }
+}
+const GATE: &[u8] = b"synthetic decisive gate\r\n\xe2\x9d\xaf 1. Yes\r\n  2. No\r\n";
+
+#[tokio::test]
+async fn custom_provider_session_output_opens_a_native_approval() {
+    let (_root, core) = fixture_with(custom_options());
+    let binding = register_as(&core, 2101, "fixture-agent-x", false).await;
+    assert!(approval_opened(&output(&core, binding, GATE.to_vec())));
+}
+
+#[tokio::test]
+async fn custom_provider_plain_question_opens_after_idle() {
+    let (_root, core) = fixture_with(custom_options());
+    // The built-in claude is the control: same screen, same outcome.
+    for (pid, provider) in [(2102, "claude"), (2106, "fixture-agent-x")] {
+        let binding = register_as(&core, pid, provider, false).await;
+        let effects = output(
+            &core,
+            binding,
+            b"Shall I run the tests? (Y:1/N:0)\r\n".to_vec(),
+        );
+        assert!(!approval_opened(&effects), "{provider}");
+        let effects = core.evaluate_idle(now() + Duration::from_secs(4));
+        let opened = effects.0.iter().any(|effect| {
+            matches!(effect, CoreEffect::Notify(CoreEvent::ApprovalOpened { session, .. })
+                if *session == binding.session)
+        });
+        assert!(opened, "{provider}");
+    }
+}
+
+#[tokio::test]
+async fn shell_and_usage_probe_sessions_never_open_an_approval() {
+    let (_root, core) = fixture_with(custom_options());
+    let shell = register_as(&core, 2103, "shell", false).await;
+    assert!(!approval_opened(&output(&core, shell, GATE.to_vec())));
+    let probe = register_as(&core, 2104, "fixture-agent-x", true).await;
+    assert!(!approval_opened(&output(&core, probe, GATE.to_vec())));
+    let _ = core.evaluate_idle(now() + Duration::from_secs(4));
+}
+
+#[tokio::test]
+async fn builtin_provider_native_approval_is_unchanged() {
+    let mut options = custom_options();
+    options
+        .approval_phrases
+        .insert("claude".into(), vec!["synthetic decisive gate".into()]);
+    let (_root, core) = fixture_with(options);
+    let binding = register_as(&core, 2105, "claude", false).await;
+    assert!(approval_opened(&output(&core, binding, GATE.to_vec())));
 }
