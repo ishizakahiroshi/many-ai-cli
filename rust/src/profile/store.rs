@@ -12,7 +12,7 @@ mod tests;
 
 use super::{
     registry::{Registry, default_adapters, diag, embedded_definitions},
-    validation::{valid_id, validate_definition},
+    validation::{DEFINITION_LIMIT, valid_id, validate_definition},
 };
 use crate::{
     config::{ConfigStore, Resource, RuntimePaths, legacy_provider_definitions},
@@ -246,7 +246,18 @@ impl FileStore {
             {
                 continue;
             }
-            let raw = root.read(&name, usize::MAX)?;
+            // The same ceiling `validate_definition` enforces: a larger file is
+            // never a loadable definition, so it is not read in full either.
+            let raw = root.read(&name, DEFINITION_LIMIT + 1)?;
+            if raw.len() > DEFINITION_LIMIT {
+                loaded.diagnostics.push(diag(
+                    "invalid_user_definition",
+                    "error",
+                    &name,
+                    "definition is larger than the provider definition limit",
+                ));
+                continue;
+            }
             let mut definition = match crate::proto::decode_wire::<Definition>(&raw) {
                 Ok(d) => d,
                 Err(_) => {

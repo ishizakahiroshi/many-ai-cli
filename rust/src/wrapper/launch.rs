@@ -221,6 +221,10 @@ pub fn provider_registry_for_config(cfg: &Config) -> Result<Registry, LaunchErro
 /// overrides + accepted distribution. Loaded once per wrapper launch, never per
 /// keystroke. A layer that cannot be read is skipped with a reason in the
 /// returned diagnostics, so built-in providers always keep launching.
+///
+/// Overrides and an accepted distribution apply to built-ins too: the dashboard
+/// shows this same registry, so what a launch runs (headless definition, enabled
+/// flag) is what the user saw there.
 pub fn provider_registry_for_runtime(
     cfg: &Config,
     paths: &RuntimePaths,
@@ -272,8 +276,9 @@ pub fn provider_registry_for_runtime(
     Ok((registry, diagnostics))
 }
 
-/// Embedded + legacy only (no runtime directory is available). The wrapper's
-/// real entry point uses [`provider_registry_for_runtime`] instead.
+/// Embedded + legacy only (no runtime directory is available), so no user,
+/// override or distribution layer applies. The wrapper's real entry point uses
+/// [`provider_registry_for_runtime`] instead.
 pub fn prepare_launch(
     cfg: &Config,
     provider: &str,
@@ -289,7 +294,19 @@ pub fn prepare_launch_with_registry(
     args: WrapperArgs,
     registry: &Registry,
 ) -> Result<LaunchPlan, LaunchError> {
-    prepare_launch_with_definition(cfg, provider, args, registry.lookup(provider).as_ref())
+    let definition = registry.lookup(provider);
+    // Same rule as the Hub's spawn path: a provider the registry has switched
+    // off does not launch (built-ins included). `shell` is not a provider.
+    if provider != "shell"
+        && definition
+            .as_ref()
+            .is_some_and(|found| found.definition.enabled == Some(false))
+    {
+        return Err(LaunchError(format!(
+            "provider {provider:?} is disabled in the provider registry; enable it from Settings (or `many-ai-cli provider list` shows its state) before launching it"
+        )));
+    }
+    prepare_launch_with_definition(cfg, provider, args, definition.as_ref())
 }
 
 /// A provider registered outside config.yaml (a `providers.d` definition) is a
@@ -313,8 +330,9 @@ fn registry_custom_provider(
 }
 
 /// Explicit definition injection is useful to registry callers and synthetic
-/// tests. `prepare_launch` uses embedded+legacy; the wrapper runtime adds the
-/// user and override layers through [`provider_registry_for_runtime`].
+/// tests. `prepare_launch` uses embedded+legacy; the wrapper runtime uses the
+/// Hub's full registry (user, override and accepted-distribution layers too)
+/// through [`provider_registry_for_runtime`].
 pub fn prepare_launch_with_definition(
     cfg: &Config,
     provider: &str,
@@ -1483,6 +1501,75 @@ mod tests {
             assert_eq!(p.display, before.display);
             assert_eq!(p.required_hooks, before.required_hooks);
             assert_eq!(p.headless_definition, before.headless_definition);
+        }
+    }
+    fn override_builtin(
+        paths: &RuntimePaths,
+        edit: impl FnOnce(&mut crate::proto::provider::Definition),
+    ) {
+        let config = std::sync::Arc::new(
+            crate::config::ConfigStore::new(paths.clone(), Config::default()).unwrap(),
+        );
+        let store = crate::profile::store::ProviderRegistryStore::new(paths, config).unwrap();
+        let baseline = store.baseline("claude").unwrap();
+        let mut edited = baseline.clone();
+        edit(&mut edited);
+        store
+            .history
+            .save_override("claude", edited, &baseline, "", "edit")
+            .unwrap();
+    }
+    #[test]
+    fn a_builtin_override_is_what_the_wrapper_launches() {
+        // The dashboard shows the registry with overrides applied; the launch
+        // uses that same registry, not the embedded definition.
+        let (_root, _installed, paths) = trial();
+        override_builtin(&paths, |def| {
+            def.launch.as_mut().unwrap().headless =
+                Some(crate::proto::provider::HeadlessDefinition {
+                    args: argv(&["--synthetic-headless"]),
+                    format: "text".into(),
+                    prompt_via: "stdin".into(),
+                });
+        });
+        let (p, _) = runtime_plan(&Config::default(), &paths, "claude", &["--headless"]);
+        assert_eq!(
+            p.headless_definition,
+            Some(HeadlessDef {
+                args: argv(&["--synthetic-headless"]),
+                format: "text".into(),
+                prompt_via: "stdin".into(),
+            })
+        );
+        let embedded =
+            prepare_launch(&Config::default(), "claude", parse(&["--headless"])).unwrap();
+        assert_ne!(p.headless_definition, embedded.headless_definition);
+    }
+    #[test]
+    fn a_disabled_provider_does_not_launch_registered_or_builtin() {
+        let (_root, _installed, paths) = trial();
+        let mut disabled = user_definition("fixture-agent-x");
+        disabled.enabled = Some(false);
+        crate::profile::store::FileStore::new(&paths)
+            .create_new(&disabled)
+            .unwrap();
+        override_builtin(&paths, |def| def.enabled = Some(false));
+        let (registry, _) = provider_registry_for_runtime(&Config::default(), &paths).unwrap();
+        for provider in ["fixture-agent-x", "claude"] {
+            let error =
+                prepare_launch_with_registry(&Config::default(), provider, parse(&[]), &registry)
+                    .err()
+                    .expect("a disabled provider must not launch")
+                    .to_string();
+            assert!(error.contains("disabled"), "{provider}: {error}");
+        }
+        // Another built-in and the shell are unaffected.
+        for provider in ["codex", "shell"] {
+            assert!(
+                prepare_launch_with_registry(&Config::default(), provider, parse(&[]), &registry)
+                    .is_ok(),
+                "{provider}"
+            );
         }
     }
     #[test]

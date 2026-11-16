@@ -138,6 +138,32 @@ fn new_user_ids_cannot_name_an_approval_pattern_file() {
     }
 }
 #[test]
+fn an_oversized_definition_file_is_skipped_with_a_diagnostic_not_read_whole() {
+    let temp = tempfile::tempdir().unwrap();
+    let paths = paths(&temp);
+    let store = FileStore::new(&paths);
+    std::fs::create_dir_all(paths.resource(Resource::ProviderDefinitions)).unwrap();
+    let dir = Dir::open(&paths.resource(Resource::ProviderDefinitions)).unwrap();
+    let mut padded = serde_json::to_vec(&definition("big-cli")).unwrap();
+    padded.extend(std::iter::repeat_n(b' ', DEFINITION_LIMIT + 10));
+    dir.create_new("big-cli.json", &padded, 0o600).unwrap();
+    dir.create_new(
+        "fine-cli.json",
+        &serde_json::to_vec(&definition("fine-cli")).unwrap(),
+        0o600,
+    )
+    .unwrap();
+    let loaded = store.load().unwrap();
+    assert_eq!(loaded.definitions.len(), 1);
+    assert_eq!(loaded.definitions[0].id, "fine-cli");
+    assert!(
+        loaded
+            .diagnostics
+            .iter()
+            .any(|d| d.field == "big-cli.json" && d.is_error())
+    );
+}
+#[test]
 fn a_historical_dotted_id_stays_loadable_and_removable_but_has_no_phrase_file() {
     let temp = tempfile::tempdir().unwrap();
     let paths = paths(&temp);
