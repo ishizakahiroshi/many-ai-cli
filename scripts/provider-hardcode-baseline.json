@@ -1,0 +1,261 @@
+{
+  "files": {
+    "rust/src/application/agent_history/discovery.rs": {
+      "count": 1,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/board_sync/taker.rs": {
+      "count": 1,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/diagnostics.rs": {
+      "count": 2,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/diagnostics/supplemental.rs": {
+      "count": 2,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/event_observer.rs": {
+      "count": 2,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/grid_spawn.rs": {
+      "count": 1,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/iris_execution_launch.rs": {
+      "count": 2,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/link_defaults.rs": {
+      "count": 9,
+      "reason": "identity: 同梱 7 本そのものの一覧・予約 id・画面や設定の固定項目（宣言の置き場に当たる。登録した CLI の分岐ではない）"
+    },
+    "rust/src/application/main_program/model_catalog/parsers.rs": {
+      "count": 3,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/output_model.rs": {
+      "count": 8,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/push/workflow.rs": {
+      "count": 1,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/session_workers/observations.rs": {
+      "count": 3,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/session_workers/observations/native.rs": {
+      "count": 10,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/session_workers/pending_shell.rs": {
+      "count": 1,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/session_workers/subagent_activity.rs": {
+      "count": 1,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/slash_commands/skills.rs": {
+      "count": 3,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/spawn_policy/routes.rs": {
+      "count": 4,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/spawn_policy/trust.rs": {
+      "count": 5,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/spawn_policy/trust/project.rs": {
+      "count": 1,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/subscriptions/appserver.rs": {
+      "count": 2,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/subscriptions/cli.rs": {
+      "count": 11,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/subscriptions/local.rs": {
+      "count": 4,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/subscriptions/probe.rs": {
+      "count": 7,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/subscriptions/usage.rs": {
+      "count": 20,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/usage_hooks.rs": {
+      "count": 3,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/usage_relay/parser.rs": {
+      "count": 2,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/application/wrapped_spawn/launch.rs": {
+      "count": 9,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/approval/marker.rs": {
+      "count": 3,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/approval/transcript/parser.rs": {
+      "count": 3,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/config/model.rs": {
+      "count": 133,
+      "reason": "migration: 旧 Go 版と同じ形で保存する設定の型・値（項目名が provider の id）。外だしの対象でない（plan C2 の記録 4）"
+    },
+    "rust/src/orchestration/child_options.rs": {
+      "count": 7,
+      "reason": "identity: 同梱 7 本そのものの一覧・予約 id・画面や設定の固定項目（宣言の置き場に当たる。登録した CLI の分岐ではない）"
+    },
+    "rust/src/orchestration/initial_prompt/screen.rs": {
+      "count": 3,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/process/execpath.rs": {
+      "count": 3,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/profile/subscriptions/seed.rs": {
+      "count": 8,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/proto/provider.rs": {
+      "count": 7,
+      "reason": "identity: 同梱 7 本そのものの一覧・予約 id・画面や設定の固定項目（宣言の置き場に当たる。登録した CLI の分岐ではない）"
+    },
+    "rust/src/storage/history.rs": {
+      "count": 2,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/terminal/session.rs": {
+      "count": 2,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/terminal/session/approvals.rs": {
+      "count": 1,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/terminal/session/board_input.rs": {
+      "count": 2,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/terminal/session/observations.rs": {
+      "count": 1,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/terminal/session/usage.rs": {
+      "count": 3,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/wrapper/approval_injection.rs": {
+      "count": 9,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/wrapper/hooks.rs": {
+      "count": 2,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/wrapper/input.rs": {
+      "count": 3,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "rust/src/wrapper/launch.rs": {
+      "count": 10,
+      "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
+    },
+    "web/src/app.ts": {
+      "count": 5,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/*-pan*.ts": {
+      "count": 41,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/chat-history.ts": {
+      "count": 1,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/detached-grid-launcher.ts": {
+      "count": 1,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/detached-grid.ts": {
+      "count": 1,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/detached-view.ts": {
+      "count": 1,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/history-lite.ts": {
+      "count": 2,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/multi-pane.ts": {
+      "count": 1,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/provider-capabilities.ts": {
+      "count": 2,
+      "reason": "identity: 同梱 7 本そのものの一覧・予約 id・画面や設定の固定項目（宣言の置き場に当たる。登録した CLI の分岐ではない）"
+    },
+    "web/src/app/provider-declarations-seed.ts": {
+      "count": 7,
+      "reason": "identity: 同梱 7 本そのものの一覧・予約 id・画面や設定の固定項目（宣言の置き場に当たる。登録した CLI の分岐ではない）"
+    },
+    "web/src/app/provider-icon.ts": {
+      "count": 7,
+      "reason": "identity: 同梱 7 本そのものの一覧・予約 id・画面や設定の固定項目（宣言の置き場に当たる。登録した CLI の分岐ではない）"
+    },
+    "web/src/app/routines.ts": {
+      "count": 1,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/settings.ts": {
+      "count": 23,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/spawn-approval-memory.ts": {
+      "count": 6,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/spawn-model-groups.ts": {
+      "count": 6,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/terminal.ts": {
+      "count": 2,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/token-statusbar.ts": {
+      "count": 11,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/transcript-message.ts": {
+      "count": 1,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/index.html": {
+      "count": 24,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    }
+  },
+  "note": "provider の id の直書きの許可の台帳（scripts/check-provider-hardcode.mjs）。件数は増やさない。増やすときは理由を書く。"
+}

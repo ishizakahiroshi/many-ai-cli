@@ -93,6 +93,14 @@ jobs:
       - name: Check CLAUDE.md stays an index
         run: node scripts/check-claude-md.mjs
 
+      # 登録した AI CLI が同梱 7 本と同じ機能で動かなかった原因は、7 本の id をコードへ
+      # 文字列で直接書き、provider ごとに処理を分けていたこと。表は定義の宣言から読む形に
+      # 直したので、直書きを再び足したらここで落とす（許可の台帳は件数を増やさない）。
+      - name: Check provider ids are not hard-coded
+        run: |
+          node --test scripts/check-provider-hardcode.test.mjs
+          node scripts/check-provider-hardcode.mjs
+
       # codex / copilot / cursor-agent / opencode を wrap すると、wrapper が
       # AGENTS.md の末尾へ承認ルールのブロックを追記する。many-ai-cli 自身を開発しながら
       # 子セッションを起こすと、それがこのリポジトリの追跡ファイルへ書かれる

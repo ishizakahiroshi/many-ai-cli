@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "bac23c1a5599275c7082ed314356c63e63d89998",
+    "commit": "903c0acf170675f868aa79ea3e8ef069d7710398",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2105,
-    "analyzed": 1652,
+    "discovered": 2108,
+    "analyzed": 1654,
     "unresolved": 17,
     "unknown": 0,
-    "unclaimed": 436,
+    "unclaimed": 437,
     "skipped_by_config": 0
   },
   "files": [
@@ -42149,6 +42149,66 @@
       "unresolved": []
     },
     {
+      "path": "scripts/check-provider-hardcode.mjs",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "provider の id を、コードの中に文字列で直接書き足すことを止める。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "scripts/check-provider-hardcode.test.mjs",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "scripts/check-slash-commands.mjs",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -42756,6 +42816,14 @@
         }
       },
       "unresolved": []
+    },
+    {
+      "path": "scripts/provider-hardcode-baseline.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
     },
     {
       "path": "scripts/publish-npm.mjs",

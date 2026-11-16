@@ -42,12 +42,21 @@ pub(crate) struct Fixture {
     pub handles: Arc<Mutex<Vec<MockHandle>>>,
     pub connects: Arc<AtomicUsize>,
     _registry: declared::TestRegistryGuard,
+    pub provider: &'static str,
     pub folder: tempfile::TempDir,
     pub logs: tempfile::TempDir,
 }
 
 pub(crate) fn fixture(config: MockConfig) -> Fixture {
-    let registry = declared::install_test_registry(acp_registry());
+    fixture_for(acp_registry(), "synthetic-acp", config)
+}
+
+pub(crate) fn fixture_for(
+    registry: Registry,
+    provider: &'static str,
+    config: MockConfig,
+) -> Fixture {
+    let registry = declared::install_test_registry(registry);
     let handles: Arc<Mutex<Vec<MockHandle>>> = Arc::default();
     let connects = Arc::new(AtomicUsize::new(0));
     let connector: Connector = {
@@ -66,6 +75,7 @@ pub(crate) fn fixture(config: MockConfig) -> Fixture {
         handles,
         connects,
         _registry: registry,
+        provider,
         folder: tempfile::tempdir().unwrap(),
         logs,
     }
@@ -76,7 +86,7 @@ impl Fixture {
         self.sessions
             .open(
                 &human(),
-                "synthetic-acp",
+                self.provider,
                 self.folder.path().to_str().unwrap(),
                 None,
             )
@@ -536,4 +546,121 @@ fn the_manager_takes_the_dashboards_proof_and_never_signs_in() {
             "{entry} must take the dashboard's proof"
         );
     }
+}
+
+/// The shipped sample definition for Antigravity, added the way a person (or an
+/// AI they asked) adds it, then driven end to end over the scripted agent. The
+/// real `agy acp` is never started and nothing is signed in.
+#[tokio::test]
+async fn the_antigravity_sample_runs_end_to_end_and_every_automatic_path_refuses_it() {
+    use crate::orchestration::child_options::RegisteredProviders;
+    use crate::profile::registry::default_adapters;
+    use crate::profile::validation::validate_definition;
+    use crate::proto::time::Timestamp;
+
+    // 1. Add: the sample validates and the registry resolves it as person-only.
+    let raw = include_str!("../../../../docs/samples/acp-agent-sample.json");
+    let (definition, diagnostics) =
+        validate_definition(raw.as_bytes(), &default_adapters()).unwrap();
+    assert!(diagnostics.iter().all(|d| d.severity.as_str() != "error"));
+    let id: &'static str = Box::leak(definition.id.clone().into_boxed_str());
+    let registry = Registry::build(
+        Layers {
+            embedded: Some(crate::profile::registry::embedded_definitions().unwrap()),
+            user: Some(vec![definition]),
+            ..Default::default()
+        },
+        &default_adapters(),
+    );
+    let f = fixture_for(registry.clone(), id, MockConfig::default());
+    assert!(declared::is_acp(id));
+    assert_eq!(
+        declared::automation_refusal(id),
+        Some(declared::ACP_HUMAN_ONLY)
+    );
+
+    // 2. Start (a person's proof), send, stream, and a permission nobody answers
+    //    for the person.
+    let session = f.open().await;
+    assert_eq!(session.provider, id);
+    f.sessions
+        .prompt(&human(), session.id, "plain")
+        .await
+        .unwrap();
+    let view = f.until(session.id, |v| has_kind(v, "turn_end")).await;
+    assert!(has_kind(&view, "update"));
+    f.sessions
+        .prompt(&human(), session.id, "permission")
+        .await
+        .unwrap();
+    let view = f
+        .until(session.id, |v| !v.pending_permissions.is_empty())
+        .await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        f.mock(0).find(|m| m["id"] == 900).is_none(),
+        "nothing answers a permission request on the person's behalf"
+    );
+    let pending = view.pending_permissions[0].clone();
+
+    // 3. Cancel closes the open request as cancelled, never as an approval.
+    f.sessions.cancel(&human(), session.id).await.unwrap();
+    let view = f
+        .until(session.id, |v| v.pending_permissions.is_empty())
+        .await;
+    assert!(!has_kind(&view, "permission_answered"));
+    if let Some(answer) = f.mock(0).find(|m| m["id"] == 900) {
+        assert_eq!(answer["result"]["outcome"]["outcome"], "cancelled");
+    }
+    let _ = pending;
+
+    // 4. A second, separate session resumes a saved conversation, then ends.
+    let resumed = f
+        .sessions
+        .open(
+            &human(),
+            id,
+            f.folder.path().to_str().unwrap(),
+            Some("sess_a"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resumed.agent_session_id, "sess_a");
+    f.sessions.end(&human(), resumed.id).await.unwrap();
+    f.sessions.end(&human(), session.id).await.unwrap();
+    assert!(
+        f.sessions
+            .prompt(&human(), session.id, "plain")
+            .await
+            .is_err(),
+        "an ended session takes no more prompts"
+    );
+
+    // 5. Every automatic path refuses it.
+    let registered = RegisteredProviders::from_registry(&registry);
+    assert!(
+        registered.is_acp(id),
+        "children and relay roles are refused"
+    );
+    assert!(!registered.is_valid(id));
+    assert!(!declared::handoff_candidates().contains(&id.to_string()));
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let mut routine = crate::routine::model::Definition {
+        name: "nightly".into(),
+        cwd: project.to_string_lossy().into_owned(),
+        provider: id.into(),
+        prompt: "do it".into(),
+        ..Default::default()
+    };
+    assert_eq!(
+        crate::routine::validation::validate(
+            &mut routine,
+            &dir.path().join("home"),
+            Timestamp::now()
+        )
+        .unwrap_err(),
+        declared::ACP_HUMAN_ONLY
+    );
 }

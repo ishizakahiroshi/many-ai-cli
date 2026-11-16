@@ -40,7 +40,9 @@ const target = join(repoRoot, 'CLAUDE.md');
 // 常時ロード分の行数予算。上げる前に上記 a / b / c を試すこと。
 const MAX_LINES = 165;
 // 1 節あたりの行数上限。これを超える本文は正本側に置く。
-const MAX_SECTION_LINES = 26;
+// 26 → 27（2026-11-16）: 設計原則の索引（表）に provider の id の直書き検査の 1 行を足したため。
+// 表の行だけが増えた分で、本文ではない。
+const MAX_SECTION_LINES = 27;
 // 「正本を名指ししている」と認める書き方。パス・リンク・スクリプト名・テスト名。
 const CANONICAL_HINT =
   /(`[^`]*\.(md|go|ts|mjs|json|yaml|yml)`|\]\([^)]+\)|scripts\/|internal\/|web\/src\/|docs\/|Test[A-Z][A-Za-z0-9_]*)/;

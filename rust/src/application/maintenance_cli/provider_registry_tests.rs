@@ -959,3 +959,96 @@ async fn test_prints_the_capability_list_and_checks_a_declared_conversation_fold
         "{report}"
     );
 }
+
+async fn provider_test(f: &Fixture) -> String {
+    offline(f)
+        .test(&TestArgs {
+            id: "file-cli".into(),
+            prompt: "hi".into(),
+            timeout_secs: 30,
+        })
+        .await
+        .unwrap()
+}
+
+/// End to end for a registered CLI: a definition file with declarations goes in
+/// through `provider add --definition`, and every declared capability is then
+/// read back through the same code paths a built-in provider uses (capability
+/// list, launch flags, routines, approval detection, conversation folder).
+/// Synthetic id and values only.
+#[tokio::test]
+async fn a_registered_cli_with_declarations_works_like_a_built_in_end_to_end() {
+    use crate::profile::declared;
+    let mut f = fixture();
+    let sessions = f.cwd.join("sessions");
+    std::fs::create_dir(&sessions).unwrap();
+    f.environment
+        .push(format!("FIXTURE_ROOT={}", f.cwd.display()));
+    let file = definition_file(
+        &f,
+        serde_json::json!({
+            "presentation": {"icon_text": "E"},
+            "permissions": {"modes": {"auto": ["--yes"]}, "choices": ["auto"]},
+            "input": {"slash_submit": "paste"},
+            "transcript": {"root": "{env:FIXTURE_ROOT}/sessions", "find": ["session_id"]},
+            "approval": {"arrow_send": true, "hint_phrases": ["trust this folder"]},
+        }),
+    );
+    // 1. Add it from the definition file (written under the data folder).
+    let report = offline(&f)
+        .add(&AddArgs {
+            definition_file: Some(file),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    for line in [
+        "available    slash_commands",
+        "available    permissions",
+        "available    approval",
+        "available    transcript",
+        "available    usage_link",
+        "unsupported  usage_meter",
+        "unsupported  subscription_profiles",
+        "unsupported  subagent_tree",
+    ] {
+        assert!(report.contains(line), "{line}\n{report}");
+    }
+    // 2. The registry the Hub holds now resolves the declarations.
+    let registry = f.cli_store.snapshot().unwrap().registry;
+    let _installed = declared::install_test_registry((*registry).clone());
+    let def = declared::declared("file-cli").expect("registered definition");
+    assert_eq!(def.slash_commands.as_ref().unwrap().items[0].cmd, "/help");
+    assert_eq!(def.input.as_ref().unwrap().slash_submit, "paste");
+    assert_eq!(def.presentation.as_ref().unwrap().icon_text, "E");
+    assert!(declared::routines_allowed(&def));
+    assert_eq!(declared::completion_mode(&def), "marker");
+    assert_eq!(
+        declared::permission_args(Some(&def), "auto"),
+        (vec!["--yes".to_string()], "auto".to_string())
+    );
+    assert!(declared::permission_args(Some(&def), "other").0.is_empty());
+    assert!(declared::automation_refusal("file-cli").is_none());
+    // 3. Approval detection follows the declared wording and nothing else.
+    let screen: Vec<String> = ["Trust this folder?", "  1. Yes", "❯ 2. No", "  3. Never"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let found = crate::approval::detect::detect_native("file-cli", &screen, &[])
+        .expect("a declared approval screen is detected");
+    assert_eq!(found.options.len(), 3);
+    assert!(
+        crate::approval::detect::detect_native("an-unregistered-cli", &screen, &[]).is_none(),
+        "the same screen is no approval for a CLI that declares nothing"
+    );
+    // 4. `provider test` checks the declared conversation folder for real.
+    assert!(
+        provider_test(&f)
+            .await
+            .contains("transcript - checked: the conversation location exists")
+    );
+    std::fs::remove_dir(&sessions).unwrap();
+    assert!(provider_test(&f).await.contains(
+        "unavailable  transcript - the declared conversation location does not exist yet"
+    ));
+}
