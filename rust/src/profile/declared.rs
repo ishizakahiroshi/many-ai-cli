@@ -568,6 +568,30 @@ mod tests {
         assert!(!automation_allowed(&def));
     }
 
+    /// The sample ACP definition users add with `provider add --definition`.
+    /// It goes through the same validation as a user-supplied file, is an ACP
+    /// provider, and is never reachable from an automated path.
+    #[test]
+    fn the_acp_sample_definition_validates_and_is_person_only() {
+        let raw = include_str!("../../../docs/samples/acp-agent-sample.json");
+        let (def, diagnostics) = validate_definition(raw.as_bytes(), &default_adapters()).unwrap();
+        assert!(
+            diagnostics.iter().all(|d| d.severity.as_str() != "error"),
+            "{:?}",
+            diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+        assert_eq!(def.connection, "acp");
+        let launch = def.launch.as_ref().expect("launch");
+        assert_eq!(launch.executable, "agy");
+        assert_eq!(launch.args, vec!["acp".to_string()]);
+        assert!(
+            launch.headless.is_none(),
+            "an ACP sample has no headless mode"
+        );
+        assert!(!automation_allowed(&def));
+        assert!(!BUILTIN_PROVIDER_IDS.contains(&def.id.as_str()));
+    }
+
     /// The values of the per-provider tables that C2 removed from the code,
     /// copied here as they were.
     #[test]

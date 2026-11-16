@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "501412a34ac1e898787d3ec5327e2df4a49b99b2",
+    "commit": "5448f5c4d8f23d2b38bd30191c41f4ab4e8ea57b",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2099,
+    "discovered": 2100,
     "analyzed": 1647,
     "unresolved": 17,
     "unknown": 0,
-    "unclaimed": 435,
+    "unclaimed": 436,
     "skipped_by_config": 0
   },
   "files": [
@@ -1258,6 +1258,14 @@
       "fields": {},
       "unresolved": [],
       "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/samples/acp-agent-sample.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
     },
     {
       "path": "docs/ui-components.md",

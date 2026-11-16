@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "antigravity",
+  "display_name": "Antigravity (ACP)",
+  "description": "Google Antigravity over its official ACP runtime. A person drives it from the dashboard; it is never a child, relay, routine or board target.",
+  "connection": "acp",
+  "launch": {
+    "executable": "agy",
+    "args": ["acp"]
+  },
+  "presentation": {
+    "letter": "G"
+  }
+}

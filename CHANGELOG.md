@@ -12,6 +12,14 @@ Release artifacts are published at
 
 ### Added
 
+- **Antigravity can be used over its official ACP runtime, only when you
+  drive it yourself.** A sample definition (`docs/samples/acp-agent-sample.json`,
+  `connection: acp`, command `agy acp`) is added with
+  `provider add --definition`; it is not a built-in. An ACP provider is refused
+  on every automated path (child, relay, routine, board, automatic approval and
+  retry). The README lists what is allowed and what is not. Google has not
+  approved many-ai-cli individually, the terms can change, and the behavior
+  against a real `agy acp` is not verified yet.
 - **A registered AI CLI is handled like the built-in seven.** A definition can
   now declare its slash command source or list, scheduled-run completion, usage
   page, badge letter and order, permission modes and their launch flags, login

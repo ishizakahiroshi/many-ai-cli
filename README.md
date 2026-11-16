@@ -298,6 +298,21 @@ If `command`'s executable is not on PATH, the session ends the same way a missin
 
 **This is a power-user setting, and it carries none of the review that goes into the built-in list.** The terms-of-service judgment calls described under [Security / Privacy](#security--privacy) — including why Gemini CLI is out of scope — are about the *built-in* provider list only. Whatever CLI you point `command` at is entirely your own choice, and checking that CLI's own terms of service before you wire it in is on you. `many-ai-cli doctor` reports how many custom providers are configured, as a standing reminder; it does not warn you again on every spawn.
 
+### Antigravity over ACP: what is allowed and what is not
+
+Antigravity is **not** one of the seven built-ins. A sample definition ships in [`docs/samples/acp-agent-sample.json`](docs/samples/acp-agent-sample.json); you add it yourself with `many-ai-cli provider add --definition docs/samples/acp-agent-sample.json` (the executable `agy` must be on PATH and you sign in through Antigravity's own flow). A definition with `"connection": "acp"` talks to the official `agy acp` runtime over ACP (stdio JSON-RPC) instead of a terminal, and the Hub **refuses it on every automated path on the server side**: a child spawn, relay, routine, board dispatch, automatic approval and automatic retry all reject it. Hiding a button is not the boundary; the rejection is.
+
+| Can do (a person drives it) | Cannot do (excluded on purpose) |
+|---|---|
+| A single-user conversation that you start and that proceeds on your own prompts | Unattended background runs, task queues, scheduled runs, a worker pool of Antigravity/Gemini |
+| Sign in through the official runtime's own flow; the Hub never reads, refreshes or relays the token | Extracting, reusing or proxying the OAuth token, relaying the auth callback, sharing or rotating accounts |
+| Gemini models only (whatever your own plan offers) | Using other vendors' models by posing as a supported IDE |
+| Streaming answers, tool progress, file diffs, allow / deny, questions, cancel | A conductor that answers by itself when a session finishes or fails, with no person typing the prompt |
+| Listing, loading, resuming and ending conversations | Embedding ACP as the model provider of another agent's own processing loop |
+| Several sessions that you start by hand, each in its own working copy | Sending `/usage` on a timer to watch the quota (ask for it yourself, or open the settings screen) |
+
+This table follows the answers Google gave on its developer forum and its ACP documentation (checked 2026-11-16; the terms and FAQ have no effective date we could confirm). It is **not** a certification: Google has not approved many-ai-cli individually, and the terms can change, so check Antigravity's current terms yourself before you use it. Not yet decided, so not offered: driving it from a phone or another machine, answering permission requests automatically in bulk, and using Antigravity's own `/swarm` / `/teamwork` through this tool. **Not verified yet:** what a real `agy acp` answers, the exact sign-in error text, and which session management calls the installed version supports.
+
 ---
 
 ## Requirements

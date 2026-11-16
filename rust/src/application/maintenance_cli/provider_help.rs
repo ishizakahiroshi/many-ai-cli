@@ -95,7 +95,9 @@ IF YOU ARE AN AI AGENT ASKED TO ADD A NEW CLI
   A CLI that is reached over ACP (a protocol the CLI speaks on its own, not a terminal) is driven
   by a person only: the user registers and starts it from the dashboard. Do not set
   \"connection\": \"acp\" yourself, do not use it as a child, relay, routine or board target, and
-  never extract or relay its sign-in token.
+  never extract or relay its sign-in token. A sample for Antigravity is docs/samples/acp-agent-sample.json
+  in the repository (add it only when the user asks: provider add --definition <file>). Report what
+  the vendor's current terms say and the URL; the user decides whether to use it.
   Things you must not do: print, read aloud or ask for the Hub token (the command reads it
   itself); answer a first-run \"do you trust this folder\" or a login prompt of the new CLI
   (the user answers those in the dashboard session); keep retrying with different flags if
