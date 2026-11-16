@@ -205,7 +205,10 @@ impl GridSpawn {
                 .map_err(|_| error(503, "unavailable", "provider registry unavailable"))?;
             Ok(registry
                 .lookup(provider)
-                .is_some_and(|d| d.definition.enabled.unwrap_or(true)))
+                .is_some_and(|d| d.definition.enabled.unwrap_or(true))
+                && !registry
+                    .declared(provider)
+                    .is_some_and(|d| !crate::profile::declared::automation_allowed(&d)))
         })?;
         if body.preset == "ai+shell" && self.deps.core.provider_updating(&plan.specs[0].0) {
             return Err(error(

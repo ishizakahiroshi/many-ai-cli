@@ -95,6 +95,10 @@ impl WrappedSessionSpawner for SessionEngine {
     ) -> CoreFuture<'a, SpawnStartOutcome> {
         Box::pin(async move {
             let spec = &mut request.spec;
+            // A provider reached over ACP is never started as a terminal session.
+            if let Some(reason) = crate::profile::declared::automation_refusal(&spec.provider) {
+                return SpawnStartOutcome::Failed(reason.into());
+            }
             let lease = if let Some(id) = spec.spawn_attempt {
                 ProviderSpawnLease {
                     id,
@@ -163,6 +167,9 @@ impl WrappedSessionSpawner for SessionEngine {
         waiter: &'a HttpWaitCancellation,
     ) -> CoreFuture<'a, SpawnWaitOutcome> {
         Box::pin(async move {
+            if let Some(reason) = crate::profile::declared::automation_refusal(&spec.provider) {
+                return SpawnWaitOutcome::Failed(reason.into());
+            }
             let lease = if let Some(id) = spec.spawn_attempt {
                 ProviderSpawnLease {
                     id,

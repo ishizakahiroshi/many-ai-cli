@@ -241,6 +241,17 @@ impl Fixture {
         let registry = Registry::build(
             Layers {
                 embedded: Some(embedded_definitions().unwrap()),
+                user: Some(vec![crate::proto::provider::Definition {
+                    schema_version: 1,
+                    id: "fixture-acp".into(),
+                    display_name: "Fixture ACP".into(),
+                    connection: "acp".into(),
+                    launch: Some(crate::proto::provider::LaunchDefinition {
+                        executable: "fixture-acp-bin".into(),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }]),
                 ..Default::default()
             },
             &default_adapters(),
@@ -947,4 +958,14 @@ async fn spawn_correlation_orchestration_keeps_authenticated_request_metadata() 
         request.spec.registration_metadata.client_request_id,
         "request_conductor-1"
     );
+}
+
+#[tokio::test]
+async fn an_acp_provider_is_refused_as_a_terminal_session() {
+    let f = Fixture::new(SpawnStartOutcome::Started { pid: 42 });
+    let mut body = f.body();
+    body.provider = "fixture-acp".into();
+    let error = f.spawn(body).await.unwrap_err();
+    assert_eq!((error.status, error.code), (400, "acp_provider"));
+    assert!(f.capture.requests.lock().unwrap().is_empty());
 }

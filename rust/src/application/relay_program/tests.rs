@@ -2567,3 +2567,40 @@ fn relay_refuses_an_unknown_provider_and_lists_the_accepted_ones() {
         .is_err()
     );
 }
+
+#[test]
+fn relay_refuses_an_acp_provider_as_a_role() {
+    use crate::proto::provider::{Definition, LaunchDefinition};
+    let acp = Definition {
+        schema_version: 1,
+        id: "fixture-acp".into(),
+        display_name: "Fixture ACP".into(),
+        connection: "acp".into(),
+        launch: Some(LaunchDefinition {
+            executable: "fixture-acp-bin".into(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let providers =
+        crate::orchestration::child_options::RegisteredProviders::from_registry(&Registry::build(
+            Layers {
+                embedded: Some(embedded_definitions().unwrap()),
+                user: Some(vec![acp]),
+                ..Default::default()
+            },
+            &default_adapters(),
+        ));
+    assert!(providers.is_acp("fixture-acp"));
+    let error = validate_roles(
+        relay_roles("fixture-acp", "auto"),
+        &Config::default(),
+        &providers,
+    )
+    .err()
+    .unwrap();
+    assert_eq!(
+        (error.status, error.code.as_str()),
+        (403, "automation_refused")
+    );
+}

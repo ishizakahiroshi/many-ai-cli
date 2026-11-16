@@ -1783,6 +1783,8 @@ pub enum ApprovalActionError {
     /// (audit U23); only a person on the prompt may approve it.
     UnverifiedCommand,
     PersistentOption,
+    /// The provider is reached over ACP: only a person on the dashboard answers.
+    HumanOnly,
     PolicyChanged,
     Transport(String),
     Cancelled,

@@ -122,6 +122,10 @@ impl ApprovalRules {
             let Some(details) = core.details(session) else {
                 return Ok(false);
             };
+            // An ACP provider's permission requests are answered by a person.
+            if crate::profile::declared::is_acp(&details.snapshot.provider) {
+                return Ok(false);
+            }
             // Audit U23: a heading prompt is decided on its whole command, which
             // Claude writes to the transcript just before drawing the prompt.
             let (summary, authority) = authorized_summary(

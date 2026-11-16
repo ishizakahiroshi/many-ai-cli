@@ -182,6 +182,9 @@ pub fn prepare_spec(
     if grant.grant.revoked || grant.grant.expires_at <= 0 || grant.grant.expires_at as u64 <= now {
         return Err(PrepareError::StaleGrant);
     }
+    if crate::profile::declared::is_acp(&b.provider) {
+        return Err(PrepareError::UnsupportedPolicy);
+    }
     if !(crate::proto::provider::BUILTIN_PROVIDER_IDS.contains(&b.provider.as_str())
         || b.provider == "synthetic")
         || !identity(&b.profile_id)
@@ -260,7 +263,7 @@ mod tests {
             .map(|b| format!("{b:02x}"))
             .collect()
     }
-    fn fixture(bytes: &[u8]) -> (tempfile::TempDir, ApprovedGrant, OwnerTicket) {
+    pub(super) fn fixture(bytes: &[u8]) -> (tempfile::TempDir, ApprovedGrant, OwnerTicket) {
         let root = tempfile::tempdir().unwrap();
         let cwd = root.path().canonicalize().unwrap();
         std::fs::write(cwd.join("instruction.txt"), bytes).unwrap();
@@ -366,6 +369,35 @@ mod tests {
         assert!(matches!(
             prepare_spec(&grant, &ticket),
             Err(PrepareError::InvalidInstruction)
+        ));
+    }
+}
+
+#[cfg(test)]
+mod acp_tests {
+    use super::*;
+
+    #[test]
+    fn a_board_execution_never_prepares_a_launch_for_an_acp_provider() {
+        use crate::{profile::registry, proto::provider};
+        let (_root, grant, ticket) = super::tests::fixture(b"synthetic instruction");
+        assert!(prepare_spec(&grant, &ticket).is_ok());
+        let _guard = crate::profile::declared::install_test_registry(registry::Registry::build(
+            provider::Layers {
+                embedded: Some(registry::embedded_definitions().unwrap()),
+                user: Some(vec![provider::Definition {
+                    schema_version: 1,
+                    id: "synthetic".into(),
+                    connection: "acp".into(),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            },
+            &registry::default_adapters(),
+        ));
+        assert!(matches!(
+            prepare_spec(&grant, &ticket),
+            Err(PrepareError::UnsupportedPolicy)
         ));
     }
 }

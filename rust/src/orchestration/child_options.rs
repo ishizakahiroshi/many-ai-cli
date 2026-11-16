@@ -27,6 +27,9 @@ pub struct RegisteredProviders {
     /// carried into the session without ever reaching the CLI.
     takes_model: BTreeMap<String, bool>,
     takes_effort: BTreeMap<String, bool>,
+    /// Providers declared `connection: acp`: driven by a person only, so never a
+    /// child, a relay role, a routine or the parent of either.
+    acp: std::collections::BTreeSet<String>,
 }
 
 impl RegisteredProviders {
@@ -34,7 +37,17 @@ impl RegisteredProviders {
         let mut headless = BTreeMap::new();
         let mut takes_model = BTreeMap::new();
         let mut takes_effort = BTreeMap::new();
+        let mut acp = std::collections::BTreeSet::new();
         for summary in registry.list() {
+            // A provider that is reached over ACP is driven by a person only (this
+            // is checked for the built-in ids too, whatever a layer wrote).
+            if registry
+                .declared(&summary.id)
+                .is_some_and(|d| !crate::profile::declared::automation_allowed(&d))
+            {
+                acp.insert(summary.id.clone());
+                continue;
+            }
             if summary.id == "shell" || ORCHESTRATION_PROVIDERS.contains(&summary.id.as_str()) {
                 continue;
             }
@@ -42,13 +55,6 @@ impl RegisteredProviders {
                 continue;
             };
             if !entry.definition.enabled.unwrap_or(true) {
-                continue;
-            }
-            // A provider that is reached over ACP is driven by a person only.
-            if registry
-                .declared(&summary.id)
-                .is_some_and(|d| !crate::profile::declared::automation_allowed(&d))
-            {
                 continue;
             }
             let Some(launch) = entry.definition.launch.as_ref() else {
@@ -62,7 +68,12 @@ impl RegisteredProviders {
             headless,
             takes_model,
             takes_effort,
+            acp,
         }
+    }
+    /// Whether `provider` is reached over ACP (a person drives it; no automation).
+    pub fn is_acp(&self, provider: &str) -> bool {
+        self.acp.contains(provider)
     }
     /// A registered provider whose definition has no `model_args`.
     fn ignores_model(&self, provider: &str) -> bool {
