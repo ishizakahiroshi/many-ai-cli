@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "173712ea5badb9fc4dcd138c522d00aa3dd55f49",
+    "commit": "ade9d8ec5b8255f0f4cd1beb3b10e85879de4a34",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2076,
+    "discovered": 2077,
     "analyzed": 1611,
     "unresolved": 15,
     "unknown": 0,
-    "unclaimed": 450,
+    "unclaimed": 451,
     "skipped_by_config": 0
   },
   "files": [
@@ -21176,6 +21176,14 @@
       "fields": {},
       "unresolved": [],
       "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "owner-stop-regression.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
     },
     {
       "path": "portfolio.md",
