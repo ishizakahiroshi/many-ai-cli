@@ -15,6 +15,7 @@ struct Executor {
     notifications: AtomicUsize,
     entered: Notify,
     parent_seen: Mutex<Option<SessionBinding>>,
+    subscription_seen: Mutex<Option<String>>,
     snapshot_hook: Mutex<Option<SnapshotHook>>,
 }
 impl ConfirmationExecutor for Executor {
@@ -38,6 +39,22 @@ impl ConfirmationExecutor for Executor {
         if self.forget_permission.load(Ordering::SeqCst) {
             config.user_prefs.spawn.role_permission.clear();
         }
+        let profile = |id: &str, enabled: Option<bool>| config::SubscriptionProfile {
+            id: id.into(),
+            enabled,
+            ..Default::default()
+        };
+        config.subscriptions.insert(
+            "codex".into(),
+            vec![
+                profile("work", None),
+                profile("personal", Some(true)),
+                profile("paused", Some(false)),
+            ],
+        );
+        config
+            .subscriptions
+            .insert("claude".into(), vec![profile("other", None)]);
         Ok(ConfirmationPresentation {
             config,
             trust_grant_providers: vec!["synthetic-trust-provider".into()],
@@ -52,6 +69,8 @@ impl ConfirmationExecutor for Executor {
         Box::pin(async move {
             self.spawns.fetch_add(1, Ordering::SeqCst);
             *lock(&self.parent_seen) = Some(request.parent);
+            *lock(&self.subscription_seen) =
+                Some(request.body.request().subscription_profile_id.clone());
             self.entered.notify_one();
             if self.pause_spawn.load(Ordering::SeqCst) {
                 cancel.token().cancelled().await;
@@ -1236,5 +1255,63 @@ async fn served_confirmation_rejects_epoch_rotation_at_accept_before_same_id_fre
             .unwrap()
             .unwrap()
             .unwrap();
+    }
+}
+async fn approve_with_subscription(
+    provider: &str,
+    subscription: Option<&str>,
+) -> (Fixture, Result<Option<String>, SessionError>) {
+    let f = fixture(true).await;
+    let r = register(&f, "worker");
+    let mut choice = response(&r.pending.id, true);
+    choice.provider = provider.into();
+    choice.subscription_profile_id = subscription.map(str::to_owned);
+    let accepted = f.engine.clone().accept_decision(
+        choice,
+        VerifiedConfirmationRequest::after_server_authentication(f.engine.auth_epoch()),
+        now(),
+    );
+    let result = match accepted {
+        Ok(accepted) => {
+            let task = accepted.run(TaskCancellation::default()).unwrap();
+            assert!(matches!(task.await, ConfirmationOutcome::SpawnFailed(_)));
+            Ok(lock(&f.executor.subscription_seen).clone())
+        }
+        Err(error) => Err(error),
+    };
+    (f, result)
+}
+#[tokio::test]
+async fn chosen_subscription_reaches_the_child_launch() {
+    let (f, seen) = approve_with_subscription("", Some(" work ")).await;
+    assert_eq!(seen.unwrap(), Some("work".into()));
+    assert_eq!(f.executor.spawns.load(Ordering::SeqCst), 1);
+    let (_, seen) = approve_with_subscription("claude", Some("other")).await;
+    assert_eq!(seen.unwrap(), Some("other".into()));
+}
+#[tokio::test]
+async fn absent_or_default_subscription_keeps_the_unspecified_launch() {
+    for choice in [None, Some(""), Some("  ")] {
+        let (f, seen) = approve_with_subscription("", choice).await;
+        assert_eq!(seen.unwrap(), Some(String::new()));
+        assert_eq!(f.executor.spawns.load(Ordering::SeqCst), 1);
+    }
+}
+#[tokio::test]
+async fn unknown_disabled_or_other_cli_subscription_is_refused_before_launch() {
+    for (provider, id) in [
+        ("", "missing"),
+        ("", "paused"),
+        ("", "other"),
+        ("claude", "work"),
+        ("shell", "work"),
+    ] {
+        let (f, seen) = approve_with_subscription(provider, Some(id)).await;
+        assert!(
+            matches!(seen, Err(SessionError::InvalidRequest(_))),
+            "{provider}/{id} must be refused"
+        );
+        assert_eq!(f.executor.spawns.load(Ordering::SeqCst), 0);
+        assert_eq!(f.engine.pending().len(), 1, "confirmation stays answerable");
     }
 }

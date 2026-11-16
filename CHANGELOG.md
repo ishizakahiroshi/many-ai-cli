@@ -32,6 +32,15 @@ Release artifacts are published at
 
 ### Fixed
 
+- **The child spawn confirmation now lets you pick the subscription profile.**
+  When the chosen CLI has two or more enabled profiles, the dialog shows the
+  same Subscription field as the derive dialog and the new-session panel, and
+  switching CLI swaps in that CLI's profiles. The child launches with the
+  chosen profile; leaving it at the default (or a CLI with one profile or
+  none, where the field is hidden) sends nothing and launches as before. An
+  unknown, disabled or other-CLI profile is refused before the child starts,
+  and switching CLI no longer carries over a profile the AI asked for on the
+  previous CLI. (#43)
 - **An AI CLI registered through the dashboard or API now actually launches.**
   The launcher read only the built-in and `config.yaml` definitions, so a CLI
   in the provider registry was started by its id and failed with "not on

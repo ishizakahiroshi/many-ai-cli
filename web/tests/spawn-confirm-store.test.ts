@@ -24,6 +24,7 @@ import {
   isRegisteredChildProvider,
   registeredChildProviderChoices,
   folderTrustDecision,
+  subscriptionDecision,
   spawnConfirmDecisionFromHttp,
   SPAWN_CONFIRM_CLOSED_FALLBACK_MS,
   unregisterDialogController,
@@ -518,6 +519,19 @@ describe('folder trust', () => {
     const record = recordFromMessage(requestedMessage({ trust_grant_providers: ['claude', 'codex'] }));
     expect(folderTrustDecision(folderTrustOffered(record, 'claude'), true, true)).toBe(true);
     expect(folderTrustDecision(folderTrustOffered(record, 'copilot'), true, true)).toBeUndefined();
+  });
+});
+
+describe('子の起動確認で契約を選ぶ（issue #43）', () => {
+  test('欄を出して契約を選んで承認したときだけ ID を送る', () => {
+    expect(subscriptionDecision(true, 'work', true)).toBe('work');
+    expect(subscriptionDecision(true, ' work ', true)).toBe('work');
+  });
+
+  test('欄が無い・「既定」のまま・拒否では JSON に載せない', () => {
+    expect(subscriptionDecision(false, 'work', true)).toBeUndefined(); // 契約が 1 件以下の CLI
+    expect(subscriptionDecision(true, '', true)).toBeUndefined(); // 既定のまま
+    expect(subscriptionDecision(true, 'work', false)).toBeUndefined(); // 拒否
   });
 });
 
