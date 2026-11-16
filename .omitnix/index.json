@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "7ef63bd06b49154b4e43c1762f5a840eb062d374",
+    "commit": "018bdbd27ce52bca27cabb5172a2d43d0e2290de",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2076,
+    "discovered": 2077,
     "analyzed": 1627,
     "unresolved": 15,
     "unknown": 0,
-    "unclaimed": 434,
+    "unclaimed": 435,
     "skipped_by_config": 0
   },
   "files": [
@@ -1170,6 +1170,14 @@
         }
       },
       "unresolved": []
+    },
+    {
+      "path": "docs/design_external-ai-board-followup.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
     },
     {
       "path": "docs/manual_board-sync.md",
