@@ -68,6 +68,8 @@ pub mod spawn_routes;
 pub mod relay_routes;
 
 pub mod iris_execution;
+pub mod iris_execution_grants;
 pub mod iris_execution_journal;
 pub mod iris_execution_mcp;
+pub mod iris_execution_owner;
 pub mod iris_execution_runtime;

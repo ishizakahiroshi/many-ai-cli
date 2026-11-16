@@ -626,13 +626,29 @@ mod voice_auth_tests;
 mod tests {
     #[tokio::test]
     async fn execution_body_reads_all_frames_and_enforces_its_own_limit() {
-        let chunks: Vec<Result<Bytes, std::io::Error>> = vec![Ok(Bytes::from_static(b"{}")), Ok(Bytes::from_static(b" {}"))];
-        let bytes = super::read_body(Body::from_stream(futures_util::stream::iter(chunks)), super::super::iris_execution::PATH).await.unwrap();
+        let chunks: Vec<Result<Bytes, std::io::Error>> = vec![
+            Ok(Bytes::from_static(b"{}")),
+            Ok(Bytes::from_static(b" {}")),
+        ];
+        let bytes = super::read_body(
+            Body::from_stream(futures_util::stream::iter(chunks)),
+            super::super::iris_execution::PATH,
+        )
+        .await
+        .unwrap();
         assert_eq!(bytes, b"{} {}");
         assert!(super::super::iris_execution_mcp::parse_json(&bytes).is_err());
-        let chunks: Vec<Result<Bytes, std::io::Error>> = vec![Ok(Bytes::from_static(b"{}")), Ok(Bytes::from(vec![b' '; 70_000]))];
-        let bytes = super::read_body(Body::from_stream(futures_util::stream::iter(chunks)), super::super::iris_execution::PATH).await.unwrap();
-        assert_eq!(bytes.len(), super::super::iris_execution_mcp::MAX_BYTES+1);
+        let chunks: Vec<Result<Bytes, std::io::Error>> = vec![
+            Ok(Bytes::from_static(b"{}")),
+            Ok(Bytes::from(vec![b' '; 70_000])),
+        ];
+        let bytes = super::read_body(
+            Body::from_stream(futures_util::stream::iter(chunks)),
+            super::super::iris_execution::PATH,
+        )
+        .await
+        .unwrap();
+        assert_eq!(bytes.len(), super::super::iris_execution_mcp::MAX_BYTES + 1);
         assert!(super::super::iris_execution_mcp::parse_json(&bytes).is_err());
     }
     use super::*;

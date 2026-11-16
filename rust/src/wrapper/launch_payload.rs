@@ -493,6 +493,7 @@ fn run_payload(path: &Path) -> io::Result<i32> {
         .env_remove(CMD_RAW_BOOTSTRAP_ENV)
         .env_remove(SPAWN_PROOF_ENV)
         .env_remove(STARTUP_JOB_ENV)
+        .env_remove(crate::wrapper::iris_owner::OWNER_ENV)
         .env_remove(PROTECTED_ENV_NAMES_ENV)
         .status()
         .map_err(|_| io::Error::other("AI launch executable could not be started"))?;

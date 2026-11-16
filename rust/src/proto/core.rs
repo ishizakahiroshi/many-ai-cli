@@ -2488,6 +2488,9 @@ pub enum ProviderCommandPurpose {
 /// or deserialized from wrapper/browser input. Prompt text is not persisted here.
 #[derive(Clone, Default)]
 pub struct SpawnRegistrationMetadata {
+    /// Trusted Iris owner ticket JSON. Never accepted from wrapper/browser
+    /// input, included in session display metadata, or replayed as spawn work.
+    pub iris_owner_context: String,
     pub client_request_id: String,
     pub parent: LiveSessionId,
     pub role: String,

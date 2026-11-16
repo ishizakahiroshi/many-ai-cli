@@ -362,6 +362,33 @@ pub async fn run_cli(
     let session_shell = registration_shell(provider, selected_shell.as_ref(), &command);
     let registration = registration(&context, &launch, &session_shell)?;
     let proof = env(context.environment, SPAWN_PROOF_ENV).map(str::to_owned);
+    let mut owner_instruction_hash = None;
+    let owner = match env(context.environment, super::iris_owner::OWNER_ENV) {
+        Some(encoded) => {
+            if proof.is_none()
+                || launch.headless
+                || launch.login_mode
+                || launch.custom_argv.is_some()
+                || launch.args.prompt_file.trim().is_empty()
+            {
+                return Err(io::Error::other(
+                    "Iris owner requires a core-issued PTY execution",
+                ));
+            }
+            let profile = env(context.environment, "MANY_AI_CLI_SUBSCRIPTION_ID")
+                .filter(|s| !s.is_empty())
+                .unwrap_or("default");
+            let owner = super::iris_owner::DurableExecutionOwner::adopt(
+                context.paths.root(),
+                encoded,
+                &launch.provider,
+                profile,
+            )?;
+            owner_instruction_hash = Some(owner.instruction_hash().to_owned());
+            Some(std::sync::Arc::new(owner) as std::sync::Arc<dyn runtime::ExecutionOwnerObserver>)
+        }
+        None => None,
+    };
     if launch.headless {
         return run_headless(
             context,
@@ -380,6 +407,7 @@ pub async fn run_cli(
     let mut prompt: Option<PreparedLaunchPrompt> = None;
     let mut options = WrapperOptions::new(registration, process);
     options.initial_proof = proof;
+    options.execution_owner = owner;
     options.login_mode = launch.login_mode;
     if context.config.log.session_enabled {
         options.raw_log = Some(RawLogPolicy {
@@ -412,6 +440,9 @@ pub async fn run_cli(
                     shim.as_deref(),
                     std::process::id(),
                 )?;
+                if let Some(expected) = owner_instruction_hash.as_deref() {
+                    prepared.verify_source(expected)?;
+                }
                 if !prepared.arg.is_empty() {
                     args = launch::with_launch_prompt(&args, &prepared.arg);
                 }

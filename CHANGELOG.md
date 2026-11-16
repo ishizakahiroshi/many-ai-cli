@@ -10,6 +10,16 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+- Fix Windows terminal disposal during process startup: terminate the owned Job
+  and observe the root exit and an empty Job before closing ConPTY, preventing
+  startup-close initialization errors. Ctrl+C input remains a separate operation.
+
+- Persist Windows PTY-owner local-tree cessation observations and independently
+  hashed, bound artifact reports across Hub disconnects. Add one-use durable
+  spawn claims, fixed operator grant manifests with revision checks, and
+  authenticated read-only owner evidence inspection. These records keep remote
+  effects and business outcome acceptance unverified; live dispatch stays off.
+
 - Add an opt-in Many Iris MCP execution-contract boundary with separate bearer
   authentication, a durable request journal, pinned grant revisions and exact
   session-bound stop requests. Live provider execution stays disabled: existing

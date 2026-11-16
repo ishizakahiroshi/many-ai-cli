@@ -53,8 +53,8 @@ Admission uses a synchronous FULL SQLite transaction before any backend action.
 Bindings include principal/workspace, plan/task and instruction revisions/hashes,
 the independently pinned grant revision/scope, host/instance, attempt/fence, and
 provider/profile. Grants are registered only by trusted local application code;
-there is no MCP grant-creation or approval tool. No production grant/bootstrap
-or real provider launch adapter is installed by this initial composition.
+there is no MCP grant-creation or approval tool. A fixed local operator manifest
+can register pinned grants. The production launch adapter remains disabled.
 
 The tools are `capabilities`, `executor_start`, `executor_poll`, `executor_stop`
 and `executor_request`. Attempt operations carry a complete `binding` object;
@@ -66,6 +66,62 @@ authorizes a replacement attempt. A new service lifetime marks unfinished work
 unknown and does not replay an outbox. Explicit restore inspection uses a hold;
 arbitrary filesystem rollback cannot be detected from an old DB alone.
 
+`executor_evidence` is a separately authenticated, read-only tool with a complete
+`binding`. It returns persisted owner observations even when execution admission
+is disabled. It cannot select a database path, issue a grant, append evidence or
+start a process. Iris can inspect these records without downgrading its start
+capability checks.
+
+## Local operator grants
+
+The fixed runtime-root file `iris-execution-approved-grants.json` has
+`schema_version: 1`, a positive `manifest_revision`, `approval_state: "approved"`
+and a `grants` array. Each entry contains the complete `binding`, `expires_at`,
+`revoked`, an absolute `approved_cwd`, relative `instruction_path` and
+`result_path`, `max_artifact_bytes`, `effect_scope` and `allow_remote_jobs`.
+Instruction and result paths resolve only beneath `iris-execution-artifacts`.
+The instruction content must match the binding's SHA256. These are explicit
+operator files; normal MCP callers cannot create or modify them.
+
+`iris-execution-grant-trust.sqlite3` retains manifest and per-task permission
+revisions separately from the manifest. Downgrades, same-version changes and
+implicit removal of active permissions are rejected. Revoke the old entry
+explicitly; deleting an entry does not silently authorize a different scope.
+Unreadable or invalid authority disables admission. Restoring an old manifest
+and trust database is not a method of re-enabling old permissions.
+
+## Native owner records
+
+For an explicitly core-issued Iris PTY launch, the wrapper verifies current
+operator approval, a read-only snapshot of the Hub admission journal, the actual
+prepared instruction content and the working directory. It commits a one-use
+owner spawn claim before native creation. A duplicate claim, including the same
+ticket after a restart, cannot launch a replacement. Internal owner bootstrap
+metadata is removed before provider exec, including launch payloads. Custom
+argv, headless and login launches are not enabled for this owner path.
+
+The wrapper keeps its owner observer independently of the Hub socket and saves
+records in `iris-execution/owner.sqlite3` before the final session frame. Windows
+uses retained native process and Job handles: checked termination must succeed,
+the root handle must be signaled and the owned Job's active process count must
+reach zero within the deadline. Unsupported platforms and failed observations
+produce no cessation proof. No process is rediscovered by PID or label.
+
+This proof means `local_tree_ceased: true` for `windows-owned-job`. It does not
+mean `owned_execution_ceased`, `remote_jobs_stopped`, `effects_verified` or
+`task_outcome_verified`. Natural exit is `local_exit`; a requested stop is bound
+to its persisted request, owner epoch, attempt and fence. A later stop request
+cannot reuse an older natural-exit observation.
+
+Result artifacts must be regular, single-link files within the approved root.
+The verifier bounds their size, rejects aliases and traversal, hashes their
+bytes independently and checks the full instruction/owner/attempt binding.
+The JSON result document contains `binding`, `owner_id`, `owner_epoch`,
+`instruction_hash`, `outcome`, `effects` and `synthetic`. A valid artifact is
+saved as a report with `verification_scope: "artifact-integrity-only"`.
+`verified_task_outcome` remains `unknown`: a provider's success statement and
+the hash of that statement are not independent business acceptance.
+
 ## Stop and result limits
 
 The exact-session bridge can request cancellation only for a previously proven
@@ -76,6 +132,7 @@ and exit code zero do not become process-tree stop or successful-task evidence.
 
 Isolated tests inject an explicitly synthetic backend and synthetic hash proofs.
 Those proofs are accepted only for the synthetic provider/profile and cannot
-complete a real provider attempt. Production still needs durable receipts from
-the actual PTY/process owner, bounded process-tree/remote-job stop verification,
-and independently verified task artifacts before execution can be enabled.
+complete a real provider attempt. The native owner path now persists Windows
+local-process observations and artifact-integrity reports. Real provider
+dispatch, remote-job cessation and independent task/effects acceptance still
+need an adopted scope and verification policy before execution can be enabled.

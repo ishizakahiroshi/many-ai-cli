@@ -114,7 +114,18 @@ impl ServiceRouter {
     }
     fn preflight_inner(&self, request: &Request, now: i64) -> Result<(), Response> {
         if request.path == super::iris_execution::PATH {
-            return self.iris_execution.as_ref().ok_or_else(|| Response::error(503, "iris_execution_not_configured", "Execution contract is not configured").no_store())?.preflight(request);
+            return self
+                .iris_execution
+                .as_ref()
+                .ok_or_else(|| {
+                    Response::error(
+                        503,
+                        "iris_execution_not_configured",
+                        "Execution contract is not configured",
+                    )
+                    .no_store()
+                })?
+                .preflight(request);
         }
         if let Some(response) = provider_early_response(request) {
             return Err(response);
@@ -341,7 +352,10 @@ impl ServiceRouter {
         self.children = Some(children);
         self
     }
-    pub fn with_iris_execution(mut self, owner: Arc<super::iris_execution::IrisExecutionHttp>) -> Self {
+    pub fn with_iris_execution(
+        mut self,
+        owner: Arc<super::iris_execution::IrisExecutionHttp>,
+    ) -> Self {
         self.iris_execution = Some(owner);
         self
     }
@@ -510,7 +524,12 @@ impl ServiceRouter {
             return Dispatch::response(error);
         }
         if request.path == super::iris_execution::PATH {
-            return Dispatch::response(self.iris_execution.as_ref().expect("preflight checked owner").handle_authenticated(request, now));
+            return Dispatch::response(
+                self.iris_execution
+                    .as_ref()
+                    .expect("preflight checked owner")
+                    .handle_authenticated(request, now),
+            );
         }
         if super::approval_pattern_routes::is_route(&request.path) {
             let Some(owner) = self.patterns.clone() else {
@@ -1294,8 +1313,15 @@ impl ServiceRouter {
         at: crate::proto::time::Timestamp,
     ) -> Dispatch {
         if request.path == super::iris_execution::PATH {
-            if let Err(error) = self.preflight(request, now) { return Dispatch::response(error); }
-            return Dispatch::response(self.iris_execution.as_ref().expect("preflight checked owner").handle_authenticated(request, now));
+            if let Err(error) = self.preflight(request, now) {
+                return Dispatch::response(error);
+            }
+            return Dispatch::response(
+                self.iris_execution
+                    .as_ref()
+                    .expect("preflight checked owner")
+                    .handle_authenticated(request, now),
+            );
         }
         if let Some(response) = provider_early_response(request) {
             return Dispatch::response(response);

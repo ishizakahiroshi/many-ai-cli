@@ -132,16 +132,15 @@ pub fn validate_request(request: &Value) -> Result<(), ProtocolError> {
     if version != VERSION {
         return Err(error(-32022, "Unsupported protocol version"));
     }
-    if let Some(info) = meta.get("io.modelcontextprotocol/clientInfo") {
-        if !info.is_object()
+    if let Some(info) = meta.get("io.modelcontextprotocol/clientInfo")
+        && (!info.is_object()
             || !info.get("name").is_some_and(Value::is_string)
-            || !info.get("version").is_some_and(Value::is_string)
-        {
-            return Err(error(
-                -32602,
-                "Client name and version required when clientInfo is supplied",
-            ));
-        }
+            || !info.get("version").is_some_and(Value::is_string))
+    {
+        return Err(error(
+            -32602,
+            "Client name and version required when clientInfo is supplied",
+        ));
     }
     if !meta
         .get("io.modelcontextprotocol/clientCapabilities")
@@ -253,11 +252,13 @@ pub fn error_response(id: Option<&Value>, e: &ProtocolError) -> Value {
 pub fn tool(name: &str, properties: Value, required: &[&str]) -> Value {
     json!({"name":name,"description":format!("Synthetic Iris operation {name}"),"inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false}})
 }
+pub type ToolHandler<'a> = dyn FnMut(&str, &Value) -> Result<Value, (String, String)> + 'a;
+
 pub fn handle_with_tools(
     request: &Value,
     server_name: &str,
     tools: &[Value],
-    context: &mut dyn FnMut(&str, &Value) -> Result<Value, (String, String)>,
+    context: &mut ToolHandler<'_>,
 ) -> Value {
     if request.is_object()
         && request["jsonrpc"] == "2.0"
@@ -321,23 +322,19 @@ pub fn handle_with_tools(
                 );
             }
             let definition = tools.iter().find(|t| t["name"] == name).unwrap();
-            if let Some(fields) = definition["inputSchema"]["required"].as_array() {
-                if fields
+            if let Some(fields) = definition["inputSchema"]["required"].as_array()
+                && fields
                     .iter()
                     .filter_map(Value::as_str)
                     .any(|field| args.get(field).is_none())
-                {
-                    return error_response(
-                        Some(id),
-                        &error(-32602, "Required tool argument missing"),
-                    );
-                }
+            {
+                return error_response(Some(id), &error(-32602, "Required tool argument missing"));
             }
             let props = &definition["inputSchema"]["properties"];
             if args.as_object().unwrap().iter().any(|(k, v)| {
                 props.get(k).is_none()
                     || match props[k]["type"].as_str() {
-                        Some("string") => !v.as_str().is_some_and(|s| !s.is_empty()),
+                        Some("string") => v.as_str().is_none_or(|s| s.is_empty()),
                         Some("integer") => !v.is_u64(),
                         Some("object") => !v.is_object(),
                         _ => false,

@@ -796,6 +796,53 @@ pub(crate) mod windows_job {
                 TerminateJobObject(self.0.as_raw_handle(), 1);
             }
         }
+        pub(crate) fn terminate_checked(&self) -> io::Result<()> {
+            if unsafe { TerminateJobObject(self.0.as_raw_handle(), 1) } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        }
+        pub(crate) fn active_processes(&self) -> io::Result<u32> {
+            let mut accounting: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION = unsafe { mem::zeroed() };
+            if unsafe {
+                QueryInformationJobObject(
+                    self.as_raw_handle(),
+                    JobObjectBasicAccountingInformation,
+                    &mut accounting as *mut _ as _,
+                    size_of::<JOBOBJECT_BASIC_ACCOUNTING_INFORMATION>() as u32,
+                    std::ptr::null_mut(),
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(accounting.ActiveProcesses)
+        }
+    }
+    #[test]
+    fn checked_job_operations_require_native_handle_rights() {
+        let job = OwnedJob::create().unwrap();
+        let query_only = OwnedJob(job.inherited_query_handle().unwrap());
+        assert_eq!(query_only.active_processes().unwrap(), 0);
+        assert!(query_only.terminate_checked().is_err());
+        let mut raw = std::ptr::null_mut();
+        assert_ne!(
+            unsafe {
+                DuplicateHandle(
+                    GetCurrentProcess(),
+                    job.as_raw_handle(),
+                    GetCurrentProcess(),
+                    &mut raw,
+                    0,
+                    0,
+                    0,
+                )
+            },
+            0
+        );
+        let no_access = OwnedJob(unsafe { OwnedHandle::from_raw_handle(raw) });
+        assert!(no_access.active_processes().is_err());
+        assert!(no_access.terminate_checked().is_err());
     }
     /// A CREATE_SUSPENDED child has only its primary thread until resumed.
     /// The thread is found by snapshotting only our still-owned child process

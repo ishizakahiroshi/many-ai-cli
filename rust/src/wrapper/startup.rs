@@ -24,6 +24,16 @@ pub fn strip_provider_environment(plan: &mut ProcessPlan) {
                 .eq_ignore_ascii_case(crate::wrapper::launch_payload::PROTECTED_ENV_NAMES_ENV)
     });
     plan.env.insert(STARTUP_JOB_ENV.into(), None);
+    for (key, value) in &mut plan.env {
+        if key
+            .to_string_lossy()
+            .eq_ignore_ascii_case(crate::wrapper::iris_owner::OWNER_ENV)
+        {
+            *value = None;
+        }
+    }
+    plan.env
+        .insert(crate::wrapper::iris_owner::OWNER_ENV.into(), None);
     plan.env.insert(
         crate::wrapper::launch_payload::PROTECTED_ENV_NAMES_ENV.into(),
         None,

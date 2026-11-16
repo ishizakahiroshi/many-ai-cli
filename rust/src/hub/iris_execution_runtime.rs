@@ -1,6 +1,6 @@
 //! Internal, deliberately incomplete runtime bridge for Iris-owned attempts.
 //!
-//! This module does not spawn, authorize, persist, expose HTTP routes, or turn
+//! This module does not spawn, authorize, expose HTTP routes, or turn
 //! session-end/Done/socket-close observations into execution or stop evidence.
 //! A composition owner may call `bind_attempt` ONLY after its mandatory durable
 //! execution journal and grant checks have committed and an actual core-created
@@ -17,6 +17,8 @@
 //! success says neither that a wrapper received the frame nor that its provider,
 //! descendants or remote jobs stopped. A cancelled/failed effect may have done
 //! partial I/O, so the reserved request is never automatically retried.
+//! Optional OwnerStore composition commits the exact owner stop ID before effect
+//! admission. It persists intent only, never process cessation or task success.
 //!
 //! Still missing before real execution can be advertised: owner-written durable
 //! provider/PTY receipts bound to attempt/fence/instance and stop_request_id;
@@ -26,6 +28,7 @@
 //! and effects=none are not established by terminating a local process. The
 //! capabilities here therefore explicitly keep `execution_ready` false.
 
+use super::iris_execution_owner::{OwnerStore, OwnerTicket};
 use crate::{
     proto::{
         core::{CoreEffectSink, LiveSessionId, SessionBinding, SessionError, StopReason},
@@ -91,6 +94,7 @@ struct Attempt {
     owner: Ownership,
     binding_receipt: Value,
     stop_request: Option<String>,
+    durable_owner: Option<OwnerTicket>,
 }
 struct StopRequest {
     attempt_id: String,
@@ -109,6 +113,7 @@ pub struct SessionBridge {
     core: Arc<SessionEngine>,
     effects: Arc<dyn CoreEffectSink>,
     state: Mutex<State>,
+    owner_store: Option<Arc<Mutex<OwnerStore>>>,
 }
 fn identity(value: &str) -> Result<(), BridgeError> {
     if value.is_empty()
@@ -148,6 +153,50 @@ fn matches_owner(owner: &Ownership, fence: u64, instance: &str) -> Result<(), Br
         Ok(())
     }
 }
+fn validate_durable_owner(
+    record: &Value,
+    ticket: &OwnerTicket,
+    binding: SessionBinding,
+) -> Result<(), BridgeError> {
+    if record["ticket"] != json!(ticket)
+        || record["claimed_session"] != binding.session.0
+        || !record["root_pid"]
+            .as_u64()
+            .is_some_and(|pid| pid > 0 && pid <= u32::MAX as u64)
+        || record["root_started_at_ms"].as_u64().is_none()
+        || record["local_tree_ceased"] == true
+    {
+        return Err(BridgeError::OwnershipConflict);
+    }
+    Ok(())
+}
+fn persist_owner_stop(
+    store: &Mutex<OwnerStore>,
+    ticket: &OwnerTicket,
+    binding: SessionBinding,
+    stop_id: &str,
+) -> Result<Value, BridgeError> {
+    let mut store = store.lock().map_err(|_| BridgeError::StateUnavailable)?;
+    let record = store
+        .query(&ticket.binding)
+        .map_err(|_| BridgeError::StateUnavailable)?;
+    validate_durable_owner(&record, ticket, binding)?;
+    if record["stop_request_id"].is_string() {
+        return Err(BridgeError::StopAlreadyRequested);
+    }
+    let seq = record["sequence"]
+        .as_u64()
+        .and_then(|n| n.checked_add(1))
+        .ok_or(BridgeError::StateUnavailable)?;
+    let at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as u64;
+    store
+        .request_stop(ticket, seq, stop_id, at)
+        .map_err(|_| BridgeError::StateUnavailable)
+}
 fn base_receipt(attempt_id: &str, owner: &Ownership) -> Value {
     json!({
         "attempt_id":attempt_id,
@@ -163,12 +212,69 @@ fn base_receipt(attempt_id: &str, owner: &Ownership) -> Value {
     })
 }
 impl SessionBridge {
+    fn check_core_owner(
+        &self,
+        ticket: &OwnerTicket,
+        binding: SessionBinding,
+    ) -> Result<(), BridgeError> {
+        let details = self
+            .core
+            .details(binding.session)
+            .ok_or(BridgeError::StaleBinding)?;
+        if details.binding != binding {
+            return Err(BridgeError::StaleBinding);
+        }
+        let profile = if details.snapshot.subscription_profile_id.is_empty() {
+            "default"
+        } else {
+            details.snapshot.subscription_profile_id.as_str()
+        };
+        if details.snapshot.provider != ticket.binding.provider
+            || profile != ticket.binding.profile_id
+        {
+            return Err(BridgeError::OwnershipConflict);
+        }
+        Ok(())
+    }
     pub fn new(core: Arc<SessionEngine>, effects: Arc<dyn CoreEffectSink>) -> Self {
         Self {
             core,
             effects,
             state: Mutex::new(State::default()),
+            owner_store: None,
         }
+    }
+
+    /// Optional trusted owner-controller lane. Existing `new` keeps its original
+    /// process-local behavior. This does not make production execution ready.
+    pub fn new_with_owner_store(
+        core: Arc<SessionEngine>,
+        effects: Arc<dyn CoreEffectSink>,
+        owner_store: Arc<Mutex<OwnerStore>>,
+    ) -> Self {
+        Self {
+            core,
+            effects,
+            state: Mutex::new(State::default()),
+            owner_store: Some(owner_store),
+        }
+    }
+
+    /// Only the trusted composition may call this after journal/grant admission
+    /// and an actual core registration proof, never from caller JSON. Provider
+    /// root PID and wrapper PID are different identities; do not equate them.
+    pub fn bind_owner_attempt(
+        &self,
+        ticket: &OwnerTicket,
+        binding: SessionBinding,
+    ) -> Result<Value, BridgeError> {
+        self.bind_internal(
+            &ticket.binding.attempt_id,
+            ticket.binding.fence,
+            &ticket.binding.executor_instance_id,
+            binding,
+            Some(ticket.clone()),
+        )
     }
 
     /// This building block's capabilities cannot enable production dispatch.
@@ -200,6 +306,16 @@ impl SessionBridge {
         executor_instance_id: &str,
         binding: SessionBinding,
     ) -> Result<Value, BridgeError> {
+        self.bind_internal(attempt_id, fence, executor_instance_id, binding, None)
+    }
+    fn bind_internal(
+        &self,
+        attempt_id: &str,
+        fence: u64,
+        executor_instance_id: &str,
+        binding: SessionBinding,
+        ticket: Option<OwnerTicket>,
+    ) -> Result<Value, BridgeError> {
         attempt_identity(attempt_id, fence, executor_instance_id)?;
         let proposed = Ownership {
             fence,
@@ -210,8 +326,34 @@ impl SessionBridge {
             .state
             .lock()
             .map_err(|_| BridgeError::StateUnavailable)?;
-        if let Some(existing) = state.attempts.get(attempt_id) {
+        if let Some(ticket) = ticket.as_ref() {
+            if !self.core.is_current(binding) {
+                return Err(BridgeError::StaleBinding);
+            }
+            self.check_core_owner(ticket, binding)?;
+            let store = self
+                .owner_store
+                .as_ref()
+                .ok_or(BridgeError::StateUnavailable)?
+                .lock()
+                .map_err(|_| BridgeError::StateUnavailable)?;
+            let record = store
+                .query(&ticket.binding)
+                .map_err(|_| BridgeError::OwnershipConflict)?;
+            validate_durable_owner(&record, ticket, binding)?;
+        }
+        if let Some(existing) = state.attempts.get_mut(attempt_id) {
             if existing.owner == proposed {
+                if let Some(ticket) = ticket {
+                    if existing
+                        .durable_owner
+                        .as_ref()
+                        .is_some_and(|old| old != &ticket)
+                    {
+                        return Err(BridgeError::OwnershipConflict);
+                    }
+                    existing.durable_owner = Some(ticket);
+                }
                 // An idempotent replay retains its original ownership, even if
                 // the session has since gone. Query will report that uncertainty.
                 return Ok(existing.binding_receipt.clone());
@@ -238,6 +380,7 @@ impl SessionBridge {
                 owner: proposed,
                 binding_receipt: receipt.clone(),
                 stop_request: None,
+                durable_owner: ticket,
             },
         );
         Ok(receipt)
@@ -340,19 +483,48 @@ impl SessionBridge {
             if state.stops.len() >= MAX_STOP_REQUESTS {
                 return Err(BridgeError::Capacity);
             }
+            // The exact durable owner stop identity is committed synchronously
+            // before any effect is polled. The process-local reservation below
+            // also retains a failed gate: repair does not authorize blind retry.
+            let durable_gate = if let Some(store) = self.owner_store.as_ref() {
+                Some(match attempt.durable_owner.as_ref() {
+                    Some(ticket) => self.check_core_owner(ticket, owner.binding).and_then(|_| {
+                        persist_owner_stop(store, ticket, owner.binding, stop_request_id)
+                    }),
+                    None => Err(BridgeError::OwnershipConflict),
+                })
+            } else {
+                None
+            };
+            let allowed = durable_gate.as_ref().is_none_or(|result| result.is_ok());
             let mut receipt = base_receipt(attempt_id, &owner);
             receipt["operation"] = "request_session_stop".into();
             receipt["stop_request_id"] = stop_request_id.into();
             receipt["recorded_at"] = observed_at().into();
             receipt["execution_state"] = "stop_unconfirmed".into();
             receipt["reason"] = "owner_written_stop_receipt_unavailable".into();
+            if let Some(result) = &durable_gate {
+                receipt["owner_stop_request_durable"] = json!(result.is_ok());
+                receipt["reason"] = json!(if result.is_ok() {
+                    "durable_owner_stop_intent_only"
+                } else {
+                    "durable_owner_gate_failed_no_effect"
+                });
+                if let Ok(owner_receipt) = result {
+                    receipt["owner_stop_receipt"] = owner_receipt.clone();
+                }
+            }
             state.stops.insert(
                 stop_request_id.into(),
                 StopRequest {
                     attempt_id: attempt_id.into(),
                     owner,
                     receipt: receipt.clone(),
-                    effect_observation: "reserved_delivery_unknown",
+                    effect_observation: if allowed {
+                        "reserved_delivery_unknown"
+                    } else {
+                        "owner_gate_failed_no_effect"
+                    },
                 },
             );
             state
@@ -360,7 +532,10 @@ impl SessionBridge {
                 .get_mut(attempt_id)
                 .expect("validated attempt retained under lock")
                 .stop_request = Some(stop_request_id.into());
-            (effects, receipt)
+            (if allowed { Some(effects) } else { None }, receipt)
+        };
+        let Some(effects) = effects else {
+            return Ok(receipt);
         };
         // No bridge/core mutex crosses async I/O. Reservation is already visible
         // if this future is cancelled while an effect may be partially applied.
@@ -421,6 +596,14 @@ mod tests {
         pause: AtomicBool,
         entered: Notify,
         release: Notify,
+        owner_expectation: Mutex<
+            Option<(
+                std::path::PathBuf,
+                crate::hub::iris_execution_journal::Binding,
+                String,
+            )>,
+        >,
+        owner_gate_seen: AtomicBool,
     }
     impl CoreEffectSink for Effects {
         fn apply<'a>(
@@ -428,6 +611,18 @@ mod tests {
             effects: CoreEffects,
         ) -> CoreFuture<'a, Result<(), CoreEffectFailure>> {
             Box::pin(async move {
+                if let Some((path, binding, stop_id)) =
+                    self.owner_expectation.lock().unwrap().as_ref()
+                {
+                    let store = OwnerStore::open(path)
+                        .expect("owner store must be readable before effects");
+                    let record = store
+                        .query(binding)
+                        .expect("full binding must already be durable");
+                    assert_eq!(record["stop_request_id"], stop_id.as_str());
+                    assert_eq!(record["sequence"], 1);
+                    self.owner_gate_seen.store(true, Ordering::SeqCst);
+                }
                 for effect in effects.0 {
                     let CoreEffect::CancelSession { binding, reason } = effect else {
                         panic!("bridge dispatched an unrelated effect")
@@ -828,6 +1023,148 @@ mod tests {
         ] {
             assert_eq!(capabilities[field], false);
         }
+        assert!(f.effects.cancelled.lock().unwrap().is_empty());
+    }
+    fn durable_ticket(
+        f: &Fixture,
+        binding: SessionBinding,
+    ) -> (Arc<Mutex<OwnerStore>>, OwnerTicket, std::path::PathBuf) {
+        let path = f.root.path().join("iris-owner.sqlite3");
+        let mut store = OwnerStore::open(&path).unwrap();
+        let b = crate::hub::iris_execution_journal::Binding {
+            principal_id: "iris".into(),
+            workspace_id: "workspace".into(),
+            plan_id: "plan".into(),
+            plan_revision: 1,
+            task_id: "task".into(),
+            instruction_revision: 1,
+            instruction_hash: "a".repeat(64),
+            approval_id: "approval".into(),
+            approval_revision: 1,
+            scope_hash: "b".repeat(64),
+            execution_host_id: "host".into(),
+            executor_instance_id: "instance-a".into(),
+            attempt_id: "attempt-a".into(),
+            fence: 1,
+            provider: "synthetic-provider".into(),
+            profile_id: "default".into(),
+        };
+        let t = store.begin_owner(&b, "owner-a", 1, 100).unwrap();
+        store.claim_spawn(&t, binding.session.0, 100).unwrap();
+        store.bind_root(&t, 9001, 100).unwrap();
+        (Arc::new(Mutex::new(store)), t, path)
+    }
+    #[tokio::test]
+    async fn durable_stop_is_committed_before_effect_and_duplicate_does_not_resequence() {
+        let f = fixture();
+        let binding = register(&f, 1).await;
+        let (store, ticket, path) = durable_ticket(&f, binding);
+        *f.effects.owner_expectation.lock().unwrap() =
+            Some((path, ticket.binding.clone(), "stop-a".into()));
+        let bridge =
+            SessionBridge::new_with_owner_store(f.core.clone(), f.effects.clone(), store.clone());
+        bridge.bind_owner_attempt(&ticket, binding).unwrap();
+        let receipt = bridge
+            .stop_bound("attempt-a", 1, "instance-a", "stop-a")
+            .await
+            .unwrap();
+        assert_eq!(receipt["owner_stop_request_durable"], true);
+        assert_eq!(receipt["owned_execution_ceased"], false);
+        assert!(f.effects.owner_gate_seen.load(Ordering::SeqCst));
+        assert_eq!(
+            bridge
+                .stop_bound("attempt-a", 1, "instance-a", "stop-a")
+                .await
+                .unwrap(),
+            receipt
+        );
+        assert_eq!(
+            bridge
+                .stop_bound("attempt-a", 1, "instance-a", "stop-b")
+                .await
+                .unwrap_err(),
+            BridgeError::StopAlreadyRequested
+        );
+        assert_eq!(
+            store.lock().unwrap().query(&ticket.binding).unwrap()["sequence"],
+            1
+        );
+        assert_eq!(f.effects.cancelled.lock().unwrap().len(), 1);
+        assert_eq!(bridge.capabilities()["execution_ready"], false);
+    }
+    #[tokio::test]
+    async fn failed_owner_write_reserves_uncertainty_and_applies_zero_effects() {
+        let f = fixture();
+        let binding = register(&f, 1).await;
+        let (store, ticket, path) = durable_ticket(&f, binding);
+        let bridge =
+            SessionBridge::new_with_owner_store(f.core.clone(), f.effects.clone(), store.clone());
+        bridge.bind_owner_attempt(&ticket, binding).unwrap();
+        let fault = rusqlite::Connection::open(path).unwrap();
+        fault.execute_batch("CREATE TRIGGER fail_owner_stop BEFORE INSERT ON receipts BEGIN SELECT RAISE(ABORT,'synthetic'); END;").unwrap();
+        let receipt = bridge
+            .stop_bound("attempt-a", 1, "instance-a", "stop-a")
+            .await
+            .unwrap();
+        assert_eq!(receipt["owner_stop_request_durable"], false);
+        assert_eq!(receipt["execution_state"], "stop_unconfirmed");
+        assert!(f.effects.cancelled.lock().unwrap().is_empty());
+        assert_eq!(
+            store.lock().unwrap().query(&ticket.binding).unwrap()["sequence"],
+            0
+        );
+        fault.execute_batch("DROP TRIGGER fail_owner_stop").unwrap();
+        assert_eq!(
+            bridge
+                .stop_bound("attempt-a", 1, "instance-a", "stop-a")
+                .await
+                .unwrap(),
+            receipt
+        );
+        assert_eq!(
+            bridge
+                .stop_bound("attempt-a", 1, "instance-a", "stop-b")
+                .await
+                .unwrap_err(),
+            BridgeError::StopAlreadyRequested
+        );
+        assert!(f.effects.cancelled.lock().unwrap().is_empty());
+    }
+    #[tokio::test]
+    async fn stale_owner_fence_scope_and_missing_ticket_never_admit_an_effect() {
+        let f = fixture();
+        let binding = register(&f, 1).await;
+        let (store, ticket, _) = durable_ticket(&f, binding);
+        let bridge =
+            SessionBridge::new_with_owner_store(f.core.clone(), f.effects.clone(), store.clone());
+        let mut stale = ticket.clone();
+        stale.binding.fence = 2;
+        assert!(bridge.bind_owner_attempt(&stale, binding).is_err());
+        let mut wrong = ticket.clone();
+        wrong.binding.profile_id = "wrong-profile".into();
+        assert_eq!(
+            bridge.bind_owner_attempt(&wrong, binding).unwrap_err(),
+            BridgeError::OwnershipConflict
+        );
+        bridge.bind_owner_attempt(&ticket, binding).unwrap();
+        assert_eq!(
+            bridge
+                .stop_bound("attempt-a", 2, "instance-a", "stop-a")
+                .await
+                .unwrap_err(),
+            BridgeError::StaleAttempt
+        );
+        assert!(f.effects.cancelled.lock().unwrap().is_empty());
+        assert!(store.lock().unwrap().query(&ticket.binding).unwrap()["stop_request_id"].is_null());
+        let legacy = SessionBridge::new_with_owner_store(f.core.clone(), f.effects.clone(), store);
+        legacy
+            .bind_attempt("attempt-a", 1, "instance-a", binding)
+            .unwrap();
+        let receipt = legacy
+            .stop_bound("attempt-a", 1, "instance-a", "stop-no-ticket")
+            .await
+            .unwrap();
+        assert_eq!(receipt["owner_stop_request_durable"], false);
         assert!(f.effects.cancelled.lock().unwrap().is_empty());
     }
 }
