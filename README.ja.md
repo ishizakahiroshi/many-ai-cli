@@ -245,20 +245,24 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 ```
 many-ai-cli provider add --id my-agent --command <ホームフォルダ>/bin/my-agent-wrapper --label "My Agent" \
   --arg --interactive --headless-arg -p --approval-option "Allow once"
+many-ai-cli provider add --definition my-agent.json    # 定義ファイルを丸ごと渡す。上のオプションはファイルの値を置き換える
 many-ai-cli provider list
 many-ai-cli provider test my-agent
 many-ai-cli provider remove my-agent
 ```
 
-`--id` は小文字・数字・`.`・`-`・`_`（同梱の id と `shell` は不可）、`--command` は PATH 上の実行ファイルか絶対パスです（CLI のホームを切り替える小さなラッパースクリプトなどを指定できます）。`--arg` は対話起動の引数（繰り返し可）、`--headless-arg` は非対話モードの引数、`--approval-option` はその CLI が承認プロンプトに出す選択肢の文言を表示のとおりに書いたものです（繰り返し可）。`provider test` は headless を 1 回動かし、終了コード・所要秒数・出力の先頭を表示します。many-ai-cli のセッションの中では、これらのコマンドを持つ実行ファイルは環境変数 `MANY_AI_CLI_BIN` が指すものです。PATH 上に別途入れた古い `many-ai-cli`（たとえば npm の 0.9.x）には `provider add` / `list` / `remove` / `test` がありません。
+`--id` は小文字・数字・`.`・`-`・`_`（同梱の id と `shell` は不可）、`--command` は PATH 上の実行ファイルか絶対パスです（CLI のホームを切り替える小さなラッパースクリプトなどを指定できます）。`--arg` は対話起動の引数（繰り返し可）、`--headless-arg` は非対話モードの引数、`--approval-option` はその CLI が承認プロンプトに出す選択肢の文言を表示のとおりに書いたものです（繰り返し可）。`--definition <ファイル>` は JSON の定義を丸ごと登録します（AI が調べた内容をまとめて渡すにはこれが一番楽です）。`--model`・`--letter`・`--color`・`--usage-url`・`--slash-source`・`--permission-mode <名前>=<引数>,...` でよく使う項目を 1 つずつ指定することもできます。`provider test` は headless を 1 回動かして終了コード・所要秒数・出力の先頭を表示し、続けてその CLI の「できること」を **使える** / **未設定で使えない**（宣言がない。理由に足すものが書かれます）/ **未対応**（下記）に分けて並べます。試せるものは実際に試します（スラッシュコマンドの取得元が読めるか、宣言した会話フォルダがあるか、モデル一覧のコマンドが動くか）。many-ai-cli のセッションの中では、これらのコマンドを持つ実行ファイルは環境変数 `MANY_AI_CLI_BIN` が指すものです。PATH 上に別途入れた古い `many-ai-cli`（たとえば npm の 0.9.x）には `provider add` / `list` / `remove` / `test` がありません。
 
 登録した CLI でできること:
 
+- 定義に書いたものは、同梱の 7 本と同じ形で働きます。スラッシュコマンドの候補、モデルの一覧と選んだモデルの受け渡し、許可モード、使用量ページへのリンク、ログインの開始、会話ファイルの場所とチャット表示、承認の文言、定期実行からの利用です。**設定 → AI CLI 連携** の各行に、これらのうちいくつが使え、どれが使えないかが出ます。書いていない項目は、ほかの CLI の動きを借りずに「未設定で使えない」と表示します。
 - **+ 新しいセッション** から、新しいセッションとして起動できます（同梱の CLI と同じく PTY 経由）。
 - `many-ai-cli orchestrate spawn --provider <id>` の子や relay の役割に使えます。headless の子には headless の定義（`--headless-arg` / `--headless-format` / `--prompt-via` のどれか）が要ります。登録した子には同梱の CLI 向けの権限の段やサブスクリプションの扱いは付かず、子の確認ダイアログは表示名を出して権限・モデルの欄を隠します。
 - 承認の検出は同梱の CLI と同じ仕組みです。Yes/No/Allow/Deny などの一般的な文言は登録した全 CLI で検出し、`--approval-option` でその CLI 固有の文言を足せます。
 - Hub が動いていれば `provider add` / `remove` は Hub 経由で行われます。Hub が定義を検査し、控えを残し、読み直し、開いている全ての画面へ知らせるので、画面を再読み込みしなくても新しいセッションの一覧が更新されます。ほかの開いている画面には「<名前> を足しました（command: ...）」と**取り消す**ボタンが出ます（足した画面自身には出ません）。Hub が動いていなければ定義ファイルを直接書き、Hub は次の起動で読みます。
 - `provider remove` が消せるのは `provider add` か画面で登録した CLI だけです（同梱のものと `config.yaml` に書いたものは消せません）。削除前の控え（`before-delete`）は版の履歴に残ります（`many-ai-cli provider backup list <id>`）が、削除した CLI をそこから復元することには対応していません。戻したいときは `provider add` で入れ直します。
+
+**登録した CLI で未対応のもの。** 残量の表示、契約（サブスクリプション）の切り替え、サブエージェントの木の 3 つは各社専用の処理が要るため、定義では足せず「未対応」と表示します。ACP（端末ではなく CLI 自身の通信方式）で動く CLI は人が直接操作するものとして扱い、自動の経路（子・リレー・定期実行・看板など）はすべて断ります。
 
 **画面から足す。** **設定 → AI CLI 連携**、または **+ 新しいセッション** の一覧の末尾の **AI CLI を追加** を開き、表示名と実行ファイルを入力して検証し、保存します。失敗しても入力は残ります。
 

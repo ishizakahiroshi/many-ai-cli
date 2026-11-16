@@ -290,6 +290,11 @@
   border-color: var(--warn-text);
   border-style: double;
 }
+.provider-manager-capabilities { margin-top: 4px; font-size: var(--fs-xs); }
+.provider-manager-capabilities summary { cursor: pointer; color: var(--muted); }
+.provider-manager-capabilities ul { margin: 4px 0 0; padding-left: 18px; }
+.provider-manager-capabilities li[data-state="unavailable"] { color: var(--muted); }
+.provider-manager-capabilities li[data-state="unsupported"] { color: var(--muted); font-style: italic; }
 .provider-manager-empty { color: var(--muted); font-size: var(--fs-sm); padding: 4px 0; }
 .provider-manager-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .provider-manager-toolbar { margin-top: 8px; }

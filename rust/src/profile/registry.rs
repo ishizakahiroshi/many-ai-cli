@@ -207,7 +207,7 @@ impl Registry {
                     if def.enabled.is_none() {
                         def.enabled = Some(true);
                     }
-                    let capabilities = derive_capabilities(&def);
+                    let capabilities = super::capability_report::summary(&def);
                     // Only a built-in id may borrow a built-in declaration; a
                     // user definition never inherits another provider's values.
                     let builtin = BUILTIN_PROVIDER_IDS
@@ -290,25 +290,6 @@ pub(super) fn diag(code: &str, severity: &str, field: &str, message: &str) -> Di
 pub(super) fn sort_diagnostics(d: &mut [Diagnostic]) {
     d.sort_by(|a, b| (&a.field, &a.code, &a.message).cmp(&(&b.field, &b.code, &b.message)));
 }
-fn available(s: &str) -> bool {
-    !matches!(s, "" | "none" | "unsupported")
-}
-fn derive_capabilities(d: &Definition) -> CapabilitySummary {
-    CapabilitySummary {
-        launch: d.launch.is_some(),
-        models: d.models.is_some(),
-        effort: d.launch.as_ref().is_some_and(|l| !l.effort_args.is_empty()),
-        headless: d.launch.as_ref().is_some_and(|l| l.headless.is_some()),
-        approval: available(&d.adapters.approval),
-        transcript: available(&d.adapters.transcript)
-            || d.transcript.as_ref().is_some_and(|t| t.reader.is_some()),
-        usage: available(&d.adapters.usage),
-        subscription: available(&d.adapters.subscription),
-        permissions: available(&d.adapters.permissions),
-        subagents: available(&d.adapters.subagents),
-    }
-}
-
 fn expand(args: &[String], key: &str, value: &str) -> Result<Vec<String>, String> {
     args.iter()
         .map(|arg| {

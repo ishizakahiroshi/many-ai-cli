@@ -37,6 +37,8 @@ export type ProviderDeclaration = {
   };
   routines?: { enabled?: boolean; completion_mode?: string };
   context_limit?: number;
+  // 宣言から Hub が計算した「できること／できないこと」（provider-manager-view.ts の capabilityView）。
+  capability_report?: { key: string; state: string; detail?: string }[];
 };
 
 const declarations = new Map<string, ProviderDeclaration>();

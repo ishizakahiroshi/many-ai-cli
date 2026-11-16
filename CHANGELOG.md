@@ -39,6 +39,18 @@ Release artifacts are published at
   a removed CLI is re-added with `provider add`; restoring a deleted one is not
   supported. A separately installed older `many-ai-cli` on PATH does not have
   these commands; inside a session, use the binary in `MANY_AI_CLI_BIN`.
+- **`provider add --definition <file>` and a feature list in `provider test` and
+  Settings.** An AI can register a whole JSON definition at once (the options
+  `--model`, `--letter`, `--color`, `--usage-url`, `--slash-source` and
+  `--permission-mode` replace single values), and `provider add --help` now
+  tells it what to research (slash command source, where conversations are
+  saved and their format, approval wording and keys, permission flags, model
+  list command, usage page) and to leave out what it cannot find. `provider
+  test` also lists what the CLI can do as available, unavailable (with what to
+  add) or unsupported, and tries the slash command source, the conversation
+  folder and the model list command. Settings -> AI CLI integrations shows the
+  same list for every row. Reading the remaining quota, switching subscription
+  profiles and the sub-agent tree stay unsupported for a registered CLI.
 - **A registered AI CLI can be an `orchestrate spawn --provider` child and a
   relay role.** Any CLI the registry has enabled with a launch definition is
   accepted besides the built-in seven. A headless child needs the CLI's own

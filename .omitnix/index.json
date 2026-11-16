@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "9fd592f0160c871bdce64604183527202ef317e3",
+    "commit": "0774aabbc166cd1fb90ba7955211b3e99d802c32",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2092,
-    "analyzed": 1640,
+    "discovered": 2095,
+    "analyzed": 1643,
     "unresolved": 17,
     "unknown": 0,
     "unclaimed": 435,
@@ -24377,6 +24377,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/application/maintenance_cli/provider_checks.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "The checks `provider test` runs against what a provider declared, beyond"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/application/maintenance_cli/provider_help.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -34537,6 +34566,35 @@
         "summary": {
           "state": "value",
           "value": "Suspended wrapper creation with an explicit inherited-handle allowlist."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/profile/capability_report.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "What a provider can and cannot do, computed from its declarations in one"
         },
         "authentication": {
           "state": "not_configured"
@@ -51278,6 +51336,36 @@
     },
     {
       "path": "web/tests/probe.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/provider-capability-view.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

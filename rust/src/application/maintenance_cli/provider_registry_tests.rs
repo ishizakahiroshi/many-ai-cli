@@ -1,4 +1,5 @@
 use super::*;
+use crate::proto::provider::LaunchDefinition;
 use crate::{
     application::maintenance_cli::{
         ProviderCommand, parse_command, provider_args::DEFAULT_TEST_PROMPT, provider_hub::HubReply,
@@ -138,6 +139,7 @@ fn add_args(id: &str) -> AddArgs {
         headless: Some(("text".into(), "arg".into())),
         description: String::new(),
         approval_options: vec![],
+        ..Default::default()
     }
 }
 fn user_files(f: &Fixture) -> usize {
@@ -680,6 +682,10 @@ async fn test_refuses_a_provider_without_headless_and_an_unknown_one() {
         .unwrap_err()
         .to_string();
     assert!(error.contains("no headless definition"), "{error}");
+    assert!(
+        error.contains("unavailable  headless"),
+        "the capability list follows the refusal: {error}"
+    );
     let error = offline(&f)
         .test(&test("nothing-here"))
         .await
@@ -797,4 +803,159 @@ fn parse_command_serves_help_without_a_hub_and_routes_the_rest() {
         .unwrap(),
         ProviderCommand::Add(_)
     ));
+}
+
+fn definition_file(f: &Fixture, extra: serde_json::Value) -> String {
+    let (command, headless_args) = echo_tool();
+    let mut value = serde_json::json!({
+        "schema_version": 1,
+        "id": "file-cli",
+        "display_name": "File CLI",
+        "launch": {"executable": command, "headless": {"args": headless_args, "format": "text", "prompt_via": "arg"}},
+        "links": {"usage_url": "https://example.test/usage"},
+        "slash_commands": {"items": [{"cmd": "/help", "desc": "help"}]},
+    });
+    for (key, entry) in extra.as_object().unwrap() {
+        value[key] = entry.clone();
+    }
+    std::fs::write(f.cwd.join("def.json"), serde_json::to_vec(&value).unwrap()).unwrap();
+    "def.json".into()
+}
+#[tokio::test]
+async fn add_from_a_definition_file_registers_it_and_the_flags_win() {
+    let f = fixture();
+    let file = definition_file(&f, serde_json::json!({}));
+    let report = online(&f)
+        .add(&AddArgs {
+            definition_file: Some(file),
+            letter: "F".into(),
+            models: vec!["m1".into(), "m2".into()],
+            permission_modes: vec![("auto".into(), vec!["--yes".into()])],
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert!(
+        report.starts_with(
+            "added provider file-cli (File CLI)
+"
+        ),
+        "{report}"
+    );
+    assert!(report.contains("available    slash_commands"), "{report}");
+    assert!(report.contains("available    usage_link"), "{report}");
+    assert!(report.contains("unavailable  approval"), "{report}");
+    assert!(report.contains("unsupported  usage_meter"), "{report}");
+    let found = f
+        .hub
+        .store
+        .snapshot()
+        .unwrap()
+        .registry
+        .lookup("file-cli")
+        .unwrap()
+        .definition;
+    assert_eq!(found.presentation.unwrap().icon_text, "F");
+    assert_eq!(found.models.unwrap().items.len(), 2);
+    let permissions = found.permissions.unwrap();
+    assert_eq!(permissions.modes["auto"], ["--yes"]);
+    assert_eq!(permissions.choices, ["auto"]);
+    assert_eq!(found.slash_commands.unwrap().items.len(), 1);
+}
+#[tokio::test]
+async fn add_from_a_definition_file_refuses_bad_input_without_writing() {
+    let f = fixture();
+    let missing = offline(&f)
+        .add(&AddArgs {
+            definition_file: Some("nope.json".into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        missing.contains("could not read the definition file"),
+        "{missing}"
+    );
+    std::fs::write(f.cwd.join("bad.json"), b"{ not json").unwrap();
+    let bad = offline(&f)
+        .add(&AddArgs {
+            definition_file: Some("bad.json".into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(bad.contains("is not valid"), "{bad}");
+    let reserved = definition_file(&f, serde_json::json!({"id": "claude"}));
+    let error = offline(&f)
+        .add(&AddArgs {
+            definition_file: Some(reserved),
+            ..Default::default()
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("reserved"), "{error}");
+    let invalid = definition_file(&f, serde_json::json!({"connection": "carrier-pigeon"}));
+    let error = offline(&f)
+        .add(&AddArgs {
+            definition_file: Some(invalid),
+            ..Default::default()
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("not valid"), "{error}");
+    assert_eq!(user_files(&f), 0);
+}
+#[tokio::test]
+async fn test_prints_the_capability_list_and_checks_a_declared_conversation_folder() {
+    let mut f = fixture();
+    let sessions = f.cwd.join("sessions");
+    std::fs::create_dir(&sessions).unwrap();
+    f.environment
+        .push(format!("FIXTURE_ROOT={}", f.cwd.display()));
+    let file = definition_file(
+        &f,
+        serde_json::json!({"transcript": {"root": "{env:FIXTURE_ROOT}/sessions", "find": ["session_id"]}}),
+    );
+    offline(&f)
+        .add(&AddArgs {
+            definition_file: Some(file),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let report = offline(&f)
+        .test(&TestArgs {
+            id: "file-cli".into(),
+            prompt: "hi".into(),
+            timeout_secs: 30,
+        })
+        .await
+        .unwrap();
+    assert!(report.contains("exit code: "), "{report}");
+    assert!(report.contains("capabilities (available / unavailable / unsupported):"));
+    assert!(report.contains("available    headless"), "{report}");
+    assert!(
+        report.contains("transcript - checked: the conversation location exists"),
+        "{report}"
+    );
+    assert!(report.contains("unsupported  subagent_tree"), "{report}");
+    std::fs::remove_dir(&sessions).unwrap();
+    let report = offline(&f)
+        .test(&TestArgs {
+            id: "file-cli".into(),
+            prompt: "hi".into(),
+            timeout_secs: 30,
+        })
+        .await
+        .unwrap();
+    assert!(
+        report.contains(
+            "unavailable  transcript - the declared conversation location does not exist yet"
+        ),
+        "{report}"
+    );
 }

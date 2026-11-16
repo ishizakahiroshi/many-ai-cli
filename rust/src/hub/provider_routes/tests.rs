@@ -851,6 +851,16 @@ fn the_declarations_route_gives_the_screen_every_providers_declared_values() {
     assert!(claude["permissions"]["modes"].get("bounded").is_some());
     let codex = list.iter().find(|d| d["id"] == "codex").unwrap();
     assert_eq!(codex["input"]["slow_paste"], true);
+    // The list of what each provider can and cannot do is carried too.
+    for entry in list {
+        let lines = entry["capability_report"].as_array().unwrap();
+        let state = |key: &str| lines.iter().find(|l| l["key"] == key).unwrap()["state"].clone();
+        assert_eq!(state("launch"), "available", "{}", entry["id"]);
+        assert!(
+            ["available", "unavailable", "unsupported"]
+                .contains(&state("usage_meter").as_str().unwrap())
+        );
+    }
     // No launch command leaves the Hub through this route.
     for entry in list {
         assert!(entry.get("launch").is_none(), "{}", entry["id"]);

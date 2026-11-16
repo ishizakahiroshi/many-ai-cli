@@ -80,6 +80,9 @@ struct DeclarationEntry {
     routines: Option<RoutinesDefinition>,
     #[serde(skip_serializing_if = "is_zero_limit")]
     context_limit: i64,
+    /// What it can and cannot do (`profile::capability_report`), for the
+    /// registration screen.
+    capability_report: Vec<crate::profile::capability_report::CapabilityLine>,
 }
 fn is_zero_limit(value: &i64) -> bool {
     *value == 0
@@ -97,6 +100,7 @@ fn declarations(registry: &Registry) -> DeclarationsResponse {
             .declared_list()
             .into_iter()
             .map(|def| DeclarationEntry {
+                capability_report: crate::profile::capability_report::report(&def),
                 builtin: is_builtin(&def.id),
                 connection: if def.connection.is_empty() {
                     "pty".into()

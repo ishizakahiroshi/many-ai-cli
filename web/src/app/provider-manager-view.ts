@@ -379,3 +379,52 @@ export function providerUpdateIsDefault(fieldOrigins: unknown): boolean {
 export function providerUpdateLoginMayBeRequired(update: unknown): boolean {
   return !!(update && typeof update === 'object' && (update as Record<string, unknown>).login_may_be_required === true);
 }
+
+// Hub が宣言から計算した「できること／できないこと」の 1 行（rust/src/profile/capability_report.rs）。
+// key は固定の名前、state は 使える（available）／使えない（unavailable）／未対応（unsupported）、
+// detail は Hub が書いた英語の理由（画面では補助の説明にだけ使う）。
+export type CapabilityState = 'available' | 'unavailable' | 'unsupported';
+export type CapabilityLine = { key: string; state: CapabilityState; detail: string };
+
+const CAPABILITY_STATES: readonly CapabilityState[] = ['available', 'unavailable', 'unsupported'];
+
+// Hub の答えを、表示できる形へそろえる。形の違うものは捨て、知らない state は「使えない」として出す。
+export function capabilityLines(report: unknown): CapabilityLine[] {
+  if (!Array.isArray(report)) return [];
+  const lines: CapabilityLine[] = [];
+  for (const entry of report) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { key, state, detail } = entry as Record<string, unknown>;
+    if (typeof key !== 'string' || !/^[a-z_]+$/.test(key)) continue;
+    lines.push({
+      key,
+      state: CAPABILITY_STATES.includes(state as CapabilityState) ? (state as CapabilityState) : 'unavailable',
+      detail: typeof detail === 'string' ? detail : '',
+    });
+  }
+  return lines;
+}
+
+export function capabilityLabelKey(key: string): string {
+  return `settings_ai_providers_cap_${key}`;
+}
+
+export function capabilityStateKey(state: CapabilityState): string {
+  return `settings_ai_providers_capstate_${state}`;
+}
+
+// 未対応（各社専用のコードが要るもの）は、理由を画面の言葉で出す。
+export function capabilityUnsupportedReasonKey(key: string): string {
+  return `settings_ai_providers_capwhy_${key}`;
+}
+
+// 使える数と全体の数、並べ替えた行（使える → 使えない → 未対応。同じ state の中は Hub の順のまま）。
+export function capabilityView(report: unknown): { available: number; total: number; lines: CapabilityLine[] } {
+  const lines = capabilityLines(report);
+  const rank = (line: CapabilityLine): number => CAPABILITY_STATES.indexOf(line.state);
+  const sorted = lines
+    .map((line, index) => ({ line, index }))
+    .sort((a, b) => rank(a.line) - rank(b.line) || a.index - b.index)
+    .map((entry) => entry.line);
+  return { available: lines.filter((line) => line.state === 'available').length, total: lines.length, lines: sorted };
+}

@@ -6,6 +6,10 @@ import {
 } from './cli-availability.js';
 import { fetchInstallLinkDefaults, missingCliRowsHtml, mountCliMaintenance, type CliMaintenanceHandle } from './cli-maintenance.js';
 import {
+  capabilityLabelKey,
+  capabilityStateKey,
+  capabilityUnsupportedReasonKey,
+  capabilityView,
   checkIconImageFile,
   createRequestGuard,
   cycleDialogFocus,
@@ -26,6 +30,7 @@ import {
   type ProviderRequestFailureLike,
   type ProviderUpdateFormValues,
 } from './provider-manager-view.js';
+import { providerDeclaration } from './provider-declarations.js';
 import { PROVIDERS_UPDATED_EVENT } from './providers-updated.js';
 import {
   createProvider,
@@ -482,6 +487,39 @@ function initProviderManager(): void {
     previousFocus = null;
   };
 
+  // 登録画面の「できること／できないこと」。宣言から Hub が計算した一覧（provider test と同じ値）。
+  const renderCapabilities = (id: string): HTMLElement | null => {
+    const view = capabilityView(providerDeclaration(id)?.capability_report);
+    if (view.total === 0) return null;
+    const box = document.createElement('details');
+    box.className = 'provider-manager-capabilities';
+    const summary = document.createElement('summary');
+    summary.textContent = tx('settings_ai_providers_cap_summary', 'Features: {available} of {total} available', {
+      available: view.available,
+      total: view.total,
+    });
+    box.append(summary);
+    const items = document.createElement('ul');
+    for (const line of view.lines) {
+      const item = document.createElement('li');
+      item.dataset.state = line.state;
+      const label = tx(capabilityLabelKey(line.key), line.key);
+      const state = tx(capabilityStateKey(line.state), line.state);
+      item.textContent = `${state}: ${label}`;
+      if (line.state === 'unsupported') {
+        const why = document.createElement('span');
+        why.className = 'provider-manager-meta';
+        why.textContent = ` - ${tx(capabilityUnsupportedReasonKey(line.key), line.detail)}`;
+        item.append(why);
+      } else if (line.detail) {
+        item.title = line.detail;
+      }
+      items.append(item);
+    }
+    box.append(items);
+    return box;
+  };
+
   const render = (providers: ProviderSummary[], errorIds: Set<string>, missingIds: Set<string>): void => {
     list.innerHTML = '';
     renderedIds = new Set(providers.map((p) => p.id));
@@ -512,6 +550,8 @@ function initProviderManager(): void {
       statusBadge.textContent = tx(statusLabelKey(kind), kind);
       meta.textContent = `${provider.id} · ${tx(originLabelKey(provider.origin), provider.origin)}`;
       details.append(name, meta, statusBadge);
+      const capabilities = renderCapabilities(provider.id);
+      if (capabilities) details.append(capabilities);
       const actions = document.createElement('div');
       actions.className = 'provider-manager-actions';
       const history = document.createElement('button');
