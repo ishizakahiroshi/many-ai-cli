@@ -217,6 +217,8 @@ pub fn resolve(def: &Definition, builtin: Option<&Definition>) -> Definition {
     out.input = pick(&def.input, &b.input);
     out.routines = pick(&def.routines, &b.routines);
     out.screen = pick(&def.screen, &b.screen);
+    out.transcript = pick(&def.transcript, &b.transcript);
+    out.approval = pick(&def.approval, &b.approval);
     if let (Some(launch), Some(bl)) = (out.launch.as_mut(), b.launch.as_ref())
         && launch.config_dir_env.is_empty()
     {
@@ -361,6 +363,56 @@ mod tests {
                 .collect();
             assert!(errors.is_empty(), "{errors:?}");
         }
+    }
+
+    #[test]
+    fn a_transcript_declaration_is_checked_before_a_definition_is_accepted() {
+        let errors = |transcript: &str| -> Vec<String> {
+            let raw = format!(
+                r#"{{"schema_version":1,"id":"synthetic-tool","display_name":"Synthetic","launch":{{"executable":"synthetic"}},"transcript":{transcript}}}"#
+            );
+            let (_, diagnostics) =
+                validate_definition(raw.as_bytes(), &default_adapters()).unwrap();
+            diagnostics
+                .iter()
+                .filter(|d| d.severity.as_str() == "error")
+                .map(|d| d.field.clone())
+                .collect()
+        };
+        let good = r#"{"root":"{env:SYNTH_APPDATA}/t","find":["index"],"index":{"file":"{env:SYNTH_APPDATA}/s.db","table":"sessions","id_column":"id","cwd_column":"cwd","time_column":"at"},"reader":{"format":"json","messages":"steps","role_key":"source","text_key":"message","roles":{"user":"user"}}}"#;
+        assert!(errors(good).is_empty(), "{:?}", errors(good));
+        assert!(!errors(r#"{"root":"/absolute/t","find":["session_id"]}"#).is_empty());
+        assert!(!errors(r#"{"root":"{home}/t"}"#).is_empty());
+        assert!(!errors(r#"{"root":"{home}/t","find":["guess"]}"#).is_empty());
+        assert!(!errors(r#"{"root":"{home}/t","find":["index"],"index":{"file":"{home}/s","table":"a b","id_column":"id","cwd_column":"c","time_column":"t"}}"#).is_empty());
+        assert!(!errors(r#"{"root":"{home}/t","find":["session_id"],"reader":{"format":"json","messages":"m","role_key":"r","text_key":"t","roles":{"x":"system"}}}"#).is_empty());
+        assert!(!errors(r#"{"file":"{home}/a.db","reader":{"format":"jsonl","role_key":"r","text_key":"t","roles":{"u":"user"}}}"#).is_empty());
+    }
+
+    #[test]
+    fn an_approval_declaration_is_checked_before_a_definition_is_accepted() {
+        let errors = |approval: &str| -> Vec<String> {
+            let raw = format!(
+                r#"{{"schema_version":1,"id":"synthetic-tool","display_name":"Synthetic","launch":{{"executable":"synthetic"}},"approval":{approval}}}"#
+            );
+            let (_, diagnostics) =
+                validate_definition(raw.as_bytes(), &default_adapters()).unwrap();
+            diagnostics
+                .iter()
+                .filter(|d| d.severity.as_str() == "error")
+                .map(|d| d.field.clone())
+                .collect()
+        };
+        let good = r#"{"line_extras":["key_lines"],"keys":[{"keys":["y"],"num":1},{"keys":["esc"],"num":2,"send":"\u001b"}],"hint_phrases":["needs approval"],"shortcut_kind":true}"#;
+        assert!(errors(good).is_empty(), "{:?}", errors(good));
+        assert!(!errors(r#"{"style":"wizard"}"#).is_empty());
+        assert!(!errors(r#"{"style":"buttons"}"#).is_empty());
+        assert!(!errors(r#"{"line_extras":["regex"]}"#).is_empty());
+        assert!(!errors(r#"{"keys":[{"keys":[],"num":1}]}"#).is_empty());
+        assert!(!errors(r#"{"keys":[{"keys":["(y)"],"num":1}]}"#).is_empty());
+        assert!(!errors(r#"{"keys":[{"keys":["y"],"num":99}]}"#).is_empty());
+        assert!(!errors(r#"{"buttons":[{"line_all":[],"labels":["a"]}]}"#).is_empty());
+        assert!(!errors(r#"{"suppress_screens":[{}]}"#).is_empty());
     }
 
     #[test]

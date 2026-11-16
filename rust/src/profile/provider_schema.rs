@@ -91,6 +91,14 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
                 name: "screen",
                 kind: "*ScreenDefinition",
             },
+            Field {
+                name: "transcript",
+                kind: "*TranscriptDefinition",
+            },
+            Field {
+                name: "approval",
+                kind: "*ApprovalDefinition",
+            },
         ],
     },
     Schema {
@@ -202,6 +210,242 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
             name: "ready_markers",
             kind: "[]string",
         }],
+    },
+    Schema {
+        name: "TranscriptDefinition",
+        fields: &[
+            Field {
+                name: "root",
+                kind: "string",
+            },
+            Field {
+                name: "file",
+                kind: "string",
+            },
+            Field {
+                name: "extension",
+                kind: "string",
+            },
+            Field {
+                name: "find",
+                kind: "[]string",
+            },
+            Field {
+                name: "id_format",
+                kind: "string",
+            },
+            Field {
+                name: "dir_fallback",
+                kind: "bool",
+            },
+            Field {
+                name: "label",
+                kind: "string",
+            },
+            Field {
+                name: "dir_label",
+                kind: "string",
+            },
+            Field {
+                name: "unavailable_reason",
+                kind: "string",
+            },
+            Field {
+                name: "not_found_reason",
+                kind: "string",
+            },
+            Field {
+                name: "meta",
+                kind: "*TranscriptMeta",
+            },
+            Field {
+                name: "index",
+                kind: "*TranscriptIndex",
+            },
+            Field {
+                name: "reader",
+                kind: "*TranscriptReader",
+            },
+        ],
+    },
+    Schema {
+        name: "TranscriptMeta",
+        fields: &[
+            Field {
+                name: "kind_key",
+                kind: "string",
+            },
+            Field {
+                name: "kind_value",
+                kind: "string",
+            },
+            Field {
+                name: "cwd_key",
+                kind: "string",
+            },
+            Field {
+                name: "time_key",
+                kind: "string",
+            },
+        ],
+    },
+    Schema {
+        name: "TranscriptIndex",
+        fields: &[
+            Field {
+                name: "file",
+                kind: "string",
+            },
+            Field {
+                name: "table",
+                kind: "string",
+            },
+            Field {
+                name: "id_column",
+                kind: "string",
+            },
+            Field {
+                name: "cwd_column",
+                kind: "string",
+            },
+            Field {
+                name: "time_column",
+                kind: "string",
+            },
+            Field {
+                name: "time_unit",
+                kind: "string",
+            },
+        ],
+    },
+    Schema {
+        name: "TranscriptReader",
+        fields: &[
+            Field {
+                name: "format",
+                kind: "string",
+            },
+            Field {
+                name: "messages",
+                kind: "string",
+            },
+            Field {
+                name: "role_key",
+                kind: "string",
+            },
+            Field {
+                name: "text_key",
+                kind: "string",
+            },
+            Field {
+                name: "time_key",
+                kind: "string",
+            },
+            Field {
+                name: "roles",
+                kind: "map[string]string",
+            },
+        ],
+    },
+    Schema {
+        name: "ApprovalDefinition",
+        fields: &[
+            Field {
+                name: "style",
+                kind: "string",
+            },
+            Field {
+                name: "line_extras",
+                kind: "[]string",
+            },
+            Field {
+                name: "keys",
+                kind: "[]ApprovalKey",
+            },
+            Field {
+                name: "bracket_keys",
+                kind: "[]ApprovalKey",
+            },
+            Field {
+                name: "buttons",
+                kind: "[]ApprovalButtons",
+            },
+            Field {
+                name: "arrow_send",
+                kind: "bool",
+            },
+            Field {
+                name: "feedback_survey",
+                kind: "bool",
+            },
+            Field {
+                name: "shortcut_kind",
+                kind: "bool",
+            },
+            Field {
+                name: "hint_phrases",
+                kind: "[]string",
+            },
+            Field {
+                name: "not_approval_phrases",
+                kind: "[]string",
+            },
+            Field {
+                name: "suppress_screens",
+                kind: "[]ApprovalSuppress",
+            },
+        ],
+    },
+    Schema {
+        name: "ApprovalKey",
+        fields: &[
+            Field {
+                name: "keys",
+                kind: "[]string",
+            },
+            Field {
+                name: "num",
+                kind: "int",
+            },
+            Field {
+                name: "send",
+                kind: "string",
+            },
+        ],
+    },
+    Schema {
+        name: "ApprovalButtons",
+        fields: &[
+            Field {
+                name: "line_all",
+                kind: "[]string",
+            },
+            Field {
+                name: "start_line",
+                kind: "string",
+            },
+            Field {
+                name: "start_required",
+                kind: "bool",
+            },
+            Field {
+                name: "labels",
+                kind: "[]string",
+            },
+        ],
+    },
+    Schema {
+        name: "ApprovalSuppress",
+        fields: &[
+            Field {
+                name: "all",
+                kind: "[]string",
+            },
+            Field {
+                name: "any",
+                kind: "[]string",
+            },
+        ],
     },
     Schema {
         name: "ModelListDefinition",
@@ -616,6 +860,38 @@ impl GoWire for RoutinesDefinition {
 }
 impl GoWire for ScreenDefinition {
     const GO_TYPE: &'static str = "ScreenDefinition";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for TranscriptDefinition {
+    const GO_TYPE: &'static str = "TranscriptDefinition";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for TranscriptMeta {
+    const GO_TYPE: &'static str = "TranscriptMeta";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for TranscriptIndex {
+    const GO_TYPE: &'static str = "TranscriptIndex";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for TranscriptReader {
+    const GO_TYPE: &'static str = "TranscriptReader";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for ApprovalDefinition {
+    const GO_TYPE: &'static str = "ApprovalDefinition";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for ApprovalKey {
+    const GO_TYPE: &'static str = "ApprovalKey";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for ApprovalButtons {
+    const GO_TYPE: &'static str = "ApprovalButtons";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for ApprovalSuppress {
+    const GO_TYPE: &'static str = "ApprovalSuppress";
     const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
 }
 impl GoWire for ModelListDefinition {

@@ -21,6 +21,15 @@ Release artifacts are published at
   choices from the Hub (`GET /api/providers/declarations`) instead of fixed
   tables. The badge letter of OpenCode and Copilot is now the same on every
   screen (`O` and `P`; the chat avatar used to show `P` and `A`).
+- **A registered AI CLI can declare where its conversation file lives and how
+  to read it, and how its approval prompt looks.** A definition's `transcript`
+  section names the folder (with `{home}` / `{env:NAME}`), how a Hub session is
+  matched to a file (session id, first-line metadata, or a read-only SQLite
+  table) and how to read it as chat (JSON or JSONL, role and text keys), so the
+  "raw log" button and the chat view work for it. Its `approval` section chooses
+  among a few prompt shapes (numbered options, single keys, button rows) and the
+  wording to look for. The built-in command-code and opencode log lookups and
+  all seven built-in approval detectors now read the same declarations.
 - **An AI can now add a new AI CLI with `many-ai-cli provider add`.** `provider
   list`, `provider remove` and `provider test` complete the set, and
   `provider add --help` is written for an AI agent (what to research, what to

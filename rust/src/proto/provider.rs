@@ -233,6 +233,382 @@ pub struct Definition {
     pub routines: Option<RoutinesDefinition>,
     #[serde(rename = "screen", skip_serializing_if = "Option::is_none")]
     pub screen: Option<ScreenDefinition>,
+    #[serde(rename = "transcript", skip_serializing_if = "Option::is_none")]
+    pub transcript: Option<TranscriptDefinition>,
+    #[serde(rename = "approval", skip_serializing_if = "Option::is_none")]
+    pub approval: Option<ApprovalDefinition>,
+}
+
+/// How the native approval prompt of a provider is recognised on its screen.
+/// Every field is optional; a provider that declares nothing gets the plain
+/// numbered-option detection (`1. Yes` / `2. No`). Sent keys are in `send`
+/// (empty = the key text itself).
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ApprovalDefinition {
+    /// `numbered` (default: lines like `1. Yes`) or `buttons` (one line of
+    /// wording-matched buttons chosen with the right arrow key).
+    #[serde(
+        rename = "style",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub style: String,
+    /// Extra option line shapes, tried after `numbered` in this order:
+    /// `paren_marker` (`1 (•) Yes`), `bracket_keys` (`Run once (y)` looked up in
+    /// `bracket_keys`), `key_lines` (`Approve (y)` looked up in `keys`).
+    #[serde(
+        rename = "line_extras",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub line_extras: Vec<String>,
+    /// Single keys that answer the prompt. A numbered option whose label is, or
+    /// ends with, `(key)` gets the key as its send text; with `key_lines` a
+    /// line `label (key)` is an option of its own (numbered by `num`).
+    #[serde(
+        rename = "keys",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub keys: Vec<ApprovalKey>,
+    /// Lines `label (key)` whose key is any of the listed spellings (compared
+    /// in lower case), for providers that show their keys in free wording.
+    #[serde(
+        rename = "bracket_keys",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub bracket_keys: Vec<ApprovalKey>,
+    /// Button rows for `style: buttons`, tried from the last matching line up.
+    #[serde(
+        rename = "buttons",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub buttons: Vec<ApprovalButtons>,
+    /// The options are chosen by moving the cursor: each option's send text is
+    /// the arrow keys from the highlighted option, then Enter.
+    #[serde(
+        rename = "arrow_send",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub arrow_send: bool,
+    /// The provider shows a one-line `1 to review, 2 to send, 0 to dismiss`
+    /// feedback survey that counts as a prompt.
+    #[serde(
+        rename = "feedback_survey",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub feedback_survey: bool,
+    /// A prompt that carries send keys is of kind `native_<id>_shortcut`.
+    #[serde(
+        rename = "shortcut_kind",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub shortcut_kind: bool,
+    /// Lower case wording that, anywhere in the prompt's text, shows that it asks
+    /// for an approval.
+    #[serde(
+        rename = "hint_phrases",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub hint_phrases: Vec<String>,
+    /// Lower case wording of screens that look like a prompt but only choose a
+    /// model: a line with one of these never counts as an approval hint.
+    #[serde(
+        rename = "not_approval_phrases",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub not_approval_phrases: Vec<String>,
+    /// Screens that are never a prompt: all of `all` and any of `any` appear.
+    #[serde(
+        rename = "suppress_screens",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub suppress_screens: Vec<ApprovalSuppress>,
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ApprovalKey {
+    #[serde(
+        rename = "keys",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub keys: Vec<String>,
+    #[serde(rename = "num", deserialize_with = "null_default")]
+    pub num: i64,
+    #[serde(
+        rename = "send",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub send: String,
+}
+
+/// A row of buttons: the last line holding every `line_all` word starts a
+/// prompt whose first line is the nearest line (up to 12 lines above) holding
+/// `start_line` (required, or else 12 lines above is used).
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ApprovalButtons {
+    #[serde(
+        rename = "line_all",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub line_all: Vec<String>,
+    #[serde(
+        rename = "start_line",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub start_line: String,
+    #[serde(
+        rename = "start_required",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub start_required: bool,
+    #[serde(
+        rename = "labels",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub labels: Vec<String>,
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ApprovalSuppress {
+    #[serde(
+        rename = "all",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub all: Vec<String>,
+    #[serde(
+        rename = "any",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub any: Vec<String>,
+}
+
+/// Where the raw conversation file of a provider lives, how a Hub session is
+/// matched to it, and (optionally) how to read it as a chat. Paths are written
+/// as patterns that start with `{home}` or `{env:NAME}`; `{cwd_slug:alnum}` and
+/// `{cwd_slug:path}` insert the session's working directory as a folder name.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TranscriptDefinition {
+    /// Directory that holds the conversation files.
+    #[serde(
+        rename = "root",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub root: String,
+    /// One file shared by every session (location only, never read as a chat).
+    #[serde(
+        rename = "file",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub file: String,
+    /// File extension without the dot (`json` by default).
+    #[serde(
+        rename = "extension",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub extension: String,
+    /// Ways to find the session's file, tried in order: `session_id` (the file
+    /// is `<agent session id>.<extension>`), `meta` (the first line of each file
+    /// names the working directory and start time), `index` (a SQLite table
+    /// maps working directory and start time to the file name).
+    #[serde(
+        rename = "find",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub find: Vec<String>,
+    /// `uuid` requires the session id to be a UUID; empty accepts a plain
+    /// file-name-safe id.
+    #[serde(
+        rename = "id_format",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub id_format: String,
+    /// When no file is found, point at `root` itself if it exists.
+    #[serde(
+        rename = "dir_fallback",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub dir_fallback: bool,
+    /// Text shown for the located file.
+    #[serde(
+        rename = "label",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub label: String,
+    /// Text shown when only the folder is located.
+    #[serde(
+        rename = "dir_label",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub dir_label: String,
+    /// Text shown when the pattern cannot be resolved for this session.
+    #[serde(
+        rename = "unavailable_reason",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub unavailable_reason: String,
+    /// Text shown when no file matches the session (yet).
+    #[serde(
+        rename = "not_found_reason",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub not_found_reason: String,
+    #[serde(rename = "meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<TranscriptMeta>,
+    #[serde(rename = "index", skip_serializing_if = "Option::is_none")]
+    pub index: Option<TranscriptIndex>,
+    #[serde(rename = "reader", skip_serializing_if = "Option::is_none")]
+    pub reader: Option<TranscriptReader>,
+}
+
+/// Keys (dotted paths) read from the first line of each candidate file. Only a
+/// line whose `kind_key` equals `kind_value` counts (both optional).
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TranscriptMeta {
+    #[serde(
+        rename = "kind_key",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub kind_key: String,
+    #[serde(
+        rename = "kind_value",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub kind_value: String,
+    #[serde(
+        rename = "cwd_key",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub cwd_key: String,
+    #[serde(
+        rename = "time_key",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub time_key: String,
+}
+
+/// SQLite table (opened read-only) that maps a session to its file name.
+/// `time_column` holds Unix seconds (`s`, default) or milliseconds (`ms`).
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TranscriptIndex {
+    #[serde(
+        rename = "file",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub file: String,
+    #[serde(
+        rename = "table",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub table: String,
+    #[serde(
+        rename = "id_column",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub id_column: String,
+    #[serde(
+        rename = "cwd_column",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub cwd_column: String,
+    #[serde(
+        rename = "time_column",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub time_column: String,
+    #[serde(
+        rename = "time_unit",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub time_unit: String,
+}
+
+/// How to read the file as a chat. `format` is `json` (one document; `messages`
+/// is the dotted path of the array) or `jsonl` (one message per line). `roles`
+/// maps the role value in the file to `user` or `assistant`; other roles are
+/// skipped.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TranscriptReader {
+    #[serde(
+        rename = "format",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub format: String,
+    #[serde(
+        rename = "messages",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub messages: String,
+    #[serde(
+        rename = "role_key",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub role_key: String,
+    #[serde(
+        rename = "text_key",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub text_key: String,
+    #[serde(
+        rename = "time_key",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub time_key: String,
+    #[serde(
+        rename = "roles",
+        deserialize_with = "go_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub roles: BTreeMap<String, String>,
 }
 
 /// Where the slash command candidates of a provider come from. At most one of

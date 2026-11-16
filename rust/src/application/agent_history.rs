@@ -1,4 +1,5 @@
 //! Read-only provider artifacts resolved from the authoritative session owner.
+mod declared;
 mod discovery;
 mod grok;
 #[cfg(test)]
@@ -27,6 +28,7 @@ use crate::{
     process::Cancellation,
     proto::{
         core::{LiveSessionId, TranscriptSessionIdentity},
+        provider::{TranscriptDefinition, TranscriptReader},
         time::parse_rfc3339,
     },
     terminal::session::SessionEngine,
@@ -121,6 +123,11 @@ impl AgentHistory {
         raw_offset: &str,
     ) -> Result<Value, Error> {
         let identity = self.identity(id)?;
+        if let Some(t) = declared::declaration(&identity.provider)
+            && let Some(reader) = t.reader.as_ref()
+        {
+            return self.declared_chat(&identity, &t, reader, raw_limit, raw_cursor, raw_offset);
+        }
         let Some(format) = ProviderFormat::for_provider(&identity.provider) else {
             return Ok(empty_chat(false));
         };
@@ -158,6 +165,41 @@ impl AgentHistory {
         let offset = state.last_read.offset;
         Ok(
             json!({"ok":true,"available":true,"total":-1,"total_known":false,"offset":offset,"cursor":offset,"next_cursor":offset,"has_more":offset>0,"messages":messages}),
+        )
+    }
+    fn declared_chat(
+        &self,
+        identity: &TranscriptSessionIdentity,
+        t: &TranscriptDefinition,
+        reader: &TranscriptReader,
+        raw_limit: &str,
+        raw_cursor: &str,
+        raw_offset: &str,
+    ) -> Result<Value, Error> {
+        let limit = limit(raw_limit)?;
+        let raw = if raw_cursor.is_empty() {
+            raw_offset
+        } else {
+            raw_cursor
+        };
+        let cursor = if raw.is_empty() {
+            -1
+        } else {
+            parse_integer(raw)
+                .filter(|v| *v >= -1)
+                .ok_or_else(|| Error::bad("invalid cursor"))?
+        };
+        let Some(path) = declared::find(&self.paths, identity, t) else {
+            return Ok(empty_chat(true));
+        };
+        let messages = declared::read_messages(&self.paths, &path, reader).map_err(|_| {
+            (self.warning)("agent_chat_read");
+            Error::missing("agent transcript not readable")
+        })?;
+        let (messages, start, total) =
+            declared::page(messages, limit, (cursor >= 0).then_some(cursor as usize));
+        Ok(
+            json!({"ok":true,"available":true,"total":total,"total_known":true,"offset":start,"cursor":start,"next_cursor":start,"has_more":start>0,"messages":messages}),
         )
     }
     pub fn grok_history(

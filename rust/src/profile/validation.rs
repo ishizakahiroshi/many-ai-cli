@@ -382,6 +382,8 @@ pub fn validate_definition(
                 "input",
                 "routines",
                 "screen",
+                "transcript",
+                "approval",
             ]
             .contains(&field.as_str())
             {
@@ -690,6 +692,16 @@ fn declared_sections(def: &Definition) -> Vec<Diagnostic> {
             }
         }
     }
+    if let Some(a) = &def.approval {
+        for (field, message) in approval_problems(a) {
+            out.push(diag("invalid_declaration", "error", &field, &message));
+        }
+    }
+    if let Some(t) = &def.transcript {
+        for (field, message) in transcript_problems(t) {
+            out.push(diag("invalid_declaration", "error", &field, &message));
+        }
+    }
     if let Some(l) = &def.launch
         && !l.config_dir_env.is_empty()
         && !env_name(&l.config_dir_env)
@@ -775,4 +787,258 @@ pub fn valid_spawn_model_label(value: &str) -> bool {
             || n == 0x7f
             || [32, 34, 39, 124, 38, 62, 60, 94, 37, 40, 41, 59, 96, 36].contains(&n)
     })
+}
+
+/// A path pattern of a transcript declaration: it starts at `{home}` or
+/// `{env:NAME}`, may use `{cwd_slug:alnum}` / `{cwd_slug:path}`, and contains
+/// no `..`, no control character and no other `{...}`.
+pub fn transcript_pattern_ok(pattern: &str) -> bool {
+    if pattern.is_empty() || pattern.len() > 300 || control(pattern) || pattern.contains("..") {
+        return false;
+    }
+    let mut rest = pattern;
+    let mut first = true;
+    while let Some(open) = rest.find('{') {
+        if first && open != 0 {
+            return false;
+        }
+        let Some(close) = rest[open..].find('}') else {
+            return false;
+        };
+        let token = &rest[open + 1..open + close];
+        let known = token == "home"
+            || token == "cwd_slug:alnum"
+            || token == "cwd_slug:path"
+            || token.strip_prefix("env:").is_some_and(env_name);
+        if !known || (first && token != "home" && !token.starts_with("env:")) {
+            return false;
+        }
+        if first {
+            // The first path segment is the token alone.
+            let after = &rest[open + close + 1..];
+            if !after.is_empty() && !after.starts_with(['/', '\\']) {
+                return false;
+            }
+        }
+        first = false;
+        rest = &rest[open + close + 1..];
+    }
+    // A closing brace with no opening one is a typo too.
+    !first && !rest.contains('}')
+}
+
+fn sql_name(value: &str) -> bool {
+    let mut chars = value.chars();
+    value.len() <= 64
+        && chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn dotted_key(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 100
+        && value
+            .split('.')
+            .all(|part| !part.is_empty() && !control(part))
+}
+
+/// Problems of a `transcript` declaration as (field, message).
+fn transcript_problems(t: &TranscriptDefinition) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = vec![];
+    let mut bad = |field: &str, message: &str| out.push((field.to_owned(), message.to_owned()));
+    let shape_ok = (!t.root.is_empty() && t.file.is_empty() && !t.find.is_empty())
+        || (t.root.is_empty() && !t.file.is_empty());
+    if !shape_ok {
+        // Either a root with find steps, or a single shared file.
+        bad(
+            "transcript",
+            "transcript needs a root with find steps, or a file",
+        );
+    }
+    for (name, pattern) in [("root", &t.root), ("file", &t.file)] {
+        if !pattern.is_empty() && !transcript_pattern_ok(pattern) {
+            bad(
+                &format!("transcript.{name}"),
+                "the path pattern must start with {home} or {env:NAME} and use only known {...} tokens",
+            );
+        }
+    }
+    if !t.extension.is_empty()
+        && !(t.extension.len() <= 12 && t.extension.chars().all(|c| c.is_ascii_alphanumeric()))
+    {
+        bad(
+            "transcript.extension",
+            "transcript.extension must be letters and digits without the dot",
+        );
+    }
+    if !t.id_format.is_empty() && t.id_format != "uuid" {
+        bad("transcript.id_format", "transcript.id_format must be uuid");
+    }
+    for (name, text) in [
+        ("label", &t.label),
+        ("dir_label", &t.dir_label),
+        ("unavailable_reason", &t.unavailable_reason),
+        ("not_found_reason", &t.not_found_reason),
+    ] {
+        if text.len() > 200 || control(text) {
+            bad(
+                &format!("transcript.{name}"),
+                "text is too long or contains a control character",
+            );
+        }
+    }
+    for step in &t.find {
+        match step.as_str() {
+            "session_id" => {}
+            "meta" => match &t.meta {
+                Some(m) if dotted_key(&m.cwd_key) && dotted_key(&m.time_key) => {}
+                _ => bad(
+                    "transcript.meta",
+                    "find: meta needs transcript.meta.cwd_key and time_key",
+                ),
+            },
+            "index" => match &t.index {
+                Some(i)
+                    if transcript_pattern_ok(&i.file)
+                        && [&i.table, &i.id_column, &i.cwd_column, &i.time_column]
+                            .iter()
+                            .all(|v| sql_name(v))
+                        && matches!(i.time_unit.as_str(), "" | "s" | "ms") => {}
+                _ => bad(
+                    "transcript.index",
+                    "find: index needs file, table and column names (letters, digits, _) and time_unit s or ms",
+                ),
+            },
+            _ => bad(
+                "transcript.find",
+                "transcript.find entries must be session_id, meta or index",
+            ),
+        }
+    }
+    if let Some(m) = &t.meta
+        && (m.kind_key.is_empty() != m.kind_value.is_empty()
+            || (!m.kind_key.is_empty() && !dotted_key(&m.kind_key)))
+    {
+        bad(
+            "transcript.meta",
+            "kind_key and kind_value must be given together",
+        );
+    }
+    if let Some(r) = &t.reader {
+        if !matches!(r.format.as_str(), "json" | "jsonl") {
+            bad("transcript.reader.format", "format must be json or jsonl");
+        }
+        if r.format == "json" && !dotted_key(&r.messages) {
+            bad(
+                "transcript.reader.messages",
+                "format json needs the dotted path of the message array",
+            );
+        }
+        if !dotted_key(&r.role_key) || !dotted_key(&r.text_key) {
+            bad("transcript.reader", "reader needs role_key and text_key");
+        }
+        if !r.time_key.is_empty() && !dotted_key(&r.time_key) {
+            bad(
+                "transcript.reader.time_key",
+                "time_key is not a valid key path",
+            );
+        }
+        if r.roles.is_empty() || r.roles.values().any(|v| v != "user" && v != "assistant") {
+            bad(
+                "transcript.reader.roles",
+                "roles must map at least one value to user or assistant",
+            );
+        }
+        if t.root.is_empty() {
+            bad(
+                "transcript.reader",
+                "a reader needs a root (a shared file is never read as a chat)",
+            );
+        }
+    }
+    out
+}
+
+/// Problems of an `approval` declaration as (field, message).
+fn approval_problems(a: &ApprovalDefinition) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = vec![];
+    let mut bad = |field: &str, message: &str| out.push((field.to_owned(), message.to_owned()));
+    if !matches!(a.style.as_str(), "" | "numbered" | "buttons") {
+        bad("approval.style", "style must be numbered or buttons");
+    }
+    for extra in &a.line_extras {
+        if !matches!(
+            extra.as_str(),
+            "paren_marker" | "bracket_keys" | "key_lines"
+        ) {
+            bad(
+                "approval.line_extras",
+                "line_extras entries must be paren_marker, bracket_keys or key_lines",
+            );
+        }
+    }
+    let phrase = |p: &String| !p.is_empty() && p.len() <= 100 && !control(p);
+    for (name, list) in [
+        ("hint_phrases", &a.hint_phrases),
+        ("not_approval_phrases", &a.not_approval_phrases),
+    ] {
+        if list.len() > 64 || !list.iter().all(phrase) {
+            bad(
+                &format!("approval.{name}"),
+                "at most 64 phrases of 1 to 100 characters without control characters",
+            );
+        }
+    }
+    for (name, table) in [("keys", &a.keys), ("bracket_keys", &a.bracket_keys)] {
+        if table.len() > 32 {
+            bad(&format!("approval.{name}"), "too many entries");
+        }
+        for (i, k) in table.iter().enumerate() {
+            let field = format!("approval.{name}[{i}]");
+            if k.keys.is_empty() || !k.keys.iter().all(|s| phrase(s) && !s.contains(['(', ')'])) {
+                bad(
+                    &field,
+                    "keys must be 1 to 100 character spellings without parentheses",
+                );
+            }
+            if !(0..=20).contains(&k.num) {
+                bad(&field, "num must be between 0 and 20");
+            }
+            if k.send.len() > 16 {
+                bad(&field, "send is too long");
+            }
+        }
+    }
+    if a.style == "buttons" && a.buttons.is_empty() {
+        bad("approval.buttons", "style buttons needs buttons");
+    }
+    if a.buttons.len() > 8 {
+        bad("approval.buttons", "too many button rows");
+    }
+    for (i, b) in a.buttons.iter().enumerate() {
+        let field = format!("approval.buttons[{i}]");
+        if b.line_all.is_empty() || !b.line_all.iter().all(phrase) {
+            bad(&field, "line_all needs 1 to 100 character words");
+        }
+        if !b.start_line.is_empty() && !phrase(&b.start_line) {
+            bad(&field, "start_line is too long or has a control character");
+        }
+        if b.labels.is_empty() || b.labels.len() > 8 || !b.labels.iter().all(phrase) {
+            bad(&field, "labels needs 1 to 8 entries");
+        }
+    }
+    if a.suppress_screens.len() > 8 {
+        bad("approval.suppress_screens", "too many entries");
+    }
+    for (i, s) in a.suppress_screens.iter().enumerate() {
+        if !s.all.iter().chain(&s.any).all(phrase) || (s.all.is_empty() && s.any.is_empty()) {
+            bad(
+                &format!("approval.suppress_screens[{i}]"),
+                "all and any need phrases (at least one list is not empty)",
+            );
+        }
+    }
+    out
 }

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "a7284a87cfdc86a45133954a0d652e292a63d3cb",
+    "commit": "91abdbbf6bf803d8f3649f9c4b7f28a19601cb11",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,9 +138,9 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2090,
-    "analyzed": 1640,
-    "unresolved": 15,
+    "discovered": 2091,
+    "analyzed": 1639,
+    "unresolved": 17,
     "unknown": 0,
     "unclaimed": 435,
     "skipped_by_config": 0
@@ -22160,6 +22160,40 @@
       "reason": "no adapter claims '.json'"
     },
     {
+      "path": "rust/src/application/agent_history/declared.rs",
+      "adapter": "rust",
+      "status": "unresolved",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Conversation file lookup and reading driven by a provider's `transcript`"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": [
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: SELECT \\\" omitnix_placeholder \\\", \\\" omitnix_placeholder \\\", \\\" omitni..."
+        }
+      ]
+    },
+    {
       "path": "rust/src/application/agent_history/discovery.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -22286,7 +22320,7 @@
     {
       "path": "rust/src/application/agent_history/tests.rs",
       "adapter": "rust",
-      "status": "analyzed",
+      "status": "unresolved",
       "fields": {
         "summary": {
           "state": "none_observed",
@@ -22310,7 +22344,12 @@
           "state": "out_of_scope"
         }
       },
-      "unresolved": []
+      "unresolved": [
+        {
+          "code": "sql_unreadable",
+          "detail": "sqlglot could not read: INSERT INTO sessions VALUES (?1, ?2, ?3)"
+        }
+      ]
     },
     {
       "path": "rust/src/application/approval_patterns.rs",
@@ -52486,6 +52525,8 @@
   "table_gaps": {
     "files": [
       "go/internal/sessionstore/store.go",
+      "rust/src/application/agent_history/declared.rs",
+      "rust/src/application/agent_history/tests.rs",
       "rust/src/hub/iris_execution_journal.rs",
       "rust/src/hub/iris_execution_owner.rs",
       "rust/src/hub/iris_execution_verification_store.rs",
@@ -52496,7 +52537,7 @@
       "rust/tests/iris_independent_verification.rs",
       "rust/tests/storage_contracts.rs"
     ],
-    "unresolved_count": 50,
-    "note": "50 statements in 10 files could not be read, so the table list may be incomplete: a table mentioned only there is missing from it entirely, and a table that is listed may be touched in more places than it names."
+    "unresolved_count": 52,
+    "note": "52 statements in 12 files could not be read, so the table list may be incomplete: a table mentioned only there is missing from it entirely, and a table that is listed may be touched in more places than it names."
   }
 }
