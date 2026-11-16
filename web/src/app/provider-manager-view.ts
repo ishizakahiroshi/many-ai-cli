@@ -1,13 +1,9 @@
-const RESERVED_PROVIDER_IDS = new Set([
-  'claude',
-  'codex',
-  'copilot',
-  'cursor-agent',
-  'opencode',
-  'grok',
-  'command-code',
-  'shell',
-]);
+import { providerIsBuiltin } from './provider-declarations.js';
+
+// Hub が登録を断る id（同梱の 7 本は宣言の builtin、ほかに shell・common・declarations）。
+function isReservedProviderId(id: string): boolean {
+  return id === 'shell' || id === 'common' || id === 'declarations' || providerIsBuiltin(id);
+}
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -42,9 +38,9 @@ export function suggestProviderId(displayName: string): string {
     .slice(0, 64);
   if (!slug) return '';
   let candidate = /^[a-z0-9]/.test(slug) ? slug : `p-${slug}`.slice(0, 64);
-  if (!RESERVED_PROVIDER_IDS.has(candidate)) return candidate;
+  if (!isReservedProviderId(candidate)) return candidate;
   candidate = `${candidate}-cli`.slice(0, 64);
-  if (!RESERVED_PROVIDER_IDS.has(candidate)) return candidate;
+  if (!isReservedProviderId(candidate)) return candidate;
   return `${candidate}-2`.slice(0, 64);
 }
 
@@ -105,14 +101,14 @@ export function statusLabelKey(kind: ProviderStatusKind): string {
   }
 }
 
-// RESERVED_PROVIDER_IDS minus the synthetic "shell" launch identity is the
+// The reserved ids minus the synthetic "shell" launch identity is the
 // exact set the Hub API treats as history/override-backed (provider.IsBuiltinID
 // on the Go side). Origin alone cannot tell this apart: once a built-in has
 // been overridden once, its origin flips from "embedded" to "override", but
 // it is still routed through the same per-provider revision contract as
 // before the first edit.
 export function isBuiltinProviderID(id: string): boolean {
-  return id !== 'shell' && RESERVED_PROVIDER_IDS.has(id);
+  return id !== 'shell' && providerIsBuiltin(id);
 }
 
 export type ProviderRequestFailureKind = 'network' | 'aborted' | 'http';

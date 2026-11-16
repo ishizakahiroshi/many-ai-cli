@@ -1,3 +1,5 @@
+import { providerPermissionChoices } from './provider-declarations.js';
+
 export const REMEMBER_APPROVAL_SETTINGS_KEY = 'remember_approval_settings';
 
 export const APPROVAL_SETTING_KEYS = [
@@ -18,13 +20,11 @@ export const DEFAULT_APPROVAL_FORM_SETTINGS = Object.freeze({
   opencode_permission_mode: 'default',
 });
 
-const PERMISSION_MODE_VALUES: Readonly<Record<string, readonly string[]>> = {
-  claude: ['default', 'plan', 'acceptEdits', 'auto', 'bypassPermissions'],
-  grok: ['default', 'plan', 'acceptEdits', 'auto', 'bypassPermissions'],
-  copilot: ['default', 'auto', 'bypassPermissions'],
-  'cursor-agent': ['default', 'auto', 'bypassPermissions'],
-  'command-code': ['default', 'plan', 'acceptEdits', 'bypassPermissions'],
-};
+// 許可モードの選択肢は provider の宣言（permissions.choices）。宣言があるものだけが「許可モード」の欄を持つ。
+// codex（sandbox と承認の 2 欄）と opencode（専用の 1 欄）は別の形なので、下で専用に扱う。
+function hasPermissionChoices(provider: string): boolean {
+  return providerPermissionChoices(provider).length > 0;
+}
 
 const CODEX_SANDBOX_VALUES = ['workspace-write', 'read-only', 'danger-full-access'] as const;
 const CODEX_APPROVAL_VALUES = ['on-request', 'untrusted', 'never'] as const;
@@ -46,7 +46,7 @@ export function providerKey(name: string, provider: string): string {
 
 /** その provider が実際に使う許可設定のキー名（codex だけ 2 つ）。 */
 function approvalKeyNamesForProvider(provider: string): readonly ApprovalSettingKey[] {
-  if (Object.prototype.hasOwnProperty.call(PERMISSION_MODE_VALUES, provider)) return ['permission_mode'];
+  if (hasPermissionChoices(provider)) return ['permission_mode'];
   if (provider === 'codex') return ['sandbox', 'ask_for_approval'];
   if (provider === 'opencode') return ['opencode_permission_mode'];
   return [];
@@ -54,9 +54,9 @@ function approvalKeyNamesForProvider(provider: string): readonly ApprovalSetting
 
 export function selectedApprovalSettings(provider: string, values: SpawnDefaults): SpawnApprovalSettings {
   const out: SpawnApprovalSettings = {};
-  if (Object.prototype.hasOwnProperty.call(PERMISSION_MODE_VALUES, provider)) {
+  if (hasPermissionChoices(provider)) {
     if (Object.prototype.hasOwnProperty.call(values, 'permission_mode')) {
-      const allowed = PERMISSION_MODE_VALUES[provider];
+      const allowed = providerPermissionChoices(provider);
       out.permission_mode = normalizeValue(values.permission_mode, allowed, 'default');
     }
     return out;
@@ -89,7 +89,7 @@ export function isApprovalSettingsMemoryEnabled(defaults: SpawnDefaults): boolea
 }
 
 export function defaultApprovalSettings(provider: string): SpawnApprovalSettings {
-  if (Object.prototype.hasOwnProperty.call(PERMISSION_MODE_VALUES, provider)) {
+  if (hasPermissionChoices(provider)) {
     return { permission_mode: DEFAULT_APPROVAL_FORM_SETTINGS.permission_mode };
   }
   if (provider === 'codex') {

@@ -53,6 +53,7 @@ import { initTabBarOrder } from './app/tab-bar-order.js';
 import { initInputToolsOrder } from './app/input-tools-order.js';
 import { initUiSide } from './app/ui-side.js';
 import { initSessionStrip } from './app/session-strip.js';
+import { initProviderDeclarations } from './app/provider-store.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
 // detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
@@ -94,6 +95,8 @@ initUiSide();
 // 端末の上のセッション帯（いま開いている箱のセッション一覧 + 高さの掴み帯）
 initSessionStrip();
 initFlexiblePaneViews();
+// provider ごとの宣言（名前・頭文字・並び順・使用量リンクなど）を Hub から取る。取れたら画面を描き直す
+initProviderDeclarations();
 // ここまで評価が届いたら初期化は完了。これより後に文を足さない（足した文の例外は、
 // 「画面を読み込めませんでした」の表示に乗らない）。
 markAppEntryEvaluated();

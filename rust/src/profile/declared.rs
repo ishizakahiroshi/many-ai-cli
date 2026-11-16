@@ -265,6 +265,12 @@ pub fn resolve(def: &Definition, builtin: Option<&Definition>) -> Definition {
             if p.handoff_order == 0 {
                 p.handoff_order = bp.handoff_order;
             }
+            if p.label.is_empty() {
+                p.label = bp.label.clone();
+            }
+            if p.long_label.is_empty() {
+                p.long_label = bp.long_label.clone();
+            }
         }
         (None, Some(bp)) => out.presentation = Some(bp.clone()),
         _ => {}
@@ -672,6 +678,20 @@ mod tests {
             assert_eq!(slow_paste(id), matches!(*id, "codex" | "opencode"), "{id}");
         }
         assert!(!slow_paste("synthetic"));
+        // web `shouldBypassCursorHideFilterForProvider`: grok and codex.
+        // web `stopKeyForActiveSession`: grok is interrupted with Ctrl+C.
+        for id in BUILTIN_PROVIDER_IDS {
+            let input = builtin(id).and_then(|d| d.input).unwrap_or_default();
+            assert_eq!(
+                input.full_frame_cursor,
+                matches!(*id, "grok" | "codex"),
+                "{id}"
+            );
+            let expected = if *id == "grok" { "ctrl-c" } else { "" };
+            assert_eq!(input.interrupt_key, expected, "{id}");
+            // web `shouldSkipClearPrefix`: codex (and the shell, which is not a provider).
+            assert_eq!(input.no_line_clear, *id == "codex", "{id}");
+        }
         // Ready screens and the model change line.
         let marker = |id: &str| {
             builtin(id)
@@ -742,6 +762,7 @@ mod tests {
                 ("*".to_owned(), vec!["--mode={mode}".to_owned()]),
             ]),
             allowed_tools_args: vec!["--allow".into(), "{tools}".into(), "--each={tool}".into()],
+            choices: vec![],
         });
         assert_eq!(
             permission_args(Some(&def), "auto"),
@@ -768,5 +789,61 @@ mod tests {
         assert!(resolved.permissions.is_some());
         assert!(resolved_for("synthetic-cli", None).is_none());
         assert!(builtin_config_dir_env("synthetic-cli").is_none());
+    }
+
+    /// The lists the screen used to hard-code (`web/src`), copied as they were.
+    #[test]
+    fn presentation_and_permission_choices_equal_what_the_screen_used_to_hard_code() {
+        // spawn-approval-memory.ts PERMISSION_MODE_VALUES
+        let choices = |id: &str| {
+            builtin(id)
+                .and_then(|d| d.permissions)
+                .map(|p| p.choices)
+                .unwrap_or_default()
+        };
+        let full = [
+            "default",
+            "plan",
+            "acceptEdits",
+            "auto",
+            "bypassPermissions",
+        ];
+        assert_eq!(choices("claude"), full);
+        assert_eq!(choices("grok"), full);
+        assert_eq!(choices("copilot"), ["default", "auto", "bypassPermissions"]);
+        assert_eq!(
+            choices("cursor-agent"),
+            ["default", "auto", "bypassPermissions"]
+        );
+        assert_eq!(
+            choices("command-code"),
+            ["default", "plan", "acceptEdits", "bypassPermissions"]
+        );
+        assert!(choices("codex").is_empty() && choices("opencode").is_empty());
+        // provider-icon.ts letters (opencode `O` in every screen but one) and
+        // session-list.ts order (ollama and lm-studio are screen-only entries at
+        // 2 and 3); orchestration-roles.ts / chat-history.ts names.
+        let rows = [
+            ("claude", "C", 1, "Claude", "Claude Code"),
+            ("codex", "X", 4, "Codex", "Codex CLI"),
+            ("copilot", "P", 5, "Copilot", "GitHub Copilot"),
+            ("opencode", "O", 6, "OpenCode", "OpenCode"),
+            ("cursor-agent", "r", 7, "Cursor Agent", "Cursor Agent"),
+            ("grok", "G", 8, "Grok Build", "Grok Build"),
+            ("command-code", "M", 9, "Command Code", "Command Code"),
+        ];
+        for (id, letter, order, label, long_label) in rows {
+            let p = builtin(id).unwrap().presentation.unwrap();
+            assert_eq!(
+                (
+                    p.letter.as_str(),
+                    p.order,
+                    p.label.as_str(),
+                    p.long_label.as_str()
+                ),
+                (letter, order, label, long_label),
+                "{id}"
+            );
+        }
     }
 }

@@ -1,5 +1,6 @@
 import { apiFetch } from './util.js';
 import { applyProviderPresentation } from './provider-icon.js';
+import { cacheProviderDeclarations } from './provider-declarations.js';
 
 export {
   BUILTIN_PROVIDER_CAPABILITIES,
@@ -130,7 +131,31 @@ function providerHTTPFailure(status: number, body: any): ProviderRequestFailure 
   };
 }
 
+// 宣言（表示名・頭文字・並び順・使用量ページの URL・許可モードの選択肢・入力の癖）を Hub から取り直す。
+// 一覧と同じ経路で、同梱 7 本も登録した AI CLI も同じ形で届く。取れなければ前の値のまま（画面は id から作る既定で動く）。
+export async function loadProviderDeclarations(): Promise<boolean> {
+  try {
+    const response = await apiFetch(`/api/providers/declarations`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) return false;
+    const body = await response.json();
+    if (!body || !Array.isArray(body.declarations)) return false;
+    cacheProviderDeclarations(body.declarations);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+// 起動時に 1 回。失敗しても画面は id から作る既定で動く（一覧を取り直すたびに、もう一度取る）。
+export function initProviderDeclarations(): void {
+  void loadProviderDeclarations();
+}
+
 export async function loadProviderSummaries(options?: { includeDisabled?: boolean }): Promise<ProviderListResponse | null> {
+  // 一覧に使う名前・頭文字・並び順を先に揃える（一覧と同じ取り直しの口で）。
+  await loadProviderDeclarations();
   try {
     const response = await apiFetch(`/api/providers`, {
       headers: { Accept: 'application/json' },

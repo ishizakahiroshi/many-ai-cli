@@ -29,6 +29,10 @@ import {
   unregisterDialogController,
   type SpawnConfirmationRecord,
 } from '../src/app/spawn-confirm-store.ts';
+import { seedBuiltinProviderDeclarations } from '../src/app/provider-declarations-seed.ts';
+
+// Hub から宣言が届いた後の状態にする（宣言の値は rust/assets/provider/declarations.json）。
+seedBuiltinProviderDeclarations();
 
 // plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C3.
 // This module is deliberately DOM-free so it can be imported directly from

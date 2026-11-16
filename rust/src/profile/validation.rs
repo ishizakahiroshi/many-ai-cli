@@ -304,11 +304,23 @@ pub fn sanitize_presentation(p: Option<&PresentationDefinition>) -> Option<Prese
     };
     let order = p.order.max(0);
     let handoff_order = p.handoff_order.max(0);
+    let label = if valid_label(&p.label) {
+        p.label.clone()
+    } else {
+        String::new()
+    };
+    let long_label = if valid_label(&p.long_label) {
+        p.long_label.clone()
+    } else {
+        String::new()
+    };
     if icon_text.is_empty()
         && color.is_empty()
         && letter.is_empty()
         && order == 0
         && handoff_order == 0
+        && label.is_empty()
+        && long_label.is_empty()
     {
         None
     } else {
@@ -318,8 +330,18 @@ pub fn sanitize_presentation(p: Option<&PresentationDefinition>) -> Option<Prese
             letter,
             order,
             handoff_order,
+            label,
+            long_label,
         })
     }
+}
+
+/// A name shown on screen: short, printable, no surrounding whitespace.
+fn valid_label(value: &str) -> bool {
+    !value.is_empty()
+        && value.chars().count() <= 40
+        && value.trim() == value
+        && !value.chars().any(char::is_control)
 }
 
 pub fn validate_definition(
@@ -587,6 +609,18 @@ fn declared_sections(def: &Definition) -> Vec<Diagnostic> {
             let values: Vec<String> = values.iter().map(|v| v.replace("{mode}", "x")).collect();
             out.extend(args(&field, &values, false));
         }
+        if p.choices.len() > 32
+            || p.choices
+                .iter()
+                .any(|c| c.is_empty() || c.len() > 64 || control(c) || c == "*")
+        {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "permissions.choices",
+                "permissions.choices holds at most 32 mode names without control characters",
+            ));
+        }
         let tools: Vec<String> = p
             .allowed_tools_args
             .iter()
@@ -709,6 +743,16 @@ fn declared_sections(def: &Definition) -> Vec<Diagnostic> {
                 "presentation.letter",
                 "presentation.letter must be 1 to 2 visible characters without surrounding whitespace",
             ));
+        }
+        for (field, value) in [("label", &p.label), ("long_label", &p.long_label)] {
+            if !value.is_empty() && !valid_label(value) {
+                out.push(diag(
+                    "invalid_presentation",
+                    "error",
+                    &format!("presentation.{field}"),
+                    "a presentation label is 1 to 40 characters without control characters",
+                ));
+            }
         }
         if p.order < 0 || p.handoff_order < 0 {
             out.push(diag(

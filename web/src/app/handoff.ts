@@ -12,7 +12,7 @@
 import { t } from '../i18n.js';
 import type { Message } from '../types/proto.js';
 import { apiFetch, escapeHtml, showToast } from './util.js';
-import { ORCHESTRATION_CLI_OPTIONS } from './orchestration-roles.js';
+import { orchestrationCliOptions } from './orchestration-roles.js';
 import { openDeriveDialog } from './derive-dialog.js';
 import {
   decideHandoffNotify,
@@ -40,7 +40,7 @@ function tx(key: string, fallback: string, vars: Record<string, unknown> = {}): 
 }
 
 function providerLabel(value: string): string {
-  const found = ORCHESTRATION_CLI_OPTIONS.find((o) => o.value === value);
+  const found = orchestrationCliOptions().find((o) => o.value === value);
   if (!found) return value;
   return found.label || tx(found.labelKey || '', found.labelKey || value);
 }

@@ -2,7 +2,8 @@
 // The optional spawn correlation event/snapshot field is defined in rust/src/proto/core.rs;
 // it does not change the frozen generated Rust message or the legacy Go contract.
 
-export type ProviderID = 'claude' | 'codex' | 'copilot' | 'cursor-agent' | 'opencode' | 'grok' | 'command-code' | 'common' | string;
+// provider の id。同梱の 7 本も登録した AI CLI も同じ文字列（一覧は Hub が送る宣言: provider-declarations.ts）。
+export type ProviderID = string;
 
 export type SessionState =
   | 'standby'

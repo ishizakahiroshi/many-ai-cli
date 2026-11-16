@@ -1,5 +1,6 @@
 import { openSessionListMoveDialog, sessionListMoveLabel, sessionListCanMove, wireSessionListMenu, restoreSessionListFocus, sessionListCardElement, isRestoringSessionListView, rememberSelectedSessionListView } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
+import { declaredProviderIds, onProviderDeclarationsChanged, providerUsageUrl } from './provider-declarations.js';
 import { t } from '../i18n.js';
 import { confirmationLabels, type ConfirmationAction } from './confirmation-labels.js';
 import { uiButtonClass, uiIconHtml, uiModalClass } from './ui-components.js';
@@ -537,14 +538,19 @@ export function getUsageLinkUrl(provider) {
     'command-code': STORAGE_USAGE_LINK_COMMAND_CODE_KEY,
   };
   const key = keyMap[provider];
-  if (!key) return DEFAULT_USAGE_LINKS[provider] || '#';
-  return normalizeHttpUrl(localStorage.getItem(key), DEFAULT_USAGE_LINKS[provider] || '') || '#';
+  // 既定: 取得して上書きした値 → 同梱の経路の値 → provider の宣言（Hub が送る links.usage_url）。
+  const fallback = DEFAULT_USAGE_LINKS[provider] || providerUsageUrl(provider);
+  if (!key) return fallback || '#';
+  return normalizeHttpUrl(localStorage.getItem(key), fallback) || '#';
 }
 
 export function applyUsageLinks() {
-  for (const p of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok', 'command-code']) {
-    const el = document.getElementById(`usage-link-${p}`);
-    if (el) el.href = getUsageLinkUrl(p);
+  // 宣言（Hub から届く provider）と、画面だけの経路（ollama・lm-studio）。リンクが分からない間は
+  // HTML に書いてある既定の href をそのまま残す（'#' で潰さない）。
+  for (const p of [...declaredProviderIds({ includeDisabled: true }), 'ollama', 'lm-studio']) {
+    const el = document.getElementById(`usage-link-${p}`) as HTMLAnchorElement | null;
+    const url = getUsageLinkUrl(p);
+    if (el && url !== '#') el.href = url;
   }
 }
 
@@ -2598,6 +2604,9 @@ initSettingsInformationArchitecture();
 
 // token moved to app/util.js (ESM shared export)
 
+// provider の宣言（使用量ページの URL）が届いたら、リンクを引き直す。
+onProviderDeclarationsChanged(() => applyUsageLinks());
+
 // usage-link デフォルトをリモート（GitHub バック）から取得して更新。
 // 失敗時は DEFAULT_USAGE_LINKS のハードコード値をそのまま使う。
 (async () => {
@@ -2605,7 +2614,7 @@ initSettingsInformationArchitecture();
     const res = await apiFetch('/api/usage-link-defaults');
     if (!res.ok) return;
     const d = await res.json();
-    for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok', 'command-code']) {
+    for (const k of Object.keys(d || {})) {
       // 空文字は無視（GitHub 側が古くキーを欠く場合に空で返るため、
       // ローカルの正しいデフォルト値を潰さない）。https 以外の値も既定値にしない（監査 N36。
       // Hub の側でも落としている）。

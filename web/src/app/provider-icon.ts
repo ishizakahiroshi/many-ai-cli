@@ -36,25 +36,32 @@
 // onerror は書けない）。読み込めなければ、または画像を外すと、頭文字の表示に戻る。図形は変えない。
 
 import { escapeHtml, withAssetTicket } from './util.js';
+import {
+  onProviderDeclarationsChanged,
+  providerBadgeLetter,
+  providerDeclaration,
+  providerShortLabel,
+} from './provider-declarations.js';
 
 type IconShape = 'circle' | 'rect';
 
 interface ProviderIconDef {
   shape: IconShape;
-  letter: string;
 }
 
-// 同梱 9 provider の既定。キーは safeClassToken() 済みの id。
+// 図形（丸 / 角丸）と、CSS で色を決める id の一覧。頭文字は持たない（Hub が送る provider の宣言
+// =presentation.letter から読む。宣言が無い id は先頭 1 文字）。ollama・lm-studio は provider ではなく
+// 画面だけにあるローカルの経路なので、ここに残す。キーは safeClassToken() 済みの id。
 const PROVIDER_ICON_DEFS: ReadonlyMap<string, ProviderIconDef> = new Map<string, ProviderIconDef>([
-  ['claude', { shape: 'circle', letter: 'C' }],
-  ['codex', { shape: 'circle', letter: 'X' }],
-  ['copilot', { shape: 'circle', letter: 'P' }],
-  ['cursor-agent', { shape: 'circle', letter: 'r' }],
-  ['ollama', { shape: 'rect', letter: 'O' }],
-  ['lm-studio', { shape: 'rect', letter: 'L' }],
-  ['opencode', { shape: 'circle', letter: 'O' }],
-  ['grok', { shape: 'circle', letter: 'G' }],
-  ['command-code', { shape: 'circle', letter: 'M' }],
+  ['claude', { shape: 'circle' }],
+  ['codex', { shape: 'circle' }],
+  ['copilot', { shape: 'circle' }],
+  ['cursor-agent', { shape: 'circle' }],
+  ['ollama', { shape: 'rect' }],
+  ['lm-studio', { shape: 'rect' }],
+  ['opencode', { shape: 'circle' }],
+  ['grok', { shape: 'circle' }],
+  ['command-code', { shape: 'circle' }],
 ]);
 
 const FALLBACK_COLOR = '#6b7280';
@@ -152,11 +159,9 @@ export function setProviderIconImageProbe(probe: ImageProbe | null): void {
 const symbolMarkups = new Map<string, string>();
 const symbolRaws = new Map<string, unknown>();
 
+// 既定の頭文字: Hub が送った宣言の letter、無ければ id（raw）の先頭 1 文字。
 function defaultLetter(token: string, raw: unknown): string {
-  const def = PROVIDER_ICON_DEFS.get(token);
-  if (def) return def.letter;
-  const source = String(raw || '?').trim();
-  return (Array.from(source)[0] || '?').toUpperCase();
+  return providerBadgeLetter(PROVIDER_ICON_DEFS.has(token) ? token : raw);
 }
 
 interface SymbolInnerOptions {
@@ -256,6 +261,11 @@ function refreshSymbol(token: string): void {
   if (existing) existing.innerHTML = buildSharedSymbolInner(token, raw);
   else if (spriteEl && spriteEl.isConnected) spriteEl.insertAdjacentHTML('beforeend', markup);
 }
+
+// Hub の宣言（頭文字）が入れ替わったら、描いてある symbol も頭文字を引き直す。
+onProviderDeclarationsChanged(() => {
+  for (const token of Array.from(symbolMarkups.keys())) refreshSymbol(token);
+});
 
 // 配布既定の色（利用者設定を上書きする前の :root の値）。設定画面の「既定のまま」の表示に使う。
 const defaultColors = new Map<string, string>();
@@ -380,21 +390,17 @@ export function providerIconHtml(provider: unknown, size: number = 16): string {
 
 // 画面に出す AI の表示名。Usage 欄・カード・起動パネルなど全画面がこの 1 つを使う。
 // usage-panel.ts は session-list.ts を import できない（循環 import の TDZ）ので、末端のここに置く。
-const PROVIDER_DISPLAY_NAMES: ReadonlyMap<string, string> = new Map<string, string>([
-  ['claude', 'Claude'],
-  ['codex', 'Codex'],
-  ['copilot', 'Copilot'],
-  ['cursor-agent', 'Cursor Agent'],
+// ローカルの経路（provider ではない）の名前。provider の名前は Hub が送る宣言から読む。
+const LOCAL_ROUTE_NAMES: ReadonlyMap<string, string> = new Map<string, string>([
   ['ollama', 'Ollama'],
   ['lm-studio', 'LM Studio'],
-  ['opencode', 'OpenCode'],
-  ['grok', 'Grok Build'],
-  ['command-code', 'Command Code'],
 ]);
 
 export function providerDisplayName(provider: unknown): string {
   const key = String(provider || '').toLowerCase();
-  return PROVIDER_DISPLAY_NAMES.get(key) || String(provider || '');
+  const local = LOCAL_ROUTE_NAMES.get(key);
+  if (local) return local;
+  return providerDeclaration(key) ? providerShortLabel(key) : String(provider || '');
 }
 
 // 静的 HTML の器（<span data-provider-icon="<id>" [data-provider-icon-size="<px>"]>）へアイコンを入れる。

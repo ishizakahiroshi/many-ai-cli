@@ -1,4 +1,5 @@
 // Orchestration role choices shared by the spawn settings and relay dialog.
+import { declaredProviderIds, providerIsBuiltin, providerLongLabel } from './provider-declarations.js';
 
 export interface OrchestrationCLIOption {
   value: string;
@@ -13,14 +14,13 @@ export const ORCHESTRATION_ROLE_DEFS = [
   { key: 'review', labelKey: 'spawn_role_review' },
 ] as const;
 
-// Shell is not a useful child-role CLI choice, so it is intentionally omitted.
-export const ORCHESTRATION_CLI_OPTIONS: readonly OrchestrationCLIOption[] = [
-  { value: '',             labelKey: 'spawn_role_cli_none' },
-  { value: 'claude',       label: 'Claude Code' },
-  { value: 'codex',        label: 'Codex CLI' },
-  { value: 'copilot',      label: 'GitHub Copilot' },
-  { value: 'cursor-agent', label: 'Cursor Agent' },
-  { value: 'opencode',     label: 'OpenCode' },
-  { value: 'grok',         label: 'Grok Build' },
-  { value: 'command-code', label: 'Command Code' },
-] as const;
+// 子の役割に選べる同梱の AI CLI（Hub が送る宣言の順。登録した AI CLI は各画面が別に足す）。
+// Shell は子の役割に向かないので入れない。
+export function orchestrationCliOptions(): readonly OrchestrationCLIOption[] {
+  return [
+    { value: '', labelKey: 'spawn_role_cli_none' },
+    ...declaredProviderIds({ sort: 'hub', includeAcp: false })
+      .filter((id) => providerIsBuiltin(id))
+      .map((id) => ({ value: id, label: providerLongLabel(id) })),
+  ];
+}

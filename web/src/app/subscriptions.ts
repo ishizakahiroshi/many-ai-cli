@@ -1,4 +1,5 @@
 // --- ESM imports (generated) ---
+import { providerLongLabel } from './provider-declarations.js';
 import { t } from '../i18n.js';
 import { confirmationLabels } from './confirmation-labels.js';
 import { apiFetch, escapeHtml, showToast } from './util.js';
@@ -32,15 +33,6 @@ export interface SubscriptionProviderEntry {
   profiles: SubscriptionProfileEntry[];
 }
 
-const PROVIDER_LABELS: Record<string, string> = {
-  claude: 'Claude Code',
-  codex: 'Codex CLI',
-  copilot: 'GitHub Copilot',
-  'cursor-agent': 'Cursor Agent',
-  opencode: 'OpenCode',
-  grok: 'Grok Build',
-};
-
 // 2 本目の契約を足すときに 1 回だけ出す同意ゲート（localStorage で記憶）。
 // mobile-connect の同意ゲートと同じ作りにしてある。
 const LS_STACKING_CONSENT = 'ai_cli_hub_subscription_stacking_consent';
@@ -65,7 +57,7 @@ let loadPromise: Promise<SubscriptionProviderEntry[]> | null = null;
 const changeListeners = new Set<() => void>();
 
 function providerLabel(provider: string): string {
-  return PROVIDER_LABELS[provider] || provider;
+  return providerLongLabel(provider);
 }
 
 function subsApi(path: string, init?: RequestInit): Promise<Response> {

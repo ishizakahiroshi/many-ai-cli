@@ -12,6 +12,7 @@ import { setActiveTab, updateChatCountBadge } from './settings.js';
 import { chatPane, openLightbox } from './attachments.js';
 import { evaluateTranscriptMessage, shouldRefreshChatDerivedState, transcriptMessageCategory, transcriptMessageIdentity, transcriptMessageKey, transcriptMessagePresentation, transcriptReadPosition, transcriptRestoreTop, updateRenderedChatMessage, type TranscriptReadPosition } from './transcript-message.js';
 import { hasProviderCapability } from './provider-store.js';
+import { providerBadgeLetter, providerDeclaration, providerShortLabel } from './provider-declarations.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -558,33 +559,25 @@ export function scrollChatPaneToBottomSoon(opts: any = {}) {
   requestAnimationFrame(() => run(0));
 }
 
+// チャットに出す AI の名前と頭文字。名前は Hub の宣言（presentation.label）、翻訳があればその文字。
+// ollama・lm-studio は provider ではなく画面だけの経路なので、ここで持つ。
+const LOCAL_ROUTE_CHAT_NAMES: Record<string, [string, string]> = {
+  'ollama': ['chat_ai_name_ollama', 'Ollama'],
+  'lm-studio': ['chat_ai_name_lm_studio', 'LM Studio'],
+};
+
 export function getAiDisplayName(provider) {
-  switch (provider) {
-    case 'claude':   return ti18n('chat_ai_name_claude', 'Claude');
-    case 'codex':    return ti18n('chat_ai_name_codex', 'Codex');
-    case 'copilot':  return ti18n('chat_ai_name_copilot', 'Copilot');
-    case 'cursor-agent': return ti18n('chat_ai_name_cursor_agent', 'Cursor Agent');
-    case 'ollama':     return ti18n('chat_ai_name_ollama', 'Ollama');
-    case 'lm-studio':  return ti18n('chat_ai_name_lm_studio', 'LM Studio');
-    case 'opencode': return ti18n('chat_ai_name_opencode', 'OpenCode');
-    case 'grok':     return ti18n('chat_ai_name_grok', 'Grok Build');
-    case 'command-code': return ti18n('chat_ai_name_command_code', 'Command Code');
-    default: return provider ? String(provider) : 'AI';
-  }
+  const local = LOCAL_ROUTE_CHAT_NAMES[String(provider || '')];
+  if (local) return ti18n(local[0], local[1]);
+  if (!provider) return 'AI';
+  const declared = providerDeclaration(provider);
+  if (!declared) return String(provider);
+  return ti18n(`chat_ai_name_${String(provider).replace(/-/g, '_')}`, providerShortLabel(provider));
 }
 
 export function getAiAvatarLetter(provider) {
-  switch (provider) {
-    case 'claude':   return 'C';
-    case 'codex':    return 'X';
-    case 'cursor-agent': return 'r';
-    case 'ollama':     return 'O';
-    case 'lm-studio':  return 'L';
-    case 'opencode': return 'P';
-    case 'grok':     return 'G';
-    case 'command-code': return 'M';
-    default: return 'A';
-  }
+  // 宣言の頭文字。無ければ先頭 1 文字（ollama は O、lm-studio は L）。AI の名前が無いときは A。
+  return provider ? providerBadgeLetter(provider) : 'A';
 }
 
 export function getUserAvatarLetter() {

@@ -55,6 +55,68 @@ struct ListResponse {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     diagnostics: Vec<Diagnostic>,
 }
+/// What the screen needs from a provider's declarations: names, badge, order,
+/// usage link, permission modes, input habits. No launch command is included.
+#[derive(Serialize)]
+struct DeclarationEntry {
+    id: String,
+    display_name: String,
+    enabled: bool,
+    /// One of the seven built-in providers (not a registered AI CLI).
+    builtin: bool,
+    /// `pty` or `acp`.
+    connection: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presentation: Option<PresentationDefinition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    slash_commands: Option<SlashCommandsDefinition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    permissions: Option<PermissionsDefinition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    links: Option<LinksDefinition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    input: Option<InputDefinition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    routines: Option<RoutinesDefinition>,
+    #[serde(skip_serializing_if = "is_zero_limit")]
+    context_limit: i64,
+}
+fn is_zero_limit(value: &i64) -> bool {
+    *value == 0
+}
+#[derive(Serialize)]
+struct DeclarationsResponse {
+    revision: String,
+    declarations: Vec<DeclarationEntry>,
+}
+/// The declarations of every provider of one registry, in registry order.
+fn declarations(registry: &Registry) -> DeclarationsResponse {
+    DeclarationsResponse {
+        revision: registry.revision().into(),
+        declarations: registry
+            .declared_list()
+            .into_iter()
+            .map(|def| DeclarationEntry {
+                builtin: is_builtin(&def.id),
+                connection: if def.connection.is_empty() {
+                    "pty".into()
+                } else {
+                    def.connection.clone()
+                },
+                enabled: def.enabled.unwrap_or(true),
+                context_limit: def.models.as_ref().map_or(0, |m| m.context_limit),
+                id: def.id,
+                display_name: def.display_name,
+                presentation: def.presentation,
+                slash_commands: def.slash_commands,
+                permissions: def.permissions,
+                links: def.links,
+                input: def.input,
+                routines: def.routines,
+            })
+            .collect(),
+    }
+}
 #[derive(Serialize)]
 struct DetailResponse {
     revision: String,
@@ -281,6 +343,18 @@ fn dispatch(
     let path = request.path.strip_prefix("/api/providers/")?;
     if path == "validate" {
         return Some(validate(request, paths));
+    }
+    // The screen's copy of every provider's declarations. `declarations` is a
+    // reserved provider id (`profile::store`), so it cannot shadow a provider.
+    if path == "declarations" {
+        return Some(if request.method != "GET" {
+            method()
+        } else {
+            match store.snapshot() {
+                Ok(snapshot) => Response::json(200, &declarations(&snapshot.registry)).no_store(),
+                Err(_) => unavailable(),
+            }
+        });
     }
     let parts = path.split('/').collect::<Vec<_>>();
     if parts.len() == 4 && parts[1] == "history" && parts[3] == "diff" {

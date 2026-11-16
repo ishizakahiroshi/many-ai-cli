@@ -1447,6 +1447,7 @@ mod tests {
         def.permissions = Some(PermissionsDefinition {
             modes: [("auto".to_owned(), argv(&["--yolo"]))].into(),
             allowed_tools_args: argv(&["--allow", "{tools}"]),
+            choices: vec![],
         });
         crate::profile::store::FileStore::new(&paths)
             .create_new(&def)

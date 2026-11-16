@@ -10,9 +10,10 @@ import { activateSession, providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 import { browserUseHint, loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 import { hasProviderCapability, loadProviderSummaries } from './provider-store.js';
+import { providerIsBuiltin, providerPermissionChoices } from './provider-declarations.js';
 import { commandMissingIds, isAiLaunchProvider, spawnLaunchBlockReason } from './cli-availability.js';
 import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
-import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
+import { orchestrationCliOptions, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
 import { compareCwdByBasename, filterCwdSubdirItems, joinCwdChild, splitCwdPath, splitCwdTypeahead } from './cwd-path.js';
 import { effortForSpawnBody, effortLevelsFor, resolveSpawnEffortSelection, setLaunchOptionChoices } from './spawn-confirm-store.js';
@@ -497,7 +498,7 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
   function buildOrchestrationRoleTable(): void {
     if (!spawnRoleTableBody) return;
     spawnRoleTableBody.innerHTML = ORCHESTRATION_ROLE_DEFS.map(r => {
-      const cliOptions = ORCHESTRATION_CLI_OPTIONS.map(o =>
+      const cliOptions = orchestrationCliOptions().map(o =>
         `<option value="${o.value}">${escapeHtml(o.label || t(o.labelKey || ''))}</option>`
       ).join('');
       return (
@@ -816,7 +817,6 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
   // 既知 provider だけを許可するため、subscription 欄は selectableProfiles が未知 id に
   // 対して自然に空を返すため、どちらも custom provider では追加対応なしで元々隠れる）。
   const injectedCustomProviderIds = new Set<string>();
-  const registryBuiltinProviderIds = new Set(['claude', 'codex', 'copilot', 'cursor-agent', 'opencode', 'grok', 'command-code']);
   let providerOptionsGeneration = 0;
   const addProviderOptionValue = '__add-ai-provider__';
   function addProviderOptionLabel(): string {
@@ -842,7 +842,7 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
       if (generation !== providerOptionsGeneration) return;
       const list = providerResponse
         ? providerResponse.providers
-          .filter((entry) => !registryBuiltinProviderIds.has(entry.id))
+          .filter((entry) => !providerIsBuiltin(entry.id))
           .map((entry) => ({ id: entry.id, label: entry.display_name }))
         : (Array.isArray(info?.custom_providers) ? info.custom_providers : []);
       const select = spawnProviderEl as HTMLSelectElement;
@@ -1183,42 +1183,44 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
     if (!spawnProviderCombobox.contains(e.target)) closeSpawnProviderList(false);
   });
 
+  // 許可モードの欄は、provider が選択肢を宣言している（permissions.choices）ときだけ出す。
+  // codex（sandbox と承認の 2 欄）と opencode（専用の 1 欄）は宣言を持たず、専用の欄を使う。
   function providerHasPermissionSelect(p: string): boolean {
     if (!hasProviderCapability(p, 'permissions')) return false;
-    return p !== 'codex' && p !== 'opencode';
+    return providerPermissionChoices(p).length > 0;
+  }
+
+  // 「auto」「bypassPermissions」の文言。provider 専用の訳があればそれ、無ければ共通の文言。
+  // 訳の名前は spawn_permission_<種類>_<id（- は _）>。cursor-agent だけは cursor で持っている。
+  function permissionLabel(kind: 'auto' | 'bypass', p: string): string {
+    const base = `spawn_permission_${kind}`;
+    const suffix = p.replace(/-/g, '_');
+    for (const key of [`${base}_${suffix}`, ...(suffix.startsWith('cursor') ? [`${base}_cursor`] : [])]) {
+      const text = t(key);
+      if (text && text !== key) return text;
+    }
+    return t(base);
   }
 
   function permissionAutoLabel(p: string): string {
-    if (p === 'copilot') return t('spawn_permission_auto_copilot');
-    if (p === 'cursor-agent') return t('spawn_permission_auto_cursor');
-    return t('spawn_permission_auto');
+    return permissionLabel('auto', p);
   }
 
   function permissionBypassLabel(p: string): string {
-    if (p === 'grok') return t('spawn_permission_bypass_grok');
-    if (p === 'copilot') return t('spawn_permission_bypass_copilot');
-    if (p === 'cursor-agent') return t('spawn_permission_bypass_cursor');
-    if (p === 'command-code') return t('spawn_permission_bypass_command_code');
-    return t('spawn_permission_bypass');
+    return permissionLabel('bypass', p);
   }
 
   function syncPermissionModeOptions(p: string): void {
     if (!spawnPermissionMode) return;
-    const claudeLike = p === 'claude' || p === 'grok';
-    // Command Code は plan / acceptEdits に対応するが auto に相当する mode を持たない
-    // （親 plan の対応表: plan → --permission-mode plan、acceptEdits → --auto-accept、
-    // bypassPermissions → --yolo）。claudeLike の条件は書き換えず、専用の分岐を足すだけにする。
-    const commandCode = p === 'command-code';
+    const choices = providerPermissionChoices(p);
     for (const opt of Array.from(spawnPermissionMode.options)) {
-      if (opt.value === 'plan' || opt.value === 'acceptEdits') {
-        opt.hidden = !(claudeLike || commandCode);
-        opt.disabled = !(claudeLike || commandCode);
+      // default は常にある。ほかは provider が宣言した選択肢だけ出す。
+      if (opt.value !== 'default') {
+        const offered = choices.includes(opt.value);
+        opt.hidden = !offered;
+        opt.disabled = !offered;
       }
-      if (opt.value === 'auto') {
-        opt.hidden = commandCode;
-        opt.disabled = commandCode;
-        opt.textContent = permissionAutoLabel(p);
-      }
+      if (opt.value === 'auto') opt.textContent = permissionAutoLabel(p);
       if (opt.value === 'bypassPermissions') opt.textContent = permissionBypassLabel(p);
     }
     const selected = spawnPermissionMode.selectedOptions[0];

@@ -1,4 +1,5 @@
 // --- ESM imports (generated) ---
+import { providerBadgeLetter } from './provider-declarations.js';
 import { inputEl } from '../app.js';
 import { mountStartupView, mountTerminalStartup } from './session-startup-view.js';
 import { sessionStartups, type SessionStartup } from './session-startup.js';
@@ -589,14 +590,7 @@ export class MultiPaneManager {
     // プロバイダ丸バッジ
     const provBadge = document.createElement('span');
     provBadge.className = `sc-provider ${session.provider || ''}`;
-    provBadge.textContent = session.provider === 'claude' ? 'C'
-                          : session.provider === 'codex'  ? 'X'
-                          : session.provider === 'copilot' ? 'P'
-                          : session.provider === 'cursor-agent' ? 'r'
-                          : session.provider === 'grok' ? 'G'
-                          : session.provider === 'ollama' ? 'O'
-                          : session.provider === 'command-code' ? 'M'
-                          : (session.provider || '?')[0].toUpperCase();
+    provBadge.textContent = providerBadgeLetter(session.provider);
     header.appendChild(provBadge);
 
     // セッション ID

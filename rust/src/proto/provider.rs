@@ -295,6 +295,14 @@ pub struct PermissionsDefinition {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub allowed_tools_args: Vec<String>,
+    /// The permission modes the new-session form offers, in order. Empty: the
+    /// form shows no permission selector for this provider.
+    #[serde(
+        rename = "choices",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub choices: Vec<String>,
 }
 
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -355,6 +363,22 @@ pub struct InputDefinition {
         skip_serializing_if = "String::is_empty"
     )]
     pub slash_submit: String,
+    /// The CLI paints its body and its frames with absolute cursor moves, so the
+    /// screen must not drop those writes as status bar updates.
+    #[serde(
+        rename = "full_frame_cursor",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub full_frame_cursor: bool,
+    /// The CLI does not read Ctrl+U as "clear the line"; sending it breaks the
+    /// submit that follows.
+    #[serde(
+        rename = "no_line_clear",
+        deserialize_with = "null_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub no_line_clear: bool,
 }
 
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -597,6 +621,20 @@ pub struct PresentationDefinition {
         skip_serializing_if = "is_zero"
     )]
     pub handoff_order: i64,
+    /// Short name the lists, badges and cards show. Rust-only.
+    #[serde(
+        rename = "label",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub label: String,
+    /// Full product name the launch pickers and role lists show. Rust-only.
+    #[serde(
+        rename = "long_label",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub long_label: String,
 }
 
 /// Source: `internal/provider/schema.go`, `UpdateDefinition`.

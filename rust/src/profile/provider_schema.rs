@@ -134,6 +134,10 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
                 name: "allowed_tools_args",
                 kind: "[]string",
             },
+            Field {
+                name: "choices",
+                kind: "[]string",
+            },
         ],
     },
     Schema {
@@ -168,6 +172,14 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
             Field {
                 name: "slash_submit",
                 kind: "string",
+            },
+            Field {
+                name: "full_frame_cursor",
+                kind: "bool",
+            },
+            Field {
+                name: "no_line_clear",
+                kind: "bool",
             },
         ],
     },
@@ -334,6 +346,14 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
             Field {
                 name: "handoff_order",
                 kind: "int",
+            },
+            Field {
+                name: "label",
+                kind: "string",
+            },
+            Field {
+                name: "long_label",
+                kind: "string",
             },
         ],
     },

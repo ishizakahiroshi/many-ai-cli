@@ -12,6 +12,15 @@ Release artifacts are published at
 
 ### Added
 
+- **A registered AI CLI is handled like the built-in seven.** A definition can
+  now declare its slash command source or list, scheduled-run completion, usage
+  page, badge letter and order, permission modes and their launch flags, login
+  arguments, model list command, input habits and ready-screen text. A routine
+  can use a registered CLI, `/api/slash-commands` answers for it, and the
+  dashboard reads names, badge letters, order, usage links and permission
+  choices from the Hub (`GET /api/providers/declarations`) instead of fixed
+  tables. The badge letter of OpenCode and Copilot is now the same on every
+  screen (`O` and `P`; the chat avatar used to show `P` and `A`).
 - **An AI can now add a new AI CLI with `many-ai-cli provider add`.** `provider
   list`, `provider remove` and `provider test` complete the set, and
   `provider add --help` is written for an AI agent (what to research, what to

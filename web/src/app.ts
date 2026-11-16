@@ -1,4 +1,5 @@
 import { noteSpawnSessions } from './app/session-spawn-tracker.js';
+import { providerInterruptKey, providerLongLabel } from './app/provider-declarations.js';
 import { restoreSessionListDrawerScroll, isSessionInSelectedListTab, preserveSessionListSelection } from './app/session-list-tabs.js';
 import { sessionListCloseNeighbor } from './app/session-list-tab-state.js';
 import { probeSpan } from './debug/probe.js';
@@ -162,9 +163,9 @@ export function isSessionHeadless(sessionId: number | null): boolean {
   return !!s && s.execution_mode === 'headless';
 }
 
-// 停止ボタン（■）が PTY へ送る中断キーを provider 別に返す。
-// grok（Grok Build CLI）は Esc では生成を中断できず Ctrl+C(0x03) のみ有効
-// （Windows 実機 v0.2.93 で確認）。他 provider は従来どおり Esc(0x1b)。
+// 停止ボタン（■）が PTY へ送る中断キーを provider 別に返す。キーは provider の宣言
+// （input.interrupt_key）。grok（Grok Build CLI）は Esc では生成を中断できず Ctrl+C(0x03) のみ有効
+// （Windows 実機 v0.2.93 で確認）なので、同梱の宣言で ctrl-c にしてある。他は Esc(0x1b)。
 export function stopKeyForActiveSession(): string {
   const s = activeSessionId !== null ? sessions.get(activeSessionId) : undefined;
   return s?.provider === 'grok' ? '\x03' : '\x1b';
@@ -2847,11 +2848,7 @@ inputEl.addEventListener('blur', (e) => {
     pickerProvider = provider;
     pickerSessionId = sessionId || null;
     pickerEl.hidden = false;
-    titleEl.textContent = provider === 'claude' ? 'Claude Code'
-                        : provider === 'copilot' ? 'GitHub Copilot'
-                        : provider === 'cursor-agent' ? 'Cursor Agent'
-                        : provider === 'command-code' ? 'Command Code'
-                        : 'Codex CLI';
+    titleEl.textContent = providerLongLabel(provider);
     timeEl.textContent  = '';
     listEl.innerHTML = `<div class="slash-picker-status">${t('slash_picker_loading')}</div>`;
     searchEl.value = '';

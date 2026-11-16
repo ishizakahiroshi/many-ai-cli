@@ -22,7 +22,7 @@ import {
 import { activeSessionId, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
 import { loadProviderSummaries } from './provider-store.js';
-import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
+import { orchestrationCliOptions, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import {
   clearAllSpawnConfirmationsForHubRestart,
   closeSpawnConfirmation,
@@ -226,7 +226,7 @@ export function headlessUnsupportedNoticeHtml(): string {
 // 「このフォルダを信頼済みとして登録する」の文言に入れる CLI 名。provider の select と
 // 同じ表示名を使う（名前を 2 か所に書かない）。
 function folderTrustCliName(provider: string): string {
-  const option = ORCHESTRATION_CLI_OPTIONS.find((o) => o.value === provider);
+  const option = orchestrationCliOptions().find((o) => o.value === provider);
   return option?.label || provider;
 }
 
@@ -272,7 +272,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   const shownPrompt = prompt.slice(0, SPAWN_CONFIRM_PROMPT_LIMIT);
   const truncated = prompt.length > shownPrompt.length;
   const provider = record.provider;
-  const providerOptions = ORCHESTRATION_CLI_OPTIONS.filter((o) => o.value);
+  const providerOptions = orchestrationCliOptions().filter((o) => o.value);
   const knownProvider = providerOptions.some((o) => o.value === provider);
   const optionHtml = (value: string, label: string) =>
     `<option value="${escapeHtml(value)}"${value === provider ? ' selected' : ''}>${escapeHtml(label)}</option>`;

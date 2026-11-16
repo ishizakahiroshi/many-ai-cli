@@ -14,6 +14,8 @@
 // provider × 段ごとに入っている（internal/hub/child_permission.go と
 // internal/hub/orchestration.go の childApprovalPreviewTiers）。
 // 全項目が空なら「Hub は何も足さない」＝ CLI 既定のまま。
+import { providerIsBuiltin } from './provider-declarations.js';
+
 export interface ChildApproval {
   permissionMode: string;
   sandbox: string;
@@ -153,22 +155,12 @@ export function rememberedRolePermission(role: string): string {
   return tier && isPermissionPresetAvailable(tier) ? tier : '';
 }
 
-// 組み込みの 7 種（Hub の ORCHESTRATION_PROVIDERS と同じ）。これ以外で shell でもない id は、
+// 組み込みの 7 種か（Hub の宣言の builtin。Hub の子の一覧と同じ）。これ以外で shell でもない id は、
 // 利用者が登録した AI CLI。登録した AI には組み込みの権限・モデルの引数を渡さない
 // （新しいセッションの画面と同じ扱い）ので、確認の画面もその欄を出さない。
-const BUILTIN_CHILD_PROVIDER_IDS: readonly string[] = [
-  'claude',
-  'codex',
-  'copilot',
-  'cursor-agent',
-  'opencode',
-  'grok',
-  'command-code',
-];
-
 export function isRegisteredChildProvider(provider: string): boolean {
   const id = String(provider ?? '').trim();
-  return id !== '' && id !== 'shell' && !BUILTIN_CHILD_PROVIDER_IDS.includes(id);
+  return id !== '' && id !== 'shell' && !providerIsBuiltin(id);
 }
 
 export interface RegisteredChildProviderChoice {

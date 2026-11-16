@@ -15,6 +15,10 @@ import {
   safeClassToken,
   setProviderIconImageProbe,
 } from '../src/app/provider-icon';
+import { seedBuiltinProviderDeclarations } from '../src/app/provider-declarations-seed';
+
+// Hub から宣言が届いた後の状態にする（宣言の値は rust/assets/provider/declarations.json）。
+seedBuiltinProviderDeclarations();
 
 const BUNDLED = [
   'claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok', 'command-code',

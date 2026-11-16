@@ -6,6 +6,7 @@
 
 'use strict';
 
+import { providerBadgeLetter } from './provider-declarations.js';
 import {
   canPageAltBuffer,
   disableWebglRenderer,
@@ -239,15 +240,7 @@ export class DetachedGridManager {
     // プロバイダ丸バッジ
     const provBadge = document.createElement('span');
     provBadge.className = `sc-provider ${session.provider || ''}`;
-    provBadge.textContent =
-      session.provider === 'claude'        ? 'C'
-    : session.provider === 'codex'         ? 'X'
-    : session.provider === 'copilot'       ? 'P'
-    : session.provider === 'cursor-agent'  ? 'r'
-    : session.provider === 'grok'          ? 'G'
-    : session.provider === 'ollama'        ? 'O'
-    : session.provider === 'command-code'  ? 'M'
-    : (session.provider || '?')[0].toUpperCase();
+    provBadge.textContent = providerBadgeLetter(session.provider);
     header.appendChild(provBadge);
 
     // セッション ID
