@@ -184,10 +184,6 @@
       "count": 5,
       "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
     },
-    "web/src/app/*-pan*.ts": {
-      "count": 41,
-      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
-    },
     "web/src/app/chat-history.ts": {
       "count": 1,
       "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
@@ -232,6 +228,10 @@
       "count": 23,
       "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
     },
+    "web/src/app/sp*-pan*.ts": {
+      "count": 25,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
     "web/src/app/spawn-approval-memory.ts": {
       "count": 6,
       "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
@@ -250,6 +250,10 @@
     },
     "web/src/app/transcript-message.ts": {
       "count": 1,
+      "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
+    },
+    "web/src/app/us*-pan*.ts": {
+      "count": 16,
       "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
     },
     "web/src/index.html": {
