@@ -40,6 +40,9 @@ pub fn registry_user_sources(
         .list()
         .into_iter()
         .filter(|summary| summary.origin.as_str() == crate::proto::provider::ORIGIN_USER)
+        // A stored id that could spell another provider's phrase file
+        // (`claude.custom`) is kept as a provider but never gets one.
+        .filter(|summary| crate::profile::store::id_may_name_phrase_file(&summary.id))
         .map(|summary| {
             let source = snapshot
                 .registry

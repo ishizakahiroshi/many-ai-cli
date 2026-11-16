@@ -152,9 +152,39 @@ fn sorted_entries(dir: &Dir) -> Result<Vec<String>> {
 pub fn is_builtin(id: &str) -> bool {
     BUILTIN_PROVIDER_IDS.contains(&id)
 }
+/// Ids that are reserved without being launchable: `shell` is a launch identity
+/// and `common` is the approval-pattern file every session shares.
+const RESERVED_NON_PROVIDERS: &[&str] = &["shell", "common"];
+fn reserved(id: &str) -> bool {
+    is_builtin(id) || RESERVED_NON_PROVIDERS.contains(&id)
+}
+/// Whether a registered id can name an approval-pattern file without landing on
+/// another provider's: the store keeps `<id>.json`, `<id>.custom.json` and
+/// `<id>.official.json` side by side, so a `.` in the id could spell
+/// `claude.custom`. Ids stored before this rule are kept (and removable) but
+/// carry no phrase file.
+pub fn id_may_name_phrase_file(id: &str) -> bool {
+    !id.contains('.') && !reserved(id)
+}
+/// For a NEW or edited user definition.
 pub fn validate_user_id(id: &str) -> Result<()> {
     valid_id(id).map_err(StoreError::Invalid)?;
-    if is_builtin(id) || id == "shell" {
+    if reserved(id) {
+        return Err(StoreError::Invalid(format!(
+            "provider id {id:?} is reserved"
+        )));
+    }
+    if !id_may_name_phrase_file(id) {
+        return Err(StoreError::Invalid(format!(
+            "provider id {id:?} must not contain '.' (it would name another provider's approval phrase file)"
+        )));
+    }
+    Ok(())
+}
+/// For removing a stored definition: a historical id with a `.` stays removable.
+fn validate_removable_id(id: &str) -> Result<()> {
+    valid_id(id).map_err(StoreError::Invalid)?;
+    if reserved(id) {
         return Err(StoreError::Invalid(format!(
             "provider id {id:?} is reserved"
         )));
@@ -277,7 +307,7 @@ impl FileStore {
         Ok(root.replace(&name, &raw, 0o600)?)
     }
     pub fn delete(&self, id: &str) -> Result<()> {
-        validate_user_id(id)?;
+        validate_removable_id(id)?;
         let _guard = self
             .gate
             .lock()

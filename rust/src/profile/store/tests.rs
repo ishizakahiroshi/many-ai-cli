@@ -101,6 +101,64 @@ fn go_oracle_canonical_hash_revision_and_registry() {
     assert_eq!(registry.revision(), fixture["registry_revision"]);
 }
 #[test]
+fn new_user_ids_cannot_name_an_approval_pattern_file() {
+    // approval-patterns/ holds `<id>.json`, `<id>.custom.json`, `<id>.official.json`
+    // for every built-in and for `common`; a registered id must never map there.
+    for id in [
+        "common",
+        "claude.custom",
+        "claude.official",
+        "codex.custom",
+        "my.cli",
+        "shell",
+        "claude",
+    ] {
+        assert!(validate_user_id(id).is_err(), "{id} must be refused");
+    }
+    for id in ["fixture-cli", "my_cli2", "a-b"] {
+        assert!(validate_user_id(id).is_ok(), "{id} must stay accepted");
+    }
+    for id in crate::application::approval_patterns::PROVIDERS {
+        assert!(
+            validate_user_id(id).is_err(),
+            "every approval-patterns provider name is reserved: {id}"
+        );
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let store = FileStore::new(&paths(&temp));
+    for id in ["common", "claude.custom"] {
+        assert!(matches!(
+            store.create_new(&definition(id)),
+            Err(StoreError::Invalid(_))
+        ));
+        assert!(matches!(
+            store.save(&definition(id)),
+            Err(StoreError::Invalid(_))
+        ));
+    }
+}
+#[test]
+fn a_historical_dotted_id_stays_loadable_and_removable_but_has_no_phrase_file() {
+    let temp = tempfile::tempdir().unwrap();
+    let paths = paths(&temp);
+    let store = FileStore::new(&paths);
+    std::fs::create_dir_all(paths.resource(Resource::ProviderDefinitions)).unwrap();
+    let dir = Dir::open(&paths.resource(Resource::ProviderDefinitions)).unwrap();
+    dir.create_new(
+        "legacy.cli.json",
+        &serde_json::to_vec(&definition("legacy.cli")).unwrap(),
+        0o600,
+    )
+    .unwrap();
+    assert_eq!(store.load().unwrap().definitions.len(), 1);
+    assert!(!id_may_name_phrase_file("legacy.cli"));
+    assert!(id_may_name_phrase_file("fixture-cli"));
+    store.delete("legacy.cli").unwrap();
+    assert!(store.load().unwrap().definitions.is_empty());
+    assert!(store.delete("common").is_err());
+    assert!(store.delete("claude").is_err());
+}
+#[test]
 fn user_create_save_delete_and_historical_load_diagnostics() {
     let temp = tempfile::tempdir().unwrap();
     let paths = paths(&temp);
