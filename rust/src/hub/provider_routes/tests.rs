@@ -446,6 +446,71 @@ fn source_backup_failure_rolls_back_create_before_reload() {
     assert_eq!(store.snapshot().unwrap().registry.revision(), before);
 }
 #[test]
+fn an_approval_source_the_hub_would_never_read_is_refused_by_validate_and_create() {
+    // A CLI that runs under another HOME writes its phrase file under its own
+    // root; the Hub can read only sources under its own root or on raw.githubusercontent.com.
+    let (temp, paths, store) = setup();
+    let elsewhere = temp.path().join("..").join("other-home").join("x.md");
+    let inside = paths.root().join("approval-patterns").join("ok-cli.md");
+    let with_source = |source: &std::path::Path| {
+        let mut def = definition("ok-cli");
+        def.approval_pattern_source = source.to_string_lossy().into_owned();
+        def
+    };
+    let outside = response(
+        &request(
+            "POST",
+            "/api/providers/validate",
+            serde_json::to_value(with_source(&elsewhere)).unwrap(),
+        ),
+        &store,
+        &paths,
+    );
+    assert_eq!(outside.status, 200);
+    assert_eq!(value(&outside)["valid"], false);
+    assert_eq!(
+        value(&outside)["diagnostics"][0]["field"],
+        "approval_pattern_source"
+    );
+    assert!(
+        value(&outside)["diagnostics"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("under")
+    );
+    for ok in [serde_json::to_value(with_source(&inside)).unwrap(), {
+        let mut def = definition("ok-cli");
+        def.approval_pattern_source =
+            "https://raw.githubusercontent.com/synthetic/phrases.md".into();
+        serde_json::to_value(def).unwrap()
+    }] {
+        let valid = response(
+            &request("POST", "/api/providers/validate", ok),
+            &store,
+            &paths,
+        );
+        assert_eq!(value(&valid)["valid"], true, "{}", value(&valid));
+    }
+    let created = response(
+        &request(
+            "POST",
+            "/api/providers",
+            serde_json::to_value(with_source(&elsewhere)).unwrap(),
+        ),
+        &store,
+        &paths,
+    );
+    assert_eq!(created.status, 422);
+    assert!(
+        store
+            .snapshot()
+            .unwrap()
+            .registry
+            .lookup("ok-cli")
+            .is_none()
+    );
+}
+#[test]
 fn schema_validation_and_clear_failure_are_real_errors() {
     let (_temp, paths, store) = setup();
     let invalid = response(

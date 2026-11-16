@@ -70,6 +70,45 @@ fn one_line(text: &str) -> String {
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect()
 }
+/// A line of another program's output made safe to print: ANSI/OSC sequences
+/// removed, any other control character shown as a space.
+fn printable_line(text: &str) -> String {
+    one_line(&crate::approval::identity::strip_ansi(text))
+}
+const SESSION_VARIABLE_PREFIX: &str = "MANY_AI_CLI_";
+/// Every variable of a Hub session this process inherited, to be removed for a
+/// provider under test: the Hub token, port, session id and local proof, and
+/// anything else with the `MANY_AI_CLI_` prefix (case-insensitive on Windows).
+fn hub_session_variables(
+    environment: &[String],
+    inherited: impl IntoIterator<Item = std::ffi::OsString>,
+) -> std::collections::BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>> {
+    let mut env = std::collections::BTreeMap::new();
+    for name in [
+        "MANY_AI_CLI_HUB_TOKEN",
+        "MANY_AI_CLI_HUB_PORT",
+        "MANY_AI_CLI_SESSION_ID",
+        "MANY_AI_CLI_LOCAL_PROOF",
+    ] {
+        env.insert(name.into(), None);
+    }
+    let from_entries = environment
+        .iter()
+        .filter_map(|entry| entry.split_once('=').map(|(name, _)| name.into()));
+    for name in inherited.into_iter().chain(from_entries) {
+        let Some(text) = name.to_str() else { continue };
+        let matches = if cfg!(windows) {
+            text.to_ascii_uppercase()
+                .starts_with(SESSION_VARIABLE_PREFIX)
+        } else {
+            text.starts_with(SESSION_VARIABLE_PREFIX)
+        };
+        if matches {
+            env.insert(name, None);
+        }
+    }
+    env
+}
 pub fn origin_label(origin: &str) -> &'static str {
     match origin {
         ORIGIN_USER => "user",
@@ -184,6 +223,9 @@ impl<H: HubApi> Registry<'_, H> {
             .join("approval-patterns")
             .join(format!("{id}.md"))
     }
+    /// Creates the phrase file, never replacing one that exists: whatever is
+    /// there belongs to another registration (or an earlier run), and a failed
+    /// `add` must not delete or overwrite a file it did not create.
     fn write_approval_phrases(&self, id: &str, label: &str, phrases: &[String]) -> io::Result<()> {
         let mut body = format!(
             "# {} Approval Patterns\n\n> Written by `many-ai-cli provider add`. One backtick-quoted phrase per bullet; the Hub reads only those.\n\n",
@@ -192,12 +234,35 @@ impl<H: HubApi> Registry<'_, H> {
         for phrase in phrases {
             body.push_str(&format!("- `{}`\n", phrase.trim()));
         }
-        self.approval_dir()?
-            .replace(&format!("{id}.md"), body.as_bytes(), 0o600)
+        match self
+            .approval_dir()?
+            .create_new(&format!("{id}.md"), body.as_bytes(), 0o600)
+        {
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Err(error(format!(
+                "{} already exists (left by an earlier registration, or another one running now); it was not changed. Delete it, or choose another id",
+                self.approval_file(id).display()
+            ))),
+            other => other,
+        }
     }
     fn remove_approval_phrases(&self, id: &str) {
+        if id.is_empty() || id.contains(['/', '\\']) || id == ".." {
+            return;
+        }
         if let Ok(dir) = self.approval_dir() {
             let _ = dir.remove_file(&format!("{id}.md"));
+        }
+    }
+    /// The Hub refused a source (or never could read it) because this CLI's data
+    /// folder is not the Hub's: say so plainly.
+    fn explain_source_refusal(&self, reason: String) -> String {
+        if reason.contains("approval_pattern_source") {
+            format!(
+                "{reason}\n  hint: this command wrote the phrase file under {}, which the running Hub does not read. The CLI and the Hub use different data folders (HOME / USERPROFILE of this shell differs from the Hub's). Run it with the Hub's HOME, or register without --approval-option",
+                self.paths.root().display()
+            )
+        } else {
+            reason
         }
     }
 
@@ -259,16 +324,16 @@ impl<H: HubApi> Registry<'_, H> {
                 .await?;
             let body = reply.json();
             if reply.status != 200 {
-                return Err(error(format!(
+                return Err(error(self.explain_source_refusal(format!(
                     "the Hub refused the definition: {}",
                     reply.reason()
-                )));
+                ))));
             }
             if body["valid"] != true {
-                return Err(error(format!(
+                return Err(error(self.explain_source_refusal(format!(
                     "the Hub refused the definition:\n  {}",
                     diagnostics_errors(&body["diagnostics"]).join("\n  ")
-                )));
+                ))));
             }
         } else {
             let (_, diagnostics) = validate_definition(&raw, &default_adapters())
@@ -306,7 +371,10 @@ impl<H: HubApi> Registry<'_, H> {
         if let Some(hub) = self.hub {
             let reply = hub.call("POST", "/api/providers", Some(raw)).await?;
             if reply.status != 201 {
-                return Err(error(format!("the Hub did not add it: {}", reply.reason())));
+                return Err(error(self.explain_source_refusal(format!(
+                    "the Hub did not add it: {}",
+                    reply.reason()
+                ))));
             }
             return Ok(reply.json()["diagnostics"]
                 .as_array()
@@ -412,6 +480,14 @@ impl<H: HubApi> Registry<'_, H> {
                 )));
             }
         }
+        // The phrase file `provider add` made: exactly `<home>/approval-patterns/<id>.md`
+        // and only when the definition points at it. Any other source (a URL, a
+        // path elsewhere) is not ours to delete.
+        let own_phrase_file = self.effective(id).await.ok().is_some_and(|effective| {
+            !effective.definition.approval_pattern_source.is_empty()
+                && Path::new(&effective.definition.approval_pattern_source)
+                    == self.approval_file(id)
+        });
         if let Some(hub) = self.hub {
             let reply = hub
                 .call(
@@ -457,6 +533,9 @@ impl<H: HubApi> Registry<'_, H> {
                 ))
             })?;
         }
+        if own_phrase_file {
+            self.remove_approval_phrases(id);
+        }
         Ok(format!(
             "removed provider {id}\nA backup (reason before-delete) is kept: many-ai-cli provider backup list {id}\n"
         ))
@@ -492,15 +571,9 @@ impl<H: HubApi> Registry<'_, H> {
                 "a headless argument prompt cannot run through a Windows cmd shim; use a native executable, or register with --prompt-via stdin",
             ));
         }
-        let mut env = std::collections::BTreeMap::new();
         // The tested CLI is not a Hub session: it gets no Hub credentials.
-        for name in [
-            "MANY_AI_CLI_HUB_TOKEN",
-            "MANY_AI_CLI_HUB_PORT",
-            "MANY_AI_CLI_SESSION_ID",
-        ] {
-            env.insert(name.into(), None);
-        }
+        let env =
+            hub_session_variables(self.environment, std::env::vars_os().map(|(name, _)| name));
         let process = ProcessPlan {
             executable: command.executable.into(),
             args: command.args.into_iter().map(Into::into).collect(),
@@ -535,9 +608,11 @@ impl<H: HubApi> Registry<'_, H> {
             _ => result.exit_code.to_string(),
         };
         let mut report = format!("exit code: {exit}\nelapsed: {elapsed:.1} s\n");
-        let lines: Vec<&str> = text
+        // The child's output is untrusted terminal text: no escape sequence of it
+        // reaches this terminal.
+        let lines: Vec<String> = crate::approval::identity::strip_ansi(&text)
             .lines()
-            .map(str::trim_end)
+            .map(|line| printable_line(line).trim_end().to_owned())
             .filter(|line| !line.is_empty())
             .collect();
         report.push_str("output (first 10 lines):\n");

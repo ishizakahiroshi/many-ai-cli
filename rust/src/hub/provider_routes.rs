@@ -274,13 +274,13 @@ fn dispatch(
                 }
                 Err(_) => unavailable(),
             },
-            "POST" => create(request, store, warnings),
+            "POST" => create(request, store, paths, warnings),
             _ => method(),
         });
     }
     let path = request.path.strip_prefix("/api/providers/")?;
     if path == "validate" {
-        return Some(validate(request));
+        return Some(validate(request, paths));
     }
     let parts = path.split('/').collect::<Vec<_>>();
     if parts.len() == 4 && parts[1] == "history" && parts[3] == "diff" {
@@ -370,15 +370,37 @@ fn dispatch(
         _ => method(),
     })
 }
+/// An `approval_pattern_source` the Hub would never read (a path outside its own
+/// data folder, or a URL other than raw.githubusercontent.com) is an error up
+/// front: accepted silently, its phrases would just never load. A CLI that runs
+/// under another HOME than the Hub writes such a path.
+fn source_diagnostic(source: &str, paths: &RuntimePaths) -> Option<Diagnostic> {
+    crate::application::slash_commands::validate_source(source, paths)
+        .err()
+        .map(|error| Diagnostic {
+            code: "approval_pattern_source_not_readable".into(),
+            severity: SEVERITY_ERROR.into(),
+            field: "approval_pattern_source".into(),
+            message: format!("the Hub cannot read this source: {error}"),
+        })
+}
 fn create(
     request: &Request,
     store: &ProviderRegistryStore,
+    paths: &RuntimePaths,
     warnings: &mut Vec<StoreWarning>,
 ) -> Response {
     let definition: Definition = match decode_json(request) {
         Ok(v) => v,
         Err(e) => return e,
     };
+    if let Some(diagnostic) = source_diagnostic(&definition.approval_pattern_source, paths) {
+        return Response::error(
+            422,
+            "invalid_approval_pattern_source",
+            &format!("approval_pattern_source: {}", diagnostic.message),
+        );
+    }
     if is_builtin(&definition.id) || definition.id == "shell" {
         return Response::error(409, "provider_id_reserved", "provider id is reserved");
     }
@@ -570,7 +592,7 @@ fn recovery(
     }
     Response::json(200, &json!({"ok":true,"revision":recovered.revision}))
 }
-fn validate(request: &Request) -> Response {
+fn validate(request: &Request, paths: &RuntimePaths) -> Response {
     if request.method != "POST" {
         return method();
     }
@@ -585,10 +607,18 @@ fn validate(request: &Request) -> Response {
         None | Some(Err(_)) => return Response::error(400, "bad_request", "invalid json"),
     };
     match validate_definition(raw.get().as_bytes(), &default_adapters()) {
-        Ok((_, diagnostics)) => Response::json(
-            200,
-            &json!({"valid":!diagnostics.iter().any(Diagnostic::is_error),"diagnostics":nullable_diagnostics(diagnostics)}),
-        ),
+        Ok((_, mut diagnostics)) => {
+            let source = serde_json::from_str::<serde_json::Value>(raw.get())
+                .ok()
+                .and_then(|value| value["approval_pattern_source"].as_str().map(str::to_owned));
+            if let Some(diagnostic) = source.and_then(|source| source_diagnostic(&source, paths)) {
+                diagnostics.push(diagnostic);
+            }
+            Response::json(
+                200,
+                &json!({"valid":!diagnostics.iter().any(Diagnostic::is_error),"diagnostics":nullable_diagnostics(diagnostics)}),
+            )
+        }
         Err(e) => Response::error(400, "invalid_provider_definition", &e),
     }
 }

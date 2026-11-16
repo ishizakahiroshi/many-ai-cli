@@ -341,6 +341,161 @@ async fn a_failed_create_leaves_no_phrase_file_and_a_duplicate_keeps_the_old_one
     assert!(online(&f).add(&args).await.is_err());
     assert_eq!(std::fs::read_to_string(&file).unwrap(), original);
 }
+fn phrase_file(f: &Fixture, id: &str) -> PathBuf {
+    f.paths
+        .root()
+        .join("approval-patterns")
+        .join(format!("{id}.md"))
+}
+#[tokio::test]
+async fn add_never_overwrites_or_deletes_a_phrase_file_it_did_not_create() {
+    let f = fixture();
+    let file = phrase_file(&f, "fixture-cli");
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(&file, "someone else's phrases").unwrap();
+    let mut args = add_args("fixture-cli");
+    args.approval_options = vec!["Allow once".into()];
+    for registry in [online(&f), offline(&f)] {
+        let error = registry.add(&args).await.unwrap_err().to_string();
+        assert!(error.contains("already exists"), "{error}");
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "someone else's phrases"
+        );
+    }
+    assert_eq!(user_files(&f), 0);
+    // A create the Hub refuses after this run wrote its own file removes only that one.
+    std::fs::remove_file(&file).unwrap();
+    f.hub.refuse_create.store(true, Ordering::SeqCst);
+    assert!(online(&f).add(&args).await.is_err());
+    assert!(!file.exists());
+}
+#[tokio::test]
+async fn remove_deletes_the_phrase_file_add_created_and_only_that_one() {
+    for through_hub in [true, false] {
+        let f = fixture();
+        let mut args = add_args("fixture-cli");
+        args.approval_options = vec!["Allow once".into()];
+        let registry = if through_hub { online(&f) } else { offline(&f) };
+        registry.add(&args).await.unwrap();
+        let file = phrase_file(&f, "fixture-cli");
+        assert!(file.exists());
+        registry.remove("fixture-cli").await.unwrap();
+        assert!(!file.exists(), "hub: {through_hub}");
+    }
+    // A definition whose source is elsewhere keeps a same-named file in place.
+    let f = fixture();
+    let elsewhere = f._temp.path().join("work").join("their-phrases.md");
+    std::fs::write(&elsewhere, "theirs").unwrap();
+    let def = Definition {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        id: "other-cli".into(),
+        display_name: "Other".into(),
+        launch: Some(LaunchDefinition {
+            executable: echo_tool().0,
+            ..Default::default()
+        }),
+        approval_pattern_source: elsewhere.to_string_lossy().into_owned(),
+        ..Default::default()
+    };
+    f.cli_store.definitions.create_new(&def).unwrap();
+    f.cli_store.reload().unwrap();
+    let same_name = phrase_file(&f, "other-cli");
+    std::fs::create_dir_all(same_name.parent().unwrap()).unwrap();
+    std::fs::write(&same_name, "not ours").unwrap();
+    offline(&f).remove("other-cli").await.unwrap();
+    assert!(same_name.exists() && elsewhere.exists());
+}
+#[tokio::test]
+async fn a_hub_with_another_data_folder_refuses_the_phrase_file_and_the_cli_says_why() {
+    let mut f = fixture();
+    let other = f._temp.path().join("other-runtime");
+    std::fs::create_dir(&other).unwrap();
+    f.hub.paths = RuntimePaths::trial(&other, 49373, &f._temp.path().join("installed")).unwrap();
+    let mut args = add_args("fixture-cli");
+    args.approval_options = vec!["Allow once".into()];
+    let error = online(&f).add(&args).await.unwrap_err().to_string();
+    assert!(
+        error.contains("approval_pattern_source") && error.contains("hint:"),
+        "{error}"
+    );
+    assert_eq!(user_files(&f), 0, "no provider was created");
+    assert!(
+        !phrase_file(&f, "fixture-cli").exists(),
+        "no phrase file was written"
+    );
+}
+#[test]
+fn test_removes_every_inherited_hub_session_variable() {
+    let environment = vec![
+        "MANY_AI_CLI_HUB_TOKEN=synthetic".to_owned(),
+        "MANY_AI_CLI_LOCAL_PROOF=synthetic".to_owned(),
+        "Many_Ai_Cli_Future=synthetic".to_owned(),
+        "PATH=synthetic".to_owned(),
+    ];
+    let inherited = [
+        "MANY_AI_CLI_SOMETHING_NEW",
+        "MANY_AI_CLI_SESSION_ID",
+        "HOME",
+    ]
+    .map(std::ffi::OsString::from);
+    let removed = hub_session_variables(&environment, inherited);
+    let names: Vec<String> = removed
+        .iter()
+        .map(|(name, value)| {
+            assert!(value.is_none(), "removed, never set");
+            name.to_string_lossy().into_owned()
+        })
+        .collect();
+    for needle in [
+        "MANY_AI_CLI_HUB_TOKEN",
+        "MANY_AI_CLI_HUB_PORT",
+        "MANY_AI_CLI_SESSION_ID",
+        "MANY_AI_CLI_LOCAL_PROOF",
+        "MANY_AI_CLI_SOMETHING_NEW",
+    ] {
+        assert!(names.iter().any(|n| n == needle), "{needle} in {names:?}");
+    }
+    assert_eq!(
+        names.iter().any(|n| n == "Many_Ai_Cli_Future"),
+        cfg!(windows),
+        "mixed case counts on Windows only: {names:?}"
+    );
+    assert!(!names.iter().any(|n| n == "PATH" || n == "HOME"));
+}
+#[tokio::test]
+async fn test_output_carries_no_terminal_escape_sequence() {
+    let f = fixture();
+    offline(&f).add(&add_args("fixture-cli")).await.unwrap();
+    let report = offline(&f)
+        .test(&TestArgs {
+            id: "fixture-cli".into(),
+            prompt: "\u{1b}[31mred\u{1b}[0m \u{1b}]0;title\u{7}ok".into(),
+            timeout_secs: 30,
+        })
+        .await
+        .unwrap();
+    assert!(
+        !report.chars().any(|c| c == '\u{1b}' || c == '\u{7}'),
+        "{report:?}"
+    );
+}
+#[test]
+fn printable_line_removes_ansi_and_osc_sequences_and_controls() {
+    assert_eq!(
+        printable_line("\u{1b}[31mred\u{1b}[0m \u{1b}]0;window title\u{7}ok"),
+        "red ok"
+    );
+    let hyperlink =
+        printable_line("a\u{1b}]8;;http://example.invalid\u{1b}\\link\u{1b}]8;;\u{1b}\\\tb\r");
+    assert!(hyperlink.starts_with('a') && !hyperlink.chars().any(char::is_control));
+    assert!(!hyperlink.contains("example.invalid"));
+    assert!(
+        !printable_line("x\u{0}\u{8}\u{1b}\u{9b}y")
+            .chars()
+            .any(char::is_control)
+    );
+}
 #[tokio::test]
 async fn list_shows_origin_enabled_and_headless_from_the_hub_and_from_disk() {
     let mut config = Config::default();
