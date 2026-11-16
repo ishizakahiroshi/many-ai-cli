@@ -649,7 +649,6 @@ fn approval_opened(effects: &CoreEffects) -> bool {
 }
 fn custom_options() -> EngineOptions {
     EngineOptions {
-        custom_providers: ["fixture-agent-x".to_owned()].into(),
         approval_phrases: [(
             "fixture-agent-x".to_owned(),
             vec!["synthetic decisive gate".to_owned()],

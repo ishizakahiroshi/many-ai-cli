@@ -66,7 +66,6 @@ pub struct EngineOptions {
     pub submit_timing: SubmitTiming,
     pub idle_after: Duration,
     pub approval_phrases: BTreeMap<String, Vec<String>>,
-    pub custom_providers: BTreeSet<String>,
     /// Live policy lookup; absence means automatic approvals are disabled.
     pub approval_policy: Option<LiveApprovalPolicy>,
     /// Transcript evidence for heading-style shell prompts (audit U23). Absence
@@ -102,7 +101,6 @@ impl Default for EngineOptions {
             submit_timing: SubmitTiming::default(),
             idle_after: Duration::from_secs(3),
             approval_phrases: BTreeMap::new(),
-            custom_providers: BTreeSet::new(),
             approval_policy: None,
             pending_shell: None,
             confirmation_executor: None,

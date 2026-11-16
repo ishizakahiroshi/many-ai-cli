@@ -40,7 +40,7 @@
 | 設定ファイル | `~/.many-ai-cli/config.yaml`（Win: `%USERPROFILE%\.many-ai-cli\config.yaml`） |
 | ログ | `~/.many-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl/.txt` |
 | 透過化環境変数 | `MANY_AI_CLI_AUTO=1` |
-| Provider | `claude` / `codex` / `copilot` / `cursor-agent` / `opencode` / `grok` / `command-code`（`command-code` は承認検出が未検証・`gemini` は未対応・任意の CLI は `config.yaml` の `custom_providers`） |
+| Provider | `claude` / `codex` / `copilot` / `cursor-agent` / `opencode` / `grok` / `command-code`（`command-code` は承認検出が未検証・`gemini` は未対応・任意の CLI は `many-ai-cli provider add`・画面の「AI CLI を追加」、旧方式は `config.yaml` の `custom_providers`） |
 
 > **grep 注意**: 旧名 `any-ai-cli` は新名 `many-ai-cli` の部分文字列（`m` + `any-ai-cli`）。旧名マーカーの残骸を新名パターンで grep すると **0 件に見える**。旧名側のパターンで grep すれば新旧どちらにも当たる。また `docs/local` と `docs/obsidian` はジャンクションで、AI の Glob / Grep ツールは中を辿らず同じく **0 件に見える**。この 2 つの列挙・検索は PowerShell で行う。
 

@@ -10,8 +10,37 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Added
+
+- **An AI can now add a new AI CLI with `many-ai-cli provider add`.** `provider
+  list`, `provider remove` and `provider test` complete the set, and
+  `provider add --help` is written for an AI agent (what to research, what to
+  show you, what only you answer). `--approval-option` registers the CLI's own
+  approval phrases. When another path adds a CLI, the dashboard shows "<name>
+  was added" with an Undo. Removing keeps a `before-delete` history backup, but
+  a removed CLI is re-added with `provider add`; restoring a deleted one is not
+  supported. A separately installed older `many-ai-cli` on PATH does not have
+  these commands; inside a session, use the binary in `MANY_AI_CLI_BIN`.
+- **A registered AI CLI can be an `orchestrate spawn --provider` child and a
+  relay role.** Any CLI the registry has enabled with a launch definition is
+  accepted besides the built-in seven. A headless child needs the CLI's own
+  headless definition, and it gets no built-in permission-tier or subscription
+  handling.
+- **Adding, changing or removing an AI CLI now reaches every open dashboard.**
+  The Hub broadcasts the change, so the new-session list and the settings list
+  reload in other tabs and devices without F5.
+
 ### Fixed
 
+- **An AI CLI registered through the dashboard or API now actually launches.**
+  The launcher read only the built-in and `config.yaml` definitions, so a CLI
+  in the provider registry was started by its id and failed with "not on
+  PATH". It now reads the same layers as the Hub.
+- **Approvals in custom AI CLI sessions are detected like the built-in ones.**
+  Custom sessions skipped the approval marker, native prompt detection and the
+  idle-question check, so a registered CLI's "run this?" never became an
+  approval button. As in the frozen Go build, only usage probes and shell
+  sessions are excluded now.
 - **An AI CLI added from another tab, the API or the command line now shows up
   in the new-session list without reloading the page.** The list is read again
   from the Hub each time it is opened. Before, it was read only when the page

@@ -128,7 +128,7 @@ Claude Code と Codex の子では、spawn 確認ダイアログに **「この�
 
 子の権限は 3 段あり、起動要求の `permission_preset`（および spawn 確認ダイアログ）で選びます。`attended` は Hub が何も足さないので、子の承認プロンプトは Hub の承認パネルへ来てあなたが答えます。`bounded` は聞きませんが、許可した操作しか通しません（Claude は `--permission-mode dontAsk` + `--allowedTools`、Codex は `--ask-for-approval never --sandbox workspace-write`、Copilot は `--allow-tool` の列挙（Copilot には自動拒否が無いので、列挙外の tool は従来どおり確認プロンプトになり、それは承認パネルへ届きます））。`full` は全許可です。許可の一覧だけでは、許可したコマンドが中で動かすもの（子が書き換えたテストや package の script、Git の hook）までは縛れないため、`bounded` の内蔵許可一覧は、子のコマンドが sandbox の中で動くかどうかで変わります。macOS・Linux・WSL2 では、`bounded` の Claude の子はシェルのコマンドを Claude Code の sandbox の中で動かします。コマンドが書けるのは子の作業フォルダの中だけで、ネットワークにも出られません。Go のビルドはそのセッション専用のビルドキャッシュを使います。一覧は、読み取り・編集・`go test` / `go vet` / `gofmt` / `bun run check`・`git status` / `git diff` / `git log` / `git add` / `git commit` です。Claude Code は repo 側の sandbox の一覧をセッションの一覧に足し合わせるため、作業フォルダから Git の root までにある `.claude/settings.json` か `.claude/settings.local.json` が sandbox を広げている（`sandbox.excludedCommands`、または `sandbox.filesystem`・`sandbox.network` の `allow…` の項目がある）ときは、`bounded` の Claude の子を起動せず、理由を出します。別の段を選ぶか、その設定を外してください。Linux と WSL2 の sandbox には bubblewrap と socat が要り、無ければ Claude Code は sandbox なしで動かさずに子の起動を断ります。ネットワークや作業フォルダの外のキャッシュを使うテストは、sandbox の中では失敗します。sandbox の無い環境（ネイティブの Windows の Claude と、Copilot）では、一覧は読み取り・編集・`git add` / `git commit` だけになり、子の Git のコマンドは repo の hook を動かしません。Claude は `git status` / `git diff` / `git log` の読み取りだけの形は今までどおり動かせ、Copilot はそれ以外を承認パネルで聞きます。どの環境でも、Claude のファイルの道具（Write・Edit）は作業フォルダの中だけに書きます。`git push` / `git reset` / `git clean` / `rm` は意図的に入れていません（`orchestration.bounded_allowed_tools` に provider ごとの一覧を書けば内蔵の一覧の代わりになります。一覧が空でなければ、Claude には sandbox とファイルの道具の制限がそのまま付きます）。無人の子（指揮者の `orchestrate spawn` と relay の子）は、要求に段の指定が無ければ `orchestration.child_permission_default` に従います。この既定は今のところ `full` で、`bounded` にすると無人の子が範囲を限った段で動きます。Grok・Cursor Agent・OpenCode には範囲を限って無人で動かす設定が無いため（OpenCode の無人の動かし方 `--auto` は、deny 規則に無いコマンドを何でも動かします）、`bounded` を選んでも全許可で起動し、確認ダイアログにその旨が出ます。
 
-セッションは端末を持たずに動かすこともできます。`execution_mode` は `interactive`（PTY 上で CLI の TUI を起動する＝既定）、`headless`（CLI 自身の非対話モード。`claude -p` / `grok -p` / `cursor-agent -p` / `opencode run` / `copilot -p` / `command-code -p`）、`auto`（誰も見ていない起動で、その CLI が対応していれば headless、そうでなければ対話）の 3 つです。headless のセッションは最初の指示を起動時に受け取り、入力欄を持たず（CLI が起動直後に stdin を閉じるため）、プロセスの終了で完了します（終了コード 0 が完了、それ以外は失敗）。止めるときはカードを閉じます（プロセスツリーごと終了します）。**非対話モードを持たない CLI へ `headless` を明示した起動はエラー**で、黙って対話へ倒して「誰も打たないまま待ち続けるセッション」を作ることはしません。**Codex は対象外です**（`codex exec` は無人の Codex の子に必ず付く承認フラグを受け付けないため、定義を書いても必ず起動に失敗します）。print モードを持つ他の CLI は、ビルドし直さずに `custom_providers:` の `headless:` を書くだけで無人の worker にできます。
+セッションは端末を持たずに動かすこともできます。`execution_mode` は `interactive`（PTY 上で CLI の TUI を起動する＝既定）、`headless`（CLI 自身の非対話モード。`claude -p` / `grok -p` / `cursor-agent -p` / `opencode run` / `copilot -p` / `command-code -p`）、`auto`（誰も見ていない起動で、その CLI が対応していれば headless、そうでなければ対話）の 3 つです。headless のセッションは最初の指示を起動時に受け取り、入力欄を持たず（CLI が起動直後に stdin を閉じるため）、プロセスの終了で完了します（終了コード 0 が完了、それ以外は失敗）。止めるときはカードを閉じます（プロセスツリーごと終了します）。**非対話モードを持たない CLI へ `headless` を明示した起動はエラー**で、黙って対話へ倒して「誰も打たないまま待ち続けるセッション」を作ることはしません。**Codex は対象外です**（`codex exec` は無人の Codex の子に必ず付く承認フラグを受け付けないため、定義を書いても必ず起動に失敗します）。print モードを持つ他の CLI は、ビルドし直さずに、`many-ai-cli provider add` の `--headless-arg` で登録するか、`config.yaml` の `custom_providers:` に `headless:` を書くだけで無人の worker にできます（[独自の AI CLI を足す](#独自の-ai-cli-を足す上級者向け)参照）。
 
 ```yaml
 custom_providers:
@@ -233,6 +233,48 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 **profile の削除**は `many-ai-cli` の登録解除だけを行い、公式 CLI の認証は残します。認証も消すかどうかは別の明示的な確認になっており、`profile_dir` で自分で指定した外部ディレクトリには適用されません。
 
 この欄を一度も開かなければ、動作は今までと変わりません。セッションは従来と 1 バイトも変わらない環境で起動します。
+
+---
+
+## 独自の AI CLI を足す（上級者向け）
+
+[同梱の 7 本](#対応プロバイダー)のほかに、自分の AI CLI を登録できます。方法は 2 つです。AI に頼んで `many-ai-cli provider add` で足してもらうか、Hub の画面から自分で足します。
+
+**AI に頼んで足す。** many-ai-cli のセッションで、足したい CLI を AI に伝えます。AI は `many-ai-cli provider add --help` を読み、その CLI 自身のフラグと利用規約を調べ、調べた内容をあなたに見せてから登録します。コマンドは 4 つです。
+
+```
+many-ai-cli provider add --id my-agent --command <ホームフォルダ>/bin/my-agent-wrapper --label "My Agent" \
+  --arg --interactive --headless-arg -p --approval-option "Allow once"
+many-ai-cli provider list
+many-ai-cli provider test my-agent
+many-ai-cli provider remove my-agent
+```
+
+`--id` は小文字・数字・`.`・`-`・`_`（同梱の id と `shell` は不可）、`--command` は PATH 上の実行ファイルか絶対パスです（CLI のホームを切り替える小さなラッパースクリプトなどを指定できます）。`--arg` は対話起動の引数（繰り返し可）、`--headless-arg` は非対話モードの引数、`--approval-option` はその CLI が承認プロンプトに出す選択肢の文言を表示のとおりに書いたものです（繰り返し可）。`provider test` は headless を 1 回動かし、終了コード・所要秒数・出力の先頭を表示します。many-ai-cli のセッションの中では、これらのコマンドを持つ実行ファイルは環境変数 `MANY_AI_CLI_BIN` が指すものです。PATH 上に別途入れた古い `many-ai-cli`（たとえば npm の 0.9.x）には `provider add` / `list` / `remove` / `test` がありません。
+
+登録した CLI でできること:
+
+- **+ 新しいセッション** から、新しいセッションとして起動できます（同梱の CLI と同じく PTY 経由）。
+- `many-ai-cli orchestrate spawn --provider <id>` の子や relay の役割に使えます。headless の子には headless の定義（`--headless-arg` / `--headless-format` / `--prompt-via` のどれか）が要ります。登録した子には同梱の CLI 向けの権限の段やサブスクリプションの扱いは付かず、子の確認ダイアログは表示名を出して権限・モデルの欄を隠します。
+- 承認の検出は同梱の CLI と同じ仕組みです。Yes/No/Allow/Deny などの一般的な文言は登録した全 CLI で検出し、`--approval-option` でその CLI 固有の文言を足せます。
+- Hub が動いていれば `provider add` / `remove` は Hub 経由で行われます。Hub が定義を検査し、控えを残し、読み直し、開いている全ての画面へ知らせるので、画面を再読み込みしなくても新しいセッションの一覧が更新されます。ほかの開いている画面には「<名前> を足しました（command: ...）」と**取り消す**ボタンが出ます（足した画面自身には出ません）。Hub が動いていなければ定義ファイルを直接書き、Hub は次の起動で読みます。
+- `provider remove` が消せるのは `provider add` か画面で登録した CLI だけです（同梱のものと `config.yaml` に書いたものは消せません）。削除前の控え（`before-delete`）は版の履歴に残ります（`many-ai-cli provider backup list <id>`）が、削除した CLI をそこから復元することには対応していません。戻したいときは `provider add` で入れ直します。
+
+**画面から足す。** **設定 → AI CLI 連携**、または **+ 新しいセッション** の一覧の末尾の **AI CLI を追加** を開き、表示名と実行ファイルを入力して検証し、保存します。失敗しても入力は残ります。
+
+**旧来の方法: `config.yaml` の `custom_providers:`。** 引き続き読み込みます（many-ai-cli はこの項目を書き換えません。`provider remove` でも消せず、消すにはファイルを編集します）。書いた CLI は同梱の CLI と同じく PTY 経由で起動し、承認検出の対象になります。
+
+```yaml
+custom_providers:
+  - id: my-cli              # 小文字・数字・./_/- のみ。同梱の id と予約 id "shell" は不可
+    label: My CLI            # 省略可。spawn の一覧に id の代わりに表示される
+    command: my-cli --agent  # many-ai-cli が実行するコマンドライン
+    approval_pattern_source: <.many-ai-cli 設定ディレクトリ配下の絶対パス>/my-cli-approval-patterns.md  # 省略可（"~" は展開されない）
+```
+
+`command` はシェルを通さず、many-ai-cli 自身が実行ファイルと引数に分けます。ASCII の空白とタブが区切りで、`"..."` で 1 つの引数（または一部）をくくれ（引用符は取り除かれ、引用の中の `""` は文字としての `"`）、`\` は常にそのままの文字です。環境変数・`~`・グロブ・`|` や `&&` などは展開も解釈もされません。引用符が閉じていない・空のコマンドは起動前に拒否します。同梱の CLI 向けの `--model`・権限フラグ・環境変数のプリセット・サブスクリプションの選択は、独自の CLI には付きません。`approval_pattern_source` は、絶対パス（`~/.many-ai-cli/` 配下）か `https://raw.githubusercontent.com/...` の URL だけが使えます。実行ファイルが PATH に無ければ、同梱の CLI が無いときと同じく `... not found in PATH` で終わります。`many-ai-cli doctor` は設定済みの独自の CLI が PATH にあるかを、実行せずに確認します。
+
+**同梱の CLI のような審査は入っていません。** [セキュリティ](#セキュリティ)で説明している利用規約の判断（Gemini CLI を対象外とする理由を含む）は、同梱の一覧だけの話です。`command` に何を指定するかはあなたの選択で、その CLI の利用規約を先に確認するのもあなたの責任です。
 
 ---
 
@@ -985,6 +1027,7 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 | `grok [args...]` | Grok Build CLI を Hub 経由で起動 |
 | `opencode [args...]` | opencode を Hub 経由で起動 |
 | `command-code [args...]` | Command Code を Hub 経由で起動 |
+| `provider add \| list \| remove \| test` | AI CLI の登録・一覧・削除・試し実行（[独自の AI CLI を足す](#独自の-ai-cli-を足す上級者向け)参照） |
 | `wrap <provider> [args...]` | 任意 provider をラップ（デバッグ用） |
 | `shell-init` | 透過モード用のシェル関数スニペットを出力 |
 | `status` | Hub の起動状態を表示 |

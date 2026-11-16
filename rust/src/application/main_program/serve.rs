@@ -593,12 +593,6 @@ impl HubComposition {
                 }),
                 hub_instance: hub_instance.clone(),
                 token_statusbar: config.user_prefs.token_statusbar.enabled.unwrap_or(true),
-                custom_providers: crate::config::effective_custom_providers(
-                    &config.custom_providers,
-                )
-                .iter()
-                .map(|provider| provider.id.clone())
-                .collect(),
                 warning: warning.clone(),
                 approval_policy: Some(approval_rules.policy.live_callback()),
                 pending_shell: Some(crate::application::session_workers::pending_shell::lookup(
