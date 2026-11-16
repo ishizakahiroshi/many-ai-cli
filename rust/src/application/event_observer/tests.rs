@@ -521,6 +521,9 @@ async fn actual_capture_handoff_summary_broadcast_callback_order_and_next_input_
 #[tokio::test]
 async fn handoff_gate_is_independent_of_capture_and_summary_requires_both_gates() {
     let f = fixture(false, true).await;
+    // This scenario checks callback gates, not cumulative wall-clock budgets.
+    // Keep the real Git commands' full per-command allowance on busy runners.
+    f.files.pin_git_clock();
     f.observer.observe(&event(f.binding, false)).await.unwrap();
     std::fs::write(f.cwd.join("task.txt"), "after\n").unwrap();
     f.observer.observe(&event(f.binding, true)).await.unwrap();
@@ -660,6 +663,9 @@ async fn end_capture_materialization_has_an_independent_resolution_budget() {
 #[tokio::test]
 async fn end_reservation_release_and_warm_reconnect_preserve_the_capture_incarnation() {
     let f = fixture(false, false).await;
+    // This scenario checks reservation and reattach behavior, not cumulative
+    // wall-clock budgets. Keep each real Git command's full allowance.
+    f.files.pin_git_clock();
     f.observer.observe(&event(f.binding, false)).await.unwrap();
     let reservation = f.files.reserve_git_turn_end(f.binding).unwrap();
     assert!(f.files.reserve_git_turn_end(f.binding).is_none());
