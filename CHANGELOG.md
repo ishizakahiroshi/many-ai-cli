@@ -10,6 +10,16 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Fixed
+
+- **An AI CLI added from another tab, the API or the command line now shows up
+  in the new-session list without reloading the page.** The list is read again
+  from the Hub each time it is opened. Before, it was read only when the page
+  loaded, so a newly added AI CLI stayed missing until the dashboard was reloaded.
+- **The "?" buttons in the new-session form are round and centred again.** They
+  had no button style of their own, so the browser's default button squeezed the
+  "?" into the lower right of a grey square.
+
 ## [0.10.0-rc.2] - 2026-11-09
 
 A release candidate for 0.10.0, published on 2026-11-09 so installing and

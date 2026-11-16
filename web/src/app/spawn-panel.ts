@@ -1005,6 +1005,14 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
     positionSpawnProviderList();
     window.addEventListener('resize', repositionSpawnProviderList);
     window.addEventListener('scroll', repositionSpawnProviderList, true);
+    // 開くたびに Hub の登録を読み直す。別のタブ・API・CLI で足した AI CLI も、
+    // ページを再読み込みせずにここへ出る（plan_ai-cli-registration.md）。
+    // 項目が増減したら、開いたままの一覧の高さと位置を測り直す。
+    void injectCustomProviderOptions().then(() => {
+      if (!spawnProviderOpen) return;
+      measureSpawnProviderListContent();
+      positionSpawnProviderList();
+    });
   }
 
   function closeSpawnProviderList(focusTrigger = false) {

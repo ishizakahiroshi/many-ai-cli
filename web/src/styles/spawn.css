@@ -204,7 +204,11 @@ html.header-folded { --app-header-h: 0px; }
 }
 .new-session-form { display: flex; flex-direction: column; gap: var(--space-2); }
 
-.spawn-provider-row { display: flex; align-items: center; gap: var(--space-2); }
+/* font-size: 「?」の文字は周りから受け継ぐ（ui-button--help）ので、この行は記憶のラベルと同じ大きさにする。
+   ラベルと選択欄はそれぞれ自分の大きさを持つので、変わるのは「?」だけ。 */
+.spawn-provider-row { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-xs); }
+/* この行は上下中央揃えなので、説明の 1 行目へ揃える上方向のずらし（.spawn-inline-help-btn）を外す。 */
+.spawn-provider-row .spawn-inline-help-btn { margin-top: 0; }
 .spawn-provider-row .spawn-select { flex: 1; }
 .spawn-provider-row .spawn-provider-combobox { flex: 1; min-width: 0; }
 .spawn-remember-approval-label {

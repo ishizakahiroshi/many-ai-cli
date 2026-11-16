@@ -10,7 +10,8 @@ last_reviewed: 2026-10-25
 
 # Web UI部品と確認文言の共通化
 
-> 最終更新: 2026-10-25(日) 07:11:18 — ライブ状態帯のテーマ別配色とパレットの操作を追記
+> 最終更新: 2026-11-16(月) 09:38:51 — 行内の「?」に使う `ui-button--help` を追記
+> 2026-10-25(日) 07:11:18 — ライブ状態帯のテーマ別配色とパレットの操作を追記
 > 2026-10-13(火) 12:56:37 — アイコンだけの操作の列に使う `ui-toolbar` を追記
 > 2026-10-13(火) 12:41:11 — popup・右クリックメニューの1行に使う `menuItem` を追記
 > 2026-10-11(日) 20:58:29
@@ -37,6 +38,7 @@ light/darkの土台を保つ（`theme-tokens.ts`）。主ボタンは専用foreg
 | modal sm/md/lg | 短い確認/通常フォーム/情報量の多い枠 | drawer、局所popover、専用認証画面 |
 | input | 通常のtext/select/textarea | terminal、IMEや認証プロトコルの再設計 |
 | general icon | close/copy/edit/delete/refresh/check/stop | provider画像・session状態iconの代替 |
+| help | 行内で補足説明を開く「?」。`ui-button--quiet ui-button--help`。16pxの丸、狭い画面とcoarseでは24px。文字の大きさは周りから受け継ぐ | 説明の無い操作、32/44pxの操作領域が要るicon |
 
 ボタンは `uiButtonClass(variant, size, options)`、枠は `uiModalClass(size)` で
 classを供給する。静的HTMLでは同じclassを直接付ける。既存classはDOM探索・配置・

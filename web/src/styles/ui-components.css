@@ -116,6 +116,22 @@
   .ui-button.ui-button--compact, .ui-button.ui-button--regular { min-height: var(--touch-target); }
   .ui-button.ui-button--icon, .ui-button.ui-button--compact.ui-button--icon { width: var(--touch-target); }
 }
+/* 行内で補足説明を開く「?」。quiet と組み合わせる。16px の丸にしてフォームの行の高さを変えない。
+   文字の大きさは周りの文から受け継ぐ（行の 1 行目に揃える画面側の計算が、受け継いだ行の高さを使うため）。
+   指で押す端末と狭い画面では 24px にする。共通の 44px にすると、説明の 1 行より高くなり行が崩れる。 */
+.ui-button.ui-button--help {
+  width: 16px;
+  height: 16px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-color: var(--line);
+  border-radius: 50%;
+  font-size: inherit;
+}
+@media (max-width: 720px), (pointer: coarse) {
+  .ui-button.ui-button--help { width: 24px; height: 24px; min-height: 0; }
+}
 
 .ui-modal {
   box-sizing: border-box;
