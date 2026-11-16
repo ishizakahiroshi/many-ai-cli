@@ -11,10 +11,20 @@ import { SESSION_LIST_TABS_KEY, normalizeSessionListTabs as normalize, loadSessi
   saveSessionListStopped as saveStopped, noteSessionListStopped as noteStopped,
   clearSessionListStopped as clearStopped, isSessionListStoppedShown as shown,
   settleSessionListStopped as settle, rememberSessionListActive as remember,
-  sessionListTabSession as pick } from './session-list-tab-state.js';
+  sessionListTabSession as pick, sessionListCloseNeighbor } from './session-list-tab-state.js';
 const session = (id: number, extra: Partial<SessionSnapshot> = {}): SessionSnapshot =>
   ({ id, started_at: `2026-10-08T01:00:${String(id).padStart(2, '0')}Z`, cwd: '/repos/example', ...extra } as SessionSnapshot);
 const state = () => { const value = normalize(null); add(value, 'Work', 'work'); return value; };
+
+test('closing an active card prefers the selected tab before the same project', () => {
+  const rows = [{ id: 1, tab: 'b', project: 'p' }, { id: 2, tab: 'a', project: 'p' },
+    { id: 3, tab: 'a', project: 'q' }, { id: 4, tab: 'a', project: 'p' }];
+  const pickNext = (items: typeof rows) => sessionListCloseNeighbor(items, 2, item => item.tab === 'a', item => item.project === 'p');
+  assert.equal(pickNext(rows), 4);
+  assert.equal(pickNext(rows.slice(0, 3)), 3);
+  assert.equal(pickNext(rows.slice(0, 2)), 1);
+  assert.equal(pickNext(rows.slice(1, 2)), null);
+});
 
 test('first use: one localized tab, all existing sessions visible, no records persisted', () => {
   const s = normalize(null, 'タブ 1');

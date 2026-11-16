@@ -219,6 +219,18 @@ export function sessionListTabSession(state: SessionListTabState, sessions: Sess
   if (remembered && owners.get(remembered.id) === tabId) return remembered.id;
   return order.find(id => owners.get(id) === tabId) ?? null;
 }
+/** Pick a neighbor in the selected tab first, preferring the same project within that tab. */
+export function sessionListCloseNeighbor<T extends { id: number }>(ordered: T[], closingId: number,
+    inSelectedTab: (session: T) => boolean, sameProject: (session: T) => boolean): number | null {
+  const local = ordered.filter(inSelectedTab);
+  const scope = local.some(session => session.id !== closingId) ? local : ordered;
+  const project = scope.filter(sameProject);
+  const pool = project.some(session => session.id === closingId) && project.length > 1 ? project : scope;
+  const index = pool.findIndex(session => session.id === closingId);
+  if (index > 0) return pool[index - 1].id;
+  if (index === 0 && pool.length > 1) return pool[1].id;
+  return null;
+}
 export function filterSessionListTree(tree: SidebarProjectNode[], owners: Map<number, string>, tabId: string): SidebarProjectNode[] {
   return tree.map(project => ({ ...project, children: project.children
     .filter(root => owners.get(root.id) === tabId)
