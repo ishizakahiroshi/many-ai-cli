@@ -1,5 +1,6 @@
 import { noteSpawnSessions } from './app/session-spawn-tracker.js';
 import { providerInterruptKey, providerLongLabel } from './app/provider-declarations.js';
+import { buildBodySubmit, mayUseSlashFallbackList, slashCommandQuickSends } from './app/slash-submit.js';
 import { restoreSessionListDrawerScroll, isSessionInSelectedListTab, preserveSessionListSelection } from './app/session-list-tabs.js';
 import { sessionListCloseNeighbor } from './app/session-list-tab-state.js';
 import { probeSpan } from './debug/probe.js';
@@ -546,20 +547,13 @@ function trimTrailingSpaceForSlashCommand(text) {
 // 受け入れ）を宣言していることをログで確認済みのため、本文はペーストで包んで正体を正しく伝える。
 // 生送信（本文+\r 同梱）のまま残す例外は「キー入力として届くべきもの」だけ:
 // - shell: 素の PowerShell / cmd 等はブラケットペースト未宣言がありうる（マーカーがリテラル混入する）
-// - "/" 始まりの単一行: スラッシュコマンド（CLI のコマンドメニュー操作）
+// - "/" 始まりの単一行: スラッシュコマンド（CLI のコマンドメニュー操作）。ただし宣言 input.slash_submit が
+//   paste の provider は、通常の本文と同じ貼り付け＋別送の Enter（コマンド候補が最初の Enter を取る CLI 向け）
 // - 数字のみ / 1 文字: 承認メニュー等へのホットキー応答。ペーストで包むとメニューが受理しない
 //   恐れがあり、かつ数バイトのチャンクはタイプと区別されないため生送信で安全
 function buildBodySubmitPart(sessionId, rawText) {
-  if (rawText.includes('\n')) {
-    // 複数行は provider を問わず従来どおりペースト包み（\n の途中 Enter 解釈を防ぐ）
-    return { textPart: '\x1b[200~' + rawText + '\x1b[201~', deferEnter: true };
-  }
-  const provider = sessions.get(sessionId)?.provider || '';
-  const keyLike = rawText === '' || rawText.length === 1 || /^[0-9]+$/.test(rawText) || rawText.startsWith('/');
-  if (isShellProvider(provider) || keyLike) {
-    return { textPart: rawText + '\r', deferEnter: false };
-  }
-  return { textPart: '\x1b[200~' + rawText + '\x1b[201~', deferEnter: true };
+  // 判定そのものは slash-submit.ts（宣言 input.slash_submit を読む純粋な関数）。
+  return buildBodySubmit(sessions.get(sessionId)?.provider || '', rawText);
 }
 
 // 「本文」を 1 件送信する共通経路（チャット自由入力以外＝クイックコマンド・承認 UI の
@@ -920,9 +914,11 @@ async function ensureSlashCommands(provider, sessionId = activeSessionId) {
 }
 
 export function getSlashCommands() {
-  const dyn = slashCmdDynamic.get(slashCmdCacheKey(activeProvider()));
+  const provider = activeProvider();
+  const dyn = slashCmdDynamic.get(slashCmdCacheKey(provider));
   if (dyn && dyn.length > 0) return dyn;
-  return getSlashCommandsFallback();
+  // 固定リストは Claude 向け。登録した AI CLI に別の CLI の候補を出さない（宣言が無ければ候補なし）。
+  return mayUseSlashFallbackList(provider) ? getSlashCommandsFallback() : [];
 }
 
 export const slashMenuEl = document.getElementById('slash-menu');
@@ -991,7 +987,7 @@ export function selectSlashItem(i) {
   // 引数を取らずダイアログを開くだけのコマンドはクイック実行用途のため、候補選択時に即送信する。
   // /models は OpenCode 側の /model 相当（TUI コマンド名 model.list）。ここに無いと Enter を
   // 2 回押す形になり、Claude の /model と操作が揃わない。
-  if (activeSessionId !== null && (cmd === '/clear' || cmd === '/model' || cmd === '/models')) {
+  if (activeSessionId !== null && slashCommandQuickSends(activeProvider(), cmd, slashItems)) {
     sendQuickCommand(activeSessionId, cmd);
     clearInput();
     hideSlashMenu();
