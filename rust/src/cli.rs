@@ -11,11 +11,12 @@ pub const BUILTIN_PROVIDERS: &[&str] = &[
     "command-code",
 ];
 pub const USAGE: &str = "many-ai-cli <serve|connect|setup|doctor|issue|wrap|claude|codex|copilot|cursor-agent|opencode|grok|command-code|shell-init|stop|status|tray|profile-export|log-clean|uninstall|version>";
-pub const TRAY_USAGE: &str = "Windows: many-ai-cli tray [--open] [--home <absolute-home>] [--port <port>]\n  --open: start or reuse the Hub and open its browser; omitted: idle tray only\n  --home/--port: retain the home and port selected by setup\nWindows: many-ai-cli setup [--port <port>]";
+pub const TRAY_USAGE: &str = "Windows: many-ai-cli tray [--open] [--replace] [--home <absolute-home>] [--port <port>]\n  --open: start or reuse the Hub and open its browser; omitted: idle tray only\n  --replace: move a console-started Hub into this tray (implies --open)\n  --home/--port: retain the home and port selected by setup\nWindows: many-ai-cli setup [--port <port>]";
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TrayInvocation {
     pub open: bool,
+    pub replace: bool,
     pub home: Option<PathBuf>,
     pub port: Option<u16>,
     pub help: bool,
@@ -26,6 +27,7 @@ pub fn parse_tray(args: &[String]) -> Result<TrayInvocation, String> {
         args,
         &[
             ("open", Kind::Bool),
+            ("replace", Kind::Bool),
             ("home", Kind::String),
             ("port", Kind::Int),
         ],
@@ -55,6 +57,7 @@ pub fn parse_tray(args: &[String]) -> Result<TrayInvocation, String> {
         .transpose()?;
     Ok(TrayInvocation {
         open: flags.boolean("open"),
+        replace: flags.boolean("replace"),
         home,
         port,
         help: false,
@@ -234,6 +237,17 @@ mod tests {
         assert!(parse(&args(&["orchestrate"]), &[]).is_err());
         assert!(parse(&args(&["wrap"]), &[]).is_err());
         assert!(parse(&args(&["gemini"]), &[]).is_err());
+    }
+    #[test]
+    fn tray_flags_parse_open_replace_home_port_and_help() {
+        let options = parse_tray(&args(&["--replace", "--open", "--port", "47777"])).unwrap();
+        assert!(options.open && options.replace && !options.help);
+        assert_eq!(options.port, Some(47777));
+        let replace_only = parse_tray(&args(&["--replace"])).unwrap();
+        assert!(replace_only.replace && !replace_only.open);
+        assert!(parse_tray(&args(&["--help"])).unwrap().help);
+        assert!(parse_tray(&args(&["--port", "0"])).is_err());
+        assert!(parse_tray(&args(&["--home", "relative"])).is_err());
     }
     #[test]
     fn trial_is_explicit_and_complete() {

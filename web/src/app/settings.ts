@@ -2662,6 +2662,16 @@ window.addEventListener('many-binary-stale', (ev: Event) => {
     const res = await apiFetch('/api/info');
     if (!res.ok) return;
     const info = await res.json();
+    // Hub の起動形態（console/setup/tray）からトレイ移行の案内行を出し分ける。
+    // 取得失敗時は案内を出さない（hidden のまま）。
+    try {
+      const launch = await apiFetch('/api/hub/launch-state');
+      if (launch.ok) {
+        const state = await launch.json();
+        const offer = document.getElementById('tray-migrate-offer');
+        if (offer) offer.hidden = !state.show_tray_migration_offer;
+      }
+    } catch (_) {}
     set__userAvatarUrl(info.userAvatar || '');
     set__userDisplayName(info.userDisplayName || '');
     setHandoffNotifyThresholdPercent(Number(info.handoff_notify_remaining_percent));

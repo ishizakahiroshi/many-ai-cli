@@ -124,7 +124,10 @@ async fn stop_real_ledger_graceful_and_force_paths_only_call_fake_process_owner(
 fn native_trial_refuses_arbitrary_pid_without_sending_a_signal() {
     use stop::StopIo;
     let f = fixture();
-    let native = stop::NativeStopIo { paths: f.paths };
+    let native = stop::NativeStopIo {
+        paths: f.paths,
+        source: "stop_command",
+    };
     let data = RuntimeData {
         pid: 987654,
         port: 49372,
@@ -203,6 +206,7 @@ fn audit_u11_native_force_stop_ends_only_the_hub_the_record_names() {
     let home = tempfile::tempdir().unwrap();
     let native = stop::NativeStopIo {
         paths: RuntimePaths::production(home.path()).unwrap(),
+        source: "stop_command",
     };
     let mut bystander = Bystander::spawn();
     let pid = bystander.pid();

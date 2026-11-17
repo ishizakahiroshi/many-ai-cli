@@ -212,3 +212,70 @@ async fn windows_message_procedure_dispatches_only_the_selected_synthetic_effect
     assert!(hooks.calls.lock().unwrap().is_empty());
     owner.shutdown().await;
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn replace_request_migrates_on_the_forwarded_port() {
+    struct Hooks {
+        calls: Mutex<Vec<&'static str>>,
+        port: Mutex<Option<u16>>,
+    }
+    impl TrayHooks for Hooks {
+        fn accept_migration_port(&self, port: u16) {
+            *self.port.lock().unwrap() = Some(port);
+        }
+        fn setup(&self) -> CoreFuture<'_, io::Result<()>> {
+            Box::pin(async move {
+                self.calls.lock().unwrap().push("setup");
+                Ok(())
+            })
+        }
+        fn running_url(&self) -> CoreFuture<'_, io::Result<Option<String>>> {
+            Box::pin(async move {
+                self.calls.lock().unwrap().push("url");
+                Ok(Some("http://127.0.0.1:49001/".into()))
+            })
+        }
+        fn start_hub(&self) -> CoreFuture<'_, io::Result<()>> {
+            Box::pin(async move {
+                self.calls.lock().unwrap().push("start");
+                Ok(())
+            })
+        }
+        fn open_url<'a>(&'a self, url: &'a str) -> CoreFuture<'a, io::Result<()>> {
+            Box::pin(async move {
+                assert_eq!(url, "http://127.0.0.1:49001/");
+                self.calls.lock().unwrap().push("open");
+                Ok(())
+            })
+        }
+        fn stop_for_migration(&self) -> CoreFuture<'_, io::Result<()>> {
+            Box::pin(async move {
+                self.calls.lock().unwrap().push("migrate-stop");
+                Ok(())
+            })
+        }
+        fn stop_hub(&self) -> CoreFuture<'_, io::Result<()>> {
+            Box::pin(async move {
+                self.calls.lock().unwrap().push("menu-stop");
+                Ok(())
+            })
+        }
+    }
+    let hooks = Arc::new(Hooks {
+        calls: Mutex::new(vec![]),
+        port: Mutex::new(None),
+    });
+    let owner = TrayOwner::new(hooks.clone());
+    let window = SyntheticWindow::new(owner.clone());
+    assert_eq!(
+        unsafe { procedure(window.handle(), REPLACE_REQUEST, 49001, 0) },
+        0
+    );
+    drain_commands(&owner).await;
+    assert_eq!(*hooks.port.lock().unwrap(), Some(49001));
+    assert_eq!(
+        *hooks.calls.lock().unwrap(),
+        vec!["setup", "migrate-stop", "start", "url", "open"]
+    );
+    owner.shutdown().await;
+}

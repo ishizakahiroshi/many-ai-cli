@@ -7,7 +7,13 @@ use std::sync::{
 /// Callers of `/api/shutdown` name themselves with this header so the Hub log
 /// can say why it stopped. Only the fixed sources below reach the log.
 pub const STOP_SOURCE_HEADER: &str = "x-many-ai-cli-stop-source";
-const STOP_SOURCES: &[&str] = &["stop_command", "web_ui", "stale_binary_restart", "launcher"];
+const STOP_SOURCES: &[&str] = &[
+    "stop_command",
+    "web_ui",
+    "stale_binary_restart",
+    "launcher",
+    "tray_migration",
+];
 /// Unknown or missing header values never become log text.
 pub fn stop_source(header: &str) -> &'static str {
     STOP_SOURCES

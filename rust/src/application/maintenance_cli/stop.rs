@@ -90,6 +90,9 @@ impl StopCommand {
 }
 pub struct NativeStopIo {
     pub paths: RuntimePaths,
+    /// Reported stop source (`x-many-ai-cli-stop-source`); the Hub allowlist
+    /// decides whether it lands as a named caller or `api_unspecified`.
+    pub source: &'static str,
 }
 impl NativeStopIo {
     fn unconfirmed(&self, pid: i64) -> io::Error {
@@ -132,7 +135,7 @@ impl StopIo for NativeStopIo {
                 .timeout(Duration::from_secs(2))
                 .build()
                 .map_err(io::Error::other)?;
-            tokio::select! {_=cancel.cancelled()=>Err(io::Error::new(io::ErrorKind::Interrupted,"stop cancelled")),reply=client.post(url).query(&[("token",token)]).headers(crate::application::hub_runtime::local_proof_headers(proof)).header(reqwest::header::CONTENT_TYPE,"application/json").header(crate::hub::lifecycle::STOP_SOURCE_HEADER,"stop_command").send()=>reply.map(|response|response.status()==200).map_err(|_|io::Error::other("shutdown request failed"))}
+            tokio::select! {_=cancel.cancelled()=>Err(io::Error::new(io::ErrorKind::Interrupted,"stop cancelled")),reply=client.post(url).query(&[("token",token)]).headers(crate::application::hub_runtime::local_proof_headers(proof)).header(reqwest::header::CONTENT_TYPE,"application/json").header(crate::hub::lifecycle::STOP_SOURCE_HEADER,self.source).send()=>reply.map(|response|response.status()==200).map_err(|_|io::Error::other("shutdown request failed"))}
         })
     }
     fn kill(&self, data: &RuntimeData) -> io::Result<bool> {

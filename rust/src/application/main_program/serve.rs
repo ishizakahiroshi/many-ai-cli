@@ -95,6 +95,7 @@ pub struct HubComposition {
     service_cancel: Cancellation,
     open: bool,
     paths: crate::config::RuntimePaths,
+    hub_launch: Arc<dyn crate::application::hub_launch::LaunchProbe>,
     warning: EventWarning,
     logger: Arc<super::logger::HubLogger>,
     shutdown_owner: Arc<crate::hub::lifecycle::ShutdownOwner>,
@@ -1145,12 +1146,15 @@ impl HubComposition {
                 })
             },
         );
+        let hub_launch = crate::application::hub_launch::probe(&context);
         let mut services = ServiceRouter::new(
             context.config.clone(),
             paths.clone(),
             trait_core,
             bound_port,
         )?
+        .with_hub_launch(hub_launch.clone())
+        .with_tray_migrate(crate::application::hub_launch::migration(&context))
         .with_task_owner(tasks.clone())
         .with_instruction_rules(Arc::new(
             crate::hub::approval_status_routes::ApprovalStatusHttp::new(instruction_rules.clone()),
@@ -1397,6 +1401,7 @@ impl HubComposition {
             service_cancel,
             open: options.open,
             paths,
+            hub_launch,
             warning,
             logger,
             shutdown_owner,
@@ -1566,6 +1571,28 @@ impl HubComposition {
                 self.logger.write("WARN", "Hub port moved", &notice);
             }
             super::banner::write_startup(&snapshot.config, services.bound_port(), configured);
+            // One-time nudge. The marker is written only after stdout accepts
+            // the line, and only when it is not already recorded, so a repeat
+            // serve does not resolve the Startup folder.
+            use std::io::IsTerminal;
+            if std::io::stdin().is_terminal()
+                && std::io::stdout().is_terminal()
+                && !crate::application::hub_launch::hint_recorded(&self.paths)
+                && self.hub_launch.migration_hint()
+            {
+                use std::io::Write;
+                let mut stdout = std::io::stdout().lock();
+                let wrote = stdout
+                    .write_all(
+                        b"Tip: to keep the Hub running without this window, run `many-ai-cli setup` once.\n",
+                    )
+                    .is_ok()
+                    && stdout.flush().is_ok();
+                drop(stdout);
+                if wrote {
+                    crate::application::hub_launch::mark_hint_shown(&self.paths);
+                }
+            }
         }
         let serve = crate::hub::transport::serve_with_websockets(
             self.listener,

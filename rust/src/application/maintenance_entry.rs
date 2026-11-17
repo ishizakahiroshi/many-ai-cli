@@ -3,6 +3,14 @@ use super::{main_program::MainContext, maintenance_cli};
 use crate::{files::safe_fs::Dir, process::Cancellation};
 use std::{io, path::PathBuf, sync::Arc};
 pub fn stop_command(context: &MainContext) -> io::Result<maintenance_cli::stop::StopCommand> {
+    stop_command_source(context, "stop_command")
+}
+/// `tray --replace` stops the old Hub through the same owner but records the
+/// migration as its stop source so the Hub log names the real caller.
+pub fn stop_command_source(
+    context: &MainContext,
+    source: &'static str,
+) -> io::Result<maintenance_cli::stop::StopCommand> {
     let cfg = context.config.snapshot().map_err(io::Error::other)?.config;
     let directory = if context.paths.is_trial() {
         context.paths.resource(crate::config::Resource::Logs)
@@ -19,6 +27,7 @@ pub fn stop_command(context: &MainContext) -> io::Result<maintenance_cli::stop::
         config: context.config.clone(),
         io: Arc::new(maintenance_cli::stop::NativeStopIo {
             paths: context.paths.clone(),
+            source,
         }),
         log: Arc::new(move |message, pid, port| {
             if !log_config.enabled {

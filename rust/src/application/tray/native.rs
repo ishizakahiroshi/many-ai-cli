@@ -15,14 +15,35 @@ pub struct NativeTrayHooks {
     pub cwd: PathBuf,
     pub environment: Vec<String>,
     pub stop: Arc<StopCommand>,
+    /// Used only by `stop_for_migration`. Menu stops keep `stop`.
+    pub migration_stop: Arc<StopCommand>,
     pub preferred_port: Option<u16>,
+    /// Port carried by `REPLACE_REQUEST`. Overrides `preferred_port` for this process.
+    pub migration_port: std::sync::Mutex<Option<u16>>,
+}
+impl NativeTrayHooks {
+    /// The console Hub port when a replace was forwarded, otherwise the port this tray was given.
+    fn launch_port(&self) -> Option<u16> {
+        self.migration_port
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .or(self.preferred_port)
+    }
 }
 impl TrayHooks for NativeTrayHooks {
     fn requested_port(&self) -> Option<u16> {
         self.preferred_port
     }
+    fn accept_migration_port(&self, port: u16) {
+        if port > 0 {
+            *self
+                .migration_port
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner()) = Some(port);
+        }
+    }
     fn instance_port(&self) -> Option<u16> {
-        self.preferred_port.or_else(|| {
+        self.launch_port().or_else(|| {
             self.config.snapshot().ok().and_then(|snapshot| {
                 u16::try_from(snapshot.config.hub.port)
                     .ok()
@@ -31,36 +52,65 @@ impl TrayHooks for NativeTrayHooks {
         })
     }
     fn instance_key(&self) -> String {
-        use sha2::Digest;
-        let root = self
-            .paths
-            .root()
-            .canonicalize()
-            .unwrap_or_else(|_| self.paths.root().to_path_buf());
-        let root = crate::config::paths::equivalent_root_prefix(&root);
-        let root = root.to_string_lossy();
-        #[cfg(windows)]
-        let root = root.to_lowercase();
-        let digest: String = sha2::Sha256::digest(root.as_bytes())
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect();
-        format!("ManyAICLITray-{digest}")
+        super::instance_key(self.paths.root())
+    }
+    fn setup(&self) -> CoreFuture<'_, io::Result<()>> {
+        Box::pin(async move {
+            if self.paths.is_trial() {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "trial tray requires synthetic setup",
+                ));
+            }
+            let executable = self.executable.canonicalize()?;
+            let mut command = Command::new(executable);
+            command
+                .arg("setup")
+                .current_dir(&self.cwd)
+                .env_clear()
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            if let Some(port) = self.launch_port() {
+                command.args(["--port", &port.to_string()]);
+            }
+            for (key, value) in self.environment.iter().filter_map(|s| s.split_once('=')) {
+                command.env(key, value);
+            }
+            command.env_remove(crate::process::wrapper_startup::STARTUP_JOB_ENV);
+            command.env_remove("MANY_AI_CLI_INTERNAL_SPAWN_PROOF");
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                command.creation_flags(
+                    windows_sys::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP
+                        | windows_sys::Win32::System::Threading::CREATE_NO_WINDOW,
+                );
+            }
+            let status = tokio::task::spawn_blocking(move || command.status())
+                .await
+                .map_err(io::Error::other)??;
+            status
+                .success()
+                .then_some(())
+                .ok_or_else(|| io::Error::other(format!("setup exited with {status}")))
+        })
     }
     fn running_url(&self) -> CoreFuture<'_, io::Result<Option<String>>> {
         Box::pin(async move {
             let snapshot = self.config.snapshot().map_err(io::Error::other)?;
             let proof = crate::hub::pin::cli_local_proof(&snapshot.config);
+            let expected_port = self.launch_port();
             let port = RuntimeLedger::open(&self.paths)?
                 .running_port(
-                    self.preferred_port
+                    expected_port
                         .map(i64::from)
                         .unwrap_or(snapshot.config.hub.port),
                     &snapshot.config.token,
                     proof.as_deref(),
                 )
                 .await;
-            if let (Some(expected), Some(actual)) = (self.preferred_port, port)
+            if let (Some(expected), Some(actual)) = (expected_port, port)
                 && expected != actual
             {
                 return Err(io::Error::new(
@@ -111,7 +161,7 @@ impl TrayHooks for NativeTrayHooks {
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null());
-            if let Some(port) = self.preferred_port {
+            if let Some(port) = self.launch_port() {
                 command.args(["--port", &port.to_string(), "--strict-port"]);
             }
             for (key, value) in self.environment.iter().filter_map(|s| s.split_once('=')) {
@@ -177,5 +227,8 @@ impl TrayHooks for NativeTrayHooks {
     }
     fn stop_hub(&self) -> CoreFuture<'_, io::Result<()>> {
         Box::pin(async move { self.stop.run(&Cancellation::default()).await })
+    }
+    fn stop_for_migration(&self) -> CoreFuture<'_, io::Result<()>> {
+        Box::pin(async move { self.migration_stop.run(&Cancellation::default()).await })
     }
 }

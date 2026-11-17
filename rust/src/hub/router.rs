@@ -58,6 +58,8 @@ pub struct ServiceRouter {
     notifications: Option<Arc<crate::notify::Manager>>,
     assets: Option<Arc<dyn assets::AssetSource>>,
     shutdown: Option<Arc<super::lifecycle::ShutdownOwner>>,
+    hub_launch: Option<Arc<dyn crate::application::hub_launch::LaunchProbe>>,
+    tray_migrate: Option<Arc<dyn crate::application::hub_launch::TrayMigration>>,
     push_presence: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
 }
 pub type ProviderCommandFound = dyn Fn(&str) -> bool + Send + Sync;
@@ -261,6 +263,8 @@ impl ServiceRouter {
             notifications: None,
             assets: None,
             shutdown: None,
+            hub_launch: None,
+            tray_migrate: None,
             push_presence: None,
         })
     }
@@ -323,6 +327,20 @@ impl ServiceRouter {
     }
     pub fn with_shutdown(mut self, shutdown: Arc<super::lifecycle::ShutdownOwner>) -> Self {
         self.shutdown = Some(shutdown);
+        self
+    }
+    pub fn with_hub_launch(
+        mut self,
+        probe: Arc<dyn crate::application::hub_launch::LaunchProbe>,
+    ) -> Self {
+        self.hub_launch = Some(probe);
+        self
+    }
+    pub fn with_tray_migrate(
+        mut self,
+        migration: Arc<dyn crate::application::hub_launch::TrayMigration>,
+    ) -> Self {
+        self.tray_migrate = Some(migration);
         self
     }
     pub fn with_push_presence(mut self, presence: Arc<dyn Fn() -> bool + Send + Sync>) -> Self {
@@ -808,6 +826,48 @@ impl ServiceRouter {
                 ),
             });
         }
+        if request.path == "/api/hub/launch-state" {
+            let Some(probe) = &self.hub_launch else {
+                return Dispatch::response(Response::error(
+                    503,
+                    "launch_state_unavailable",
+                    "launch state probe is not initialized",
+                ));
+            };
+            return Dispatch::response(match probe.probe().await {
+                Ok(state) => Response::json(
+                    200,
+                    &json!({
+                        "console": state.console,
+                        "setup": state.setup,
+                        "tray": state.tray,
+                        "show_tray_migration_offer": state.migration_offer(),
+                    }),
+                ),
+                Err(_) => Response::error(500, "launch_state_failed", "launch state probe failed"),
+            });
+        }
+        if request.path == "/api/tray-migrate" {
+            // Spawned detached and answered immediately: the replacing tray
+            // ends this Hub after the response leaves.
+            return Dispatch::response(match &self.tray_migrate {
+                Some(migration) if cfg!(windows) && !self.paths.is_trial() => {
+                    match migration.spawn_replace(self.bound_port) {
+                        Ok(()) => Response::json(200, &json!({"ok":true})),
+                        Err(_) => Response::error(
+                            503,
+                            "tray_migrate_unavailable",
+                            "tray migration could not be started",
+                        ),
+                    }
+                }
+                _ => Response::error(
+                    403,
+                    "tray_migrate_unavailable",
+                    "tray migration requires a non-trial Windows Hub",
+                ),
+            });
+        }
         if request.path == super::cli_version::PATH {
             let Some(versions) = &self.cli_versions else {
                 return Dispatch::response(Response::error(
@@ -1078,6 +1138,8 @@ impl ServiceRouter {
             settings_published: None,
             notifications: None,
             shutdown: None,
+            hub_launch: None,
+            tray_migrate: None,
             push_presence: None,
         })
     }
@@ -1624,6 +1686,8 @@ pub(crate) fn needs_owned_request(path: &str) -> bool {
         || path == "/api/spawn-grid"
         || path == "/api/notify-test"
         || path == "/api/shutdown"
+        || path == "/api/hub/launch-state"
+        || path == "/api/tray-migrate"
         || is_routine_route(path)
         || path.starts_with(super::approval_actions::ONE_TAP_PREFIX)
         || path == "/api/approval/batch"
@@ -1739,6 +1803,8 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
         "/api/notify-config" => &["GET", "POST"],
         "/api/notify-test" => &["POST"],
         "/api/shutdown" => &["POST"],
+        "/api/hub/launch-state" => &["GET"],
+        "/api/tray-migrate" => &["POST"],
         super::preferences::PATH => &["GET", "PUT"],
         super::preference_media::AVATAR_PATH => &["GET"],
         super::preference_media::AVATAR_UPLOAD_PATH => &["PUT", "DELETE"],

@@ -497,8 +497,18 @@ async fn run() -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
             let stop = std::sync::Arc::new(
-                many_ai_cli::application::maintenance_entry::stop_command(&context)
-                    .map_err(|e| e.to_string())?,
+                many_ai_cli::application::maintenance_entry::stop_command_source(
+                    &context,
+                    "stop_command",
+                )
+                .map_err(|e| e.to_string())?,
+            );
+            let migration_stop = std::sync::Arc::new(
+                many_ai_cli::application::maintenance_entry::stop_command_source(
+                    &context,
+                    "tray_migration",
+                )
+                .map_err(|e| e.to_string())?,
             );
             let trial = context.paths.is_trial();
             let hooks =
@@ -509,10 +519,12 @@ async fn run() -> Result<(), String> {
                     cwd: context.cwd,
                     environment: context.environment,
                     stop,
+                    migration_stop,
                     preferred_port: options.port,
+                    migration_port: std::sync::Mutex::new(None),
                 });
             many_ai_cli::application::tray::TrayOwner::new(hooks)
-                .run_with_open(trial, options.open)
+                .run_with_open(trial, options.open || options.replace, options.replace)
                 .await
                 .map_err(|e| e.to_string())?;
         }

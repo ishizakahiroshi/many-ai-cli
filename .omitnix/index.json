@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "7ef63bd06b49154b4e43c1762f5a840eb062d374",
+    "commit": "7b3a5ac8bc6f94812cd928e71c13eec8136c59ae",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2076,
-    "analyzed": 1627,
+    "discovered": 2078,
+    "analyzed": 1629,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 434,
@@ -22916,6 +22916,35 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/application/hub_launch.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Hub launch-shape detection (`GET /api/hub/launch-state`) and the detached"
         },
         "authentication": {
           "state": "not_configured"
@@ -51330,6 +51359,36 @@
     },
     {
       "path": "web/tests/session-view-preferences.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/settings-tray-migrate.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

@@ -12,7 +12,21 @@ pub mod native;
 #[cfg(test)]
 mod tests;
 #[cfg(windows)]
-mod windows;
+pub(crate) mod windows;
+/// Per-home identity shared by the tray mutex/window and the launch probe.
+pub(crate) fn instance_key(root: &std::path::Path) -> String {
+    use sha2::Digest;
+    let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let root = crate::config::paths::equivalent_root_prefix(&root);
+    let root = root.to_string_lossy();
+    #[cfg(windows)]
+    let root = root.to_lowercase();
+    let digest: String = sha2::Sha256::digest(root.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    format!("ManyAICLITray-{digest}")
+}
 pub trait TrayHooks: Send + Sync {
     fn instance_key(&self) -> String {
         "ManyAICLITray".into()
@@ -23,10 +37,27 @@ pub trait TrayHooks: Send + Sync {
     fn requested_port(&self) -> Option<u16> {
         None
     }
+    /// `many-ai-cli setup` once, so the migrated Hub survives the next sign-in.
+    /// Non-native owners reject; `migrate_hub` surfaces that error unchanged.
+    fn setup(&self) -> CoreFuture<'_, io::Result<()>> {
+        Box::pin(async move {
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "tray setup is unavailable",
+            ))
+        })
+    }
+    /// The console Hub's bound port, when a second tray forwards `--replace`.
+    /// The existing owner must serve on that port, not the port it was started with.
+    fn accept_migration_port(&self, _port: u16) {}
     fn running_url(&self) -> CoreFuture<'_, io::Result<Option<String>>>;
     fn start_hub(&self) -> CoreFuture<'_, io::Result<()>>;
     fn open_url<'a>(&'a self, url: &'a str) -> CoreFuture<'a, io::Result<()>>;
     fn stop_hub(&self) -> CoreFuture<'_, io::Result<()>>;
+    /// Stop used only by `migrate_hub`, so a later tray-menu stop keeps its own source.
+    fn stop_for_migration(&self) -> CoreFuture<'_, io::Result<()>> {
+        self.stop_hub()
+    }
 }
 #[cfg(test)]
 type TestErrorReporter = Arc<dyn Fn(&str) + Send + Sync>;
@@ -102,6 +133,45 @@ impl TrayOwner {
         *self.last_open.lock().unwrap_or_else(|p| p.into_inner()) = None;
         Ok(())
     }
+    /// `tray --replace`: install setup first so a failure leaves the old Hub
+    /// alone, then end the console Hub, start the detached one and reopen the
+    /// browser. The URL wait mirrors open_hub's deadline (50 x 200ms).
+    pub async fn migrate_hub(&self) -> io::Result<()> {
+        if self.opening.swap(true, Ordering::AcqRel) {
+            return Ok(());
+        }
+        let _request = OpenRequest(&self.opening);
+        let _action = self.actions.lock().await;
+        if self.cancel.is_cancelled() {
+            return Err(io::Error::new(io::ErrorKind::Interrupted, "tray closed"));
+        }
+        let result = tokio::select! {
+            biased;
+            _ = self.cancel.cancelled() => Err(io::Error::new(io::ErrorKind::Interrupted, "tray closed")),
+            result = tokio::time::timeout(Duration::from_secs(60), async {
+                self.hooks.setup().await?;
+                self.hooks.stop_for_migration().await?;
+                self.hooks.start_hub().await?;
+                for _ in 0..50 {
+                    if let Some(url) = self.hooks.running_url().await? {
+                        return self.hooks.open_url(&url).await.map_err(|error| io::Error::new(error.kind(), format!("ブラウザを開けませんでした。Hub は起動しています。既定のブラウザを確認してください: {error}")));
+                    }
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                }
+                Err(io::Error::new(io::ErrorKind::TimedOut, "Hub が起動しませんでした。起動状態・使用中のポートを確認してください。"))
+            }) => result.unwrap_or_else(|_| Err(io::Error::new(io::ErrorKind::TimedOut, "Hub 移行が制限時間内に完了しませんでした。トレイのメニューから開き直してください。"))),
+        };
+        *self.last_open.lock().unwrap_or_else(|p| p.into_inner()) =
+            Some(tokio::time::Instant::now());
+        result
+    }
+    /// `REPLACE_REQUEST` carries the console Hub port in `port`. `None` keeps the owner's port.
+    pub fn command_replace(self: &Arc<Self>, port: Option<u16>) {
+        if let Some(port) = port.filter(|port| *port > 0) {
+            self.hooks.accept_migration_port(port);
+        }
+        self.command(5);
+    }
     pub fn command(self: &Arc<Self>, id: u32) {
         let owner = self.clone();
         let mut runs = self
@@ -120,6 +190,7 @@ impl TrayOwner {
                     1 => owner.open_hub().await,
                     2 => owner.stop_hub().await,
                     4 => Err(io::Error::new(io::ErrorKind::AddrInUse, "同じ保存先のトレイが別のポートで起動しています。既存トレイだけを終了し、使用するアイコンを開き直してください。Hub は自動では停止しません。")),
+                    5 => owner.migrate_hub().await,
                     _ => Ok(())
                 } } => result,
             };
@@ -149,9 +220,14 @@ impl TrayOwner {
         }
     }
     pub async fn run(self: &Arc<Self>, trial: bool) -> io::Result<()> {
-        self.run_with_open(trial, false).await
+        self.run_with_open(trial, false, false).await
     }
-    pub async fn run_with_open(self: &Arc<Self>, trial: bool, open: bool) -> io::Result<()> {
+    pub async fn run_with_open(
+        self: &Arc<Self>,
+        trial: bool,
+        open: bool,
+        replace: bool,
+    ) -> io::Result<()> {
         if trial {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
@@ -161,7 +237,7 @@ impl TrayOwner {
         #[cfg(windows)]
         {
             let owner = self.clone();
-            let result = tokio::task::spawn_blocking(move || windows::run(owner, open))
+            let result = tokio::task::spawn_blocking(move || windows::run(owner, open, replace))
                 .await
                 .map_err(io::Error::other)?;
             self.shutdown().await;
@@ -169,7 +245,7 @@ impl TrayOwner {
         }
         #[cfg(not(windows))]
         {
-            let _ = open;
+            let _ = (open, replace);
             Err(io::Error::new(
                 io::ErrorKind::Unsupported,
                 "tray is only available on Windows",

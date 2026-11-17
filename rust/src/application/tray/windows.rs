@@ -1,7 +1,10 @@
 use super::*;
 use std::ptr::{null, null_mut};
 use windows_sys::Win32::{
-    Foundation::{CloseHandle, ERROR_ALREADY_EXISTS, GetLastError, HWND, LPARAM, LRESULT, WPARAM},
+    Foundation::{
+        CloseHandle, ERROR_ALREADY_EXISTS, GetLastError, HWND, LPARAM, LRESULT, SetLastError,
+        WPARAM,
+    },
     System::{Console::FreeConsole, LibraryLoader::GetModuleHandleW, Threading::CreateMutexW},
     UI::{
         Shell::{
@@ -17,7 +20,8 @@ mod procedure_tests;
 use procedure_tests::{DefWindowProcW, DestroyWindow, GetWindowLongPtrW, PostQuitMessage};
 const CALLBACK: u32 = WM_USER + 1;
 const OPEN_REQUEST: u32 = WM_APP + 1;
-fn wide(value: &str) -> Vec<u16> {
+const REPLACE_REQUEST: u32 = WM_APP + 2;
+pub(crate) fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(Some(0)).collect()
 }
 unsafe extern "system" fn procedure(window: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
@@ -33,6 +37,17 @@ unsafe extern "system" fn procedure(window: HWND, message: u32, w: WPARAM, l: LP
                             .instance_port()
                             .is_some_and(|port| usize::from(port) != w);
                     owner.command(if mismatch { 4 } else { 1 });
+                }
+                0
+            }
+            REPLACE_REQUEST => {
+                let pointer = GetWindowLongPtrW(window, GWLP_USERDATA) as *const Arc<TrayOwner>;
+                if !pointer.is_null() {
+                    // The sender is the console Hub's port. This owner may have
+                    // been started for a different one, and sessions stay on the
+                    // port they already use.
+                    let port = u16::try_from(w).ok();
+                    (*pointer).command_replace(port);
                 }
                 0
             }
@@ -101,7 +116,7 @@ unsafe fn menu(window: HWND) {
         DestroyMenu(menu);
     }
 }
-pub(super) fn run(owner: Arc<TrayOwner>, open: bool) -> io::Result<()> {
+pub(super) fn run(owner: Arc<TrayOwner>, open: bool, replace: bool) -> io::Result<()> {
     // This complete function runs on one blocking OS thread: all window calls and
     // message dispatch share the same Win32 queue.
     unsafe {
@@ -121,7 +136,9 @@ pub(super) fn run(owner: Arc<TrayOwner>, open: bool) -> io::Result<()> {
         }
         let duplicate = GetLastError() == ERROR_ALREADY_EXISTS;
         if duplicate {
-            let result = if open {
+            let result = if replace {
+                forward_replace(&key, owner.hooks.requested_port())
+            } else if open {
                 notify_existing(&key, owner.hooks.requested_port())
             } else {
                 Ok(())
@@ -129,7 +146,7 @@ pub(super) fn run(owner: Arc<TrayOwner>, open: bool) -> io::Result<()> {
             CloseHandle(mutex);
             return result;
         }
-        let result = window_loop(owner, &key, open);
+        let result = window_loop(owner, &key, open, replace);
         CloseHandle(mutex);
         result
     }
@@ -159,6 +176,36 @@ fn notify_existing(key: &str, port: Option<u16>) -> io::Result<()> {
         std::thread::sleep(Duration::from_millis(25));
     }
 }
+/// `tray --replace` against an already-running tray. `port` is the console Hub
+/// the new process was given; the owner records command 5 before this returns.
+fn forward_replace(key: &str, port: Option<u16>) -> io::Result<()> {
+    let class = wide("ManyAICLITrayWindow");
+    let title = wide(key);
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let window = unsafe { FindWindowW(class.as_ptr(), title.as_ptr()) };
+        if !window.is_null() {
+            unsafe {
+                SetLastError(0);
+                let parameter = port.map(usize::from).unwrap_or(0);
+                SendMessageW(window, REPLACE_REQUEST, parameter, 0);
+            }
+            let error = unsafe { GetLastError() };
+            return if error == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::from_raw_os_error(error as i32))
+            };
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "起動済みのトレイへ接続できませんでした。トレイの状態を確認して開き直してください。",
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
 pub(super) fn show_error(message: &str) {
     let message = wide(&format!(
         "操作を完了できませんでした。\n\n{message}\n\n同じ保存先でターミナルから many-ai-cli doctor または serve を実行すると詳細を確認できます。\nこの案内では Hub を停止していません。"
@@ -172,7 +219,12 @@ pub(super) fn show_error(message: &str) {
         );
     }
 }
-unsafe fn window_loop(owner: Arc<TrayOwner>, key: &str, open: bool) -> io::Result<()> {
+unsafe fn window_loop(
+    owner: Arc<TrayOwner>,
+    key: &str,
+    open: bool,
+    replace: bool,
+) -> io::Result<()> {
     unsafe {
         let instance = GetModuleHandleW(null());
         let name = wide("ManyAICLITrayWindow");
@@ -241,7 +293,9 @@ unsafe fn window_loop(owner: Arc<TrayOwner>, key: &str, open: bool) -> io::Resul
                 }
                 return Err(error);
             }
-            if open {
+            if replace {
+                state.command(5);
+            } else if open {
                 state.command(1);
             }
             let mut message: MSG = std::mem::zeroed();

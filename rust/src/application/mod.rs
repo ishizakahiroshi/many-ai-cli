@@ -3,6 +3,7 @@
 pub mod agent_history;
 pub mod diagnostic_cli;
 pub mod diagnostics;
+pub mod hub_launch;
 pub mod hub_runtime;
 pub mod hub_status;
 pub mod iris_execution_dispatcher;

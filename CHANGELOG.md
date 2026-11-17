@@ -48,6 +48,19 @@ Release artifacts are published at
   The Hub broadcasts the change, so the new-session list and the settings list
   reload in other tabs and devices without F5.
 
+- **A console-launched Hub can move into the Windows tray with `many-ai-cli
+  tray --replace`.** The tray runs `setup`, stops the old console Hub (logged
+  as `tray_migration`), starts a detached Hub and reopens the browser, so
+  active sessions just reconnect.
+- **Settings → Hub can offer "Move Hub to tray".** On a Windows Hub started
+  in a console window that has never been set up and has no tray running, the
+  section shows the offer; one confirmation migrates the Hub. If external
+  exposure is active it is closed first, and a failed check or close cancels
+  the switch.
+- **A foreground `serve` now prints a one-time tip** — `many-ai-cli setup`
+  keeps the Hub running without its console window — only when the launch
+  could still move to the tray.
+
 ### Fixed
 
 - **The child spawn confirmation now lets you pick the subscription profile.**

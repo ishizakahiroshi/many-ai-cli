@@ -309,6 +309,14 @@
             <span class="web-menu-item-icon" aria-hidden="true">📱</span>
             <span class="web-menu-item-label" data-i18n="mobile_connect_tooltip">スマホで接続（QR）</span>
           </button>
+          <!-- 🗔 トレイ常駐への切替案内。console 起動・未 setup・トレイ未稼働の Hub でだけ /api/hub/launch-state が hidden を外す。 -->
+          <div id="tray-migrate-offer" hidden>
+            <div class="settings-note" data-i18n="tray_migrate_note">この Hub はコマンドプロンプト窓で動いています。トレイ常駐へ切り替えると、窓を閉じても Hub は動き続けます。</div>
+            <button id="tray-migrate-btn" class="ui-button ui-button--quiet ui-button--compact web-menu-item" type="button">
+              <span class="web-menu-item-icon" aria-hidden="true">🗔</span>
+              <span class="web-menu-item-label" data-i18n="tray_migrate_btn">トレイ常駐に切り替え</span>
+            </button>
+          </div>
           <button id="shutdown-btn" class="ui-button ui-button--quiet ui-button--compact web-menu-item" type="button" data-i18n-tooltip="shutdown_tooltip">
             <span class="web-menu-item-icon" aria-hidden="true">⏻</span>
             <span class="web-menu-item-label" data-i18n="shutdown_tooltip">Hub を停止</span>

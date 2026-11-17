@@ -2033,6 +2033,54 @@ inputEl.addEventListener('blur', (e) => {
 })();
 
 (function () {
+  const migrateBtn = document.getElementById('tray-migrate-btn');
+  if (!migrateBtn) return;
+
+  migrateBtn.addEventListener('click', async () => {
+    // Tailscale serve survives the old Hub. A failed status check or a failed
+    // close must leave this Hub running.
+    if (migrateBtn.disabled) return;
+    migrateBtn.disabled = true;
+    try {
+      const refreshed = await fetchExposeStatus(true);
+      if (!refreshed.ok) {
+        showToast(t('tray_migrate_status_failed'));
+        return;
+      }
+      const exposeActive = refreshed.status?.state === 'ready';
+      const ok = await appConfirm({
+        title: t('tray_migrate_confirm_title'),
+        message: exposeActive
+          ? t('tray_migrate_confirm') + ' ' + t('tray_migrate_confirm_expose')
+          : t('tray_migrate_confirm'),
+        confirmText: t('tray_migrate_btn'),
+        cancelText: t('spawn_cancel'),
+        kind: 'warn',
+      });
+      if (!ok) return;
+      if (exposeActive) {
+        const folded = await disableExpose();
+        if (!folded.ok) {
+          showToast(t('tray_migrate_expose_failed'));
+          return;
+        }
+      }
+      const response = await apiFetch('/api/tray-migrate', { method: 'POST' });
+      if (!response.ok) {
+        showToast(t('tray_migrate_failed'));
+        return;
+      }
+      const offer = document.getElementById('tray-migrate-offer');
+      if (offer) offer.hidden = true;
+    } catch (_) {
+      showToast(t('tray_migrate_failed'));
+    } finally {
+      migrateBtn.disabled = false;
+    }
+  });
+})();
+
+(function () {
   const idleTimeoutEl     = document.getElementById('idle-timeout-min');
   const terminalColorEl   = document.getElementById('terminal-color') as HTMLSelectElement | null;
   const aiLaunchShellSettings = initAiLaunchShellSettings();
