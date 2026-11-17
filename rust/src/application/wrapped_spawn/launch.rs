@@ -337,6 +337,18 @@ fn prepare_resolved(
             }
             _ => {}
         }
+        // A registered provider's approval-mode flags are its own spelling too.
+        if kind.is_some()
+            && !crate::proto::provider::BUILTIN_PROVIDER_IDS.contains(&spec.provider.as_str())
+        {
+            provider_tail.extend(
+                resolved
+                    .ordinary_permission_args
+                    .iter()
+                    .cloned()
+                    .map(Into::into),
+            );
+        }
         // An effort mapping is the same: `--effort <level>` is the wrapper's
         // own flag, and a provider's own spelling (codex:
         // `-c model_reasoning_effort="high"`) is not, so it follows `--` too.

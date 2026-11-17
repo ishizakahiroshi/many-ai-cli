@@ -25,6 +25,7 @@ impl SpawnLaunchPolicy for Policy {
             subscription_environment: vec!["SYNTHETIC_PRECEDENCE=subscription".into()],
             effective_route: spec.route.clone(),
             ordinary_model_args: vec![],
+            ordinary_permission_args: vec![],
             current_model: spec.model.clone(),
             resolved_model: spec.model.trim().to_owned(),
             effort_args: if spec.effort.is_empty() {

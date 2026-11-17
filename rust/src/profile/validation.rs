@@ -39,6 +39,8 @@ fn text(value: &str, field: &str, required: bool) -> Result<(), String> {
     }
     Ok(())
 }
+/// Approval modes a registered provider may map to its own flags.
+pub const PERMISSION_ARG_MODES: [&str; 4] = ["plan", "acceptEdits", "auto", "bypassPermissions"];
 fn argument(value: &str, field: &str) -> Result<(), String> {
     if value.is_empty() || value.len() > 1024 || control(value) {
         return Err(format!(
@@ -117,6 +119,19 @@ fn launch(launch: &LaunchDefinition) -> Vec<Diagnostic> {
     out.extend(args("launch.args", &launch.args, false));
     out.extend(args("launch.model_args", &launch.model_args, true));
     out.extend(args("launch.effort_args", &launch.effort_args, true));
+    for (mode, values) in &launch.permission_args {
+        let field = format!("launch.permission_args.{mode}");
+        if !PERMISSION_ARG_MODES.contains(&mode.as_str()) {
+            out.push(diag(
+                "invalid_permission_mode",
+                "error",
+                &field,
+                "permission_args keys must be plan, acceptEdits, auto or bypassPermissions",
+            ));
+            continue;
+        }
+        out.extend(args(&field, values, false));
+    }
     if launch.effort_levels.len() > 256 {
         out.push(diag(
             "too_many_effort_levels",

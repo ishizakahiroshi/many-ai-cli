@@ -15,7 +15,7 @@ import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
 import { compareCwdByBasename, filterCwdSubdirItems, joinCwdChild, splitCwdPath, splitCwdTypeahead } from './cwd-path.js';
-import { effortForSpawnBody, effortLevelsFor, resolveSpawnEffortSelection, setLaunchOptionChoices } from './spawn-confirm-store.js';
+import { effortForSpawnBody, effortLevelsFor, permissionModesFor, resolveSpawnEffortSelection, setLaunchOptionChoices } from './spawn-confirm-store.js';
 import {
   fillModelDatalist,
   getCachedSpawnModelGroups,
@@ -1184,6 +1184,8 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
   });
 
   function providerHasPermissionSelect(p: string): boolean {
+    // 登録型は、定義が権限モードを起動引数へ写像しているときだけ欄を出す。
+    if (isCustomProviderValue(p)) return permissionModesFor(p).length > 0;
     if (!hasProviderCapability(p, 'permissions')) return false;
     return p !== 'codex' && p !== 'opencode';
   }
@@ -1209,6 +1211,20 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
     // （親 plan の対応表: plan → --permission-mode plan、acceptEdits → --auto-accept、
     // bypassPermissions → --yolo）。claudeLike の条件は書き換えず、専用の分岐を足すだけにする。
     const commandCode = p === 'command-code';
+    if (isCustomProviderValue(p)) {
+      // 登録型: 定義が写像しているモードだけを選べる（default は常に選べる）。
+      const mapped = new Set(permissionModesFor(p));
+      for (const opt of Array.from(spawnPermissionMode.options)) {
+        if (opt.value === 'default') continue;
+        opt.hidden = !mapped.has(opt.value);
+        opt.disabled = !mapped.has(opt.value);
+        if (opt.value === 'auto') opt.textContent = t('spawn_permission_auto');
+        if (opt.value === 'bypassPermissions') opt.textContent = t('spawn_permission_bypass');
+      }
+      const picked = spawnPermissionMode.selectedOptions[0];
+      if (picked && (picked.hidden || picked.disabled)) spawnPermissionMode.value = 'default';
+      return;
+    }
     for (const opt of Array.from(spawnPermissionMode.options)) {
       if (opt.value === 'plan' || opt.value === 'acceptEdits') {
         opt.hidden = !(claudeLike || commandCode);
@@ -3003,7 +3019,7 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
         bodyObj.risk_confirmed = riskConfirmed;
         bodyObj.sandbox = sandbox;
         bodyObj.ask_for_approval = approval;
-      } else if (provider === 'grok' || provider === 'copilot' || provider === 'cursor-agent' || provider === 'command-code') {
+      } else if (provider === 'grok' || provider === 'copilot' || provider === 'cursor-agent' || provider === 'command-code' || (isCustomProviderValue(provider) && permissionModesFor(provider).length > 0)) {
         const permMode = spawnPermissionMode ? spawnPermissionMode.value : 'default';
         if (permMode === 'bypassPermissions') {
           const riskConfirmed = await appConfirm({

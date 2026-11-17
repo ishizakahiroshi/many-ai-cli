@@ -64,7 +64,7 @@ impl SessionHttp {
             .iter()
             .map(|provider| json!({"id":provider.id,"label":provider.effective_label()}))
             .collect();
-        let (effort, headless) = capabilities(config, context.registry);
+        let (effort, headless, permission_modes) = capabilities(config, context.registry);
         let role_permission: BTreeMap<_, _> = config
             .user_prefs
             .spawn
@@ -116,6 +116,7 @@ impl SessionHttp {
             "handoff_notify_remaining_percent":config.handoff.notify_remaining_percent_or_default(),
             "handoff_note_on_threshold":config.handoff.note_on_threshold_or_default(),
             "effort_levels":effort,
+            "permission_modes":permission_modes,
             "execution_modes":config::available_execution_modes(),
             "permission_presets":config::available_permission_presets(),
             "headless_providers":headless,
@@ -128,7 +129,11 @@ impl SessionHttp {
 fn capabilities(
     config: &Config,
     registry: Option<&Registry>,
-) -> (BTreeMap<String, Vec<String>>, Vec<String>) {
+) -> (
+    BTreeMap<String, Vec<String>>,
+    Vec<String>,
+    BTreeMap<String, Vec<String>>,
+) {
     let mut effort: BTreeMap<_, _> = config::effort_providers()
         .into_iter()
         .map(|provider| {
@@ -139,6 +144,9 @@ fn capabilities(
         .collect();
     let mut headless = config::headless_providers(Some(config));
     let mut seen: BTreeSet<_> = headless.iter().cloned().collect();
+    // Registered providers only: the approval modes their definition maps to
+    // flags. Built-in providers keep the fixed per-provider lists in the UI.
+    let mut permission_modes: BTreeMap<String, Vec<String>> = BTreeMap::new();
     if let Some(registry) = registry {
         for summary in registry.list() {
             if let Some(definition) = registry.lookup(&summary.id)
@@ -147,13 +155,19 @@ fn capabilities(
                 if !launch.effort_levels.is_empty() {
                     effort.insert(summary.id.clone(), launch.effort_levels);
                 }
+                if !launch.permission_args.is_empty() {
+                    permission_modes.insert(
+                        summary.id.clone(),
+                        launch.permission_args.keys().cloned().collect(),
+                    );
+                }
                 if launch.headless.is_some() && seen.insert(summary.id.clone()) {
                     headless.push(summary.id);
                 }
             }
         }
     }
-    (effort, headless)
+    (effort, headless, permission_modes)
 }
 fn runtime_label(mode: &str) -> &str {
     match mode {

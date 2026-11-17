@@ -89,6 +89,10 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
                 kind: "[]string",
             },
             Field {
+                name: "permission_args",
+                kind: "map[string][]string",
+            },
+            Field {
                 name: "allowed_env",
                 kind: "[]string",
             },

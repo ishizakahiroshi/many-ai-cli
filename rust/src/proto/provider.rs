@@ -247,6 +247,15 @@ pub struct LaunchDefinition {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub effort_levels: Vec<String>,
+    /// Approval mode (`plan` / `acceptEdits` / `auto` / `bypassPermissions`) ->
+    /// the provider's own argv for it. A mode without an entry is not offered
+    /// for this provider, so an unmapped flag is never guessed.
+    #[serde(
+        rename = "permission_args",
+        deserialize_with = "go_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub permission_args: BTreeMap<String, Vec<String>>,
     #[serde(
         rename = "allowed_env",
         deserialize_with = "go_vec",

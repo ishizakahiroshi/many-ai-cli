@@ -359,6 +359,7 @@ impl OrdinarySpawnService {
                 resolved_model: String::new(),
                 effort_args: vec![],
                 ordinary_model_args: vec![],
+                ordinary_permission_args: vec![],
             }
         } else {
             self.policy

@@ -289,6 +289,14 @@ impl SpawnLaunchPolicy for ConfigSpawnLaunchPolicy {
         } else {
             vec![]
         };
+        let ordinary_permission_args = if custom && !spec.subscription_login {
+            definition
+                .as_ref()
+                .map(|d| crate::profile::registry::permission_args(d, &spec.permission_mode))
+                .unwrap_or_default()
+        } else {
+            vec![]
+        };
         Ok(ResolvedSpawnPolicy {
             base_environment,
             route_environment,
@@ -298,6 +306,7 @@ impl SpawnLaunchPolicy for ConfigSpawnLaunchPolicy {
             resolved_model,
             effort_args,
             ordinary_model_args,
+            ordinary_permission_args,
         })
     }
     fn folder_trust(

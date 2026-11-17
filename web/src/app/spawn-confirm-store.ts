@@ -69,6 +69,9 @@ export interface SpawnConfirmationRecord {
 // 返す。ここに置いてあるのは「まだ /api/info を読んでいないとき」の保守的な既定で、
 // 画面の描画にしか使わない（受理の判断は常に Hub 側が行う）。
 let effortLevelsByProvider: Record<string, string[]> = {};
+// 登録型 provider ごとの、定義が起動引数へ写像している権限モード
+// （/api/info の permission_modes）。写像の無い provider は欄ごと出さない。
+let permissionModesByProvider: Record<string, string[]> = {};
 let availableExecutionModes: string[] = ['auto', 'interactive'];
 let availablePermissionPresets: string[] = ['attended', 'full'];
 
@@ -115,6 +118,17 @@ export function setLaunchOptionChoices(info: any): void {
       if (list.length) next[key] = list;
     }
     effortLevelsByProvider = next;
+  }
+  const permissionModes = info?.permission_modes;
+  if (permissionModes && typeof permissionModes === 'object') {
+    const next: Record<string, string[]> = {};
+    for (const [provider, value] of Object.entries(permissionModes as Record<string, any>)) {
+      const key = String(provider || '').trim();
+      if (!key || !Array.isArray(value)) continue;
+      const list = value.map((v) => String(v)).filter((v) => v);
+      if (list.length) next[key] = list;
+    }
+    permissionModesByProvider = next;
   }
   if (Array.isArray(info?.execution_modes)) {
     const list = info.execution_modes.map((v: any) => String(v)).filter((v: string) => v);
@@ -226,6 +240,12 @@ export function childPermissionPreviewFor(provider: string, tier: string, execut
     return approvalForSelection(childPermissionPreview, provider, childPermissionDefault);
   }
   return approvalForSelection(childPermissionPreview, provider, preset);
+}
+
+// 登録型 provider の定義が写像している権限モード。無ければ空配列（欄ごと出さない）。
+export function permissionModesFor(provider: string): string[] {
+  const list = permissionModesByProvider[String(provider || '').trim()];
+  return Array.isArray(list) ? list.slice() : [];
 }
 
 // provider に effort の写像が無ければ空配列。呼び出し側は空なら欄ごと出さない

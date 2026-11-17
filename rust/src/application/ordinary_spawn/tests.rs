@@ -70,6 +70,7 @@ impl SpawnLaunchPolicy for Policy {
             resolved_model: spec.model.clone(),
             effort_args: vec![],
             ordinary_model_args: vec![],
+            ordinary_permission_args: vec![],
         })
     }
     fn folder_trust(&self, _: &WrappedSpawnSpec, _: &[String]) -> std::io::Result<()> {
@@ -702,6 +703,7 @@ fn ordinary_risk_matches_pinned_provider_switch_without_preset_confirmation() {
         resolved_model: "new".into(),
         effort_args: vec![],
         ordinary_model_args: vec![],
+        ordinary_permission_args: vec![],
     };
     for (provider, expected) in [
         ("claude", true),

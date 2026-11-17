@@ -272,7 +272,10 @@ fn derive_capabilities(d: &Definition) -> CapabilitySummary {
         transcript: available(&d.adapters.transcript),
         usage: available(&d.adapters.usage),
         subscription: available(&d.adapters.subscription),
-        permissions: available(&d.adapters.permissions),
+        permissions: available(&d.adapters.permissions)
+            || d.launch
+                .as_ref()
+                .is_some_and(|l| !l.permission_args.is_empty()),
         subagents: available(&d.adapters.subagents),
     }
 }
@@ -303,6 +306,16 @@ pub fn effort_args(def: &EffectiveDefinition, effort: &str) -> Result<Vec<String
         ));
     }
     expand(&launch.effort_args, "effort", effort)
+}
+/// The provider's own argv for an approval mode; empty for `default`, an
+/// empty mode or a mode the definition does not map.
+pub fn permission_args(def: &EffectiveDefinition, mode: &str) -> Vec<String> {
+    def.definition
+        .launch
+        .as_ref()
+        .and_then(|l| l.permission_args.get(mode))
+        .cloned()
+        .unwrap_or_default()
 }
 pub fn model_args(def: &EffectiveDefinition, model: &str) -> Result<Vec<String>, String> {
     if model.is_empty() {

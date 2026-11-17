@@ -153,6 +153,7 @@ fn request(t: &TestRuntime, attempt: u64, kind: WrappedStartKind) -> WrappedStar
             resolved_model: "prepared-model".into(),
             effort_args: vec!["-c".into(), "model_reasoning_effort=high".into()],
             ordinary_model_args: vec![],
+            ordinary_permission_args: vec![],
         },
         kind,
     }

@@ -12,6 +12,12 @@ Release artifacts are published at
 
 ### Added
 
+- **A registered AI CLI can now offer the approval-mode picker too.** A
+  provider definition's `launch.permission_args` maps `plan` / `acceptEdits` /
+  `auto` / `bypassPermissions` to that CLI's own flags (for example Devin CLI:
+  `--permission-mode accept-edits` / `dangerous`). New Session shows the picker
+  with only the mapped modes, and the full-access mode asks for confirmation
+  like the built-in CLIs. A definition without the map shows no picker, as before.
 - **An AI can now add a new AI CLI with `many-ai-cli provider add`.** `provider
   list`, `provider remove` and `provider test` complete the set, and
   `provider add --help` is written for an AI agent (what to research, what to

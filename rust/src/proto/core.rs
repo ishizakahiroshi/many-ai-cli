@@ -2579,6 +2579,8 @@ pub struct ResolvedSpawnPolicy {
     /// registry mappings are raw provider flags; never rewrite them to --effort.
     pub effort_args: Vec<String>,
     pub ordinary_model_args: Vec<String>,
+    /// Registered provider's own argv for the chosen approval mode.
+    pub ordinary_permission_args: Vec<String>,
 }
 
 #[derive(Clone)]
