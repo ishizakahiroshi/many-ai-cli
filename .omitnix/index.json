@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "7b3a5ac8bc6f94812cd928e71c13eec8136c59ae",
+    "commit": "cc7338658e5cea3c1d5d06b48e5b53931e20485e",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -139,10 +139,10 @@
   },
   "coverage": {
     "discovered": 2078,
-    "analyzed": 1629,
+    "analyzed": 1631,
     "unresolved": 15,
     "unknown": 0,
-    "unclaimed": 434,
+    "unclaimed": 432,
     "skipped_by_config": 0
   },
   "files": [
@@ -180,19 +180,57 @@
     },
     {
       "path": ".githooks/pre-commit",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '(no extension)'"
+      "adapter": "shell",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "doxguard prerelease opt-in begin"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
     },
     {
       "path": ".githooks/pre-push",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '(no extension)'"
+      "adapter": "shell",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "pre-push — CI の Validate より先に、ローカルで落ちるものを落とす。"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
     },
     {
       "path": ".github/workflows/backport-to-develop.yml",

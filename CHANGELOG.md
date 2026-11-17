@@ -61,6 +61,11 @@ Release artifacts are published at
   keeps the Hub running without its console window — only when the launch
   could still move to the tray.
 
+### Changed
+
+- Windows の常駐は、通知領域のアイコンではなく、タスクバーの小さい窓で動いていることを示す。窓を閉じると最小化され、Hub は止まらない。
+- 設定の切り替え案内、起動時の 1 行ヒント、setup の完了文を、タスクバーの小さい窓の説明に変えた。
+
 ### Fixed
 
 - **The child spawn confirmation now lets you pick the subscription profile.**

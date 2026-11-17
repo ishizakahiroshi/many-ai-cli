@@ -1584,7 +1584,7 @@ impl HubComposition {
                 let mut stdout = std::io::stdout().lock();
                 let wrote = stdout
                     .write_all(
-                        b"Tip: to keep the Hub running without this window, run `many-ai-cli setup` once.\n",
+                        b"Tip: to keep the Hub running after this window closes, run `many-ai-cli setup` once. Windows then shows a small MANY-AI-CLI window on the taskbar.\n",
                     )
                     .is_ok()
                     && stdout.flush().is_ok();

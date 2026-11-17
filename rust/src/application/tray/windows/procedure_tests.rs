@@ -10,20 +10,32 @@ enum NativeCall {
     Destroy,
     Quit(i32),
     Default(u32),
+    Minimize,
+    Text(String),
 }
 struct WindowData {
     window: usize,
+    status: usize,
     owner: isize,
+    stop_answer: i32,
     calls: Arc<Mutex<Vec<NativeCall>>>,
 }
 thread_local! {
     static WINDOW: RefCell<Option<WindowData>> = const { RefCell::new(None) };
+    static POSTS: RefCell<Vec<(isize, bool)>> = const { RefCell::new(Vec::new()) };
+}
+pub(super) fn record_presence(hwnd: isize, running: bool) {
+    POSTS.with(|slot| slot.borrow_mut().push((hwnd, running)));
+}
+pub(super) fn take_presence_posts() -> Vec<(isize, bool)> {
+    POSTS.with(|slot| std::mem::take(&mut *slot.borrow_mut()))
 }
 struct WindowOwnerData {
     owner: Arc<TrayOwner>,
 }
 struct SyntheticWindow {
     _owner: Box<WindowOwnerData>,
+    _presence: Option<Box<PresenceWindow>>,
     previous: Option<WindowData>,
     calls: Arc<Mutex<Vec<NativeCall>>>,
     // HWND data and its RAII guard must stay on the procedure's one OS thread.
@@ -38,12 +50,41 @@ impl SyntheticWindow {
         let previous = WINDOW.with(|slot| {
             slot.replace(Some(WindowData {
                 window: 1,
+                status: 0,
                 owner: &owner.owner as *const Arc<TrayOwner> as isize,
+                stop_answer: 0,
                 calls: calls.clone(),
             }))
         });
         Self {
             _owner: owner,
+            _presence: None,
+            previous,
+            calls,
+            _same_thread: PhantomData,
+        }
+    }
+    fn presence(owner: Arc<TrayOwner>, answer: i32) -> Self {
+        let presence = Box::new(PresenceWindow {
+            owner,
+            status: std::ptr::without_provenance_mut(3),
+            text: presence_copy(0x11),
+        });
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let previous = WINDOW.with(|slot| {
+            slot.replace(Some(WindowData {
+                window: 2,
+                status: 3,
+                owner: &*presence as *const PresenceWindow as isize,
+                stop_answer: answer,
+                calls: calls.clone(),
+            }))
+        });
+        Self {
+            _owner: Box::new(WindowOwnerData {
+                owner: presence.owner.clone(),
+            }),
+            _presence: Some(presence),
             previous,
             calls,
             _same_thread: PhantomData,
@@ -51,6 +92,9 @@ impl SyntheticWindow {
     }
     fn handle(&self) -> HWND {
         std::ptr::without_provenance_mut(1)
+    }
+    fn presence_handle(&self) -> HWND {
+        std::ptr::without_provenance_mut(2)
     }
     fn calls(&self) -> Vec<NativeCall> {
         self.calls.lock().unwrap().clone()
@@ -104,12 +148,74 @@ pub(super) unsafe fn DefWindowProcW(window: HWND, message: u32, w: WPARAM, l: LP
         unsafe { native::DefWindowProcW(window, message, w, l) }
     }
 }
+pub(super) unsafe fn ShowWindow(window: HWND, command: i32) -> i32 {
+    if let Some(calls) = window_calls(window) {
+        if command == native::SW_MINIMIZE {
+            calls.lock().unwrap().push(NativeCall::Minimize);
+        }
+        1
+    } else {
+        unsafe { native::ShowWindow(window, command) }
+    }
+}
+pub(super) unsafe fn MessageBoxW(
+    window: HWND,
+    text: *const u16,
+    caption: *const u16,
+    kind: u32,
+) -> i32 {
+    let answer = WINDOW.with(|slot| {
+        slot.borrow().as_ref().and_then(|data| {
+            if data.window == window as usize {
+                Some(if data.stop_answer == 0 {
+                    native::IDNO
+                } else {
+                    data.stop_answer
+                })
+            } else {
+                None
+            }
+        })
+    });
+    if let Some(answer) = answer {
+        return answer;
+    }
+    unsafe { native::MessageBoxW(window, text, caption, kind) }
+}
+pub(super) unsafe fn SetWindowTextW(window: HWND, text: *const u16) -> i32 {
+    if let Some(calls) = window_calls(window) {
+        calls
+            .lock()
+            .unwrap()
+            .push(NativeCall::Text(wide_to_string(text)));
+        1
+    } else {
+        unsafe { native::SetWindowTextW(window, text) }
+    }
+}
+fn wide_to_string(text: *const u16) -> String {
+    if text.is_null() {
+        return String::new();
+    }
+    let mut len = 0;
+    unsafe {
+        while *text.add(len) != 0 {
+            len += 1;
+        }
+        String::from_utf16_lossy(std::slice::from_raw_parts(text, len))
+    }
+}
 fn window_calls(window: HWND) -> Option<Arc<Mutex<Vec<NativeCall>>>> {
     WINDOW.with(|slot| {
-        slot.borrow()
-            .as_ref()
-            .filter(|data| data.window == window as usize)
-            .map(|data| data.calls.clone())
+        slot.borrow().as_ref().and_then(|data| {
+            if data.window == window as usize
+                || (data.status != 0 && data.status == window as usize)
+            {
+                Some(data.calls.clone())
+            } else {
+                None
+            }
+        })
     })
 }
 
@@ -276,6 +382,168 @@ async fn replace_request_migrates_on_the_forwarded_port() {
     assert_eq!(
         *hooks.calls.lock().unwrap(),
         vec!["setup", "migrate-stop", "start", "url", "open"]
+    );
+    owner.shutdown().await;
+}
+
+#[test]
+fn presence_copy_follows_the_four_primary_languages() {
+    let japanese = presence_copy(0x0411);
+    assert_eq!(japanese.running, "動いています");
+    assert_eq!(japanese.stopped, "止まっています");
+    assert_eq!(japanese.open, "ブラウザを開く");
+    assert_eq!(japanese.stop, "停止");
+    assert_eq!(japanese.confirm_title, "Hub の停止");
+    assert_eq!(
+        japanese.confirm_body,
+        "Hub を停止しますか？ 実行中のセッションは、Hub が戻るまで待ちます。"
+    );
+    let english = presence_copy(0x0409);
+    assert_eq!(english.running, "Running");
+    assert_eq!(english.stopped, "Stopped");
+    assert_eq!(english.open, "Open browser");
+    assert_eq!(english.stop, "Stop");
+    assert_eq!(english.confirm_title, "Stop the Hub");
+    assert_eq!(
+        english.confirm_body,
+        "Stop the Hub? Running sessions wait until the Hub comes back."
+    );
+    let vietnamese = presence_copy(0x042a);
+    assert_eq!(vietnamese.running, "Đang chạy");
+    assert_eq!(vietnamese.stopped, "Đã dừng");
+    assert_eq!(vietnamese.open, "Mở trình duyệt");
+    assert_eq!(vietnamese.stop, "Dừng");
+    assert_eq!(vietnamese.confirm_title, "Dừng Hub");
+    assert_eq!(
+        vietnamese.confirm_body,
+        "Dừng Hub? Phiên đang chạy sẽ chờ Hub quay lại."
+    );
+    let other = presence_copy(0x0407);
+    assert_eq!(other.running, japanese.running);
+    assert_eq!(other.confirm_body, japanese.confirm_body);
+    assert_eq!(presence_origin(None), (100, 100));
+    assert_eq!(presence_origin(Some((0, 0, 1920, 1080))), (1544, 904));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn presence_window_minimizes_confirms_stop_and_publishes_state() {
+    let _ = take_presence_posts();
+    let hooks = Arc::new(Hooks::default());
+    let owner = TrayOwner::new(hooks.clone());
+    let window = SyntheticWindow::presence(owner.clone(), native::IDNO);
+    let handle = window.presence_handle();
+    assert_eq!(unsafe { presence_procedure(handle, WM_COMMAND, 1, 0) }, 0);
+    drain_commands(&owner).await;
+    assert_eq!(*hooks.calls.lock().unwrap(), ["running", "open"]);
+    assert!(window.calls().is_empty());
+
+    hooks.calls.lock().unwrap().clear();
+    assert_eq!(unsafe { presence_procedure(handle, WM_COMMAND, 2, 0) }, 0);
+    drain_commands(&owner).await;
+    assert!(hooks.calls.lock().unwrap().is_empty());
+
+    drop(window);
+    let window = SyntheticWindow::presence(owner.clone(), native::IDYES);
+    let handle = window.presence_handle();
+    assert_eq!(unsafe { presence_procedure(handle, WM_COMMAND, 2, 0) }, 0);
+    drain_commands(&owner).await;
+    assert_eq!(*hooks.calls.lock().unwrap(), ["running", "stop"]);
+
+    hooks.calls.lock().unwrap().clear();
+    assert_eq!(unsafe { presence_procedure(handle, WM_COMMAND, 3, 0) }, 0);
+    assert_eq!(unsafe { presence_procedure(handle, WM_CLOSE, 0, 0) }, 0);
+    assert_eq!(
+        unsafe { presence_procedure(handle, WM_SYSCOMMAND, SC_CLOSE as usize, 0) },
+        0
+    );
+    assert_eq!(
+        unsafe { presence_procedure(handle, WM_SYSCOMMAND, SC_MINIMIZE as usize, 0) },
+        277
+    );
+    assert_eq!(
+        window.calls(),
+        [
+            NativeCall::Minimize,
+            NativeCall::Minimize,
+            NativeCall::Default(WM_SYSCOMMAND),
+        ]
+    );
+    assert!(hooks.calls.lock().unwrap().is_empty());
+    assert!(!owner.cancel.is_cancelled());
+
+    assert_eq!(
+        unsafe { presence_procedure(handle, PRESENCE_STATE, 1, 0) },
+        0
+    );
+    assert_eq!(
+        unsafe { presence_procedure(handle, PRESENCE_STATE, 0, 0) },
+        0
+    );
+    assert_eq!(
+        window.calls(),
+        [
+            NativeCall::Minimize,
+            NativeCall::Minimize,
+            NativeCall::Default(WM_SYSCOMMAND),
+            NativeCall::Text("動いています".into()),
+            NativeCall::Text("止まっています".into()),
+        ]
+    );
+    owner.shutdown().await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn presence_publish_posts_state_without_a_url_and_skips_a_missing_window() {
+    let _ = take_presence_posts();
+    let hooks = Arc::new(Hooks::default());
+    let owner = TrayOwner::new(hooks.clone());
+    owner.command(1);
+    drain_commands(&owner).await;
+    assert!(take_presence_posts().is_empty());
+    assert_eq!(*hooks.calls.lock().unwrap(), ["running", "open"]);
+
+    hooks.calls.lock().unwrap().clear();
+    owner.bind_presence_window(2);
+    owner.command(2);
+    drain_commands(&owner).await;
+    assert_eq!(take_presence_posts(), vec![(2, true)]);
+    assert_eq!(*hooks.calls.lock().unwrap(), ["running", "stop", "running"]);
+    owner.shutdown().await;
+
+    let migrate_errors = Arc::new(Mutex::new(Vec::new()));
+    let recorded_migrate = migrate_errors.clone();
+    let hooks = Arc::new(Hooks::default());
+    let mut owner = TrayOwner::new(hooks.clone());
+    Arc::get_mut(&mut owner).unwrap().test_error_reporter = Some(Arc::new(move |message| {
+        recorded_migrate.lock().unwrap().push(message.to_owned());
+    }));
+    owner.bind_presence_window(2);
+    owner.command(5);
+    drain_commands(&owner).await;
+    assert_eq!(take_presence_posts(), vec![(2, true)]);
+    assert!(
+        !migrate_errors
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|message| message.contains("http"))
+    );
+    owner.shutdown().await;
+
+    let errors = Arc::new(Mutex::new(Vec::new()));
+    let recorded = errors.clone();
+    let hooks = Arc::new(Hooks::default());
+    let mut owner = TrayOwner::new(hooks);
+    Arc::get_mut(&mut owner).unwrap().test_error_reporter = Some(Arc::new(move |message| {
+        recorded.lock().unwrap().push(message.to_owned());
+    }));
+    owner.command(4);
+    drain_commands(&owner).await;
+    assert_eq!(
+        errors.lock().unwrap().as_slice(),
+        [
+            "同じ保存先の小さい窓が別のポートで開いています。その窓のプロセスだけをタスクマネージャーで終了し、開き直してください。Hub は自動では停止しません。"
+        ]
     );
     owner.shutdown().await;
 }

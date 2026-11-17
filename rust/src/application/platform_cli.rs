@@ -202,7 +202,7 @@ impl PlatformCli {
         }
         writeln!(
             out,
-            "\nNext:\n  Double click \"MANY-AI-CLI\" on your desktop to start/reuse the Hub and open the browser.\n  Sign-in starts only the tray; it does not open the browser.\n  Tray exit keeps the Hub running; choose \"Hub を停止\" to stop the Hub.\n  To stop sign-in startup, delete \"MANY-AI-CLI\" from the Startup folder\n  (or turn it off in Task Manager > Startup apps)."
+            "\nNext:\n  Double-click \"MANY-AI-CLI\" on the desktop to start or reuse the Hub and open the browser.\n  Sign-in places a small window on the taskbar and does not open the browser.\n  Closing that window minimizes it. The Hub keeps running.\n  Stop the Hub with the window's Stop button.\n  To replace the executable without stopping the Hub, end that window's process in Task Manager.\n  To stop sign-in startup, delete \"MANY-AI-CLI\" from the Startup folder\n  (or turn it off in Task Manager > Startup apps)."
         )?;
         if failed {
             Err(io::Error::other("some shortcuts failed to create"))

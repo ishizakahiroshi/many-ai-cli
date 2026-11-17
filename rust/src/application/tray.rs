@@ -4,7 +4,7 @@ use std::{
     io,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicIsize, Ordering},
     },
     time::Duration,
 };
@@ -69,6 +69,10 @@ pub struct TrayOwner {
     actions: tokio::sync::Mutex<()>,
     opening: AtomicBool,
     last_open: Mutex<Option<tokio::time::Instant>>,
+    /// Visible window handle. `0` means the resident loop has no window yet,
+    /// including every test that never creates one.
+    #[cfg(windows)]
+    presence_hwnd: AtomicIsize,
     #[cfg(test)]
     test_error_reporter: Option<TestErrorReporter>,
 }
@@ -82,6 +86,8 @@ impl TrayOwner {
             actions: tokio::sync::Mutex::new(()),
             opening: AtomicBool::new(false),
             last_open: Mutex::new(None),
+            #[cfg(windows)]
+            presence_hwnd: AtomicIsize::new(0),
             #[cfg(test)]
             test_error_reporter: None,
         })
@@ -159,7 +165,7 @@ impl TrayOwner {
                     tokio::time::sleep(Duration::from_millis(200)).await;
                 }
                 Err(io::Error::new(io::ErrorKind::TimedOut, "Hub が起動しませんでした。起動状態・使用中のポートを確認してください。"))
-            }) => result.unwrap_or_else(|_| Err(io::Error::new(io::ErrorKind::TimedOut, "Hub 移行が制限時間内に完了しませんでした。トレイのメニューから開き直してください。"))),
+            }) => result.unwrap_or_else(|_| Err(io::Error::new(io::ErrorKind::TimedOut, "Hub 移行が制限時間内に完了しませんでした。小さい窓から開き直してください。"))),
         };
         *self.last_open.lock().unwrap_or_else(|p| p.into_inner()) =
             Some(tokio::time::Instant::now());
@@ -186,13 +192,23 @@ impl TrayOwner {
             let result = tokio::select! {
                 biased;
                 _ = owner.cancel.cancelled() => return,
-                result = async { match id {
-                    1 => owner.open_hub().await,
-                    2 => owner.stop_hub().await,
-                    4 => Err(io::Error::new(io::ErrorKind::AddrInUse, "同じ保存先のトレイが別のポートで起動しています。既存トレイだけを終了し、使用するアイコンを開き直してください。Hub は自動では停止しません。")),
-                    5 => owner.migrate_hub().await,
-                    _ => Ok(())
-                } } => result,
+                result = async {
+                    let result = match id {
+                        1 => owner.open_hub().await,
+                        2 => owner.stop_hub().await,
+                        4 => Err(io::Error::new(io::ErrorKind::AddrInUse, "同じ保存先の小さい窓が別のポートで開いています。その窓のプロセスだけをタスクマネージャーで終了し、開き直してください。Hub は自動では停止しません。")),
+                        5 => owner.migrate_hub().await,
+                        _ => Ok(()),
+                    };
+                    // Command 5 is the settings switch. The status line would
+                    // stay on the pre-switch value without this publish.
+                    // There is no timer.
+                    #[cfg(windows)]
+                    if matches!(id, 1 | 2 | 5) {
+                        owner.publish_presence().await;
+                    }
+                    result
+                } => result,
             };
             if let Err(error) = result
                 && !owner.cancel.is_cancelled()
@@ -206,6 +222,40 @@ impl TrayOwner {
                 let _ = tokio::task::spawn_blocking(move || report_error(&message)).await;
             }
         }));
+    }
+    #[cfg(windows)]
+    fn bind_presence_window(&self, hwnd: isize) {
+        self.presence_hwnd.store(hwnd, Ordering::Release);
+    }
+    #[cfg(windows)]
+    fn presence_window(&self) -> isize {
+        self.presence_hwnd.load(Ordering::Acquire)
+    }
+    /// Posts running/stopped to the visible window. A missing handle, including
+    /// every test that never creates the window, does nothing and does not read
+    /// the URL into the message.
+    #[cfg(windows)]
+    async fn publish_presence(&self) {
+        let hwnd = self.presence_window();
+        if hwnd == 0 {
+            return;
+        }
+        let running = self.hooks.running_url().await.ok().flatten().is_some();
+        windows::post_presence_state(hwnd, running);
+    }
+    #[cfg(windows)]
+    fn kick_presence_refresh(self: &Arc<Self>) {
+        if self.presence_window() == 0 {
+            return;
+        }
+        let owner = self.clone();
+        let task = self.runtime.spawn(async move {
+            owner.publish_presence().await;
+        });
+        self.runs
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .push(task);
     }
     pub async fn shutdown(&self) {
         self.cancel.cancel();
