@@ -469,6 +469,7 @@ async fn audit_u29_a_reply_past_the_size_limit_is_refused_without_reading_it() {
             key_file: f.root.path().join("writer.key"),
             project: "demo".into(),
             item_id: "synthetic".into(),
+            fence: None,
         };
         let result = tokio::time::timeout(
             Duration::from_secs(10),
@@ -524,6 +525,39 @@ struct Shelf {
     calls: AtomicUsize,
     /// The bearer token of each `board_accept_handoff`.
     accepted_with: Mutex<Vec<String>>,
+    /// Behaves like a board with safe resumption (Many Iris PR #4): the
+    /// accept answers a generation, and the writer that took a request must
+    /// write onto it as the run. Without it, the board refuses those fields,
+    /// as one without generations does.
+    generations: AtomicBool,
+    /// Every call: (bearer token, tool, arguments).
+    log: Mutex<Vec<(String, String, serde_json::Value)>>,
+    heartbeats: AtomicUsize,
+}
+/// The generation the fenced `Shelf` hands out.
+const GENERATION: u64 = 7;
+/// Whether `auth` may write onto `item` as the board with generations decides.
+/// A plain write (`required` false) is asked for the fence only from the
+/// writer that took the item; a run's write (`required` true) must come from
+/// that writer with the fence.
+fn fence_ok(
+    item: &serde_json::Value,
+    auth: &str,
+    args: &serde_json::Value,
+    required: bool,
+) -> bool {
+    let handoff = &item["handoff"];
+    if handoff["state"] != "accepted" || handoff["accepted_by"] != auth {
+        return !required;
+    }
+    args["request_id"] == handoff["request_id"] && args["generation"] == handoff["generation"]
+}
+fn without_fence(mut args: serde_json::Value) -> serde_json::Value {
+    if let Some(fields) = args.as_object_mut() {
+        fields.remove("request_id");
+        fields.remove("generation");
+    }
+    args
 }
 impl Shelf {
     fn put(&self, item: serde_json::Value) {
@@ -563,22 +597,93 @@ async fn shelve(
     axum::Json(body): axum::Json<serde_json::Value>,
 ) -> axum::Json<serde_json::Value> {
     shelf.calls.fetch_add(1, Ordering::SeqCst);
-    if body["params"]["name"] == "board_accept_handoff" {
-        let auth = headers
-            .get("authorization")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or_default()
-            .to_owned();
-        lock(&shelf.accepted_with).push(auth);
+    let auth = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+    let tool = body["params"]["name"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    if tool == "board_accept_handoff" {
+        lock(&shelf.accepted_with).push(auth.clone());
     }
     let args = body["params"]["arguments"].clone();
+    lock(&shelf.log).push((auth.clone(), tool.clone(), args.clone()));
     let reply = |content: serde_json::Value| {
         axum::Json(serde_json::json!({
             "jsonrpc": "2.0", "id": 1, "result": {"structuredContent": content},
         }))
     };
     let refused = serde_json::json!({"ok": false, "error": {"code": "INVALID"}});
-    match body["params"]["name"].as_str().unwrap_or_default() {
+    let generations = shelf.generations.load(Ordering::SeqCst);
+    let fencing = args.get("request_id").is_some() || args.get("generation").is_some();
+    if matches!(tool.as_str(), "board_upsert_item" | "board_add_event") {
+        if !generations && fencing {
+            // A board without generations refuses fields it does not know.
+            return reply(refused);
+        }
+        if generations {
+            let item = lock(&shelf.items)
+                .iter()
+                .find(|item| item["item_id"] == args["item_id"])
+                .cloned();
+            if item.is_some_and(|item| !fence_ok(&item, &auth, &args, false)) {
+                return reply(
+                    serde_json::json!({"ok": false, "error": {"code": "FENCE_REQUIRED"}}),
+                );
+            }
+        }
+    }
+    // What is kept on the shelf has no fence (the accept's request id stays).
+    let args = if matches!(
+        tool.as_str(),
+        "board_upsert_item" | "board_add_event" | "board_progress_handoff"
+    ) {
+        without_fence(args)
+    } else {
+        args
+    };
+    let run_ok = |id: &serde_json::Value, fence: &serde_json::Value| {
+        lock(&shelf.items).iter().any(|item| {
+            item["item_id"] == *id
+                && item["handoff"]["state"] == "accepted"
+                && fence_ok(item, &auth, fence, true)
+        })
+    };
+    let fence = body["params"]["arguments"].clone();
+    match tool.as_str() {
+        "board_heartbeat_handoff" if generations => {
+            if !run_ok(&args["item_id"], &fence) {
+                return reply(refused);
+            }
+            shelf.heartbeats.fetch_add(1, Ordering::SeqCst);
+            reply(serde_json::json!({"ok": true, "changed": true}))
+        }
+        "board_progress_handoff" if generations => {
+            if !run_ok(&args["item_id"], &fence) {
+                return reply(refused);
+            }
+            lock(&shelf.events).push(args);
+            reply(serde_json::json!({"ok": true}))
+        }
+        "board_complete_handoff" if generations => {
+            if !run_ok(&args["item_id"], &fence) {
+                return reply(refused);
+            }
+            let mut items = lock(&shelf.items);
+            let item = items
+                .iter_mut()
+                .find(|item| item["item_id"] == args["item_id"])
+                .unwrap();
+            item["handoff"]["state"] = "completed".into();
+            item["state"] = args["outcome"].clone();
+            lock(&shelf.events).push(serde_json::json!({
+                "item_id": args["item_id"], "kind": "note", "text": "completed",
+            }));
+            reply(serde_json::json!({"ok": true, "changed": true}))
+        }
         "board_list" => {
             let items: Vec<_> = lock(&shelf.items)
                 .iter()
@@ -643,7 +748,13 @@ async fn shelve(
                 Some(item) => {
                     item["handoff"]["state"] = "accepted".into();
                     item["state"] = "in_progress".into();
-                    reply(serde_json::json!({"ok": true, "changed": true}))
+                    if !generations {
+                        return reply(serde_json::json!({"ok": true, "changed": true}));
+                    }
+                    item["handoff"]["accepted_by"] = auth.clone().into();
+                    item["handoff"]["generation"] = GENERATION.into();
+                    let handoff = item["handoff"].clone();
+                    reply(serde_json::json!({"ok": true, "changed": true, "handoff": handoff}))
                 }
                 None => reply(refused),
             }
@@ -1808,5 +1919,253 @@ async fn a_request_for_local_claude_started_from_the_list_is_taken_with_its_key(
         shelf.item("backlog/1").unwrap()["handoff"]["state"],
         "accepted"
     );
+    f.cancel.cancel();
+}
+
+// ---- A board with safe resumption: work taken is written as the run. ----
+
+async fn until(what: &str, done: impl Fn() -> bool) {
+    tokio::time::timeout(Duration::from_secs(20), async {
+        while !done() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("never: {what}"));
+}
+/// The tools called for `item`, in order (reads of the whole project excluded).
+fn tools_for(shelf: &Shelf, item: &str) -> Vec<String> {
+    lock(&shelf.log)
+        .iter()
+        .filter(|(_, _, args)| args["item_id"] == item)
+        .map(|(_, tool, _)| tool.clone())
+        .collect()
+}
+
+#[tokio::test]
+async fn on_a_board_with_generations_the_taker_writes_as_the_run_and_completes_it() {
+    let (f, shelf) = linked().await;
+    shelf.generations.store(true, Ordering::SeqCst);
+    f.list_repo_with_taker(6);
+    shelf.put(local_item(
+        "backlog/1",
+        "REQ-20261117-0a0b0c0d",
+        "page:owner",
+        "page:owner",
+        "local-claude",
+    ));
+    let (runner, _) = fake_runner(RunOutcome::Done {
+        result: "Sorted the notes.".into(),
+        turns: None,
+        cost_usd: None,
+    });
+    f.sync.set_taker_runner(runner);
+    assert_eq!(
+        f.sync.take_local_once().await,
+        Taken::Ran {
+            item_id: "backlog/1".into(),
+            finished: true
+        }
+    );
+    let item = shelf.item("backlog/1").unwrap();
+    assert_eq!(item["handoff"]["state"], "completed");
+    assert_eq!(item["state"], "done");
+    assert_eq!(shelf.events_of("backlog/1", "session_start").len(), 1);
+    assert_eq!(
+        shelf.events_of("backlog/1", "note")[0]["text"],
+        "[完了] Sorted the notes.（claude -p）"
+    );
+    assert_eq!(shelf.events_of("backlog/1", "session_end").len(), 1);
+    assert_eq!(
+        tools_for(&shelf, "backlog/1"),
+        [
+            "board_accept_handoff",
+            "board_progress_handoff",
+            "board_progress_handoff",
+            "board_progress_handoff",
+            "board_complete_handoff",
+        ]
+    );
+    assert!(lock(&f.warnings).is_empty(), "{:?}", lock(&f.warnings));
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn on_a_board_with_generations_a_failed_run_leaves_the_work_waiting() {
+    let (f, shelf) = linked().await;
+    shelf.generations.store(true, Ordering::SeqCst);
+    f.list_repo_with_taker(6);
+    shelf.put(local_item(
+        "backlog/1",
+        "REQ-20261117-0a0b0c0d",
+        "page:owner",
+        "page:owner",
+        "local-claude",
+    ));
+    let (runner, _) = fake_runner(RunOutcome::Failed("止めた".into()));
+    f.sync.set_taker_runner(runner);
+    assert!(matches!(
+        f.sync.take_local_once().await,
+        Taken::Ran {
+            finished: false,
+            ..
+        }
+    ));
+    let item = shelf.item("backlog/1").unwrap();
+    assert_eq!(item["state"], "waiting");
+    assert_eq!(item["waiting_reason"], "手元の claude -p: 止めた");
+    assert_eq!(item["handoff"]["state"], "accepted");
+    assert_eq!(
+        shelf.events_of("backlog/1", "note")[0]["text"],
+        "[失敗] 止めた"
+    );
+    assert!(lock(&f.warnings).is_empty(), "{:?}", lock(&f.warnings));
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn on_a_board_with_generations_a_long_run_is_heartbeated() {
+    let (f, shelf) = linked().await;
+    shelf.generations.store(true, Ordering::SeqCst);
+    *lock(&f.sync.heartbeat_every) = Duration::from_millis(30);
+    f.list_repo_with_taker(6);
+    shelf.put(local_item(
+        "backlog/1",
+        "REQ-20261117-0a0b0c0d",
+        "page:owner",
+        "page:owner",
+        "local-claude",
+    ));
+    let runner: Arc<Runner> = Arc::new(|_run: RunRequest| {
+        Box::pin(async {
+            tokio::time::sleep(Duration::from_millis(400)).await;
+            RunOutcome::Done {
+                result: "ok".into(),
+                turns: None,
+                cost_usd: None,
+            }
+        })
+    });
+    f.sync.set_taker_runner(runner);
+    assert!(matches!(
+        f.sync.take_local_once().await,
+        Taken::Ran { finished: true, .. }
+    ));
+    let beats = shelf.heartbeats.load(Ordering::SeqCst);
+    assert!(beats >= 3, "heartbeats while claude -p worked: {beats}");
+    // Beats stop with the run.
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    assert_eq!(shelf.heartbeats.load(Ordering::SeqCst), beats);
+    assert_eq!(
+        shelf.item("backlog/1").unwrap()["handoff"]["state"],
+        "completed"
+    );
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn on_a_board_with_generations_a_session_writes_as_the_run_it_took() {
+    let (f, shelf) = linked().await;
+    shelf.generations.store(true, Ordering::SeqCst);
+    *lock(&f.sync.heartbeat_every) = Duration::from_millis(30);
+    shelf.put(handed_item(
+        "backlog/1",
+        "REQ-20261117-0a0b0c0d",
+        "requested",
+    ));
+    let work = f.sync.handed_work().await.remove(0);
+    f.sync.claim("start-1", &work);
+    let d = started_for(61, &f.repo, 600, "start-1");
+    f.sync.session_started(&d);
+    f.sync
+        .turn_done(Some(&d), &done(61, "Looked the price up."));
+    until("the note", || {
+        !shelf.events_of("backlog/1", "note").is_empty()
+    })
+    .await;
+    until("two heartbeats", || {
+        shelf.heartbeats.load(Ordering::SeqCst) >= 2
+    })
+    .await;
+    f.sync.session_ended(LiveSessionId(61), "exited");
+    until("the end", || {
+        shelf.item("backlog/1").unwrap()["handoff"]["state"] == "completed"
+    })
+    .await;
+    let item = shelf.item("backlog/1").unwrap();
+    assert_eq!(item["state"], "done");
+    assert_eq!(item["title"], "Check the closing price");
+    assert_eq!(shelf.events_of("backlog/1", "session_start").len(), 1);
+    assert_eq!(shelf.events_of("backlog/1", "session_end").len(), 1);
+    // The Hub's key took the work, so its writes onto it are the run's.
+    assert!(
+        lock(&shelf.log)
+            .iter()
+            .filter(|(_, tool, args)| args["item_id"] == "backlog/1"
+                && matches!(
+                    tool.as_str(),
+                    "board_upsert_item" | "board_progress_handoff"
+                ))
+            .all(|(_, _, args)| args["generation"] == GENERATION),
+        "{:?}",
+        lock(&shelf.log)
+    );
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let beats = shelf.heartbeats.load(Ordering::SeqCst);
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    assert_eq!(
+        shelf.heartbeats.load(Ordering::SeqCst),
+        beats,
+        "beats stop with the session"
+    );
+    assert!(lock(&f.warnings).is_empty(), "{:?}", lock(&f.warnings));
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn on_a_board_with_generations_work_for_local_claude_from_the_list_is_completed_with_its_key()
+{
+    let (f, shelf) = linked().await;
+    shelf.generations.store(true, Ordering::SeqCst);
+    f.list_repo_with_taker(6);
+    let mut item = handed_item("backlog/1", "REQ-20261117-0a0b0c0d", "requested");
+    item["handoff"]["to"] = "local-claude".into();
+    shelf.put(item);
+    let work = f.sync.handed_work().await.remove(0);
+    f.sync.claim("start-1", &work);
+    let d = started_for(71, &f.repo, 700, "start-1");
+    f.sync.session_started(&d);
+    f.sync.turn_done(Some(&d), &done(71, "Tidied it."));
+    until("the note", || {
+        !shelf.events_of("backlog/1", "note").is_empty()
+    })
+    .await;
+    f.sync.session_ended(LiveSessionId(71), "exited");
+    until("the end", || {
+        shelf.item("backlog/1").unwrap()["handoff"]["state"] == "completed"
+    })
+    .await;
+    let local = "Bearer synthetic-local-claude-key-0123456789";
+    let log = lock(&shelf.log).clone();
+    let by = |tool: &str| -> Vec<String> {
+        log.iter()
+            .filter(|(_, t, args)| t == tool && args["item_id"] == "backlog/1")
+            .map(|(auth, _, _)| auth.clone())
+            .collect()
+    };
+    assert_eq!(by("board_accept_handoff"), [local]);
+    assert_eq!(by("board_complete_handoff"), [local]);
+    // The session writes with the Hub's key, which did not take the work:
+    // those writes are ordinary ones.
+    assert!(
+        log.iter()
+            .filter(|(auth, _, args)| *auth == format!("Bearer {KEY}")
+                && args["item_id"] == "backlog/1")
+            .all(|(_, tool, args)| tool != "board_progress_handoff"
+                && args.get("generation").is_none()),
+        "{log:?}"
+    );
+    assert_eq!(shelf.item("backlog/1").unwrap()["state"], "done");
+    assert!(lock(&f.warnings).is_empty(), "{:?}", lock(&f.warnings));
     f.cancel.cancel();
 }

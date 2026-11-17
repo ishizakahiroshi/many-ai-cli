@@ -119,6 +119,15 @@ many-ai-cli のデータフォルダ（`config.yaml` と同じ場所。既定は
 
 任された仕事を扱う看板は、加えて `board_list` の各項目に `handoff`（`state` が `requested` / `accepted`、`request_id`、`requested_at`。`local_taker` を使うときは `to`・`requested_by`・`to_set_by`・`title` も）を返し、`board_accept_handoff`（`item_id`・`request_id`。最初の 1 回だけ通す）を受け付けます。これらが無い看板では、任された仕事のボタンが出ないだけです。
 
+受けた実行に世代を付ける看板（Many Iris の「止まった仕事の安全な再開」。受けた書き手本人の書き込みに、その実行の `request_id` と `generation` を求めます）では、`board_accept_handoff` の答えの `handoff.generation` を控え、受けたのと同じ鍵で書く分を、その実行の書き込みとして送ります。
+
+- 出来事は `board_progress_handoff`、項目の更新は `board_upsert_item` に `request_id`・`generation` を付けて送ります
+- 実行中は 10 分ごとに `board_heartbeat_handoff` を送ります（看板の連絡の期限は 30 分です）。手元の PC の `claude -p` は動いている間、一覧から始めたセッションは終わるまで送ります
+- 終わりは `board_complete_handoff`（`outcome` は `done`）で書き、看板が項目を完了にします。手元の PC の `claude -p` が終わらなかったときは、今までどおり理由と「待ち」を書き、実行は閉じません（持ち主が看板で状態を確かめて片付けます）
+- `local-claude` の依頼を一覧から始めたときは、受けるのが `local_taker` の鍵、セッションの記録を書くのが `repos` 全体の鍵なので、記録はふつうの書き込みのままです。ハートビートと終わりは `local_taker` の鍵で送ります
+
+答えに `handoff.generation` が無い看板には、今までどおりの書き方で送ります（知らない欄を送ると断られるため）。
+
 `board_list` に答えない看板でも、開始・要約・終了は今までどおり載ります（計画の下に並べることだけが働きません）。
 
 項目の ID は `session/<many-ai-cli のセッション番号>` です（途中で計画が変わった分は `session/<番号>/2`…）。Hub を再起動した後に同じセッションが続いても、看板にある続きの項目へ書き足し、付けた題名は変えません。

@@ -12,6 +12,15 @@ Release artifacts are published at
 
 ### Added
 
+- **Board sync follows a board with safe resumption.** When the board answers
+  `board_accept_handoff` with the run's `handoff.generation` (Many Iris), work
+  taken with the same key is written as that run: events through
+  `board_progress_handoff`, item updates with the run's `request_id` and
+  `generation`, a `board_heartbeat_handoff` every 10 minutes while the
+  `local_taker` run or the session started from the handed-over list is going,
+  and the end through `board_complete_handoff`. Without it such a board refuses
+  the writes of the writer that took the work. A board without generations is
+  written to as before. See `docs/manual_board-sync.md`.
 - **Each AI CLI row in the install/update list has an "Include in updates"
   switch.** It flips only `update.enabled` of that AI CLI's definition, so an AI
   CLI left out of "Update all" can be turned back on without opening settings.

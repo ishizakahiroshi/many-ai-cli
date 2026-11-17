@@ -44,6 +44,15 @@
 //! else took first leaves the session an ordinary one. Only requests this
 //! machine can take are listed: one the board has not routed yet, and one for
 //! `local-claude` when `local_taker` is set up (taken with that writer's key).
+//!
+//! A board with safe resumption (Many Iris) answers the accept with the run's
+//! `handoff.generation` and refuses a plain write from the writer that took the
+//! work unless it carries that run's request id and generation. When the
+//! answer has one, writes onto the taken item from the same key carry it
+//! (events go through `board_progress_handoff`), the run tells the board it is
+//! still working every `HEARTBEAT_EVERY` (`board_heartbeat_handoff`), and it
+//! ends with `board_complete_handoff`. A board without generations is written
+//! to as before (it refuses fields it does not know).
 use crate::{
     files::branch::GitBranchSource,
     hub::task_owner::HubTaskHandle,
@@ -86,6 +95,10 @@ const HANDED_MAX: usize = 50;
 const CLAIMS_MAX: usize = 32;
 /// The board's limit for an item id; a request id is far shorter.
 const ID_MAX: usize = 200;
+/// How often a taken run tells the board it is still working. Many Iris gives
+/// a run a 30-minute lease and shows the work as silent past it; a missed beat
+/// or two still keeps it inside the lease.
+const HEARTBEAT_EVERY: Duration = Duration::from_secs(10 * 60);
 
 pub type Warning = dyn Fn(&str, &str) + Send + Sync;
 
@@ -119,6 +132,66 @@ struct Target {
     project: String,
     /// The session's first item; later pieces of its work append `/<n>`.
     item_id: String,
+    /// Set when this key took `fence.item_id` on a board with generations:
+    /// writes onto that item go out as the run (see `fenced`).
+    fence: Option<Fence>,
+}
+
+/// A taken request as a board with safe resumption numbers it.
+#[derive(Clone, Debug, PartialEq)]
+struct Fence {
+    item_id: String,
+    request_id: String,
+    generation: u64,
+}
+
+/// The run of a taken request: the key that took it, which heartbeats and
+/// completes it, and its fence.
+#[derive(Clone, Debug, PartialEq)]
+struct Run {
+    key_file: PathBuf,
+    fence: Fence,
+}
+
+/// The fence in `board_accept_handoff`'s answer, when the board has generations.
+fn fence_of(accepted: &serde_json::Value, item_id: &str, request_id: &str) -> Option<Fence> {
+    let handoff = accepted.get("handoff")?;
+    if handoff
+        .get("request_id")
+        .and_then(|v| v.as_str())
+        .is_some_and(|answered| answered != request_id)
+    {
+        return None;
+    }
+    let generation = handoff.get("generation")?.as_u64().filter(|g| *g >= 1)?;
+    Some(Fence {
+        item_id: item_id.to_owned(),
+        request_id: request_id.to_owned(),
+        generation,
+    })
+}
+
+/// A write onto the fenced item, sent as the run: an event goes through
+/// `board_progress_handoff` (which also renews the lease), an item update
+/// carries the run's request id and generation. Anything else passes as is.
+fn fenced(
+    fence: Option<&Fence>,
+    tool: &str,
+    mut arguments: serde_json::Value,
+) -> (String, serde_json::Value) {
+    let Some(fence) = fence.filter(|fence| {
+        arguments.get("item_id").and_then(|v| v.as_str()) == Some(fence.item_id.as_str())
+    }) else {
+        return (tool.to_owned(), arguments);
+    };
+    let tool = match tool {
+        "board_add_event" => "board_progress_handoff",
+        "board_upsert_item" => "board_upsert_item",
+        _ => return (tool.to_owned(), arguments),
+    };
+    arguments["request_id"] = fence.request_id.clone().into();
+    arguments["generation"] = fence.generation.into();
+    (tool.to_owned(), arguments)
 }
 
 /// One listed session: where its writes go and what names and links its work.
@@ -138,6 +211,8 @@ struct Seat {
     handoff_key: Option<PathBuf>,
     /// The session's own item, used when the request cannot be taken.
     own_item: String,
+    /// The taken request's run, on a board with generations.
+    run: Option<Run>,
 }
 
 /// A piece of work the board's owner handed over and nobody has taken yet.
@@ -284,6 +359,7 @@ enum Job {
     End {
         session: LiveSessionId,
         target: Target,
+        run: Option<Run>,
         text: String,
     },
 }
@@ -779,6 +855,8 @@ pub struct BoardSync {
     taker: Mutex<taker::TakerState>,
     /// How a taken piece of work is run; `None` = `claude -p` (tests set one).
     taker_runner: Mutex<Option<Arc<taker::Runner>>>,
+    /// `HEARTBEAT_EVERY` (tests shorten it).
+    heartbeat_every: Mutex<Duration>,
 }
 
 impl BoardSync {
@@ -824,6 +902,7 @@ impl BoardSync {
             claims: Mutex::default(),
             taker: Mutex::default(),
             taker_runner: Mutex::new(None),
+            heartbeat_every: Mutex::new(HEARTBEAT_EVERY),
         }))
     }
 
@@ -881,6 +960,7 @@ impl BoardSync {
                 key_file: config.key_file,
                 project,
                 item_id,
+                fence: None,
             },
             root: dir,
             provider: details.snapshot.provider.clone(),
@@ -888,6 +968,7 @@ impl BoardSync {
             handoff,
             handoff_key,
             own_item,
+            run: None,
         })
     }
 
@@ -923,6 +1004,7 @@ impl BoardSync {
                 key_file: config.key_file.clone(),
                 project: project.clone(),
                 item_id: String::new(),
+                fence: None,
             };
             let Some(items) = self.items(&target).await else {
                 continue;
@@ -981,6 +1063,7 @@ impl BoardSync {
             key_file: config.key_file,
             project: work.project.clone(),
             item_id: work.item_id.clone(),
+            fence: None,
         };
         let args = serde_json::json!({"item_id": item_id, "request_id": request_id});
         match self.request(&target, "board_take_back_handoff", args).await {
@@ -1080,6 +1163,7 @@ impl BoardSync {
         self.enqueue(Job::End {
             session,
             target: seat.target,
+            run: seat.run,
             text: truncate(&format!("終了（{state}）"), TEXT_MAX),
         });
     }
@@ -1127,7 +1211,7 @@ impl BoardSync {
         });
     }
 
-    async fn run(&self, job: Job) {
+    async fn run(self: &Arc<Self>, job: Job) {
         match job {
             Job::Start {
                 session,
@@ -1152,12 +1236,25 @@ impl BoardSync {
             Job::End {
                 session,
                 target,
+                run,
                 text,
             } => {
                 let item_id = lock(&self.pieces)
                     .remove(&session)
                     .map(|piece| piece.item_id)
                     .unwrap_or_else(|| target.item_id.clone());
+                if let Some(run) = run.filter(|run| run.fence.item_id == item_id) {
+                    // The end is written while the run is still open (as the
+                    // run, when this key took it); completing the run closes
+                    // the item as done.
+                    self.event(&target, &item_id, "session_end", text, None)
+                        .await;
+                    if !self.complete(&target, &run, "done").await {
+                        let args = serde_json::json!({"item_id": item_id, "state": "done"});
+                        self.call(&target, "board_upsert_item", args).await;
+                    }
+                    return;
+                }
                 let args = serde_json::json!({"item_id": item_id, "state": "done"});
                 if self
                     .call(&target, "board_upsert_item", args)
@@ -1171,7 +1268,7 @@ impl BoardSync {
         }
     }
 
-    async fn start(&self, session: LiveSessionId, seat: &Seat, mut text: String) {
+    async fn start(self: &Arc<Self>, session: LiveSessionId, seat: &Seat, mut text: String) {
         let mut seat = seat.clone();
         let mut taken = false;
         if let Some(request) = seat.handoff.take() {
@@ -1183,12 +1280,19 @@ impl BoardSync {
                     .unwrap_or_else(|| seat.target.key_file.clone()),
                 ..seat.target.clone()
             };
-            if self
-                .call(&taker, "board_accept_handoff", args)
-                .await
-                .is_some()
-            {
+            if let Some(accepted) = self.call(&taker, "board_accept_handoff", args).await {
                 taken = true;
+                if let Some(fence) = fence_of(&accepted, &seat.target.item_id, &request) {
+                    // The session writes with the Hub's key; only when that is
+                    // also the key that took the work are its writes the run's.
+                    if taker.key_file == seat.target.key_file {
+                        seat.target.fence = Some(fence.clone());
+                    }
+                    seat.run = Some(Run {
+                        key_file: taker.key_file.clone(),
+                        fence,
+                    });
+                }
                 text = truncate(
                     &format!("{text}（任された仕事 {request} を受けた）"),
                     TEXT_MAX,
@@ -1200,6 +1304,9 @@ impl BoardSync {
             }
             if let Some(slot) = lock(&self.sessions).get_mut(&session) {
                 *slot = Some(seat.clone());
+            }
+            if let Some(run) = seat.run.clone() {
+                self.keep_alive(session, seat.target.clone(), run);
             }
         }
         let seat = &seat;
@@ -1387,6 +1494,103 @@ impl BoardSync {
         }
     }
 
+    /// The target that speaks for `run`: the key that took it.
+    fn run_target(target: &Target, run: &Run) -> Target {
+        Target {
+            key_file: run.key_file.clone(),
+            item_id: run.fence.item_id.clone(),
+            fence: None,
+            ..target.clone()
+        }
+    }
+
+    /// Tells the board the run is still working (renews its lease).
+    async fn heartbeat(&self, target: &Target, run: &Run) -> Result<(), Failed> {
+        let fence = &run.fence;
+        let args = serde_json::json!({
+            "item_id": fence.item_id, "request_id": fence.request_id, "generation": fence.generation,
+        });
+        self.request(
+            &Self::run_target(target, run),
+            "board_heartbeat_handoff",
+            args,
+        )
+        .await
+        .map(|_| ())
+    }
+
+    /// Completes the run (`done` or `stopped`); the board closes the item so.
+    async fn complete(&self, target: &Target, run: &Run, outcome: &str) -> bool {
+        let fence = &run.fence;
+        let args = serde_json::json!({
+            "item_id": fence.item_id, "request_id": fence.request_id,
+            "generation": fence.generation, "outcome": outcome,
+        });
+        self.call(
+            &Self::run_target(target, run),
+            "board_complete_handoff",
+            args,
+        )
+        .await
+        .is_some()
+    }
+
+    /// Heartbeats a session's run until the session ends. A board that
+    /// refuses the beat (the run was replaced, marked unknown or completed)
+    /// ends it too; an unreachable board is tried again at the next beat.
+    fn keep_alive(self: &Arc<Self>, session: LiveSessionId, target: Target, run: Run) {
+        let Ok(permit) = self.tasks.effect_permit() else {
+            return;
+        };
+        let owner = self.clone();
+        let cancellation = permit.cancellation();
+        let _receipt = permit.start(async move {
+            loop {
+                let every = *lock(&owner.heartbeat_every);
+                tokio::select! {
+                    _ = cancellation.token().cancelled() => break,
+                    _ = tokio::time::sleep(every) => {}
+                }
+                let current = lock(&owner.sessions)
+                    .get(&session)
+                    .cloned()
+                    .flatten()
+                    .and_then(|seat| seat.run);
+                if current.as_ref() != Some(&run) {
+                    break;
+                }
+                if matches!(owner.heartbeat(&target, &run).await, Err(Failed::Refused)) {
+                    break;
+                }
+            }
+        });
+    }
+
+    /// Runs `work` while heartbeating `run` (an unattended run can outlast
+    /// the board's lease). A refused beat stops the beats, not the work.
+    async fn beating<T>(
+        &self,
+        target: &Target,
+        run: &Run,
+        work: impl std::future::Future<Output = T>,
+    ) -> T {
+        let every = *lock(&self.heartbeat_every);
+        let beat = async {
+            loop {
+                tokio::time::sleep(every).await;
+                if matches!(self.heartbeat(target, run).await, Err(Failed::Refused)) {
+                    break;
+                }
+            }
+            std::future::pending::<()>().await;
+        };
+        tokio::select! {
+            biased;
+            outcome = work => outcome,
+            () = beat => unreachable!("the beat waits forever once it stops"),
+        }
+    }
+
     async fn event(
         &self,
         target: &Target,
@@ -1442,6 +1646,7 @@ impl BoardSync {
             self.warn_once("board key file unreadable");
             return Err(Failed::Unreached);
         };
+        let (tool, arguments) = fenced(target.fence.as_ref(), tool, arguments);
         let body = serde_json::json!({
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": tool, "arguments": arguments},

@@ -31,9 +31,12 @@
 //! `claude -p` through stdin as data, never as an argument; the run starts in the
 //! project's listed folder. The board then gets the start, the run's short
 //! result (masked) and `done`, or the reason it did not finish and `waiting`.
+//! On a board with generations these writes go out as the run, the run is
+//! heartbeated while `claude -p` works, and `done` is the run's completion
+//! (see the module above).
 use super::{
-    BoardSync, Listed, TEXT_MAX, TITLE_MAX, Target, clean_line, id_ok, load, lock, project_of,
-    project_ok, today, truncate,
+    BoardSync, Listed, Run, TEXT_MAX, TITLE_MAX, Target, clean_line, fence_of, id_ok, load, lock,
+    project_of, project_ok, today, truncate,
 };
 use crate::storage::mask_secrets;
 use serde::Deserialize;
@@ -407,6 +410,7 @@ impl BoardSync {
                 key_file: taker.key_file.clone(),
                 project: project.clone(),
                 item_id: String::new(),
+                fence: None,
             };
             let Some(items) = self.items(&reader).await else {
                 continue;
@@ -420,17 +424,22 @@ impl BoardSync {
                     ..reader.clone()
                 };
                 let args = serde_json::json!({"item_id": item.item_id, "request_id": request});
-                if self
-                    .call(&target, "board_accept_handoff", args)
-                    .await
-                    .is_none()
-                {
+                let Some(accepted) = self.call(&target, "board_accept_handoff", args).await else {
                     // Taken back, routed elsewhere or taken meanwhile.
                     continue;
-                }
+                };
+                // On a board with generations every write below is the run's.
+                let run = fence_of(&accepted, &item.item_id, &request).map(|fence| Run {
+                    key_file: taker.key_file.clone(),
+                    fence,
+                });
+                let target = Target {
+                    fence: run.as_ref().map(|run| run.fence.clone()),
+                    ..target
+                };
                 lock(&self.taker).runs += 1;
                 let finished = self
-                    .run_taken(&target, &taker, &repo.path, &request, &title)
+                    .run_taken(&target, &taker, run.as_ref(), &repo.path, &request, &title)
                     .await;
                 return Taken::Ran {
                     item_id: item.item_id.clone(),
@@ -445,6 +454,7 @@ impl BoardSync {
         &self,
         target: &Target,
         taker: &TakerConfig,
+        run: Option<&Run>,
         folder: &Path,
         request: &str,
         title: &str,
@@ -467,7 +477,7 @@ impl BoardSync {
                     .into(),
             ),
             Some(api_key) => {
-                let run = RunRequest {
+                let order = RunRequest {
                     folder: folder.to_path_buf(),
                     prompt: prompt(&target.project, title),
                     api_key,
@@ -475,9 +485,15 @@ impl BoardSync {
                     timeout: Duration::from_secs(taker.timeout_secs),
                 };
                 let runner = lock(&self.taker_runner).clone();
-                match runner {
-                    Some(runner) => runner(run).await,
-                    None => run_claude(run).await,
+                let work = async move {
+                    match runner {
+                        Some(runner) => runner(order).await,
+                        None => run_claude(order).await,
+                    }
+                };
+                match run {
+                    Some(run) => self.beating(target, run, work).await,
+                    None => work.await,
                 }
             }
         };
@@ -497,10 +513,23 @@ impl BoardSync {
                 let body = truncate(&mask_secrets(&result), RESULT_MAX);
                 let text = truncate(&format!("[完了] {body}（{tail}）"), TEXT_MAX);
                 self.event(target, item, "note", text, None).await;
-                let args = serde_json::json!({"item_id": item, "state": "done"});
-                self.call(target, "board_upsert_item", args).await;
-                self.event(target, item, "session_end", "終了（done）".into(), None)
-                    .await;
+                let end = "終了（done）".to_owned();
+                match run {
+                    // The end is written while the run is open; completing it
+                    // closes the item as done.
+                    Some(run) => {
+                        self.event(target, item, "session_end", end, None).await;
+                        if !self.complete(target, run, "done").await {
+                            let args = serde_json::json!({"item_id": item, "state": "done"});
+                            self.call(target, "board_upsert_item", args).await;
+                        }
+                    }
+                    None => {
+                        let args = serde_json::json!({"item_id": item, "state": "done"});
+                        self.call(target, "board_upsert_item", args).await;
+                        self.event(target, item, "session_end", end, None).await;
+                    }
+                }
                 true
             }
             RunOutcome::Failed(reason) => {
