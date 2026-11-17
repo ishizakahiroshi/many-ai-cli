@@ -206,10 +206,20 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
     },
     Schema {
         name: "ScreenDefinition",
-        fields: &[Field {
-            name: "ready_markers",
-            kind: "[]string",
-        }],
+        fields: &[
+            Field {
+                name: "ready_markers",
+                kind: "[]string",
+            },
+            Field {
+                name: "composer_prefix",
+                kind: "string",
+            },
+            Field {
+                name: "composer_end_markers",
+                kind: "[]string",
+            },
+        ],
     },
     Schema {
         name: "TranscriptDefinition",

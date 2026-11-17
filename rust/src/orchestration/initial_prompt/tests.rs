@@ -1120,3 +1120,22 @@ async fn post_echo_approval_prevents_orchestration_composer_enter_retry() {
     ));
     assert!(fixture.transport.frames.lock().unwrap().is_empty());
 }
+
+#[test]
+fn a_pasted_placeholder_left_in_the_composer_is_a_prompt_not_submitted() {
+    let stuck = lines(&format!(
+        "❯ [Pasted text #1 +23 lines]
+{RULE}
+footer"
+    ));
+    let text = screen::composer_text("claude", &stuck).unwrap();
+    assert!(screen::has_paste_placeholder(&text));
+    let sent = lines(&format!(
+        "❯ 
+{RULE}
+footer"
+    ));
+    let text = screen::composer_text("claude", &sent).unwrap();
+    assert!(!screen::has_paste_placeholder(&text));
+    assert!(!screen::has_paste_placeholder("[Pastedtext#x]"));
+}

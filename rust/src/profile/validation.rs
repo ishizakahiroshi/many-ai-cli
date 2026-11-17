@@ -692,6 +692,34 @@ fn declared_sections(def: &Definition) -> Vec<Diagnostic> {
             }
         }
     }
+    if let Some(s) = &def.screen {
+        if s.composer_prefix.chars().count() > 8 || control(&s.composer_prefix) {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "screen.composer_prefix",
+                "the composer prefix is too long or contains a control character",
+            ));
+        }
+        if s.composer_end_markers.len() > 32 {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "screen.composer_end_markers",
+                "too many composer end markers",
+            ));
+        }
+        for (i, marker) in s.composer_end_markers.iter().enumerate() {
+            if marker.is_empty() || marker.len() > 128 || control(marker) {
+                out.push(diag(
+                    "invalid_declaration",
+                    "error",
+                    &format!("screen.composer_end_markers[{i}]"),
+                    "a composer end marker is empty, too long, or contains a control character",
+                ));
+            }
+        }
+    }
     if let Some(a) = &def.approval {
         for (field, message) in approval_problems(a) {
             out.push(diag("invalid_declaration", "error", &field, &message));

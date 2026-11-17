@@ -68,31 +68,50 @@ pub(super) fn echo_marker(prompt: &str) -> String {
     text.chars().skip(skip).collect()
 }
 
-pub(super) fn echo_visible(collapsed: &str, marker: &str) -> bool {
-    marker.is_empty()
-        || collapsed.contains(marker)
-        || collapsed.match_indices("[Pastedtext#").any(|(at, prefix)| {
-            collapsed.as_bytes()[at + prefix.len()..]
-                .first()
-                .is_some_and(u8::is_ascii_digit)
-        })
+/// The "[Pasted text #N ...]" stand-in a TUI shows for a long paste.
+pub(super) fn has_paste_placeholder(collapsed: &str) -> bool {
+    collapsed.match_indices("[Pastedtext#").any(|(at, prefix)| {
+        collapsed.as_bytes()[at + prefix.len()..]
+            .first()
+            .is_some_and(u8::is_ascii_digit)
+    })
 }
 
+pub(super) fn echo_visible(collapsed: &str, marker: &str) -> bool {
+    marker.is_empty() || collapsed.contains(marker) || has_paste_placeholder(collapsed)
+}
+
+/// The text still sitting in the input line, read with the declared
+/// `screen.composer_prefix` / `screen.composer_end_markers`. `None` when the
+/// provider declares no prefix or the input line is not on the screen.
 pub(super) fn composer_text(provider: &str, lines: &[String]) -> Option<String> {
-    if provider != "claude" {
+    let (prefix, ends) = crate::profile::declared::with_declared(provider, |def| {
+        def.screen.as_ref().map(|s| {
+            (
+                s.composer_prefix.clone(),
+                s.composer_end_markers
+                    .iter()
+                    .map(|m| collapse_whitespace(m))
+                    .collect::<Vec<_>>(),
+            )
+        })
+    })
+    .flatten()?;
+    let prefix = prefix.trim();
+    if prefix.is_empty() {
         return None;
     }
     let start = lines
         .iter()
-        .rposition(|line| line.trim().starts_with('❯'))?;
+        .rposition(|line| line.trim().starts_with(prefix))?;
     let mut text = String::new();
     for (index, line) in lines.iter().enumerate().skip(start) {
         let line = line.trim();
-        if index > start && (rule_line(line) || claude_footer(line)) {
+        if index > start && (rule_line(line) || composer_ends(line, &ends)) {
             break;
         }
         text.push_str(if index == start {
-            line.strip_prefix('❯').expect("selected composer prefix")
+            line.strip_prefix(prefix).unwrap_or(line)
         } else {
             line
         });
@@ -104,8 +123,9 @@ fn rule_line(line: &str) -> bool {
     line.chars().all(|c| matches!(c, '─' | '━' | '═' | ' '))
         && line.chars().filter(|c| *c != ' ').count() >= 8
 }
-fn claude_footer(line: &str) -> bool {
-    line.starts_with('⏵') || collapse_whitespace(line).contains("shift+tabtocycle")
+fn composer_ends(line: &str, ends: &[String]) -> bool {
+    let collapsed = collapse_whitespace(line);
+    ends.iter().any(|end| collapsed.contains(end.as_str()))
 }
 
 /// Source launchArgStartupScreen: callers use this only before transcript

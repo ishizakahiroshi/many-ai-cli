@@ -125,7 +125,7 @@
       "reason": "identity: 同梱 7 本そのものの一覧・予約 id・画面や設定の固定項目（宣言の置き場に当たる。登録した CLI の分岐ではない）"
     },
     "rust/src/orchestration/initial_prompt/screen.rs": {
-      "count": 3,
+      "count": 2,
       "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
     },
     "rust/src/process/execpath.rs": {

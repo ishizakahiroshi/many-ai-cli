@@ -581,7 +581,7 @@ impl InitialPromptDriver {
             else {
                 return Ok(ComposerClear::Unknown);
             };
-            if text.contains(marker) {
+            if text.contains(marker) || screen::has_paste_placeholder(&text) {
                 clear_since = None;
                 if start.elapsed() >= self.timing.confirm_wait {
                     return Ok(ComposerClear::Stuck);

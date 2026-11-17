@@ -783,6 +783,24 @@ pub struct ScreenDefinition {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub ready_markers: Vec<String>,
+    /// The glyph that starts the input line (for example `❯`). With it the Hub
+    /// can read the text still sitting in the composer after a submit and press
+    /// Enter again when the pasted prompt was not taken.
+    #[serde(
+        rename = "composer_prefix",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub composer_prefix: String,
+    /// Text on a line below the input line that ends the composer area (a
+    /// footer or status line). A rule line of box-drawing characters always
+    /// ends it, so this is only needed for footers without a rule above them.
+    #[serde(
+        rename = "composer_end_markers",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub composer_end_markers: Vec<String>,
 }
 
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
