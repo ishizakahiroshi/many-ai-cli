@@ -232,21 +232,21 @@ impl InstructionRules {
                         mode: "shared_block".into(),
                     })
                 }
-                "copilot" | "cursor-agent" | "grok" | "opencode" => {
-                    if s.cwd.trim().is_empty() {
-                        None
-                    } else {
-                        Some(Target {
-                            path: self
-                                .resolve_root(&s.cwd, cancel, &mut roots)
-                                .await
-                                .join("AGENTS.md"),
-                            providers: vec![provider.into()],
-                            mode: "shared_block".into(),
-                        })
-                    }
-                }
-                _ => None,
+                // Every other provider, a registered one included, names the
+                // project file it reads in its declaration
+                // (`instructions.rules_file`); one that declares none is left
+                // alone, so the Hub never writes a file no CLI asked for.
+                _ => match crate::profile::declared::project_rules_file(provider) {
+                    Some(file) if !s.cwd.trim().is_empty() => Some(Target {
+                        path: self
+                            .resolve_root(&s.cwd, cancel, &mut roots)
+                            .await
+                            .join(file),
+                        providers: vec![provider.into()],
+                        mode: "shared_block".into(),
+                    }),
+                    _ => None,
+                },
             };
             if let Some(target) = target {
                 active.push(target);

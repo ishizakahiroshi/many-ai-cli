@@ -195,6 +195,19 @@ pub fn slow_paste(id: &str) -> bool {
     with_declared(id, |d| d.input.as_ref().is_some_and(|i| i.slow_paste)).unwrap_or(false)
 }
 
+/// The project-root file the Hub keeps its marker rules in while a session of
+/// `id` runs (`instructions.rules_file`). `None` when the provider declares
+/// none, when the name is not a plain Markdown file name, or when the provider
+/// is reached over ACP (its sessions have no terminal that shows a marker).
+pub fn project_rules_file(id: &str) -> Option<String> {
+    with_declared(id, |d| {
+        let name = d.instructions.as_ref()?.rules_file.as_str();
+        (automation_allowed(d) && crate::profile::validation::rules_file_name(name))
+            .then(|| name.to_owned())
+    })
+    .flatten()
+}
+
 /// Every provider the running registry knows, built-ins first; the seven
 /// built-ins alone when no registry is installed.
 pub fn declared_all() -> Vec<Definition> {
@@ -258,6 +271,7 @@ pub fn resolve(def: &Definition, builtin: Option<&Definition>) -> Definition {
     out.screen = pick(&def.screen, &b.screen);
     out.transcript = pick(&def.transcript, &b.transcript);
     out.approval = pick(&def.approval, &b.approval);
+    out.instructions = pick(&def.instructions, &b.instructions);
     if let (Some(launch), Some(bl)) = (out.launch.as_mut(), b.launch.as_ref())
         && launch.config_dir_env.is_empty()
     {
@@ -527,6 +541,9 @@ mod tests {
                 "input",
                 "routines",
                 "screen",
+                "transcript",
+                "approval",
+                "instructions",
             ] {
                 assert!(!object.contains_key(key), "{}: {key}", manifest.id);
             }
@@ -545,6 +562,11 @@ mod tests {
             r#","permissions":{"modes":{"auto":["--a;b"]}}"#,
             r#","screen":{"ready_markers":[""]}"#,
             r#","routines":{"completion_mode":"x"}"#,
+            r#","instructions":{"rules_file":"../AGENTS.md"}"#,
+            r#","instructions":{"rules_file":"docs/AGENTS.md"}"#,
+            r#","instructions":{"rules_file":"C:AGENTS.md"}"#,
+            r#","instructions":{"rules_file":"AGENTS.txt"}"#,
+            r#","instructions":{"rules_file":".md"}"#,
         ];
         for fragment in bad {
             let raw = format!("{base}{fragment}}}");
@@ -556,7 +578,7 @@ mod tests {
         }
         let good = format!(
             "{base}{}",
-            r#","connection":"acp","links":{"usage_url":"https://example.com/usage"},"slash_commands":{"items":[{"cmd":"/help","desc":"Help"}]},"input":{"interrupt_key":"ctrl-c"},"permissions":{"modes":{"auto":["--auto"]},"allowed_tools_args":["--allow","{tools}"]},"routines":{"enabled":false}}"#
+            r#","connection":"acp","links":{"usage_url":"https://example.com/usage"},"slash_commands":{"items":[{"cmd":"/help","desc":"Help"}]},"input":{"interrupt_key":"ctrl-c"},"permissions":{"modes":{"auto":["--auto"]},"allowed_tools_args":["--allow","{tools}"]},"routines":{"enabled":false},"instructions":{"rules_file":"AGENTS.md"}}"#
         );
         let (def, diagnostics) = validate_definition(good.as_bytes(), &adapters).unwrap();
         assert!(
@@ -606,6 +628,14 @@ mod tests {
                 "marker"
             };
             assert_eq!(completion_mode(&def), expected, "{id}");
+        }
+        // application/instruction_rules.rs: these four got the rules block in
+        // the project's AGENTS.md; claude and codex keep their own files in
+        // their config directory, and command-code got nothing.
+        for id in BUILTIN_PROVIDER_IDS {
+            let expected = matches!(*id, "copilot" | "cursor-agent" | "grok" | "opencode")
+                .then(|| "AGENTS.md".to_string());
+            assert_eq!(project_rules_file(id), expected, "{id}");
         }
         // slash_commands settings: one raw.githubusercontent URL per provider.
         for id in BUILTIN_PROVIDER_IDS {

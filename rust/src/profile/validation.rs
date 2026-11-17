@@ -384,6 +384,7 @@ pub fn validate_definition(
                 "screen",
                 "transcript",
                 "approval",
+                "instructions",
             ]
             .contains(&field.as_str())
             {
@@ -536,6 +537,27 @@ fn env_name(value: &str) -> bool {
             .next()
             .is_some_and(|c| c.is_ascii_uppercase() || c == '_')
         && chars.all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+}
+
+/// A file the Hub may write its rules block to: one plain Markdown file name,
+/// never a path. The Hub joins it to the project root, so a separator, a drive
+/// or `..` would let a definition point the write somewhere else.
+pub fn rules_file_name(value: &str) -> bool {
+    let Some(stem) = value
+        .len()
+        .checked_sub(3)
+        .filter(|at| value.is_char_boundary(*at) && value[*at..].eq_ignore_ascii_case(".md"))
+        .map(|at| &value[..at])
+    else {
+        return false;
+    };
+    value.len() <= 64
+        && !stem.is_empty()
+        && stem.chars().any(|c| c.is_ascii_alphanumeric())
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        && !value.contains("..")
 }
 
 /// The Rust-only declarative sections (connection, slash commands, permissions,
@@ -691,6 +713,17 @@ fn declared_sections(def: &Definition) -> Vec<Diagnostic> {
                 ));
             }
         }
+    }
+    if let Some(i) = &def.instructions
+        && !i.rules_file.is_empty()
+        && !rules_file_name(&i.rules_file)
+    {
+        out.push(diag(
+            "invalid_declaration",
+            "error",
+            "instructions.rules_file",
+            "instructions.rules_file must be the name of a Markdown file in the project root (letters, digits, '.', '-' and '_', ending in .md)",
+        ));
     }
     if let Some(a) = &def.approval {
         for (field, message) in approval_problems(a) {

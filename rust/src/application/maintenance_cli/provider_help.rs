@@ -84,10 +84,15 @@ IF YOU ARE AN AI AGENT ASKED TO ADD A NEW CLI
   7. The exact text its approval prompts print and the key that answers each one. Copy the option
      strings verbatim into --approval-option; the keys go in the definition's approval section
      (style, keys). Without them only the generic wording (Yes/No/Allow/Deny) is detected.
-  8. Its usage page URL (--usage-url) and the argument that starts its login (login.args).
-  9. Where it keeps its home or config. If it needs a different HOME or a config directory,
+  8. The file in the project root that it always reads as instructions, if its documentation
+     names one (instructions.rules_file, e.g. \"AGENTS.md\"; a plain .md file name, not a path).
+     While a session of the CLI runs, the Hub keeps its question and done marker rules in that
+     file and takes them out when the last session ends. Without it the CLI asks with its own
+     picker, which the dashboard cannot turn into buttons.
+  9. Its usage page URL (--usage-url) and the argument that starts its login (login.args).
+  10. Where it keeps its home or config. If it needs a different HOME or a config directory,
      write a small wrapper script that sets it and registers the script as --command.
-  10. Whether the CLI's terms of service allow another tool to drive it. Report what the terms
+  11. Whether the CLI's terms of service allow another tool to drive it. Report what the terms
      say and where; the user decides. If the user says no, do not register it. Do not decide
      this for the user.
   Not declarable (shown as \"unsupported\"): reading the remaining quota, switching subscription

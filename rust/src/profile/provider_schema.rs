@@ -99,6 +99,10 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
                 name: "approval",
                 kind: "*ApprovalDefinition",
             },
+            Field {
+                name: "instructions",
+                kind: "*InstructionsDefinition",
+            },
         ],
     },
     Schema {
@@ -203,6 +207,13 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
                 kind: "string",
             },
         ],
+    },
+    Schema {
+        name: "InstructionsDefinition",
+        fields: &[Field {
+            name: "rules_file",
+            kind: "string",
+        }],
     },
     Schema {
         name: "ScreenDefinition",
@@ -856,6 +867,10 @@ impl GoWire for InputDefinition {
 }
 impl GoWire for RoutinesDefinition {
     const GO_TYPE: &'static str = "RoutinesDefinition";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for InstructionsDefinition {
+    const GO_TYPE: &'static str = "InstructionsDefinition";
     const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
 }
 impl GoWire for ScreenDefinition {

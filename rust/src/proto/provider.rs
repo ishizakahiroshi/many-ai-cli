@@ -237,6 +237,24 @@ pub struct Definition {
     pub transcript: Option<TranscriptDefinition>,
     #[serde(rename = "approval", skip_serializing_if = "Option::is_none")]
     pub approval: Option<ApprovalDefinition>,
+    #[serde(rename = "instructions", skip_serializing_if = "Option::is_none")]
+    pub instructions: Option<InstructionsDefinition>,
+}
+
+/// Where the Hub hands a provider the approval and done marker rules.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InstructionsDefinition {
+    /// The name of a Markdown file in the project root that the CLI always
+    /// reads as instructions (`AGENTS.md`). While a session of this provider
+    /// runs, the Hub keeps its rules block in that file and takes it out when
+    /// the last such session ends. Empty = the Hub writes nothing for it.
+    #[serde(
+        rename = "rules_file",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub rules_file: String,
 }
 
 /// How the native approval prompt of a provider is recognised on its screen.

@@ -38,6 +38,16 @@ Release artifacts are published at
   among a few prompt shapes (numbered options, single keys, button rows) and the
   wording to look for. The built-in command-code and opencode log lookups and
   all seven built-in approval detectors now read the same declarations.
+- **A registered AI CLI can be told to ask its questions in the dashboard's
+  format.** A definition's `instructions.rules_file` names the Markdown file in
+  the project root that the CLI always reads (for example `AGENTS.md`). While a
+  session of that CLI runs, the Hub keeps its question and done marker rules in
+  that file and removes them when the last session ends, as it already did for
+  Copilot, Cursor Agent, Grok and OpenCode (those four now read the same
+  declaration). A CLI that declares no file is left alone. Until now a
+  registered CLI never received the rules, so it asked with its own picker and
+  no confirmation dialog appeared. Whether a given CLI follows the rules is
+  not verified.
 - **An AI can now add a new AI CLI with `many-ai-cli provider add`.** `provider
   list`, `provider remove` and `provider test` complete the set, and
   `provider add --help` is written for an AI agent (what to research, what to
