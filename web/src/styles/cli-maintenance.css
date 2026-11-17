@@ -40,6 +40,8 @@
 .cli-maint-version-sub { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cli-maint-status { color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; }
 .cli-maint-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.cli-maint-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; cursor: pointer; }
+.cli-maint-toggle input { margin: 0; cursor: pointer; }
 .cli-maint-note-inline { max-width: 11em; color: var(--muted); font-size: var(--fs-sm); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cli-maint-pill { display: inline-block; border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 0 7px; font-size: var(--fs-xs); color: var(--muted); }
 .cli-maint-install-link { color: var(--accent); font-size: var(--fs-md); text-decoration: none; }

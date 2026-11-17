@@ -226,7 +226,7 @@ export function cliUpdateDisabledNote(entry: { reason?: string; running_sessions
     case 'trial_scope':
       return { key: 'cli_maintenance_update_reason_trial_scope', fallback: '試験モードのため、更新の対象外です' };
     case 'update_disabled':
-      return { key: 'cli_maintenance_update_reason_disabled', fallback: '更新 OFF（設定で更新をオンにできます）' };
+      return { key: 'cli_maintenance_update_reason_disabled', fallback: '更新 OFF' };
     case 'update_not_configured':
       return { key: 'cli_maintenance_update_reason_not_configured', fallback: '更新コマンドが未設定です' };
     case 'running_sessions':

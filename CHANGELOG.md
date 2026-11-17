@@ -12,6 +12,9 @@ Release artifacts are published at
 
 ### Added
 
+- **Each AI CLI row in the install/update list has an "Include in updates"
+  switch.** It flips only `update.enabled` of that AI CLI's definition, so an AI
+  CLI left out of "Update all" can be turned back on without opening settings.
 - **A registered AI CLI can now offer the approval-mode picker too.** A
   provider definition's `launch.permission_args` maps `plan` / `acceptEdits` /
   `auto` / `bypassPermissions` to that CLI's own flags (for example Devin CLI:

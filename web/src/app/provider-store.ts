@@ -235,6 +235,33 @@ export async function saveProviderDefinition(
   return providerMutationOutcome(result);
 }
 
+// withoutServerComputedFields drops what the Hub computes when it answers a
+// read and never takes back on a save (source/effective_source/revision/
+// field_origins/capabilities_summary). Every caller that sends a loaded
+// definition back through PATCH uses it, so they agree on what "the whole
+// definition" is.
+export function withoutServerComputedFields(definition: ProviderEffectiveDefinition): Record<string, unknown> {
+  const rest: Record<string, unknown> = { ...(definition as unknown as Record<string, unknown>) };
+  delete rest.source;
+  delete rest.effective_source;
+  delete rest.revision;
+  delete rest.field_origins;
+  delete rest.capabilities_summary;
+  return rest;
+}
+
+// setProviderUpdateEnabled flips only update.enabled — whether this AI CLI takes
+// part in the updater ("全部更新" and its own 更新 button). It loads the current
+// definition and sends the whole thing back, the same contract the Enable button
+// and the edit dialog use.
+export async function setProviderUpdateEnabled(id: string, enabled: boolean): Promise<ProviderMutationResult> {
+  const detail = await loadProviderDetail(id);
+  if (detail.ok === false) return detail;
+  const definition = withoutServerComputedFields(detail.provider);
+  const update = { ...((definition.update as Record<string, unknown> | undefined) || {}), enabled };
+  return saveProviderDefinition(id, detail.provider.effective_source?.revision || '', { ...definition, update });
+}
+
 // removeProvider is DELETE for both a built-in (soft-disables via an
 // override) and a custom provider (actually removes the file) — same request
 // shape either way; the Hub decides which by provider.IsBuiltinID.

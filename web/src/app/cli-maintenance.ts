@@ -24,7 +24,7 @@ import {
   type CliVersionResult,
   type I18nMessage,
 } from './cli-availability.js';
-import { loadProviderSummaries } from './provider-store.js';
+import { loadProviderSummaries, setProviderUpdateEnabled } from './provider-store.js';
 import { providerIconHtml, stateIconSvgHtml } from './session-list.js';
 import { apiFetch, escapeHtml } from './util.js';
 
@@ -179,6 +179,7 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
   let activeJob: { id: string; serial: boolean; pending: Set<string>; total: number } | null = null;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let destroyed = false;
+  const togglePending = new Set<string>();
 
   function dow(): string[] {
     try {
@@ -282,6 +283,21 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
     return `<span class="cli-maint-note-inline" title="${escapeHtml(note)}">${escapeHtml(note)}</span>${pill}`;
   }
 
+  // 更新の対象にするかのスイッチ。更新コマンドが無い・未インストール・試験モードの AI は
+  // スイッチで変えられないので出さない。OFF かどうかは更新できない理由（update_disabled /
+  // login_may_be_required）から読む。
+  function updateToggleHtml(status: CliInstallStatus, entry: CliUpdateEligibilityEntry | undefined): string {
+    if (!entry) return '';
+    const reason = entry.reason || '';
+    if (reason === 'not_installed' || reason === 'update_not_configured' || reason === 'trial_scope') return '';
+    const on = reason !== 'update_disabled' && reason !== 'login_may_be_required';
+    const label = tx('cli_maintenance_update_toggle', '更新の対象');
+    const pending = togglePending.has(status.id);
+    return `<label class="cli-maint-toggle" title="${escapeHtml(tx('cli_maintenance_update_toggle_hint', 'ON にすると「全部更新」と「更新」ボタンの対象になります'))}">` +
+      `<input type="checkbox" data-action="toggle-update" data-provider="${escapeHtml(status.id)}"${on ? ' checked' : ''}${pending ? ' disabled' : ''}>` +
+      `<span>${escapeHtml(label)}</span></label>`;
+  }
+
   function installedRowHtml(status: CliInstallStatus): string {
     const r = rows.get(status.id) || {};
     const name = escapeHtml(status.displayName);
@@ -298,7 +314,7 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
       <span class="cli-maint-name">${name}</span>
       <span class="cli-maint-version-cell"><span class="cli-maint-version cli-maint-version-${cell.kind}">${escapeHtml(versionText)}</span>${detailHtml}</span>
       <span class="cli-maint-status">${escapeHtml(tx('zero_session_install_status_installed', 'インストール済み'))}</span>
-      <span class="cli-maint-actions">${updateButtonHtml(status, btnState)}</span>
+      <span class="cli-maint-actions">${updateToggleHtml(status, r.eligibility)}${updateButtonHtml(status, btnState)}</span>
     </div>`;
   }
 
@@ -382,7 +398,7 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
     container.innerHTML = `
       <p class="cli-maint-heading">${escapeHtml(tx('zero_session_install_status_heading', 'このPCでの導入状況'))}</p>
       <div class="cli-maint-toolbar">${toolbarHtml}</div>
-      <p class="cli-maint-note">${escapeHtml(checkedAtLabel)}${statuses.length ? ` ・ ${escapeHtml(tx('cli_maintenance_hidden_button_note', '更新ボタンが出ない AI は、設定で更新が OFF です'))}` : ''}</p>
+      <p class="cli-maint-note">${escapeHtml(checkedAtLabel)}${statuses.length ? ` ・ ${escapeHtml(tx('cli_maintenance_hidden_button_note', '更新ボタンが出ない AI は、「更新の対象」が OFF です。各行のスイッチで切り替えられます'))}` : ''}</p>
       ${summaryHtml}
       <div class="cli-maint-list">${rowsHtml}</div>
     `;
@@ -583,6 +599,23 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
     await loadVersionsAndEligibility();
   }
 
+  async function toggleUpdate(providerId: string, enabled: boolean): Promise<void> {
+    if (!providerId || togglePending.has(providerId)) return;
+    togglePending.add(providerId);
+    render();
+    const result = await setProviderUpdateEnabled(providerId, enabled);
+    togglePending.delete(providerId);
+    if (destroyed) return;
+    if (result.ok === false) {
+      // 保存できなかったときはスイッチを元に戻す（描き直せば eligibility の通りに戻る）。
+      render();
+      return;
+    }
+    // 定義が変わったので、更新できるかを引き直す。一覧そのものも読み直す。
+    void loadProviderSummaries({ includeDisabled: true });
+    await loadVersionsAndEligibility();
+  }
+
   async function retryFailed(): Promise<void> {
     const ids = currentFailingProviderIds();
     if (!ids.length) return;
@@ -623,6 +656,12 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
       ? `${log.content}\n\n[${tx('cli_maintenance_log_truncated', 'ログが大きいため一部だけ表示しています。')}]`
       : log.content;
   }
+
+  container.addEventListener('change', (e) => {
+    const input = (e.target as HTMLElement)?.closest('input[data-action="toggle-update"]') as HTMLInputElement | null;
+    if (!input) return;
+    void toggleUpdate(input.dataset.provider || '', input.checked);
+  });
 
   container.addEventListener('click', (e) => {
     const target = (e.target as HTMLElement)?.closest('[data-action]') as HTMLElement | null;

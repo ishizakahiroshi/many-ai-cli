@@ -42,6 +42,7 @@ import {
   restoreProviderBackup,
   restoreProviderRevision,
   saveProviderDefinition,
+  withoutServerComputedFields,
   uploadProviderIconImage,
   validateProviderDefinition,
   verifyProviderBackup,
@@ -83,22 +84,6 @@ function tx(key: string, fallback: string, vars: Record<string, unknown> = {}): 
     });
   }
   return value;
-}
-
-// withoutServerComputedFields drops what the Hub computes when it answers a
-// read and never takes back on a save (source/effective_source/revision/
-// field_origins/capabilities_summary). The edit dialog (through the advanced
-// JSON prefill below) and the list's Enable button both send a loaded
-// definition back through it, so the two agree on what "the whole
-// definition" is.
-function withoutServerComputedFields(definition: ProviderEffectiveDefinition): Record<string, unknown> {
-  const rest: Record<string, unknown> = { ...(definition as unknown as Record<string, unknown>) };
-  delete rest.source;
-  delete rest.effective_source;
-  delete rest.revision;
-  delete rest.field_origins;
-  delete rest.capabilities_summary;
-  return rest;
 }
 
 // The advanced JSON editor prefill drops the server-computed fields and the
