@@ -46,6 +46,7 @@ import {
   folderTrustDecision,
   subscriptionDecision,
   isRegisteredChildProvider,
+  permissionModesFor,
   registeredChildProviderChoices,
   type RegisteredChildProviderChoice,
   type ChildApproval,
@@ -361,6 +362,10 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_confirm_permission_preset'))}</span>
         <select name="permission_preset" class="ui-input spawn-select">${permissionPresetOptionsHtml(record.permissionPreset)}</select>
       </label>
+      <label class="spawn-confirm-field" data-spawn-confirm-regmode-field hidden>
+        <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_confirm_permission_preset'))}</span>
+        <select name="permission_mode" class="ui-input spawn-select"></select>
+      </label>
       <label class="spawn-confirm-remember" data-spawn-confirm-remember>
         <input type="checkbox" name="remember_permission"${record.rememberPermission ? ' checked' : ''}>
         <span>${escapeHtml(t('spawn_confirm_remember_permission'))}</span>
@@ -461,6 +466,26 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     ]) {
       dialog.querySelectorAll<HTMLElement>(selector).forEach((el) => { el.hidden = hide; });
     }
+    refreshRegisteredPermissionModes();
+  }
+  // 登録した AI は、定義が起動引数へ写像している承認モードだけを選べる。写像が無ければ欄ごと出さない。
+  function refreshRegisteredPermissionModes(): void {
+    const field = dialog.querySelector('[data-spawn-confirm-regmode-field]') as HTMLElement | null;
+    const select = field?.querySelector('select') as HTMLSelectElement | null;
+    if (!field || !select) return;
+    const provider = providerSelect?.value || record.provider;
+    const modes = registeredSelected() ? permissionModesFor(provider) : [];
+    const labels: Record<string, string> = {
+      plan: t('spawn_permission_plan'),
+      acceptEdits: t('spawn_permission_accept_edits'),
+      auto: t('spawn_permission_auto'),
+      bypassPermissions: t('spawn_permission_bypass'),
+    };
+    const keep = modes.includes(select.value) ? select.value : '';
+    select.innerHTML = [`<option value="">${escapeHtml(t('spawn_confirm_option_unset'))}</option>`,
+      ...modes.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(labels[m] || m)}</option>`)].join('');
+    select.value = keep;
+    field.hidden = modes.length === 0;
   }
   // Hub の登録から、子に選べる登録済みの AI を読み直して選択肢へ反映する。
   // 選んでいる値は動かさない。
@@ -602,7 +627,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     state = 'deciding';
     if (providerSelect) providerSelect.disabled = true;
     if (modelInput) modelInput.disabled = true;
-    for (const name of ['effort', 'execution_mode', 'permission_preset', 'subscription']) {
+    for (const name of ['effort', 'execution_mode', 'permission_preset', 'permission_mode', 'subscription']) {
       const el = dialog.querySelector(`[name=${name}]`) as HTMLSelectElement | null;
       if (el) el.disabled = true;
     }
@@ -632,6 +657,11 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       execution_mode: executionModeVal,
       permission_preset: permissionPresetVal,
     };
+    if (approved && registered) {
+      const modeEl = dialog.querySelector('[name=permission_mode]') as HTMLSelectElement | null;
+      const modeField = dialog.querySelector('[data-spawn-confirm-regmode-field]') as HTMLElement | null;
+      if (modeEl && modeField && !modeField.hidden && modeEl.value) payload.permission_mode = modeEl.value;
+    }
     if (approved && !registered) payload.remember_permission = !!rememberInput?.checked;
     // 契約は欄を出していて、既定以外を選んで承認したときだけ送る。欄が無い CLI や
     // 「既定」のままなら JSON に載せず、契約を指定しない今までの起動と同じにする。

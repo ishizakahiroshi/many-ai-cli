@@ -2223,6 +2223,10 @@ pub struct SpawnConfirmationResponse {
     /// sends it when it showed the field and a profile was chosen (issue #43).
     #[serde(rename = "subscription_profile_id")]
     pub subscription_profile_id: Option<String>,
+    /// The approval mode the human picked for a registered AI CLI (the modes its
+    /// definition maps to flags). Absent or blank leaves the request as it was.
+    #[serde(rename = "permission_mode")]
+    pub permission_mode: Option<String>,
 }
 
 /// Produced only by the server after same-origin/capability and auth checks.
@@ -2317,6 +2321,11 @@ impl ChildSpawnRequest {
         }
         if let Some(value) = decision.remember_permission {
             self.remember_permission = Some(value);
+        }
+        if let Some(value) = decision.permission_mode.as_deref().map(str::trim)
+            && ["plan", "acceptEdits", "auto", "bypassPermissions"].contains(&value)
+        {
+            self.permission_mode = value.to_owned();
         }
         let chosen = decision
             .subscription_profile_id

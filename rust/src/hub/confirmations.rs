@@ -56,6 +56,10 @@ impl GoWire for SpawnConfirmationResponse {
                 name: "subscription_profile_id",
                 kind: "*string",
             },
+            Field {
+                name: "permission_mode",
+                kind: "*string",
+            },
         ],
     }];
 }
