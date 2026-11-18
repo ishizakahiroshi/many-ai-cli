@@ -12,6 +12,13 @@ Release artifacts are published at
 
 ### Added
 
+- **A registered AI CLI can receive the approval rules.** A provider definition
+  that sets `capabilities.agents_md_instructions` to `true` (for a CLI that
+  reads the project's `AGENTS.md` as always-on rules, such as Devin CLI) gets
+  the short approval-rules block in the project `AGENTS.md` while its session
+  runs. Without it nothing is written, as before. Until now such a CLI was
+  never told the approval format, so it asked through its own picker and no
+  approval button appeared.
 - **Board sync follows a board with safe resumption.** When the board answers
   `board_accept_handoff` with the run's `handoff.generation` (Many Iris), work
   taken with the same key is written as that run: events through
@@ -63,6 +70,16 @@ Release artifacts are published at
 
 ### Changed
 
+- **The approval-rules block written into `AGENTS.md` is now short.** Codex,
+  GitHub Copilot, Cursor Agent, Grok and opencode used to get the full rules
+  (about 13 KB) in their instruction file. They now get a block under 1,200
+  bytes — the Yes/No form, the done form and the path of the full rules — and
+  read the full rules from the Hub's own file when they need the other forms.
+  An AI CLI with a budget for always-on rules (Devin CLI: 32,768 bytes in
+  total) no longer loses the project's own rules while another CLI's session
+  runs in the same project. A full block left by an earlier version is
+  replaced on the next session start. Claude Code is unchanged (one import
+  line).
 - Windows の常駐は、通知領域のアイコンではなく、タスクバーの小さい窓で動いていることを示す。窓を閉じると最小化され、Hub は止まらない。
 - 設定の切り替え案内、起動時の 1 行ヒント、setup の完了文を、タスクバーの小さい窓の説明に変えた。
 

@@ -95,13 +95,21 @@ fn actual_private_trial_rmw_restores_bytes_and_central_version_is_source_authori
         files.read(&central).unwrap(),
         b"<!-- version: 26 -->\nuser central \xff"
     );
+    // The shared block is the short rules, not a copy of the central file: what
+    // the user wrote there is read through the path the block names.
+    let injected = files.read(&target).unwrap();
+    assert!(current(&injected, START, END, SHORT_VERSION));
     assert!(
-        files
-            .read(&target)
-            .unwrap()
+        !injected
             .windows(b"user central \xff".len())
             .any(|v| v == b"user central \xff")
     );
+    let named = home
+        .join(".many-ai-cli")
+        .join("approval-rules.md") // doxguard: allow approval-rules.md
+        .to_string_lossy()
+        .into_owned();
+    assert!(injected.windows(named.len()).any(|v| v == named.as_bytes()));
     assert!(
         files
             .inject("codex", &installed.path().join("AGENTS.md"))
@@ -132,7 +140,7 @@ fn version_24_central_and_shared_block_upgrade_once_with_surrounding_bytes_prese
     assert_eq!(files.read(&central).unwrap(), RULES.as_bytes());
     assert!(RULES.starts_with("<!-- version: 26 -->\n"));
     let upgraded = files.read(&target).unwrap();
-    assert!(current(&upgraded, START, END, "<!-- version: 26 -->"));
+    assert!(current(&upgraded, START, END, SHORT_VERSION));
     assert!(!current(&upgraded, START, END, "<!-- version: 24 -->"));
     files.inject("codex", &target).unwrap();
     assert_eq!(files.read(&target).unwrap(), upgraded);
@@ -162,11 +170,70 @@ fn version_25_central_and_shared_block_upgrade_once_to_the_shipped_rules() {
     files.inject("codex", &target).unwrap();
     assert_eq!(files.read(&central).unwrap(), RULES.as_bytes());
     let upgraded = files.read(&target).unwrap();
-    assert!(current(&upgraded, START, END, RULES_VERSION));
+    assert!(current(&upgraded, START, END, SHORT_VERSION));
+    assert!(!current(&upgraded, START, END, RULES_VERSION));
     assert!(!current(&upgraded, START, END, "<!-- version: 25 -->"));
     assert!(upgraded.starts_with(b"mine\n"));
     files.inject("codex", &target).unwrap();
     assert_eq!(files.read(&target).unwrap(), upgraded);
+}
+#[test]
+fn short_rules_stay_under_their_limit_and_name_the_central_file() {
+    assert!(RULES_SHORT.starts_with(&format!("{SHORT_VERSION}\n")));
+    // The two forms the dashboard needs are written out, not referred to.
+    for form in ["question? (Y:1/N:0)", "-DONE]"] {
+        assert!(RULES_SHORT.contains(form), "{form}");
+    }
+    let central = Path::new("/srv/hub/rules-central.md");
+    let body = short_rules(central);
+    assert!(body.len() <= SHORT_LIMIT, "{}", body.len());
+    assert!(!body.contains(CENTRAL_PLACEHOLDER));
+    assert!(body.contains("/srv/hub/rules-central.md"));
+    // A path that would break the limit is spelled from the home instead.
+    let deep = PathBuf::from(format!("/{}/rules-central.md", "d".repeat(SHORT_LIMIT)));
+    let fallback = short_rules(&deep);
+    assert!(fallback.len() <= SHORT_LIMIT, "{}", fallback.len());
+    assert!(fallback.contains(": ~/") && !fallback.contains("dddd"));
+    // The full rules never fit: they are what the short block replaces.
+    assert!(RULES.len() > SHORT_LIMIT);
+}
+#[test]
+fn full_rules_block_is_replaced_by_the_short_one_and_claude_keeps_its_import() {
+    let root = tempfile::tempdir().unwrap();
+    let installed = tempfile::tempdir().unwrap();
+    let paths = RuntimePaths::trial(root.path(), 49337, installed.path()).unwrap();
+    let home = root.path().join("actor");
+    std::fs::create_dir(&home).unwrap();
+    let files = InstructionFiles::new(paths, home.clone()).unwrap();
+    let target = root.path().join("project/AGENTS.md");
+    // What the previous version left in a project: the full rules, version 26.
+    let previous = inject_rules_content("codex", b"mine\n", RULES.as_bytes()).unwrap();
+    assert!(previous.len() > RULES.len());
+    files.write(&target, &previous, false).unwrap();
+    files.inject("codex", &target).unwrap();
+    let replaced = files.read(&target).unwrap();
+    assert!(replaced.starts_with(b"mine\n"));
+    assert!(current(&replaced, START, END, SHORT_VERSION));
+    assert!(!current(&replaced, START, END, RULES_VERSION));
+    // The file grows by the short block only (markers and newlines included).
+    assert!(replaced.len() <= b"mine\n".len() + SHORT_LIMIT + START.len() + END.len() + 4);
+    files.inject("codex", &target).unwrap();
+    assert_eq!(files.read(&target).unwrap(), replaced);
+    files.remove("codex", &target, false).unwrap();
+    assert_eq!(files.read(&target).unwrap(), b"mine\n");
+    // Claude Code still gets one import line and no block.
+    let claude = root.path().join("project/CLAUDE.md");
+    files.write(&claude, b"own\n", false).unwrap();
+    files.inject("claude", &claude).unwrap();
+    assert_eq!(
+        files.read(&claude).unwrap(),
+        format!("own\n\n{IMPORT}\n").as_bytes()
+    );
+    // An id the injection does not know is refused before the file is touched.
+    let other = root.path().join("project/OTHER.md");
+    files.write(&other, b"keep\n", false).unwrap();
+    assert!(files.inject("unknown", &other).is_err());
+    assert_eq!(files.read(&other).unwrap(), b"keep\n");
 }
 #[test]
 fn shipped_rules_carry_their_version_and_the_frozen_go_text_is_untouched() {

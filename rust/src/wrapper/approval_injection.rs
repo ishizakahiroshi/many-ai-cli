@@ -18,6 +18,30 @@ const DELEGATE_END: &str = "<!-- /many-ai-cli:delegation -->";
 pub const RULES: &str = include_str!("approval_injection/rules_current.txt");
 /// First line of `RULES`. A central file or shared block without it is replaced.
 const RULES_VERSION: &str = "<!-- version: 26 -->";
+/// What an instruction file without imports receives instead of `RULES`: the
+/// two forms the dashboard needs most and where the full rules are. An AI CLI
+/// with a budget for always-on rules (Devin CLI: 32,768 bytes in total) drops
+/// the project's own rules when a 13 KB block lands in the same file.
+pub const RULES_SHORT: &str = include_str!("approval_injection/rules_short.txt");
+/// First line of `RULES_SHORT`. A shared block without it — every block that
+/// carries the full rules — is replaced on the next injection.
+const SHORT_VERSION: &str = "<!-- short-version: 1 -->";
+/// Stands in `RULES_SHORT` for the path of the central file. The path is
+/// written out because `~` is not the same folder for every AI CLI the Hub
+/// starts (a profile may run with its own home).
+const CENTRAL_PLACEHOLDER: &str = "{{central}}";
+/// A shared block may not exceed this, whatever the central path is.
+pub const SHORT_LIMIT: usize = 1200;
+/// The short rules pointing at `central`. A path too long for the limit is
+/// replaced by the `~` spelling, which every AI CLI started with the default
+/// home still resolves.
+pub fn short_rules(central: &Path) -> String {
+    let body = RULES_SHORT.replace(CENTRAL_PLACEHOLDER, &central.to_string_lossy());
+    if body.len() <= SHORT_LIMIT {
+        return body;
+    }
+    RULES_SHORT.replace(CENTRAL_PLACEHOLDER, "~/.many-ai-cli/approval-rules.md") // doxguard: allow approval-rules.md
+}
 static OPERATIONS: Mutex<()> = Mutex::new(());
 const CAP: usize = 32 * 1024 * 1024;
 fn pattern(pairs: &[(&str, &str)]) -> regex::bytes::Regex {
@@ -162,6 +186,18 @@ fn inject_rules_at(
         append(&mut result, START, END, central);
     }
     Ok(result)
+}
+/// The shared block of an import-less instruction file: `body` is the short
+/// rules (`short_rules`). A block left by a version that wrote the full rules
+/// does not carry `SHORT_VERSION` and is replaced.
+pub fn inject_short_content(provider: &str, content: &[u8], body: &[u8]) -> io::Result<Vec<u8>> {
+    if !shared(provider) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "unknown instruction provider",
+        ));
+    }
+    inject_rules_at(provider, content, body, SHORT_VERSION)
 }
 pub fn inject_delegation_content(
     provider: &str,
@@ -324,7 +360,14 @@ impl InstructionFiles {
             Err(e) if e.kind() == io::ErrorKind::NotFound => vec![],
             Err(e) => return Err(e),
         };
-        let updated = inject_rules_content(provider, &content, &central)?;
+        // Claude Code imports the central file. Every other AI CLI gets the short
+        // rules in its own file and reads the central file when it needs more.
+        let updated = if provider == "claude" {
+            inject_rules_content(provider, &content, &central)?
+        } else {
+            let central_path = self.home.join(".many-ai-cli").join("approval-rules.md"); // doxguard: allow approval-rules.md
+            inject_short_content(provider, &content, short_rules(&central_path).as_bytes())?
+        };
         if content != updated {
             self.write(path, &updated, false)?;
         }

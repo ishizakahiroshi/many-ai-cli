@@ -1099,6 +1099,12 @@ impl HubComposition {
                 crate::application::approval_patterns::registry_user_sources(&registry)
             }));
         }
+        {
+            let registry = registry.clone();
+            instruction_rules.set_agents_file_providers(Arc::new(move || {
+                crate::application::instruction_rules::registry_agents_file_providers(&registry)
+            }));
+        }
         if approval_patterns.sync().is_err() {
             logger.write(
                 "WARN",

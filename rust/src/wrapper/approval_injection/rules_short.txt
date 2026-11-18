@@ -1,0 +1,13 @@
+<!-- short-version: 1 -->
+## many-ai-cli Approval Format (short)
+
+Applies only when the environment variable MANY_AI_CLI is "1". Check it once per session with a command that prints match / unset, never the raw value.
+
+- Ask the user to confirm or choose only with this text block. Never use the CLI's own picker or question UI for it:
+  [MANY-AI-CLI]
+  question? (Y:1/N:0)
+  [/MANY-AI-CLI]
+- When a task is finished, end that reply once with:
+  [MANY-AI-CLI-DONE] result in 1-2 sentences [/MANY-AI-CLI-DONE]
+- Write these marker strings nowhere else, not even to quote or explain them.
+- Before you use numbered choices, several questions or multi-select, and for every other detail, read the full rules first and follow them: {{central}}

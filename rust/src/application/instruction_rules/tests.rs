@@ -205,6 +205,40 @@ async fn two_profiles_linking_one_claude_md_keep_the_import_until_the_last_sessi
     assert!(f.warnings.lock().unwrap().is_empty());
 }
 #[tokio::test]
+async fn registered_cli_gets_the_short_block_only_when_it_declares_the_agents_file() {
+    let f = fixture();
+    let session = register(&f, "devin-cli", 2021).await;
+    let path = f._root.path().join("project/AGENTS.md");
+    std::fs::write(&path, b"original").unwrap();
+    let cancel = Cancellation::default();
+    // Not declared: the user's file is left alone and nothing is journalled.
+    f.owner.change("enable", &cancel).await.unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), b"original");
+    assert!(!f.paths.root().join("approval-rule-targets.json").exists());
+    // Declared: the same sweep writes the short rules, never the full ones.
+    f.owner
+        .set_agents_file_providers(Arc::new(|| vec!["devin-cli".to_string()]));
+    f.owner.registered(&cancel).await;
+    let body = std::fs::read(&path).unwrap();
+    assert!(body.starts_with(b"original"));
+    assert!(
+        body.windows(b"<!-- many-ai-cli:approval-rules -->".len())
+            .any(|v| v == b"<!-- many-ai-cli:approval-rules -->")
+    );
+    assert!(
+        body.len()
+            <= b"original".len()
+                + crate::wrapper::approval_injection::SHORT_LIMIT
+                + 2 * "<!-- /many-ai-cli:approval-rules -->".len()
+    );
+    assert!(f.paths.root().join("approval-rule-targets.json").exists());
+    f.core.disconnected(session, at()).unwrap();
+    f.owner.ended(&cancel).await;
+    assert_eq!(std::fs::read(&path).unwrap(), b"original");
+    assert!(!f.paths.root().join("approval-rule-targets.json").exists());
+    assert!(f.warnings.lock().unwrap().is_empty());
+}
+#[tokio::test]
 async fn source_shared_provider_lifetime_keeps_block_until_last_actual_session_ends() {
     let f = fixture();
     let first = register(&f, "copilot", 2011).await;

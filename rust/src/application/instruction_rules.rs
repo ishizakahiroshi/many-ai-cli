@@ -22,6 +22,41 @@ use std::{
     sync::Arc,
 };
 pub type Warning = dyn Fn(&'static str) + Send + Sync;
+/// Capability a registered AI CLI's definition sets to `true` when that CLI
+/// reads the project's `AGENTS.md` as always-on rules. Only then does the Hub
+/// write the short approval rules there for its sessions: a CLI that does not
+/// read the file would leave the user's file changed for nothing.
+pub const AGENTS_FILE_CAPABILITY: &str = "agents_md_instructions";
+/// Ids of the AI CLIs registered in the registry's user layer (`providers.d`)
+/// that declare `AGENTS_FILE_CAPABILITY`. Read on each sweep, so a registration
+/// made while the Hub runs is seen without a restart.
+pub type AgentsFileProviders = dyn Fn() -> Vec<String> + Send + Sync;
+/// The ids for `InstructionRules::set_agents_file_providers`. Built-in AI CLIs
+/// are not listed: `targets` names their files itself.
+pub fn registry_agents_file_providers(
+    store: &crate::profile::store::ProviderRegistryStore,
+) -> Vec<String> {
+    let Ok(snapshot) = store.snapshot() else {
+        return vec![];
+    };
+    snapshot
+        .registry
+        .list()
+        .into_iter()
+        .filter(|summary| summary.origin.as_str() == crate::proto::provider::ORIGIN_USER)
+        .filter(|summary| {
+            snapshot.registry.lookup(&summary.id).is_some_and(|found| {
+                found
+                    .definition
+                    .capabilities
+                    .get(AGENTS_FILE_CAPABILITY)
+                    .copied()
+                    .unwrap_or(false)
+            })
+        })
+        .map(|summary| summary.id)
+        .collect()
+}
 pub trait InstructionRootResolver: Send + Sync {
     fn root<'a>(&'a self, cwd: &'a Path, cancel: &'a Cancellation) -> CoreFuture<'a, PathBuf>;
 }
@@ -131,6 +166,7 @@ pub struct InstructionRules {
     resolver: Arc<dyn InstructionRootResolver>,
     known: tokio::sync::Mutex<BTreeMap<String, Target>>,
     warning: Arc<Warning>,
+    agents_file: std::sync::OnceLock<Arc<AgentsFileProviders>>,
 }
 impl InstructionRules {
     #[allow(clippy::too_many_arguments)]
@@ -158,7 +194,14 @@ impl InstructionRules {
             resolver,
             known: tokio::sync::Mutex::new(BTreeMap::new()),
             warning,
+            agents_file: std::sync::OnceLock::new(),
         }))
+    }
+    /// Lets a registered AI CLI that reads the project's `AGENTS.md` receive the
+    /// short approval rules like the built-in ones do. Set once, before the Hub
+    /// serves.
+    pub fn set_agents_file_providers(&self, providers: Arc<AgentsFileProviders>) {
+        let _ = self.agents_file.set(providers);
     }
     fn absolute(&self, path: PathBuf) -> PathBuf {
         crate::files::scope::clean(&if path.is_absolute() {
@@ -186,6 +229,7 @@ impl InstructionRules {
         let mut active = Vec::new();
         let mut legacy = Vec::new();
         let mut roots = BTreeMap::new();
+        let agents_file = self.agents_file.get().map(|f| f()).unwrap_or_default();
         for id in self.core.registered_session_ids() {
             let Some(details) = self.core.details(id) else {
                 continue;
@@ -233,6 +277,20 @@ impl InstructionRules {
                     })
                 }
                 "copilot" | "cursor-agent" | "grok" | "opencode" => {
+                    if s.cwd.trim().is_empty() {
+                        None
+                    } else {
+                        Some(Target {
+                            path: self
+                                .resolve_root(&s.cwd, cancel, &mut roots)
+                                .await
+                                .join("AGENTS.md"),
+                            providers: vec![provider.into()],
+                            mode: "shared_block".into(),
+                        })
+                    }
+                }
+                registered if agents_file.iter().any(|known| known == registered) => {
                     if s.cwd.trim().is_empty() {
                         None
                     } else {
