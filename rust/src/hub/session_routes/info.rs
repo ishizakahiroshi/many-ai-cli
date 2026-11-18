@@ -126,14 +126,12 @@ impl SessionHttp {
         })).no_store() }
     }
 }
+/// Provider id to the values the UI offers for it.
+type ProviderValues = BTreeMap<String, Vec<String>>;
 fn capabilities(
     config: &Config,
     registry: Option<&Registry>,
-) -> (
-    BTreeMap<String, Vec<String>>,
-    Vec<String>,
-    BTreeMap<String, Vec<String>>,
-) {
+) -> (ProviderValues, Vec<String>, ProviderValues) {
     let mut effort: BTreeMap<_, _> = config::effort_providers()
         .into_iter()
         .map(|provider| {

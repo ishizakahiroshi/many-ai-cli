@@ -63,6 +63,7 @@ fn request() -> WrappedStartRequest {
             resolved_model: "synthetic-selected-model".into(),
             effort_args: vec![],
             ordinary_model_args: vec![],
+            ordinary_permission_args: vec![],
         },
         kind: WrappedStartKind::OrdinaryAi { delegation: false },
     }

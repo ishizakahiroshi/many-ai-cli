@@ -519,7 +519,8 @@ fn start_failure(outcome: &SpawnWaitOutcome) -> SpawnStartOutcome {
 enum CompletionMode {
     RegistrationWait(Duration),
     NativeStart {
-        policy: ResolvedSpawnPolicy,
+        // Boxed: the policy is far larger than the other variant's `Duration`.
+        policy: Box<ResolvedSpawnPolicy>,
         kind: WrappedStartKind,
     },
 }
@@ -672,7 +673,7 @@ impl WrappedSessionSpawner for ProcessWrappedSpawner {
                 entry,
                 request.spec,
                 CompletionMode::NativeStart {
-                    policy: request.policy,
+                    policy: Box::new(request.policy),
                     kind: request.kind,
                 },
             );

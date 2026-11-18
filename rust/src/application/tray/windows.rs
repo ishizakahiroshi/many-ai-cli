@@ -208,10 +208,7 @@ pub(super) fn post_presence_state(hwnd: isize, running: bool) {
         return;
     }
     #[cfg(test)]
-    {
-        procedure_tests::record_presence(hwnd, running);
-        return;
-    }
+    procedure_tests::record_presence(hwnd, running);
     #[cfg(not(test))]
     unsafe {
         PostMessageW(
