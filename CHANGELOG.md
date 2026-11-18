@@ -54,7 +54,21 @@ Release artifacts are published at
 - **Adding, changing or removing an AI CLI now reaches every open dashboard.**
   The Hub broadcasts the change, so the new-session list and the settings list
   reload in other tabs and devices without F5.
-
+- **Settings → Usage lists every registered AI CLI, in the same order as New
+  Session.** The rows come from the provider registry instead of a fixed table,
+  so a custom provider such as Devin CLI appears as soon as it is registered.
+  Each row links to the provider's usage page (Usage Links settings gained a
+  Devin CLI field); the old "unavailable" badges and per-row info tooltips are
+  gone — providers that cannot report usage through the CLI are shown as plain
+  links, and remaining-quota meters still appear for the CLIs that can.
+- **A screen layout preset can put the whole input area on top.** Settings →
+  Layout gains a "Screen layout" selector: "Bottom" keeps the current order,
+  "Top" moves the complete input area — the progress/button row, the input
+  field, and the attachment/usage row — above the terminal on a mouse-operated
+  desktop (721px and wider). The slash list, slash picker, prompt-template
+  palette and voice bar then open downward, and the approval popup follows to
+  the top by default, with "Always bottom" and the side columns still
+  selectable. Phone widths and touch-first screens keep the bottom layout.
 - **A console-launched Hub can move into the Windows tray with `many-ai-cli
   tray --replace`.** The tray runs `setup`, stops the old console Hub (logged
   as `tray_migration`), starts a detached Hub and reopens the browser, so

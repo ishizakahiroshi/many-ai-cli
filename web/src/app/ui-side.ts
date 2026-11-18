@@ -4,7 +4,8 @@
 //   - cards    セッションカードの列（#session-list）
 //   - tools    入力欄のツール群（#input-wrap 内のボタン列）
 //   - close    各パネルの閉じるボタン（Review / Git / 設定 / 各モーダルの ✕）
-//   - approval 確認ポップアップ（#action-bar）。軸が違うため '' = 下ドック
+//   - approval 確認ポップアップ（#action-bar）。軸が違うため '' = 入力まわりと同じ側
+//     （下寄せでは下ドック、上寄せでは上ドック。型は layout-preset.ts）。'bottom' = いつも下
 //
 // v0.8 までは uiSide 1 本で 3 要素をまとめて倒していた（32f101b）。
 // 「カードは左・ポップアップは右・入力欄は右」のように要素ごとに決めたい要求のため、
@@ -12,10 +13,10 @@
 // 入力欄の各ボタンを取っ手で自由配置できるようになったので廃止した（2026-10-14）。
 // 側は設定画面の 4 つの選択欄で選ぶ。
 //
-// 値は '' / 'left' / 'right' の 3 値。'' は「その要素の従来どおりの位置」を意味し、
+// 値は '' / 'left' / 'right' の 3 値（approval は 'bottom' も取る）。'' は「その要素の従来どおりの位置」を意味し、
 // 更新しただけで画面が変わらないことを守る:
 //   cards '' = 左 / tools '' = 旧キー ai_cli_hub_tools_left /
-//   close '' = 右 / approval '' = 下ドック
+//   close '' = 右 / approval '' = 入力まわりと同じ側（下寄せでは下ドック）
 //
 // 設計メモ:
 //  - DOM は動かさず flex の order だけを入れ替える（DOM を並べ替えると detached-grid の
@@ -30,9 +31,13 @@ import { STORAGE_TOOLS_LEFT_KEY } from './user-prefs.js';
 
 export type UiSide = '' | 'left' | 'right';
 
+// approval だけは上下の軸を持つため 'bottom'（いつも下）も取る。
+// '' は「入力まわりと同じ側」: 下寄せでは下ドック、上寄せでは上ドック。
+export type ApprovalSide = UiSide | 'bottom';
+
 export type UiSideElement = 'cards' | 'tools' | 'close' | 'approval';
 
-export type UiSideMap = Record<UiSideElement, UiSide>;
+export type UiSideMap = { cards: UiSide; tools: UiSide; close: UiSide; approval: ApprovalSide };
 
 const STORAGE_KEYS: Record<UiSideElement, string> = {
   cards: 'uiSideCards',
@@ -46,6 +51,10 @@ const ELEMENTS: readonly UiSideElement[] = ['cards', 'tools', 'close', 'approval
 
 function normalize(v: string | null): UiSide {
   return v === 'left' || v === 'right' ? v : '';
+}
+
+function normalizeApproval(v: string | null): ApprovalSide {
+  return v === 'left' || v === 'right' || v === 'bottom' ? v : '';
 }
 
 /** 旧 uiSide（3 要素一括）からの移行。4 キーが 1 つも無いときだけ 1 回行う。 */
@@ -63,9 +72,12 @@ function migrateLegacy(): void {
   } catch (_) { /* private mode 等は無視 */ }
 }
 
-export function getUiSideEl(el: UiSideElement): UiSide {
+export function getUiSideEl(el: 'approval'): ApprovalSide;
+export function getUiSideEl(el: Exclude<UiSideElement, 'approval'>): UiSide;
+export function getUiSideEl(el: UiSideElement): UiSide | ApprovalSide {
   try {
-    return normalize(localStorage.getItem(STORAGE_KEYS[el]));
+    const raw = localStorage.getItem(STORAGE_KEYS[el]);
+    return el === 'approval' ? normalizeApproval(raw) : normalize(raw);
   } catch (_) {
     return '';
   }
@@ -89,7 +101,8 @@ export function toolsOnLeft(): boolean {
 
 /** 確認ポップアップが縦カラム（右 or 左）なら true。 */
 export function isApprovalColumn(): boolean {
-  return getUiSideEl('approval') !== '';
+  const side = getUiSideEl('approval');
+  return side === 'left' || side === 'right';
 }
 
 function applyBodyClasses(state: UiSideMap): void {
@@ -97,9 +110,12 @@ function applyBodyClasses(state: UiSideMap): void {
   document.body.classList.toggle('close-left', state.close === 'left');
   document.body.classList.toggle('approval-dock-right', state.approval === 'right');
   document.body.classList.toggle('approval-dock-left', state.approval === 'left');
+  document.body.classList.toggle('approval-dock-bottom', state.approval === 'bottom');
 }
 
-export function setUiSideEl(el: UiSideElement, side: UiSide): void {
+export function setUiSideEl(el: 'approval', side: ApprovalSide): void;
+export function setUiSideEl(el: Exclude<UiSideElement, 'approval'>, side: UiSide): void;
+export function setUiSideEl(el: UiSideElement, side: UiSide | ApprovalSide): void {
   try {
     if (side) localStorage.setItem(STORAGE_KEYS[el], side);
     else localStorage.removeItem(STORAGE_KEYS[el]);
@@ -136,7 +152,12 @@ export function initUiSide(): void {
     if (!sel) continue;
     sel.value = state[el];
     sel.addEventListener('change', () => {
-      setUiSideEl(el, sel.value === 'left' || sel.value === 'right' ? (sel.value as UiSide) : '');
+      if (el === 'approval') {
+        setUiSideEl(el, sel.value === 'left' || sel.value === 'right' || sel.value === 'bottom'
+          ? (sel.value as ApprovalSide) : '');
+      } else {
+        setUiSideEl(el, sel.value === 'left' || sel.value === 'right' ? (sel.value as UiSide) : '');
+      }
     });
   }
 }

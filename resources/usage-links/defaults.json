@@ -6,5 +6,6 @@
   "cursor-agent": "https://cursor.com/dashboard",
   "grok":     "https://grok.com/?_s=usage",
   "ollama":   "https://ollama.com/settings",
-  "opencode": "https://opencode.ai/go"
+  "opencode": "https://opencode.ai/go",
+  "devin-cli": "https://app.devin.ai/"
 }

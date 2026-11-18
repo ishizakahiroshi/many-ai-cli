@@ -132,6 +132,13 @@
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
 }
 #voice-bar[hidden] { display: none !important; }
+/* 上寄せでは入力まわりの下へ開く（配置の型は layout-preset.ts。PC 幅だけ）。 */
+@media (min-width: 721px) {
+  body.layout-input-top #voice-bar {
+    top: calc(100% + 6px);
+    bottom: auto;
+  }
+}
 .voice-waveform {
   flex: 1;
   height: 36px;

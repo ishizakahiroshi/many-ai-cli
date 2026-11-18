@@ -14,6 +14,17 @@
       "reason": "Shell launch nudge offers two execution routes. False still sends the ordinary shell command and records suppression; it is not a no-operation cancellation. Keep both explicit route labels and payloads."
     },
     {
+      "file": "web/src/app.ts",
+      "selector": "Hub confirmation/style call",
+      "context": "",
+      "property": "confirmation-without-action",
+      "value": "appConfirm({ title: t('tray_migrate_confirm_title'), message: exposeActive ? t('tray_migrate_confirm') + ' ' + t('tray_migrate_confirm_expose') : t('tray_migrate_confirm'), confirmText: t('tray_migrate_btn'), cancelText: t('spawn_cancel'), kind: 'warn', })",
+      "rule": "confirmation-without-action",
+      "fingerprint": "df854f535d966a5acdd4fe02e337102552741b3069460831daed6b634c473d56",
+      "count": 1,
+      "reason": "Tray migration restarts the Hub once and decline is a plain no-op cancel. The accept label stays specific to the migration action instead of a generic continue."
+    },
+    {
       "file": "web/src/app/git-view.ts",
       "selector": ".inline",
       "context": "",
@@ -496,17 +507,6 @@
       "fingerprint": "39fcdbd73f113cfb9d6a08dfe3955534b1cdb5ac4b70c7c13a9625f1468e14c2",
       "count": 1,
       "reason": "Light-theme code diff additions and deletions retain their existing syntax palette and background contrast. Reviewed declaration: [data-theme=\"light\"] .hljs-addition { color: #116329 }."
-    },
-    {
-      "file": "web/src/styles.css",
-      "selector": ".usage-info-bubble",
-      "context": "",
-      "property": "box-shadow",
-      "value": "0 5px 14px rgba(0,0,0,0.35)",
-      "rule": "literal-color",
-      "fingerprint": "3e26dc8ca8d0134ca7f374d13ed7c396f4ba696be0b583106a5e21613407cd4a",
-      "count": 1,
-      "reason": "Existing popup, tooltip, drawer or content shadow retains its placement/depth cue outside the shared modal body; the migrated shell uses the shared modal shadow. Reviewed declaration: .usage-info-bubble { box-shadow: 0 5px 14px rgba(0,0,0,0.35) }."
     },
     {
       "file": "web/src/styles.css",
@@ -8133,28 +8133,6 @@
     },
     {
       "file": "web/src/styles/tabs.css",
-      "selector": ".pane-slot .ph-badge.waiting",
-      "context": "",
-      "property": "color",
-      "value": "var(--yellow, #eab308)",
-      "rule": "literal-color",
-      "fingerprint": "061e37d91188fc5381b15937a8dc8534d3f109a1be0fa227dddf2644307c17e3",
-      "count": 1,
-      "reason": "semantic-state: Existing selected/current/armed/live/copy/danger feedback is behavioral state. Matching ui-button variables preserve it under common hover. Reviewed color=var(--yellow, #eab308) at .pane-slot .ph-badge.waiting."
-    },
-    {
-      "file": "web/src/styles/tabs.css",
-      "selector": ".pane-slot .ph-badge.error",
-      "context": "",
-      "property": "color",
-      "value": "var(--red, #ef4444)",
-      "rule": "literal-color",
-      "fingerprint": "2919c3cf450790817a0c905331571f8e357eb96fbac3874b9ceccc04534fe142",
-      "count": 1,
-      "reason": "semantic-state: Existing selected/current/armed/live/copy/danger feedback is behavioral state. Matching ui-button variables preserve it under common hover. Reviewed color=var(--red, #ef4444) at .pane-slot .ph-badge.error."
-    },
-    {
-      "file": "web/src/styles/tabs.css",
       "selector": ".pane-splitter:hover",
       "context": "",
       "property": "background",
@@ -8185,17 +8163,6 @@
       "fingerprint": "5bc2a0ffcf49b60323f3436872cb74348a383af9479873e782423559d3667c54",
       "count": 1,
       "reason": "modal-content-structure: Inner content/header divider/status/code metadata or dedicated transient/setup surface, rather than the shared ordinary modal shell. Reviewed color=var(--muted) at .picker-title:where(:not(.ui-modal__title))."
-    },
-    {
-      "file": "web/src/styles/tabs.css",
-      "selector": ".pane-slot .ph-badge.running",
-      "context": "",
-      "property": "color",
-      "value": "var(--green, #22c55e)",
-      "rule": "literal-color",
-      "fingerprint": "71f111b1582188b0c581031efafe74e783e66b66d6eb56472b7864f58615bbc9",
-      "count": 1,
-      "reason": "semantic-state: Existing selected/current/armed/live/copy/danger feedback is behavioral state. Matching ui-button variables preserve it under common hover. Reviewed color=var(--green, #22c55e) at .pane-slot .ph-badge.running."
     },
     {
       "file": "web/src/styles/tabs.css",
@@ -8320,17 +8287,6 @@
     },
     {
       "file": "web/src/styles/terminal.css",
-      "selector": "#history-viewer .hv-header",
-      "context": "",
-      "property": "background",
-      "value": "rgba(22, 30, 43, 0.92)",
-      "rule": "literal-color",
-      "fingerprint": "044034c5b2c7ec41562f9589c45700a3f478284763f0ab5849447b5a74e3247c",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed background=rgba(22, 30, 43, 0.92) at #history-viewer .hv-header."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
       "selector": ".live-status-palette-row input[type=\"color\"]",
       "context": "",
       "property": "border",
@@ -8342,17 +8298,6 @@
     },
     {
       "file": "web/src/styles/terminal.css",
-      "selector": "#terminal-live-status.idle",
-      "context": "",
-      "property": "color",
-      "value": "rgba(148, 163, 184, 0.78)",
-      "rule": "literal-color",
-      "fingerprint": "0c14dc17f90190974f078655a9d8dcaf0bd7d6355197c4019ec6eb072ea08fa6",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(148, 163, 184, 0.78) at #terminal-live-status.idle."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
       "selector": "#grok-chat-viewer .gcv-title:where(:not(.ui-modal__title))",
       "context": "",
       "property": "color",
@@ -8361,17 +8306,6 @@
       "fingerprint": "0d7962c227cb751ee503f1c5454b3074f4da33c3b6b22d9f775518d2422559e9",
       "count": 1,
       "reason": "modal-content-structure: Inner content/header divider/status/code metadata or dedicated transient/setup surface, rather than the shared ordinary modal shell. Reviewed color=var(--text) at #grok-chat-viewer .gcv-title:where(:not(.ui-modal__title))."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
-      "selector": "body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.waiting",
-      "context": "@media (max-width: 720px)",
-      "property": "color",
-      "value": "rgba(251, 191, 36, 0.95)",
-      "rule": "literal-color",
-      "fingerprint": "115e4e13d3cb86f91c03aea02a2b8e856126d95b805e55494f2b3b1a1cce0062",
-      "count": 1,
-      "reason": "semantic-state: Existing selected/current/armed/live/copy/danger feedback is behavioral state. Matching ui-button variables preserve it under common hover. Reviewed color=rgba(251, 191, 36, 0.95) at body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.waiting."
     },
     {
       "file": "web/src/styles/terminal.css",
@@ -8515,17 +8449,6 @@
       "fingerprint": "325787557b28b5c0747b33cdbd48945de8ca2f04347c8929f00674aebfc52247",
       "count": 1,
       "reason": "content-label-or-indicator: The broad guard matched a content label, placeholder, badge, focus/state indicator or native specialized control; it does not replace common ordinary controls. Reviewed background=none at .live-status-palette-row input[type=\"color\"]."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
-      "selector": "body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-success",
-      "context": "@media (max-width: 720px)",
-      "property": "color",
-      "value": "rgba(134, 239, 172, 0.95)",
-      "rule": "literal-color",
-      "fingerprint": "34ebdd6a2d4279df86218a27035879b4d32fa974ab95ef5a1ca98a34f8655e8c",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(134, 239, 172, 0.95) at body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-success."
     },
     {
       "file": "web/src/styles/terminal.css",
@@ -8738,17 +8661,6 @@
     },
     {
       "file": "web/src/styles/terminal.css",
-      "selector": "#terminal-live-status.done-success",
-      "context": "",
-      "property": "color",
-      "value": "rgba(134, 239, 172, 0.95)",
-      "rule": "literal-color",
-      "fingerprint": "6776d768cd6cc14cf52f694be34fd9a605e06fd666408ed013fe932fde39ab2b",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(134, 239, 172, 0.95) at #terminal-live-status.done-success."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
       "selector": "body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-btn",
       "context": "@media (max-width: 720px)",
       "property": "border-radius",
@@ -8757,17 +8669,6 @@
       "fingerprint": "67c716cdda84c0f1d5ebe88cd23f81f1591835191f746ede316b3a11ab854a6b",
       "count": 1,
       "reason": "circular-layout: Circle shape is a dedicated composer/voice control layout; its operation area still follows common size and coarse 44px. Reviewed border-radius=50% at body.mobile-has-session:not(.mobile-home-view) #mobile-composer-attach-btn."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
-      "selector": "#terminal-live-status.done-needs-action",
-      "context": "",
-      "property": "color",
-      "value": "rgba(251, 191, 36, 0.95)",
-      "rule": "literal-color",
-      "fingerprint": "690347659807ca5c9ba8efdc63de487060c8b67e451063aa7b1135262b2a0aee",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(251, 191, 36, 0.95) at #terminal-live-status.done-needs-action."
     },
     {
       "file": "web/src/styles/terminal.css",
@@ -8834,28 +8735,6 @@
       "fingerprint": "7778cc90e8e6f7c94b7acb01fe74764e8df93f2cdac528ae809bf0472bcf2182",
       "count": 1,
       "reason": "code-payload: Code, raw payload, diff, Markdown or path identifiers retain their legibility and domain palette rather than chrome appearance. Reviewed background=#8b92ff at .xterm .alt-scroll-rail:active .alt-scroll-rail-slider."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
-      "selector": "#terminal-live-status.done-unknown",
-      "context": "",
-      "property": "color",
-      "value": "rgba(148, 163, 184, 0.85)",
-      "rule": "literal-color",
-      "fingerprint": "7b5e3392890f84b338d96944597850d0a40e6bcfc0d4b5c31603f938101498c9",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(148, 163, 184, 0.85) at #terminal-live-status.done-unknown."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
-      "selector": "#history-viewer",
-      "context": "",
-      "property": "background",
-      "value": "#0d1117",
-      "rule": "literal-color",
-      "fingerprint": "7f10f2755dfbed8e57636e725910969911d9344af685394a20fcdaabb8615a0b",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed background=#0d1117 at #history-viewer."
     },
     {
       "file": "web/src/styles/terminal.css",
@@ -9024,17 +8903,6 @@
     },
     {
       "file": "web/src/styles/terminal.css",
-      "selector": "#terminal-live-status.done-aborted",
-      "context": "",
-      "property": "color",
-      "value": "rgba(203, 213, 225, 0.9)",
-      "rule": "literal-color",
-      "fingerprint": "a024ddfd4baea820466e29d12524fca86c650a90ac798ee3adc6410a0a9b24f7",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(203, 213, 225, 0.9) at #terminal-live-status.done-aborted."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
       "selector": "#terminal-readonly-badge",
       "context": "",
       "property": "background",
@@ -9112,17 +8980,6 @@
     },
     {
       "file": "web/src/styles/terminal.css",
-      "selector": "body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done",
-      "context": "@media (max-width: 720px)",
-      "property": "color",
-      "value": "rgba(148, 163, 184, 0.85)",
-      "rule": "literal-color",
-      "fingerprint": "af454d05359bfbc40c87a92bbdc070b9662b107452132e080824ae68a51ee76e",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(148, 163, 184, 0.85) at body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
       "selector": "#history-viewer .hv-title:where(:not(.ui-modal__title))",
       "context": "",
       "property": "font-weight",
@@ -9164,17 +9021,6 @@
       "fingerprint": "b7621fc5462b4531b6eaf14122804a1de5bff83a70d1b20ca6d07791b2c6e402",
       "count": 1,
       "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed border-color=rgba(217, 119, 6, 0.5) at #terminal-live-status.done-needs-action."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
-      "selector": "#terminal-area",
-      "context": "",
-      "property": "background",
-      "value": "#0d1117",
-      "rule": "literal-color",
-      "fingerprint": "b929ed956c6e3db00d5359a1ad9f0bbf69ddbf4c0e0ecb3199288601fe5170c2",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed background=#0d1117 at #terminal-area."
     },
     {
       "file": "web/src/styles/terminal.css",
@@ -9244,28 +9090,6 @@
     },
     {
       "file": "web/src/styles/terminal.css",
-      "selector": "body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-needs-action",
-      "context": "@media (max-width: 720px)",
-      "property": "color",
-      "value": "rgba(251, 191, 36, 0.95)",
-      "rule": "literal-color",
-      "fingerprint": "c6fba0ee854a6efd78e29765263501a2b8f3da2f3552840dd99fa69c4b50a7a6",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(251, 191, 36, 0.95) at body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-needs-action."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
-      "selector": "body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-unknown",
-      "context": "@media (max-width: 720px)",
-      "property": "color",
-      "value": "rgba(148, 163, 184, 0.85)",
-      "rule": "literal-color",
-      "fingerprint": "cb54ef561390a6bee1b217d30341dbee16eecfca99ee3a13d03ec9cac62f1eac",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(148, 163, 184, 0.85) at body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-unknown."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
       "selector": "#send-btn.is-stopping:hover.ui-button",
       "context": "",
       "property": "--ui-button-bg",
@@ -9285,17 +9109,6 @@
       "fingerprint": "cf9349809576dded01cb6daf2e137da51bf5f24303eab559c6b2704d27675788",
       "count": 1,
       "reason": "semantic-state: Existing selected/current/armed/live/copy/danger feedback is behavioral state. Matching ui-button variables preserve it under common hover. Reviewed border-color=var(--accent) at #mobile-key-row button[aria-pressed=\"true\"]."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
-      "selector": "#terminal-live-status.waiting",
-      "context": "",
-      "property": "color",
-      "value": "rgba(251, 191, 36, 0.95)",
-      "rule": "literal-color",
-      "fingerprint": "d16b20b9904d1b0fe3fad37b9ba4782b484dc22983d669f36cd0143806bf8a02",
-      "count": 1,
-      "reason": "semantic-state: Existing selected/current/armed/live/copy/danger feedback is behavioral state. Matching ui-button variables preserve it under common hover. Reviewed color=rgba(251, 191, 36, 0.95) at #terminal-live-status.waiting."
     },
     {
       "file": "web/src/styles/terminal.css",
@@ -9376,17 +9189,6 @@
     },
     {
       "file": "web/src/styles/terminal.css",
-      "selector": "#terminal-live-status.done",
-      "context": "",
-      "property": "color",
-      "value": "rgba(148, 163, 184, 0.9)",
-      "rule": "literal-color",
-      "fingerprint": "dca94860185807e58424ef2b6735360e9f1cf9d4674dda14e45032bbd4fb7832",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(148, 163, 184, 0.9) at #terminal-live-status.done."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
       "selector": "#input",
       "context": "",
       "property": "background",
@@ -9398,17 +9200,6 @@
     },
     {
       "file": "web/src/styles/terminal.css",
-      "selector": "body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-failure",
-      "context": "@media (max-width: 720px)",
-      "property": "color",
-      "value": "rgba(252, 165, 165, 0.95)",
-      "rule": "literal-color",
-      "fingerprint": "dd9cb65fccf76ab5b881a43a605e6b6035e06ac4190148384b945c68b1b6ce8e",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(252, 165, 165, 0.95) at body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-failure."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
       "selector": "#terminal-live-status.idle .live-status-state",
       "context": "",
       "property": "color",
@@ -9417,17 +9208,6 @@
       "fingerprint": "ddb107c8bbc3eb33121d7fd9d31dd97644fefbcf489624f1a0696cb382bfeb45",
       "count": 1,
       "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(203, 213, 225, 0.75) at #terminal-live-status.idle .live-status-state."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
-      "selector": "#terminal-live-status.done-failure",
-      "context": "",
-      "property": "color",
-      "value": "rgba(252, 165, 165, 0.95)",
-      "rule": "literal-color",
-      "fingerprint": "df2e2bf3284764758075998f1627661b26c0c9c0f6a4bac9ea16fc58ff15d518",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(252, 165, 165, 0.95) at #terminal-live-status.done-failure."
     },
     {
       "file": "web/src/styles/terminal.css",
@@ -9483,17 +9263,6 @@
       "fingerprint": "e9d3fcf9ba355bbf09cb7cad78ae580cf502b5f6b14ffde2028ce26a435f9ea6",
       "count": 1,
       "reason": "theme-fallback: The primary value already references an existing theme/status token; the exact fallback preserves old/custom theme compatibility. Reviewed background=var(--bg-deep, #0d1117) at body.mobile-has-session:not(.mobile-home-view) #input-bar-outer."
-    },
-    {
-      "file": "web/src/styles/terminal.css",
-      "selector": "body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.idle",
-      "context": "@media (max-width: 720px)",
-      "property": "color",
-      "value": "rgba(148, 163, 184, 0.78)",
-      "rule": "literal-color",
-      "fingerprint": "ea0e5b51722c7be585cc65a5dfb6ace825650f5b836b063e0eb30fea2408e3ad",
-      "count": 1,
-      "reason": "terminal-surface: Terminal/composer surface uses the established dark rendering and runtime layout independent of ordinary UI chrome. Reviewed color=rgba(148, 163, 184, 0.78) at body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.idle."
     },
     {
       "file": "web/src/styles/terminal.css",
@@ -10374,6 +10143,94 @@
       "fingerprint": "2e3a448e464d7f08bd64e7523913aa38354764208730c450850567f1b0fa746f",
       "count": 1,
       "reason": "Semantic unfinished-memo count badge inside the memo button, not an action control. Preserve its 15px count indicator contrast and typography using existing tokens; restore the published-base state after shared-control migration. Exact declaration reviewed independently."
+    },
+    {
+      "file": "web/src/styles/terminal.css",
+      "selector": "body.layout-input-top #terminal-column > #input-bar-outer",
+      "context": "@media (min-width: 721px)",
+      "property": "border-bottom",
+      "value": "1px solid var(--line)",
+      "rule": "local-control-appearance",
+      "fingerprint": "96346aae073c928f3c769ed739eafc80ad84ed4b8a393faf3100971de58a4677",
+      "count": 1,
+      "reason": "Layout preset 'top' moves the input group above the terminal; its bottom edge needs the same 1px separator the bottom dock draws with border-top. Uses the shared --line token, no new color or control styling."
+    },
+    {
+      "file": "web/src/styles/terminal.css",
+      "selector": "body.layout-input-top #slash-menu",
+      "context": "@media (min-width: 721px)",
+      "property": "border-top",
+      "value": "none",
+      "rule": "local-control-appearance",
+      "fingerprint": "5e55082e491bce43fb394d6a22df3d087c18d81acf4c0a2d6c5a63841c93d9d0",
+      "count": 1,
+      "reason": "Layout preset 'top' opens the slash menu downward; the border side flips to the outer edge (mirror of the existing upward-open rule). No new appearance."
+    },
+    {
+      "file": "web/src/styles/terminal.css",
+      "selector": "body.layout-input-top #slash-menu",
+      "context": "@media (min-width: 721px)",
+      "property": "border-bottom",
+      "value": "1px solid var(--line)",
+      "rule": "local-control-appearance",
+      "fingerprint": "1620199b2ba01019c9efddf0deb93b51d133e41cf71ab05bb82c28f05f1ed3d1",
+      "count": 1,
+      "reason": "Layout preset 'top' opens the slash menu downward; the border side flips to the outer edge (mirror of the existing upward-open rule). Uses the shared --line token."
+    },
+    {
+      "file": "web/src/styles/terminal.css",
+      "selector": "body.layout-input-top #slash-menu",
+      "context": "@media (min-width: 721px)",
+      "property": "border-radius",
+      "value": "0 0 6px 6px",
+      "rule": "local-control-appearance",
+      "fingerprint": "a8bcb950efba3a5cf93f4fdb31333d5244c4197284573cd7ff0297fdbbbfee7b",
+      "count": 1,
+      "reason": "Layout preset 'top' opens the slash menu downward; the corner radius flips to the lower corners (mirror of the existing 6px 6px 0 0). Same radius value, no new appearance."
+    },
+    {
+      "file": "web/src/styles/approval.css",
+      "selector": "body.layout-input-top:not(.approval-dock-right):not(.approval-dock-left):not(.approval-dock-bottom) #action-bar",
+      "context": "@media (min-width: 721px)",
+      "property": "border-top",
+      "value": "none",
+      "rule": "local-control-appearance",
+      "fingerprint": "6062adea339536c15c6ba16aaadbc458aed85959ba23a2b0d8f56d26b1631f76",
+      "count": 1,
+      "reason": "Layout preset 'top' docks the approval bar above the terminal; the top border is removed (mirror of the existing bottom-dock border-top)."
+    },
+    {
+      "file": "web/src/styles/approval.css",
+      "selector": "body.layout-input-top:not(.approval-dock-right):not(.approval-dock-left):not(.approval-dock-bottom) #action-bar",
+      "context": "@media (min-width: 721px)",
+      "property": "border-bottom",
+      "value": "1px solid var(--line)",
+      "rule": "local-control-appearance",
+      "fingerprint": "d5d468014ba72db3857ab4396c903476da594f95d68eb535e722fff944ee58f1",
+      "count": 1,
+      "reason": "Layout preset 'top' docks the approval bar above the terminal; the separator moves to the lower edge. Uses the shared --line token."
+    },
+    {
+      "file": "web/src/styles/approval.css",
+      "selector": "body.layout-input-top:not(.approval-dock-right):not(.approval-dock-left):not(.approval-dock-bottom) #action-bar",
+      "context": "@media (min-width: 721px)",
+      "property": "box-shadow",
+      "value": "0 6px 18px rgba(0, 0, 0, 0.35)",
+      "rule": "literal-color",
+      "fingerprint": "5cfc23f8d9654ec0ede7ee2433be9e79fac79c01f1bb407215b739e756623039",
+      "count": 1,
+      "reason": "Same shadow color as the existing bottom-dock #action-bar shadow (0 -6px 18px); only the direction flips for top dock."
+    },
+    {
+      "file": "web/src/styles/approval.css",
+      "selector": "body.layout-input-top:not(.approval-dock-right):not(.approval-dock-left):not(.approval-dock-bottom) #action-bar",
+      "context": "@media (min-width: 721px)",
+      "property": "box-shadow",
+      "value": "0 6px 18px rgba(0, 0, 0, 0.35)",
+      "rule": "local-control-appearance",
+      "fingerprint": "51b19071e17d1fe171b92337e4c757ecc5b8033a383503006606984cc9b2b36c",
+      "count": 1,
+      "reason": "Mirror of the existing bottom-dock approval shadow; same value, flipped direction so it falls toward the terminal."
     }
   ]
 }

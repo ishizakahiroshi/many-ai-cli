@@ -6,7 +6,7 @@ import { uiButtonClass, uiIconHtml, uiModalClass } from './ui-components.js';
 import { getNotificationVolume, setNotificationVolume, STORAGE_NOTIFY_SOUND_VOLUME_KEY } from './notification-volume.js';
 import { apiFetch, escapeHtml, showToast, ti18n, token, withAssetTicket } from './util.js';
 import { httpsUrlOrEmpty } from './url-detect.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_6_KEY, STORAGE_QUICK_CMD_7_KEY, STORAGE_QUICK_CMD_8_KEY, STORAGE_QUICK_CMD_9_KEY, STORAGE_QUICK_CMD_10_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_QUICK_CMD_6_SHOW_KEY, STORAGE_QUICK_CMD_7_SHOW_KEY, STORAGE_QUICK_CMD_8_SHOW_KEY, STORAGE_QUICK_CMD_9_SHOW_KEY, STORAGE_QUICK_CMD_10_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_6_KEY, STORAGE_QUICK_CMD_7_KEY, STORAGE_QUICK_CMD_8_KEY, STORAGE_QUICK_CMD_9_KEY, STORAGE_QUICK_CMD_10_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_QUICK_CMD_6_SHOW_KEY, STORAGE_QUICK_CMD_7_SHOW_KEY, STORAGE_QUICK_CMD_8_SHOW_KEY, STORAGE_QUICK_CMD_9_SHOW_KEY, STORAGE_QUICK_CMD_10_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_LINK_DEVIN_CLI_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, openProjectKey, sessions, terminals } from './state.js';
 import { getDoneSummary } from './done-summary.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
@@ -524,43 +524,40 @@ export function normalizeHttpUrl(value, fallback = '') {
   return fallback;
 }
 
-export function getUsageLinkUrl(provider) {
-  const keyMap = {
-    claude:   STORAGE_USAGE_LINK_CLAUDE_KEY,
-    codex:    STORAGE_USAGE_LINK_CODEX_KEY,
-    copilot:  STORAGE_USAGE_LINK_COPILOT_KEY,
-    'cursor-agent': STORAGE_USAGE_LINK_CURSOR_AGENT_KEY,
-    ollama:        STORAGE_USAGE_LINK_OLLAMA_KEY,
-    'lm-studio':   STORAGE_USAGE_LINK_LM_STUDIO_KEY,
-    opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
-    grok:     STORAGE_USAGE_LINK_GROK_KEY,
-    'command-code': STORAGE_USAGE_LINK_COMMAND_CODE_KEY,
-  };
-  const key = keyMap[provider];
-  if (!key) return DEFAULT_USAGE_LINKS[provider] || '#';
-  return normalizeHttpUrl(localStorage.getItem(key), DEFAULT_USAGE_LINKS[provider] || '') || '#';
+const USAGE_LINK_STORAGE_KEYS = {
+  claude:   STORAGE_USAGE_LINK_CLAUDE_KEY,
+  codex:    STORAGE_USAGE_LINK_CODEX_KEY,
+  copilot:  STORAGE_USAGE_LINK_COPILOT_KEY,
+  'cursor-agent': STORAGE_USAGE_LINK_CURSOR_AGENT_KEY,
+  ollama:        STORAGE_USAGE_LINK_OLLAMA_KEY,
+  'lm-studio':   STORAGE_USAGE_LINK_LM_STUDIO_KEY,
+  opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
+  grok:     STORAGE_USAGE_LINK_GROK_KEY,
+  'command-code': STORAGE_USAGE_LINK_COMMAND_CODE_KEY,
+  'devin-cli': STORAGE_USAGE_LINK_DEVIN_CLI_KEY,
+};
+// 表に無い provider（custom provider）も同じ命名規則でキーを引く。URL が無い provider は
+// 空文字を返し、呼び出し側がリンクではなく名前だけの行にする。
+function usageLinkStorageKey(provider) {
+  return USAGE_LINK_STORAGE_KEYS[provider] || `ai_cli_hub_usage_link_${String(provider).replace(/[^a-z0-9]+/g, '_')}`;
 }
 
+export function getUsageLinkUrl(provider) {
+  return normalizeHttpUrl(localStorage.getItem(usageLinkStorageKey(provider)), DEFAULT_USAGE_LINKS[provider] || '');
+}
+
+// 行は usage-panel.ts が provider 一覧から生成する。保存・既定値更新のたびに doxguard: allow panel
+// usage-links-changed を投げ、リンク無し→有りの行も描き直せるようにする。
 export function applyUsageLinks() {
-  for (const p of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok', 'command-code']) {
-    const el = document.getElementById(`usage-link-${p}`);
-    if (el) el.href = getUsageLinkUrl(p);
-  }
+  document.querySelectorAll<HTMLElement>('[data-usage-link-provider]').forEach((el) => {
+    const url = getUsageLinkUrl(el.dataset.usageLinkProvider || '');
+    if (url && el instanceof HTMLAnchorElement) el.href = url;
+  });
+  document.dispatchEvent(new CustomEvent('usage-links-changed'));
 }
 
 export function loadUsageLinkSettings() {
-  const keyMap = {
-    claude:   STORAGE_USAGE_LINK_CLAUDE_KEY,
-    codex:    STORAGE_USAGE_LINK_CODEX_KEY,
-    copilot:  STORAGE_USAGE_LINK_COPILOT_KEY,
-    'cursor-agent': STORAGE_USAGE_LINK_CURSOR_AGENT_KEY,
-    ollama:        STORAGE_USAGE_LINK_OLLAMA_KEY,
-    'lm-studio':   STORAGE_USAGE_LINK_LM_STUDIO_KEY,
-    opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
-    grok:     STORAGE_USAGE_LINK_GROK_KEY,
-    'command-code': STORAGE_USAGE_LINK_COMMAND_CODE_KEY,
-  };
-  for (const [p, k] of Object.entries(keyMap)) {
+  for (const [p, k] of Object.entries(USAGE_LINK_STORAGE_KEYS)) {
     const el = document.getElementById(`usage-link-${p}-url`);
     if (el) el.value = localStorage.getItem(k) || '';
   }
@@ -570,6 +567,8 @@ export function loadUsageLinkSettings() {
 }
 
 export function saveUsageLinkSettings() {
+  // prefPath が '' の provider（devin-cli）はサーバー側の user_prefs 表に項目が
+  // 無いので、このブラウザの localStorage にだけ保存する。
   const pairs = [
     ['claude',   'usage_links.claude',   STORAGE_USAGE_LINK_CLAUDE_KEY],
     ['codex',    'usage_links.codex',    STORAGE_USAGE_LINK_CODEX_KEY],
@@ -580,6 +579,7 @@ export function saveUsageLinkSettings() {
     ['opencode', 'usage_links.opencode', STORAGE_USAGE_LINK_OPENCODE_KEY],
     ['grok',     'usage_links.grok',     STORAGE_USAGE_LINK_GROK_KEY],
     ['command-code', 'usage_links.command-code', STORAGE_USAGE_LINK_COMMAND_CODE_KEY],
+    ['devin-cli', '', STORAGE_USAGE_LINK_DEVIN_CLI_KEY],
   ];
   for (const [p, prefPath, key] of pairs) {
     const input = document.getElementById(`usage-link-${p}-url`);
@@ -587,11 +587,12 @@ export function saveUsageLinkSettings() {
     const raw = input.value.trim();
     const normalized = normalizeHttpUrl(raw, '');
     if (normalized) {
-      setUserPref(prefPath, normalized);
+      if (prefPath) setUserPref(prefPath, normalized);
+      else try { localStorage.setItem(key, normalized); } catch (_) {}
       input.value = normalized;
     } else {
       try { localStorage.removeItem(key); } catch (_) {}
-      setUserPref(prefPath, '');
+      if (prefPath) setUserPref(prefPath, '');
       input.value = '';
     }
   }
@@ -1570,9 +1571,12 @@ function syncSettingsPanelButton(): void {
       setUserPref('usage_links.copilot', '');
       setUserPref('usage_links.cursor-agent', '');
       setUserPref('usage_links.ollama', '');
+      setUserPref('usage_links.lm-studio', '');
       setUserPref('usage_links.opencode', '');
       setUserPref('usage_links.grok', '');
       setUserPref('usage_links.command-code', '');
+      // devin-cli は user_prefs に載せず localStorage だけなので、ここで直接消す。
+      try { localStorage.removeItem(STORAGE_USAGE_LINK_DEVIN_CLI_KEY); } catch (_) {}
       loadUsageLinkSettings();
       showToast(t('settings_usage_links_reset_done'), usageLinksResetBtn);
     });
@@ -2605,7 +2609,7 @@ initSettingsInformationArchitecture();
     const res = await apiFetch('/api/usage-link-defaults');
     if (!res.ok) return;
     const d = await res.json();
-    for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok', 'command-code']) {
+    for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok', 'command-code', 'devin-cli']) {
       // 空文字は無視（GitHub 側が古くキーを欠く場合に空で返るため、
       // ローカルの正しいデフォルト値を潰さない）。https 以外の値も既定値にしない（監査 N36。
       // Hub の側でも落としている）。
@@ -4253,6 +4257,16 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
                   : lk === 'chat'     ? _summaryLabel('チャット',  'Chat')
                                       : _summaryLabel('自由切替',  'Free');
     return [langLabel, themeLabel, fsLabel, lkLabel].join('・');
+  },
+
+  layout: () => {
+    const preset = _summaryVal('layout-preset-select') || 'bottom';
+    const parts = [preset === 'top' ? _summaryLabel('上寄せ', 'top') : _summaryLabel('下寄せ', 'bottom')];
+    const approval = _summaryVal('ui-side-approval-select');
+    if (approval === 'bottom') parts.push(_summaryLabel('承認:いつも下', 'approval:bottom'));
+    else if (approval === 'left') parts.push(_summaryLabel('承認:左', 'approval:left'));
+    else if (approval === 'right') parts.push(_summaryLabel('承認:右', 'approval:right'));
+    return parts.join('・');
   },
 
   appearance: () => {

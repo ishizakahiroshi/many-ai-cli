@@ -78,6 +78,7 @@ export const STORAGE_USAGE_LINK_LM_STUDIO_KEY = 'ai_cli_hub_usage_link_lm_studio
 export const STORAGE_USAGE_LINK_OPENCODE_KEY  = 'ai_cli_hub_usage_link_opencode';
 export const STORAGE_USAGE_LINK_GROK_KEY      = 'ai_cli_hub_usage_link_grok';
 export const STORAGE_USAGE_LINK_COMMAND_CODE_KEY = 'ai_cli_hub_usage_link_command_code';
+export const STORAGE_USAGE_LINK_DEVIN_CLI_KEY  = 'ai_cli_hub_usage_link_devin_cli';
 export const STORAGE_USAGE_PROBE_MODEL_KEY    = 'ai_cli_hub_usage_probe_model';
 export const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
 export const STORAGE_VOICE_INPUT_DISABLED_KEY = 'ai_cli_hub_voice_input_disabled';
@@ -240,6 +241,7 @@ export const DEFAULT_USAGE_LINKS = {
   opencode: 'https://opencode.ai/go',
   grok:     'https://grok.com/?_s=usage',
   'command-code': 'https://commandcode.ai/usage',
+  'devin-cli': 'https://app.devin.ai/',
 };
 
 export const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };

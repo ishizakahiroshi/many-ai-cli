@@ -165,15 +165,23 @@
           </div>
           <div class="settings-note" data-i18n="settings_tab_order_desc">タブバーのタブはドラッグで並べ替えできます。使わないタブは右端へ寄せてください。並び順はこのブラウザにのみ保存されます。</div>
           <div class="settings-row">
-            <span class="settings-label" data-i18n="settings_input_tools_order_label">入力欄ボタンの並び順</span>
-            <button type="button" id="input-tools-order-reset-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_input_tools_order_reset">既定に戻す</button>
-          </div>
-          <div class="settings-note" data-i18n="settings_input_tools_order_desc">各ボタンの右上の取っ手（⠿）をドラッグして、アプリ内の好きな位置へ配置できます。ボタンの上で Ctrl（Mac は ⌘）を押しながらホイールを回すと、大きさを 50%〜400% で変えられます。PC では状態表示の右側が初期位置です。「既定に戻す」は位置と大きさの両方を戻します（生ログ左の「⌂ 初期位置」は位置だけ）。配置と大きさはこのブラウザに保存されます。</div>
-          <div class="settings-row">
             <span class="settings-label" data-i18n="settings_provider_order_label">新規セッションの並び順</span>
             <button type="button" id="provider-order-reset-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_provider_order_reset">既定に戻す</button>
           </div>
           <div class="settings-note" data-i18n="settings_provider_order_desc">新規セッションの provider はドラッグで並べ替えできます。並び順はこのブラウザにのみ保存されます。タッチ端末では並べ替えできません。</div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="layout" data-group="basic">
+        <summary class="settings-section-title"><span data-i18n="settings_layout">配置</span><span class="settings-section-current" data-section="layout"></span></summary>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_layout_preset_label">画面の配置</span>
+            <select id="layout-preset-select" class="ui-input settings-select">
+              <option value="bottom" data-i18n="settings_layout_preset_bottom">下寄せ（従来どおり）</option>
+              <option value="top" data-i18n="settings_layout_preset_top">上寄せ</option>
+            </select>
+          </div>
+          <div class="settings-note" data-i18n="settings_layout_preset_desc">上寄せは、タブの段とセッションの帯のすぐ下に入力まわり一式を置き、端末がその下へ広がります。マウスで使う PC の幅（721px 以上）だけに効き、スマホ幅とタッチ操作の画面では常に下寄せです。この設定はこのブラウザにのみ保存されます。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_ui_side_cards_label">操作系の左右: セッションカード</span>
             <select id="ui-side-cards-select" class="ui-input settings-select">
@@ -201,12 +209,18 @@
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_ui_side_approval_label">確認ポップアップの位置</span>
             <select id="ui-side-approval-select" class="ui-input settings-select">
-              <option value="" data-i18n="settings_ui_side_approval_default">下（従来どおり）</option>
+              <option value="" data-i18n="settings_ui_side_approval_default">入力まわりと同じ側（既定）</option>
+              <option value="bottom" data-i18n="settings_ui_side_approval_bottom">いつも下</option>
               <option value="right" data-i18n="settings_ui_side_approval_right">右カラム</option>
               <option value="left" data-i18n="settings_ui_side_approval_left">左カラム</option>
             </select>
           </div>
-          <div class="settings-note" data-i18n="settings_ui_side_desc">セッションカード・入力欄のツール群・開閉／閉じるボタン（⊟／⊞／✕）・確認ポップアップを、それぞれ独立して好きな側へ置けます。「既定」は更新前と同じ配置です。この設定はこのブラウザにのみ保存されます（スマホ幅ではカード列は常に左のドロワーで、確認ポップアップも必ず下に出ます）。</div>
+          <div class="settings-note" data-i18n="settings_ui_side_desc">セッションカード・入力欄のツール群・開閉／閉じるボタン（⊟／⊞／✕）・確認ポップアップを、それぞれ独立して好きな側へ置けます。確認ポップアップの「入力まわりと同じ側」は、画面の配置で選んだ型に追従します。この設定はこのブラウザにのみ保存されます（スマホ幅ではカード列は常に左のドロワーで、確認ポップアップも必ず下に出ます）。</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_input_tools_order_label">入力欄ボタンの並び順</span>
+            <button type="button" id="input-tools-order-reset-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_input_tools_order_reset">既定に戻す</button>
+          </div>
+          <div class="settings-note" data-i18n="settings_input_tools_order_desc">各ボタンの右上の取っ手（⠿）をドラッグして、アプリ内の好きな位置へ配置できます。ボタンの上で Ctrl（Mac は ⌘）を押しながらホイールを回すと、大きさを 50%〜400% で変えられます。PC では状態表示の右側が初期位置です。「既定に戻す」は位置と大きさの両方を戻します（生ログ左の「⌂ 初期位置」は位置だけ）。配置と大きさはこのブラウザに保存されます。</div>
         </div>
       </details>
       <details class="settings-section" data-section="usage" data-group="basic">
@@ -220,72 +234,11 @@
           <div class="usage-dropdown-header">
             <span data-i18n="usage_dropdown_header">AI Usage Links</span>
           </div>
-          <!-- 内容幅に余裕があるときのみ .usage-dropdown-columns を左右 2 カラムに割る。左=契約の残量、
-               右=取得不可 provider とローカル実行。狭幅はこの順で縦に積む。プロファイル行は
-               renderProfiles() が data-usage-provider の直後に挿すためラッパー内で完結する。 -->
-          <div class="usage-dropdown-columns">
-          <div class="usage-dropdown-col">
-          <div class="usage-dropdown-section-title" data-i18n="usage_contract_group">契約の残量</div>
-          <a id="usage-link-claude" data-usage-provider="claude" class="usage-dropdown-item" href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">
-            <span class="usage-item-icon" data-provider-icon="claude" aria-hidden="true"></span>
-            <span class="usage-item-name">Claude</span>
-            <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </a>
-          <a id="usage-link-codex" data-usage-provider="codex" class="usage-dropdown-item" href="https://chatgpt.com/codex/cloud/settings/analytics#usage" target="_blank" rel="noopener noreferrer">
-            <span class="usage-item-icon" data-provider-icon="codex" aria-hidden="true"></span>
-            <span class="usage-item-name">Codex</span>
-            <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </a>
-          <a id="usage-link-grok" data-usage-provider="grok" class="usage-dropdown-item" href="https://grok.com/?_s=usage" target="_blank" rel="noopener noreferrer">
-            <span class="usage-item-icon" data-provider-icon="grok" aria-hidden="true"></span>
-            <span class="usage-item-name">Grok Build</span>
-            <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </a>
-          </div>
-          <div class="usage-dropdown-col">
-          <div class="usage-dropdown-unavailable-row">
-          <a id="usage-link-copilot" class="usage-dropdown-item" href="https://github.com/settings/billing" target="_blank" rel="noopener noreferrer">
-            <span class="usage-item-icon" data-provider-icon="copilot" aria-hidden="true"></span>
-            <span class="usage-item-name">Copilot</span>
-            <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="ui-button ui-button--secondary ui-button--regular usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
-          </div>
-          <div class="usage-dropdown-unavailable-row">
-          <a id="usage-link-cursor-agent" class="usage-dropdown-item" href="https://cursor.com/dashboard" target="_blank" rel="noopener noreferrer">
-            <span class="usage-item-icon" data-provider-icon="cursor-agent" aria-hidden="true"></span>
-            <span class="usage-item-name">Cursor Agent</span>
-            <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="ui-button ui-button--secondary ui-button--regular usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
-          </div>
-          <div class="usage-dropdown-unavailable-row">
-          <a id="usage-link-opencode" class="usage-dropdown-item" href="https://opencode.ai/go" target="_blank" rel="noopener noreferrer">
-            <span class="usage-item-icon" data-provider-icon="opencode" aria-hidden="true"></span>
-            <span class="usage-item-name">OpenCode</span>
-            <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="ui-button ui-button--secondary ui-button--regular usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
-          </div>
-          <div class="usage-dropdown-unavailable-row">
-          <a id="usage-link-command-code" class="usage-dropdown-item" href="https://commandcode.ai/usage" target="_blank" rel="noopener noreferrer">
-            <span class="usage-item-icon" data-provider-icon="command-code" aria-hidden="true"></span>
-            <span class="usage-item-name">Command Code</span>
-            <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="ui-button ui-button--secondary ui-button--regular usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
-          </div>
-          <div class="usage-dropdown-unavailable-row">
-          <a id="usage-link-ollama" class="usage-dropdown-item" href="https://ollama.com/settings" target="_blank" rel="noopener noreferrer">
-            <span class="usage-item-icon" data-provider-icon="ollama" aria-hidden="true"></span>
-            <span class="usage-item-name">Ollama</span>
-            <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="ui-button ui-button--secondary ui-button--regular usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
-          </div>
-          <div class="usage-dropdown-section-title" data-i18n="usage_local_group">ローカル実行 — 上限が無いので数字は出ない</div>
-          <a id="usage-link-lm-studio" class="usage-dropdown-item" href="http://localhost:1234" target="_blank" rel="noopener noreferrer">
-            <span class="usage-item-icon" data-provider-icon="lm-studio" aria-hidden="true"></span>
-            <span class="usage-item-name">LM Studio</span>
-            <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-          </a>
-          </div>
-          </div>
+          <div class="settings-note" data-i18n="usage_links_note">各行は公式の利用状況ページへのリンクです。残量メーターは CLI から取得できる AI だけに出ます。</div>
+          <!-- provider 行は usage-panel.ts が /api/providers から描く（「新しいセッション」と同じ一覧・ doxguard: allow panel
+               同じ並び順）。index.html に provider id は書かないので、custom provider もそのまま並ぶ。
+               契約の残量行は renderProfiles() が data-usage-provider の直後に挿す。 -->
+          <div id="usage-provider-list"></div>
         </div>
       </details>
       <details class="settings-section" data-section="hub" data-group="basic">
@@ -989,6 +942,10 @@
           <div class="settings-row">
             <span class="settings-label">LM Studio</span>
             <input type="text" id="usage-link-lm-studio-url" class="ui-input settings-input-url" data-i18n-placeholder="settings_usage_links_lm_studio_placeholder" placeholder="Default: http://localhost:1234">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Devin CLI</span>
+            <input type="text" id="usage-link-devin-cli-url" class="ui-input settings-input-url" data-i18n-placeholder="settings_usage_links_devin_cli_placeholder" placeholder="Default: https://app.devin.ai/">
           </div>
           <div class="settings-row">
             <button id="usage-links-reset-btn" class="ui-button ui-button--primary ui-button--regular slash-src-save-btn" data-i18n="settings_usage_links_reset">デフォルトに戻す</button>

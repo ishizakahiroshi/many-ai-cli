@@ -22,6 +22,14 @@ function isApprovalColumn(): boolean {
     || document.body.classList.contains('approval-dock-left');
 }
 
+// 上ドック: 上寄せ型（layout-preset.ts）で承認の出る側が既定のとき、バーは
+// display-stack の上端から入力欄帯側へ張り出す。「いつも下」と右/左カラムは従来どおり。
+function isApprovalTopDock(): boolean {
+  return document.body.classList.contains('layout-input-top')
+    && !document.body.classList.contains('approval-dock-bottom')
+    && !isApprovalColumn();
+}
+
 export function initApprovalDock(): void {
   const stack = document.getElementById('display-stack');
   const outer = document.getElementById('input-bar-outer');
@@ -35,9 +43,20 @@ export function initApprovalDock(): void {
       document.documentElement.style.setProperty(SHIFT_VAR, '0px');
       return;
     }
+    const rect = outer.getBoundingClientRect();
+    const cs = getComputedStyle(outer);
+    if (isApprovalTopDock()) {
+      // 上ドック: 入力欄帯の上端に padding-top を足した位置がバー上端の狙い
+      // （帯の上に並ぶセッション帯・タブ帯は覆わない）。出し幅はスタック上端からの距離。
+      const pad = parseFloat(cs.paddingTop) || 0;
+      const targetTop = rect.top + pad;
+      const shift = Math.max(0, Math.round(stack.getBoundingClientRect().top - targetTop));
+      document.documentElement.style.setProperty(SHIFT_VAR, shift + 'px');
+      return;
+    }
     // 入力欄帯の下端から帯の padding-bottom を引いた位置がバー下端の狙い（フッターは帯の下に並ぶので覆わない）。
-    const pad = parseFloat(getComputedStyle(outer).paddingBottom) || 0;
-    const targetBottom = outer.getBoundingClientRect().bottom - pad;
+    const pad = parseFloat(cs.paddingBottom) || 0;
+    const targetBottom = rect.bottom - pad;
     const shift = Math.max(0, Math.round(targetBottom - stack.getBoundingClientRect().bottom));
     document.documentElement.style.setProperty(SHIFT_VAR, shift + 'px');
   };

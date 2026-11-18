@@ -29,6 +29,14 @@ function approvalColumn(): '' | 'right' | 'left' {
   return '';
 }
 
+// 上ドック（上寄せ型で承認が既定のとき）はバーが display-stack の上側へ出るので、
+// 掴み帯はターミナル側＝バーの下端、伸ばす方向は下向きになる（approval.css 参照）。
+function approvalDockTop(): boolean {
+  return approvalColumn() === ''
+    && document.body.classList.contains('layout-input-top')
+    && !document.body.classList.contains('approval-dock-bottom');
+}
+
 export function initActionBarResize(): void {
   const bar = document.getElementById('action-bar');
   if (!bar) return;
@@ -85,6 +93,7 @@ export function initActionBarResize(): void {
     const col = approvalColumn();
     if (col === 'right') return e.clientX - rect.left <= HANDLE_ZONE_PX;
     if (col === 'left') return rect.right - e.clientX <= HANDLE_ZONE_PX;
+    if (approvalDockTop()) return rect.bottom - e.clientY <= HANDLE_ZONE_PX;
     return e.clientY - rect.top <= HANDLE_ZONE_PX;
   };
 
@@ -103,7 +112,8 @@ export function initActionBarResize(): void {
       startSize = rect.width;
     } else {
       axis = 'y';
-      dragSign = -1; // 下端固定で上へ動かすと広がる
+      // 下ドックは下端固定で上へ、上ドックは上端固定で下へ動かすと広がる。
+      dragSign = approvalDockTop() ? 1 : -1;
       startPos = e.clientY;
       startSize = rect.height;
       // ドラッグ開始時の質問欄の実描画高さを基準に、バー増減分を加算していく。
@@ -153,7 +163,10 @@ export function initActionBarResize(): void {
     const col = approvalColumn();
     if (col === 'right' && e.clientX - rect.left > HANDLE_ZONE_PX) return;
     if (col === 'left' && rect.right - e.clientX > HANDLE_ZONE_PX) return;
-    if (!col && e.clientY - rect.top > HANDLE_ZONE_PX) return;
+    if (!col) {
+      const off = approvalDockTop() ? rect.bottom - e.clientY : e.clientY - rect.top;
+      if (off > HANDLE_ZONE_PX) return;
+    }
     clearInlineSize();
     followTerminal();
   });

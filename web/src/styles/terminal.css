@@ -706,6 +706,39 @@
   flex-shrink: 0;
 }
 
+/* 上寄せ（設定「配置」で選ぶ型。layout-preset.ts が body.layout-input-top を付ける）。
+   #terminal-column の子の order だけを入れ替え、入力まわり一式をタブの段とセッションの帯の
+   すぐ下へ置く。DOM は動かさない（ui-side.ts と同じ方針）。#display-stack の flex:1 が
+   残った高さを取るので、端末の行数・桁数は型の切替で変わらない。
+   並び: タブの段 → セッションの帯 → 入力まわり一式 → 畳んだ承認の帯とバナー → 端末 → ステータス行。
+   PC 幅だけに効かせる（スマホはキーボードが下から出るので常に下寄せ）。 */
+@media (min-width: 721px) {
+  body.layout-input-top #terminal-column > #unified-tab-bar { order: 0; }
+  body.layout-input-top #terminal-column > #session-strip { order: 1; }
+  body.layout-input-top #terminal-column > #input-bar-outer { order: 2; }
+  body.layout-input-top #terminal-column > #mobile-keyboard-panel { order: 3; } /* doxguard: allow panel */
+  body.layout-input-top #terminal-column > #approval-fold-band { order: 4; }
+  body.layout-input-top #terminal-column > #multi-question-banner { order: 5; }
+  body.layout-input-top #terminal-column > #stale-binary-banner { order: 6; }
+  body.layout-input-top #terminal-column > #approval-suppressed-banner { order: 7; }
+  body.layout-input-top #terminal-column > #display-stack { order: 8; }
+  body.layout-input-top #terminal-column > #token-statusbar { order: 9; }
+  /* 一式の下端が端末との境目になる。下寄せでは #input-bar / #attach-panel の border-top が doxguard: allow panel
+     境目を引いていたぶん、上寄せでは外枠の下辺に線を足す。 */
+  body.layout-input-top #terminal-column > #input-bar-outer { border-bottom: 1px solid var(--line); }
+  /* 進捗とボタンの段はセッションの帯のすぐ下に来る。下寄せの margin-bottom と対になる
+     上側の余白を足す。 */
+  body.layout-input-top #terminal-live-status { margin-top: 6px; }
+  /* 入力まわりから開く一覧は、一式が上にあるとき下向きに開く。 */
+  body.layout-input-top #slash-menu {
+    top: 100%;
+    bottom: auto;
+    border-top: none;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0 0 6px 6px;
+  }
+}
+
 #mobile-keyboard-panel {
   display: none;
   flex-shrink: 0;

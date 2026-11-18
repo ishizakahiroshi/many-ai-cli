@@ -16,6 +16,7 @@
 //  - 各ボタンの自由配置は input-icon-position.ts が個別に管理する。
 
 import { onUiSideChange, toolsOnLeft } from './ui-side.js';
+import { onLayoutPresetChange } from './layout-preset.js';
 import { initInputIconPositions, resetInputIconPositions, resetInputIconScales, refreshInputIconPositions } from './input-icon-position.js';
 
 const STORAGE_KEY = 'inputToolsOrder';
@@ -149,6 +150,9 @@ export function initInputToolsOrder(): void {
   applyOrder();
   initInputIconPositions();
   onUiSideChange(() => { applyOrder(); refreshInputIconPositions(); });
+  // 配置の型（下寄せ / 上寄せ）で帯が同じ大きさのまま場所だけ動くので、ResizeObserver では
+  // 拾えない。型が変わったら帯の座標からボタンを置き直す。
+  onLayoutPresetChange(() => { refreshInputIconPositions(); });
 
   // ▤ はラッパー（パレットを含む）ではなくボタン側を掴ませる。
   // ラッパーごと draggable にすると、パレット内の検索欄で文字を選択できなくなる。

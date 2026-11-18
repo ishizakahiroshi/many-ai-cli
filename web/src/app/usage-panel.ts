@@ -17,12 +17,13 @@ import {
   type UsageFreshness,
   type UsageWindowInput,
 } from './usage-limit.js';
-import { hasProviderCapability } from './provider-store.js';
+import { hasProviderCapability, loadProviderSummaries, type ProviderSummary } from './provider-store.js';
 import { fillProviderIconSlots, providerDisplayName, providerIconHtml } from './provider-icon.js';
 import { PROVIDER_ORDER_CHANGED_EVENT, sortByProviderOrder } from './provider-order.js';
+import { PROVIDERS_UPDATED_EVENT } from './providers-updated.js';
 import { activeSessionId, sessions } from './state.js';
-// settings.ts と循環するが、openSettingsSection は呼び出し時にしか使わない（読み込み時に読まない）。
-import { openSettingsSection } from './settings.js';
+// settings.ts と循環するが、openSettingsSection / getUsageLinkUrl は呼び出し時にしか使わない（読み込み時に読まない）。
+import { getUsageLinkUrl, openSettingsSection } from './settings.js';
 
 interface UsageWindow {
   used_percent?: number;
@@ -93,6 +94,10 @@ const AUTH_POLL_WINDOW_MS = 20000;
 const running = new Set<string>();
 const failures = new Map<string, string>();
 let panelRoot: HTMLElement | null = null;
+let providerListRoot: HTMLElement | null = null;
+let providerSummaries: ProviderSummary[] = [];
+let providersLoaded = false;
+let providerListLoading: Promise<void> | null = null;
 let panelVisible = false;
 let usageData: UsageResponse | null = null;
 let refreshInFlight: Promise<boolean> | null = null;
@@ -810,60 +815,65 @@ async function cancelProbe(key: string): Promise<void> {
   }
 }
 
-function bindUnavailableInfo(): void {
-  if (!panelRoot) return;
-  panelRoot.querySelectorAll<HTMLButtonElement>('.usage-info').forEach((button) => {
-    if (button.dataset.bound === '1') return;
-    button.dataset.bound = '1';
-    const bubble = button.parentElement?.querySelector<HTMLElement>('.usage-info-bubble');
-    if (!bubble) return;
-    button.setAttribute('aria-label', tx('usage_info_label', 'More information'));
-    const row = button.parentElement;
-    const setOpen = (open: boolean) => {
-      bubble.hidden = !open;
-      button.setAttribute('aria-expanded', String(open));
-    };
-    button.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setOpen(bubble.hidden === true);
-    });
-    button.addEventListener('pointerenter', () => setOpen(true));
-    button.addEventListener('pointerleave', () => setOpen(false));
-    button.addEventListener('focus', () => setOpen(true));
-    button.addEventListener('blur', () => setOpen(false));
-    row?.addEventListener('pointerleave', () => setOpen(false));
-  });
+// Usage の provider 行は /api/providers（「新しいセッション」と同じ供給元）から描き、
+// 並び順も provider-order.ts で共有する。index.html に provider id は書かないので、
+// 登録した custom provider（Devin CLI 等）もそのまま並ぶ。
+// 残量を CLI から取れる provider には data-usage-provider を付け、renderProfiles /
+// renderSkeleton が契約の残量行を直後へ挿す。取れない provider は公式ページへの
+// リンクだけ（「取得不可」バッジや説明ボタンは置かない）。
+// provider ではないリンク項目（ローカル実行の Ollama / LM Studio）は末尾に付ける。
+const EXTRA_USAGE_LINKS = ['ollama', 'lm-studio'];
+const USAGE_ITEM_EXT_ICON = '<svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>';
+
+function usageProviderRowHtml(id: string, name: string, usageCapable: boolean): string {
+  const icon = `<span class="usage-item-icon" data-provider-icon="${escapeHtml(id)}" aria-hidden="true"></span>`;
+  const label = `<span class="usage-item-name">${escapeHtml(name)}</span>`;
+  const url = getUsageLinkUrl(id);
+  const usageAttr = usageCapable ? ` data-usage-provider="${escapeHtml(id)}"` : '';
+  if (!url) {
+    return `<span class="usage-dropdown-item usage-dropdown-item--nolink"${usageAttr}>${icon}${label}</span>`;
+  }
+  return `<a class="usage-dropdown-item" data-usage-link-provider="${escapeHtml(id)}"${usageAttr} href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${icon}${label}${USAGE_ITEM_EXT_ICON}</a>`;
 }
 
-// applyProviderOrderToPanel は各カラムの中だけで行を provider の並び順（provider-order.ts・
-// 「新しいセッション」の一覧と共有）に揃える。カラムをまたいでは動かさない（左=契約の残量 /
-// 右=取得不可は意味の区分）。並び順に無いもの（Ollama 等）は元の順のまま後ろに付く。
-// 契約の残量の行は renderProfiles / renderSkeleton が直後に .usage-profile-list を挿すので、
-// それも一緒に動かす。ローカル実行（LM Studio）は見出しの後ろにあり対象外。
-function applyProviderOrderToPanel(): void {
-  if (!panelRoot) return;
-  for (const col of Array.from(panelRoot.querySelectorAll<HTMLElement>('.usage-dropdown-col'))) {
-    const units: { id: string; nodes: HTMLElement[] }[] = [];
-    for (const anchor of Array.from(col.querySelectorAll<HTMLElement>(':scope > [data-usage-provider]'))) {
-      const nodes = [anchor];
-      const next = anchor.nextElementSibling;
-      if (next instanceof HTMLElement && next.classList.contains('usage-profile-list')) nodes.push(next);
-      units.push({ id: anchor.dataset.usageProvider || '', nodes });
-    }
-    for (const row of Array.from(col.querySelectorAll<HTMLElement>(':scope > .usage-dropdown-unavailable-row'))) {
-      const link = row.querySelector<HTMLElement>('a[id^="usage-link-"]');
-      units.push({ id: (link?.id || '').replace(/^usage-link-/, ''), nodes: [row] });
-    }
-    if (units.length < 2) continue;
-    // 並べ替える行は各カラムで連続しているので、先頭の位置へ新しい順で詰め直す。
-    const marker = document.createComment('usage-order');
-    col.insertBefore(marker, units[0].nodes[0]);
-    for (const unit of sortByProviderOrder(units, (u) => u.id)) {
-      for (const node of unit.nodes) col.insertBefore(node, marker);
-    }
-    marker.remove();
+function renderProviderList(): void {
+  if (!providerListRoot) return;
+  const ordered = sortByProviderOrder(providerSummaries, (summary) => summary.id);
+  const providerIds = new Set(ordered.map((summary) => summary.id));
+  const rows = ordered.map((summary) => usageProviderRowHtml(
+    summary.id,
+    summary.display_name || providerDisplayName(summary.id),
+    hasProviderCapability(summary.id, 'usage'),
+  ));
+  for (const id of EXTRA_USAGE_LINKS) {
+    if (!providerIds.has(id)) rows.push(usageProviderRowHtml(id, providerDisplayName(id), false));
   }
+  providerListRoot.innerHTML = rows.join('');
+  fillProviderIconSlots(providerListRoot);
+  if (usageData) renderProfiles(usageData);
+}
+
+// /api/providers の取得は 1 回だけ。失敗したときは providersLoaded が立たず、
+// 次の runRefresh で再試行する（空のまま描き進めても renderProfiles は安全に何もしない）。
+function ensureProviderList(): Promise<void> {
+  if (providersLoaded) return Promise.resolve();
+  providerListLoading ??= loadProviderSummaries()
+    .then((response) => {
+      if (response) {
+        providerSummaries = response.providers;
+        providersLoaded = true;
+      }
+      renderProviderList();
+    })
+    .finally(() => { providerListLoading = null; });
+  return providerListLoading;
+}
+
+function onProvidersUpdated(): void {
+  providersLoaded = false;
+  void ensureProviderList().then(() => {
+    if (panelVisible) void refreshUsagePanel(); // doxguard: allow panel
+  });
 }
 
 function syncUsageVisibility(): void {
@@ -877,24 +887,18 @@ function syncUsageVisibility(): void {
 export function initUsagePanel(panel: HTMLElement): void {
   if (panelRoot === panel) return;
   panelRoot = panel;
+  providerListRoot = panel.querySelector<HTMLElement>('#usage-provider-list'); // doxguard: allow panel
   document.addEventListener('settings-view-changed', syncUsageVisibility);
-  // Usage 各行のアイコンは index.html に図形を複製せず、空の器へ provider-icon.ts が入れる。
-  fillProviderIconSlots(panel);
   inlineRoot = document.getElementById('session-inline-usage');
   document.addEventListener('session-usage-target-changed', onInlineTargetChanged);
   // settings.ts initializes the panel while modules are still evaluating.
   // Wait until state.ts has initialized activeSessionId before reading it.
   queueMicrotask(onInlineTargetChanged);
-  applyProviderOrderToPanel();
-  document.addEventListener(PROVIDER_ORDER_CHANGED_EVENT, applyProviderOrderToPanel);
-  bindUnavailableInfo();
-  document.addEventListener('pointerdown', (event) => {
-    if (!panelRoot || panelRoot.contains(event.target as Node)) return;
-    panelRoot.querySelectorAll<HTMLElement>('.usage-info-bubble:not([hidden])').forEach((bubble) => {
-      bubble.hidden = true;
-      bubble.parentElement?.querySelector('.usage-info')?.setAttribute('aria-expanded', 'false');
-    });
-  });
+  void ensureProviderList();
+  document.addEventListener(PROVIDER_ORDER_CHANGED_EVENT, renderProviderList);
+  document.addEventListener(PROVIDERS_UPDATED_EVENT, onProvidersUpdated);
+  // Usage Links 設定で URL を直したとき、リンク無しの行をリンク付きへ描き直す。
+  document.addEventListener('usage-links-changed', renderProviderList);
 }
 
 export async function refreshUsagePanel(forceAuth = false): Promise<boolean> {
@@ -907,7 +911,8 @@ async function runRefresh(forceAuth: boolean, fromPoll: boolean): Promise<boolea
     // A user-initiated open (or Retry) starts a fresh polling window.
     authPollDeadline = Date.now() + AUTH_POLL_WINDOW_MS;
     stopAuthPoll();
-    if (!usageData) renderSkeleton();
+    // スケルトンの器は provider 行なので、一覧が来てから載せる。
+    if (!usageData) void ensureProviderList().then(() => { if (!usageData) renderSkeleton(); });
   }
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
@@ -922,6 +927,8 @@ async function runRefresh(forceAuth: boolean, fromPoll: boolean): Promise<boolea
           if (profile.probe_state !== 'running') running.delete(key);
         }
       }
+      // profile 行は provider 行の直後へ挿すので、先に一覧を確定させる。
+      await ensureProviderList();
       renderProfiles(usageData);
       renderInlineUsage();
       scheduleAuthPoll();

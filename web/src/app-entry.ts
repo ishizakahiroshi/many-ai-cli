@@ -52,6 +52,7 @@ import { initSubscriptions } from './app/subscriptions.js';
 import { initTabBarOrder } from './app/tab-bar-order.js';
 import { initInputToolsOrder } from './app/input-tools-order.js';
 import { initUiSide } from './app/ui-side.js';
+import { initLayoutPreset } from './app/layout-preset.js';
 import { initSessionStrip } from './app/session-strip.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
@@ -87,6 +88,9 @@ initBugReportModal();
 initSubscriptions();
 // 統合タブバーのタブをドラッグ&ドロップで並べ替え（順序は localStorage 保存）
 initTabBarOrder();
+// 画面の配置の型（下寄せ / 上寄せ）を読み body のクラスへ反映（localStorage 保存）。
+// 入力欄のボタンは帯の位置から座標を決めるので、ボタンの初期化より先に型を反映しておく。
+initLayoutPreset();
 // 入力欄の下段ボタン列をドラッグ&ドロップで並べ替え（順序は localStorage 保存）
 initInputToolsOrder();
 // 操作系（カード列 / 入力欄ツール / ✕）の左右位置（localStorage 保存）

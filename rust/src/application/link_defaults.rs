@@ -246,7 +246,7 @@ fn fallback(install: bool) -> serde_json::Value {
     if install {
         serde_json::json!({})
     } else {
-        serde_json::json!({"claude":"https://claude.ai/settings/usage","codex":"https://chatgpt.com/codex/cloud/settings/analytics#usage","command-code":"https://commandcode.ai/usage","copilot":"https://github.com/settings/billing","cursor-agent":"https://cursor.com/dashboard","grok":"https://grok.com/?_s=usage","ollama":"https://ollama.com/settings","opencode":"https://opencode.ai/go"})
+        serde_json::json!({"claude":"https://claude.ai/settings/usage","codex":"https://chatgpt.com/codex/cloud/settings/analytics#usage","command-code":"https://commandcode.ai/usage","copilot":"https://github.com/settings/billing","cursor-agent":"https://cursor.com/dashboard","devin-cli":"https://app.devin.ai/","grok":"https://grok.com/?_s=usage","ollama":"https://ollama.com/settings","opencode":"https://opencode.ai/go"})
     }
 }
 #[cfg(test)]

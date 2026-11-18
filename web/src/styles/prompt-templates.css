@@ -40,6 +40,11 @@
 @media (min-width: 721px) {
   #prompt-template-palette:not([hidden]) { display: flex; flex-direction: column; max-height: min(70vh, 640px); }
   #prompt-template-list { flex: 1 1 auto; min-height: 0; align-content: start; }
+  /* 上寄せではボタンの下へ開く（配置の型は layout-preset.ts）。 */
+  body.layout-input-top #prompt-template-palette {
+    top: calc(100% + 7px);
+    bottom: auto;
+  }
 }
 @media (max-width: 720px) {
   #prompt-template-toggle { min-width: 44px; min-height: 44px; }

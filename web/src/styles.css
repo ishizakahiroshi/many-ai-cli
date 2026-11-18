@@ -419,74 +419,9 @@ header {
 .usage-item-icon { flex-shrink: 0; display: flex; align-items: center; width: 16px; height: 16px; }
 .usage-item-name { flex: 1; }
 .usage-item-ext  { flex-shrink: 0; opacity: 0.35; }
-.usage-dropdown-section-title {
-  padding: 8px 12px 4px;
-  font-size: var(--fs-2xs);
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  color: var(--muted-2);
-  border-top: 1px solid var(--line);
-}
-.usage-dropdown-unavailable-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-.usage-dropdown-unavailable-row .usage-dropdown-item { flex: 1; min-width: 0; }
-.usage-unavailable {
-  flex-shrink: 0;
-  margin-right: 4px;
-  font-size: var(--fs-2xs);
-  color: var(--muted-2);
-  white-space: nowrap;
-}
-.usage-info {
-  flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  margin-right: 9px;
-  padding: 0;
-  border: 1px solid var(--muted-2);
-  border-radius: 50%;
-  color: var(--muted-2);
-  background: transparent;
-  font-family: inherit;
-  font-size: var(--fs-2xs);
-  font-weight: 600;
-  line-height: 16px;
-  text-align: center;
-  cursor: help;
-}
-.usage-info:hover,
-.usage-info:focus-visible,
-.usage-info[aria-expanded="true"] {
-  color: var(--text);
-  border-color: var(--text);
-  outline: none;
-}
-.usage-info-bubble {
-  position: absolute;
-  z-index: 2;
-  /* Pin to the row inside the Settings scrolling pane;
-     a 300px bubble with right:8px was clipped on the left (「CLI の」が消える). */
-  left: 8px;
-  right: 8px;
-  bottom: calc(100% - 2px);
-  width: auto;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  background: var(--bg-elev);
-  box-shadow: 0 5px 14px rgba(0,0,0,0.35);
-  font-size: var(--fs-2xs);
-  line-height: 1.4;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  pointer-events: none;
-}
-.usage-info-bubble[hidden] { display: none; }
+/* リンク先が分からない provider は名前だけの行（ホバー色を付けずカーソルも既定）。 */
+.usage-dropdown-item--nolink { color: var(--text-soft, var(--muted)); cursor: default; }
+.usage-dropdown-item--nolink:hover { background: transparent; color: var(--text-soft, var(--muted)); }
 .usage-profile-list {
   margin: -2px 8px 5px 28px;
   border-left: 2px solid color-mix(in srgb, var(--line) 75%, transparent);
@@ -884,15 +819,6 @@ body:has(.git-lock-banner:not(.save-leftover-banner)) .save-leftover-banner { ri
 .label-rename-dialog-error[hidden] { display: none; }
 .label-rename-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 15px; }
 
-/* Usage columns follow their Settings pane width, not the whole viewport. */
-.usage-dropdown-columns {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
-  gap: 12px 16px;
-  align-items: start;
-}
-.usage-dropdown-col { min-width: 0; }
-.usage-dropdown-col > .usage-dropdown-section-title:first-child { border-top: 0; }
 @media (min-width: 900px) {
   /* 1 プロファイルのメーター群（5h/7d 等）を横並びにする。メーター行と直下の
      usage-meter-meta の対応が分からなくならないよう、セル単位は group ごと。
@@ -1750,6 +1676,13 @@ body:has(.git-lock-banner:not(.save-leftover-banner)) .save-leftover-banner { ri
   overflow: hidden;
 }
 #slash-picker[hidden] { display: none !important; }
+/* 上寄せでは入力まわりの下へ開く（配置の型は layout-preset.ts。PC 幅だけ）。 */
+@media (min-width: 721px) {
+  body.layout-input-top #slash-picker {
+    top: calc(100% + 4px);
+    bottom: auto;
+  }
+}
 .slash-picker-header {
   display: flex;
   align-items: center;

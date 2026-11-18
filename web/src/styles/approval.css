@@ -117,6 +117,34 @@
   body.approval-dock-right #action-bar::after { right: auto; left: 3px; }
 }
 
+/* ===== 上ドック（body.layout-input-top。型は layout-preset.ts の uiLayoutPreset）=====
+   上寄せ型で承認の出る側が既定（入力まわりと同じ側）のとき。下ドックの上下反転:
+   #display-stack の上端へ重ね、上へ --approval-dock-shift だけ出して、上へ移った
+   入力欄帯（#input-bar-outer）側へかぶせる。下げ幅の実測は下ドックと同じく
+   app/approval-dock.ts。「いつも下」(approval-dock-bottom) と右/左カラムでは効かない。
+   狭い幅とタッチ主体の画面では layout-preset.ts がクラス自体を付けない（下の
+   `(max-width: 720px), (pointer: coarse)` がバーをフロー配置へ戻す条件の裏返し）。
+   クラスが付いたままフロー配置になると、この top がそのまま効いてバーが上へずれる。 */
+@media (min-width: 721px) {
+  body.layout-input-top:not(.approval-dock-right):not(.approval-dock-left):not(.approval-dock-bottom) #action-bar {
+    top: calc(-1 * var(--approval-dock-shift, 0px));
+    bottom: auto;
+    border-top: none;
+    border-bottom: 1px solid var(--line);
+    /* 影はターミナル側（下）へ向ける。 */
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  }
+  /* 掴み帯とグリップはターミナル側＝バーの下端へ付け替える。 */
+  body.layout-input-top:not(.approval-dock-right):not(.approval-dock-left):not(.approval-dock-bottom) #action-bar::before {
+    top: auto;
+    bottom: 0;
+  }
+  body.layout-input-top:not(.approval-dock-right):not(.approval-dock-left):not(.approval-dock-bottom) #action-bar::after {
+    top: auto;
+    bottom: 2px;
+  }
+}
+
 /* P-03: compact, provider-neutral approval context. The command remains a
    single readable line; raw VT context is available only on demand. */
 .approval-summary-card {
