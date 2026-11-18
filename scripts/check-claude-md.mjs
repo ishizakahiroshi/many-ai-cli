@@ -13,11 +13,25 @@
 // 昇格（guide から CLAUDE.md へ移す）は制度として存在するのに、降格が存在しない。
 // 一方向のラチェットなので放っておくと必ず太る。本スクリプトが降格側の圧力になる。
 //
-// 検査するのは 3 つ。
+// 検査するのは 4 つ。
 //
 //   1. 全体の行数が予算内か
 //   2. 1 つの節が長すぎないか（長い本文は正本側に置き、ここは索引にする）
 //   3. 日付入りの「制定」節が正本の場所を名指ししているか
+//   4. 全体のバイト数が予算内か（2026-11-17 追加）
+//
+// 4 を足した理由（2026-11-17 実測）:
+//
+// 「全 AI セッションで全文がロードされる」は、常時読ませる量に上限のある AI CLI では
+// 成り立たない。Devin CLI は常時ルールを 1 ファイル 16,384 バイトで切り、全ファイルの
+// 合計が 32,768 バイトを超えると、後から読むファイルを丸ごと落として「必要なら読め」の
+// 1 行に置き換える。プロジェクトの CLAUDE.md は最後に読まれるので、落ちるのはこのファイル
+// になる。当時の本ファイルは 21,472 バイトあり、Devin には 1 文字も届いていなかった。
+// 行数の予算は通っていたので、行数だけでは守れない。
+//
+// 表を `CLAUDE/design-principles.md` へ移したのはこのため。`@` を展開する AI CLI には
+// CLAUDE.md の `@CLAUDE/design-principles.md` の行で今までどおり常時届き、展開しない
+// AI CLI は実装の前にその表を読む。
 //
 // 予算を超えたときの正しい直し方は「予算を上げる」ではない。次の順に考える。
 //
@@ -41,6 +55,9 @@ const target = join(repoRoot, 'CLAUDE.md');
 const MAX_LINES = 165;
 // 1 節あたりの行数上限。これを超える本文は正本側に置く。
 const MAX_SECTION_LINES = 26;
+// 全体のバイト数（UTF-8）の予算。Devin CLI が 1 ファイルを切る 16,384 バイトより小さく取り、
+// 利用者のグローバル指示・AGENTS.md と合わせても合計 32,768 バイトに収まる余地を残す。
+const MAX_BYTES = 15000;
 // 「正本を名指ししている」と認める書き方。パス・リンク・スクリプト名・テスト名。
 const CANONICAL_HINT =
   /(`[^`]*\.(md|go|ts|mjs|json|yaml|yml)`|\]\([^)]+\)|scripts\/|internal\/|web\/src\/|docs\/|Test[A-Z][A-Za-z0-9_]*)/;
@@ -53,6 +70,15 @@ if (lines.length > MAX_LINES) {
   problems.push(
     `CLAUDE.md が ${lines.length} 行で予算 ${MAX_LINES} 行を超えている（超過 ${lines.length - MAX_LINES} 行）。\n` +
       `    予算を上げて通すのは最後の手段。まず本スクリプト冒頭の a / b / c を試すこと。`,
+  );
+}
+
+const bytes = Buffer.byteLength(text, 'utf8');
+if (bytes > MAX_BYTES) {
+  problems.push(
+    `CLAUDE.md が ${bytes} バイトで予算 ${MAX_BYTES} バイトを超えている（超過 ${bytes - MAX_BYTES} バイト）。\n` +
+      `    常時読ませる量に上限のある AI CLI では、このファイルが丸ごと読まれなくなる。\n` +
+      `    予算を上げず、本文や長い表を正本側（CLAUDE/*.md など）へ移すこと。`,
   );
 }
 
@@ -95,7 +121,7 @@ if (problems.length > 0) {
 }
 
 console.log(
-  `OK: CLAUDE.md は ${lines.length}/${MAX_LINES} 行・節 ${sections.length} 件（最長 ${Math.max(
+  `OK: CLAUDE.md は ${lines.length}/${MAX_LINES} 行・${bytes}/${MAX_BYTES} バイト・節 ${sections.length} 件（最長 ${Math.max(
     ...sections.map((s) => s.lines.length + 1),
   )} 行 / 上限 ${MAX_SECTION_LINES} 行）`,
 );

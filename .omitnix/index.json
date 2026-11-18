@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "9b77e167d03ce0bbbdfb7faff7eafe315cf1f023",
+    "commit": "31c79610b4d010d3b3b3f4341f9a2047ca18bf08",
     "dirty": false,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2079,
+    "discovered": 2081,
     "analyzed": 1631,
     "unresolved": 15,
     "unknown": 0,
-    "unclaimed": 433,
+    "unclaimed": 435,
     "skipped_by_config": 0
   },
   "files": [
@@ -377,7 +377,23 @@
       "reason": "no adapter claims '.md'"
     },
     {
+      "path": "CLAUDE/design-principles.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
       "path": "CLAUDE/development.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "CLAUDE/history.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},

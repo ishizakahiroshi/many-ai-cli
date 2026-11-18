@@ -1,16 +1,8 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-11-03(火) 09:16:20 — 次のRust版をv0.10.0へ変更
-
-> 最終更新: 2026-10-23(金) 01:37:30 — v1.0.0で対象外にした公式Docker提供範囲の参照を追加
-> 2026-10-21(水) 09:03:00 — 「ビルドコマンドは make build が基本」の 1 行を削除（Go 版との言葉の整理が要らなくなり、Makefile の冒頭・手順書と食い違っていたため。手順は reference_rust-local-build.md）
-> 2026-10-19(月) 23:28:55 — 本線を Rust 版へ移し（develop）、Go 版を go/ に凍結したことに合わせて概要・構成・作業ルールを書き換えた
-> 2026-10-16(金) 11:56:03 — 利用者指定で見送り台帳 D-01〜D-13 と custom_providers の制限を全件撤廃し、判断基準を利用者の使いやすさに改めた
-> 2026-10-11(日) 20:36:31 — 共通UI部品・確認文言と機械検査の索引を追加
-> 2026-10-09(金) 19:36:22 — 全修正の普段のビルド元への反映を明文化
-> 2026-09-29(火) 21:14:45 — prompt-audit の指摘で、古くなった版数の段落を削り、サブコマンド表を現行の分岐に合わせ、`internal/` の列挙を索引への参照に替えた
-> 2026-09-28(月) 19:34:08 — 設計原則の索引「引き継ぎ看板と…」の行に、作業メモ（`memo_store.go`）に書かれたパスも `isPathMentionedInMemos` 経由で読み取り専用に開ける旨を追記（plan_memo-panel.md C4）
-> 2026-09-26(土) 01:08:47 — 引き継ぎメモの表示を、記録済みパスに対する明示的な Markdown プレビューとして設計原則の索引へ反映。索引化の経緯（2026-08-19）: 常時ロード分が 5 週間で 129 → 269 行に倍増したため「制定」節の本文を正本へ移した。再肥大は `scripts/check-claude-md.mjs` が CI で止める
+> 最終更新: 2026-11-17(火) 20:20:29 — v0.10.0 の公開後も「予定」のままだった記述と、切れていた参照 3 件を実物に合わせた
+> 2026-11-17(火) 17:09:36 — 設計原則の索引の表を `CLAUDE/design-principles.md` へ、過去の更新履歴を `CLAUDE/history.md` へ移した（理由と上限は `scripts/check-claude-md.mjs` の冒頭）
+> 2026-11-03(火) 09:16:20 — 次のRust版をv0.10.0へ変更（これより前は `CLAUDE/history.md`）
 
 > **このファイルは索引であって本文ではない。** 全 AI セッションで全文がロードされるので、本文を置くと全員のコンテキストを毎回消費する。詳細は各行が指す正本を読む。タスク別の詳細は `CLAUDE/*.md`。
 
@@ -24,7 +16,7 @@
 
 ## プロジェクト概要
 
-**開発方針（2026-10-09 利用者指定、2026-10-19 に本線を移行）:** 本線は Rust 版で、`develop` で開発し、次のRust版は v0.10.0 でリリースする予定。全ての修正は普段のビルド元への反映まで行う（`CLAUDE/development.md`）。Go 版のソースは `go/` に凍結してあり、ビルド・改修・追加調査・回帰確認は行わない（Rust のテストが固定基準として読むだけ）。
+**開発方針（2026-10-09 利用者指定、2026-10-19 に本線を移行）:** 本線は Rust 版で、`develop` で開発する。v0.10.0（2026-11-16 公開）から Rust 版を配布している。全ての修正は普段のビルド元への反映まで行う（`CLAUDE/development.md`）。Go 版のソースは `go/` に凍結してあり、ビルド・改修・追加調査・回帰確認は行わない（Rust のテストが固定基準として読むだけ）。
 
 **many-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI など。対応一覧は下の用語表の Provider 行）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。Rust の実行ファイル 2 本（Hub 常駐 + ラッパー機能の `many-ai-cli`、ランチャーの `many-ai-cli-launcher`）+ ブラウザ UI（xterm.js / TypeScript）。
 
@@ -75,29 +67,13 @@ docs/local/        設計書・plan 等（非公開）
 
 ## 設計原則の索引（本文は正本にある）
 
-事故から生まれた設計ルール。**本文はここに書かず、破る人が必ず開く場所に置いてある。** 機械検査があるものは、それが最終的な歯止め。`go/internal/` のパスと `Test...` は凍結した Go 版の正本で、Rust 版の対応箇所への付け替えは [pending](docs/local/pending_rust-design-index-remap.md) にある（ルール自体は Rust 版にもそのまま効く）。
+事故から生まれた設計ルール。**本文はここに書かず、破る人が必ず開く場所に置いてある。** 機械検査があるものは、それが最終的な歯止め。表は [`CLAUDE/design-principles.md`](CLAUDE/design-principles.md) にある（承認・サブスクリプション・利用者のファイルへの書き込み・観測コード・版数・`resources/`・端末と画面・relay・サイドバー・引き継ぎ看板・残量 の 17 行）。
 
-| ルール | 正本（本文はここ） | 機械検査 |
-|---|---|---|
-| 承認の同一性は 1 本（`candidateKey` + `sourceEpoch`）だけ。誤表示を踏んでも抑止を足さない | `go/internal/hub/approval_identity.go` / `web/src/app/approval-answered.ts` | `TestApprovalSuppressionStateIsSingleSource` |
-| 承認の表示は Hub が持つ保留中の記録を描くだけ。画面は端末の文字から承認を作らず、「保留中」も記録からだけ出す。承認マーカーの供給元はセッションに 1 つ（claude / codex は CLI のトランスクリプト、他は VT ミラー） | `go/internal/hub/approval_record.go` の冒頭 / `go/internal/hub/approval_marker_transcript.go` | `scripts/check-approval-display-source.mjs`（Validate CI） / `go/internal/hub/approval_display_guard_test.go` / `TestReplayApprovalSkipsVTMarkerWhenTranscriptIsSource` |
-| 複数サブスクリプションは設定ディレクトリを env で切るだけ。token を持たない | `go/internal/subscription/adapter.go` のパッケージ doc | `TestLiveSessionAuthIsNeverSwapped` ほか 2 件 |
-| auto 選択は spawn 時の round-robin だけ。残量を見て自動で別契約へ乗り換えない | `go/internal/hub/subscription.go` の `pickAutoSubscription` 冒頭 | `TestAutoSubscriptionNeverConsultsUsage` |
-| 利用者のファイルへ書く機能は「次回起動時の回収」まで設計する | `go/internal/doctor/residue.go` の冒頭 | `many-ai-cli doctor` の置き去り検査 / `scripts/check-approval-rules-residue.mjs`（commit 混入） |
-| 調査用の観測コードは同じコミットで `instrumentation.json` へ登録し、リリース成果物には入れない（build tag オプトイン＋成果物検査） | `scripts/check-instrumentation.mjs` の冒頭 / `web/src/debug/probe.ts` / `docs/local/archive/v0.8.x/plan_instrumentation-probe-lifecycle.md` | `scripts/check-instrumentation.mjs`（Validate CI） / `scripts/check-artifact-clean.mjs` |
-| 版数を手で直す場所は無い（タグが単一ソース。古いままが正常） | `scripts/check-version-sources.mjs` の冒頭 | 同スクリプト（Validate CI） |
-| `resources/` は `main` へ push した時点で全ユーザーへ live 配信される | [`resources/README.md`](resources/README.md) | `scripts/check-slash-commands.mjs` |
-| profile へ持ち込む設定は additive のみ。credential は運ばず、書くのは自分のツリーの中だけ | `go/internal/subscription/seed.go` のパッケージ doc | `TestSeedIsAdditiveOnly` / `TestSeedNeverCarriesCredentials` |
-| 本ファイルを索引のまま保つ（本文を書き戻さない） | `scripts/check-claude-md.mjs` の冒頭 | 同スクリプト（Validate CI） |
-| 代替画面を CLI が全面管理している端末へこちらのテキストを差し込まない（消せない残骸になる）／マーカーは端末の折り返しで分断される前提で照合する（連続バイト完全一致にしない）／端末出力を溜めて捨てる状態機械を置かない（再描画フレームに CLOSE が描かれないことがある） | `web/src/app/hub-marker-filter.ts` の案 H・案 I・案 J | `hub-marker-filter-fixtures.ts` の案 H 5 件・案 I 8 件・案 J 6 件 |
-| 全画面オーバーレイには wheel 除外クラス `.aac-wheel-overlay` を付ける（端末に重なるだけのポップオーバーは `data-wheel-native`） | `web/src/app/terminal.ts` の `isModalOverlayOpen()` | `scripts/check-wheel-overlays.mjs`（Validate CI） |
-| 画面の JS を読み込んだ瞬間に、循環 import の相手の変数を同期で読まない（TDZ で評価が止まり「読み込み中...」のまま固まる。遅らせるなら `queueMicrotask`）。止まったときは黙らず失敗の帯を出す | `web/src/app/boot-guard.ts` の冒頭 / `scripts/check-web-module-init.mjs` の冒頭 | `scripts/check-web-module-init.mjs`（Validate CI） / `web/tests/boot-guard.test.ts` |
-| relay は Hub の状態機械で回し、AI conductor に判断させない。利用者ブランチへは触らない | `go/internal/hub/relay.go` / `go/internal/hub/relay_worktree.go` | `TestRelay_*`（`go/internal/hub/`） |
-| サイドバーの配置は 1 本の木から導く（兄弟順と折りたたみ以外でノードが器を越えない） | `web/src/app/sidebar-tree.ts` | `sidebar-tree-fixtures.ts` |
-| 引き継ぎ看板とサブエージェントの木は、入れてよいものだけを型で受け、それ以外は入れる口を作らない。メモ本文は Record に入れず、記録済みパスを利用者が明示して開いた場合だけ Hub の読み取り専用 Markdown ビューアが表示できる。会話ログは引き続き後継のツールだけが開く。利用者の作業メモ（`go/internal/hub/memo_store.go`）に書かれたパスも、論理リモートからは `isPathMentionedInMemos`（`files_content.go`）経由で同様に読み取り専用で開ける（秘密 denylist は変わらず先に適用） | `go/internal/handoff/handoff.go` の冒頭コメント / `go/internal/proto/messages.go` の `SubagentNode` / `go/internal/hub/files_content.go` の `isPathMentionedInMemos` | `go/internal/handoff/handoff_test.go` の allowlist フィールド固定テスト / `TestSubagentNodeFieldsAreTheAllowlist` / `TestHandleFilesContent_MemoMentionedOutsidePathReadOnly` ほか `files_content_test.go` の Memo 系 |
-| 残量ソースは provider 直書きの switch/slice ではなく 1 本の表で持つ。問い合わせて取る経路は作らない（`ReadUsage` を Adapter に足さない） | `go/internal/subscription/usage_source.go` | `go/internal/subscription/usage_source_test.go` |
+**実装・修正・設計の提案に入る前に、必ずその表を読む。** `@` を展開する AI CLI には、次の行で常時届く。
 
-**新しいルールを足したくなったら、まずこの表に 1 行足せる形にできないかを考える。** できないもの（機械検査も、決まったファイルも無いもの）だけが本文を持ってよい。
+@CLAUDE/design-principles.md
+
+**新しいルールを足したくなったら、まずその表に 1 行足せる形にできないかを考える。** できないもの（機械検査も、決まったファイルも無いもの）だけが本文を持ってよい。
 
 ## 機能の採否は利用者の使いやすさで決める（2026-10-16 改定）
 
@@ -108,11 +84,11 @@ docs/local/        設計書・plan 等（非公開）
 - 規約上、利用者のアカウントが止められるおそれがある連携（旧 D-01 Gemini・Antigravity / D-07 NVIDIA NIM / D-09 ChatGPT Web の自動操作など）は、作る前に現行の規約を一次資料で確かめる
 - 公開版に作者の個人パス・秘密を入れない（旧 D-08）。Hub token を画面・ログ・会話へ出さない
 
-上の「設計原則の索引」は不具合の再発を止める実装上の約束で、撤廃の対象外。進行中の作業は [`docs/local/plan_user-first-config-and-providers.md`](docs/local/plan_user-first-config-and-providers.md)。
+上の「設計原則の索引」は不具合の再発を止める実装上の約束で、撤廃の対象外。
 
 ## AI 作業共通ルール
 
-ビルド・コミット禁止、secrets-scan 責務、plan/bugfix/pending md の作成ルール等は、各利用者のグローバル AI 設定に従う（作者環境の例: `~/.claude/CLAUDE.md` と `~/.claude/guides/`）。本ファイルはプロジェクト固有ルールだけを扱う。
+ビルドと Git 操作の承認範囲、secrets-scan 責務、plan/bugfix/pending md の作成ルール等は、各利用者のグローバル AI 設定に従う（作者環境の例: `~/.claude/CLAUDE.md` と `~/.claude/guides/`）。本ファイルはプロジェクト固有ルールだけを扱う。
 
 - ビルドだけでなく **実行・Hub 起動・ブラウザリロードも全てユーザーが行う**（`cargo run` / `serve` / `stop` / 再起動 / ブラウザリロード等）
 - **AI がコードを編集したら、ビルドせず構文だけ確認してよい**（Rust は `cargo +1.90.0 fmt --manifest-path rust/Cargo.toml -- --check`、TS は **`web` ディレクトリで** `bun run check`。リポジトリ直下に `package.json` は無く、直下で叩くと `Script not found` になる）。ただし**構文が通ることは動作の証明ではない**。AI 側で保証できるのは「parse が通る」までと明示する
@@ -122,7 +98,7 @@ docs/local/        設計書・plan 等（非公開）
 
 - 静的確認、ローカルテスト、CI 実行、release artifact、実機確認は**別の証拠**として報告する。未実行の CI・artifact・実機確認を完了扱いにしない
 - Agent Chat の cursor 変更は parser 単体で完了扱いにせず、caller の offset 採用と次 poll の再開まで追跡・検証する
-- `go:embed` 対象の Gitignored runtime は clean release job で取得・検証・artifact 化する。ローカルにファイルがあることを release の証拠にしない
+- リリースに同梱する資材は clean release job で取得・検証・artifact 化する。ローカルにファイルがあることを release の証拠にしない
 - release workflow の手順・SHA・secret scope は [`.github/workflows/release.yml`](.github/workflows/release.yml) が正本。**ここに手順を複製しない**
 
 ## 詳細ガイド（タスク種別ベース）
@@ -133,7 +109,7 @@ docs/local/        設計書・plan 等（非公開）
 |---|---|
 | 調査・読み取り・質問応答 | （本ファイルのみ。`CLAUDE/*` は読まない） |
 | Rust移行の看板・現在地・次の1個・再開 | [マスター計画](docs/local/plan_rust-migration-execution.md#看板の現在地) → [台帳・看板運用](docs/local/reference/manual_rust-migration-board.md)（ローカル資料） |
-| 実装・コーディング（Rust / TypeScript）、共通UI部品・確認文言 | `CLAUDE/coding.md` / [docs/ui-components.md](docs/ui-components.md) / `scripts/check-ui-components.mjs`（Validate CI） |
+| 実装・コーディング（Rust / TypeScript）、共通UI部品・確認文言 | `CLAUDE/design-principles.md` / `CLAUDE/coding.md` / [docs/ui-components.md](docs/ui-components.md) / `scripts/check-ui-components.mjs`（Validate CI） |
 | Rust版のローカルビルド・起動・停止（手元の手順） | [reference_rust-local-build.md](docs/local/reference/reference_rust-local-build.md)（ローカルに存在する場合） |
 | ビルド・配布・クロスコンパイル | `CLAUDE/deployment.md` |
 | 全修正のビルド元への反映・context分割・docs命名・AI作業モデル・plan自走/停止条件 | `CLAUDE/development.md` |
@@ -148,7 +124,7 @@ docs/local/        設計書・plan 等（非公開）
 |------|------|
 | **どのファイルが何をして、どのテーブルを読み書きするか**（探す前にここ） | `.omitnix/index.json`。全ファイルの索引とテーブル逆引き。**解析できなかったファイルも名前と理由付きで載る**ので「索引に無い」と「読めなかった」を取り違えない。参照 0 件は「未使用」ではない。**`generated.commit` が HEAD と違えば索引はその commit 時点のもの**なので、古いまま断定せず `omitnix` で作り直すか、古いことを添えて答える |
 | 設計書 v0.3.x（履歴） | [docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md) |
-| 設計書 v0.2.0 / v1（履歴） | [docs/local/archive/v0.2.2/v0.2.x-any-ai-cli-design.md](docs/local/archive/v0.2.2/v0.2.x-any-ai-cli-design.md) / [docs/local/archive/v0.1.3/v0.1.x-any-ai-cli-design.md](docs/local/archive/v0.1.3/v0.1.x-any-ai-cli-design.md) |
+| 設計書 v0.2.0 / v1（履歴） | [docs/local/archive/v0.2.x/v0.2.x-any-ai-cli-design.md](docs/local/archive/v0.2.x/v0.2.x-any-ai-cli-design.md) / [docs/local/archive/v0.1.x/v0.1.x-any-ai-cli-design.md](docs/local/archive/v0.1.x/v0.1.x-any-ai-cli-design.md) |
 | Codex 用補足 | [AGENTS.md](AGENTS.md)（ローカル補足があれば `AGENTS.local.md`） |
 | Gemini 用補足 | [GEMINI.md](GEMINI.md)（**wrap 対象外**。本リポジトリで Gemini CLI を開発補助に使う場合の手引き） |
 
