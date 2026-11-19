@@ -604,7 +604,7 @@ impl CliUpdates {
             .map(|r| r.version_line.clone())
             .unwrap_or_default();
         let payload = format!(
-            "provider: {id}\nargv: {}\nresolved_executable: {}\nstarted_at: {}\nfinished_at: {}\nexit_code: {}\ntimed_out: {}\n{}version_before: {}\nversion_after: {}\n--- output ---\n{text}",
+            "provider: {id}\nargv: {}\nresolved_executable: {}\nstarted_at: {}\nfinished_at: {}\nexit_code: {}\ntimed_out: {}\n{}{}version_before: {}\nversion_after: {}\n--- output ---\n{text}",
             argv.join(" "),
             work.plan.command.process.executable.display(),
             status.started_at,
