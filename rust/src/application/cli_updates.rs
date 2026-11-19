@@ -76,6 +76,31 @@ fn update_environment(
         .map(|(key, value)| (key.into(), Some(value.into())))
         .collect()
 }
+/// The Codex standalone installer moves `<codex home>/packages/standalone/current`
+/// after resolving where it points today. A link whose target is gone (for
+/// example left behind when the Hub's home directory moved) stops it with
+/// "The system cannot find the path specified" before anything is replaced.
+/// Returns that link when the update environment would reach a dangling one.
+fn dangling_codex_current(
+    env: &BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>>,
+) -> Option<PathBuf> {
+    let get = |name: &str| {
+        env.iter()
+            .find(|(key, _)| key.to_string_lossy().eq_ignore_ascii_case(name))
+            .and_then(|(_, value)| value.as_ref())
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+    };
+    let home = get("CODEX_HOME").or_else(|| {
+        get("USERPROFILE")
+            .or_else(|| get("HOME"))
+            .map(|h| h.join(".codex"))
+    })?;
+    let current = home.join("packages").join("standalone").join("current");
+    (std::fs::symlink_metadata(&current).is_ok()
+        && matches!(std::fs::metadata(&current), Err(e) if e.kind() == io::ErrorKind::NotFound))
+    .then_some(current)
+}
 fn normalize_process(
     plan: &crate::process::ProcessPlan,
     platform: crate::process::execpath::Platform,
@@ -507,6 +532,9 @@ impl CliUpdates {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .insert(id.clone(), status.clone());
+        let dangling = (id == "codex")
+            .then(|| dangling_codex_current(&work.plan.command.process.env))
+            .flatten();
         let before = tokio::select! {_=cancel.cancelled()=>None,result=self.dependencies.versions.check_one(&id,&work.definition)=>result.ok()};
         let output = if cancel.is_cancelled() {
             Ok(ProcessOutput {
@@ -587,6 +615,13 @@ impl CliUpdates {
                 .as_ref()
                 .err()
                 .map(|e| format!("start_error: {e}\n"))
+                .unwrap_or_default(),
+            dangling
+                .map(|path| format!(
+                    "warning: the link {} points to a missing folder; the installer cannot replace it. Remove or re-point it, then update again.
+",
+                    path.display()
+                ))
                 .unwrap_or_default(),
             status.version_before,
             status.version_after

@@ -682,3 +682,39 @@ fn update_environment_drops_psmodulepath_and_keeps_the_rest() {
         Some(&Some("a=b".into()))
     );
 }
+
+#[test]
+fn dangling_codex_current_is_reported_only_for_a_broken_link() {
+    let dir = tempfile::tempdir().unwrap();
+    let standalone = dir
+        .path()
+        .join(".codex")
+        .join("packages")
+        .join("standalone");
+    std::fs::create_dir_all(&standalone).unwrap();
+    let env = |home: &std::path::Path| {
+        BTreeMap::from([(
+            std::ffi::OsString::from("USERPROFILE"),
+            Some(home.as_os_str().to_owned()),
+        )])
+    };
+    assert_eq!(dangling_codex_current(&env(dir.path())), None);
+    let target = dir.path().join("gone");
+    let link = standalone.join("current");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    #[cfg(windows)]
+    {
+        std::fs::create_dir(&target).unwrap();
+        let status = std::process::Command::new("cmd")
+            .args(["/c", "mklink", "/J"])
+            .arg(&link)
+            .arg(&target)
+            .output()
+            .unwrap();
+        assert!(status.status.success());
+        assert_eq!(dangling_codex_current(&env(dir.path())), None);
+        std::fs::remove_dir(&target).unwrap();
+    }
+    assert_eq!(dangling_codex_current(&env(dir.path())), Some(link));
+}
