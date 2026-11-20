@@ -1,5 +1,6 @@
 import { openSessionListMoveDialog, sessionListMoveLabel, sessionListCanMove, wireSessionListMenu, restoreSessionListFocus, sessionListCardElement, isRestoringSessionListView, rememberSelectedSessionListView } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
+import { quickCommandLabelStorageKey } from './user-prefs.js';
 import { t } from '../i18n.js';
 import { confirmationLabels, type ConfirmationAction } from './confirmation-labels.js';
 import { uiButtonClass, uiIconHtml, uiModalClass } from './ui-components.js';
@@ -966,6 +967,34 @@ export function quickCommandLabel(cmd) {
   return chars.slice(0, QUICK_CMD_LABEL_LEN).join('') + '…';
 }
 
+// ボタンに出すラベル（任意）の最大文字数。コードポイント単位（絵文字 1 個 = 1 文字）。
+export const QUICK_CMD_CUSTOM_LABEL_MAXLEN = 12;
+
+// ラベルの入力を 1 行・制御文字なし・最大長に整える。空なら ''（= 命令の先頭を省略して出す）。
+export function sanitizeQuickCommandLabel(label: unknown): string {
+  if (typeof label !== 'string') return '';
+  const cleaned = label
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/[\x00-\x1f\x7f]/g, '')
+    .trim();
+  return [...cleaned].slice(0, QUICK_CMD_CUSTOM_LABEL_MAXLEN).join('');
+}
+
+// 設定したラベル。無ければ ''。
+export function getQuickCommandLabel(slot: number): string {
+  if (!quickCommandButtonId(slot)) return '';
+  try {
+    return sanitizeQuickCommandLabel(localStorage.getItem(quickCommandLabelStorageKey(slot)));
+  } catch (_) {
+    return '';
+  }
+}
+
+// ボタンに実際に出す文字。ラベルがあればそれ、無ければ命令の先頭を省略したもの。
+export function quickCommandButtonText(slot: number): string {
+  return getQuickCommandLabel(slot) || quickCommandLabel(getQuickCommand(slot));
+}
+
 export function getQuickCommand(slot) {
   // 未設定(null)は既定値（無ければ空欄）。空文字は「ユーザーが意図的に空にした」
   // 未登録スロットを意味するため、その場合は既定値へ戻さず空のままにする。
@@ -1016,7 +1045,15 @@ export function setQuickCommandVisible(slot: number, visible: boolean): void {
 export function deleteQuickCommand(slot: number): void {
   if (!quickCommandButtonId(slot)) return;
   setUserPref(`quick_cmds.cmd${slot}`, '');
+  setUserPref(`quick_cmds.label${slot}`, '');
   setUserPref(`quick_cmds.show${slot}`, true);
+  refreshQuickCommandButtons();
+}
+
+/** 設定画面の入力欄からのラベル変更。空にすると命令の先頭を出す表示へ戻る。 */
+export function setQuickCommandLabel(slot: number, label: string): void {
+  if (!quickCommandButtonId(slot)) return;
+  setUserPref(`quick_cmds.label${slot}`, sanitizeQuickCommandLabel(label));
   refreshQuickCommandButtons();
 }
 
@@ -1050,6 +1087,16 @@ export function editQuickCommand(slot: number): void {
   field.value = getQuickCommand(slot);
   field.setAttribute('list', 'quick-cmd-presets');
   label.append(field);
+  const labelRow = document.createElement('label');
+  labelRow.className = 'ui-modal__body quick-command-editor-label';
+  labelRow.textContent = t('settings_quick_cmd_button_label');
+  const labelField = document.createElement('input');
+  labelField.type = 'text';
+  labelField.className = 'ui-input quick-command-editor-input';
+  labelField.maxLength = QUICK_CMD_CUSTOM_LABEL_MAXLEN * 2; // サロゲートペアの絵文字も入るよう余裕を持たせ、切り詰めは sanitize で行う
+  labelField.value = getQuickCommandLabel(slot);
+  labelField.placeholder = t('settings_quick_cmd_button_label_placeholder');
+  labelRow.append(labelField);
   const actions = document.createElement('div');
   actions.className = 'ui-modal__actions';
   const cancel = document.createElement('button');
@@ -1062,12 +1109,13 @@ export function editQuickCommand(slot: number): void {
   submit.className = uiButtonClass('primary');
   submit.textContent = t('template_save');
   actions.append(cancel, submit);
-  form.append(heading, label, actions);
+  form.append(heading, label, labelRow, actions);
   dialog.append(form);
   form.addEventListener('submit', event => {
     event.preventDefault();
     const value = sanitizeQuickCommand(field.value, '');
     setUserPref(`quick_cmds.cmd${slot}`, value);
+    setUserPref(`quick_cmds.label${slot}`, value === '' ? '' : sanitizeQuickCommandLabel(labelField.value));
     // 追加ボタンから開いた空きスロットは、保存した時点で表示状態も「表示」にそろえる。
     if (value !== '' && !getQuickCommandVisible(slot)) setUserPref(`quick_cmds.show${slot}`, true);
     refreshQuickCommandButtons();
@@ -1099,7 +1147,7 @@ export function refreshQuickCommandButtons() {
     const btn = document.getElementById(QUICK_CMD_BTN_IDS[slot]);
     if (!btn) continue;
     const cmd = getQuickCommand(slot);
-    btn.textContent = quickCommandLabel(cmd);
+    btn.textContent = quickCommandButtonText(slot);
     btn.dataset.tooltip = quickCommandTooltip(cmd);
     // 表示トグル ON かつコマンドが空でないときだけボタンを出す。
     btn.hidden = !(getQuickCommandVisible(slot) && cmd !== '');

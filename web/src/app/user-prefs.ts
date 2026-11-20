@@ -60,6 +60,11 @@ export const STORAGE_QUICK_CMD_7_SHOW_KEY     = 'ai_cli_hub_quick_cmd_7_show';
 export const STORAGE_QUICK_CMD_8_SHOW_KEY     = 'ai_cli_hub_quick_cmd_8_show';
 export const STORAGE_QUICK_CMD_9_SHOW_KEY     = 'ai_cli_hub_quick_cmd_9_show';
 export const STORAGE_QUICK_CMD_10_SHOW_KEY    = 'ai_cli_hub_quick_cmd_10_show';
+// クイックコマンドのボタンに出すラベル（任意。空なら命令の先頭を省略して出す）。
+// スロット 1〜10 ぶんを、下の同期表へ同じ形で載せる。
+export function quickCommandLabelStorageKey(slot: number): string {
+  return `ai_cli_hub_quick_cmd_${slot}_label`;
+}
 export const STORAGE_TEMPLATES_KEY            = 'ai_cli_hub_prompt_templates';
 // テンプレートを選んだときの挙動: 1 = 即時送信 / 0（既定）= 入力欄へ反映のみ。
 export const STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY = 'ai_cli_hub_template_send_immediate';
@@ -335,6 +340,9 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'display.live_status_dark_fg':  [STORAGE_LIVE_STATUS_DARK_FG_KEY,  String],
   'display.custom_themes':     [STORAGE_CUSTOM_THEMES_KEY,         JSON.stringify],
 };
+for (let slot = 1; slot <= 10; slot++) {
+  _USER_PREFS_PATH_TO_LS[`quick_cmds.label${slot}`] = [quickCommandLabelStorageKey(slot), String];
+}
 // Voice engine selection is intentionally absent from server-synced user prefs.
 // It must stay device-local so each device keeps its own on/off setting.
 
@@ -374,6 +382,8 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'display.live_status_dark_bg',
   'display.live_status_dark_fg',
 ]);
+// ラベルも数字だけ（例: 1）が数値に化けないよう文字列として扱う。
+for (let slot = 1; slot <= 10; slot++) _USER_PREFS_STRING_PATHS.add(`quick_cmds.label${slot}`);
 export const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
   'group_order',
   'project_favorites',

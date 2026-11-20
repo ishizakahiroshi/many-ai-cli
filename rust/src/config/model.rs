@@ -203,6 +203,28 @@ pub struct UserPrefsQuickCmds {
     pub show9: Option<bool>,
     #[serde(rename = "show10")]
     pub show10: Option<bool>,
+    // ボタンに出すラベル（任意）。空なら命令の先頭を省略して出す。Rust 版で足した枠で、
+    // Go 版の golden には無い。空のままなら出力に現れない。
+    #[serde(rename = "label1")]
+    pub label1: String,
+    #[serde(rename = "label2")]
+    pub label2: String,
+    #[serde(rename = "label3")]
+    pub label3: String,
+    #[serde(rename = "label4")]
+    pub label4: String,
+    #[serde(rename = "label5")]
+    pub label5: String,
+    #[serde(rename = "label6")]
+    pub label6: String,
+    #[serde(rename = "label7")]
+    pub label7: String,
+    #[serde(rename = "label8")]
+    pub label8: String,
+    #[serde(rename = "label9")]
+    pub label9: String,
+    #[serde(rename = "label10")]
+    pub label10: String,
 }
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize, Debug)]
 #[serde(default)]
@@ -1197,6 +1219,76 @@ pub(super) fn schema(kind: &str) -> &'static [Field] {
                 yaml: "show10",
                 json: "show10",
                 kind: "*bool",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "label1",
+                json: "label1",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "label2",
+                json: "label2",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "label3",
+                json: "label3",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "label4",
+                json: "label4",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "label5",
+                json: "label5",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "label6",
+                json: "label6",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "label7",
+                json: "label7",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "label8",
+                json: "label8",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "label9",
+                json: "label9",
+                kind: "string",
+                yomit: true,
+                jomit: true,
+            },
+            Field {
+                yaml: "label10",
+                json: "label10",
+                kind: "string",
                 yomit: true,
                 jomit: true,
             },

@@ -12,6 +12,12 @@ Release artifacts are published at
 
 ### Added
 
+- **Quick command buttons can show a custom label.** Each quick command slot
+  takes an optional short label (up to 12 characters, counting emoji as one)
+  that is shown on the button instead of the truncated command. The label can
+  be set in the quick-command settings list and in the edit dialog, and the
+  right-click menu shows it next to the command so you can tell which button it
+  is. Leaving it blank keeps the truncated command, as before.
 - **A registered AI CLI can receive the approval rules.** A provider definition
   that sets `capabilities.agents_md_instructions` to `true` (for a CLI that
   reads the project's `AGENTS.md` as always-on rules, such as Devin CLI) gets

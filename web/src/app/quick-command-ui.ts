@@ -6,8 +6,9 @@
 import { t } from '../i18n.js';
 import { getDockedBandRect, getInputIconOrder } from './input-icon-position.js';
 import {
-  QUICK_CMD_SLOTS, deleteQuickCommand, editQuickCommand, firstFreeQuickSlot, getQuickCommand,
-  getQuickCommandVisible, quickCommandButtonId, registeredQuickSlots, setQuickCommandText,
+  QUICK_CMD_CUSTOM_LABEL_MAXLEN, QUICK_CMD_SLOTS, deleteQuickCommand, editQuickCommand,
+  firstFreeQuickSlot, getQuickCommand, getQuickCommandLabel, getQuickCommandVisible,
+  quickCommandButtonId, registeredQuickSlots, setQuickCommandLabel, setQuickCommandText,
   setQuickCommandVisible,
 } from './settings.js';
 import { uiButtonClass, uiIconHtml } from './ui-components.js';
@@ -84,7 +85,9 @@ function renderMenu(menu: HTMLDivElement): void {
     mark.textContent = visible ? '✓' : '';
     const text = document.createElement('span');
     text.className = 'ctx-label quick-cmd-menu-text';
-    text.textContent = cmd;
+    // ラベルを付けたものは「ラベル  命令」で出し、どのボタンか分かるようにする。
+    const buttonLabel = getQuickCommandLabel(slot);
+    text.textContent = buttonLabel ? `${buttonLabel}　${cmd}` : cmd;
     toggle.append(mark, text);
     // 表示の切り替えでは一覧を閉じない（続けて何個か切り替えられるように）。
     toggle.addEventListener('click', () => setQuickCommandVisible(slot, !getQuickCommandVisible(slot)));
@@ -182,6 +185,20 @@ function renderSettingsList(): void {
     showText.textContent = t('settings_quick_cmd_show_short');
     show.append(check, showText);
 
+    const labelInput = document.createElement('input');
+    labelInput.type = 'text';
+    labelInput.className = 'ui-input settings-input-text quick-cmd-label-input';
+    labelInput.maxLength = QUICK_CMD_CUSTOM_LABEL_MAXLEN * 2; // 絵文字（サロゲートペア）も入るよう余裕を持たせる。切り詰めは保存側で行う
+    labelInput.autocomplete = 'off';
+    labelInput.placeholder = t('settings_quick_cmd_button_label_short');
+    labelInput.value = getQuickCommandLabel(slot);
+    labelInput.setAttribute('aria-label', t('settings_quick_cmd_button_label'));
+    labelInput.dataset.tooltip = t('settings_quick_cmd_button_label_placeholder');
+    labelInput.addEventListener('change', () => {
+      setQuickCommandLabel(slot, labelInput.value);
+      labelInput.value = getQuickCommandLabel(slot);
+    });
+
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'ui-input settings-input-text quick-cmd-input';
@@ -203,7 +220,7 @@ function renderSettingsList(): void {
       }
     });
 
-    row.append(show, input, iconButton('delete', t('quick_cmd_delete'), () => deleteQuickCommand(slot)));
+    row.append(show, labelInput, input, iconButton('delete', t('quick_cmd_delete'), () => deleteQuickCommand(slot)));
     host.append(row);
   }
 

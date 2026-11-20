@@ -2504,6 +2504,7 @@ inputEl.addEventListener('blur', (e) => {
 	setUserPref('approval.auto_approval_enabled', false);
     for (let slot = 1; slot <= QUICK_CMD_SLOTS; slot++) {
       setUserPref(`quick_cmds.cmd${slot}`, quickCommandDefault(slot));
+      setUserPref(`quick_cmds.label${slot}`, '');
       setUserPref(`quick_cmds.show${slot}`, true);
     }
     setUserPref('usage_links.claude', '');

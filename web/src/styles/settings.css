@@ -490,6 +490,8 @@ summary.settings-section-title::-webkit-details-marker { display: none; }
   cursor: pointer;
 }
 .quick-cmd-show .settings-checkbox { margin: 0; }
+/* ボタンに出すラベル（任意）。短い固定幅にして、命令の入力欄を広く残す。 */
+.quick-cmd-row .settings-input-text.quick-cmd-label-input { flex: 0 0 9em; width: 9em; min-width: 0; }
 /* 一覧: 登録済みのコマンドごとに 1 行（表示 ON/OFF・内容・削除）。番号は付けない。 */
 .quick-cmd-list { display: flex; flex-direction: column; gap: var(--space-1); }
 .quick-cmd-list .quick-cmd-row { gap: var(--space-2); }
