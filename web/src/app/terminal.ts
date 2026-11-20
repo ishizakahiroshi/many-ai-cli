@@ -27,7 +27,6 @@ import {
 import { findUrlCandidates, looksLikeLinkWrapContinuation } from './url-detect.js';
 import { showUrlPopup } from './url-links.js';
 import { ws } from './ws-client.js';
-import { isShellProvider } from './approval.js';
 import { probe, probeSpan } from '../debug/probe.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
 import { addPromptTemplate } from './prompt-templates.js';
@@ -140,7 +139,6 @@ function sendSelectionDirect(text, opts: any = {}) {
   if (!cleaned) return;
   const sessionId = opts.sessionId ?? activeSessionId;
   if (sessionId == null) return;
-  if (isShellProvider(sessions.get(sessionId)?.provider) && !window.confirm(ti18n('term_ctx_send_confirm_shell'))) return;
   sendQuickCommand(sessionId, cleaned);
   showToast(ti18n('term_ctx_sent'), opts.anchor);
 }

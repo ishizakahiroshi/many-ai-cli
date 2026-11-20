@@ -124,6 +124,11 @@ Release artifacts are published at
 - **The "?" buttons in the new-session form are round and centred again.** They
   had no button style of their own, so the browser's default button squeezed the
   "?" into the lower right of a grey square.
+- **Sending selected terminal text to a shell session no longer asks for
+  confirmation.** "Send as-is" on the terminal's right-click menu used to open
+  the browser's own confirm dialog, which pops up far from the menu and breaks
+  the flow. Choosing the item is already an explicit send, so the text now goes
+  straight to the session like it does for AI CLI sessions.
 
 ## [0.10.0-rc.2] - 2026-11-09
 
