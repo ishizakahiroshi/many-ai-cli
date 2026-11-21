@@ -26,12 +26,29 @@ const PERMISSION_MODE_VALUES: Readonly<Record<string, readonly string[]>> = {
   'command-code': ['default', 'plan', 'acceptEdits', 'bypassPermissions'],
 };
 
+// 登録型 provider（devin-cli や「AI CLI を追加」で登録したもの）も、定義の
+// launch.permission_args が写像しているときは permission_mode を使う。記憶側は
+// provider 定義を知らないので、表に無い provider は呼び出し側の
+// 「permission select を出している」フラグで判別し、スキーマ全体
+// （rust の PERMISSION_ARG_MODES + default）で normalize する。
+// 写像に無いモードが記憶されても、復元時に syncPermissionModeOptions が
+// 選べない選択肢を default へ戻す。
+const REGISTERED_PERMISSION_MODES = ['default', 'plan', 'acceptEdits', 'auto', 'bypassPermissions'] as const;
+
 const CODEX_SANDBOX_VALUES = ['workspace-write', 'read-only', 'danger-full-access'] as const;
 const CODEX_APPROVAL_VALUES = ['on-request', 'untrusted', 'never'] as const;
 const OPENCODE_PERMISSION_VALUES = ['default', 'bypassPermissions'] as const;
 
 function normalizeValue(value: unknown, allowed: readonly string[], fallback: string): string {
   return typeof value === 'string' && allowed.includes(value) ? value : fallback;
+}
+
+// その provider が permission_mode の記憶対象なら許容値の一覧、そうでなければ undefined。
+// built-in は表で判別し、登録型は呼び出し側のフラグ（permission select を出しているか）で判別する。
+function permissionModesForProvider(provider: string, usesPermissionMode: boolean): readonly string[] | undefined {
+  if (Object.prototype.hasOwnProperty.call(PERMISSION_MODE_VALUES, provider)) return PERMISSION_MODE_VALUES[provider];
+  if (provider === 'codex' || provider === 'opencode') return undefined;
+  return usesPermissionMode ? REGISTERED_PERMISSION_MODES : undefined;
 }
 
 /**
@@ -45,19 +62,19 @@ export function providerKey(name: string, provider: string): string {
 }
 
 /** その provider が実際に使う許可設定のキー名（codex だけ 2 つ）。 */
-function approvalKeyNamesForProvider(provider: string): readonly ApprovalSettingKey[] {
+function approvalKeyNamesForProvider(provider: string, usesPermissionMode = false): readonly ApprovalSettingKey[] {
   if (Object.prototype.hasOwnProperty.call(PERMISSION_MODE_VALUES, provider)) return ['permission_mode'];
   if (provider === 'codex') return ['sandbox', 'ask_for_approval'];
   if (provider === 'opencode') return ['opencode_permission_mode'];
-  return [];
+  return usesPermissionMode ? ['permission_mode'] : [];
 }
 
-export function selectedApprovalSettings(provider: string, values: SpawnDefaults): SpawnApprovalSettings {
+export function selectedApprovalSettings(provider: string, values: SpawnDefaults, usesPermissionMode = false): SpawnApprovalSettings {
   const out: SpawnApprovalSettings = {};
-  if (Object.prototype.hasOwnProperty.call(PERMISSION_MODE_VALUES, provider)) {
+  const permissionModes = permissionModesForProvider(provider, usesPermissionMode);
+  if (permissionModes) {
     if (Object.prototype.hasOwnProperty.call(values, 'permission_mode')) {
-      const allowed = PERMISSION_MODE_VALUES[provider];
-      out.permission_mode = normalizeValue(values.permission_mode, allowed, 'default');
+      out.permission_mode = normalizeValue(values.permission_mode, permissionModes, 'default');
     }
     return out;
   }
@@ -88,8 +105,8 @@ export function isApprovalSettingsMemoryEnabled(defaults: SpawnDefaults): boolea
   return defaults[REMEMBER_APPROVAL_SETTINGS_KEY] !== 'false';
 }
 
-export function defaultApprovalSettings(provider: string): SpawnApprovalSettings {
-  if (Object.prototype.hasOwnProperty.call(PERMISSION_MODE_VALUES, provider)) {
+export function defaultApprovalSettings(provider: string, usesPermissionMode = false): SpawnApprovalSettings {
+  if (permissionModesForProvider(provider, usesPermissionMode)) {
     return { permission_mode: DEFAULT_APPROVAL_FORM_SETTINGS.permission_mode };
   }
   if (provider === 'codex') {
@@ -111,8 +128,8 @@ export function defaultApprovalSettings(provider: string): SpawnApprovalSettings
  * 優先順位: 名前空間キー → 旧フラットキー → （どちらも無ければキー自体を作らず、
  * 呼び出し側の provider 既定に委ねる）。
  */
-function namespacedApprovalValues(provider: string, defaults: SpawnDefaults): SpawnDefaults {
-  const names = approvalKeyNamesForProvider(provider);
+function namespacedApprovalValues(provider: string, defaults: SpawnDefaults, usesPermissionMode = false): SpawnDefaults {
+  const names = approvalKeyNamesForProvider(provider, usesPermissionMode);
   const out: Record<string, unknown> = {};
   for (const name of names) {
     const nsKey = providerKey(name, provider);
@@ -125,10 +142,10 @@ function namespacedApprovalValues(provider: string, defaults: SpawnDefaults): Sp
   return out;
 }
 
-export function restoreApprovalSettings(provider: string, defaults: SpawnDefaults): SpawnApprovalSettings {
-  if (!isApprovalSettingsMemoryEnabled(defaults)) return defaultApprovalSettings(provider);
-  const namespaced = namespacedApprovalValues(provider, defaults);
-  return { ...defaultApprovalSettings(provider), ...selectedApprovalSettings(provider, namespaced) };
+export function restoreApprovalSettings(provider: string, defaults: SpawnDefaults, usesPermissionMode = false): SpawnApprovalSettings {
+  if (!isApprovalSettingsMemoryEnabled(defaults)) return defaultApprovalSettings(provider, usesPermissionMode);
+  const namespaced = namespacedApprovalValues(provider, defaults, usesPermissionMode);
+  return { ...defaultApprovalSettings(provider, usesPermissionMode), ...selectedApprovalSettings(provider, namespaced, usesPermissionMode) };
 }
 
 /**
@@ -149,9 +166,10 @@ export function mergeApprovalSettings(
   provider: string,
   selected: SpawnDefaults,
   remember: boolean,
+  usesPermissionMode = false,
 ): Record<string, string> {
   const currentProviderKeys = new Set(
-    approvalKeyNamesForProvider(provider).map((name) => providerKey(name, provider)),
+    approvalKeyNamesForProvider(provider, usesPermissionMode).map((name) => providerKey(name, provider)),
   );
   const next: Record<string, string> = {};
   for (const [key, value] of Object.entries(defaults)) {
@@ -169,7 +187,7 @@ export function mergeApprovalSettings(
   }
   next[REMEMBER_APPROVAL_SETTINGS_KEY] = remember ? 'true' : 'false';
   if (remember) {
-    const chosen = selectedApprovalSettings(provider, selected);
+    const chosen = selectedApprovalSettings(provider, selected, usesPermissionMode);
     for (const [name, value] of Object.entries(chosen)) {
       next[providerKey(name, provider)] = value;
     }

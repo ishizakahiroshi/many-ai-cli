@@ -113,6 +113,7 @@ test('actual spawn click keeps its tab through risk wait, preference save, and n
  const ctx:any={spawnLaunchSequence:0,captureSpawnTab:()=>tab,document:{getElementById:(id:string)=>inputs[id]||{value:''}},spawnCwdInput:{value:'/repos/example'},
   spawnLaunchBlockReason:()=>'',isPathMissing:()=>false,commandMissingProviderIds:new Set(),spawnLaunchBtn:{disabled:false},spawnModelInput:{value:''},
   updateSpawnLaunchButton:no,getCachedSpawnModelGroups:()=>[],isModelCompatibleWithProvider:()=>true,resolveRoute:()=>'',isCustomProviderValue:()=>false,
+ providerHasPermissionSelect:()=>true,
   readSpawnDefaults:()=>({provider_claude:'existing'}),hasProviderBooleanSetting:()=>false,spawnInitialPrompt:{value:''},selectedSubscriptionID:()=>'',
   effortForSpawnBody:()=>'',selectedEffort:()=>'',claudeModelSelection:null,codexModelSelection:null,isClaudeHighRisk:()=>true,
   appConfirm:async()=>{tab='during-risk';return true;},spawnOrchestrationMode:false,boardHandoff:null,setBoardHandoff:no,

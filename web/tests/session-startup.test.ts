@@ -92,6 +92,7 @@ function spawnFixture(options: { status?: number; pendingHttp?: boolean; rejectN
     spawnCwdInput: { value: '/repos/example' }, spawnLaunchBlockReason: () => '', isPathMissing: () => false, commandMissingProviderIds: new Set(), spawnLaunchBtn: { disabled: false }, spawnModelInput: { value: '' },
     getSpawnOpenTarget: () => 'main', getSpawnGridLayout: () => '1x1', spawnDetachedPreset: { value: 'single' }, updateSpawnLaunchButton: no,
     getCachedSpawnModelGroups: () => [], isModelCompatibleWithProvider: () => true, resolveRoute: () => '', isCustomProviderValue: () => false,
+    providerHasPermissionSelect: () => true,
     readSpawnDefaults: () => ({}), hasProviderBooleanSetting: () => false, spawnInitialPrompt: { value: '' }, selectedSubscriptionID: () => '', effortForSpawnBody: () => '', selectedEffort: () => '',
     claudeModelSelection: null, codexModelSelection: null, isClaudeHighRisk: () => false, spawnOrchestrationMode: false,
     beginTrackedSpawn: () => 'A', beginSessionStartup: (id: string, provider: string, name: string, tab: string) => {

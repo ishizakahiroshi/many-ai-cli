@@ -1272,7 +1272,7 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
   function applySpawnApprovalSettings(provider: string, defaults: Record<string, unknown>): void {
     const approval = {
       ...DEFAULT_APPROVAL_FORM_SETTINGS,
-      ...restoreApprovalSettings(provider, defaults),
+      ...restoreApprovalSettings(provider, defaults, providerHasPermissionSelect(provider)),
     };
     if (spawnPermissionMode) {
       spawnPermissionMode.value = approval.permission_mode;
@@ -1459,6 +1459,7 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
       provider,
       currentApprovalSettings(provider),
       spawnRememberApprovalSettings.checked,
+      providerHasPermissionSelect(provider),
     );
     setUserPref('spawn.defaults', next);
     await flushUserPrefsPut();
@@ -3113,6 +3114,7 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
           provider,
           { ...bodyObj, opencode_permission_mode: bodyObj.permission_mode },
           rememberApprovalSettings,
+          providerHasPermissionSelect(provider),
         );
         // Local preference memory is updated synchronously; its network flush must
         // not hold the startup display or the already accepted terminal hostage.

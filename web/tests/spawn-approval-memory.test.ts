@@ -190,6 +190,40 @@ describe('spawn approval memory', () => {
       .toEqual({ remember_approval_settings: 'true' });
   });
 
+  // 登録型 provider（devin-cli や「AI CLI を追加」で登録したもの）は PERMISSION_MODE_VALUES
+  // の表に載らないため、usesPermissionMode フラグ（permission select を出しているか）で
+  // permission_mode の記憶を有効化する。フラグ無しの登録型は shell と同じく何も覚えない。
+  test('registered provider stores permission_mode only when the permission select is shown', () => {
+    // devin-cli で全許可を選んで記憶 → 次回の復元で全許可が戻る（本バグの再現）。
+    const saved = mergeApprovalSettings({}, 'devin-cli', { permission_mode: 'bypassPermissions' }, true, true);
+    expect(saved).toEqual({
+      remember_approval_settings: 'true',
+      'permission_mode_devin-cli': 'bypassPermissions',
+    });
+    expect(restoreApprovalSettings('devin-cli', saved, true)).toEqual({ permission_mode: 'bypassPermissions' });
+
+    // 写像の無い登録型 provider（select が出ない）は、built-in と同じく何も覚えない。
+    expect(mergeApprovalSettings({}, 'devin-cli', { permission_mode: 'bypassPermissions' }, true))
+      .toEqual({ remember_approval_settings: 'true' });
+    // フラグ無しでは記憶キーを読まず {}（呼び出し側は既定フォーム値へマージする）。
+    expect(restoreApprovalSettings('devin-cli', saved)).toEqual({});
+  });
+
+  test('registered provider permission memory is wiped on memory-off like the built-ins', () => {
+    const saved = mergeApprovalSettings({}, 'devin-cli', { permission_mode: 'bypassPermissions' }, true, true);
+    const afterOff = mergeApprovalSettings(saved, 'devin-cli', {}, false, true);
+    expect(afterOff).toEqual({ remember_approval_settings: 'false' });
+    expect(restoreApprovalSettings('devin-cli', afterOff, true)).toEqual({ permission_mode: 'default' });
+  });
+
+  test('registered provider default falls back to permission_mode default when select is shown', () => {
+    expect(defaultApprovalSettings('devin-cli', true)).toEqual({ permission_mode: 'default' });
+    expect(defaultApprovalSettings('devin-cli')).toEqual({});
+    // スキーマ外の値は記憶されず default に落ちる。
+    expect(restoreApprovalSettings('devin-cli', { 'permission_mode_devin-cli': 'unexpected' }, true))
+      .toEqual({ permission_mode: 'default' });
+  });
+
   test('switching the provider restores that provider default, not the other provider value (C1 完了条件 1・2)', () => {
     const afterClaudeSave = mergeApprovalSettings({}, 'claude', { permission_mode: 'bypassPermissions' }, true);
     expect(afterClaudeSave).toEqual({
