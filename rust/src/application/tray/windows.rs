@@ -6,9 +6,9 @@ use windows_sys::Win32::{
         CloseHandle, ERROR_ALREADY_EXISTS, GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, RECT,
         SetLastError, WPARAM,
     },
-    Graphics::Gdi::{COLOR_BTNFACE, CreateFontIndirectW, DeleteObject, GetSysColorBrush, HFONT},
+    Graphics::Gdi::{COLOR_WINDOW, CreateFontIndirectW, DeleteObject, GetSysColorBrush, HFONT},
     System::{Console::FreeConsole, LibraryLoader::GetModuleHandleW, Threading::CreateMutexW},
-    UI::WindowsAndMessaging::*,
+    UI::{HiDpi::GetDpiForSystem, WindowsAndMessaging::*},
 };
 #[cfg(test)]
 #[path = "windows/procedure_tests.rs"]
@@ -21,11 +21,14 @@ use procedure_tests::{
 const OPEN_REQUEST: u32 = WM_APP + 1;
 const REPLACE_REQUEST: u32 = WM_APP + 2;
 const PRESENCE_STATE: u32 = WM_APP + 3;
+// Window metrics are logical (96 DPI) values scaled by the system DPI at use.
 const PRESENCE_WIDTH: i32 = 360;
 const PRESENCE_HEIGHT: i32 = 160;
 const PRESENCE_EDGE: i32 = 16;
 const SS_LEFT: u32 = 0;
 const SS_NOPREFIX: u32 = 128;
+const SS_ICON: u32 = 3;
+const SS_CENTERIMAGE: u32 = 512;
 #[link(name = "kernel32")]
 unsafe extern "system" {
     fn GetUserDefaultUILanguage() -> u16;
@@ -129,14 +132,24 @@ fn presence_copy(langid: u16) -> PresenceCopy {
         },
     }
 }
-fn presence_origin(work: Option<(i32, i32, i32, i32)>) -> (i32, i32) {
+fn presence_origin(
+    work: Option<(i32, i32, i32, i32)>,
+    edge: i32,
+    width: i32,
+    height: i32,
+) -> (i32, i32) {
     match work {
-        Some((_, _, right, bottom)) => (
-            right - PRESENCE_EDGE - PRESENCE_WIDTH,
-            bottom - PRESENCE_EDGE - PRESENCE_HEIGHT,
-        ),
+        Some((_, _, right, bottom)) => (right - edge - width, bottom - edge - height),
         None => (100, 100),
     }
+}
+fn presence_dpi() -> i32 {
+    i32::try_from(unsafe { GetDpiForSystem() })
+        .unwrap_or(96)
+        .max(96)
+}
+fn presence_scaled(value: i32, dpi: i32) -> i32 {
+    value * dpi / 96
 }
 fn current_presence_copy() -> PresenceCopy {
     presence_copy(unsafe { GetUserDefaultUILanguage() })
@@ -338,11 +351,17 @@ fn presence_position() -> (i32, i32) {
     let ok = unsafe {
         SystemParametersInfoW(SPI_GETWORKAREA, 0, &mut area as *mut RECT as *mut c_void, 0)
     };
-    presence_origin(if ok != 0 {
-        Some((area.left, area.top, area.right, area.bottom))
-    } else {
-        None
-    })
+    let dpi = presence_dpi();
+    presence_origin(
+        if ok != 0 {
+            Some((area.left, area.top, area.right, area.bottom))
+        } else {
+            None
+        },
+        presence_scaled(PRESENCE_EDGE, dpi),
+        presence_scaled(PRESENCE_WIDTH, dpi),
+        presence_scaled(PRESENCE_HEIGHT, dpi),
+    )
 }
 fn ui_font() -> HFONT {
     unsafe {
@@ -400,15 +419,17 @@ unsafe fn create_presence(instance: HINSTANCE, owner: Arc<TrayOwner>) -> io::Res
     unsafe {
         let class = wide("ManyAICLIPresenceWindow");
         let (x, y) = presence_position();
+        let dpi = presence_dpi();
+        let scaled = |value: i32| presence_scaled(value, dpi);
         let window = CreateWindowExW(
             WS_EX_APPWINDOW,
             class.as_ptr(),
-            wide("MANY-AI-CLI").as_ptr(),
+            wide("many-ai-cli").as_ptr(),
             WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
             x,
             y,
-            PRESENCE_WIDTH,
-            PRESENCE_HEIGHT,
+            scaled(PRESENCE_WIDTH),
+            scaled(PRESENCE_HEIGHT),
             null_mut(),
             null_mut(),
             instance,
@@ -426,20 +447,39 @@ unsafe fn create_presence(instance: HINSTANCE, owner: Arc<TrayOwner>) -> io::Res
             bottom: 0,
         };
         GetClientRect(window, &mut client);
-        let width = (client.right - client.left).max(160);
-        let margin = 12;
-        let gap = 8;
+        let width = (client.right - client.left).max(scaled(160));
+        let height = client.bottom - client.top;
+        let margin = scaled(12);
+        let gap = scaled(8);
+        let icon_px = GetSystemMetrics(SM_CXICON).max(scaled(16));
         let inner = (width - margin * 2).max(80);
         let button_w = (inner - gap) / 2;
+        let button_h = scaled(28);
+        let content_h = icon_px + gap + button_h;
+        let top = margin + (height - margin * 2 - content_h).max(0) / 2;
+        let icon = CreateWindowExW(
+            0,
+            wide("STATIC").as_ptr(),
+            null(),
+            WS_CHILD | WS_VISIBLE | SS_ICON,
+            margin,
+            top,
+            icon_px,
+            icon_px,
+            window,
+            std::ptr::without_provenance_mut(101),
+            instance,
+            null(),
+        );
         let status = CreateWindowExW(
             0,
             wide("STATIC").as_ptr(),
             wide(text.stopped).as_ptr(),
-            WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX,
-            margin,
-            margin,
-            inner,
-            24,
+            WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX | SS_CENTERIMAGE,
+            margin + icon_px + gap,
+            top,
+            inner - icon_px - gap,
+            icon_px,
             window,
             std::ptr::without_provenance_mut(100),
             instance,
@@ -451,9 +491,9 @@ unsafe fn create_presence(instance: HINSTANCE, owner: Arc<TrayOwner>) -> io::Res
             wide(text.open).as_ptr(),
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON as u32,
             margin,
-            margin + 24 + gap,
+            top + icon_px + gap,
             button_w,
-            28,
+            button_h,
             window,
             std::ptr::without_provenance_mut(1),
             instance,
@@ -465,15 +505,15 @@ unsafe fn create_presence(instance: HINSTANCE, owner: Arc<TrayOwner>) -> io::Res
             wide(text.stop).as_ptr(),
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON as u32,
             margin + button_w + gap,
-            margin + 24 + gap,
+            top + icon_px + gap,
             button_w,
-            28,
+            button_h,
             window,
             std::ptr::without_provenance_mut(2),
             instance,
             null(),
         );
-        if status.is_null() || open.is_null() || stop.is_null() {
+        if icon.is_null() || status.is_null() || open.is_null() || stop.is_null() {
             let error = io::Error::last_os_error();
             DestroyWindow(window);
             if !font.is_null() {
@@ -489,6 +529,7 @@ unsafe fn create_presence(instance: HINSTANCE, owner: Arc<TrayOwner>) -> io::Res
         let (owned_icons, big, small) = load_presence_icons(instance);
         if !big.is_null() {
             SendMessageW(window, WM_SETICON, ICON_BIG as usize, big as isize);
+            SendMessageW(icon, STM_SETICON, big as usize, 0);
         }
         if !small.is_null() {
             SendMessageW(window, WM_SETICON, ICON_SMALL as usize, small as isize);
@@ -536,7 +577,7 @@ unsafe fn window_loop(
             hInstance: instance,
             lpszClassName: presence_name.as_ptr(),
             hCursor: LoadCursorW(null_mut(), IDC_ARROW),
-            hbrBackground: GetSysColorBrush(COLOR_BTNFACE),
+            hbrBackground: GetSysColorBrush(COLOR_WINDOW),
             ..std::mem::zeroed()
         };
         if RegisterClassW(&presence_class) == 0 {

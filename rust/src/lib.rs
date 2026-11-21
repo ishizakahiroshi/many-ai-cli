@@ -6,6 +6,7 @@ pub mod process;
 pub mod proto;
 
 pub mod asset_contract;
+pub mod windows_resource;
 
 pub mod hub;
 

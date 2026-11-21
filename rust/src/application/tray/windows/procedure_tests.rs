@@ -421,8 +421,11 @@ fn presence_copy_follows_the_four_primary_languages() {
     let other = presence_copy(0x0407);
     assert_eq!(other.running, japanese.running);
     assert_eq!(other.confirm_body, japanese.confirm_body);
-    assert_eq!(presence_origin(None), (100, 100));
-    assert_eq!(presence_origin(Some((0, 0, 1920, 1080))), (1544, 904));
+    assert_eq!(presence_origin(None, 16, 360, 160), (100, 100));
+    assert_eq!(
+        presence_origin(Some((0, 0, 1920, 1080)), 16, 360, 160),
+        (1544, 904)
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

@@ -147,6 +147,7 @@ class CandidateReceiptTests(unittest.TestCase):
         icon = root / 'assets/many-ai-cli.ico'
         icon.parent.mkdir()
         icon.write_bytes(b'\0\0\1\0\1\0' + bytes([1, 1, 0, 0]) + struct.pack('<HHII', 1, 32, len(icon_payload), 22) + icon_payload)
+        (root / 'assets/app.manifest').write_bytes(b'synthetic manifest bytes')
         for stem in ('many-ai-cli', 'many-ai-cli-launcher'):
             binary = root / 'rust/target' / target / 'release' / (stem + ('.exe' if windows else ''))
             binary.parent.mkdir(parents=True, exist_ok=True)
@@ -194,7 +195,8 @@ class CandidateReceiptTests(unittest.TestCase):
                 return 0 if smoke == 'passed' else 1
             return 0
         argv = ['native', '--target', target] + (['--release-tag', 'v1.0.0'] if release else [])
-        api = self.icon_api({(14, 1): self.group_icon(icon_payload), (3, 7): icon_payload})
+        api = self.icon_api({(14, 1): self.group_icon(icon_payload), (3, 7): icon_payload,
+                             (24, 1): b'synthetic manifest bytes'})
         with patch.object(ci, 'ROOT', root), patch.object(ci, 'capture', side_effect=capture), patch.object(ci, 'run', side_effect=run):
             with patch.object(ci.shutil, 'which', return_value='synthetic-rc.exe'):
                 with patch.object(ci, 'windows_file_version', side_effect=lambda path: {'FileVersion': '1.0.0', 'ProductVersion': '1.0.0', 'OriginalFilename': path.name}):
@@ -315,14 +317,16 @@ class CandidateReceiptTests(unittest.TestCase):
         self.assertFalse(any(args[0] == 'cargo' for args, _ in calls))
 
     def test_windows_resource_formatter_and_mocked_native_readback(self):
-        script = ci.windows_resource_script('1.2.3-rc.1', Path('synthetic/icon.ico'), 'many-ai-cli-launcher.exe')
+        script = ci.windows_resource_script('1.2.3-rc.1', Path('synthetic/icon.ico'),
+                                            Path('synthetic/app.manifest'), 'many-ai-cli-launcher.exe')
         self.assertIn('FILEVERSION 1,2,3,0', script)
         self.assertIn('PRODUCTVERSION 1,2,3,0', script)
         self.assertIn('FILEFLAGS 2', script)
         self.assertIn('VALUE "ProductVersion", "1.2.3-rc.1\\0"', script)
         self.assertIn('1 ICON "synthetic/icon.ico"', script)
+        self.assertIn('1 24 "synthetic/app.manifest"', script)
         with self.assertRaises(ValueError):
-            ci.windows_resource_script('65536.0.0', Path('icon.ico'), 'many-ai-cli.exe')
+            ci.windows_resource_script('65536.0.0', Path('icon.ico'), Path('app.manifest'), 'many-ai-cli.exe')
         output, calls = self.synthetic_native(windows=True)
         receipt = json.loads((output / 'BUILD-RECEIPT.json').read_text())
         self.assertEqual(len(receipt['windows_resources']['binaries']), 2)
@@ -338,7 +342,7 @@ class CandidateReceiptTests(unittest.TestCase):
             return {'FileVersion': '1.0.0', 'ProductVersion': '1.0.0', 'OriginalFilename': path.name}
         with patch.object(ci, 'ROOT', root):
             with patch.object(ci, 'windows_file_version', return_value={'FileVersion': '0.0.0', 'ProductVersion': '1.0.0', 'OriginalFilename': 'many-ai-cli.exe'}):
-                with self.assertRaisesRegex(ValueError, 'product version/icon readback'):
+                with self.assertRaisesRegex(ValueError, 'version/icon/manifest readback'):
                     ci.verify_windows_resources(output, '1.0.0', receipt['windows_resources'])
             (output / 'many-ai-cli.exe').write_bytes(b'nonempty synthetic binary without icon')
             missing = self.icon_api({(14, 1): self.group_icon(b'missing referenced icon')})
@@ -360,13 +364,14 @@ class CandidateReceiptTests(unittest.TestCase):
         for actual_planes in (0, 1):
             group = bytearray(self.group_icon(payload))
             struct.pack_into('<H', group, 10, actual_planes)
-            api = self.icon_api({(14, 1): bytes(group), (3, 7): payload})
+            api = self.icon_api({(14, 1): bytes(group), (3, 7): payload,
+                                 (24, 1): b'synthetic manifest bytes'})
             with self.subTest(actual_planes=actual_planes), patch.object(ci, 'ROOT', root):
                 with patch.object(ci, 'windows_file_version', side_effect=observed), patch.object(ctypes, 'WinDLL', return_value=api, create=True):
                     result = ci.verify_windows_resources(output, '1.0.0', prepared)
                 self.assertEqual(len(result['binaries']), 2)
                 self.assertTrue(all(item['icon_payloads_verified'] for item in result['binaries']))
-                self.assertEqual(api.lookups, [(14, 1), (3, 7), (14, 1), (3, 7)])
+                self.assertEqual(api.lookups, [(14, 1), (3, 7), (24, 1), (14, 1), (3, 7), (24, 1)])
                 self.assertEqual(api.freed, [71, 71])
 
     def test_sdk_planes_exception_preserves_header_count_and_payload_rejections(self):
@@ -394,7 +399,8 @@ class CandidateReceiptTests(unittest.TestCase):
                       ('zero_count', group[:4] + b'\0\0', payload),
                       ('truncated_group', group[:-1], payload)])
         for label, group, actual_payload in cases:
-            api = self.icon_api({(14, 1): group, (3, 7): actual_payload})
+            api = self.icon_api({(14, 1): group, (3, 7): actual_payload,
+                                 (24, 1): b'synthetic manifest bytes'})
             with self.subTest(case=label), patch.object(ci, 'ROOT', root):
                 with patch.object(ci, 'windows_file_version', side_effect=observed), patch.object(ctypes, 'WinDLL', return_value=api, create=True):
                     with self.assertRaises(ValueError):
@@ -405,25 +411,28 @@ class CandidateReceiptTests(unittest.TestCase):
         struct.pack_into('<H', source, 10, 2)
         icon.write_bytes(source)
         prepared['icon_sha256'] = ci.digest(icon)
-        api = self.icon_api({(14, 1): self.group_icon(payload), (3, 7): payload})
+        api = self.icon_api({(14, 1): self.group_icon(payload), (3, 7): payload,
+                             (24, 1): b'synthetic manifest bytes'})
         with patch.object(ci, 'ROOT', root), patch.object(ci, 'windows_file_version', side_effect=observed):
             with patch.object(ctypes, 'WinDLL', return_value=api, create=True):
-                with self.assertRaisesRegex(ValueError, 'product version/icon readback'):
+                with self.assertRaisesRegex(ValueError, 'version/icon/manifest readback'):
                     ci.verify_windows_resources(output, '1.0.0', prepared)
 
     def test_icon_reader_follows_group_ids_and_always_frees_resource_only_module(self):
         payload = b'synthetic referenced icon'
-        api = self.icon_api({(14, 1): self.group_icon(payload), (3, 7): payload})
+        api = self.icon_api({(14, 1): self.group_icon(payload), (3, 7): payload,
+                             (24, 1): b'synthetic manifest'})
         with patch.object(ctypes, 'WinDLL', return_value=api, create=True):
-            result = ci.windows_icon_resources(Path('synthetic.exe'))
-        self.assertEqual(result, [((1, 1, 0, 0, 1, 32, len(payload)), payload)])
-        self.assertEqual(api.lookups, [(14, 1), (3, 7)])
+            images, manifest = ci.windows_binary_resources(Path('synthetic.exe'))
+        self.assertEqual(images, [((1, 1, 0, 0, 1, 32, len(payload)), payload)])
+        self.assertEqual(manifest, b'synthetic manifest')
+        self.assertEqual(api.lookups, [(14, 1), (3, 7), (24, 1)])
         self.assertEqual(api.flags, [0x22])
         self.assertEqual(api.freed, [71])
         missing = self.icon_api({(14, 1): self.group_icon(payload, identifier=8), (3, 7): payload})
         with patch.object(ctypes, 'WinDLL', return_value=missing, create=True):
             with self.assertRaisesRegex(ValueError, 'group/icon resource is missing'):
-                ci.windows_icon_resources(Path('synthetic.exe'))
+                ci.windows_binary_resources(Path('synthetic.exe'))
         self.assertEqual(missing.lookups, [(14, 1), (3, 8)])
         self.assertEqual(missing.freed, [71])
 

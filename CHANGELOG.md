@@ -131,6 +131,7 @@ Release artifacts are published at
   line).
 - Windows の常駐は、通知領域のアイコンではなく、タスクバーの小さい窓で動いていることを示す。窓を閉じると最小化され、Hub は止まらない。
 - 設定の切り替え案内、起動時の 1 行ヒント、setup の完了文を、タスクバーの小さい窓の説明に変えた。
+- **On Windows, the taskbar window stays sharp at 125 % / 150 % display scaling.** Both executables now carry an application manifest (normal user rights, Windows 10/11, modern controls, DPI aware), and the small taskbar window scales its size and layout with the display and shows the app icon beside its status line.
 
 ### Fixed
 

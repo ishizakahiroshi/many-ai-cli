@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "72ed73323206e718754dd73de44248986b3b55e8",
+    "commit": "95d2bbea1ae8e114335db2586ce7336d175941c0",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2090,
-    "analyzed": 1639,
+    "discovered": 2093,
+    "analyzed": 1641,
     "unresolved": 15,
     "unknown": 0,
-    "unclaimed": 436,
+    "unclaimed": 437,
     "skipped_by_config": 0
   },
   "files": [
@@ -479,6 +479,14 @@
       "fields": {},
       "unresolved": [],
       "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "assets/app.manifest",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.manifest'"
     },
     {
       "path": "assets/demo-approval.gif",
@@ -36892,6 +36900,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/windows_resource.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Generates the `.res` linked into non-release Windows builds. The release"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/wrapper/approval_injection.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -41462,6 +41499,35 @@
     },
     {
       "path": "rust/tests/transcript_contracts.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/tests/windows_resource_contracts.rs",
       "adapter": "rust",
       "status": "analyzed",
       "fields": {

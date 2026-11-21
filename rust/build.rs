@@ -1,5 +1,7 @@
 #[path = "src/asset_contract.rs"]
 mod asset_contract;
+#[path = "src/windows_resource.rs"]
+mod windows_resource;
 use std::{
     env, fs, io,
     path::{Path, PathBuf},
@@ -32,6 +34,7 @@ fn main() {
     prepare_native_windows_test_fixture(&manifest);
     let root = manifest.parent().unwrap();
     link_windows_release_resources();
+    link_windows_dev_resources(root);
     let web = root.join("web/dist");
     if !web.join("index.html").is_file() {
         panic!(
@@ -42,6 +45,7 @@ fn main() {
         .expect("generated Web asset validation failed");
     println!("cargo:rerun-if-changed={}", root.join("web/src").display());
     println!("cargo:rerun-if-changed=src/asset_contract.rs");
+    println!("cargo:rerun-if-changed=src/windows_resource.rs");
     let mut files = Vec::new();
     walk(&web, &web, &mut files).expect("read generated Web assets");
     files.sort_by(|a, b| a.0.cmp(&b.0));
@@ -108,6 +112,31 @@ fn link_windows_release_resources() {
     }
 }
 
+/// Non-release Windows builds get no rc.exe pass, so the icon/manifest .res is
+/// generated here instead: same resource IDs (icon group 1, manifest 1) that
+/// `windows_resource_script` emits for release builds.
+fn link_windows_dev_resources(root: &Path) {
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows")
+        || env::var("CARGO_CFG_TARGET_ENV").as_deref() != Ok("msvc")
+        || env::var("MANY_AI_BUILD_KIND").as_deref() == Ok("release")
+    {
+        return;
+    }
+    let icon = root.join("assets/many-ai-cli.ico");
+    let manifest = root.join("assets/app.manifest");
+    for path in [&icon, &manifest] {
+        println!("cargo:rerun-if-changed={}", path.display());
+    }
+    let icon = fs::read(&icon).expect("read dev icon resource input");
+    let manifest = fs::read(&manifest).expect("read dev manifest resource input");
+    let resource =
+        windows_resource::dev_windows_resource(&icon, &manifest).expect("generate dev .res");
+    let path = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("many-ai-cli-dev.res");
+    fs::write(&path, resource).expect("write dev .res");
+    for binary in ["many-ai-cli", "many-ai-cli-launcher"] {
+        println!("cargo:rustc-link-arg-bin={binary}={}", path.display());
+    }
+}
 fn prepare_native_windows_test_fixture(manifest: &Path) {
     let host = env::var("HOST").expect("Cargo host target");
     let target = env::var("TARGET").expect("Cargo compilation target");

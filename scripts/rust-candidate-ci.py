@@ -66,17 +66,19 @@ def verify_release_source(tag: str, source: str) -> None:
     if capture(['git', 'rev-parse', '--verify', f'refs/tags/{tag}^{{commit}}'], ROOT) != source:
         raise ValueError('release tag commit does not match HEAD/source')
 
-def windows_resource_script(version: str, icon: Path, filename: str) -> str:
+def windows_resource_script(version: str, icon: Path, manifest: Path, filename: str) -> str:
     release_version('v' + version)
     numbers = version.split('-', 1)[0].split('+', 1)[0].split('.')
     if any(int(part) > 65535 for part in numbers):
         raise ValueError('Windows resource version components must fit unsigned 16-bit fields')
-    if filename not in ('many-ai-cli.exe', 'many-ai-cli-launcher.exe') or any(c in icon.as_posix() for c in '\"\r\n'):
+    if filename not in ('many-ai-cli.exe', 'many-ai-cli-launcher.exe') or any(
+            c in icon.as_posix() + manifest.as_posix() for c in '\"\r\n'):
         raise ValueError('invalid Windows resource filename or icon path')
     numeric = ','.join([*numbers, '0'])
     prerelease = '-' in version.split('+', 1)[0]
     return f'''#pragma code_page(65001)
 1 ICON "{icon.as_posix()}"
+1 24 "{manifest.as_posix()}"
 1 VERSIONINFO
  FILEVERSION {numeric}
  PRODUCTVERSION {numeric}
@@ -112,11 +114,13 @@ def prepare_windows_resources(output: Path, version: str, env: dict[str, str]) -
     if not compiler:
         raise ValueError('Windows SDK resource compiler rc.exe is required for release builds')
     icon = ROOT / 'assets' / 'many-ai-cli.ico'
-    receipt = {'version': version, 'icon_sha256': digest(icon), 'resources': []}
+    manifest = ROOT / 'assets' / 'app.manifest'
+    receipt = {'version': version, 'icon_sha256': digest(icon),
+               'manifest_sha256': digest(manifest), 'resources': []}
     output.mkdir()
     for stem in ('many-ai-cli', 'many-ai-cli-launcher'):
         source, resource = output / f'{stem}.rc', output / f'{stem}.res'
-        source.write_text(windows_resource_script(version, icon, stem + '.exe'), encoding='utf-8')
+        source.write_text(windows_resource_script(version, icon, manifest, stem + '.exe'), encoding='utf-8')
         run([compiler, '/nologo', '/fo', str(resource), str(source)], env)
         receipt['resources'].append({'name': resource.name, 'sha256': digest(resource)})
     return receipt
@@ -147,8 +151,8 @@ def windows_file_version(binary: Path) -> dict[str, str]:
         result[key] = ctypes.wstring_at(value.value, length.value).rstrip('\0')
     return result
 
-def windows_icon_resources(binary: Path) -> list[tuple[tuple, bytes]]:
-    """Read group 1 and its actual RT_ICON payloads without executing the binary."""
+def windows_binary_resources(binary: Path) -> tuple[list[tuple[tuple, bytes]], bytes]:
+    """Read group 1, its RT_ICON payloads and the manifest without executing the binary."""
     import ctypes
     from ctypes import wintypes
     api = ctypes.WinDLL('kernel32', use_last_error=True)
@@ -194,7 +198,11 @@ def windows_icon_resources(binary: Path) -> list[tuple[tuple, bytes]]:
             if len(payload) != entry[6]:
                 raise ValueError('Windows icon resource size differs from its group entry')
             images.append((entry[:7], payload))
-        return images
+        try:
+            manifest = resource(24, 1)  # RT_MANIFEST, CREATEPROCESS_MANIFEST_RESOURCE_ID
+        except ValueError:
+            raise ValueError('Windows manifest resource is missing') from None
+        return images, manifest
     finally:
         api.FreeLibrary(module)
 
@@ -221,14 +229,19 @@ def verify_windows_resources(output: Path, version: str, prepared: dict) -> dict
         if not size or offset < 6 + count * 16 or offset + size > len(icon):
             raise ValueError('release icon payload bounds are invalid')
         images.append((entry[:7], icon[offset:offset + size]))
+    manifest_expected = (ROOT / 'assets' / 'app.manifest').read_bytes()
+    def resources_match(binary: Path) -> bool:
+        embedded_icons, embedded_manifest = windows_binary_resources(binary)
+        return (windows_icon_images_match(embedded_icons, images)
+                and embedded_manifest.startswith(manifest_expected))
     binaries = []
     for stem in ('many-ai-cli', 'many-ai-cli-launcher'):
         binary = output / (stem + '.exe')
         observed = windows_file_version(binary)
         if (observed['FileVersion'] != version or observed['ProductVersion'] != version
                 or observed['OriginalFilename'] != binary.name
-                or not windows_icon_images_match(windows_icon_resources(binary), images)):
-            raise ValueError('Windows binary product version/icon readback mismatch')
+                or not resources_match(binary)):
+            raise ValueError('Windows binary product version/icon/manifest readback mismatch')
         binaries.append({'name': binary.name, 'sha256': digest(binary), 'file_version': version,
                          'product_version': version, 'icon_payloads_verified': True})
     return {**prepared, 'binaries': binaries}

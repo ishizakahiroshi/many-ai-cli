@@ -36,3 +36,8 @@ a02223c622345e44c6da8cbcc4e2e9da1b225ded:rust/tests/fixtures/core/journal/mask_o
 # Recovery validation receipt: the value is a 40-hex git blob id under
 # unchanged_scan_input_blobs (key = .github/workflows/secret-scan.yml), not a credential.
 2ef6d3c8aa366bf86162cbf205598030f6750961:docs/bot/rust-recovery-resume/VALIDATION-4dc961ce.json:generic-api-key:1413
+
+# Windows application manifest: the assemblyIdentity version attributes on lines 3 and 22
+# are four-part assembly versions, not IPv4 addresses.
+assets/app.manifest:public-ipv4-literal:3
+assets/app.manifest:public-ipv4-literal:22
