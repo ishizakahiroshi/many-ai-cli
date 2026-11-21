@@ -10,7 +10,10 @@ Release artifacts are published at
 
 ## [Unreleased]
 
-## [0.11.0] - 2026-11-21
+## [0.11.1] - 2026-11-21
+
+(The `v0.11.0` tag published nothing: its release run stopped at the macOS and
+Linux native builds, before signing. The fix is listed under Fixed.)
 
 ### Added
 
@@ -136,6 +139,11 @@ Release artifacts are published at
 - **On Windows, the taskbar window stays sharp at 125 % / 150 % display scaling.** Both executables now carry an application manifest (normal user rights, Windows 10/11, modern controls, DPI aware), and the small taskbar window scales its size and layout with the display and shows the app icon beside its status line.
 
 ### Fixed
+
+- **The macOS and Linux builds compile again.** A Windows-only import in the
+  taskbar window code broke the macOS and Linux release builds, and the
+  release smoke test could be handed the Hub's default port by the OS and
+  refuse it. Both are fixed; the Windows build was not affected.
 
 - **The child spawn confirmation now lets you pick the subscription profile.**
   When the chosen CLI has two or more enabled profiles, the dialog shows the
@@ -4918,8 +4926,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.11.0...HEAD
-[0.11.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.10.0...v0.11.0
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.10.0...v0.11.1
 [0.10.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...v0.10.0
 [0.10.0-rc.2]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...v0.10.0-rc.2
 [0.9.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.8.0...v0.9.0
