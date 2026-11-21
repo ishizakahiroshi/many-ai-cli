@@ -53,7 +53,11 @@ function stateLine(s: TakerStatus): string {
 function showButtons(): void {
   for (const el of document.querySelectorAll<HTMLElement>('[data-open-local-taker]')) {
     el.hidden = !status?.configured;
-    el.dataset.takerState = !status ? '' : status.current ? 'running' : status.paused ? 'paused' : 'waiting';
+    const state = !status ? '' : status.current ? 'running' : status.paused ? 'paused' : 'waiting';
+    el.dataset.takerState = state;
+    // The dot carries the state too: its colour is set on the dot, not on the button.
+    const dot = el.querySelector<HTMLElement>('.local-taker-dot');
+    if (dot) dot.dataset.takerState = state;
     if (status?.configured) el.title = `${tr('title')}: ${stateLine(status)}`;
   }
 }

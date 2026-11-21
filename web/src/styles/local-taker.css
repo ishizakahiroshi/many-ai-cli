@@ -10,14 +10,14 @@
   background: var(--muted);
   pointer-events: none;
 }
-.local-taker-button[data-taker-state="running"] .local-taker-dot {
+.local-taker-dot[data-taker-state="running"] {
   background: var(--green);
   animation: local-taker-pulse 1.6s ease-in-out infinite;
 }
-.local-taker-button[data-taker-state="paused"] .local-taker-dot { background: var(--yellow); }
+.local-taker-dot[data-taker-state="paused"] { background: var(--yellow); }
 @keyframes local-taker-pulse { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) {
-  .local-taker-button[data-taker-state="running"] .local-taker-dot { animation: none; }
+  .local-taker-dot[data-taker-state="running"] { animation: none; }
 }
 
 .local-taker-state {
@@ -38,7 +38,7 @@
 .local-taker-outcome { flex: none; font-size: var(--fs-sm); font-weight: 700; color: var(--muted); }
 .local-taker-run[data-outcome="done"] .local-taker-outcome { color: var(--green); }
 .local-taker-run[data-outcome="failed"] .local-taker-outcome,
-.local-taker-run[data-outcome="interrupted"] .local-taker-outcome { color: var(--danger, #e66); }
+.local-taker-run[data-outcome="interrupted"] .local-taker-outcome { color: var(--danger); }
 .local-taker-run[data-outcome="running"] .local-taker-outcome { color: var(--accent); }
 .local-taker-summary { white-space: pre-wrap; overflow-wrap: anywhere; }
 
