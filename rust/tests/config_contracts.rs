@@ -69,8 +69,9 @@ fn every_source_field_matches_go_public_projection() {
         "fixtures/foundation/config/all-fields.public.json"
     ))
     .unwrap();
-    // This Rust extension has no field in the fixed Go golden.
+    // These Rust extensions have no field in the fixed Go golden.
     expected["Hub"]["AiLaunchShell"] = json!("auto");
+    expected["slash_cmd_sources"]["devin-cli"] = json!("");
     assert_eq!(config.public_json(), expected);
     let roundtrip: Config = serde_saphyr::from_str(&config.to_private_yaml().unwrap()).unwrap();
     assert_eq!(config, roundtrip);
