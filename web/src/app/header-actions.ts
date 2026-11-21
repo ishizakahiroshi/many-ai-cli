@@ -34,7 +34,9 @@ function init(): void {
   bar.before(anchor);
   const originalOrder = Array.from(bar.children) as HTMLElement[];
   const boardBtn = originalOrder.find(el => el.hasAttribute('data-open-board-handoffs')) ?? null;
-  const menuTargets = originalOrder.filter(el => el !== newBtn && el !== boardBtn);
+  // 手元 PC の拾い手は、動いているかを点で見せるので「⋯」に入れない（設定している Hub だけに出る）。
+  const takerBtn = originalOrder.find(el => el.hasAttribute('data-open-local-taker')) ?? null;
+  const menuTargets = originalOrder.filter(el => el !== newBtn && el !== boardBtn && el !== takerBtn);
 
   const more = document.createElement('div');
   more.className = 'header-more';
@@ -118,7 +120,7 @@ function init(): void {
     const fold = desktop && !detachedView;
     if (desktop) {
       for (const el of menuTargets) { menu.appendChild(el); decorate(el, true); }
-      bar.replaceChildren(...[boardBtn, newBtn, more].filter((el): el is HTMLElement => !!el));
+      bar.replaceChildren(...[takerBtn, boardBtn, newBtn, more].filter((el): el is HTMLElement => !!el));
       if (fold) {
         head.append(...[logo, runtimeBadge, bar].filter((el): el is HTMLElement => !!el));
         aside?.prepend(head);

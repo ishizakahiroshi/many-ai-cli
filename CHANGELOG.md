@@ -12,6 +12,19 @@ Release artifacts are published at
 
 ### Added
 
+- **You can see and pause the board taker on this PC.** On a Hub with
+  `local_taker` in `board.json`, a header button shows whether the taker is
+  working (green dot), paused (yellow) or waiting. Its dialog shows the run in
+  progress, today's count against the daily limit and the next look at the
+  board, and has a Pause / Resume switch: while paused no new work is taken (a
+  run already going finishes), and it stays paused across Hub restarts. Recent
+  runs are listed with their result, and "Show what it did" opens the run's
+  steps — what claude said, the commands it ran and their output — kept on this
+  PC under `~/.many-ai-cli/logs/local-taker/` (secrets masked, newest 50 runs).
+  With desktop notifications on, the dashboard tells you when a run starts and
+  when it ends. The board still holds the request and its result; this keeps
+  only how the run went on this machine, under the board's request id.
+
 - **The sidebar tabs can sit in a vertical rail.** A new "Sidebar tabs" choice
   in Settings → Layout switches the tab strip from one horizontal row to a
   narrow rail on the left of the session cards. Reordering tabs, dropping a

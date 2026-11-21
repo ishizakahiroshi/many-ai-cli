@@ -1277,7 +1277,10 @@ impl ServiceRouter {
                 });
             return Dispatch::response(response);
         }
-        if request.path == super::board_handoff_routes::PATH {
+        if request.path == super::board_handoff_routes::PATH
+            || request.path == super::board_handoff_routes::TAKER_PATH
+            || request.path == super::board_handoff_routes::TAKER_STREAM_PATH
+        {
             if let Err(error) = self.preflight(request, now) {
                 return Dispatch::response(error);
             }
@@ -1837,6 +1840,8 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
         }
         p if p == "/api/routine-runs" || p.starts_with("/api/routine-runs/") => &["GET"],
         super::board_handoff_routes::PATH => &["GET", "POST"],
+        super::board_handoff_routes::TAKER_PATH => &["GET", "POST"],
+        super::board_handoff_routes::TAKER_STREAM_PATH => &["GET"],
         p if p == "/api/memos" || p.starts_with("/api/memos/") => {
             &["GET", "POST", "PATCH", "DELETE"]
         }

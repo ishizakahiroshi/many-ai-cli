@@ -1,0 +1,63 @@
+/* 手元 PC の拾い手（local-taker.ts）。ボタンの点と、ダイアログの状態・最近の作業・作業の流れ。 */
+.local-taker-button { position: relative; }
+.local-taker-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--muted);
+  pointer-events: none;
+}
+.local-taker-button[data-taker-state="running"] .local-taker-dot {
+  background: var(--green);
+  animation: local-taker-pulse 1.6s ease-in-out infinite;
+}
+.local-taker-button[data-taker-state="paused"] .local-taker-dot { background: var(--yellow); }
+@keyframes local-taker-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) {
+  .local-taker-button[data-taker-state="running"] .local-taker-dot { animation: none; }
+}
+
+.local-taker-state {
+  margin: 12px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--muted);
+  border-radius: 10px;
+}
+.local-taker-state[data-taker-state="running"] { border-left-color: var(--green); }
+.local-taker-state[data-taker-state="paused"] { border-left-color: var(--yellow); }
+.local-taker-state p { margin: 6px 0; }
+.local-taker-state-line { font-weight: 700; overflow-wrap: anywhere; }
+.local-taker-recent-title { margin: 18px 0 4px; font-size: var(--fs-lg); }
+
+.local-taker-run-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.local-taker-run-head h3 { margin: 0; }
+.local-taker-outcome { flex: none; font-size: var(--fs-sm); font-weight: 700; color: var(--muted); }
+.local-taker-run[data-outcome="done"] .local-taker-outcome { color: var(--green); }
+.local-taker-run[data-outcome="failed"] .local-taker-outcome,
+.local-taker-run[data-outcome="interrupted"] .local-taker-outcome { color: var(--danger, #e66); }
+.local-taker-run[data-outcome="running"] .local-taker-outcome { color: var(--accent); }
+.local-taker-summary { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.local-taker-steps { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.local-taker-step {
+  display: grid;
+  grid-template-columns: 5.5em 1fr;
+  gap: var(--space-2);
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--line) 40%, transparent);
+  font-size: var(--fs-sm);
+}
+.local-taker-step-kind { color: var(--muted); font-weight: 600; }
+.local-taker-step-text { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; line-height: 1.6; }
+.local-taker-step--tool .local-taker-step-text,
+.local-taker-step--tool_result .local-taker-step-text { font-family: var(--font-mono, ui-monospace, monospace); }
+.local-taker-step--tool_result .local-taker-step-text { max-height: 12em; overflow: auto; }
+.local-taker-step--result { background: color-mix(in srgb, var(--green) 12%, transparent); }
+@media (max-width: 720px) {
+  .local-taker-step { grid-template-columns: 1fr; gap: 2px; }
+}

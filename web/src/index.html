@@ -1260,6 +1260,14 @@
           </svg>
           <span class="memo-button-badge" data-board-handoffs-count aria-hidden="true" hidden></span>
         </button>
+        <!-- 手元 PC の拾い手（board.json に local_taker がある Hub だけ）。動いている・止めているを点で出す。 -->
+        <button type="button" class="ui-button ui-button--secondary ui-button--compact detached-grid-launcher-sidebar-btn local-taker-button" data-open-local-taker data-i18n-tooltip="local_taker_title" aria-label="This PC's taker" hidden>
+          <svg class="routine-sidebar-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="12" rx="2"/>
+            <path d="M8 20h8M12 16v4"/>
+          </svg>
+          <span class="local-taker-dot" aria-hidden="true"></span>
+        </button>
         <!-- C3: plan_memo-panel.md — 自分用の作業メモ（プロジェクトに紐づく）。
              AI がセッション単位で書く引き継ぎ看板とは別物。ルーティンと新規セッションの間に置く。 -->
         <button type="button" class="ui-button ui-button--secondary ui-button--compact detached-grid-launcher-sidebar-btn" data-open-memo data-i18n-tooltip="memo_button_tooltip" aria-label="Memo">

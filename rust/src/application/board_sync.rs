@@ -906,6 +906,11 @@ impl BoardSync {
         }))
     }
 
+    /// The folder board.json is in (`~/.many-ai-cli`).
+    fn root(&self) -> &Path {
+        self.file.parent().unwrap_or_else(|| Path::new("."))
+    }
+
     fn warn_once(&self, message: &'static str) {
         let mut last = lock(&self.warned);
         if *last != Some(message) {
@@ -1705,7 +1710,9 @@ impl BoardSync {
 }
 
 mod taker;
-pub use taker::{RunOutcome, RunRequest, Runner, Taken};
+mod taker_log;
+pub use taker::{RunOutcome, RunRequest, Runner, Taken, TakerStatus};
+pub use taker_log::{RunRecord, StreamEntry};
 
 #[cfg(test)]
 mod tests;

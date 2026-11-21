@@ -2169,3 +2169,201 @@ async fn on_a_board_with_generations_work_for_local_claude_from_the_list_is_comp
     assert!(lock(&f.warnings).is_empty(), "{:?}", lock(&f.warnings));
     f.cancel.cancel();
 }
+
+// ---- What the local-claude taker shows on the dashboard. ----
+
+#[tokio::test]
+async fn a_taken_run_is_recorded_with_its_stream_for_the_dashboard() {
+    let (f, shelf) = linked().await;
+    f.list_repo_with_taker(6);
+    shelf.put(local_item(
+        "backlog/1",
+        "REQ-20261121-0a0b0c0d",
+        "page:owner",
+        "page:owner",
+        "local-claude",
+    ));
+    let runner: Arc<Runner> = Arc::new(|run: RunRequest| {
+        // What `claude -p --output-format stream-json` writes, line by line.
+        let path = run.stream.clone().expect("the stream is kept");
+        let mut writer = taker_log::StreamWriter::create(&path);
+        for line in [
+            r#"{"type":"system","subtype":"init"}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Looking at the notes."},{"type":"tool_use","name":"Bash","input":{"command":"ls notes"}}]}}"#,
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","content":"a.md\nb.md"}]}}"#,
+            r#"{"type":"result","subtype":"success","result":"Sorted 2 notes. token=sk-ant-api03-SYNTHETICSYNTHETICSYNTHETIC"}"#,
+        ] {
+            writer.line(line.as_bytes());
+        }
+        Box::pin(async move {
+            RunOutcome::Done {
+                result: "Sorted 2 notes.".into(),
+                turns: Some(2),
+                cost_usd: None,
+            }
+        })
+    });
+    f.sync.set_taker_runner(runner);
+    assert!(matches!(
+        f.sync.take_local_once().await,
+        Taken::Ran { finished: true, .. }
+    ));
+    let status = f.sync.local_taker_status();
+    assert!(status.configured && !status.paused);
+    assert!(status.current.is_none());
+    assert_eq!(status.runs_today, 1);
+    assert_eq!(status.max_runs_per_day, 6);
+    assert_eq!(status.recent.len(), 1);
+    let run = &status.recent[0];
+    assert_eq!(run.request_id, "REQ-20261121-0a0b0c0d");
+    assert_eq!(run.item_id, "backlog/1");
+    assert_eq!(run.title, "Tidy the notes folder");
+    assert_eq!(run.outcome, "done");
+    assert_eq!(run.summary, "Sorted 2 notes.");
+    assert!(run.ended_at.unwrap() >= run.started_at);
+    let steps = f.sync.local_taker_stream("REQ-20261121-0a0b0c0d").unwrap();
+    let kinds: Vec<&str> = steps.iter().map(|s| s.kind).collect();
+    assert_eq!(kinds, ["text", "tool", "tool_result", "result"]);
+    assert_eq!(steps[1].text, "Bash: ls notes");
+    assert!(
+        !steps[3].text.contains("SYNTHETICSYNTHETIC"),
+        "{}",
+        steps[3].text
+    );
+    // Only runs this taker recorded can be read, whatever the name.
+    assert!(f.sync.local_taker_stream("REQ-20261121-ffffffff").is_none());
+    assert!(f.sync.local_taker_stream("../board").is_none());
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn a_paused_taker_reads_nothing_and_stays_paused_after_a_restart() {
+    let (f, shelf) = linked().await;
+    f.list_repo_with_taker(6);
+    shelf.put(local_item(
+        "backlog/1",
+        "REQ-20261121-0a0b0c0d",
+        "page:owner",
+        "page:owner",
+        "local-claude",
+    ));
+    let (runner, seen) = fake_runner(RunOutcome::Failed("should not run".into()));
+    f.sync.set_taker_runner(runner);
+    f.sync.set_local_taker_paused(true).unwrap();
+    assert_eq!(f.sync.take_local_once().await, Taken::Paused);
+    assert!(lock(&seen).is_empty());
+    assert_eq!(
+        shelf.item("backlog/1").unwrap()["handoff"]["state"],
+        "requested"
+    );
+    // A Hub started again on the same folder is still paused.
+    let again = BoardSync::new(
+        f.root.path(),
+        false,
+        f.sync.tasks.clone(),
+        Arc::new(|_: &str, _: &str| {}),
+    )
+    .unwrap();
+    assert!(again.local_taker_status().paused);
+    f.sync.set_local_taker_paused(false).unwrap();
+    assert!(!f.sync.local_taker_status().paused);
+    f.cancel.cancel();
+}
+
+#[tokio::test]
+async fn a_run_left_running_by_a_stopped_hub_shows_as_interrupted() {
+    let dir = tempfile::tempdir().unwrap();
+    let owner = HubTaskOwner::new(tokio::runtime::Handle::current());
+    let sync = BoardSync::new(
+        dir.path(),
+        false,
+        owner.handle(),
+        Arc::new(|_: &str, _: &str| {}),
+    )
+    .unwrap();
+    let logs = taker_log::dir_of(dir.path());
+    taker_log::write_record(
+        &logs,
+        &RunRecord {
+            request_id: "REQ-1".into(),
+            item_id: "backlog/1".into(),
+            project: "demo".into(),
+            title: "t".into(),
+            started_at: 1,
+            ended_at: None,
+            outcome: "running".into(),
+            summary: String::new(),
+        },
+    );
+    assert_eq!(sync.local_taker_status().recent[0].outcome, "interrupted");
+}
+
+#[test]
+fn only_the_newest_runs_are_kept() {
+    let dir = tempfile::tempdir().unwrap();
+    for n in 0..(taker_log::KEEP + 3) {
+        let request = format!("REQ-{n:04}");
+        let record = RunRecord {
+            request_id: request.clone(),
+            item_id: "backlog/1".into(),
+            project: "demo".into(),
+            title: "t".into(),
+            started_at: n as i64,
+            ended_at: Some(n as i64),
+            outcome: "done".into(),
+            summary: String::new(),
+        };
+        taker_log::write_record(dir.path(), &record);
+        std::fs::write(taker_log::stream_path(dir.path(), &request), "{}\n").unwrap();
+    }
+    taker_log::prune(dir.path(), taker_log::KEEP);
+    let kept = taker_log::records(dir.path());
+    assert_eq!(kept.len(), taker_log::KEEP);
+    assert_eq!(kept.last().unwrap().request_id, "REQ-0003");
+    assert!(!taker_log::stream_path(dir.path(), "REQ-0002").exists());
+    assert!(taker_log::stream_path(dir.path(), "REQ-0003").exists());
+}
+
+#[test]
+fn a_request_id_becomes_a_plain_file_name() {
+    assert_eq!(
+        taker_log::stem_of("REQ-20261121-ba71cd89"),
+        "REQ-20261121-ba71cd89"
+    );
+    for odd in ["../board", "a/b", "..", "REQ 1", "依頼"] {
+        let stem = taker_log::stem_of(odd);
+        assert!(
+            !stem.is_empty()
+                && !stem.starts_with('.')
+                && stem
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')),
+            "{odd} -> {stem}"
+        );
+    }
+    assert_ne!(taker_log::stem_of("a/b"), taker_log::stem_of("a\\b"));
+}
+
+#[test]
+fn the_result_is_the_last_line_even_after_a_long_tool_line() {
+    let mut seen = Vec::new();
+    let mut lines = taker::LineSplitter::default();
+    let long = vec![b'x'; 600 * 1024];
+    lines.feed(b"{\"type\":\"system\"}\n", &mut |l| seen.push(l.len()));
+    lines.feed(&long, &mut |l| seen.push(l.len()));
+    lines.feed(b"\n{\"type\":\"result\",\"result\":\"ok\"}", &mut |l| {
+        seen.push(l.len())
+    });
+    let last = lines.finish(&mut |l| seen.push(l.len()));
+    assert_eq!(last, b"{\"type\":\"result\",\"result\":\"ok\"}");
+    assert_eq!(seen.len(), 3);
+    assert!(seen[1] <= 512 * 1024);
+    assert_eq!(
+        taker::outcome_of(&last, true),
+        RunOutcome::Done {
+            result: "ok".into(),
+            turns: None,
+            cost_usd: None
+        }
+    );
+}

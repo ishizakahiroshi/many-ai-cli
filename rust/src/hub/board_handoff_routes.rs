@@ -11,12 +11,22 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 pub const PATH: &str = "/api/board-handoffs";
+/// The `local-claude` taker: GET its state, POST `{"paused": bool}`.
+pub const TAKER_PATH: &str = "/api/local-taker";
+/// GET `?request_id=` a kept run's steps.
+pub const TAKER_STREAM_PATH: &str = "/api/local-taker/stream";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct TakeBackBody {
     item_id: String,
     request_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PauseBody {
+    paused: bool,
 }
 
 pub struct BoardHandoffHttp {
@@ -27,6 +37,12 @@ impl BoardHandoffHttp {
         Self { board }
     }
     pub async fn authenticated(&self, request: &Request) -> Response {
+        if request.path == TAKER_PATH {
+            return self.taker_authenticated(request);
+        }
+        if request.path == TAKER_STREAM_PATH {
+            return self.taker_stream_authenticated(request);
+        }
         if request.method == "POST" {
             return self.take_back_authenticated(request).await;
         }
@@ -58,6 +74,51 @@ impl BoardHandoffHttp {
             TakeBack::Unreached => {
                 Response::error(502, "board_unreachable", "the board could not be reached")
             }
+        }
+    }
+
+    /// The taker's state; a POST from the person at the dashboard pauses or
+    /// resumes it (that press is the confirmation).
+    fn taker_authenticated(&self, request: &Request) -> Response {
+        if let Err(error) = require_method(request, &["GET", "POST"]) {
+            return error;
+        }
+        if request.method == "POST" {
+            let body = &request.body[..request.body.len().min(super::http::JSON_BODY_LIMIT)];
+            let Ok(named) = serde_json::from_slice::<PauseBody>(body) else {
+                return Response::error(
+                    400,
+                    "local_taker_invalid",
+                    "send {\"paused\": true|false}",
+                );
+            };
+            if self.board.set_local_taker_paused(named.paused).is_err() {
+                return Response::error(
+                    500,
+                    "local_taker_unsaved",
+                    "the setting could not be saved",
+                );
+            }
+        }
+        Response::json(
+            200,
+            &serde_json::json!({"ok": true, "taker": self.board.local_taker_status()}),
+        )
+    }
+
+    fn taker_stream_authenticated(&self, request: &Request) -> Response {
+        if let Err(error) = require_method(request, &["GET"]) {
+            return error;
+        }
+        match self.board.local_taker_stream(&request.query("request_id")) {
+            Some(entries) => {
+                Response::json(200, &serde_json::json!({"ok": true, "entries": entries}))
+            }
+            None => Response::error(
+                404,
+                "local_taker_stream_missing",
+                "no kept run for that request",
+            ),
         }
     }
 
