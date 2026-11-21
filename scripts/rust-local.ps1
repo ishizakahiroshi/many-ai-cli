@@ -11,6 +11,8 @@
 .EXAMPLE
   pwsh scripts\rust-local.ps1              # 修正元をビルド（debug）→ version 表示
   pwsh scripts\rust-local.ps1 -Run         # 上に加えて serve を別ウィンドウで起動し、URL を表示
+  pwsh scripts\rust-local.ps1 -Real -Run   # 通常モードでビルドし、配布版と同じくタスクトレイに入れて起動（tray --open。ウィンドウは出ない）
+  pwsh scripts\rust-local.ps1 -Real -Run -Console   # トレイでなく、serve を見えるウィンドウで起動（Hub のログをその場で読みたいとき）
   pwsh scripts\rust-local.ps1 -Real -Run -NoWebDebug # 画面の観測 sink（web/src/debug/）を入れずにビルド・起動（debug ビルドの既定は入る。-Release では常に入らない）
   pwsh scripts\rust-local.ps1 -Stop        # 起動した trial の Hub を止める
   pwsh scripts\rust-local.ps1 -Release     # release ビルド（CI と同じ形・時間がかかる）
@@ -31,6 +33,7 @@ param(
     [string]$Branch = 'develop',
     [string]$CodexHome,      # -Real の Hub に CODEX_HOME を渡す（例: %USERPROFILE%\.codex を展開した値）。「全部更新」で、本物の Codex のインストールを更新する。省略時は実 home の .codex（あれば）を渡す
     [switch]$IsolateCodex,   # -CodexHome の既定（実 home の .codex）を使わず、Codex も仮 home の中だけで動かす。仮 home の Codex は実 home の bin と食い違うので、「全部更新」は通らない
+    [switch]$Console,        # -Real -Run で、トレイ（tray --open）でなく serve を見えるウィンドウで起動する。trial は常にウィンドウ（trial はトレイを使えない）
     [string]$Source,         # 手元の worktree（rust\Cargo.toml があるフォルダ）を、取得せずそのままビルドする。push 不要。-Stop も同じ -Source を付ける
     [int]$Port = 0           # 0 = 既定。-Real は 47777（リリース版と同じ）、trial は 49400（trial は 47777 を使えない）
 )
@@ -95,6 +98,21 @@ function New-PrivateDir([string]$path) {
     if ($LASTEXITCODE -ne 0) { throw "権限を絞れませんでした（exit $LASTEXITCODE）: $path" }
 }
 
+# このフォルダのビルドから起動したトレイ（many-ai-cli.exe tray ...）を閉じる。Hub は止めない（stop が止める）。
+# 古いトレイが残っていると、新しいビルドの tray --open はその古いトレイへ転送され、古い実行ファイル（.old.*.exe へ退避したもの）で
+# Hub が起動してしまう（rust/src/application/tray/windows.rs の二重起動の処理）。配布版など別の場所の exe のトレイには触らない。
+function Stop-LocalTray {
+    $targetRoot = (Join-Path $Worktree 'rust\target') + '\'
+    $trays = @(Get-CimInstance Win32_Process -Filter "Name LIKE 'many-ai-cli%.exe'" | Where-Object {
+            $_.ExecutablePath -and $_.ExecutablePath.StartsWith($targetRoot, [StringComparison]::OrdinalIgnoreCase) -and
+            $_.CommandLine -match '\.exe"?\s+tray(\s|$)'
+        })
+    foreach ($tray in $trays) {
+        Stop-Process -Id $tray.ProcessId -Force -ErrorAction SilentlyContinue
+        Write-Host "このビルドのトレイを閉じました（pid $($tray.ProcessId)。アイコンはマウスを乗せると消えます）"
+    }
+}
+
 function Step([string]$text) { Write-Host "`n== $text" -ForegroundColor Cyan }
 function Native([string]$what, [scriptblock]$cmd) {
     & $cmd
@@ -118,7 +136,9 @@ if ($Stop) {
         Step '通常モード（-Real）の Hub を止める'
         Set-Location -LiteralPath $FakeHome
         Invoke-WithFakeHome { & $stopExe stop }
-        if ($LASTEXITCODE -ne 0) { throw "stop が失敗しました（exit $LASTEXITCODE）" }
+        $stopCode = $LASTEXITCODE
+        Stop-LocalTray   # stop は Hub だけを止め、トレイは残す作りなので、ここで閉じる
+        if ($stopCode -ne 0) { throw "stop が失敗しました（exit $stopCode）" }
         return
     }
     Step 'trial の Hub を止める'
@@ -313,8 +333,6 @@ if ($Real) {
     if ($LASTEXITCODE -ne 0) { throw "version が失敗しました（exit $LASTEXITCODE）" }
     Write-Host "実行ファイル: $exe"
     if ($Run) {
-        Step "serve を別ウィンドウで起動（通常モード・ポート $Port・home=$FakeHome）"
-        $serveCmd = "`$env:USERPROFILE='$FakeHome'; `$env:HOME='$FakeHome'; "
         # 仮 home のままだと、Codex のインストーラは仮 home の .codex を見る一方、PATH 上の bin は実 home を指す。
         # 食い違ってジャンクションの更新が失敗する（2026-10-11 実測）ので、既定は実 home の .codex を渡す。
         if (-not $CodexHome -and -not $IsolateCodex) {
@@ -324,11 +342,33 @@ if ($Real) {
         if ($CodexHome) {
             if (-not (Test-Path -LiteralPath $CodexHome -PathType Container)) { throw "-CodexHome のフォルダが見つかりません: $CodexHome" }
             Write-Host "CODEX_HOME=$CodexHome を Hub に渡します。「全部更新」は、本物の Codex のインストールを書き換えます。" -ForegroundColor Yellow
-            $serveCmd += "`$env:CODEX_HOME='$CodexHome'; "
         }
-        # serve は --open を付けたときだけブラウザを開く（付けないと開かない）。利用者のショートカットも serve --open で起動する。
-        $serveCmd += "& '$exe' serve --port $Port --open"
-        Start-Process -FilePath 'pwsh' -ArgumentList @('-NoExit', '-Command', $serveCmd) -WorkingDirectory $FakeHome
+        Stop-LocalTray   # 前回のビルドのトレイが残っていると、新しいトレイの起動がそちらへ転送されるため
+        $null = Invoke-WithFakeHome { & $exe status 2>&1 }
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host '同じ home の Hub がすでに動いています。新しいビルドで動かすには、先に -Real -Stop してからやり直してください（このまま進むと、動いている Hub をそのまま使います）。' -ForegroundColor Yellow
+        }
+        if ($Console) {
+            Step "serve を別ウィンドウで起動（-Console・通常モード・ポート $Port・home=$FakeHome）"
+            $serveCmd = "`$env:USERPROFILE='$FakeHome'; `$env:HOME='$FakeHome'; "
+            if ($CodexHome) { $serveCmd += "`$env:CODEX_HOME='$CodexHome'; " }
+            # serve は --open を付けたときだけブラウザを開く（付けないと開かない）。
+            $serveCmd += "& '$exe' serve --port $Port --open"
+            Start-Process -FilePath 'pwsh' -ArgumentList @('-NoExit', '-Command', $serveCmd) -WorkingDirectory $FakeHome
+        } else {
+            Step "タスクトレイに入れて起動（tray --open・通常モード・ポート $Port・home=$FakeHome）"
+            # 配布版のスタートアップのショートカットと同じ起動（tray --open）。Hub はトレイが serve として裏で起動する。
+            # コンソールを持たせない（CREATE_NO_WINDOW）ため、UseShellExecute を切って直接起動する。環境はこのプロセスだけに渡す。
+            $psi = [System.Diagnostics.ProcessStartInfo]::new($exe)
+            foreach ($a in @('tray', '--open', '--port', "$Port")) { $psi.ArgumentList.Add($a) }
+            $psi.WorkingDirectory = $FakeHome
+            $psi.UseShellExecute = $false
+            $psi.CreateNoWindow = $true
+            $psi.Environment['USERPROFILE'] = $FakeHome
+            $psi.Environment['HOME'] = $FakeHome
+            if ($CodexHome) { $psi.Environment['CODEX_HOME'] = $CodexHome }
+            $null = [System.Diagnostics.Process]::Start($psi)
+        }
         Step 'status（URL。ブラウザが自動で開く。開かないときはこの URL を開く。トークン付きなので他人に見せない）'
         $ok = $false
         for ($i = 1; $i -le 15; $i++) {
@@ -337,10 +377,11 @@ if ($Real) {
             if ($LASTEXITCODE -eq 0) { $ok = $true; $out; break }
         }
         if (-not $ok) {
-            Write-Host '30 秒待っても status が成功しませんでした。別ウィンドウ（serve）に出ているメッセージを確認してください。' -ForegroundColor Yellow
+            $where = if ($Console) { '別ウィンドウ（serve）に出ているメッセージ' } else { 'トレイが出したメッセージ（Hub の出力を見るときは -Stop のあと -Console で起動し直す）' }
+            Write-Host "30 秒待っても status が成功しませんでした。$where を確認してください。" -ForegroundColor Yellow
             Write-Host "最後の status の出力: $out"
         }
-        Write-Host "`n止めるとき: pwsh $PSCommandPath -Real -Stop"
+        Write-Host "`n止めるとき: pwsh $PSCommandPath -Real -Stop（Hub を止め、このビルドのトレイも閉じる）"
     } else {
         Write-Host "`n起動するとき: pwsh $PSCommandPath -Real -Run -SkipWeb"
     }
