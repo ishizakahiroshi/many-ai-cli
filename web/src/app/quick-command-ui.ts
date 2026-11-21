@@ -45,6 +45,16 @@ function iconButton(kind: 'edit' | 'delete', label: string, onClick: () => void)
 
 let menuEl: HTMLDivElement | null = null;
 
+/** 全画面オーバーレイ（`.aac-wheel-overlay`）が表示中か。terminal.ts の isModalOverlayOpen と同じ判定。 */
+function isModalOverlayVisible(): boolean {
+  for (const el of document.querySelectorAll<HTMLElement>('.aac-wheel-overlay')) {
+    if (el.hidden) continue;
+    if (getComputedStyle(el).display === 'none') continue;
+    return true;
+  }
+  return false;
+}
+
 function closeMenu(): void {
   menuEl?.classList.remove('open');
 }
@@ -252,6 +262,12 @@ export function initQuickCommandUi(): void {
       || event.clientY < rect.top || event.clientY > rect.bottom) return;
     // 開いているダイアログ（設定・編集など）の上では、一覧を出さず通常の動作に任せる。
     if (document.querySelector('dialog[open]')) return;
+    // 全画面のモーダル（ファイルのプレビュー・詳細表示など）が帯の上に重なっているときも同じ。
+    // 帯は座標だけで判定しているので、これが無いとモーダルの中の右クリックで一覧が開き、
+    // しかも一覧の z-index がモーダルより低くて、モーダルの背面に半分隠れて出てしまう。
+    if (isModalOverlayVisible()) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest('[role="dialog"], [aria-modal="true"]')) return;
     event.preventDefault();
     event.stopPropagation();
     openMenu(event.clientX, event.clientY);
