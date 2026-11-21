@@ -10,6 +10,8 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-21
+
 ### Added
 
 - **The slash-command picker now works with Devin CLI sessions.** Sessions
@@ -4916,7 +4918,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...v0.10.0
 [0.10.0-rc.2]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...v0.10.0-rc.2
 [0.9.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.8.0...v0.9.0
