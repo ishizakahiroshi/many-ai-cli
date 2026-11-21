@@ -517,20 +517,34 @@ impl InitialPromptDriver {
         cancel: &TaskCancellation,
     ) -> Result<InitialPromptOutcome, SessionError> {
         for retried in [false, true] {
-            let evidence = match self.wait_clear(engine, binding, marker, cancel).await? {
-                ComposerClear::Unknown => Some(DeliveryEvidence::EchoObserved),
-                ComposerClear::Cleared => Some(DeliveryEvidence::ComposerCleared),
-                ComposerClear::Stuck => None,
-            };
-            if let Some(evidence) = evidence {
-                return Ok(InitialPromptOutcome::Delivered {
-                    evidence,
-                    attempts,
-                    composer_enter_retried: retried,
-                });
-            }
-            if retried {
-                break;
+            match self.wait_clear(engine, binding, marker, cancel).await? {
+                ComposerClear::Cleared => {
+                    return Ok(InitialPromptOutcome::Delivered {
+                        evidence: DeliveryEvidence::ComposerCleared,
+                        attempts,
+                        composer_enter_retried: retried,
+                    });
+                }
+                // Without a composer extractor the screen cannot prove the
+                // Enter submitted; the echo may be the prompt still sitting in
+                // the composer. The fixed source accepted that echo outright
+                // and skipped every retry, which is how registered providers
+                // (e.g. devin-cli) silently lost the initial prompt. Retry one
+                // Enter, then report the honestly unconfirmed delivery.
+                ComposerClear::Unknown => {
+                    if retried {
+                        return Ok(InitialPromptOutcome::Delivered {
+                            evidence: DeliveryEvidence::EchoObservedSubmitUnconfirmed,
+                            attempts,
+                            composer_enter_retried: true,
+                        });
+                    }
+                }
+                ComposerClear::Stuck => {
+                    if retried {
+                        break;
+                    }
+                }
             }
             let (details, _) = observation(engine, binding, cancel)?;
             if details.approval.record.is_some() {

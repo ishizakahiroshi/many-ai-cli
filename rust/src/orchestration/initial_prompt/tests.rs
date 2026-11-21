@@ -1016,19 +1016,22 @@ async fn generic_no_output_retry_and_composer_retry_remain_distinct_source_paths
 }
 
 #[tokio::test(start_paused = true)]
-async fn provider_without_composer_extractor_keeps_source_echo_evidence() {
+async fn provider_without_composer_extractor_retries_enter_then_records_unconfirmed() {
+    // The fixed source's echo-accept skipped the retry entirely, which left a
+    // registered provider's prompt sitting in its composer (devin-cli). The
+    // unprovable screen now earns one retry Enter and unconfirmed evidence.
     let fixture = Fixture::new("grok", 0).await;
     let result = fixture.run().await;
     assert!(matches!(
         result.outcome,
         InitialPromptOutcome::Delivered {
-            evidence: DeliveryEvidence::EchoObserved,
-            composer_enter_retried: false,
+            evidence: DeliveryEvidence::EchoObservedSubmitUnconfirmed,
+            composer_enter_retried: true,
             ..
         }
     ));
     assert_eq!(fixture.transport.bodies.load(Ordering::SeqCst), 1);
-    assert_eq!(fixture.transport.enters.load(Ordering::SeqCst), 1);
+    assert_eq!(fixture.transport.enters.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test(start_paused = true)]
