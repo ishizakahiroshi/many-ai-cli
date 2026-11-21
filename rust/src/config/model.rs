@@ -76,6 +76,8 @@ pub struct SlashCmdSources {
     pub grok: String,
     #[serde(rename = "command-code")]
     pub command_code: String,
+    #[serde(rename = "devin-cli")]
+    pub devin_cli: String,
 }
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize, Debug)]
 #[serde(default)]
@@ -877,6 +879,13 @@ pub(super) fn schema(kind: &str) -> &'static [Field] {
             Field {
                 yaml: "command-code",
                 json: "command-code",
+                kind: "string",
+                yomit: false,
+                jomit: false,
+            },
+            Field {
+                yaml: "devin-cli",
+                json: "devin-cli",
                 kind: "string",
                 yomit: false,
                 jomit: false,
@@ -2645,6 +2654,7 @@ impl SlashCmdSources {
             opencode: source_url("slash-commands", "opencode"),
             grok: source_url("slash-commands", "grok"),
             command_code: source_url("slash-commands", "command-code"),
+            devin_cli: source_url("slash-commands", "devin-cli"),
         }
     }
     pub fn effective(mut self) -> Self {
@@ -2659,6 +2669,7 @@ impl SlashCmdSources {
             ("opencode", &mut self.opencode),
             ("grok", &mut self.grok),
             ("command-code", &mut self.command_code),
+            ("devin-cli", &mut self.devin_cli),
         ] {
             if field.is_empty() {
                 *field = source_url("slash-commands", provider);

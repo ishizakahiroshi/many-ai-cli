@@ -32,6 +32,7 @@ pub const PROVIDERS: &[&str] = &[
     "opencode",
     "grok",
     "command-code",
+    "devin-cli",
 ];
 #[derive(Clone, Default, Debug, PartialEq, Serialize)]
 pub struct SlashCmd {
@@ -49,6 +50,7 @@ pub struct SearchContext {
     pub home_dir: String,
     pub codex_home: String,
     pub claude_dir: String,
+    pub cwd: String,
 }
 #[derive(Clone, Serialize)]
 pub struct SlashResponse {
@@ -87,6 +89,8 @@ pub struct SourcePatch {
     pub grok: Option<String>,
     #[serde(rename = "command-code")]
     pub command_code: Option<String>,
+    #[serde(rename = "devin-cli")]
+    pub devin_cli: Option<String>,
 }
 impl crate::proto::wire::GoWire for SourcePatch {
     const GO_TYPE: &'static str = "slashCmdSourcesPatch";
@@ -119,6 +123,10 @@ impl crate::proto::wire::GoWire for SourcePatch {
             },
             crate::proto::wire::Field {
                 name: "command-code",
+                kind: "*string",
+            },
+            crate::proto::wire::Field {
+                name: "devin-cli",
                 kind: "*string",
             },
         ],
@@ -195,6 +203,7 @@ impl SlashCommands {
                 &patch.opencode,
                 &patch.grok,
                 &patch.command_code,
+                &patch.devin_cli,
             ];
             for (field, value) in fields.into_iter().zip(patches) {
                 if let Some(value) = value {
@@ -248,6 +257,7 @@ impl SlashCommands {
             home_dir: details.transcript.home_dir,
             codex_home: details.transcript.codex_home,
             claude_dir: details.transcript.claude_dir,
+            cwd: details.transcript.cwd,
         }
     }
     pub async fn commands(
@@ -352,7 +362,7 @@ pub enum SourceFailure {
     Invalid(String),
     Save,
 }
-fn source_fields(source: &SlashCmdSources) -> [&str; 7] {
+fn source_fields(source: &SlashCmdSources) -> [&str; 8] {
     [
         &source.claude,
         &source.codex,
@@ -361,9 +371,10 @@ fn source_fields(source: &SlashCmdSources) -> [&str; 7] {
         &source.opencode,
         &source.grok,
         &source.command_code,
+        &source.devin_cli,
     ]
 }
-fn source_fields_mut(source: &mut SlashCmdSources) -> [&mut String; 7] {
+fn source_fields_mut(source: &mut SlashCmdSources) -> [&mut String; 8] {
     [
         &mut source.claude,
         &mut source.codex,
@@ -372,14 +383,16 @@ fn source_fields_mut(source: &mut SlashCmdSources) -> [&mut String; 7] {
         &mut source.opencode,
         &mut source.grok,
         &mut source.command_code,
+        &mut source.devin_cli,
     ]
 }
 fn cache_key(provider: &str, ctx: &SearchContext) -> String {
     format!(
-        "{provider}|{}|{}|{}",
+        "{provider}|{}|{}|{}|{}",
         simple_lower(ctx.home_dir.trim()),
         simple_lower(ctx.codex_home.trim()),
-        simple_lower(ctx.claude_dir.trim())
+        simple_lower(ctx.claude_dir.trim()),
+        simple_lower(ctx.cwd.trim())
     )
 }
 fn merge(provider: &str, cmds: Vec<SlashCmd>, skills: Vec<SlashCmd>) -> Vec<SlashCmd> {

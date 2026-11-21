@@ -91,40 +91,8 @@ fn read(provider: &str, path: &Path) -> Option<SlashCmd> {
         path: path.to_owned(),
     })
 }
-pub(super) fn discover(
-    provider: &str,
-    ctx: &SearchContext,
-    environment: &[String],
-    home: Option<&Path>,
-    paths: &RuntimePaths,
-) -> Vec<SlashCmd> {
-    if !matches!(provider, "claude" | "codex") {
-        return vec![];
-    }
-    let home = if !ctx.home_dir.trim().is_empty() {
-        PathBuf::from(ctx.home_dir.trim())
-    } else {
-        match home {
-            Some(home) => home.to_owned(),
-            None => return vec![],
-        }
-    };
-    let (explicit, key, suffix, children) = if provider == "codex" {
-        (
-            &ctx.codex_home,
-            "CODEX_HOME",
-            ".codex",
-            ["skills", "plugins/cache"],
-        )
-    } else {
-        (
-            &ctx.claude_dir,
-            "CLAUDE_CONFIG_DIR",
-            ".claude",
-            ["skills", "plugins"],
-        )
-    };
-    let from_env = environment
+fn env_get<'a>(environment: &'a [String], key: &str) -> &'a str {
+    environment
         .iter()
         .find_map(|entry| {
             entry
@@ -138,18 +106,82 @@ pub(super) fn discover(
                 })
                 .map(|(_, value)| value.trim())
         })
-        .unwrap_or("");
-    let vendor = if !explicit.trim().is_empty() {
-        PathBuf::from(explicit.trim())
-    } else if !from_env.is_empty() {
-        PathBuf::from(from_env)
+        .unwrap_or("")
+}
+pub(super) fn discover(
+    provider: &str,
+    ctx: &SearchContext,
+    environment: &[String],
+    home: Option<&Path>,
+    paths: &RuntimePaths,
+) -> Vec<SlashCmd> {
+    if !matches!(provider, "claude" | "codex" | "devin-cli") {
+        return vec![];
+    }
+    let home = if !ctx.home_dir.trim().is_empty() {
+        PathBuf::from(ctx.home_dir.trim())
     } else {
-        home.join(suffix)
+        match home {
+            Some(home) => home.to_owned(),
+            None => return vec![],
+        }
     };
+    let mut roots = Vec::new();
+    if provider == "devin-cli" {
+        // `devin skills paths` の実測値: global は APPDATA/devin・APPDATA/cognition・
+        // ~/.agents、project は cwd/.devin・.cognition・.agents。
+        let config_root = {
+            let app_data = env_get(environment, "APPDATA");
+            if cfg!(windows) {
+                if app_data.is_empty() {
+                    home.join("AppData").join("Roaming")
+                } else {
+                    PathBuf::from(app_data)
+                }
+            } else {
+                home.join(".config")
+            }
+        };
+        roots.push(config_root.join("devin").join("skills"));
+        roots.push(config_root.join("cognition").join("skills"));
+        roots.push(home.join(".agents").join("skills"));
+        let cwd = ctx.cwd.trim();
+        if !cwd.is_empty() {
+            for name in [".devin", ".cognition", ".agents"] {
+                roots.push(PathBuf::from(cwd).join(name).join("skills"));
+            }
+        }
+    } else {
+        let (explicit, key, suffix, children) = if provider == "codex" {
+            (
+                &ctx.codex_home,
+                "CODEX_HOME",
+                ".codex",
+                ["skills", "plugins/cache"],
+            )
+        } else {
+            (
+                &ctx.claude_dir,
+                "CLAUDE_CONFIG_DIR",
+                ".claude",
+                ["skills", "plugins"],
+            )
+        };
+        let from_env = env_get(environment, key);
+        let vendor = if !explicit.trim().is_empty() {
+            PathBuf::from(explicit.trim())
+        } else if !from_env.is_empty() {
+            PathBuf::from(from_env)
+        } else {
+            home.join(suffix)
+        };
+        for suffix in children {
+            roots.push(vendor.join(suffix));
+        }
+    }
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
-    for suffix in children {
-        let root = vendor.join(suffix);
+    for root in roots {
         if !seen.insert(root.clone())
             || !root.is_dir()
             || fs::symlink_metadata(&root).is_ok_and(|metadata| metadata.file_type().is_symlink())

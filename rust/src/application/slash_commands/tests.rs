@@ -366,7 +366,7 @@ async fn failed_save_retains_published_sources_and_invalidates_all_changed_provi
             .keys()
             .all(|key| !key.starts_with("claude|"))
     );
-    assert!(f.owner.cache.lock().unwrap().contains_key("codex|||"));
+    assert!(f.owner.cache.lock().unwrap().contains_key("codex||||"));
 }
 #[tokio::test]
 async fn source_http_patch_preserves_omitted_and_null_fields_and_rejects_before_publication() {

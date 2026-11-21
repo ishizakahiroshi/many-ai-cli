@@ -3087,6 +3087,7 @@ export async function loadSlashCmdSources() {
   const openCodeEl = document.getElementById('slash-src-opencode');
   const grokEl = document.getElementById('slash-src-grok');
   const commandCodeEl = document.getElementById('slash-src-command-code');
+  const devinCliEl = document.getElementById('slash-src-devin-cli');
   if (!claudeEl || !codexEl || !copilotEl) return;
   try {
     const resp = await apiFetch('/api/slash-cmd-sources');
@@ -3099,6 +3100,7 @@ export async function loadSlashCmdSources() {
     if (openCodeEl) openCodeEl.value = data.opencode || '';
     if (grokEl) grokEl.value = data.grok || '';
     if (commandCodeEl) commandCodeEl.value = data['command-code'] || '';
+    if (devinCliEl) devinCliEl.value = data['devin-cli'] || '';
   } catch (_) {}
 }
 
@@ -3114,6 +3116,7 @@ export async function loadSlashCmdSources() {
       opencode: (document.getElementById('slash-src-opencode')?.value || '').trim(),
       grok: (document.getElementById('slash-src-grok')?.value || '').trim(),
       'command-code': (document.getElementById('slash-src-command-code')?.value || '').trim(),
+      'devin-cli': (document.getElementById('slash-src-devin-cli')?.value || '').trim(),
     };
     try {
       const resp = await apiFetch('/api/slash-cmd-sources', {
@@ -4475,7 +4478,7 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
     const ids = [
       'slash-src-claude', 'slash-src-codex', 'slash-src-copilot',
       'slash-src-cursor-agent', 'slash-src-opencode', 'slash-src-grok',
-      'slash-src-command-code',
+      'slash-src-command-code', 'slash-src-devin-cli',
     ];
     let custom = 0;
     for (const id of ids) {

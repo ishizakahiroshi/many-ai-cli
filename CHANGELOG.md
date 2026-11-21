@@ -12,6 +12,15 @@ Release artifacts are published at
 
 ### Added
 
+- **The slash-command picker now works with Devin CLI sessions.** Sessions
+  launched as a `devin-cli` custom provider get a bundled command list
+  (fetched from the repository's `devin-cli.md` source, overridable in
+  Settings → Slash command sources) plus locally discovered Devin skills
+  from the Devin, Cognition and `.agents` skill directories. Single-line
+  inputs starting with `/` are sent as bracketed paste with a deferred
+  Enter so Devin's own completion popup no longer swallows the first
+  Enter and leaves commands half-typed.
+
 - **You can see and pause the board taker on this PC.** On a Hub with
   `local_taker` in `board.json`, a header button shows whether the taker is
   working (green dot), paused (yellow) or waiting. Its dialog shows the run in

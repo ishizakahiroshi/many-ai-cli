@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "79dc6b1ecc32ab63d3a13838eddd58e5db8fc4ee",
-    "dirty": false,
+    "commit": "72ed73323206e718754dd73de44248986b3b55e8",
+    "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
     "adapters": [
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2089,
+    "discovered": 2090,
     "analyzed": 1639,
     "unresolved": 15,
     "unknown": 0,
-    "unclaimed": 435,
+    "unclaimed": 436,
     "skipped_by_config": 0
   },
   "files": [
@@ -21203,6 +21203,14 @@
     },
     {
       "path": "resources/slash-commands/cursor-agent.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "resources/slash-commands/devin-cli.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},

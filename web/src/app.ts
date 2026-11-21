@@ -555,6 +555,13 @@ function buildBodySubmitPart(sessionId, rawText) {
     return { textPart: '\x1b[200~' + rawText + '\x1b[201~', deferEnter: true };
   }
   const provider = sessions.get(sessionId)?.provider || '';
+  // Devin TUI は "/" 入力直後に候補ポップアップを開き、最初の Enter をコマンド送信ではなく
+  // 候補確定に使う。本文+\r 同梱だと Enter が飲まれてコマンドが入力欄に残り、次の送信と
+  // 連結される実害（"/model" の後の文が連結・"/help" が "/help/help" 化）があるため、
+  // devin-cli の "/" 始まりだけはペースト包み＋遅延 Enter に変える。
+  if (provider === 'devin-cli' && rawText.startsWith('/')) {
+    return { textPart: '\x1b[200~' + rawText + '\x1b[201~', deferEnter: true };
+  }
   const keyLike = rawText === '' || rawText.length === 1 || /^[0-9]+$/.test(rawText) || rawText.startsWith('/');
   if (isShellProvider(provider) || keyLike) {
     return { textPart: rawText + '\r', deferEnter: false };
@@ -2458,6 +2465,7 @@ inputEl.addEventListener('blur', (e) => {
       opencode: (document.getElementById('slash-src-opencode')?.value || '').trim(),
       grok: (document.getElementById('slash-src-grok')?.value || '').trim(),
       'command-code': (document.getElementById('slash-src-command-code')?.value || '').trim(),
+      'devin-cli': (document.getElementById('slash-src-devin-cli')?.value || '').trim(),
     };
     try {
       await apiFetch('/api/slash-cmd-sources', {
@@ -2595,6 +2603,7 @@ inputEl.addEventListener('blur', (e) => {
     const slashOpenCodeEl = document.getElementById('slash-src-opencode');
     const slashGrokEl = document.getElementById('slash-src-grok');
     const slashCommandCodeEl = document.getElementById('slash-src-command-code');
+    const slashDevinCliEl = document.getElementById('slash-src-devin-cli');
     if (slashClaudeEl) slashClaudeEl.value = '';
     if (slashCodexEl) slashCodexEl.value = '';
     if (slashCopilotEl) slashCopilotEl.value = '';
@@ -2602,6 +2611,7 @@ inputEl.addEventListener('blur', (e) => {
     if (slashOpenCodeEl) slashOpenCodeEl.value = '';
     if (slashGrokEl) slashGrokEl.value = '';
     if (slashCommandCodeEl) slashCommandCodeEl.value = '';
+    if (slashDevinCliEl) slashDevinCliEl.value = '';
     loadUsageLinkSettings();
 
     const termAppEl = document.getElementById('settings-terminal-app');
