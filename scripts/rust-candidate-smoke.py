@@ -372,9 +372,16 @@ class Clock:
 
 
 def pick_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.bind((LOOPBACK, 0))
-        return probe.getsockname()[1]
+    # The OS may hand out DEFAULT_PORT as an ephemeral port (it is inside the
+    # Linux range); ask again instead of letting prepare refuse it.
+    port = 0
+    for _ in range(16):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind((LOOPBACK, 0))
+            port = probe.getsockname()[1]
+        if port != DEFAULT_PORT:
+            return port
+    return port
 
 
 def port_is_open(port: int) -> bool:

@@ -406,6 +406,25 @@ class SmokeTests(unittest.TestCase):
 
 
 class PureHelperTests(unittest.TestCase):
+    def test_free_port_is_picked_again_when_the_os_hands_out_the_default_port(self):
+        ports = iter([smoke.DEFAULT_PORT, 50123])
+
+        class Probe:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def bind(self, address):
+                self.port = next(ports)
+
+            def getsockname(self):
+                return (smoke.LOOPBACK, self.port)
+
+        with patch.object(smoke.socket, 'socket', lambda *args: Probe()):
+            self.assertEqual(smoke.pick_free_port(), 50123)
+
     def test_redaction_removes_known_and_token_shaped_values(self):
         text = f'GET /?token={TOKEN}&x=1 Authorization: Bearer {TOKEN} other {"f" * 40} short abcdef12 secret-xyz'
         cleaned = smoke.redact(text, ('secret-xyz',))

@@ -4,7 +4,7 @@ use std::{
     io,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicIsize, Ordering},
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
@@ -72,7 +72,7 @@ pub struct TrayOwner {
     /// Visible window handle. `0` means the resident loop has no window yet,
     /// including every test that never creates one.
     #[cfg(windows)]
-    presence_hwnd: AtomicIsize,
+    presence_hwnd: std::sync::atomic::AtomicIsize,
     #[cfg(test)]
     test_error_reporter: Option<TestErrorReporter>,
 }
@@ -87,7 +87,7 @@ impl TrayOwner {
             opening: AtomicBool::new(false),
             last_open: Mutex::new(None),
             #[cfg(windows)]
-            presence_hwnd: AtomicIsize::new(0),
+            presence_hwnd: std::sync::atomic::AtomicIsize::new(0),
             #[cfg(test)]
             test_error_reporter: None,
         })
