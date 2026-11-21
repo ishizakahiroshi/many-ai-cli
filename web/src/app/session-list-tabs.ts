@@ -13,6 +13,7 @@ import { SESSION_LIST_TAB_DRAG, SESSION_LIST_CARD_DRAG, SESSION_LIST_GROUP_DRAG,
   pinSessionListScope, unpinSessionListScope, type SessionListTabScope,
   type SessionListTabState } from './session-list-tab-state.js';
 import { VALID_TAB_NAME_LIST, type TabName } from './project-view-memory.js';
+import { isSessionListTabsVertical } from './session-list-tab-layout.js';
 
 interface Callbacks {
   sessions: () => SessionSnapshot[];
@@ -121,6 +122,11 @@ function revealSelected(): void {
   const button = parent?.querySelector<HTMLElement>('[aria-selected="true"]');
   if (!parent || !button) return;
   const a = button.getBoundingClientRect(), b = parent.getBoundingClientRect();
+  if (isSessionListTabsVertical()) {
+    if (a.top < b.top) parent.scrollTop -= b.top - a.top;
+    else if (a.bottom > b.bottom) parent.scrollTop += a.bottom - b.bottom;
+    return;
+  }
   if (a.left < b.left) parent.scrollLeft -= b.left - a.left;
   else if (a.right > b.right) parent.scrollLeft += a.right - b.right;
 }
@@ -364,11 +370,14 @@ export function initializeSessionListTabs(options: Callbacks): void {
   });
   parent.addEventListener('keydown', event => {
     const button = (event.target as Element).closest<HTMLElement>('[data-session-list-tab]');
-    if (!button || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    // 縦レールでは上下キーで移る（aria-orientation に合わせる）。
+    const vertical = isSessionListTabsVertical();
+    const forward = vertical ? 'ArrowDown' : 'ArrowRight', backward = vertical ? 'ArrowUp' : 'ArrowLeft';
+    if (!button || ![backward, forward, 'Home', 'End'].includes(event.key)) return;
     event.preventDefault(); event.stopPropagation();
     const tabs = state().tabs, index = tabs.findIndex(tab => tab.id === button.dataset.sessionListTab);
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
-      : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      : (index + (event.key === forward ? 1 : -1) + tabs.length) % tabs.length;
     select(tabs[next].id, true, true);
   });
   sidebar.addEventListener('contextmenu', event => {
@@ -451,7 +460,7 @@ export function renderSessionListTabs(): void {
   if (signature === tabsSignature || drag) return;
   tabsSignature = signature;
   const focused = parent.contains(document.activeElement);
-  const x = parent.scrollLeft;
+  const x = parent.scrollLeft, y = parent.scrollTop;
   parent.replaceChildren();
   for (const tab of state().tabs) {
     const button = document.createElement('button');
@@ -478,7 +487,7 @@ export function renderSessionListTabs(): void {
     }
     parent.append(button);
   }
-  parent.scrollLeft = x;
+  parent.scrollLeft = x; parent.scrollTop = y;
   document.getElementById('sessions')?.setAttribute('aria-labelledby', `session-list-tab-${state().selectedId}`);
   const add = document.getElementById('session-list-tab-add');
   const label = tx('session_list_tab_add', 'Add tab');
@@ -612,8 +621,13 @@ function stopEdge(): void { cancelAnimationFrame(edgeFrame); edgeFrame = 0; edge
 function clearDrag(): void { drag = null; stopEdge(); clearFeedback(); renderSessionListTabs(); }
 function edgeScroll(): void {
   if (!edgeDirection || !drag || !strip()) { stopEdge(); return; }
-  strip()!.scrollLeft += edgeDirection * 5;
+  if (isSessionListTabsVertical()) strip()!.scrollTop += edgeDirection * 5;
+  else strip()!.scrollLeft += edgeDirection * 5;
   edgeFrame = requestAnimationFrame(edgeScroll);
+}
+/** ドラッグ位置がタブの後ろ半分か（横一列では右半分、縦レールでは下半分）。 */
+function pointerInTrailingHalf(event: DragEvent, rect: DOMRect): boolean {
+  return isSessionListTabsVertical() ? event.clientY > rect.top + rect.height / 2 : event.clientX > rect.left + rect.width / 2;
 }
 function bindDrag(parent: HTMLElement, sidebar: HTMLElement): void {
   sidebar.addEventListener('dragstart', event => {
@@ -648,11 +662,13 @@ function bindDrag(parent: HTMLElement, sidebar: HTMLElement): void {
     if (target) {
       const rect = target.getBoundingClientRect();
       target.classList.add(drag.kind === 'tab'
-        ? event.clientX > rect.left + rect.width / 2 ? 'drop-after' : 'drop-before'
+        ? pointerInTrailingHalf(event, rect) ? 'drop-after' : 'drop-before'
         : 'drop-session');
     }
     const rect = parent.getBoundingClientRect();
-    const direction = event.clientX < rect.left + 20 ? -1 : event.clientX > rect.right - 20 ? 1 : 0;
+    const direction = isSessionListTabsVertical()
+      ? event.clientY < rect.top + 20 ? -1 : event.clientY > rect.bottom - 20 ? 1 : 0
+      : event.clientX < rect.left + 20 ? -1 : event.clientX > rect.right - 20 ? 1 : 0;
     if (direction !== edgeDirection) { stopEdge(); edgeDirection = direction; if (direction) edgeFrame = requestAnimationFrame(edgeScroll); }
   });
   parent.addEventListener('dragleave', event => { if (!parent.contains(event.relatedTarget as Node)) { stopEdge(); clearFeedback(); } });
@@ -665,7 +681,7 @@ function bindDrag(parent: HTMLElement, sidebar: HTMLElement): void {
     if (target) {
       const to = target.dataset.sessionListTab!;
       if (payload.kind === 'tab') {
-        const rect = target.getBoundingClientRect(); reorderSessionListTab(state(), payload.id, to, event.clientX > rect.left + rect.width / 2);
+        const rect = target.getBoundingClientRect(); reorderSessionListTab(state(), payload.id, to, pointerInTrailingHalf(event, rect));
       } else if (payload.kind === 'group') {
         if (to !== payload.from) moveSessionListProject(state(), all(), payload.key, payload.from, to);
       } else if (sessionListIdentity(all().find(session => session.id === payload.id)) === payload.identity) {

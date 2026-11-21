@@ -12,6 +12,13 @@ Release artifacts are published at
 
 ### Added
 
+- **The sidebar tabs can sit in a vertical rail.** A new "Sidebar tabs" choice
+  in Settings → Layout switches the tab strip from one horizontal row to a
+  narrow rail on the left of the session cards. Reordering tabs, dropping a
+  card or a project onto a tab, and the right-click menu work the same way;
+  the arrow keys switch to Up/Down. It applies only at mouse-driven PC widths
+  (721px and up) — phone widths and touch screens keep the horizontal strip.
+  The default stays horizontal, and the choice is stored in this browser only.
 - **Quick command buttons can show a custom label.** Each quick command slot
   takes an optional short label (up to 12 characters, counting emoji as one)
   that is shown on the button instead of the truncated command. The label can

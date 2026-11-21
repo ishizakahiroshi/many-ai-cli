@@ -53,6 +53,7 @@ import { initTabBarOrder } from './app/tab-bar-order.js';
 import { initInputToolsOrder } from './app/input-tools-order.js';
 import { initUiSide } from './app/ui-side.js';
 import { initLayoutPreset } from './app/layout-preset.js';
+import { initSessionListTabLayout } from './app/session-list-tab-layout.js';
 import { initSessionStrip } from './app/session-strip.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
@@ -95,6 +96,8 @@ initLayoutPreset();
 initInputToolsOrder();
 // 操作系（カード列 / 入力欄ツール / ✕）の左右位置（localStorage 保存）
 initUiSide();
+// サイドバーのタブを横一列にするか左の縦レールにするか（localStorage 保存）
+initSessionListTabLayout();
 // 端末の上のセッション帯（いま開いている箱のセッション一覧 + 高さの掴み帯）
 initSessionStrip();
 initFlexiblePaneViews();

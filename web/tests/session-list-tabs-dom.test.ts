@@ -64,9 +64,10 @@ function fixture(saved?:unknown) {
   const all=(root:El=doc.body):El[]=>[root,...root.children.flatMap(child=>all(child))];
   const el=(tag:string,id:string,parent:El=doc.body)=>{const node=new El(tag,doc);node.id=id;parent.append(node);return node;};
   const sidebar=el('aside','session-list'), strip=el('div','session-list-tabs',sidebar), add=el('button','session-list-tab-add',sidebar), cards=el('div','sessions',sidebar);el('p','session-list-tabs-storage',sidebar);
-  let storage=JSON.stringify(saved??null), writes=0, active=1, menus=0;
+  let storage=JSON.stringify(saved??null), writes=0, active=1, menus=0, vertical=false;
   const window=new El('window',doc);
-  const ctx:any={...model,document:doc,window,Element:El,HTMLElement:El,HTMLInputElement:El,HTMLSelectElement:El,
+  // isSessionListTabsVertical は session-list-tab-layout.ts の関数。import を落として評価するので、ここで差し込む。
+  const ctx:any={...model,isSessionListTabsVertical:()=>vertical,document:doc,window,Element:El,HTMLElement:El,HTMLInputElement:El,HTMLSelectElement:El,
     innerWidth:1280,innerHeight:900,CSS:{escape:(value:string)=>value},crypto:{getRandomValues:(array:Uint32Array)=>array.fill(++seq)},
     t:(key:string)=>key,localStorage:{getItem:()=>storage,setItem:(_key:string,value:string)=>{storage=value;writes++;}},
     setTimeout:(fn:Function)=>{timers.set(++seq,fn);return seq;},clearTimeout:(id:number)=>timers.delete(id),
@@ -85,7 +86,7 @@ function fixture(saved?:unknown) {
   const listeners=listSource.slice(listSource.indexOf('  if (!_sessionListClickDelegated) {'),listSource.indexOf("  root.innerHTML = '';",listSource.indexOf('export function renderSessionList()')));
   Object.assign(ctx,{root:cards,_sessionListClickDelegated:false,_sessionCardPointerDown:null,isSessionCardInteractiveTarget:()=>false,sessionCardTapMoveLimit:()=>18,markSessionCardPointerActivated:()=>{},onSessionCardActivate:(id:number)=>{active=id;},consumeDuplicateSessionCardClick:()=>false,openCardCtxMenu:()=>{menus++;}});
   runInNewContext(new Bun.Transpiler({loader:'ts'}).transformSync(listeners),ctx);
-  return {ui,ctx,doc,sidebar,strip,add,cards,sessions,all,el,render,timers,frames,open,get storage(){return JSON.parse(storage);},get writes(){return writes;},get active(){return active;},get menus(){return menus;},flush(){for(const [id,fn]of [...frames]){frames.delete(id);fn();}},hold(){for(const[id,fn]of[...timers]){timers.delete(id);fn();}}};
+  return {ui,ctx,doc,sidebar,strip,add,cards,sessions,all,el,render,timers,frames,open,setVertical(on:boolean){vertical=on;},get storage(){return JSON.parse(storage);},get writes(){return writes;},get active(){return active;},get menus(){return menus;},flush(){for(const [id,fn]of [...frames]){frames.delete(id);fn();}},hold(){for(const[id,fn]of[...timers]){timers.delete(id);fn();}}};
 }
 
 test('actual UI: add/switch preserves active conversation; waiting badge, literal rename and blank rejection',()=>{
@@ -201,6 +202,25 @@ test('actual tab drag listeners reorder tabs with feedback without emitting a pa
  f.strip.children[0].emit('dragover',{dataTransfer:transfer,clientX:239});assert.equal(f.strip.children[0].classList.contains('drop-after'),true);
  f.strip.children[0].emit('drop',{dataTransfer:transfer,clientX:239});f.flush();
  assert.deepEqual(f.strip.children.map(el=>el.dataset.sessionListTab),[before[0],before[2],before[1]]);assert.equal(f.active,1);
+});
+test('vertical rail: tab drag decides the drop side by pointer Y, not X',()=>{
+ const f=fixture();f.setVertical(true);f.flush();f.add.click();f.add.click();const before=f.strip.children.map(el=>el.dataset.sessionListTab);
+ const data=new Map<string,string>();const transfer={get types(){return [...data.keys()];},setData:(k:string,v:string)=>data.set(k,v)};
+ f.strip.children[2].emit('dragstart',{dataTransfer:transfer});
+ // X は端でも、Y が上半分なら「前」。横一列の判定（X）を使っていないことを確かめる。
+ f.strip.children[0].emit('dragover',{dataTransfer:transfer,clientX:239,clientY:2});
+ assert.equal(f.strip.children[0].classList.contains('drop-before'),true);assert.equal(f.strip.children[0].classList.contains('drop-after'),false);
+ f.strip.children[0].emit('dragover',{dataTransfer:transfer,clientX:0,clientY:33});assert.equal(f.strip.children[0].classList.contains('drop-after'),true);
+ f.strip.children[0].emit('drop',{dataTransfer:transfer,clientX:0,clientY:33});f.flush();
+ assert.deepEqual(f.strip.children.map(el=>el.dataset.sessionListTab),[before[0],before[2],before[1]]);
+});
+test('vertical rail: arrow keys move with Up/Down and ignore Left/Right; horizontal keeps Left/Right',()=>{
+ const saved=model.normalizeSessionListTabs(null);model.addSessionListTab(saved,'Other','other');saved.selectedId='tab-1';saved.memberships['session:3:start-3']='other';
+ const f=fixture(saved);f.flush();const first=f.strip.children[0];
+ f.setVertical(true);first.emit('keydown',{key:'ArrowRight'});assert.equal(f.strip.children[0].getAttribute('aria-selected'),'true');
+ f.strip.children[0].emit('keydown',{key:'ArrowDown'});assert.equal(f.strip.children[1].getAttribute('aria-selected'),'true');
+ f.setVertical(false);f.strip.children[1].emit('keydown',{key:'ArrowDown'});assert.equal(f.strip.children[1].getAttribute('aria-selected'),'true');
+ f.strip.children[1].emit('keydown',{key:'ArrowLeft'});assert.equal(f.strip.children[0].getAttribute('aria-selected'),'true');
 });
 test('actual existing card drag listener keeps its pane payload alongside membership movement',()=>{
  const f=fixture();f.flush();const c=f.cards.children[2];const s=f.sessions[2];const text=readFileSync(new URL('../src/app/session-list.ts',import.meta.url),'utf8');

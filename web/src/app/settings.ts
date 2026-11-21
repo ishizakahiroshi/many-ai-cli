@@ -4314,6 +4314,7 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
     if (approval === 'bottom') parts.push(_summaryLabel('承認:いつも下', 'approval:bottom'));
     else if (approval === 'left') parts.push(_summaryLabel('承認:左', 'approval:left'));
     else if (approval === 'right') parts.push(_summaryLabel('承認:右', 'approval:right'));
+    if (_summaryVal('session-list-tab-layout-select') === 'vertical') parts.push(_summaryLabel('縦タブ', 'vertical tabs'));
     return parts.join('・');
   },
 

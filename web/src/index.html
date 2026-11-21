@@ -217,6 +217,14 @@
           </div>
           <div class="settings-note" data-i18n="settings_ui_side_desc">セッションカード・入力欄のツール群・開閉／閉じるボタン（⊟／⊞／✕）・確認ポップアップを、それぞれ独立して好きな側へ置けます。確認ポップアップの「入力まわりと同じ側」は、画面の配置で選んだ型に追従します。この設定はこのブラウザにのみ保存されます（スマホ幅ではカード列は常に左のドロワーで、確認ポップアップも必ず下に出ます）。</div>
           <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_session_tabs_layout_label">サイドバーのタブ</span>
+            <select id="session-list-tab-layout-select" class="ui-input settings-select">
+              <option value="horizontal" data-i18n="settings_session_tabs_layout_horizontal">横（既定）</option>
+              <option value="vertical" data-i18n="settings_session_tabs_layout_vertical">縦（左のレール）</option>
+            </select>
+          </div>
+          <div class="settings-note" data-i18n="settings_session_tabs_layout_desc">サイドバー上部のタブを、横一列にするか、カードの左に縦に並べるかを選びます。縦は、マウスで使う PC の幅（721px 以上）だけに効き、スマホ幅とタッチ操作の画面では常に横です。タブの並べ替え・カードの移動はどちらでも同じ操作です。この設定はこのブラウザにのみ保存されます。</div>
+          <div class="settings-row">
             <span class="settings-label" data-i18n="settings_input_tools_order_label">入力欄ボタンの並び順</span>
             <button type="button" id="input-tools-order-reset-btn" class="ui-button ui-button--secondary ui-button--compact settings-inline-btn" data-i18n="settings_input_tools_order_reset">既定に戻す</button>
           </div>

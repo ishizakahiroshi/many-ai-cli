@@ -49,6 +49,27 @@ dialog.session-list-tab-dialog:not([open]) {
   #session-list-tab-add { --ui-button-bg: transparent; --ui-button-border: transparent; --ui-button-fg: var(--muted); align-self: center; flex-basis: 24px; width: 24px; min-height: 24px; padding: 0; }
   #session-list-tab-add:hover:not(:disabled) { --ui-button-fg: var(--text); }
 }
+/* 縦タブ（設定 → 配置 → サイドバーのタブ の「縦」。クラスの付け外しは session-list-tab-layout.ts）。
+   DOM は動かさず、サイドバーを 2 列の grid にしてタブ帯を左の縦レールへ置く。
+   条件は session-list-tab-layout.ts の VERTICAL_TABS_QUERY と同じ（マウスで使う PC の幅だけ。変えるときは両方を直す）。
+   行: 1 操作ボタン帯（全幅）/ 2 保存失敗の注意 / 3 新規セッションの入力（.aac-wheel-overlay で指す。同じクラスの relay-dialog は position: fixed なので grid に参加しない） / 4 カード一覧 / 5 フッター（全幅）。
+   レールは 2〜4 行目に渡して置き、2〜4 は右の列。非表示の要素は grid に参加しないので、行番号を固定しても詰まる。 */
+@media (min-width: 721px) and (not (pointer: coarse)) {
+  #session-list.tabs-vertical { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr) auto; column-gap: 6px; }
+  #session-list.tabs-vertical > * { grid-column: 1 / -1; }
+  #session-list.tabs-vertical > #new-session-bar { grid-row: 1; }
+  #session-list.tabs-vertical > #session-list-tab-bar { grid-column: 1; grid-row: 2 / 5; flex-direction: column; align-items: stretch; gap: 3px; min-height: 0; margin: 0; overflow: hidden; border-bottom: 0; border-right: 1px solid var(--line); padding-right: 4px; }
+  #session-list.tabs-vertical > #session-list-tabs-storage { grid-column: 2; grid-row: 2; }
+  #session-list.tabs-vertical > .aac-wheel-overlay:not([hidden]) { grid-column: 2; grid-row: 3; max-height: 45vh; }
+  #session-list.tabs-vertical > #sessions { grid-column: 2; grid-row: 4; }
+  #session-list.tabs-vertical > .session-footer { grid-row: 5; }
+  #session-list.tabs-vertical #session-list-tabs { flex-direction: column; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+  #session-list.tabs-vertical .session-list-tab { min-width: 40px; max-width: 112px; border-bottom: 1px solid transparent; border-right: 2px solid transparent; border-radius: var(--radius-md) 0 0 var(--radius-md); touch-action: pan-y; }
+  #session-list.tabs-vertical .session-list-tab[aria-selected="true"] { border-bottom-color: transparent; border-right-color: var(--accent); }
+  #session-list.tabs-vertical .session-list-tab.drop-before { box-shadow: inset 0 3px var(--accent); }
+  #session-list.tabs-vertical .session-list-tab.drop-after { box-shadow: inset 0 -3px var(--accent); }
+  #session-list.tabs-vertical #session-list-tab-add { flex: 0 0 24px; align-self: center; }
+}
 @media (max-width: 720px) {
   body.mobile-drawer-open #new-session-bar { display: flex; order: -3; }
   body.mobile-drawer-open #session-list-tab-bar { order: -2; }
