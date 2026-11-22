@@ -5,10 +5,20 @@ tags: [many-iris, execution-contract, mcp]
 owner: maintainers
 review_status: draft
 related: [../README.md, ../README.ja.md, ../CHANGELOG.md]
-last_reviewed: 2026-11-03
+last_reviewed: 2026-11-22
 ---
 
 # Many Iris execution contract
+
+> 最終更新: 2026-11-22(日) 17:31:16
+
+> **Frozen (2026-11-22)**: Many Iris now keeps its current work state
+> (items, handoffs, leases, generations, routing) only in its board
+> (`board-worker`). Local work reaches the Hub through the board's pull-based
+> picker, not through this contract. This contract stays as a reference: no new
+> capabilities will be added, and the production composition below remains
+> inspection-only. See
+> [many-iris#46](https://github.com/ishizakahiroshi/many-iris/issues/46).
 
 This opt-in boundary separates durable execution admission from HTTP delivery,
 ordinary session spawning, and process termination. It uses the MCP 2026-07-28
