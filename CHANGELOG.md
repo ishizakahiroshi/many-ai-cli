@@ -10,6 +10,18 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Changed
+
+- **Exit from the small Windows window.** Its **Exit** button and title-bar
+  **×** now end all connected AI sessions, stop the Hub and close the app.
+  When sessions are still running, a confirmation shows their count; with no
+  running sessions, the app exits directly. Canceling or an exit failure leaves
+  the window open. Minimize the window to keep working in the background.
+  Duplicate end-all-sessions and Hub-stop actions have been removed from the
+  browser dashboard; closing a browser tab keeps the sessions running, subject
+  to the configured idle timeout. The `stop` command remains available for Hub
+  maintenance.
+
 ## [0.11.1] - 2026-11-21
 
 (The `v0.11.0` tag published nothing: its release run stopped at the macOS and

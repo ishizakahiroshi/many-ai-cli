@@ -3,7 +3,7 @@
    mockup: docs/local/mobile-connect-mockup.html。
    配色・角丸はテーマ変数（styles.css :root）と共用。 */
 
-/* ── ヘッダーボタン（#shutdown-btn と同じ見た目） ── */
+/* ── モバイル接続ボタン ── */
 #mobile-connect-btn {
 
   ;

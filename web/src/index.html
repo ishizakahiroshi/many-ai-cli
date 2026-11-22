@@ -272,16 +272,12 @@
           </button>
           <!-- 🗔 トレイ常駐への切替案内。console 起動・未 setup・トレイ未稼働の Hub でだけ /api/hub/launch-state が hidden を外す。 -->
           <div id="tray-migrate-offer" hidden>
-            <div class="settings-note" data-i18n="tray_migrate_note">この Hub はコマンドプロンプト窓で動いています。トレイ常駐へ切り替えると、窓を閉じても Hub は動き続けます。</div>
+            <div class="settings-note" data-i18n="tray_migrate_note">切り替えると、タスクバーに小さい窓が出ます。最小化すればAIの作業は続きます。「終了」または「×」でアプリを終了できます（Windows）。</div>
             <button id="tray-migrate-btn" class="ui-button ui-button--quiet ui-button--compact web-menu-item" type="button">
               <span class="web-menu-item-icon" aria-hidden="true">🗔</span>
               <span class="web-menu-item-label" data-i18n="tray_migrate_btn">トレイ常駐に切り替え</span>
             </button>
           </div>
-          <button id="shutdown-btn" class="ui-button ui-button--quiet ui-button--compact web-menu-item" type="button" data-i18n-tooltip="shutdown_tooltip">
-            <span class="web-menu-item-icon" aria-hidden="true">⏻</span>
-            <span class="web-menu-item-label" data-i18n="shutdown_tooltip">Hub を停止</span>
-          </button>
           <div class="web-menu-divider" role="separator"></div>
           <button id="bug-report-btn" class="ui-button ui-button--quiet ui-button--compact web-menu-item" type="button" data-i18n-tooltip="bug_report_tooltip" aria-haspopup="dialog">
             <span class="web-menu-item-icon" aria-hidden="true">🐞</span>
@@ -545,11 +541,6 @@
         <summary class="settings-section-title"><span>危険な操作</span><span class="settings-section-current" data-section="danger">データの削除・リセット</span></summary>
         <div class="settings-section-body">
           <p class="settings-danger-intro">復元できない操作です。実行前に対象の確認と操作名の入力が必要です。</p>
-          <div class="settings-row">
-            <span class="settings-label">実行中の全セッションを終了</span>
-            <button id="settings-kill-all-btn" class="ui-button ui-button--danger ui-button--compact settings-inline-btn settings-danger-btn">すべて終了</button>
-          </div>
-          <div class="settings-note">すべての AI CLI セッションを直ちに終了します。保存されていない作業が失われる場合があります。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_saved_history">Saved session history</span>
             <button id="session-store-reset-btn" class="ui-button ui-button--danger ui-button--compact settings-inline-btn settings-danger-btn" data-i18n="settings_history_reset">Delete history</button>
@@ -1219,19 +1210,13 @@
         </div>
       </div>
       <div id="new-session-bar" class="ui-toolbar">
-        <button class="ui-button ui-button--danger ui-button--compact" id="kill-all-btn" data-i18n-tooltip="kill_all_tooltip" aria-label="Terminate all sessions">
-          <svg class="kill-all-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
-            <rect x="9" y="9" width="6" height="6" rx="1.2" fill="currentColor"/>
-          </svg>
-        </button>
         <button id="detached-grid-launcher-btn" class="ui-button ui-button--secondary ui-button--compact detached-grid-launcher-sidebar-btn" data-i18n-tooltip="dgl_sidebar_btn_tooltip" aria-label="Open Detached Grid Launcher" title="Open Detached Grid">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="3" y="3" width="18" height="18" rx="2"/>
             <path d="M12 3v18M3 12h18"/>
           </svg>
         </button>
-        <!-- C1: plan_orchestration-spawn-ui-exposure.md — 停止/gridと同じ丸アイコンボタンで
+        <!-- C1: plan_orchestration-spawn-ui-exposure.md — gridと同じ丸アイコンボタンで
              オーケストレーション導線を追加。クリックで通常の起動フォームを開く（spawn-panel.ts）。 -->
         <button id="orchestration-btn" class="ui-button ui-button--secondary ui-button--compact orchestration-sidebar-btn" data-i18n-tooltip="orchestration_tooltip" aria-label="Start orchestration conductor session">
           <svg class="orchestration-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">

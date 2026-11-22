@@ -28,7 +28,7 @@ const tick = async () => {
   for (let i = 0; i < 15; i++) await Promise.resolve();
 };
 
-test('tray migration offer sits inside the Hub section before the shutdown button', () => {
+test('tray migration offer remains inside the Hub section without a separate shutdown action', () => {
   const hub = html.slice(
     html.indexOf('id="settings-hub-actions"'),
     html.indexOf('</details>', html.indexOf('id="settings-hub-actions"')),
@@ -37,12 +37,7 @@ test('tray migration offer sits inside the Hub section before the shutdown butto
   assert.match(hub, /id="tray-migrate-btn"/);
   assert.match(hub, /data-i18n="tray_migrate_note"/);
   assert.match(hub, /data-i18n="tray_migrate_btn"/);
-  // The conditional row precedes the unconditional stop action so the offered
-  // alternative is read before the destructive one.
-  assert.ok(
-    hub.indexOf('id="tray-migrate-offer"') < hub.indexOf('id="shutdown-btn"'),
-    'offer must precede shutdown-btn',
-  );
+  assert.doesNotMatch(hub, /id="shutdown-btn"/);
 });
 
 test('tray migration i18n keys exist in all locales', () => {

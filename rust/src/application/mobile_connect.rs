@@ -199,6 +199,8 @@ impl GoWire for Status {
 #[derive(Default)]
 struct TailState {
     state: &'static str,
+    /// False for a failed command/parse; the display state alone is advisory.
+    probe_ok: bool,
     dns: String,
     online: bool,
     admin: String,
@@ -235,6 +237,7 @@ impl MobileConnect {
             ..Default::default()
         };
         if !self.io.available(Program::Tailscale) {
+            st.probe_ok = true;
             return st;
         }
         let out = self.command(&["status", "--json"], cancel).await;
@@ -248,9 +251,11 @@ impl MobileConnect {
         st.online = status.own.online;
         if simple_fold_key(&status.backend) != simple_fold_key("Running") {
             st.state = "not_logged_in";
+            st.probe_ok = true;
             return st;
         }
         let out = self.command(&["serve", "status"], cancel).await;
+        st.probe_ok = out.success;
         st.state = if out.success && out.stdout.contains(&format!("127.0.0.1:{}", self.port)) {
             "ready"
         } else {
@@ -340,7 +345,7 @@ impl MobileConnect {
     }
     pub async fn status(&self, cancel: &Cancellation) -> Result<MobileResponse, ConfigError> {
         let st = self.probe(cancel).await;
-        let mut value = json!({"state":st.state,"dns_name":st.dns,"online":st.online,"hub_port":self.port,"serve_command":format!("tailscale serve --bg {}",self.port),"serve_off_command":"tailscale serve --https=443 off"});
+        let mut value = json!({"state":st.state,"probe_ok":st.probe_ok,"dns_name":st.dns,"online":st.online,"hub_port":self.port,"serve_command":format!("tailscale serve --bg {}",self.port),"serve_off_command":"tailscale serve --https=443 off"});
         if !st.admin.is_empty() {
             value["admin_url"] = st.admin.into();
         }

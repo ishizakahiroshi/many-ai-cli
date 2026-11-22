@@ -76,10 +76,73 @@ impl ShutdownOwner {
         }));
         Ok(())
     }
+    /// Application exit only: recheck after the HTTP response delay, immediately
+    /// before cancellation. A newly connected session leaves the Hub running.
+    pub async fn request_when_empty(
+        self: &Arc<Self>,
+        source: &'static str,
+        empty: Arc<dyn Fn() -> bool + Send + Sync>,
+    ) -> Result<(), SessionError> {
+        if !empty() {
+            return Err(SessionError::Transport(
+                "new sessions prevent application exit".into(),
+            ));
+        }
+        let permit = self.tasks.effect_permit()?;
+        let owner = self.clone();
+        drop(permit.start(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            if empty() {
+                // This path has no connected wrappers to notify. Keep this final
+                // observation and cancellation together with no intervening await.
+                owner.record_reason(source);
+                owner.cancel.cancel();
+            }
+        }));
+        Ok(())
+    }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test(start_paused = true)]
+    async fn guarded_exit_rechecks_new_sessions_after_the_response_delay() {
+        for session_appears in [false, true] {
+            let tasks =
+                super::super::task_owner::HubTaskOwner::new(tokio::runtime::Handle::current());
+            let cancel = Cancellation::default();
+            let owner = Arc::new(ShutdownOwner::new(
+                cancel.clone(),
+                Arc::new(SocketRegistry::default()),
+                tasks.handle(),
+            ));
+            let empty = Arc::new(AtomicBool::new(true));
+            let probe = empty.clone();
+            owner
+                .request_when_empty("launcher", Arc::new(move || probe.load(Ordering::SeqCst)))
+                .await
+                .unwrap();
+            tokio::task::yield_now().await;
+            if session_appears {
+                empty.store(false, Ordering::SeqCst);
+            }
+            tokio::time::advance(std::time::Duration::from_millis(100)).await;
+            tokio::task::yield_now().await;
+            assert_eq!(cancel.is_cancelled(), !session_appears);
+            assert_eq!(
+                owner.reason(),
+                if session_appears {
+                    None
+                } else {
+                    Some("launcher")
+                }
+            );
+            tasks.stop_requests();
+            tasks.drain_requests().await;
+            tasks.stop_effects().unwrap();
+            assert_eq!(tasks.drain_effects().await.completed, 1);
+        }
+    }
     #[tokio::test(start_paused = true)]
     async fn intentional_shutdown_retains_delay_and_closes_only_after_response_window() {
         let tasks = super::super::task_owner::HubTaskOwner::new(tokio::runtime::Handle::current());

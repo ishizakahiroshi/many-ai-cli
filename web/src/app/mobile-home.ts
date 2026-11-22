@@ -613,14 +613,6 @@ function renderMobileDrawerResults(): void {
     (window as any).closeMobileSessionDrawer?.();
     document.getElementById('expose-btn')?.click();
   });
-  const shutdown = document.createElement('button');
-  shutdown.type = 'button';
-  shutdown.className = 'ui-button ui-button--secondary ui-button--regular mobile-drawer-action';
-  shutdown.textContent = `⏻ ${t('shutdown_tooltip')}`;
-  shutdown.addEventListener('click', () => {
-    (window as any).closeMobileSessionDrawer?.();
-    document.getElementById('shutdown-btn')?.click();
-  });
   const settings = document.createElement('button');
   settings.type = 'button';
   settings.className = 'ui-button ui-button--secondary ui-button--regular mobile-drawer-action';
@@ -642,7 +634,7 @@ function renderMobileDrawerResults(): void {
     (window as any).closeMobileSessionDrawer?.();
     openServerModal();
   });
-  actions.append(home, expose, shutdown, settings, server);
+  actions.append(home, expose, settings, server);
   body.appendChild(actions);
 
   sessionListScrollAfterRender(body, prevScrollTop, true);

@@ -543,7 +543,7 @@ Mở `http://127.0.0.1:47777/?token=<token>`.
 ### Bố cục (tóm tắt)
 
 - **Header**: chip `[running][waiting][standby]`, đếm theo provider.
-- **Footer cố định**: chỉ có **Settings**. Mỗi lần mở sẽ hiển thị **General**. Trong điều hướng Settings, chọn **Usage** để xem mức sử dụng hoặc **Hub** để truy cập bên ngoài, kết nối điện thoại bằng mã QR, dừng Hub và báo lỗi.
+- **Footer cố định**: chỉ có **Settings**. Mỗi lần mở sẽ hiển thị **General**. Trong điều hướng Settings, chọn **Usage** để xem mức sử dụng hoặc **Hub** để truy cập bên ngoài, kết nối điện thoại bằng mã QR và báo lỗi.
 - **Sidebar trái**: `+ New Session`; session nhóm theo project folder; pin / đóng / state badge / branch / last response. Cuối danh sách provider có **Thêm AI CLI**, cùng dialog với **Settings → Tích hợp AI CLI**.
 - **Pane phải**: terminal xterm.js + ô nhập + attach + slash picker.  
 - **Tab**: Terminal, Chat, Split, Multi, Files, Git (Files/Git lazy).  
@@ -650,7 +650,7 @@ Ngoại lệ: engine voice (`off`/`browser`/`whisper`) ở localStorage từng t
 - **Tắt có chủ đích** (nút `×` session, «dừng tất cả», idle timeout khi Hub HTTP còn sống): PTY con **thoát ngay**, không grace.  
 - **Hub crash / restart / đóng console**: wrapper chờ `wrapper_reconnect_grace_sec` (mặc định 3600s) rồi reattach — **không** mất session AI vì UI lỗi/restart trong cửa sổ grace. Task dài: tăng tới tối đa 86400.  
 
-Dừng sạch: `⏻` UI hoặc `many-ai-cli stop`.
+Trên Windows, chọn **Thoát** hoặc **×** trên cửa sổ nhỏ để kết thúc mọi phiên AI và đóng ứng dụng; nếu còn phiên đang chạy, hộp xác nhận sẽ hiển thị số phiên. Thu nhỏ cửa sổ để tiếp tục làm việc. Lệnh `many-ai-cli stop` chỉ dừng Hub.
 
 ---
 

@@ -17,6 +17,15 @@ pub trait StopIo: Send + Sync {
         proof: Option<&'a str>,
         cancel: &'a Cancellation,
     ) -> CoreFuture<'a, io::Result<bool>>;
+    fn request_app_exit<'a>(
+        &'a self,
+        _port: u16,
+        _token: &'a str,
+        _proof: Option<&'a str>,
+        _cancel: &'a Cancellation,
+    ) -> CoreFuture<'a, io::Result<bool>> {
+        Box::pin(async { Err(io::Error::other("guarded application exit is unavailable")) })
+    }
     /// Ends the Hub that wrote `data`. Ok(true): ended, or already gone.
     /// Ok(false): another process now holds the PID and was left running.
     /// Err: not ended, including when the process could not be identified.
@@ -31,6 +40,21 @@ pub struct StopCommand {
 }
 impl StopCommand {
     pub async fn run(&self, cancel: &Cancellation) -> io::Result<()> {
+        self.run_inner(cancel, None).await
+    }
+    /// Application exit must only stop the same Hub whose sessions were confirmed.
+    pub async fn run_expected(
+        &self,
+        cancel: &Cancellation,
+        expected: &RuntimeData,
+    ) -> io::Result<()> {
+        self.run_inner(cancel, Some(expected)).await
+    }
+    async fn run_inner(
+        &self,
+        cancel: &Cancellation,
+        expected: Option<&RuntimeData>,
+    ) -> io::Result<()> {
         if cancel.is_cancelled() {
             return Err(io::Error::new(io::ErrorKind::Interrupted, "stop cancelled"));
         }
@@ -38,6 +62,9 @@ impl StopCommand {
             .ledger
             .read()?
             .ok_or_else(|| io::Error::other("hub pid not found"))?;
+        if expected.is_some_and(|expected| expected != &data) {
+            return Err(io::Error::other("hub runtime owner changed before stop"));
+        }
         let port = u16::try_from(data.port)
             .ok()
             .filter(|port| *port > 0)
@@ -46,12 +73,21 @@ impl StopCommand {
         let token = config.token.clone();
         let proof = crate::hub::pin::cli_local_proof(&config);
         let _ = (self.log)("graceful shutdown requested", data.pid, port);
-        if self
-            .io
-            .request(port, &token, proof.as_deref(), cancel)
-            .await
-            .unwrap_or(false)
-        {
+        let requested = if expected.is_some() {
+            self.io
+                .request_app_exit(port, &token, proof.as_deref(), cancel)
+                .await
+        } else {
+            self.io
+                .request(port, &token, proof.as_deref(), cancel)
+                .await
+        };
+        if expected.is_some() && !requested.as_ref().is_ok_and(|accepted| *accepted) {
+            return Err(io::Error::other(
+                "終了できませんでした。新しいAIセッションや接続状態を確認し、もう一度「終了」を押してください。",
+            ));
+        }
+        if requested.unwrap_or(false) {
             let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
             loop {
                 if !self.io.alive(&data) {
@@ -63,6 +99,12 @@ impl StopCommand {
                 }
                 tokio::select! {_=cancel.cancelled()=>return Err(io::Error::new(io::ErrorKind::Interrupted,"stop cancelled")),_=tokio::time::sleep(Duration::from_millis(100))=>{}}
             }
+        }
+        if expected.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "Hub の終了を確認できませんでした。アプリを開いたままにしています。",
+            ));
         }
         if cancel.is_cancelled() {
             return Err(io::Error::new(io::ErrorKind::Interrupted, "stop cancelled"));
@@ -95,6 +137,45 @@ pub struct NativeStopIo {
     pub source: &'static str,
 }
 impl NativeStopIo {
+    fn request_guarded<'a>(
+        &'a self,
+        port: u16,
+        token: &'a str,
+        proof: Option<&'a str>,
+        cancel: &'a Cancellation,
+        require_empty: bool,
+    ) -> CoreFuture<'a, io::Result<bool>> {
+        Box::pin(async move {
+            if self.paths.is_trial() && port != self.paths.port() {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "trial shutdown port refused",
+                ));
+            }
+            crate::process::listener::require_own_loopback_listener(port)?;
+            let client = reqwest::Client::builder()
+                .no_proxy()
+                .redirect(reqwest::redirect::Policy::none())
+                .timeout(Duration::from_secs(2))
+                .build()
+                .map_err(io::Error::other)?;
+            let request = client
+                .post(format!("http://127.0.0.1:{port}/api/shutdown"))
+                .query(&[("token", token)])
+                .headers(hub_runtime::local_proof_headers(proof))
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .header(crate::hub::lifecycle::STOP_SOURCE_HEADER, self.source)
+                .header(
+                    "x-many-ai-cli-require-empty",
+                    if require_empty { "1" } else { "0" },
+                );
+            tokio::select! {
+                _ = cancel.cancelled() => Err(io::Error::new(io::ErrorKind::Interrupted, "stop cancelled")),
+                reply = request.send() => reply.map(|response| response.status() == 200)
+                    .map_err(|_| io::Error::other("shutdown request failed")),
+            }
+        })
+    }
     fn unconfirmed(&self, pid: i64) -> io::Error {
         io::Error::new(
             io::ErrorKind::PermissionDenied,
@@ -119,24 +200,16 @@ impl StopIo for NativeStopIo {
         proof: Option<&'a str>,
         cancel: &'a Cancellation,
     ) -> CoreFuture<'a, io::Result<bool>> {
-        Box::pin(async move {
-            if self.paths.is_trial() && port != self.paths.port() {
-                return Err(io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    "trial shutdown port refused",
-                ));
-            }
-            // The token goes only to a listener this OS user holds (U01).
-            crate::process::listener::require_own_loopback_listener(port)?;
-            let url = format!("http://127.0.0.1:{port}/api/shutdown");
-            let client = reqwest::Client::builder()
-                .no_proxy()
-                .redirect(reqwest::redirect::Policy::none())
-                .timeout(Duration::from_secs(2))
-                .build()
-                .map_err(io::Error::other)?;
-            tokio::select! {_=cancel.cancelled()=>Err(io::Error::new(io::ErrorKind::Interrupted,"stop cancelled")),reply=client.post(url).query(&[("token",token)]).headers(crate::application::hub_runtime::local_proof_headers(proof)).header(reqwest::header::CONTENT_TYPE,"application/json").header(crate::hub::lifecycle::STOP_SOURCE_HEADER,self.source).send()=>reply.map(|response|response.status()==200).map_err(|_|io::Error::other("shutdown request failed"))}
-        })
+        self.request_guarded(port, token, proof, cancel, false)
+    }
+    fn request_app_exit<'a>(
+        &'a self,
+        port: u16,
+        token: &'a str,
+        proof: Option<&'a str>,
+        cancel: &'a Cancellation,
+    ) -> CoreFuture<'a, io::Result<bool>> {
+        self.request_guarded(port, token, proof, cancel, true)
     }
     fn kill(&self, data: &RuntimeData) -> io::Result<bool> {
         let pid = data.pid;

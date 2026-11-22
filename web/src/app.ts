@@ -14,7 +14,7 @@ import { projectKeyForSession } from './app/sidebar-tree.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
 import { disposeAltScrollRail } from './app/alt-scroll-rail-view.js';
 import { altDragSelectionText, disposeAltDragSelect } from './app/alt-drag-select-view.js';
-import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, attachTurnEndNotifyToggle, attachMultiPanePrefsControls, getActiveTriggerPhrase, getQuickCommand, initAiLaunchShellSettings, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, refreshQuickCommandButtons, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
+import { QUICK_CMD_SLOTS, appConfirm, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, attachTurnEndNotifyToggle, attachMultiPanePrefsControls, getActiveTriggerPhrase, getQuickCommand, initAiLaunchShellSettings, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, refreshQuickCommandButtons, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { initQuickCommandUi } from './app/quick-command-ui.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
@@ -30,7 +30,7 @@ import { emptySubmitHitsFoldedHighRiskApproval, forgetApprovalSession } from './
 import { chatHistoryCommitOutput, isTranscriptBackedSession, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { askRemoteAttachChoice, attachThumbnails, flushPendingAttach, isRemoteAttachChoicePending, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
-import { getExposeStatus, fetchExposeStatus, disableExpose } from './app/host-expose.js';
+import { fetchExposeStatus, disableExpose } from './app/host-expose.js';
 import './app/detached-grid-launcher.js';
 import './app/mobile-home.js';
 import { mobileApprovalActiveBadgeCount } from './app/mobile-approval-sheet.js';
@@ -1977,65 +1977,6 @@ inputEl.addEventListener('blur', (e) => {
   launcherBtn.addEventListener('click', () => {
     if (typeof (window as any).openDetachedGridLauncher === 'function') {
       (window as any).openDetachedGridLauncher();
-    }
-  });
-})();
-
-(function () {
-  const killAllBtns = [document.getElementById('kill-all-btn'), document.getElementById('settings-kill-all-btn')]
-    .filter((button): button is HTMLButtonElement => button instanceof HTMLButtonElement);
-  if (killAllBtns.length === 0) return;
-
-  killAllBtns.forEach((killAllBtn) => killAllBtn.addEventListener('click', async () => {
-    const ok = await appConfirmTypedDanger({
-      title: t('kill_all_confirm_title'),
-      message: t('kill_all_confirm'),
-      confirmText: t('kill_all_confirm_run'),
-      cancelText: t('spawn_cancel'),
-      phrase: 'KILL ALL',
-    });
-    if (!ok) return;
-    killAllBtns.forEach((button) => { button.disabled = true; });
-    try {
-      await apiFetch('/api/kill-all', { method: 'POST' });
-    } catch (_) {}
-    killAllBtns.forEach((button) => { button.disabled = false; });
-  }));
-})();
-
-(function () {
-  const shutdownBtn = document.getElementById('shutdown-btn');
-  if (!shutdownBtn) return;
-
-  shutdownBtn.addEventListener('click', async () => {
-    // 外部公開（tailscale serve）中なら確認に「公開も停止」チェック（既定 ON）を出す。
-    // serve は --bg で tailscaled 側に残るため、Hub 停止だけだと幽霊公開状態になる。
-    let exposeActive = getExposeStatus()?.state === 'ready';
-    try {
-      const r = await fetchExposeStatus(true);
-      if (r.ok && r.status) exposeActive = r.status.state === 'ready';
-    } catch (_) { /* 取得失敗時はキャッシュ値で判断 */ }
-
-    const result = await appConfirmShutdown({ exposeActive });
-    if (!result) return;
-    shutdownBtn.disabled = true;
-
-    // graceful 経路でのみ確実に停止できる（PID kill / クラッシュでは走らない）。
-    if (result.stopExpose) {
-      try { await disableExpose(); } catch (_) {}
-    }
-
-    // Hub のログに止まった理由（web_ui）を残すため、送り元を名乗る。
-    const shutdownInit: RequestInit = { method: 'POST', headers: { 'X-Many-Ai-Cli-Stop-Source': 'web_ui' } };
-    if (result.action === 'sessions') {
-      try { await apiFetch('/api/kill-all', { method: 'POST' }); } catch (_) {}
-      try { await apiFetch('/api/shutdown', shutdownInit); } catch (_) {}
-      window.close();
-    } else {
-      try {
-        await apiFetch('/api/shutdown', shutdownInit);
-      } catch (_) {}
-      window.close();
     }
   });
 })();

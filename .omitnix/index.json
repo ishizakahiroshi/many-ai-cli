@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "95d2bbea1ae8e114335db2586ce7336d175941c0",
+    "commit": "c25bb626d15e22062bd9241246a230de6e70b9da",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2093,
-    "analyzed": 1641,
+    "discovered": 2094,
+    "analyzed": 1642,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 437,
@@ -27502,7 +27502,36 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "Native tray actions keep a real Hub child alive after tray shutdown."
+          "value": "Native tray actions; application exit settles AI sessions before stopping the Hub."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/application/tray/native/exit.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Scoped loopback requests for a deliberate application exit. Errors never"
         },
         "authentication": {
           "state": "not_configured"

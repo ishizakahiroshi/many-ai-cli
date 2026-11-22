@@ -21,6 +21,7 @@ use procedure_tests::{
 const OPEN_REQUEST: u32 = WM_APP + 1;
 const REPLACE_REQUEST: u32 = WM_APP + 2;
 const PRESENCE_STATE: u32 = WM_APP + 3;
+const PRESENCE_EXIT: u32 = WM_APP + 4;
 // Window metrics are logical (96 DPI) values scaled by the system DPI at use.
 const PRESENCE_WIDTH: i32 = 360;
 const PRESENCE_HEIGHT: i32 = 160;
@@ -96,6 +97,8 @@ struct PresenceCopy {
     stop: &'static str,
     confirm_title: &'static str,
     confirm_body: &'static str,
+    cancel: &'static str,
+    confirm_accept: &'static str,
 }
 struct PresenceWindow {
     owner: Arc<TrayOwner>,
@@ -110,25 +113,31 @@ fn presence_copy(langid: u16) -> PresenceCopy {
             running: "Running",
             stopped: "Stopped",
             open: "Open browser",
-            stop: "Stop",
-            confirm_title: "Stop the Hub",
-            confirm_body: "Stop the Hub? Running sessions wait until the Hub comes back.",
+            stop: "Exit",
+            confirm_title: "Exit many-ai-cli",
+            confirm_body: "All AI sessions will end and many-ai-cli will close.",
+            cancel: "Back",
+            confirm_accept: "Exit all",
         },
         0x2a => PresenceCopy {
             running: "Đang chạy",
             stopped: "Đã dừng",
             open: "Mở trình duyệt",
-            stop: "Dừng",
-            confirm_title: "Dừng Hub",
-            confirm_body: "Dừng Hub? Phiên đang chạy sẽ chờ Hub quay lại.",
+            stop: "Thoát",
+            confirm_title: "Thoát many-ai-cli",
+            confirm_body: "Kết thúc tất cả phiên AI và đóng many-ai-cli.",
+            cancel: "Quay lại",
+            confirm_accept: "Kết thúc tất cả",
         },
         _ => PresenceCopy {
             running: "動いています",
             stopped: "止まっています",
             open: "ブラウザを開く",
-            stop: "停止",
-            confirm_title: "Hub の停止",
-            confirm_body: "Hub を停止しますか？ 実行中のセッションは、Hub が戻るまで待ちます。",
+            stop: "終了",
+            confirm_title: "many-ai-cli を終了",
+            confirm_body: "すべてのAIの作業を終了し、many-ai-cliを閉じます。",
+            cancel: "戻る",
+            confirm_accept: "すべて終了",
         },
     }
 }
@@ -168,22 +177,26 @@ unsafe extern "system" fn presence_procedure(
                     let data = &*pointer;
                     match w as u32 & 0xffff {
                         1 => data.owner.command(1),
-                        2 => {
-                            if confirm_stop(window, data) {
-                                data.owner.command(2);
-                            }
-                        }
+                        2 => data.owner.command(6),
                         _ => {}
                     }
                 }
                 0
             }
             WM_CLOSE => {
-                ShowWindow(window, SW_MINIMIZE);
+                if !pointer.is_null() {
+                    (*pointer).owner.command(6);
+                }
                 0
             }
             WM_SYSCOMMAND if (w & 0xFFF0) == SC_CLOSE as usize => {
-                ShowWindow(window, SW_MINIMIZE);
+                if !pointer.is_null() {
+                    (*pointer).owner.command(6);
+                }
+                0
+            }
+            PRESENCE_EXIT => {
+                PostQuitMessage(0);
                 0
             }
             PRESENCE_STATE => {
@@ -203,18 +216,75 @@ unsafe extern "system" fn presence_procedure(
         }
     }
 }
-fn confirm_stop(window: HWND, data: &PresenceWindow) -> bool {
-    let body = wide(data.text.confirm_body);
-    let title = wide(data.text.confirm_title);
-    let answer = unsafe {
-        MessageBoxW(
-            window,
-            body.as_ptr(),
-            title.as_ptr(),
-            MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2,
-        )
+fn exit_heading(text: &PresenceCopy, count: usize) -> String {
+    match text.stop {
+        "Exit" => format!("{count} AI sessions are running"),
+        "Thoát" => format!("Có {count} phiên AI đang chạy"),
+        _ => format!("実行中のAIが{count}件あります"),
+    }
+}
+#[cfg(not(test))]
+pub(super) fn confirm_exit(hwnd: isize, count: usize) -> io::Result<bool> {
+    use windows_sys::Win32::UI::Controls::{
+        TASKDIALOG_BUTTON, TASKDIALOGCONFIG, TDF_ALLOW_DIALOG_CANCELLATION,
+        TDF_POSITION_RELATIVE_TO_WINDOW, TaskDialogIndirect,
     };
-    answer == IDYES
+    let text = current_presence_copy();
+    let title = wide(text.confirm_title);
+    let heading = wide(&exit_heading(&text, count));
+    let body = wide(text.confirm_body);
+    let cancel = wide(text.cancel);
+    let accept = wide(text.confirm_accept);
+    let buttons = [
+        TASKDIALOG_BUTTON {
+            nButtonID: IDCANCEL,
+            pszButtonText: cancel.as_ptr(),
+        },
+        TASKDIALOG_BUTTON {
+            nButtonID: IDOK,
+            pszButtonText: accept.as_ptr(),
+        },
+    ];
+    let config = TASKDIALOGCONFIG {
+        cbSize: std::mem::size_of::<TASKDIALOGCONFIG>() as u32,
+        hwndParent: std::ptr::without_provenance_mut(hwnd as usize),
+        dwFlags: TDF_ALLOW_DIALOG_CANCELLATION | TDF_POSITION_RELATIVE_TO_WINDOW,
+        pszWindowTitle: title.as_ptr(),
+        pszMainInstruction: heading.as_ptr(),
+        pszContent: body.as_ptr(),
+        cButtons: buttons.len() as u32,
+        pButtons: buttons.as_ptr(),
+        nDefaultButton: IDCANCEL,
+        ..unsafe { std::mem::zeroed() }
+    };
+    let mut answer = IDCANCEL;
+    let result = unsafe { TaskDialogIndirect(&config, &mut answer, null_mut(), null_mut()) };
+    if result < 0 {
+        return Err(io::Error::other(
+            "終了の確認画面を開けませんでした。アプリは終了していません。",
+        ));
+    }
+    Ok(answer == IDOK)
+}
+pub(super) fn post_presence_exit(hwnd: isize) -> io::Result<()> {
+    if hwnd == 0 {
+        return Ok(());
+    }
+    #[cfg(test)]
+    procedure_tests::record_exit(hwnd);
+    #[cfg(not(test))]
+    if unsafe {
+        PostMessageW(
+            std::ptr::without_provenance_mut(hwnd as usize),
+            PRESENCE_EXIT,
+            0,
+            0,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
 }
 pub(super) fn post_presence_state(hwnd: isize, running: bool) {
     if hwnd == 0 {

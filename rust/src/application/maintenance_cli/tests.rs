@@ -88,6 +88,16 @@ impl stop::StopIo for StopFixture {
         self.kills.fetch_add(1, Ordering::SeqCst);
         Ok(true)
     }
+    fn request_app_exit<'a>(
+        &'a self,
+        _: u16,
+        _: &'a str,
+        _: Option<&'a str>,
+        _: &'a crate::process::Cancellation,
+    ) -> crate::proto::core::CoreFuture<'a, io::Result<bool>> {
+        // Models the final Hub guard refusing because a new session appeared.
+        Box::pin(async { Ok(false) })
+    }
 }
 #[tokio::test]
 async fn stop_real_ledger_graceful_and_force_paths_only_call_fake_process_owner() {
@@ -119,6 +129,61 @@ async fn stop_real_ledger_graceful_and_force_paths_only_call_fake_process_owner(
         assert!(ledger.read().unwrap().is_none());
         assert_eq!(logs.lock().unwrap().len(), if graceful { 1 } else { 2 });
     }
+}
+#[tokio::test]
+async fn app_exit_never_stops_a_replacement_hub() {
+    let f = fixture();
+    let ledger = RuntimeLedger::open(&f.paths).unwrap();
+    ledger.write(49372, 987654, Timestamp::now()).unwrap();
+    let expected = ledger.read().unwrap().unwrap();
+    ledger.write(49372, 987655, Timestamp::now()).unwrap();
+    let io = Arc::new(StopFixture {
+        alive: AtomicBool::new(true),
+        kills: AtomicUsize::new(0),
+        graceful: true,
+    });
+    let command = stop::StopCommand {
+        ledger: ledger.clone(),
+        config: f.config,
+        io: io.clone(),
+        log: Arc::new(|_, _, _| panic!("a replacement Hub must receive no stop request")),
+    };
+    assert!(
+        command
+            .run_expected(&crate::process::Cancellation::default(), &expected)
+            .await
+            .is_err()
+    );
+    assert_eq!(io.kills.load(Ordering::SeqCst), 0);
+    assert!(io.alive.load(Ordering::SeqCst));
+    assert_eq!(ledger.read().unwrap().unwrap().pid, 987655);
+}
+#[tokio::test]
+async fn guarded_app_exit_refusal_never_falls_back_to_force_stop() {
+    let f = fixture();
+    let ledger = RuntimeLedger::open(&f.paths).unwrap();
+    ledger.write(49372, 987654, Timestamp::now()).unwrap();
+    let expected = ledger.read().unwrap().unwrap();
+    let io = Arc::new(StopFixture {
+        alive: AtomicBool::new(true),
+        kills: AtomicUsize::new(0),
+        graceful: true,
+    });
+    let command = stop::StopCommand {
+        ledger: ledger.clone(),
+        config: f.config,
+        io: io.clone(),
+        log: Arc::new(|_, _, _| Ok(())),
+    };
+    assert!(
+        command
+            .run_expected(&crate::process::Cancellation::default(), &expected)
+            .await
+            .is_err()
+    );
+    assert_eq!(io.kills.load(Ordering::SeqCst), 0);
+    assert!(io.alive.load(Ordering::SeqCst));
+    assert_eq!(ledger.read().unwrap().as_ref(), Some(&expected));
 }
 #[test]
 fn native_trial_refuses_arbitrary_pid_without_sending_a_signal() {

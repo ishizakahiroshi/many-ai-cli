@@ -12,6 +12,69 @@ impl Drop for CancelOnDrop {
     }
 }
 #[tokio::test]
+async fn unconfirmed_empty_app_exit_rejects_a_new_session_before_any_stop_effect() {
+    for connected in [false, true] {
+        let mut f = fixture_at_port(true, 49327);
+        f.config.token = "synthetic-exit-token".into();
+        let id = if connected {
+            Some(register(&f).await)
+        } else {
+            None
+        };
+        let tasks = HubTaskOwner::new(tokio::runtime::Handle::current());
+        let config = Arc::new(ConfigStore::new(f.paths.clone(), f.config.clone()).unwrap());
+        let router = ServiceRouter::new(config, f.paths.clone(), f.core.clone(), 49327)
+            .unwrap()
+            .with_task_owner(tasks.handle())
+            .with_session_routes(
+                f.http.clone(),
+                Arc::new(|http: &SessionHttp, config: &Config| {
+                    Ok(http.handle_info_authenticated(config, &info_context()))
+                }),
+                // The fixture panics if a CancelSession effect reaches it.
+                f.sink.clone(),
+            );
+        let response = router
+            .handle_owned_async_at(
+                &crate::hub::http::Request {
+                    method: "POST".into(),
+                    path: "/api/kill-all".into(),
+                    query: "token=synthetic-exit-token".into(),
+                    host: "127.0.0.1:49327".into(),
+                    remote_addr: "127.0.0.1:49328".into(),
+                    headers: vec![("x-many-ai-cli-require-empty".into(), "1".into())],
+                    ..Default::default()
+                },
+                crate::proto::time::UNIX_EPOCH,
+                &crate::proto::core::TaskCancellation::default(),
+                &crate::proto::core::HttpWaitCancellation::default(),
+            )
+            .await;
+        assert_eq!(response.response.status, if connected { 409 } else { 200 });
+        let shutdown = router
+            .handle_owned_async_at(
+                &crate::hub::http::Request {
+                    method: "POST".into(),
+                    path: "/api/shutdown".into(),
+                    query: "token=synthetic-exit-token".into(),
+                    host: "127.0.0.1:49327".into(),
+                    remote_addr: "127.0.0.1:49328".into(),
+                    headers: vec![("x-many-ai-cli-require-empty".into(), "1".into())],
+                    ..Default::default()
+                },
+                crate::proto::time::UNIX_EPOCH,
+                &crate::proto::core::TaskCancellation::default(),
+                &crate::proto::core::HttpWaitCancellation::default(),
+            )
+            .await;
+        // No ShutdownOwner: only the empty case can reach its unavailable response.
+        assert_eq!(shutdown.response.status, if connected { 409 } else { 503 });
+        if let Some(id) = id {
+            assert!(f.core.details(id).unwrap().connected);
+        }
+    }
+}
+#[tokio::test]
 async fn registered_http_session_routes_preserve_guards_and_real_store_effects() {
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
         .await
@@ -70,7 +133,9 @@ async fn registered_http_session_routes_preserve_guards_and_real_store_effects()
         .unwrap();
     assert_eq!(info.status(), 200);
     assert_eq!(info.headers()["cache-control"], "no-store");
-    assert_eq!(info.json::<Value>().await.unwrap()["active_sessions"], 1);
+    let info = info.json::<Value>().await.unwrap();
+    assert_eq!(info["active_sessions"], 1);
+    assert_eq!(info["connected_sessions"], 1);
 
     // The prefix's token/path decisions precede its ordinary method/Host guard.
     let path = format!("{base}/api/session/invalid/unknown");

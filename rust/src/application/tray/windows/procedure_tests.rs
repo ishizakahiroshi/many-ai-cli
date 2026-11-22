@@ -23,6 +23,13 @@ struct WindowData {
 thread_local! {
     static WINDOW: RefCell<Option<WindowData>> = const { RefCell::new(None) };
     static POSTS: RefCell<Vec<(isize, bool)>> = const { RefCell::new(Vec::new()) };
+    static EXITS: RefCell<Vec<isize>> = const { RefCell::new(Vec::new()) };
+}
+pub(super) fn record_exit(hwnd: isize) {
+    EXITS.with(|slot| slot.borrow_mut().push(hwnd));
+}
+fn take_exit_posts() -> Vec<isize> {
+    EXITS.with(|slot| std::mem::take(&mut *slot.borrow_mut()))
 }
 pub(super) fn record_presence(hwnd: isize, running: bool) {
     POSTS.with(|slot| slot.borrow_mut().push((hwnd, running)));
@@ -65,6 +72,9 @@ impl SyntheticWindow {
         }
     }
     fn presence(owner: Arc<TrayOwner>, answer: i32) -> Self {
+        owner
+            .test_exit_answer
+            .store(answer == native::IDYES, Ordering::Release);
         let presence = Box::new(PresenceWindow {
             owner,
             status: std::ptr::without_provenance_mut(3),
@@ -222,6 +232,9 @@ fn window_calls(window: HWND) -> Option<Arc<Mutex<Vec<NativeCall>>>> {
 #[derive(Default)]
 struct Hooks {
     calls: Mutex<Vec<&'static str>>,
+    active: std::sync::atomic::AtomicUsize,
+    fail_count: AtomicBool,
+    fail_exit: AtomicBool,
 }
 impl TrayHooks for Hooks {
     fn instance_port(&self) -> Option<u16> {
@@ -246,6 +259,31 @@ impl TrayHooks for Hooks {
     fn stop_hub(&self) -> CoreFuture<'_, io::Result<()>> {
         Box::pin(async move {
             self.calls.lock().unwrap().push("stop");
+            Ok(())
+        })
+    }
+    fn active_sessions(&self) -> CoreFuture<'_, io::Result<ExitSnapshot>> {
+        Box::pin(async move {
+            self.calls.lock().unwrap().push("count");
+            if self.fail_count.load(Ordering::Acquire) {
+                return Err(io::Error::other("synthetic count failure"));
+            }
+            Ok(ExitSnapshot {
+                count: self.active.load(Ordering::Acquire),
+                runtime: None,
+            })
+        })
+    }
+    fn exit_app(&self, snapshot: ExitSnapshot) -> CoreFuture<'_, io::Result<()>> {
+        Box::pin(async move {
+            self.calls.lock().unwrap().push(if snapshot.count > 0 {
+                "exit-confirmed"
+            } else {
+                "exit-empty"
+            });
+            if self.fail_exit.load(Ordering::Acquire) {
+                return Err(io::Error::other("synthetic session stop failure"));
+            }
             Ok(())
         })
     }
@@ -392,31 +430,34 @@ fn presence_copy_follows_the_four_primary_languages() {
     assert_eq!(japanese.running, "動いています");
     assert_eq!(japanese.stopped, "止まっています");
     assert_eq!(japanese.open, "ブラウザを開く");
-    assert_eq!(japanese.stop, "停止");
-    assert_eq!(japanese.confirm_title, "Hub の停止");
+    assert_eq!(japanese.stop, "終了");
+    assert_eq!(japanese.confirm_title, "many-ai-cli を終了");
+    assert_eq!(japanese.cancel, "戻る");
+    assert_eq!(japanese.confirm_accept, "すべて終了");
+    assert_eq!(exit_heading(&japanese, 3), "実行中のAIが3件あります");
     assert_eq!(
         japanese.confirm_body,
-        "Hub を停止しますか？ 実行中のセッションは、Hub が戻るまで待ちます。"
+        "すべてのAIの作業を終了し、many-ai-cliを閉じます。"
     );
     let english = presence_copy(0x0409);
     assert_eq!(english.running, "Running");
     assert_eq!(english.stopped, "Stopped");
     assert_eq!(english.open, "Open browser");
-    assert_eq!(english.stop, "Stop");
-    assert_eq!(english.confirm_title, "Stop the Hub");
+    assert_eq!(english.stop, "Exit");
+    assert_eq!(english.confirm_title, "Exit many-ai-cli");
     assert_eq!(
         english.confirm_body,
-        "Stop the Hub? Running sessions wait until the Hub comes back."
+        "All AI sessions will end and many-ai-cli will close."
     );
     let vietnamese = presence_copy(0x042a);
     assert_eq!(vietnamese.running, "Đang chạy");
     assert_eq!(vietnamese.stopped, "Đã dừng");
     assert_eq!(vietnamese.open, "Mở trình duyệt");
-    assert_eq!(vietnamese.stop, "Dừng");
-    assert_eq!(vietnamese.confirm_title, "Dừng Hub");
+    assert_eq!(vietnamese.stop, "Thoát");
+    assert_eq!(vietnamese.confirm_title, "Thoát many-ai-cli");
     assert_eq!(
         vietnamese.confirm_body,
-        "Dừng Hub? Phiên đang chạy sẽ chờ Hub quay lại."
+        "Kết thúc tất cả phiên AI và đóng many-ai-cli."
     );
     let other = presence_copy(0x0407);
     assert_eq!(other.running, japanese.running);
@@ -429,9 +470,11 @@ fn presence_copy_follows_the_four_primary_languages() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn presence_window_minimizes_confirms_stop_and_publishes_state() {
+async fn presence_window_button_and_close_share_confirmed_exit() {
     let _ = take_presence_posts();
+    let _ = take_exit_posts();
     let hooks = Arc::new(Hooks::default());
+    hooks.active.store(3, Ordering::Release);
     let owner = TrayOwner::new(hooks.clone());
     let window = SyntheticWindow::presence(owner.clone(), native::IDNO);
     let handle = window.presence_handle();
@@ -441,16 +484,29 @@ async fn presence_window_minimizes_confirms_stop_and_publishes_state() {
     assert!(window.calls().is_empty());
 
     hooks.calls.lock().unwrap().clear();
+    owner.bind_presence_window(2);
     assert_eq!(unsafe { presence_procedure(handle, WM_COMMAND, 2, 0) }, 0);
     drain_commands(&owner).await;
-    assert!(hooks.calls.lock().unwrap().is_empty());
+    assert_eq!(*hooks.calls.lock().unwrap(), ["count"]);
+    assert!(take_exit_posts().is_empty());
 
     drop(window);
     let window = SyntheticWindow::presence(owner.clone(), native::IDYES);
     let handle = window.presence_handle();
+    hooks.calls.lock().unwrap().clear();
     assert_eq!(unsafe { presence_procedure(handle, WM_COMMAND, 2, 0) }, 0);
     drain_commands(&owner).await;
-    assert_eq!(*hooks.calls.lock().unwrap(), ["running", "stop"]);
+    assert_eq!(*hooks.calls.lock().unwrap(), ["count", "exit-confirmed"]);
+    assert_eq!(take_exit_posts(), [2]);
+    assert!(owner.exiting.load(Ordering::Acquire));
+
+    // The real message loop now exits; a fresh synthetic owner checks titlebar close.
+    owner.shutdown().await;
+    drop(window);
+    let owner = TrayOwner::new(hooks.clone());
+    let window = SyntheticWindow::presence(owner.clone(), native::IDYES);
+    owner.bind_presence_window(2);
+    let handle = window.presence_handle();
 
     hooks.calls.lock().unwrap().clear();
     assert_eq!(unsafe { presence_procedure(handle, WM_COMMAND, 3, 0) }, 0);
@@ -459,19 +515,15 @@ async fn presence_window_minimizes_confirms_stop_and_publishes_state() {
         unsafe { presence_procedure(handle, WM_SYSCOMMAND, SC_CLOSE as usize, 0) },
         0
     );
+    // A second close while exit is pending is coalesced.
+    drain_commands(&owner).await;
+    assert_eq!(*hooks.calls.lock().unwrap(), ["count", "exit-confirmed"]);
+    assert_eq!(take_exit_posts(), [2]);
     assert_eq!(
         unsafe { presence_procedure(handle, WM_SYSCOMMAND, SC_MINIMIZE as usize, 0) },
         277
     );
-    assert_eq!(
-        window.calls(),
-        [
-            NativeCall::Minimize,
-            NativeCall::Minimize,
-            NativeCall::Default(WM_SYSCOMMAND),
-        ]
-    );
-    assert!(hooks.calls.lock().unwrap().is_empty());
+    assert_eq!(window.calls(), [NativeCall::Default(WM_SYSCOMMAND)]);
     assert!(!owner.cancel.is_cancelled());
 
     assert_eq!(
@@ -485,13 +537,64 @@ async fn presence_window_minimizes_confirms_stop_and_publishes_state() {
     assert_eq!(
         window.calls(),
         [
-            NativeCall::Minimize,
-            NativeCall::Minimize,
             NativeCall::Default(WM_SYSCOMMAND),
             NativeCall::Text("動いています".into()),
             NativeCall::Text("止まっています".into()),
         ]
     );
+    owner.shutdown().await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn presence_empty_exits_without_confirmation_and_failures_keep_window() {
+    let _ = take_exit_posts();
+    let hooks = Arc::new(Hooks::default());
+    let errors = Arc::new(Mutex::new(Vec::new()));
+    let recorded = errors.clone();
+    let mut owner = TrayOwner::new(hooks.clone());
+    Arc::get_mut(&mut owner).unwrap().test_error_reporter = Some(Arc::new(move |message| {
+        recorded.lock().unwrap().push(message.to_owned());
+    }));
+    let window = SyntheticWindow::presence(owner.clone(), native::IDNO);
+    let handle = window.presence_handle();
+    owner.bind_presence_window(2);
+    unsafe {
+        presence_procedure(handle, WM_CLOSE, 0, 0);
+    }
+    drain_commands(&owner).await;
+    assert_eq!(*hooks.calls.lock().unwrap(), ["count", "exit-empty"]);
+    assert_eq!(take_exit_posts(), [2]);
+    assert!(window.calls().is_empty());
+    owner.shutdown().await;
+    drop(window);
+
+    let mut owner = TrayOwner::new(hooks.clone());
+    let recorded = errors.clone();
+    Arc::get_mut(&mut owner).unwrap().test_error_reporter = Some(Arc::new(move |message| {
+        recorded.lock().unwrap().push(message.to_owned());
+    }));
+    let window = SyntheticWindow::presence(owner.clone(), native::IDNO);
+    owner.bind_presence_window(2);
+    let handle = window.presence_handle();
+
+    hooks.fail_count.store(true, Ordering::Release);
+    hooks.calls.lock().unwrap().clear();
+    unsafe {
+        presence_procedure(handle, WM_COMMAND, 2, 0);
+    }
+    drain_commands(&owner).await;
+    assert_eq!(*hooks.calls.lock().unwrap(), ["count"]);
+    assert!(take_exit_posts().is_empty());
+    hooks.fail_count.store(false, Ordering::Release);
+    hooks.fail_exit.store(true, Ordering::Release);
+    unsafe {
+        presence_procedure(handle, WM_CLOSE, 0, 0);
+    }
+    drain_commands(&owner).await;
+    assert!(take_exit_posts().is_empty());
+    assert_eq!(errors.lock().unwrap().len(), 2);
+    assert!(!owner.exiting.load(Ordering::Acquire));
+    assert!(window.calls().is_empty());
     owner.shutdown().await;
 }
 

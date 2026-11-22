@@ -99,6 +99,7 @@ impl SessionHttp {
             "web_src_hash":context.web_src_hash,
             "web_dist_fresh":context.web_dist_fresh,
             "active_sessions":self.core.registered_session_count(),
+            "connected_sessions":self.core.registered_session_ids().into_iter().filter(|id| self.core.details(*id).is_some_and(|details| details.connected)).count(),
             "git_commit":context.git_commit,
             "build_time":context.build_time,
             "runtime_mode":context.runtime_mode,

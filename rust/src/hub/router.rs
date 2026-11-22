@@ -676,11 +676,36 @@ impl ServiceRouter {
             // Stop each connected wrapper in source order without dismissing
             // its session, changing its worktree, or purging its history.
             let ids = core.registered_session_ids();
+            if request.header("x-many-ai-cli-require-empty") == "1" {
+                return Dispatch::response(
+                    if ids
+                        .iter()
+                        .any(|id| core.details(*id).is_some_and(|details| details.connected))
+                    {
+                        Response::error(
+                            409,
+                            "sessions_started",
+                            "New AI sessions started; confirm application exit again",
+                        )
+                    } else {
+                        // Do not revisit disconnected IDs: they might reconnect while iterating.
+                        Response::json(200, &json!({"ok":true}))
+                    },
+                );
+            }
             for id in ids {
-                if core.details(id).is_some_and(|details| details.connected)
-                    && let Ok(effects) = core.stop(id, crate::proto::core::StopReason::KillAll, at)
-                {
-                    let _ = sessions.effects.apply(effects).await;
+                if core.details(id).is_some_and(|details| details.connected) {
+                    let failed = match core.stop(id, crate::proto::core::StopReason::KillAll, at) {
+                        Ok(effects) => sessions.effects.apply(effects).await.is_err(),
+                        Err(_) => true,
+                    };
+                    if failed {
+                        return Dispatch::response(Response::error(
+                            503,
+                            "session_stop_failed",
+                            "A session could not be stopped; the Hub is still running",
+                        ));
+                    }
                 }
             }
             return Dispatch::response(Response::json(200, &json!({"ok":true})));
@@ -810,10 +835,48 @@ impl ServiceRouter {
             });
         }
         if request.path == "/api/shutdown" {
+            if request.header("x-many-ai-cli-require-empty") == "1" {
+                let Some(core) = &self.core else {
+                    return Dispatch::response(Response::error(
+                        503,
+                        "sessions_unavailable",
+                        "Session state unavailable",
+                    ));
+                };
+                if core
+                    .registered_session_ids()
+                    .into_iter()
+                    .any(|id| core.details(id).is_some_and(|details| details.connected))
+                {
+                    return Dispatch::response(Response::error(
+                        409,
+                        "sessions_started",
+                        "New AI sessions started; confirm application exit again",
+                    ));
+                }
+            }
             let source =
                 super::lifecycle::stop_source(request.header(super::lifecycle::STOP_SOURCE_HEADER));
             return Dispatch::response(match &self.shutdown {
-                Some(shutdown) => match shutdown.request(source).await {
+                Some(shutdown) => match if request.header("x-many-ai-cli-require-empty") == "1" {
+                    let core = self
+                        .core
+                        .as_ref()
+                        .expect("guarded shutdown checked session core")
+                        .clone();
+                    shutdown
+                        .request_when_empty(
+                            source,
+                            Arc::new(move || {
+                                !core.registered_session_ids().into_iter().any(|id| {
+                                    core.details(id).is_some_and(|details| details.connected)
+                                })
+                            }),
+                        )
+                        .await
+                } else {
+                    shutdown.request(source).await
+                } {
                     Ok(()) => Response::json(200, &json!({"ok":true})),
                     Err(_) => {
                         Response::error(503, "shutdown_unavailable", "Hub shutdown is unavailable")

@@ -435,7 +435,7 @@ If you still want to use the exe straight from the extracted zip, the previous f
    - The Hub starts and your browser opens automatically at `http://127.0.0.1:47777/?token=<token>`
    - If a Hub is already running, your browser is reopened against the existing instance
 3. In the Hub UI, click **"+ New Session"** to launch a wrapped AI CLI session
-4. To stop the Hub intentionally, use the `⏻` button in the Settings → Hub view of the Hub UI, or run `many-ai-cli stop` from another terminal
+4. On Windows, use **Exit** or **×** on the small taskbar window to end all AI sessions and close the app. To stop only the Hub for maintenance on any platform, run `many-ai-cli stop` from another terminal
 
 ### Verify Release Artifacts (Checksum + Signature)
 
@@ -470,7 +470,7 @@ v0.10.0 replaces the program inside the release: the executables (`many-ai-cli` 
 
 **Update**
 
-1. Choose a moment when no AI work is in progress, then stop the running Hub with `many-ai-cli stop` (or the `⏻` button in Settings → Hub, or **Stop** on the small taskbar window). See [Shutdown, zombie protection & Hub crash resilience](#shutdown-zombie-protection--hub-crash-resilience) for what stopping does to running sessions.
+1. Choose a moment when no AI work is in progress, then stop the running Hub with `many-ai-cli stop` (or **Exit** on the small Windows taskbar window, which also ends all connected AI sessions). See [Shutdown, zombie protection & Hub crash resilience](#shutdown-zombie-protection--hub-crash-resilience) for what stopping does to running sessions.
 2. Copy your data first (see **Back up before updating** below).
 3. Install v0.10.0 the same way you installed before; the commands are in [Quick Download](#quick-download). For an npm install, that is `pnpm add -g many-ai-cli@<version>`, as described in [Getting started](#getting-started-right-after-install).
 4. On Windows, run `many-ai-cli setup` again from the new version so the shortcuts point at the new executable ([Getting started](#getting-started-right-after-install)).
@@ -505,21 +505,21 @@ Whichever install path you used, the next steps are the same.
    many-ai-cli setup
    ```
 
-   On **Windows** it creates a single **"MANY-AI-CLI"** shortcut on your desktop and a separate sign-in entry in your **Startup folder**. The desktop shortcut starts or reuses the Hub and opens the browser. The sign-in entry places a small window on the taskbar and does not open a browser. Closing that window minimizes it and does not stop the Hub. If you would rather launch it yourself, delete "MANY-AI-CLI" from the Startup folder or switch it off in **Task Manager → Startup apps**. On macOS and Linux it creates **"Many AI Hub Start"** and **"Many AI Hub Stop"** (`.command` / `.desktop`).
-2. From now on, just **double-click the desktop shortcut**. On Windows it starts the Hub if needed and opens the browser directly, including the first launch; an existing Hub is reused. **Open browser** on the small taskbar window opens the dashboard again. Closing that window minimizes it and does not stop the Hub. On macOS and Linux, "Many AI Hub Start" opens a console window alongside the browser.
+   On **Windows** it creates a single **"MANY-AI-CLI"** shortcut on your desktop and a separate sign-in entry in your **Startup folder**. The desktop shortcut starts or reuses the Hub and opens the browser. The sign-in entry places a small window on the taskbar and does not open a browser. Use **Minimize (−)** to keep the Hub and AI sessions running. **Exit** or **×** ends all connected AI sessions and closes the app; running sessions require confirmation. If you would rather launch it yourself, delete "MANY-AI-CLI" from the Startup folder or switch it off in **Task Manager → Startup apps**. On macOS and Linux it creates **"Many AI Hub Start"** and **"Many AI Hub Stop"** (`.command` / `.desktop`).
+2. From now on, just **double-click the desktop shortcut**. On Windows it starts the Hub if needed and opens the browser directly, including the first launch; an existing Hub is reused. **Open browser** on the small taskbar window opens the dashboard again. Use **Minimize (−)** to keep the Hub and AI sessions running. **Exit** or **×** ends all connected AI sessions and closes the app; running sessions require confirmation. On macOS and Linux, "Many AI Hub Start" opens a console window alongside the browser.
 3. In the Hub UI, click **"+ New Session"** in the lower left to launch one of the wrapped AI CLIs (claude / codex / copilot / cursor-agent / opencode / grok / command-code). When an approval prompt appears, an action bar shows up under the input — click a button or use the keyboard.
 
-To stop, use **Stop** on the small taskbar window (Windows), **"Many AI Hub Stop"** on your desktop (macOS / Linux), the `⏻` button in the Settings → Hub view of the Hub UI, or `many-ai-cli stop` from another terminal. If you prefer a terminal, `many-ai-cli serve --open` still works — and a Hub that was started in a console window can later be switched to the small taskbar window from **Settings → Hub → Switch to the taskbar window** (Windows), which runs the setup, restarts the Hub and lets active sessions reconnect automatically.
+To finish on Windows, use **Exit** or **×** on the small taskbar window. If AI sessions are connected, a confirmation shows their count; choosing **Exit all** ends those sessions, stops the Hub and closes the app. With no connected sessions it exits directly. Closing a browser tab keeps work running until the configured idle timeout. On macOS / Linux, use **"Many AI Hub Stop"** on your desktop. The maintenance command `many-ai-cli stop` stops only the Hub. If you prefer a terminal, `many-ai-cli serve --open` still works — and a Hub that was started in a console window can later be switched to the small taskbar window from **Settings → Hub → Switch to the taskbar window** (Windows), which runs the setup, restarts the Hub and lets active sessions reconnect automatically.
 
-Windows shortcuts retain the executable, home and selected Hub port from setup. If the intended port is not currently running and differs from the saved configuration, use `many-ai-cli setup --port <port>` explicitly. Setup does not copy or migrate existing settings, data or credentials. Closing the small window minimizes it and leaves the Hub running. Stop the Hub with that window's **Stop** button. To replace the executable without stopping the Hub, end that window's process in Task Manager.
+Windows shortcuts retain the executable, home and selected Hub port from setup. If the intended port is not currently running and differs from the saved configuration, use `many-ai-cli setup --port <port>` explicitly. Setup does not copy or migrate existing settings, data or credentials. Minimizing the small window leaves the Hub and sessions running. Its **Exit** button and **×** end all connected AI sessions, stop the Hub and close the app. To replace the executable without stopping the Hub, end that window's process in Task Manager.
 
 For npm updates, install the selected version (for example, `pnpm add -g many-ai-cli@<version>`) and run `many-ai-cli setup` again from that version. Package managers may change the executable's directory between versions, so setup refreshes the shortcuts. Installation does not restart a running Hub; arrange any restart around ongoing AI work. Foreground `serve` and no-argument Hub startup show a logo, version and connection instructions when stdin and stdout are terminals. Background launches and redirected output do not print the authentication URL.
 
 > **Upgrading from an earlier version?** The small taskbar window does not appear just because you installed a newer binary — **run `setup` once** to get the "MANY-AI-CLI" shortcut and the sign-in entry. Doing so **leaves your existing "Start" and "Stop" icons in place** — they keep working. Delete them yourself once you have switched to the small window; `setup` will never remove them for you. An older desktop icon named "Many AI Hub" is the same launcher under the previous name; `setup` replaces it with "MANY-AI-CLI".
 
 > **⚠ About the console window (macOS / Linux)**
-> Launching "Many AI Hub Start" opens a console window alongside the browser. **That console *is* the Hub server process** — closing it with `×` terminates the Hub. If it gets in the way, **minimize** it instead of closing it. On Windows the resident process places a small window on the taskbar and starts the Hub detached, so there is no console window to keep open. Closing the small window minimizes it and does not stop the Hub. Stop the Hub with the window's **Stop** button.
-> If the Hub does go down (whether by `×`, a crash, or a manual restart), running AI sessions wait up to **60 minutes** for the Hub to come back before terminating themselves (configurable in `config.yaml` up to 24 hours — extend it for long-running autonomous tasks). A Web UI bug or restart will not silently kill your work. See [Shutdown, zombie protection & Hub crash resilience](#shutdown-zombie-protection--hub-crash-resilience) for details.
+> Launching "Many AI Hub Start" opens a console window alongside the browser. **That console *is* the Hub server process** — closing it with `×` terminates the Hub. If it gets in the way, **minimize** it instead of closing it. On Windows the resident process places a small window on the taskbar and starts the Hub detached, so there is no console window to keep open. Use **Minimize (−)** to keep work running. **Exit** or **×** ends all connected AI sessions and closes the app.
+> If the Hub goes down unexpectedly or is restarted for maintenance, running AI sessions wait up to **60 minutes** for the Hub to come back before terminating themselves (configurable in `config.yaml` up to 24 hours — extend it for long-running autonomous tasks). A Web UI bug or restart will not silently kill your work. See [Shutdown, zombie protection & Hub crash resilience](#shutdown-zombie-protection--hub-crash-resilience) for details.
 > On Linux (GNOME), the first time you use a `.desktop` shortcut on the desktop, right-click it and choose **"Allow Launching"** (this is an OS-level requirement).
 
 ### Tip: one skills shelf and one canonical rule file for every wrapped CLI
@@ -1100,7 +1100,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 ![many-ai-cli dashboard](assets/readme-dashboard.png)
 
 ```
-┌─ MANY-AI-CLI  [1][0][6] │ ● Claude:2  ● Codex:5         [⏻] [Settings] ─┐
+┌─ MANY-AI-CLI  [1][0][6] │ ● Claude:2  ● Codex:5         [Settings] ─┐
 ├──────────────────────────┬──────────────────────────────────────────────┤
 │ [+ New Session]          │ ● Codex  cwd: C:\src\many-ai-cli  [↑ to top] │
 │ 📁 many-ai-cli  [1][0][6] │ Terminal output — Windows PowerShell         │
@@ -1134,7 +1134,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
   - Each session card: `×` (close) / provider-colored dot + ID + state badge (Running / Standby / Pending / Error / Disconnected) / branch badge when Git is available / one-line preview of recent output.
   - Right-click a card to open the Git view, open the Files tab, activate the session, or copy the session ID.
   - Errored sessions stay in the list until you click `×`.
-  - Fixed footer at the bottom: `Settings`. It opens the existing General settings each time. Choose `Usage` or `Hub` in the settings navigation for provider usage or Hub actions (external access, mobile QR, shutdown and bug report). Other settings remain in the same navigation (General / Connections & plans / Input / Approvals & notifications / Maintenance). A search box at the top left narrows the items; close it with the `Close` button or Esc.
+  - Fixed footer at the bottom: `Settings`. It opens the existing General settings each time. Choose `Usage` or `Hub` in the settings navigation for provider usage or Hub actions (external access, mobile QR and bug report). Other settings remain in the same navigation (General / Connections & plans / Input / Approvals & notifications / Maintenance). A search box at the top left narrows the items; close it with the `Close` button or Esc.
 - **Right pane (terminal + input)**
   - Top bar: active session's provider and cwd, plus `↑ to top` to scroll the PTY buffer back to the start.
   - Center: PTY output rendered live with xterm.js.
@@ -1383,18 +1383,18 @@ When the wrapper's WebSocket to the Hub drops, the wrapper **probes the Hub's HT
 
 | Scenario | Wrapper behavior |
 |---|---|
-| **Intentional disconnect** — UI `×` (dismiss), "stop everything", or idle-timeout fired<br>(Hub HTTP responds normally) | Kill the PTY child (`claude` / `codex` / `copilot` / `cursor-agent` / `grok`) **immediately**. No grace period. |
+| **Intentional disconnect** — UI `×` (dismiss), the small Windows window's Exit, or idle-timeout fired<br>(Hub HTTP responds normally) | Kill the PTY child (`claude` / `codex` / `copilot` / `cursor-agent` / `grok`) **immediately**. No grace period. |
 | **Hub crash / `.exe` console closed**<br>(Hub HTTP unreachable) | Retry dial+register every 2 s for up to `wrapper_reconnect_grace_sec` (default **3600 s = 60 min**).<br>　• If Hub comes back: re-register as a new session, replay the last 64 KB of PTY output to the UI, and resume.<br>　• If the grace expires with Hub still down: kill the PTY. |
 | **Browser closed but Hub still running** (no UI connected) | After `idle_timeout_min` minutes (default 60), the Hub force-disconnects every wrapper, which is then handled as the "intentional disconnect" row above. |
 
-> **Why**: this lets you recover from a Hub-side bug, panic, or manual restart without losing your AI session — as long as the Hub comes back within the grace window. For long-running autonomous tasks (multi-hour agent loops), bump `wrapper_reconnect_grace_sec` up to e.g. 12 h (`43200`). Cases where the user *meant* to stop (dismiss, "stop everything", browser closed and forgotten) still terminate sessions promptly.
+> **Why**: this lets you recover from a Hub-side bug, panic, or manual restart without losing your AI session — as long as the Hub comes back within the grace window. For long-running autonomous tasks (multi-hour agent loops), bump `wrapper_reconnect_grace_sec` up to e.g. 12 h (`43200`). Cases where the user *meant* to stop (dismiss, the small Windows window's Exit, browser closed and forgotten) still terminate sessions promptly.
 
 Configuration knobs in `~/.many-ai-cli/config.yaml`:
 
 - `hub.wrapper_reconnect_grace_sec` — `0` disables reconnect (legacy "kill immediately" behavior). Range `0`–`86400` seconds (up to 24 h). Default `3600` (60 min). Also editable in Settings (in minutes). **Applies to new sessions only** — running sessions keep the value they were spawned with.
 - `hub.idle_timeout_min` — how long the Hub keeps wrappers alive when no UI is connected. `0` disables. Range `0`–`1440` minutes. Also editable in Settings.
 
-For a clean shutdown, prefer the `⏻` button in the Settings → Hub view of the Hub UI or `many-ai-cli stop`; closing the console window now leaves wrappers waiting for the Hub to come back rather than killing them right away.
+To end all AI sessions and the app on Windows, use **Exit** or **×** on the small taskbar window. To stop only the Hub for maintenance, use `many-ai-cli stop`; closing the console window now leaves wrappers waiting for the Hub to come back rather than killing them right away.
 
 ---
 

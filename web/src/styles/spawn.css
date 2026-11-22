@@ -11,16 +11,16 @@
   padding: 6px 4px 4px;
   background: var(--bg);
   /* サイドバー幅に合わせてボタンを縮める（狭いと右端のアイコンが切れるため）。
-     ボタン 7 個・gap 6 本ぶん（24px）を引いた残りを等分し、18px〜32px に収める。 */
+     ボタン 6 個・gap 5 本ぶん（20px）を引いた残りを等分し、18px〜32px に収める。 */
   container-type: inline-size;
-  --nsb-size: clamp(18px, calc((100cqw - 24px) / 7), 32px);
+  --nsb-size: clamp(18px, calc((100cqw - 20px) / 6), 32px);
 }
-/* マウス操作の PC では compact の 32px を上限にし、サイドバーが狭いときだけ 7 個とも収まるまで縮める
+/* マウス操作の PC では compact の 32px を上限にし、サイドバーが狭いときだけ 6 個とも収まるまで縮める
    （押せる大きさの最低基準 24px は守る）。タッチ操作は下の coarse 側で指で押せる大きさを保つ。 */
 @media (min-width: 721px) and (not (pointer: coarse)) {
   #new-session-bar {
     padding: 4px 4px 3px;
-    --nsb-size: clamp(24px, calc((100cqw - 24px) / 7), var(--ui-control-compact));
+    --nsb-size: clamp(24px, calc((100cqw - 20px) / 6), var(--ui-control-compact));
   }
 }
 
@@ -54,13 +54,6 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
 }
-
-#kill-all-btn {
-  opacity: 0.82;
-  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
-}
-#kill-all-btn:hover { opacity: 1; }
-#kill-all-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .orchestration-icon { width: calc(var(--nsb-size, 32px) * 0.53); height: calc(var(--nsb-size, 32px) * 0.53); display: block; }
 

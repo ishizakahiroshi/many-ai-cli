@@ -9,6 +9,10 @@ use std::{
     time::Duration,
 };
 pub mod native;
+pub struct ExitSnapshot {
+    pub count: usize,
+    pub runtime: Option<crate::application::hub_runtime::RuntimeData>,
+}
 #[cfg(test)]
 mod tests;
 #[cfg(windows)]
@@ -54,6 +58,14 @@ pub trait TrayHooks: Send + Sync {
     fn start_hub(&self) -> CoreFuture<'_, io::Result<()>>;
     fn open_url<'a>(&'a self, url: &'a str) -> CoreFuture<'a, io::Result<()>>;
     fn stop_hub(&self) -> CoreFuture<'_, io::Result<()>>;
+    /// Connected live sessions, including idle AI terminals. A failed query is not zero.
+    fn active_sessions(&self) -> CoreFuture<'_, io::Result<ExitSnapshot>> {
+        Box::pin(async { Err(io::Error::other("session status is unavailable")) })
+    }
+    /// End every connected session, then the Hub. Must not stop the Hub on failure.
+    fn exit_app(&self, _snapshot: ExitSnapshot) -> CoreFuture<'_, io::Result<()>> {
+        Box::pin(async { Err(io::Error::other("application exit is unavailable")) })
+    }
     /// Stop used only by `migrate_hub`, so a later tray-menu stop keeps its own source.
     fn stop_for_migration(&self) -> CoreFuture<'_, io::Result<()>> {
         self.stop_hub()
@@ -68,6 +80,7 @@ pub struct TrayOwner {
     runtime: tokio::runtime::Handle,
     actions: tokio::sync::Mutex<()>,
     opening: AtomicBool,
+    exiting: AtomicBool,
     last_open: Mutex<Option<tokio::time::Instant>>,
     /// Visible window handle. `0` means the resident loop has no window yet,
     /// including every test that never creates one.
@@ -75,6 +88,8 @@ pub struct TrayOwner {
     presence_hwnd: std::sync::atomic::AtomicIsize,
     #[cfg(test)]
     test_error_reporter: Option<TestErrorReporter>,
+    #[cfg(test)]
+    test_exit_answer: AtomicBool,
 }
 impl TrayOwner {
     pub fn new(hooks: Arc<dyn TrayHooks>) -> Arc<Self> {
@@ -85,11 +100,14 @@ impl TrayOwner {
             runtime: tokio::runtime::Handle::current(),
             actions: tokio::sync::Mutex::new(()),
             opening: AtomicBool::new(false),
+            exiting: AtomicBool::new(false),
             last_open: Mutex::new(None),
             #[cfg(windows)]
             presence_hwnd: std::sync::atomic::AtomicIsize::new(0),
             #[cfg(test)]
             test_error_reporter: None,
+            #[cfg(test)]
+            test_exit_answer: AtomicBool::new(false),
         })
     }
     pub async fn open_hub(&self) -> io::Result<()> {
@@ -179,6 +197,13 @@ impl TrayOwner {
         self.command(5);
     }
     pub fn command(self: &Arc<Self>, id: u32) {
+        if id == 6 {
+            if self.exiting.swap(true, Ordering::AcqRel) {
+                return;
+            }
+        } else if self.exiting.load(Ordering::Acquire) {
+            return;
+        }
         let owner = self.clone();
         let mut runs = self
             .runs
@@ -198,6 +223,11 @@ impl TrayOwner {
                         2 => owner.stop_hub().await,
                         4 => Err(io::Error::new(io::ErrorKind::AddrInUse, "同じ保存先の小さい窓が別のポートで開いています。その窓のプロセスだけをタスクマネージャーで終了し、開き直してください。Hub は自動では停止しません。")),
                         5 => owner.migrate_hub().await,
+                        6 => owner.exit_app().await.map(|exited| {
+                            if !exited {
+                                owner.exiting.store(false, Ordering::Release);
+                            }
+                        }),
                         _ => Ok(()),
                     };
                     // Command 5 is the settings switch. The status line would
@@ -210,6 +240,9 @@ impl TrayOwner {
                     result
                 } => result,
             };
+            if id == 6 && result.is_err() {
+                owner.exiting.store(false, Ordering::Release);
+            }
             if let Err(error) = result
                 && !owner.cancel.is_cancelled()
             {
@@ -222,6 +255,31 @@ impl TrayOwner {
                 let _ = tokio::task::spawn_blocking(move || report_error(&message)).await;
             }
         }));
+    }
+    async fn exit_app(&self) -> io::Result<bool> {
+        let _action = self.actions.lock().await;
+        let snapshot = self.hooks.active_sessions().await?;
+        let count = snapshot.count;
+        if count > 0 {
+            #[cfg(test)]
+            let confirmed = self.test_exit_answer.load(Ordering::Acquire);
+            #[cfg(all(windows, not(test)))]
+            let confirmed = {
+                let hwnd = self.presence_window();
+                tokio::task::spawn_blocking(move || windows::confirm_exit(hwnd, count))
+                    .await
+                    .map_err(io::Error::other)??
+            };
+            #[cfg(all(not(windows), not(test)))]
+            let confirmed = false;
+            if !confirmed {
+                return Ok(false);
+            }
+        }
+        self.hooks.exit_app(snapshot).await?;
+        #[cfg(windows)]
+        windows::post_presence_exit(self.presence_window())?;
+        Ok(true)
     }
     #[cfg(windows)]
     fn bind_presence_window(&self, hwnd: isize) {

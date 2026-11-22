@@ -1,4 +1,4 @@
-//! Native tray actions keep a real Hub child alive after tray shutdown.
+//! Native tray actions; application exit settles AI sessions before stopping the Hub.
 use super::*;
 use crate::{
     application::{hub_runtime::RuntimeLedger, maintenance_cli::stop::StopCommand},
@@ -8,6 +8,7 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
 };
+mod exit;
 pub struct NativeTrayHooks {
     pub paths: RuntimePaths,
     pub config: Arc<ConfigStore>,
@@ -227,6 +228,36 @@ impl TrayHooks for NativeTrayHooks {
     }
     fn stop_hub(&self) -> CoreFuture<'_, io::Result<()>> {
         Box::pin(async move { self.stop.run(&Cancellation::default()).await })
+    }
+    fn active_sessions(&self) -> CoreFuture<'_, io::Result<ExitSnapshot>> {
+        Box::pin(async move {
+            match self.exit_client()? {
+                Some(client) => Ok(ExitSnapshot {
+                    count: client.active_sessions().await?,
+                    runtime: Some(client.runtime),
+                }),
+                None => Ok(ExitSnapshot {
+                    count: 0,
+                    runtime: None,
+                }),
+            }
+        })
+    }
+    fn exit_app(&self, snapshot: ExitSnapshot) -> CoreFuture<'_, io::Result<()>> {
+        Box::pin(async move {
+            let client = self.exit_client()?;
+            if client.as_ref().map(|client| &client.runtime) != snapshot.runtime.as_ref() {
+                return Err(io::Error::other(
+                    "Hub が切り替わりました。もう一度「終了」を押して確認してください。",
+                ));
+            }
+            let Some(client) = client else { return Ok(()) };
+            client.stop_exposure().await?;
+            client.end_sessions(snapshot.count > 0).await?;
+            self.stop
+                .run_expected(&Cancellation::default(), &client.runtime)
+                .await
+        })
     }
     fn stop_for_migration(&self) -> CoreFuture<'_, io::Result<()>> {
         Box::pin(async move { self.migration_stop.run(&Cancellation::default()).await })

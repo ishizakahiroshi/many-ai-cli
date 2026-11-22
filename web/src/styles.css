@@ -895,8 +895,7 @@ body:has(.git-lock-banner:not(.save-leftover-banner)) .save-leftover-banner { ri
 #settings-hub-actions #expose-btn span[data-i18n="expose_btn"],
 #settings-hub-actions #bug-report-btn span:last-child { display: inline; }
 
-/* シャットダウン・設定ボタン共通 */
-#shutdown-btn,
+/* 設定ボタン */
 #settings-btn {
   display: flex;
   align-items: center;

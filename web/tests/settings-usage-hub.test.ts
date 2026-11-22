@@ -100,7 +100,7 @@ function fixture(mobile = false) {
   const usagePanel = el('div', 'settings-usage-panel', sections.get('usage')); // doxguard: allow panel
   el('div', 'usage-provider-list', usagePanel);
   const hub = el('div', 'settings-hub-actions', sections.get('hub'));
-  for (const id of ['expose-btn', 'mobile-connect-btn', 'shutdown-btn', 'bug-report-btn']) el('button', id, hub);
+  for (const id of ['expose-btn', 'mobile-connect-btn', 'bug-report-btn']) el('button', id, hub);
   el('span', 'expose-dot', doc.getElementById('expose-btn')); el('span', 'expose-state', doc.getElementById('expose-btn'));
   for (const id of ['theme-select', 'fontsize-select', 'lang-select', 'usage-links-reset-btn', 'provider-order-reset-btn', 'settings-readme-btn', 'settings-licenses-btn']) el('input', id, sections.get('general'));
   el('div', 'about-panel').hidden = true; el('button', 'about-close-btn'); el('div', 'session-inline-usage');
@@ -153,7 +153,7 @@ test('footer has only Settings; destinations are embedded exactly once and retai
     assert.match(usageLinks, new RegExp('id="usage-link-' + provider + '-url"'));
   }
   const hub = html.slice(html.indexOf('id="settings-hub-actions"'), html.indexOf('</details>', html.indexOf('id="settings-hub-actions"')));
-  for (const id of ['expose-btn', 'mobile-connect-btn', 'shutdown-btn', 'bug-report-btn']) assert.match(hub, new RegExp('id="' + id + '"'));
+  for (const id of ['expose-btn', 'mobile-connect-btn', 'bug-report-btn']) assert.match(hub, new RegExp('id="' + id + '"'));
   assert.doesNotMatch(hub, /role="menu/);
   assert.equal((html.match(/id="session-inline-usage"/g) || []).length, 1);
   assert.ok(html.indexOf('id="session-inline-usage"') > html.indexOf('id="session-footer"'));
@@ -377,11 +377,12 @@ test('Hub exposure state stays synchronized and nested Escape dismisses only its
   assert.ok(calls.every(path => path === '/api/mobile-connect/tailscale'));
 });
 
-test('source keeps Hub confirmations/actions and responsive labels without standalone menu initialization', () => {
+test('source keeps Hub connection actions and responsive labels without standalone menu initialization', () => {
   const app = read('../src/app.ts');
-  assert.match(app, /const result = await appConfirmShutdown\(\{ exposeActive \}\)/);
-  assert.match(app, /if \(!result\) return/); assert.match(app, /result.action === 'sessions'/);
-  assert.match(app, /apiFetch\('\/api\/kill-all'/); assert.match(app, /apiFetch\('\/api\/shutdown'/);
+  assert.doesNotMatch(app, /appConfirmShutdown|apiFetch\('\/api\/(?:kill-all|shutdown)'/);
+  assert.doesNotMatch(settings, /appConfirmShutdown/);
+  assert.doesNotMatch(html, /id="(?:kill-all-btn|settings-kill-all-btn|shutdown-btn)"/);
+  assert.doesNotMatch(read('../src/app/mobile-home.ts'), /shutdown-btn|shutdown_tooltip/);
   assert.match(read('../src/app/mobile-connect.ts'), /getElementById\('mobile-connect-btn'\)/);
   assert.match(read('../src/app/bug-report-modal.ts'), /bug-report-btn/);
   assert.doesNotMatch(read('../src/app-entry.ts'), /initWebMenu|web-menu\.js/);
@@ -392,25 +393,7 @@ test('source keeps Hub confirmations/actions and responsive labels without stand
   assert.match(css, /#settings-hub-actions #expose-btn span\[data-i18n="expose_btn"\]/);
   for (const lang of ['en', 'ja', 'vi']) {
     const dict = JSON.parse(read('../src/i18n/' + lang + '.json'));
-    for (const key of ['usage_menu_btn', 'web_menu_btn', 'settings_general', 'expose_btn', 'shutdown_tooltip', 'bug_report_button']) assert.ok(dict[key]);
-  }
-});
-
-
-test('actual shutdown listener preserves cancellation and both affirmative payloads', async () => {
-  const app = read('../src/app.ts');
-  const start = app.indexOf("  const shutdownBtn = document.getElementById('shutdown-btn');");
-  const listener = app.slice(start, app.indexOf('})();', start));
-  for (const result of [null, { action: 'shutdown', stopExpose: false }, { action: 'sessions', stopExpose: true }]) {
-    const f = fixture(); const calls: string[] = []; let closed = 0;
-    const ctx = { ...f.ctx, getExposeStatus: () => ({ state: 'ready' }), fetchExposeStatus: async () => ({ ok: true, status: { state: 'ready' } }),
-      appConfirmShutdown: async (opts: any) => { assert.equal(opts.exposeActive, true); return result; },
-      disableExpose: async () => { calls.push('disable-expose'); }, apiFetch: async (path: string, init: any) => { assert.equal(init.method, 'POST'); calls.push(path); },
-    };
-    ctx.window.close = () => { closed++; }; run('(function(){' + listener + '})();', ctx);
-    f.button('settings-btn').click(); f.select('hub'); f.button('shutdown-btn').click(); await tick();
-    assert.deepEqual(calls, !result ? [] : result.action === 'sessions' ? ['disable-expose', '/api/kill-all', '/api/shutdown'] : ['/api/shutdown']);
-    assert.equal(closed, result ? 1 : 0);
+    for (const key of ['usage_menu_btn', 'web_menu_btn', 'settings_general', 'expose_btn', 'bug_report_button']) assert.ok(dict[key]);
   }
 });
 

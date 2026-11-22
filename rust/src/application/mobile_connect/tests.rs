@@ -157,6 +157,31 @@ async fn status_typed_errors_and_logged_out_do_not_issue_serve_or_include_token(
     }
 }
 #[tokio::test]
+async fn status_probe_failure_is_not_proof_that_exposure_is_off() {
+    for replies in [
+        vec![output("", "", false)],
+        vec![output("invalid json", "", true)],
+        vec![
+            output(r#"{"BackendState":"Running"}"#, "", true),
+            output("", "", false),
+        ],
+    ] {
+        let (_root, _config, _io, owner, _warnings) = setup(replies);
+        let result = owner.status(&Cancellation::default()).await.unwrap();
+        assert_eq!(result.value["probe_ok"], false);
+    }
+    let (_root, _config, _io, mut owner, _warnings) = setup(vec![]);
+    Arc::get_mut(&mut owner).unwrap().io = Arc::new(FakeIo {
+        windows: true,
+        available: vec![],
+        replies: Mutex::new(VecDeque::new()),
+        calls: Mutex::new(vec![]),
+    });
+    let result = owner.status(&Cancellation::default()).await.unwrap();
+    assert_eq!(result.value["state"], "not_installed");
+    assert_eq!(result.value["probe_ok"], true);
+}
+#[tokio::test]
 async fn tailnet_admin_failure_is_200_state_and_never_exposes_stderr() {
     let (_root, _config, _io, owner, _warnings) = setup(vec![
         output(
