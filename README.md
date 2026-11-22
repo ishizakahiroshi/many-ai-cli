@@ -533,6 +533,17 @@ You can keep **one** skills shelf and **one** canonical rule file, and let each 
 
 The wiring is independent of this tool: it works with or without the Hub. It simply pairs well with running several CLIs at once.
 
+### Tip: give AI browser work its own Chrome profile
+
+When an AI drives the browser through Claude in Chrome, its tabs open in the window of whichever profile the extension is connected to. If that is your everyday profile, AI tabs keep appearing between the Hub and the tabs you are working in, and the more sessions you run side by side, the more they get in the way.
+
+- **Create a separate Chrome profile for AI and connect the extension only there.** AI tabs then stay in that window. Turn the extension off in your everyday profile
+- Sign in, inside the AI profile, to the sites you want the AI to operate (where you publish articles, for example). Sites with a large blast radius, such as admin consoles, can go in yet another profile so they cannot be touched by mistake
+- The extension is connected only while that profile's Chrome window is open. On Windows you can start a closed profile with `chrome.exe --profile-directory="Profile 2"` (the folder name is the last part of "Profile Path" on `chrome://version`), and the extension reconnects on its own
+- The extension must be signed in to the same Claude account as the session. For the limits when you use more than one Claude account, see "Browser integration follows the directory too" under [Multiple subscriptions per provider](#multiple-subscriptions-per-provider)
+
+This is a way of using Chrome, not a many-ai-cli feature.
+
 ### Unified launcher (Windows / Linux / macOS)
 
 `many-ai-cli-launcher` (`many-ai-cli-launcher.exe` on Windows) is a unified launcher that manages connection profiles for both WSL and remote server targets. Connection profiles are stored in `~/.many-ai-cli/launcher-profiles.yaml`.
