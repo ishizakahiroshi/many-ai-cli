@@ -7,6 +7,8 @@ import { apiFetch, escapeHtml, ti18n } from './util.js';
 import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, openProjectKey, orderSessions, projectFavorites, saveCollapsedNodes, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, set_openProjectKey, terminals } from './state.js';
 import { NO_PROJECT_KEY, buildSidebarTree, deriveProjectKeyFromCwd, flattenSidebarTree, moveToSiblingFront, projectBoxKeyAfterSessionCardSelection, projectKeyForSession } from './sidebar-tree.js';
 import { attachProjectPathPopover } from './project-group-path-popover.js';
+import { collectCardNotes, computeBaselines, type CardBaselines, type CardNote } from './session-card-notes.js';
+import { attachSessionCardPopover, hideSessionCardPopover, refreshSessionCardPopover } from './session-card-popover.js';
 import { STORAGE_SIDEBAR_PIN_MIGRATED_KEY, isTurnEndBellOff, setTurnEndBellOff, setUserPref } from './user-prefs.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
 import { renderZeroSessionEmptyState } from './zero-session-empty-state.js';
@@ -752,13 +754,100 @@ function cardDoneHtml(s) {
   return `<span class="card-done card-done-${doneSummaryKindSuffix(done?.kind)}" data-tooltip="${escapeHtml(full)}" aria-label="${escapeHtml(line)}">${escapeHtml(line)}</span>`;
 }
 
-function cardCtxHtml(s) {
+function cardCtxHtml(s, compact = false) {
   const ctx = getSessionCtxPct(Number(s.id));
   if (!ctx) return '';
   const pct = Math.max(0, Math.min(100, Number(ctx.pct) || 0));
   const severity = pct >= 90 ? 'crit' : (pct >= 75 ? 'warn' : '');
   const title = ti18n('card_ctx_title', 'Context window usage', { pct });
-  return `<span class="card-ctx" data-tooltip="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><span class="card-ctx-gauge"><span class="card-ctx-fill ${severity}" style="width:${pct}%"></span></span><span class="card-ctx-pct ${severity}">${pct}%</span>${ctx.is1m ? '<span class="card-ctx-1m">1M</span>' : ''}</span>`;
+  return `<span class="card-ctx" data-tooltip="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><span class="card-ctx-gauge"><span class="card-ctx-fill ${severity}" style="width:${pct}%"></span></span><span class="card-ctx-pct ${severity}">${pct}%</span>${ctx.is1m && !compact ? '<span class="card-ctx-1m">1M</span>' : ''}</span>`;
+}
+
+// Informational spans use the delayed compact popover rather than instant tooltips.
+function compactInfoHtml(html: string): string {
+  return html.replace(/ (?:data-tooltip|title)="[^"]*"/g, '');
+}
+
+// The explanations compactInfoHtml removed from a row, so the details popover can still show them.
+// Values are already escaped by the helper that built the span, so they go back into HTML as they are.
+function compactInfoTooltips(html: string): string[] {
+  const tips: string[] = [];
+  for (const match of html.matchAll(/ data-tooltip="([^"]*)"/g)) if (match[1]) tips.push(match[1]);
+  return tips;
+}
+
+// The project nodes exactly as the sidebar draws them (selected tab and color filter applied).
+function displayedSidebarProjects() {
+  const all = Array.from(sessions.values()) as any[];
+  return visibleSessionListTree(buildSidebarTree({ sessions: all, order: sessionOrder, colorFilter: activeSessionColorFilter }), all);
+}
+
+// D1: the baseline group is the project node the sidebar draws, collapsed children included —
+// the same sessions its header counts. While a color filter (or a tab) narrows the node, only
+// the cards still visible are compared with each other. Parent membership stays with the tree.
+function compactBaselinesBySession(projects = displayedSidebarProjects()): Map<number, CardBaselines> {
+  const result = new Map<number, CardBaselines>();
+  for (const project of projects) {
+    const ids = flattenSidebarTree([project]);
+    const baseline = computeBaselines(ids.map(id => sessions.get(id)).filter(Boolean));
+    for (const id of ids) result.set(id, baseline);
+  }
+  return result;
+}
+
+function cardNoteText(note: CardNote): string {
+  if (note.kind === 'permission') {
+    return t(note.labelKey, { value: note.value ? permissionModeLabel(note.value) : t('card_note_unspecified') });
+  }
+  if (note.kind === 'branch') return t(note.labelKey, { value: note.value || t('card_branch_no_git') });
+  if (note.kind === 'handoff-from' || note.kind === 'handoff-to') return t(note.labelKey, { id: note.value });
+  return t(note.labelKey, { value: note.value });
+}
+
+function cardNotesHtml(s, baselines: CardBaselines): string {
+  const notes = collectCardNotes(s, baselines, successorSessionIDOf(Number(s.id)));
+  if (notes.length === 0) return '';
+  const board = notes.some(note => note.kind === 'board') ? ' board' : '';
+  return `<span class="card-note-dot${board}" role="img" aria-label="${escapeHtml(notes.map(cardNoteText).join('; '))}">●</span>`;
+}
+
+function compactCardDetailsHtml(id: number): string {
+  const s = sessions.get(id);
+  if (!s) return '';
+  const baseline = compactBaselinesBySession().get(id) || computeBaselines([s]);
+  const notes = collectCardNotes(s, baseline, successorSessionIDOf(id));
+  const info = getSessionAgentInfo(id);
+  const title = sessionDisplayTitle(s) || filterFirstMessage(s.last_message || s.first_message || '');
+  const state = stateActivityDecoration(s).label || stateLabel(s.state || 'standby');
+  const done = cardDoneHtml(s);
+  const status = cardStatusRowHtml(s);
+  const memo = cardMemoBadgeHtml(s);
+  const ctx = cardCtxHtml(s);
+  // The row shows these without their instant tooltips; the details carry the explanations
+  // instead (what to do about ⚠, workflow progress, the open-memo count). A tooltip that only
+  // repeats the visible text (the end reason) is not listed twice.
+  const statusHelp = compactInfoTooltips(status).filter(tip => !compactInfoHtml(status).includes(`>${tip}<`));
+  const line = (html: string) => (html ? `<div>${html}</div>` : '');
+  return `<div><b>${escapeHtml(info.model || providerDisplayName(s.provider))}</b></div>` +
+    `<div>${escapeHtml(title)}</div><div>${escapeHtml(state)}</div>` +
+    line(compactInfoHtml(done)) +
+    line(compactInfoHtml(status)) + statusHelp.map(tip => line(tip)).join('') +
+    compactInfoTooltips(memo).map(tip => line(tip)).join('') +
+    line(compactInfoHtml(ctx)) +
+    (notes.length ? `<ul>${notes.map(note => `<li>${escapeHtml(cardNoteText(note))}</li>`).join('')}</ul>` : '');
+}
+
+// B: only the compact mode uses this one-line markup; the standard row is unchanged.
+function compactCardHtml(s, statePill: string, title: string, bell: string, children: string, baselines: CardBaselines): string {
+  const info = getSessionAgentInfo(Number(s.id));
+  const provider = (s.route === 'ollama' || s.route === 'lm-studio') ? s.route : s.provider;
+  const name = [info.model, title].filter(Boolean).join(' ');
+  return `<div class="card-compact-row">${compactInfoHtml(statePill)}<b>#${s.id}</b>${providerIconHtml(provider, 14)}` +
+    `<span class="card-compact-name">${escapeHtml(name)}</span>` +
+    `<span class="card-done-slot">${compactInfoHtml(cardDoneHtml(s))}</span>` +
+    `<span class="card-status-slot">${compactInfoHtml(cardStatusRowHtml(s))}</span>${compactInfoHtml(cardMemoBadgeHtml(s))}${bell}${children}` +
+    `<span class="card-notes-slot">${cardNotesHtml(s, baselines)}</span>` +
+    `<span class="card-ctx-slot">${compactInfoHtml(cardCtxHtml(s, true))}</span></div>`;
 }
 
 // C4 (plan_memo-panel.md): そのセッションの cwd に属する未完了メモの件数。
@@ -777,29 +866,49 @@ function cardMemoBadgeHtml(s) {
 
 // 1 枚のカードの 2 行目を in-place で更新する（フル再描画を避け、スクロール位置・
 // 入力フォーカス・D&D 状態を保つため）。各スロットは常に存在させる。
-export function updateCardLiveInfo(id) {
+export function updateCardLiveInfo(id, baselines?: CardBaselines) {
   const root = document.getElementById('sessions');
   if (!root) return;
   const s = sessions.get(id);
   if (!s) return;
   const card = root.querySelector(`.card[data-session-id="${CSS.escape(String(id))}"]`);
   if (!card) return;
+  const compact = card.classList.contains('card-compact');
+  const infoHtml = compact ? compactInfoHtml : (html: string) => html;
   const statusSlot = card.querySelector('.card-status-slot');
-  if (statusSlot) statusSlot.innerHTML = cardStatusRowHtml(s);
+  if (statusSlot) statusSlot.innerHTML = infoHtml(cardStatusRowHtml(s));
   const ctxSlot = card.querySelector('.card-ctx-slot');
-  if (ctxSlot) ctxSlot.innerHTML = cardCtxHtml(s);
+  if (ctxSlot) ctxSlot.innerHTML = infoHtml(cardCtxHtml(s, compact));
   const doneSlot = card.querySelector('.card-done-slot');
-  if (doneSlot) doneSlot.innerHTML = cardDoneHtml(s);
+  if (doneSlot) doneSlot.innerHTML = infoHtml(cardDoneHtml(s));
+  if (compact) {
+    const notesSlot = card.querySelector('.card-notes-slot');
+    const baseline = baselines || compactBaselinesBySession().get(Number(id)) || computeBaselines([s]);
+    if (notesSlot) notesSlot.innerHTML = cardNotesHtml(s, baseline);
+    refreshSessionCardPopover(card as HTMLElement);
+  }
 }
 
 // 全カードの 2 行目を更新する（1Hz タイマー等から呼ぶ）。
 export function updateAllCardsLiveInfo() {
   const root = document.getElementById('sessions');
   if (!root) return;
+  const baselines = root.classList.contains('density-compact') ? compactBaselinesBySession() : null;
   root.querySelectorAll('.card').forEach(card => {
     const id = parseInt((card as HTMLElement).dataset.sessionId || '', 10);
-    if (!isNaN(id)) updateCardLiveInfo(id);
+    if (!isNaN(id)) updateCardLiveInfo(id, baselines?.get(id));
   });
+}
+
+// One Git-view activation path for sidebar badges and the selected-session header.
+export function openSessionGitTab(sid: number): void {
+  if (!Number.isFinite(sid)) return;
+  const sess = sessions.get(sid);
+  if (!sess) return;
+  const root = sess.git_root || sess.cwd || '';
+  if (!root) return;
+  activateSession(sid);
+  FilesTabManager.openGitTab(sid, root, sess.branch || '');
 }
 
 export let _sessionListClickDelegated = false;
@@ -808,7 +917,7 @@ let _sessionCardPointerActivatedAt = 0;
 let _sessionCardPointerActivatedId = null;
 
 function isSessionCardInteractiveTarget(target) {
-  return target?.closest?.('.card-actions, .card-branch, .card-bell-muted');
+  return target?.closest?.('.card-actions, .card-branch, .card-bell-muted, .card-compact .card-children-toggle');
 }
 
 function sessionCardTapMoveLimit() {
@@ -953,6 +1062,7 @@ function projectGroupFullPath(key: string, groupSessions: any[]): string {
 }
 
 export function renderSessionList() {
+  hideSessionCardPopover();
   initializeSessionListTabs({ sessions: () => Array.from(sessions.values()), render: renderSessionList,
     cardMenu: openCardCtxMenu, resetDrag: () => { set_dragSrcId(null); set_dragSrcGroupKey(null); }, pending: id => isApprovalPending(id) || pendingSpawnConfirmationCount(id) > 0,
     // On a phone the tabs live in the drawer for browsing; opening a session there would close it.
@@ -962,6 +1072,7 @@ export function renderSessionList() {
       groupOrder, projectFavorites, colorFilter: activeSessionColorFilter })) });
   renderSessionListTabs();
   const root = document.getElementById('sessions');
+  const compact = root.classList.contains('density-compact');
   const scrollEl = document.getElementById('sessions');
   // innerHTML クリアで scrollTop が 0 に戻るのを防ぐ。経過時間更新の 1Hz 再描画や
   // session_update 受信のたびにユーザのスクロール位置がトップへ吹き飛ぶのを避ける。
@@ -1007,13 +1118,7 @@ export function renderSessionList() {
         e.stopPropagation();
         if (branchEl.getAttribute('data-disabled') === 'true') return;
         const sid = parseInt(branchEl.dataset.sid, 10);
-        if (isNaN(sid)) return;
-        const sess = sessions.get(sid);
-        if (!sess) return;
-        const gr = sess.git_root || sess.cwd || '';
-        if (!gr) return;
-        activateSession(sid);
-        FilesTabManager.openGitTab(sid, gr, sess.branch || '');
+        openSessionGitTab(sid);
         return;
       }
       const id = parseInt(card.dataset.sessionId, 10);
@@ -1035,13 +1140,7 @@ export function renderSessionList() {
       e.stopPropagation();
       if (branchEl.getAttribute('data-disabled') === 'true') return;
       const sid = parseInt(branchEl.dataset.sid, 10);
-      if (isNaN(sid)) return;
-      const sess = sessions.get(sid);
-      if (!sess) return;
-      const gr = sess.git_root || sess.cwd || '';
-      if (!gr) return;
-      activateSession(sid);
-      FilesTabManager.openGitTab(sid, gr, sess.branch || '');
+      openSessionGitTab(sid);
     });
     // カード右クリック context menu
     root.addEventListener('contextmenu', (e) => {
@@ -1092,6 +1191,7 @@ export function renderSessionList() {
   if (_groupOrderChanged) saveGroupOrder();
 
   const tree = visibleSessionListTree(fullTree, Array.from(sessions.values()));
+  const compactBaselines = compact ? compactBaselinesBySession(tree) : new Map<number, CardBaselines>();
   if (!tree.length) {
     const empty = document.createElement('div'); empty.className = 'no-sessions';
     empty.textContent = t('session_list_tab_empty'); root.append(empty);
@@ -1322,6 +1422,7 @@ export function renderSessionList() {
       const orchClass = entry.depth > 0 ? ' orchestration-child' : (entry.childCount > 0 || s.orchestration_id ? ' orchestration-parent' : '');
       const colorClass = s.color ? ` card-color-${safeClassToken(s.color)}` : '';
       c.className = 'card' + stateClasses + orchClass + colorClass + (s.id === activeSessionId ? ' active' : '');
+      if (compact) c.classList.add('card-compact');
       c.tabIndex = isCollapsed ? -1 : 0;
       c.setAttribute('role', 'button');
       const label = stateLabel(state);
@@ -1329,7 +1430,7 @@ export function renderSessionList() {
       const title = sessionDisplayTitle(s);
       const displayTitle = title || filteredMsg;
       const titleTooltipParts = [title, filteredMsg].filter((value, index, values) => value && values.indexOf(value) === index);
-      if (titleTooltipParts.length > 0) c.dataset.tooltip = titleTooltipParts.join('\n');
+      if (!compact && titleTooltipParts.length > 0) c.dataset.tooltip = titleTooltipParts.join('\n');
       const taskTitleHtml = displayTitle ? `<span class="card-label">${escapeHtml(displayTitle)}</span>` : '<span class="card-label" aria-hidden="true"></span>';
       const noteHtml = s.note ? `<span class="card-note" data-tooltip="${escapeHtml(s.note)}">${escapeHtml(s.note)}</span>` : '';
       const roleLabel = s.role ? String(s.role) : (s.orchestration_id ? 'conductor' : '');
@@ -1395,9 +1496,15 @@ export function renderSessionList() {
       // 先頭に固定すると全カードで同じX座標に揃い、縦に並ぶ実行中セッションを一直線で拾える）。
       const stateDescription = activity.label || label;
       const statePillHtml = `<span class="card-state-pill ${safeClassToken(state)} ${activity.className}" title="${escapeHtml(stateDescription)}" data-tooltip="${escapeHtml(stateDescription)}" aria-label="${escapeHtml(stateDescription)}"><span class="card-pdot"></span><span class="card-state-icon" aria-hidden="true">${stateIconSvgHtml(activity.iconKind)}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
+      if (compact) {
+        c.innerHTML = compactCardHtml(s, statePillHtml, displayTitle, bellMutedHtml, childToggleHtml,
+          compactBaselines.get(Number(s.id)) || computeBaselines([s]));
+        attachSessionCardPopover(c, () => compactCardDetailsHtml(Number(s.id)));
+      } else {
       c.innerHTML =
 		`<div class="card-title-row">${statePillHtml} <b>#${s.id}</b> ${cardProviderModelHtml(s)}${taskTitleHtml}${cardMemoBadgeHtml(s)}</div>` +
 	        metaRow;
+      }
 
       const childToggleEl = c.querySelector('.card-children-toggle') as HTMLElement | null;
       if (childToggleEl) {
@@ -1873,8 +1980,10 @@ export function updateSessionCardStateInPlace(id) {
   if (pill) {
     pill.className = `card-state-pill ${safeClassToken(state)} ${activity.className}`;
     const stateDescription = activity.label || stateLabel(state);
-    pill.setAttribute('title', stateDescription);
-    pill.setAttribute('data-tooltip', stateDescription);
+    if (!card.classList.contains('card-compact')) {
+      pill.setAttribute('title', stateDescription);
+      pill.setAttribute('data-tooltip', stateDescription);
+    }
     pill.setAttribute('aria-label', stateDescription);
     const icon = pill.querySelector('.card-state-icon');
     if (icon) icon.innerHTML = stateIconSvgHtml(activity.iconKind);

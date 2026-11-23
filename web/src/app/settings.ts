@@ -7,11 +7,11 @@ import { uiButtonClass, uiIconHtml, uiModalClass } from './ui-components.js';
 import { getNotificationVolume, setNotificationVolume, STORAGE_NOTIFY_SOUND_VOLUME_KEY } from './notification-volume.js';
 import { apiFetch, escapeHtml, showToast, ti18n, token, withAssetTicket } from './util.js';
 import { httpsUrlOrEmpty } from './url-detect.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_6_KEY, STORAGE_QUICK_CMD_7_KEY, STORAGE_QUICK_CMD_8_KEY, STORAGE_QUICK_CMD_9_KEY, STORAGE_QUICK_CMD_10_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_QUICK_CMD_6_SHOW_KEY, STORAGE_QUICK_CMD_7_SHOW_KEY, STORAGE_QUICK_CMD_8_SHOW_KEY, STORAGE_QUICK_CMD_9_SHOW_KEY, STORAGE_QUICK_CMD_10_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_LINK_DEVIN_CLI_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_SIDEBAR_DENSITY_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_6_KEY, STORAGE_QUICK_CMD_7_KEY, STORAGE_QUICK_CMD_8_KEY, STORAGE_QUICK_CMD_9_KEY, STORAGE_QUICK_CMD_10_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_QUICK_CMD_6_SHOW_KEY, STORAGE_QUICK_CMD_7_SHOW_KEY, STORAGE_QUICK_CMD_8_SHOW_KEY, STORAGE_QUICK_CMD_9_SHOW_KEY, STORAGE_QUICK_CMD_10_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_LINK_DEVIN_CLI_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, openProjectKey, sessions, terminals } from './state.js';
 import { getDoneSummary } from './done-summary.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
-import { activateSession, cardSessionActions, openDetachedGridForSessions, patchSessionMeta, permissionModeChipHtml, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
+import { activateSession, cardSessionActions, openSessionGitTab, openDetachedGridForSessions, patchSessionMeta, permissionModeChipHtml, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
 import { executionModeKind } from './session-launch-declaration.js';
 import { pathPopupEl } from './path-links.js';
 import { TERMINAL_SCROLLBACK_LINES, attachTerminal, dismissTerminalReadOverlays, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, refreshTerminalThemes, sendResize } from './terminal.js';
@@ -49,6 +49,8 @@ import { captureTerminalView, restoreTerminalView, terminalViewFollows } from '.
 import { detectSupport } from '../vendor/vtype-core/index.js';
 import { detachedTabName, isDetachedTabView } from './detached-view-mode.js';
 import { FILES_BESIDE_MIN_WIDTH_QUERY, shouldOpenFilesBeside, type FilesOpenSurface } from './files-open-mode.js';
+import { abbreviateBranchName } from './session-strip-branch.js';
+import { hideSessionCardPopover } from './session-card-popover.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -1331,6 +1333,11 @@ function bindCustomThemeControls(): void {
   });
 }
 
+// Device-local: deliberately excluded from the server user-prefs mapping.
+export function applySidebarDensity(value: string): void {
+  document.getElementById('sessions')?.classList.toggle('density-compact', value === 'compact');
+}
+
 export function applyFontSize(size) {
   const s = FONTSIZE_MAP[size] ? size : 'medium';
   const px = FONTSIZE_MAP[s];
@@ -1413,6 +1420,14 @@ function syncSettingsPanelButton(): void {
 (function () {
   applyTheme(localStorage.getItem(STORAGE_THEME_KEY) || 'light');
   applyFontSize(localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium');
+  // Defer imported storage constants until the cyclic module graph has finished evaluating.
+  queueMicrotask(() => {
+    const density = localStorage.getItem(STORAGE_SIDEBAR_DENSITY_KEY) === 'compact' ? 'compact' : 'standard';
+    applySidebarDensity(density);
+    const select = document.getElementById('sidebar-density-select') as HTMLSelectElement | null;
+    if (select) select.value = density;
+    if (density === 'compact') renderSessionList();
+  });
   applyLang(localStorage.getItem(STORAGE_LANG_KEY) || 'ja');
   applyUsageLinks();
   initUsageSettings();
@@ -1493,6 +1508,12 @@ function syncSettingsPanelButton(): void {
   themeEl.addEventListener('change',    () => { applyTheme(themeEl.value); setUserPref('display.theme', themeEl.value); });
   bindCustomThemeControls();
   fontsizeEl.addEventListener('change', () => { applyFontSize(fontsizeEl.value); setUserPref('display.font_size', fontsizeEl.value); });
+  document.getElementById('sidebar-density-select')?.addEventListener('change', (e) => {
+    const density = (e.target as HTMLSelectElement).value === 'compact' ? 'compact' : 'standard';
+    try { localStorage.setItem(STORAGE_SIDEBAR_DENSITY_KEY, density); } catch (_) {}
+    applySidebarDensity(density);
+    renderSessionList();
+  });
   langEl.addEventListener('change',     async () => {
     // setLang は即 location.reload() するため、debounce を待たず同期 PUT で確実に永続化する。
     // 永続化しないとリロード後に mirror が旧サーバ値で localStorage を上書きし、言語が巻き戻る。
@@ -3229,10 +3250,25 @@ export function renderSessionInfoChip() {
   // 指定なしで起動したセッションは空文字が返り、何も出ない。
   const permissionHtml = permissionModeChipHtml(s.permission_mode);
   const permissionBadge = permissionHtml ? ` ${permissionHtml}` : '';
-  chip.innerHTML =
+  // ブランチは短縮して出し、押すとカードのブランチ表示と同じ経路で Git タブを開く。git 外（空）は出さない。
+  const branch = String(s.branch || '');
+  const branchTip = branch ? t('card_branch_tooltip', { branch }) : '';
+  const branchBadge = branch
+    ? ` <button type="button" class="ui-button ui-button--quiet ui-button--compact session-info-branch" data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(abbreviateBranchName(branch))}</button>`
+    : '';
+  const html =
     `<span class="sid">#${s.id}</span>` +
     ` ${statePill} ` +
-    `${providerIconHtml(s.provider)} ${providerChipHtml}${modeBadge}${modelBadge}${effortBadge}${thinkBadge}${agentNameBadge}${permissionBadge}${subBadge}`;
+    `${providerIconHtml(s.provider)} ${providerChipHtml}${modeBadge}${modelBadge}${effortBadge}${thinkBadge}${agentNameBadge}${permissionBadge}${subBadge}${branchBadge}`;
+  // 1Hz の更新でキーボードのフォーカスが乗った Git ボタンを作り直さない（同じ中身なら触らない）。
+  if (chip.innerHTML !== html) {
+    const previousBranch = chip.querySelector('.session-info-branch');
+    const branchFocused = previousBranch && document.activeElement === previousBranch;
+    chip.innerHTML = html;
+    const branchButton = chip.querySelector('.session-info-branch') as HTMLButtonElement | null;
+    branchButton?.addEventListener('click', () => openSessionGitTab(Number(s.id)));
+    if (branchFocused) branchButton?.focus({ preventScroll: true });
+  }
 }
 
 // D12: チャット件数バッジ更新
@@ -3287,6 +3323,7 @@ export let _setActiveTabRecursion = false;
 // plan_multi-repo-scope.md
 let _multiOpenFromTabClick = false;
 export function setActiveTab(sid, name) {
+  hideSessionCardPopover();
   // 別窓タブモードは開いたタブ 1 枚に固定する。承認の自動移動などで別のタブへ切り替わらないよう、
   // どの経路から呼ばれても固定したタブへ置き換える。作業メモとファイルの別窓は display-area を使わない。
   const detachedTab = detachedTabName();

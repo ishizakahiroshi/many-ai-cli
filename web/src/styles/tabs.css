@@ -257,6 +257,16 @@ body.pane-resizing .xterm { pointer-events: none; }
   font-size: var(--header-font-size);
   white-space: nowrap;
   flex-shrink: 0;
+  /* 権限・ブランチ・契約まで並ぶと幅が伸び、表示モードのタブを右へ押し出す。チップはタブの段の
+     半分までにして、はみ出す分はモデル名・エージェント名・契約名・ブランチを省略して収める。 */
+  max-width: 50%;
+  overflow: hidden;
+}
+.session-info-chip .tsb-agent-name,
+.session-info-chip .card-subscription {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .session-info-chip[hidden] { display: none !important; }
 .session-info-chip .sid {
@@ -309,7 +319,18 @@ body.pane-resizing .xterm { pointer-events: none; }
   border-color: color-mix(in srgb, var(--warn) 55%, transparent);
   background: color-mix(in srgb, var(--warn) 14%, transparent);
 }
-
+/* 選択中セッションのブランチ（コンパクト表示のカードから外した分をここで読む）。押すとカードの
+   ブランチ表示と同じ経路で Git タブを開く。長い名前は 18 文字で切り、狭いときは 6 文字まで縮む。 */
+.session-info-chip .session-info-branch {
+  font-size: var(--header-font-size);
+  display: block;
+  flex: 0 1 auto;
+  min-width: 6ch;
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* ── タブの段の幅が足りないときの段階的省略（PC 幅だけ・段自身の幅で判定）──────────
    窓の幅 1275px（サイドバー 260px・段の中身の幅 約 970px）で、タブ 9 個（約 775px）と
    セッション情報チップ（約 470〜680px）が 1 段に入らず、右のタブが切れて段の中が横スクロールに
