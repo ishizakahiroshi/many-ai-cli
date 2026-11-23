@@ -172,7 +172,7 @@ export function isSessionHeadless(sessionId: number | null): boolean {
 // （Windows 実機 v0.2.93 で確認）なので、同梱の宣言で ctrl-c にしてある。他は Esc(0x1b)。
 export function stopKeyForActiveSession(): string {
   const s = activeSessionId !== null ? sessions.get(activeSessionId) : undefined;
-  return s?.provider === 'grok' ? '\x03' : '\x1b';
+  return providerInterruptKey(s?.provider) === 'ctrl-c' ? '\x03' : '\x1b';
 }
 
 // B1a: スマホ幅判定の単一情報源。OS キーボードの🎤誘導 placeholder の表示判定にだけ使う。

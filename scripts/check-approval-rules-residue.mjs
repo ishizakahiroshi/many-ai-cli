@@ -17,6 +17,7 @@
 //
 // 正本:
 //   マーカーと注入対象   rust/src/wrapper/approval_injection.rs
+//   登録型の書き先       instructions.rules_file（rust/src/application/instruction_rules.rs）
 //   置き去りの検出       rust/src/application/diagnostics/supplemental.rs
 //
 // モード:
@@ -44,6 +45,14 @@ const TARGET_BASENAMES = new Set([
   'CLAUDE.local.md',
   'GEMINI.md',
 ]);
+
+// 登録した AI CLI は instructions.rules_file で、リポジトリ直下の任意の .md を書き先にできる
+// （rust/src/profile/validation.rs の rules_file_name）。直下の .md は上の一覧に無くても見るが、
+// CHANGELOG などは説明文でマーカーの名前を正当に書くので、行頭がコメント開始記号の
+// 「書き込まれた形」の行だけを数える。
+function isRootMarkdown(file) {
+  return !file.includes('/') && file.endsWith('.md') && !TARGET_BASENAMES.has(file);
+}
 
 // 配線の検査。マーカーを改名したのにこの検査が古い文字列を探し続ける状態を防ぐ。
 // 2026-10-19 に本線を Rust 版へ移したので、Rust の注入処理を読む（Go 版は go/ に凍結）。
@@ -86,13 +95,13 @@ function stagedTargets() {
   // -z: 日本語名・引用符入りのパスを八進エスケープで返させない（読めず取りこぼすため）
   const out = git(['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR']);
   return out.split('\0').filter(Boolean)
-    .filter(p => TARGET_BASENAMES.has(path.basename(p)));
+    .filter(p => TARGET_BASENAMES.has(path.basename(p)) || isRootMarkdown(p));
 }
 
 function trackedTargets() {
   const out = git(['ls-tree', '-r', '--name-only', '-z', 'HEAD']);
   return out.split('\0').filter(Boolean)
-    .filter(p => TARGET_BASENAMES.has(path.basename(p)));
+    .filter(p => TARGET_BASENAMES.has(path.basename(p)) || isRootMarkdown(p));
 }
 
 function readBlob(mode, file) {
@@ -106,7 +115,9 @@ function findHits(mode, files) {
     const text = readBlob(mode, file);
     if (!text) continue;
     const lines = text.split('\n');
+    const strict = isRootMarkdown(file);
     lines.forEach((line, i) => {
+      if (strict && !line.trim().startsWith('<!--')) return;
       if (line.includes(BLOCK_NEEDLE)) {
         hits.push({ file, line: i + 1, kind: '承認ルールのブロック' });
       } else if (line.trim() === CLAUDE_IMPORT_NEEDLE) {

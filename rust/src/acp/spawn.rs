@@ -1,7 +1,7 @@
 //! Starts the agent as a child process and connects the client to its stdio.
 
 use std::collections::BTreeMap;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -46,8 +46,11 @@ const ENV_ALLOWLIST: &[&str] = &[
     "XDG_CACHE_HOME",
 ];
 
-/// Flags that make the agent approve tool calls on its own. A person must
-/// answer permission requests, so a launch that asks for this is refused.
+/// Known flags that make the agent approve tool calls on its own. A person
+/// must answer permission requests, so a launch whose arguments contain one
+/// (also inside a single `cmd.exe /c` string a shim was wrapped into) is
+/// refused. This is a guard against a known flag, not a full check: the launch
+/// definition itself is written by the user and trusted as such.
 const REFUSED_ARGS: &[&str] = &["--dangerously-skip-permissions"];
 
 /// Keeps only the allow-listed variables (names compared without case).
@@ -91,9 +94,8 @@ fn describe_exit(outcome: &io::Result<crate::process::ProcessOutput>) -> String 
 /// Dropping every clone of the client stops the process.
 pub fn spawn_process(spec: AcpProcessSpec) -> io::Result<(AcpClient, AcpEvents)> {
     if spec.args.iter().any(|arg| {
-        REFUSED_ARGS
-            .iter()
-            .any(|refused| arg == OsStr::new(refused))
+        let arg = arg.to_string_lossy();
+        REFUSED_ARGS.iter().any(|refused| arg.contains(refused))
     }) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,

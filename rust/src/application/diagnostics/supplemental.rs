@@ -478,6 +478,29 @@ fn generated(bytes: &[u8]) -> bool {
         .iter()
         .any(|needle| bytes.windows(needle.len()).any(|w| w == *needle))
 }
+/// The project-root files the Hub may keep its marker rules in: `AGENTS.md`
+/// (the built-ins and the older `agents_md_instructions` capability) first,
+/// then every other `instructions.rules_file` a definition in the registry
+/// declares. A registry that cannot be read leaves `AGENTS.md` alone.
+fn rules_files(cfg: &Config, paths: &RuntimePaths) -> Vec<String> {
+    let mut names = vec!["AGENTS.md".to_owned()];
+    let declared = crate::wrapper::launch::provider_registry_for_runtime(cfg, paths)
+        .map(|(registry, _)| registry.declared_list())
+        .unwrap_or_default();
+    for def in declared {
+        let Some(name) = def
+            .instructions
+            .map(|i| i.rules_file)
+            .filter(|name| crate::profile::validation::rules_file_name(name))
+        else {
+            continue;
+        };
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
+}
 pub(super) async fn residue(
     owner: &Diagnostics,
     cfg: &Config,
@@ -548,20 +571,24 @@ pub(super) async fn residue(
     } else if stale {
         checks.push(Check::new("residue","WARN",format!("前回の opencode セッションが後始末を通らずに終了した痕跡が残っています（{lock} / git には未登録）"),"次に opencode セッションを起動すると自動で回収されます。今すぐ消す場合はこのファイルを削除してください"))
     }
-    if git(owner, &root, &["show", ":AGENTS.md"], cancel)
-        .await
-        .is_some_and(|b| generated(&b))
-    {
-        checks.push(Check::new("residue","WARN","AGENTS.md に many-ai-cli の承認ルールブロックが含まれたまま git に登録されています","AGENTS.md から many-ai-cli:approval-rules ブロック（旧名 any-ai-cli 版を含む）を削除して commit してください"))
-    } else if std::net::TcpListener::bind(format!("127.0.0.1:{}", cfg.hub.port)).is_ok()
-        && read(owner, &root.join("AGENTS.md")).is_ok_and(|b| generated(&b))
-    {
-        checks.push(Check::new(
-            "residue",
-            "WARN",
-            "AGENTS.md に many-ai-cli の承認ルールブロックが残っています（git には未登録）",
-            "Hub を起動すると自動で回収されます。commit しないよう注意してください",
-        ))
+    for name in rules_files(cfg, &owner.deps.paths) {
+        if git(owner, &root, &["show", &format!(":{name}")], cancel)
+            .await
+            .is_some_and(|b| generated(&b))
+        {
+            checks.push(Check::new("residue","WARN",format!("{name} に many-ai-cli の承認ルールブロックが含まれたまま git に登録されています"),&format!("{name} から many-ai-cli:approval-rules ブロック（旧名 any-ai-cli 版を含む）を削除して commit してください")))
+        } else if std::net::TcpListener::bind(format!("127.0.0.1:{}", cfg.hub.port)).is_ok()
+            && read(owner, &root.join(&name)).is_ok_and(|b| generated(&b))
+        {
+            checks.push(Check::new(
+                "residue",
+                "WARN",
+                format!(
+                    "{name} に many-ai-cli の承認ルールブロックが残っています（git には未登録）"
+                ),
+                "Hub を起動すると自動で回収されます。commit しないよう注意してください",
+            ))
+        }
     }
     checks.extend(relays(owner, &root, cancel).await);
     checks

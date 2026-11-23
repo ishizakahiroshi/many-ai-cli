@@ -138,6 +138,12 @@ Release artifacts are published at
   longer claim a risk confirmation by itself. With
   `orchestration.child_full_bypass: false`, such a child starts with no
   approval mode, matching built-in children.
+- For the seven built-in AI CLIs, the approval-mode flags, the keys an approval
+  answer sends and the rules file always come from the shipped declarations.
+  An override or a distribution file cannot change which flag a mode such as
+  `plan` turns into. A registered AI CLI's `default` mode never adds a flag.
+  `many-ai-cli doctor` and the commit check also look for a leftover rules
+  block in a file named by `instructions.rules_file`.
 - A project `AGENTS.md` that is itself a symlink no longer gets the
   approval-rules block written through it. On macOS and Linux, rewriting an
   instruction file keeps its permission bits.

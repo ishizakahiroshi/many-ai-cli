@@ -159,3 +159,25 @@ describe('a registered AI CLI is handled by the same functions', () => {
     expect(declaredProviderIds()).toContain('by-hand');
   });
 });
+
+// 起動時の種: Hub の答えが届く前と、取れなかったときも、同梱の CLI は同梱のまま見える
+// （登録した AI CLI に見えると、起動確認の画面が許可モードなどの行を隠してしまう）。
+describe('the built-in seed at startup', () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    clearProviderDeclarations();
+  });
+
+  test('the built-ins stay built-in before the Hub answers and when the fetch fails', async () => {
+    clearProviderDeclarations();
+    globalThis.fetch = (() => Promise.reject(new Error('offline'))) as unknown as typeof fetch;
+    const { initProviderDeclarations, loadProviderDeclarations } = await import('../src/app/provider-store');
+    initProviderDeclarations();
+    expect(providerIsBuiltin('claude')).toBe(true);
+    expect(isRegisteredChildProvider('claude')).toBe(false);
+    expect(await loadProviderDeclarations()).toBe(false);
+    expect(providerIsBuiltin('claude')).toBe(true);
+    expect(providerInterruptKey('grok')).toBe('ctrl-c');
+  });
+});

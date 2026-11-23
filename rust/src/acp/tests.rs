@@ -533,6 +533,12 @@ async fn a_launch_that_approves_tools_by_itself_is_refused() {
     spec.args.push("--dangerously-skip-permissions".into());
     let error = spawn_process(spec).err().expect("refused");
     assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    // The same flag inside one `cmd.exe /c` string (a shim wrapped) is refused too.
+    let mut spec = exit_immediately();
+    spec.args
+        .push("\"synthetic-agent.cmd\" --acp --dangerously-skip-permissions".into());
+    let error = spawn_process(spec).err().expect("refused");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
 }
 
 /// The client talks protocol only. Nothing in this directory may name a

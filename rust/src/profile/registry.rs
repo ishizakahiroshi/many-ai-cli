@@ -319,19 +319,18 @@ pub fn effort_args(def: &EffectiveDefinition, effort: &str) -> Result<Vec<String
 }
 /// The provider's own argv for an approval mode, from its permission
 /// declaration (`permissions.modes`, with the older `launch.permission_args`
-/// folded in by [`crate::profile::declared::resolve`]); empty for `default`
-/// (unless the declaration maps it), an empty mode or a mode the definition
-/// does not map.
+/// folded in by [`crate::profile::declared::resolve`]); empty for `default`,
+/// an empty mode or a mode the definition does not map.
+///
+/// `default` is always empty, even when the declaration maps it: the Hub hands
+/// these flags to a child without a person's confirmation only for `default`
+/// (or no mode), on the promise that `default` adds nothing.
 pub fn permission_args(def: &EffectiveDefinition, mode: &str) -> Vec<String> {
-    let resolved = crate::profile::declared::resolve(&def.definition, None);
-    if mode.trim() == "default"
-        && !resolved
-            .permissions
-            .as_ref()
-            .is_some_and(|p| p.modes.contains_key("default"))
-    {
+    let mode = mode.trim();
+    if mode.is_empty() || mode == "default" {
         return vec![];
     }
+    let resolved = crate::profile::declared::resolve(&def.definition, None);
     crate::profile::declared::permission_args(Some(&resolved), mode).0
 }
 pub fn model_args(def: &EffectiveDefinition, model: &str) -> Result<Vec<String>, String> {

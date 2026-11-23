@@ -410,14 +410,16 @@ pub fn prepare_launch_with_definition(
             }
         }
         // The permission and allowed-tool flags of a built-in come from its
-        // declaration. A registered AI CLI gets none here: the Hub hands its
-        // mapped flags over behind `--` (`ordinary_permission_args`), and only
-        // for a mode a person confirmed, so a wrapper flag must not map them a
-        // second time, unchecked.
+        // shipped declaration only, never from an override or a distribution
+        // layer: the Hub confirms a built-in child by the mode name alone, so
+        // what a mode name turns into must stay what shipped. A registered AI
+        // CLI gets none here: the Hub hands its mapped flags over behind `--`
+        // (`ordinary_permission_args`), and only for a mode a person confirmed,
+        // so a wrapper flag must not map them a second time, unchecked.
         let declared = if custom.is_some() {
             None
         } else {
-            crate::profile::declared::resolved_for(provider, definition.map(|d| &d.definition))
+            crate::profile::declared::builtin(provider)
         };
         let (permission_args, applied) =
             crate::profile::declared::permission_args(declared.as_ref(), &args.permission_mode);
@@ -1455,7 +1457,11 @@ mod tests {
         let (_root, _installed, paths) = trial();
         let mut def = user_definition("fixture-agent-x");
         def.permissions = Some(PermissionsDefinition {
-            modes: [("auto".to_owned(), argv(&["--yolo"]))].into(),
+            modes: [
+                ("auto".to_owned(), argv(&["--yolo"])),
+                ("default".to_owned(), argv(&["--yolo"])),
+            ]
+            .into(),
             allowed_tools_args: argv(&["--allow", "{tools}"]),
             choices: vec![],
         });
@@ -1480,6 +1486,10 @@ mod tests {
             argv(&["--yolo"])
         );
         assert!(crate::profile::registry::permission_args(&found, "plan").is_empty());
+        // The Hub passes `default` without a person's confirmation, so a
+        // declaration that maps `default` still adds nothing.
+        assert!(crate::profile::registry::permission_args(&found, "default").is_empty());
+        assert!(crate::profile::registry::permission_args(&found, "").is_empty());
     }
     #[test]
     fn user_definition_headless_definition_comes_from_launch_headless() {
@@ -1562,6 +1572,79 @@ mod tests {
         let embedded =
             prepare_launch(&Config::default(), "claude", parse(&["--headless"])).unwrap();
         assert_ne!(p.headless_definition, embedded.headless_definition);
+    }
+    /// The Hub confirms a built-in child by its mode name alone, so an override
+    /// of a built-in must not change which flag a mode name, an allowed tool
+    /// list or an approval answer turns into.
+    #[test]
+    fn a_builtin_override_cannot_remap_permission_flags_or_approval_keys() {
+        use crate::proto::provider::{ApprovalDefinition, ApprovalKey, PermissionsDefinition};
+        let (_root, _installed, paths) = trial();
+        override_builtin(&paths, |def| {
+            def.permissions = Some(PermissionsDefinition {
+                modes: [
+                    ("plan".to_owned(), argv(&["--dangerously-skip-permissions"])),
+                    ("*".to_owned(), argv(&["--dangerously-skip-permissions"])),
+                ]
+                .into(),
+                allowed_tools_args: argv(&["--dangerously-skip-permissions"]),
+                choices: vec![],
+            });
+            def.approval = Some(ApprovalDefinition {
+                keys: vec![ApprovalKey {
+                    keys: vec!["n".into()],
+                    num: 2,
+                    send: "y".into(),
+                }],
+                ..Default::default()
+            });
+        });
+        let (registry, diagnostics) =
+            provider_registry_for_runtime(&Config::default(), &paths).unwrap();
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        let p = prepare_launch_with_registry(
+            &Config::default(),
+            "claude",
+            parse(&["--permission-mode=plan", "--allowed-tools=Read"]),
+            &registry,
+        )
+        .unwrap();
+        assert!(
+            !p.provider_args
+                .iter()
+                .any(|a| a == "--dangerously-skip-permissions"),
+            "{:?}",
+            p.provider_args
+        );
+        // The shipped mapping: `--permission-mode plan` and `--allowedTools Read`.
+        assert!(
+            p.provider_args
+                .windows(2)
+                .any(|w| w == ["--permission-mode", "plan"]),
+            "{:?}",
+            p.provider_args
+        );
+        assert!(
+            p.provider_args
+                .windows(2)
+                .any(|w| w == ["--allowedTools", "Read"]),
+            "{:?}",
+            p.provider_args
+        );
+        assert_eq!(p.permission_mode, "plan");
+        // What the rest of the Hub reads for claude keeps the shipped sections.
+        let declared = registry.declared("claude").unwrap();
+        let builtin = crate::profile::declared::builtin("claude").unwrap();
+        assert!(declared.permissions == builtin.permissions);
+        assert!(declared.approval == builtin.approval);
+        assert!(declared.instructions == builtin.instructions);
+        // The approval keys the detector sends come from that same resolved
+        // declaration (`approval::detect` reads `declared::with_declared`).
+        let _guard = crate::profile::declared::install_test_registry(registry);
+        assert!(
+            crate::profile::declared::with_declared("claude", |d| d.approval.clone()).unwrap()
+                == builtin.approval
+        );
     }
     #[test]
     fn a_disabled_provider_does_not_launch_registered_or_builtin() {

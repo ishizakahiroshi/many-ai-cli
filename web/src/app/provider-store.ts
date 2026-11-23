@@ -1,6 +1,7 @@
 import { apiFetch } from './util.js';
 import { applyProviderPresentation } from './provider-icon.js';
-import { cacheProviderDeclarations } from './provider-declarations.js';
+import { cacheProviderDeclarations, hasProviderDeclarations } from './provider-declarations.js';
+import { seedBuiltinProviderDeclarations } from './provider-declarations-seed.js';
 
 export {
   BUILTIN_PROVIDER_CAPABILITIES,
@@ -148,8 +149,11 @@ export async function loadProviderDeclarations(): Promise<boolean> {
   }
 }
 
-// 起動時に 1 回。失敗しても画面は id から作る既定で動く（一覧を取り直すたびに、もう一度取る）。
+// 起動時に 1 回。Hub の答えが届くまで（と、取れなかったとき）は同梱 7 本の種を置いておく。
+// 種が無いと、取得前や失敗時に同梱の CLI が「登録した AI CLI」に見え、起動確認の画面が
+// 許可モードなどの行を隠してしまう。Hub の答えが届けば丸ごと入れ替わる（一覧を取り直すたびに、もう一度取る）。
 export function initProviderDeclarations(): void {
+  if (!hasProviderDeclarations()) seedBuiltinProviderDeclarations();
   void loadProviderDeclarations();
 }
 

@@ -181,7 +181,7 @@
       "reason": "vendor: 各社の画面・API・保存形式・起動規則に結びつく処理（plan で「各社専用のまま残す」と分類した C）。登録した CLI は未対応と出す"
     },
     "web/src/app.ts": {
-      "count": 5,
+      "count": 4,
       "reason": "pending: 画面の各社専用の表示・入力欄（利用量・設定・起動パネル）。宣言への移行は pending_provider-vendor-specific-features.md で扱う"
     },
     "web/src/app/chat-history.ts": {

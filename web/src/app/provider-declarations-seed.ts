@@ -1,5 +1,6 @@
 // 同梱 7 本の宣言（Hub の GET /api/providers/declarations の答えと同じ形）。
-// テストと fixtures が、Hub から宣言が届いた後の状態を作るための種。画面の本体コードは読まない。
+// テストと fixtures が、Hub から宣言が届いた後の状態を作るための種。画面は起動時に、Hub の答えが
+// 届くまで（と取れなかったとき）の控えとしてだけ読む（provider-store.ts の initProviderDeclarations）。
 // 値の正本は rust/assets/provider/declarations.json。web/tests/provider-declarations.test.ts が
 // この写しと突き合わせ、ずれたら落とす。
 

@@ -302,8 +302,10 @@ fn pick<T: Clone>(own: &Option<T>, fallback: &Option<T>) -> Option<T> {
 }
 
 /// `def` with every declarative section that it leaves empty filled from
-/// `builtin`. The result is what the rest of the Hub reads; `def` itself (and
-/// therefore the registry revision) is never changed.
+/// `builtin` (`permissions`, `approval` and `instructions` always come from
+/// `builtin`, see below). The result is what the rest of the Hub reads; `def`
+/// itself (and therefore the registry revision) is never changed. `builtin` is
+/// given only for a built-in id.
 pub fn resolve(def: &Definition, builtin: Option<&Definition>) -> Definition {
     let mut out = def.clone();
     fold_launch_permission_args(&mut out);
@@ -315,15 +317,22 @@ pub fn resolve(def: &Definition, builtin: Option<&Definition>) -> Definition {
         out.connection = b.connection.clone();
     }
     out.slash_commands = pick(&def.slash_commands, &b.slash_commands);
-    out.permissions = pick(&def.permissions, &b.permissions);
     out.login = pick(&def.login, &b.login);
     out.links = pick(&def.links, &b.links);
     out.input = pick(&def.input, &b.input);
     out.routines = pick(&def.routines, &b.routines);
     out.screen = pick(&def.screen, &b.screen);
     out.transcript = pick(&def.transcript, &b.transcript);
-    out.approval = pick(&def.approval, &b.approval);
-    out.instructions = pick(&def.instructions, &b.instructions);
+    // A built-in id keeps its shipped values for the sections that decide what
+    // reaches the CLI or the project on a person's behalf: which flag a mode
+    // turns into, which key an approval answer sends, and which file the Hub
+    // writes its rules into. The Hub asks a person to confirm a built-in child
+    // by the mode name alone, so an override or a distribution layer (both can
+    // name a built-in id) must not change what that name means. These used to
+    // be fixed in code before they were declared.
+    out.permissions = b.permissions.clone();
+    out.approval = b.approval.clone();
+    out.instructions = b.instructions.clone();
     if let (Some(launch), Some(bl)) = (out.launch.as_mut(), b.launch.as_ref())
         && launch.config_dir_env.is_empty()
     {

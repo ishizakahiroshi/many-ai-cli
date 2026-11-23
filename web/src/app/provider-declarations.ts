@@ -3,7 +3,8 @@
 // 表示名・頭文字・並び順・使用量ページの URL・許可モードの選択肢・入力の癖など、
 // これまで画面のあちこちに provider ごとの固定表で持っていた値の置き場。
 // 同梱 7 本も、登録した AI CLI も、同じ経路（GET /api/providers/declarations）で届く。
-// 取得前（と fixtures）は何も無い状態で、各関数は id から作れる控えめな既定を返す。
+// 画面は起動時に同梱 7 本の種（provider-declarations-seed.ts）を置き、Hub の答えで入れ替える。
+// 何も入っていないとき（単体のテストなど）は、各関数は id から作れる控えめな既定を返す。
 //
 // 色は CSS の変数（--prov-<id>）と、利用者が設定した色（provider-icon.ts）の持ち分。ここには持たない。
 
@@ -159,7 +160,7 @@ export function providerIgnoresLineClear(id: unknown): boolean {
   return providerDeclaration(id)?.input?.no_line_clear === true;
 }
 
-// 同梱の 7 本か。登録した AI CLI は false。宣言を取る前は false。
+// 同梱の 7 本か。登録した AI CLI は false。宣言が何も入っていなければ false。
 export function providerIsBuiltin(id: unknown): boolean {
   return providerDeclaration(id)?.builtin === true;
 }
