@@ -843,6 +843,36 @@ mod tests {
     }
 
     #[test]
+    fn autonomous_request_json_cannot_claim_a_risk_confirmation() {
+        let providers = registered();
+        let cfg = Config::default();
+        let prepared = |provider: &str, origin: &str| {
+            let body = ChildSpawnRequest {
+                provider: provider.into(),
+                claimed_origin: origin.into(),
+                permission_mode: "plan".into(),
+                risk_confirmed: true,
+                ..Default::default()
+            };
+            let resolved = ResolvedChildSpawn::from_request(
+                body,
+                (origin == "ui").then(proof),
+                InternalSpawnGrants::from_config(vec![]),
+            )
+            .unwrap();
+            prepare_with(resolved, &cfg, &providers)
+                .unwrap()
+                .request()
+                .risk_confirmed
+        };
+        // A conductor's spawn request carries no proof, so its own
+        // `risk_confirmed: true` is dropped before preparation.
+        assert!(!prepared("fixture-plain", ""));
+        // A person's request keeps the confirmation it was given.
+        assert!(prepared("fixture-plain", "ui"));
+    }
+
+    #[test]
     fn unknown_provider_message_lists_built_ins_and_registered_ids() {
         let message = invalid_provider_message("\"nope\"", &registered());
         assert_eq!(

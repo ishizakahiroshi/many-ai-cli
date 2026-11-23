@@ -2404,6 +2404,11 @@ impl ResolvedChildSpawn {
         let origin = request.verify_origin(proof)?;
         if !origin.is_human() {
             request.remember_permission = None;
+            // A risk confirmation is something a person gives. Request JSON
+            // from an autonomous caller (a conductor's `orchestrate spawn`)
+            // cannot claim it; only server-side resolution (`resolve_permission`)
+            // or a verified human decision (`approve`) may set it afterwards.
+            request.risk_confirmed = false;
         }
         Ok(Self {
             request,
