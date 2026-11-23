@@ -1,6 +1,8 @@
 # 外部 AI の停止を看板から追う案
 
-Status: 提案。実装・外部 AI への接続・自動承認は未実施。対象: #48。
+> 最終更新: 2026-11-23(月) 23:45:54 — 外へ接続しない判定部分を `rust/src/application/external_followup.rs` に入れた旨を Status に書いた
+
+Status: 提案。判定部分（看板の `followup/1` の記録・利用者が置く許可ファイル・Muse Code の `approval/listPending` の結果の読み取り・範囲外 / 失効 / 曖昧 / 重複 / 中断後不明の判定）だけを `rust/src/application/external_followup.rs` に入れ、合成のテストで確かめた。`muse` の起動、`approval/decide` の送信、Hub 起動時の組み込み、外部 AI への接続、自動承認は未実施。対象: #48。
 
 ## 問題
 

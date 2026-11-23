@@ -9,13 +9,19 @@
 //! [`screen_from_msp_pending`] reads a Muse Code `approval/listPending` result.
 //! This module does not spawn `muse` and does not send `approval/decide`. Hub
 //! startup does not construct a [`Watcher`]. One process should call [`Watcher::tick`]
-//! at a time; a claim left in `acting` is never executed again.
+//! at a time; a claim left in `acting` is never executed again. Claims are kept
+//! per work item and observation, and one card is answered under at most one
+//! observation of a work item.
 //!
 //! Silence and a disconnected observation are not completion. This function
 //! does not turn a quiet poll into a retry.
 
 use serde::{Deserialize, Serialize};
-use std::{fs, io::Write, path::PathBuf, sync::Mutex};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
 pub const SCHEMA_VERSION: u32 = 1;
 /// Prefix on a board `note`. Other notes are ignored.
@@ -40,6 +46,7 @@ pub const REASON_ACTION_FAILED: &str = "action_failed";
 pub const REASON_MALFORMED: &str = "malformed";
 pub const REASON_OBSERVATION_FAILED: &str = "observation_failed";
 pub const REASON_BOARD_UNRECORDED: &str = "board_unrecorded";
+pub const REASON_DUPLICATE: &str = "duplicate";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FollowupError {
@@ -47,6 +54,7 @@ pub enum FollowupError {
     Claim,
     Permits,
     Action,
+    Invalid,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -188,14 +196,11 @@ pub fn judge(
     let Some(screen) = screen else {
         return hold(REASON_SCREEN_UNCONFIRMED, false);
     };
-    match screen {
+    let (card_id, operation, target, seen_wait) = match screen {
         Screen::Disconnected => return hold(REASON_DISCONNECTED, false),
         Screen::Unknown => return hold(REASON_UNKNOWN, false),
         Screen::Running => return hold(REASON_RUNNING, false),
         Screen::Done => return hold(REASON_NOT_PRESENTED, true),
-        Screen::Approval { .. } | Screen::Continue { .. } => {}
-    }
-    let (card_id, operation, target, seen_wait) = match screen {
         Screen::Approval {
             card_id,
             operation,
@@ -206,7 +211,6 @@ pub fn judge(
             operation,
             target,
         } => (prompt_id, operation, target, WaitKind::Continue),
-        _ => return hold(REASON_AMBIGUOUS, true),
     };
     if !valid_token(card_id) || !valid_label(operation) || !valid_label(target) {
         return hold(REASON_AMBIGUOUS, true);
@@ -223,7 +227,7 @@ pub fn judge(
     {
         return hold(REASON_EXPIRED, true);
     }
-    let matches: Vec<&Permit> = permits
+    let scoped: Vec<&Permit> = permits
         .iter()
         .filter(|permit| {
             permit.work_id == work_id
@@ -232,23 +236,23 @@ pub fn judge(
                 && permit.effect.matches(intent.wait)
         })
         .collect();
-    if matches.len() != 1 {
-        return hold(
-            if matches.is_empty() {
-                REASON_OUT_OF_SCOPE
-            } else {
-                REASON_AMBIGUOUS
-            },
-            true,
-        );
+    if scoped.is_empty() {
+        return hold(REASON_OUT_OF_SCOPE, true);
     }
-    let permit = &matches[0];
-    if permit.revoked {
-        return hold(REASON_REVOKED, true);
-    }
-    if permit.expires_at_ms <= now_ms {
-        return hold(REASON_EXPIRED, true);
-    }
+    // A revoked or lapsed row beside its replacement is history, not a second
+    // choice. Only two rows that could both answer are ambiguous.
+    let live: Vec<&&Permit> = scoped
+        .iter()
+        .filter(|permit| !permit.revoked && permit.expires_at_ms > now_ms)
+        .collect();
+    let permit = match live.as_slice() {
+        [permit] => permit,
+        [] if scoped.iter().all(|permit| permit.revoked) => {
+            return hold(REASON_REVOKED, true);
+        }
+        [] => return hold(REASON_EXPIRED, true),
+        _ => return hold(REASON_AMBIGUOUS, true),
+    };
     Judgement::Act {
         permit_id: permit.permit_id.clone(),
         effect: permit.effect,
@@ -349,30 +353,42 @@ impl ClaimStore {
         })
     }
 
-    fn begin(&self, observation_id: &str) -> Result<Begin, FollowupError> {
+    /// Observation ids are written by each work item's external AI, so two
+    /// items may reuse one. A claim is the pair, never the observation alone.
+    fn begin(&self, work_id: &str, observation_id: &str) -> Result<Begin, FollowupError> {
         let mut file = self.inner.lock().map_err(|_| FollowupError::Claim)?;
         if let Some(row) = file
             .claims
             .iter()
-            .find(|row| row.observation_id == observation_id)
+            .find(|row| row.is(work_id, observation_id))
         {
             return Ok(Begin::Existing(row.phase.clone()));
         }
         file.claims.push(ClaimRow {
+            work_id: work_id.to_owned(),
             observation_id: observation_id.to_owned(),
             phase: "acting".to_owned(),
             event_text: None,
         });
-        self.persist(&file)?;
+        if let Err(error) = self.persist(&file) {
+            // Nothing was executed; memory must not claim more than the disk.
+            file.claims.pop();
+            return Err(error);
+        }
         Ok(Begin::Started)
     }
 
-    fn settle(&self, observation_id: &str, event_text: &str) -> Result<(), FollowupError> {
+    fn settle(
+        &self,
+        work_id: &str,
+        observation_id: &str,
+        event_text: &str,
+    ) -> Result<(), FollowupError> {
         let mut file = self.inner.lock().map_err(|_| FollowupError::Claim)?;
         let Some(row) = file
             .claims
             .iter_mut()
-            .find(|row| row.observation_id == observation_id)
+            .find(|row| row.is(work_id, observation_id))
         else {
             return Err(FollowupError::Claim);
         };
@@ -383,29 +399,32 @@ impl ClaimStore {
 
     fn lookup(
         &self,
+        work_id: &str,
         observation_id: &str,
     ) -> Result<Option<(String, Option<String>)>, FollowupError> {
         let file = self.inner.lock().map_err(|_| FollowupError::Claim)?;
         Ok(file
             .claims
             .iter()
-            .find(|row| row.observation_id == observation_id)
+            .find(|row| row.is(work_id, observation_id))
             .map(|row| (row.phase.clone(), row.event_text.clone())))
     }
 
+    /// Replaces the file whole, so an interrupted write leaves the previous
+    /// claims rather than a truncated file that refuses to open.
     fn persist(&self, file: &ClaimFile) -> Result<(), FollowupError> {
-        if let Some(parent) = self.path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent).map_err(|_| FollowupError::Claim)?;
-            }
-        }
         let text = serde_json::to_string(file).map_err(|_| FollowupError::Claim)?;
-        let mut handle = fs::File::create(&self.path).map_err(|_| FollowupError::Claim)?;
-        handle
-            .write_all(text.as_bytes())
-            .map_err(|_| FollowupError::Claim)?;
-        handle.sync_all().map_err(|_| FollowupError::Claim)?;
-        Ok(())
+        let path = if self
+            .path
+            .parent()
+            .is_some_and(|parent| parent.as_os_str().is_empty())
+        {
+            Path::new(".").join(&self.path)
+        } else {
+            self.path.clone()
+        };
+        crate::config::private_io::write_atomic(&path, text.as_bytes())
+            .map_err(|_| FollowupError::Claim)
     }
 }
 
@@ -424,9 +443,16 @@ struct ClaimFile {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ClaimRow {
+    work_id: String,
     observation_id: String,
     phase: String,
     event_text: Option<String>,
+}
+
+impl ClaimRow {
+    fn is(&self, work_id: &str, observation_id: &str) -> bool {
+        self.work_id == work_id && self.observation_id == observation_id
+    }
 }
 
 pub struct Watcher<B, S, E> {
@@ -478,6 +504,9 @@ where
         outcomes: &mut Vec<Outcome>,
     ) -> Result<(), FollowupError> {
         let mut opens = Vec::new();
+        // Every card already recorded against an observation of this item, in
+        // board order. A card belongs to the first observation that saw it.
+        let mut sightings: Vec<(String, String)> = Vec::new();
         for text in &item.events {
             let Some(rest) = text.strip_prefix(EVENT_PREFIX) else {
                 continue;
@@ -489,7 +518,12 @@ where
                     Status::Held,
                     REASON_MISMATCH,
                 )),
-                Ok(record) => apply_record(&mut opens, record.event),
+                Ok(record) => {
+                    if let Event::Seen { card_id, .. } = &record.event {
+                        sightings.push((record.observation_id.clone(), card_id.clone()));
+                    }
+                    apply_record(&mut opens, record.event);
+                }
                 Err(()) => outcomes.push(Outcome {
                     work_id: item.id.clone(),
                     observation_id: String::new(),
@@ -499,7 +533,9 @@ where
             }
         }
         for open in opens {
-            if let Some(outcome) = self.tick_open(&item.id, &open, &item.events, now_ms)? {
+            if let Some(outcome) =
+                self.tick_open(&item.id, &open, &item.events, &mut sightings, now_ms)?
+            {
                 outcomes.push(outcome);
             }
         }
@@ -511,32 +547,32 @@ where
         work_id: &str,
         open: &OpenIntent,
         events: &[String],
+        sightings: &mut Vec<(String, String)>,
         now_ms: u64,
     ) -> Result<Option<Outcome>, FollowupError> {
         if open.conflict {
-            return self.finish_hold(work_id, open, events, REASON_MISMATCH);
+            return self.finish_hold(work_id, open, REASON_MISMATCH);
         }
         if open.settled {
             return Ok(Some(skipped(work_id, &open.observation_id, "settled")));
         }
-        match self.claims.lookup(&open.observation_id)? {
+        match self.claims.lookup(work_id, &open.observation_id)? {
             Some((phase, text)) if phase == "settled" => {
                 if let Some(text) = text
                     && !events.iter().any(|event| event == &text)
+                    && self.board.append_note(work_id, &text).is_err()
                 {
-                    if self.board.append_note(work_id, &text).is_err() {
-                        return Ok(Some(outcome(
-                            work_id,
-                            &open.observation_id,
-                            Status::Skipped,
-                            REASON_BOARD_UNRECORDED,
-                        )));
-                    }
+                    return Ok(Some(outcome(
+                        work_id,
+                        &open.observation_id,
+                        Status::Skipped,
+                        REASON_BOARD_UNRECORDED,
+                    )));
                 }
                 return Ok(Some(skipped(work_id, &open.observation_id, "settled")));
             }
             Some((phase, _)) if phase == "acting" => {
-                return self.finish_hold(work_id, open, events, REASON_UNKNOWN_AFTER_INTERRUPT);
+                return self.finish_hold(work_id, open, REASON_UNKNOWN_AFTER_INTERRUPT);
             }
             _ => {}
         }
@@ -563,12 +599,24 @@ where
             Judgement::Hold { reason, terminal } if !terminal => {
                 self.note_transient(work_id, open, events, reason)
             }
-            Judgement::Hold { reason, .. } => self.finish_hold(work_id, open, events, reason),
+            Judgement::Hold { reason, .. } => self.finish_hold(work_id, open, reason),
+            Judgement::Act { card_id, .. }
+                if sightings
+                    .iter()
+                    .any(|(obs, card)| card == &card_id && obs != &open.observation_id) =>
+            {
+                // Answered, or tried and failed, under another observation.
+                // Answering it here would be a second click on one card.
+                self.note_transient(work_id, open, events, REASON_DUPLICATE)
+            }
             Judgement::Act {
                 permit_id,
                 effect,
                 card_id,
-            } => self.act(work_id, open, events, permit_id, effect, card_id),
+            } => {
+                sightings.push((open.observation_id.clone(), card_id.clone()));
+                self.act(work_id, open, events, permit_id, effect, card_id)
+            }
         }
     }
 
@@ -588,8 +636,16 @@ where
                     terminal: false,
                 },
             )?;
-            if !events.iter().any(|event| event == &text) {
-                self.board.append_note(work_id, &text)?;
+            if !events.iter().any(|event| event == &text)
+                && self.board.append_note(work_id, &text).is_err()
+            {
+                // Still waiting; the note is written again on the next poll.
+                return Ok(Some(outcome(
+                    work_id,
+                    &open.observation_id,
+                    Status::Waiting,
+                    REASON_BOARD_UNRECORDED,
+                )));
             }
         }
         Ok(Some(outcome(
@@ -604,7 +660,6 @@ where
         &self,
         work_id: &str,
         open: &OpenIntent,
-        events: &[String],
         reason: &str,
     ) -> Result<Option<Outcome>, FollowupError> {
         let text = encode(
@@ -615,13 +670,10 @@ where
                 terminal: true,
             },
         )?;
-        match self.claims.begin(&open.observation_id)? {
+        match self.claims.begin(work_id, &open.observation_id)? {
             Begin::Started => {}
-            Begin::Existing(phase) if phase == "acting" || phase == "settled" => {
-                if phase == "acting" {
-                    self.claims.settle(&open.observation_id, &text)?;
-                    let _ = self.board.append_note(work_id, &text);
-                }
+            Begin::Existing(phase) if phase == "acting" => {}
+            Begin::Existing(phase) if phase == "settled" => {
                 return Ok(Some(outcome(
                     work_id,
                     &open.observation_id,
@@ -631,22 +683,7 @@ where
             }
             Begin::Existing(_) => return Err(FollowupError::Claim),
         }
-        self.claims.settle(&open.observation_id, &text)?;
-        if self.board.append_note(work_id, &text).is_err() {
-            return Ok(Some(outcome(
-                work_id,
-                &open.observation_id,
-                Status::Held,
-                REASON_BOARD_UNRECORDED,
-            )));
-        }
-        let _ = events;
-        Ok(Some(outcome(
-            work_id,
-            &open.observation_id,
-            Status::Held,
-            reason,
-        )))
+        self.finish_after_claim(work_id, open, reason, Status::Held, &text)
     }
 
     fn act(
@@ -666,11 +703,20 @@ where
                     card_id: card_id.clone(),
                 },
             )?;
-            if !events.iter().any(|event| event == &seen) {
-                self.board.append_note(work_id, &seen)?;
+            // The sighting is what tells a later poll, or a restarted watcher,
+            // which card this observation owns. Do not answer without it.
+            if !events.iter().any(|event| event == &seen)
+                && self.board.append_note(work_id, &seen).is_err()
+            {
+                return Ok(Some(outcome(
+                    work_id,
+                    &open.observation_id,
+                    Status::Waiting,
+                    REASON_BOARD_UNRECORDED,
+                )));
             }
         }
-        match self.claims.begin(&open.observation_id)? {
+        match self.claims.begin(work_id, &open.observation_id)? {
             Begin::Started => {}
             Begin::Existing(_) => {
                 return Ok(Some(skipped(work_id, &open.observation_id, "claimed")));
@@ -686,7 +732,21 @@ where
             card_id,
         };
         if self.executor.act(&action).is_err() {
-            return self.finish_after_claim(work_id, open, REASON_ACTION_FAILED, Status::Held);
+            let text = encode(
+                work_id,
+                &Event::Hold {
+                    observation_id: open.observation_id.clone(),
+                    reason: REASON_ACTION_FAILED.to_owned(),
+                    terminal: true,
+                },
+            )?;
+            return self.finish_after_claim(
+                work_id,
+                open,
+                REASON_ACTION_FAILED,
+                Status::Held,
+                &text,
+            );
         }
         let text = encode(
             work_id,
@@ -696,40 +756,22 @@ where
                 permit_id,
             },
         )?;
-        self.claims.settle(&open.observation_id, &text)?;
-        if self.board.append_note(work_id, &text).is_err() {
-            return Ok(Some(outcome(
-                work_id,
-                &open.observation_id,
-                Status::Acted,
-                REASON_BOARD_UNRECORDED,
-            )));
-        }
-        Ok(Some(outcome(
-            work_id,
-            &open.observation_id,
-            Status::Acted,
-            effect.as_str(),
-        )))
+        self.finish_after_claim(work_id, open, effect.as_str(), Status::Acted, &text)
     }
 
+    /// Settles a claim already in `acting`, then writes the record. A board
+    /// that refuses the write is reported; the settled claim re-sends the same
+    /// text on a later poll instead of acting again.
     fn finish_after_claim(
         &self,
         work_id: &str,
         open: &OpenIntent,
         reason: &str,
         status: Status,
+        text: &str,
     ) -> Result<Option<Outcome>, FollowupError> {
-        let text = encode(
-            work_id,
-            &Event::Hold {
-                observation_id: open.observation_id.clone(),
-                reason: reason.to_owned(),
-                terminal: true,
-            },
-        )?;
-        self.claims.settle(&open.observation_id, &text)?;
-        if self.board.append_note(work_id, &text).is_err() {
+        self.claims.settle(work_id, &open.observation_id, text)?;
+        if self.board.append_note(work_id, text).is_err() {
             return Ok(Some(outcome(
                 work_id,
                 &open.observation_id,
@@ -1184,7 +1226,18 @@ fn skipped(work_id: &str, observation_id: &str, reason: &str) -> Outcome {
     outcome(work_id, observation_id, Status::Skipped, reason)
 }
 
+/// Writes the note an external AI posts before an operation that may wait.
+/// Refuses what [`Watcher::tick`] would read back as malformed, so a writer
+/// learns at once instead of leaving a record nobody acts on.
 pub fn intent_note(work_id: &str, intent: &Intent) -> Result<String, FollowupError> {
+    if !valid_token(work_id)
+        || !valid_token(&intent.observation_id)
+        || !valid_label(&intent.operation)
+        || !valid_label(&intent.target)
+        || intent.deadline_ms == Some(0)
+    {
+        return Err(FollowupError::Invalid);
+    }
     encode(
         work_id,
         &Event::Intent {

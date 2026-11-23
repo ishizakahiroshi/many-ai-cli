@@ -35,21 +35,36 @@ impl Drop for TempDir {
 
 struct Board {
     items: Mutex<Vec<ItemSnapshot>>,
+    /// Item whose `append_note` fails, standing in for a board write error.
+    fail_for: Mutex<Option<String>>,
 }
 impl Board {
-    fn with_intent(work_id: &str, intent: &Intent) -> Self {
+    fn new(items: Vec<ItemSnapshot>) -> Self {
         Self {
-            items: Mutex::new(vec![ItemSnapshot {
-                id: work_id.to_owned(),
-                events: vec![
-                    "session started".to_owned(),
-                    intent_note(work_id, intent).unwrap(),
-                ],
-            }]),
+            items: Mutex::new(items),
+            fail_for: Mutex::new(None),
         }
+    }
+    fn with_intent(work_id: &str, intent: &Intent) -> Self {
+        Self::new(vec![ItemSnapshot {
+            id: work_id.to_owned(),
+            events: vec![
+                "session started".to_owned(),
+                intent_note(work_id, intent).unwrap(),
+            ],
+        }])
     }
     fn texts(&self) -> Vec<String> {
         self.items.lock().unwrap()[0].events.clone()
+    }
+    fn texts_of(&self, item_id: &str) -> Vec<String> {
+        self.items
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|item| item.id == item_id)
+            .map(|item| item.events.clone())
+            .unwrap_or_default()
     }
 }
 impl BoardPort for Board {
@@ -57,6 +72,9 @@ impl BoardPort for Board {
         Ok(self.items.lock().unwrap().clone())
     }
     fn append_note(&self, item_id: &str, text: &str) -> Result<(), FollowupError> {
+        if self.fail_for.lock().unwrap().as_deref() == Some(item_id) {
+            return Err(FollowupError::Board);
+        }
         let mut items = self.items.lock().unwrap();
         let item = items
             .iter_mut()
@@ -154,17 +172,86 @@ fn calls(watcher: &Watcher<Board, Screens, Exec>) -> Vec<Action> {
 
 #[test]
 fn permits_reject_unknown_fields_and_duplicates() {
-    let ok = r#"{"schema_version":1,"permits":[{"permit_id":"permit-1","work_id":"task/1","operation":"github.update_pr_body","target":"https://github.com/example/repo/pull/49","effect":"approve_once","expires_at_ms":9,"revoked":false}]}"#;
-    assert_eq!(load_permits(ok).unwrap().len(), 1);
+    let row = |id: &str| {
+        format!(
+            r#"{{"permit_id":"{id}","work_id":"task/1","operation":"github.update_pr_body","target":"https://github.com/example/repo/pull/49","effect":"approve_once","expires_at_ms":9,"revoked":false}}"#
+        )
+    };
+    let file =
+        |rows: &[String]| format!(r#"{{"schema_version":1,"permits":[{}]}}"#, rows.join(","));
+    let ok = file(&[row("permit-1")]);
+    assert_eq!(load_permits(&ok).unwrap().len(), 1);
     assert!(load_permits(&ok.replace("revoked", "revoked_at")).is_err());
-    let dup = ok.replacen("permit-1", "permit-1", 1);
-    let two = format!(
-        "{{\"schema_version\":1,\"permits\":[{},{}]}}",
-        &ok[ok.find("{\"permit_id\"").unwrap()..ok.rfind('}').unwrap()],
-        &ok[ok.find("{\"permit_id\"").unwrap()..ok.rfind('}').unwrap()]
+    // Two well-formed rows load, so the duplicate below fails on the id alone.
+    assert_eq!(
+        load_permits(&file(&[row("permit-1"), row("permit-2")]))
+            .unwrap()
+            .len(),
+        2
     );
-    let _ = dup;
-    assert!(load_permits(&two).is_err());
+    assert_eq!(
+        load_permits(&file(&[row("permit-1"), row("permit-1")])),
+        Err(FollowupError::Permits)
+    );
+}
+
+#[test]
+fn a_renewed_permit_beside_a_revoked_one_acts() {
+    let work = "task/1";
+    let intent = approval_intent();
+    let mut old = permit(Effect::ApproveOnce, work, &intent.operation, &intent.target);
+    old.revoked = true;
+    let mut renewed = permit(Effect::ApproveOnce, work, &intent.operation, &intent.target);
+    renewed.permit_id = "permit-2".to_owned();
+    assert_eq!(
+        judge(
+            work,
+            &intent,
+            Some(&approval_screen()),
+            &[old.clone(), renewed.clone()],
+            1_000,
+            None
+        ),
+        Judgement::Act {
+            permit_id: "permit-2".to_owned(),
+            effect: Effect::ApproveOnce,
+            card_id: "card-1".to_owned(),
+        }
+    );
+    // Two live permits for the same scope are still ambiguous.
+    let mut twin = renewed.clone();
+    twin.permit_id = "permit-3".to_owned();
+    assert_eq!(
+        judge(
+            work,
+            &intent,
+            Some(&approval_screen()),
+            &[old, renewed, twin],
+            1_000,
+            None
+        ),
+        Judgement::Hold {
+            reason: REASON_AMBIGUOUS,
+            terminal: true
+        }
+    );
+}
+
+#[test]
+fn intent_note_refuses_what_the_watcher_would_call_malformed() {
+    let mut intent = approval_intent();
+    intent.observation_id = "obs 1".to_owned();
+    assert_eq!(intent_note("task/1", &intent), Err(FollowupError::Invalid));
+    let mut intent = approval_intent();
+    intent.target = "line\nbreak".to_owned();
+    assert_eq!(intent_note("task/1", &intent), Err(FollowupError::Invalid));
+    let mut intent = approval_intent();
+    intent.deadline_ms = Some(0);
+    assert_eq!(intent_note("task/1", &intent), Err(FollowupError::Invalid));
+    assert_eq!(
+        intent_note("", &approval_intent()),
+        Err(FollowupError::Invalid)
+    );
 }
 
 #[test]
@@ -184,7 +271,7 @@ fn approval_and_continue_are_different_waits() {
             work,
             &approval,
             Some(&approval_screen()),
-            &[approval_permit.clone()],
+            std::slice::from_ref(&approval_permit),
             now,
             None
         ),
@@ -480,11 +567,8 @@ fn restart_after_an_acting_claim_does_not_act_again() {
     let dir = TempDir::new();
     let work = "task/1";
     let intent = approval_intent();
-    let claim = format!(
-        "{{\"schema_version\":1,\"claims\":[{{\"observation_id\":\"{}\",\"phase\":\"acting\",\"event_text\":null}}]}}",
-        intent.observation_id
-    );
-    fs::write(dir.claim(), claim).unwrap();
+    fs::write(dir.claim(), acting_claim(work, &intent.observation_id)).unwrap();
+
     let watcher = open_watcher(
         &dir,
         Board::with_intent(work, &intent),
@@ -534,16 +618,14 @@ fn ordinary_notes_are_ignored_and_a_foreign_work_id_does_not_act() {
     let work = "task/1";
     let intent = approval_intent();
     let foreign = intent_note("task/2", &intent).unwrap();
-    let board = Board {
-        items: Mutex::new(vec![ItemSnapshot {
-            id: work.to_owned(),
-            events: vec![
-                "作業しました".to_owned(),
-                foreign,
-                "followup/1 {".to_owned(),
-            ],
-        }]),
-    };
+    let board = Board::new(vec![ItemSnapshot {
+        id: work.to_owned(),
+        events: vec![
+            "作業しました".to_owned(),
+            foreign,
+            "followup/1 {".to_owned(),
+        ],
+    }]);
     let watcher = open_watcher(
         &dir,
         board,
@@ -608,12 +690,10 @@ fn an_open_claim_file_from_a_new_watcher_keeps_the_refusal() {
     drop(first);
     let second = open_watcher(
         &dir,
-        Board {
-            items: Mutex::new(vec![ItemSnapshot {
-                id: work.to_owned(),
-                events,
-            }]),
-        },
+        Board::new(vec![ItemSnapshot {
+            id: work.to_owned(),
+            events,
+        }]),
         Ok(Some(approval_screen())),
         vec![permit(
             Effect::ApproveOnce,
@@ -625,6 +705,239 @@ fn an_open_claim_file_from_a_new_watcher_keeps_the_refusal() {
     );
     assert_eq!(second.tick(1_200).unwrap()[0].status, Status::Skipped);
     assert!(calls(&second).is_empty());
+}
+
+fn acting_claim(work_id: &str, observation_id: &str) -> String {
+    format!(
+        "{{\"schema_version\":1,\"claims\":[{{\"work_id\":\"{work_id}\",\"observation_id\":\"{observation_id}\",\"phase\":\"acting\",\"event_text\":null}}]}}"
+    )
+}
+
+#[test]
+fn the_same_observation_id_on_two_work_items_is_judged_for_each() {
+    let dir = TempDir::new();
+    let intent = approval_intent();
+    let board = Board::new(vec![
+        ItemSnapshot {
+            id: "task/1".to_owned(),
+            events: vec![intent_note("task/1", &intent).unwrap()],
+        },
+        ItemSnapshot {
+            id: "task/2".to_owned(),
+            events: vec![intent_note("task/2", &intent).unwrap()],
+        },
+    ]);
+    let mut other = permit(
+        Effect::ApproveOnce,
+        "task/2",
+        &intent.operation,
+        &intent.target,
+    );
+    other.permit_id = "permit-2".to_owned();
+    let watcher = open_watcher(
+        &dir,
+        board,
+        Ok(Some(approval_screen())),
+        vec![
+            permit(
+                Effect::ApproveOnce,
+                "task/1",
+                &intent.operation,
+                &intent.target,
+            ),
+            other,
+        ],
+        false,
+    );
+    let outcomes = watcher.tick(1_000).unwrap();
+    assert_eq!(outcomes.len(), 2);
+    assert!(outcomes.iter().all(|item| item.status == Status::Acted));
+    let acted: Vec<String> = calls(&watcher)
+        .iter()
+        .map(|action| action.work_id.clone())
+        .collect();
+    assert_eq!(acted, vec!["task/1".to_owned(), "task/2".to_owned()]);
+    // One item's record never lands on the other item.
+    assert!(
+        !watcher
+            .board
+            .texts_of("task/2")
+            .iter()
+            .any(|text| text.contains("\"work\":\"task/1\""))
+    );
+    assert!(
+        watcher
+            .tick(1_100)
+            .unwrap()
+            .iter()
+            .all(|item| item.status == Status::Skipped)
+    );
+    assert_eq!(calls(&watcher).len(), 2);
+}
+
+#[test]
+fn a_card_answered_for_one_observation_is_not_answered_for_another() {
+    let dir = TempDir::new();
+    let work = "task/1";
+    let first = approval_intent();
+    let mut later = approval_intent();
+    later.observation_id = "obs-3".to_owned();
+    let board = Board::new(vec![ItemSnapshot {
+        id: work.to_owned(),
+        events: vec![
+            intent_note(work, &first).unwrap(),
+            intent_note(work, &later).unwrap(),
+        ],
+    }]);
+    let watcher = open_watcher(
+        &dir,
+        board,
+        Ok(Some(approval_screen())),
+        vec![permit(
+            Effect::ApproveOnce,
+            work,
+            &first.operation,
+            &first.target,
+        )],
+        false,
+    );
+    let outcomes = watcher.tick(1_000).unwrap();
+    assert_eq!(outcomes[0].status, Status::Acted);
+    assert_eq!(outcomes[1].status, Status::Waiting);
+    assert_eq!(outcomes[1].reason, REASON_DUPLICATE);
+    assert_eq!(calls(&watcher).len(), 1);
+    // The same card still on screen at the next poll stays answered once.
+    let again = watcher.tick(1_100).unwrap();
+    assert_eq!(again[1].reason, REASON_DUPLICATE);
+    assert_eq!(calls(&watcher).len(), 1);
+    // A new card is the later observation's own.
+    *watcher.screens.0.lock().unwrap() = Ok(Some(Screen::Approval {
+        card_id: "card-2".to_owned(),
+        operation: first.operation.clone(),
+        target: first.target.clone(),
+    }));
+    let next = watcher.tick(1_200).unwrap();
+    assert_eq!(next[1].status, Status::Acted);
+    let made = calls(&watcher);
+    assert_eq!(made.len(), 2);
+    assert_eq!(made[1].observation_id, "obs-3");
+    assert_eq!(made[1].card_id, "card-2");
+}
+
+#[test]
+fn a_board_write_failure_holds_one_item_and_the_next_still_runs() {
+    let dir = TempDir::new();
+    let intent = approval_intent();
+    let board = Board::new(vec![
+        ItemSnapshot {
+            id: "task/1".to_owned(),
+            events: vec![intent_note("task/1", &intent).unwrap()],
+        },
+        ItemSnapshot {
+            id: "task/2".to_owned(),
+            events: vec![intent_note("task/2", &intent).unwrap()],
+        },
+    ]);
+    *board.fail_for.lock().unwrap() = Some("task/1".to_owned());
+    let mut other = permit(
+        Effect::ApproveOnce,
+        "task/2",
+        &intent.operation,
+        &intent.target,
+    );
+    other.permit_id = "permit-2".to_owned();
+    let watcher = open_watcher(
+        &dir,
+        board,
+        Ok(Some(approval_screen())),
+        vec![
+            permit(
+                Effect::ApproveOnce,
+                "task/1",
+                &intent.operation,
+                &intent.target,
+            ),
+            other,
+        ],
+        false,
+    );
+    let outcomes = watcher.tick(1_000).unwrap();
+    assert_eq!(outcomes[0].work_id, "task/1");
+    assert_eq!(outcomes[0].status, Status::Waiting);
+    assert_eq!(outcomes[0].reason, REASON_BOARD_UNRECORDED);
+    assert_eq!(outcomes[1].work_id, "task/2");
+    assert_eq!(outcomes[1].status, Status::Acted);
+    // The card is not answered while its sighting cannot be recorded.
+    let made = calls(&watcher);
+    assert_eq!(made.len(), 1);
+    assert_eq!(made[0].work_id, "task/2");
+    // Once the board takes notes again, the first item proceeds.
+    *watcher.board.fail_for.lock().unwrap() = None;
+    let later = watcher.tick(1_100).unwrap();
+    assert_eq!(later[0].status, Status::Acted);
+    assert_eq!(calls(&watcher).len(), 2);
+}
+
+#[test]
+fn a_transient_note_that_cannot_be_written_does_not_stop_the_tick() {
+    let dir = TempDir::new();
+    let work = "task/1";
+    let intent = approval_intent();
+    let board = Board::with_intent(work, &intent);
+    *board.fail_for.lock().unwrap() = Some(work.to_owned());
+    let watcher = open_watcher(
+        &dir,
+        board,
+        Ok(None),
+        vec![permit(
+            Effect::ApproveOnce,
+            work,
+            &intent.operation,
+            &intent.target,
+        )],
+        false,
+    );
+    let outcome = watcher.tick(1_000).unwrap();
+    assert_eq!(outcome[0].status, Status::Waiting);
+    assert_eq!(outcome[0].reason, REASON_BOARD_UNRECORDED);
+    assert!(calls(&watcher).is_empty());
+}
+
+#[test]
+fn an_interrupted_claim_says_when_the_board_did_not_take_the_hold() {
+    let dir = TempDir::new();
+    let work = "task/1";
+    let intent = approval_intent();
+    fs::write(dir.claim(), acting_claim(work, &intent.observation_id)).unwrap();
+    let board = Board::with_intent(work, &intent);
+    *board.fail_for.lock().unwrap() = Some(work.to_owned());
+    let watcher = open_watcher(
+        &dir,
+        board,
+        Ok(Some(approval_screen())),
+        vec![permit(
+            Effect::ApproveOnce,
+            work,
+            &intent.operation,
+            &intent.target,
+        )],
+        false,
+    );
+    let outcome = watcher.tick(1_000).unwrap();
+    assert_eq!(outcome[0].status, Status::Held);
+    assert_eq!(outcome[0].reason, REASON_BOARD_UNRECORDED);
+    assert!(calls(&watcher).is_empty());
+    // The settled hold reaches the board on the next poll.
+    *watcher.board.fail_for.lock().unwrap() = None;
+    assert_eq!(watcher.tick(1_100).unwrap()[0].status, Status::Skipped);
+    assert!(
+        watcher
+            .board
+            .texts()
+            .iter()
+            .any(|text| text.contains(REASON_UNKNOWN_AFTER_INTERRUPT))
+    );
+    assert!(calls(&watcher).is_empty());
 }
 
 #[test]
