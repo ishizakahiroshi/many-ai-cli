@@ -1129,3 +1129,105 @@ async fn audit_n03_guarded_text_is_held_by_a_prompt_on_the_screen_that_has_no_re
         InputDisposition::TransportWritten { .. }
     ));
 }
+
+// Audit N03, board path: a child's DONE / QUESTION notice is pasted with its
+// Enter into the idle conductor. A prompt on the screen without a record must
+// hold it too, and the notice is typed once the prompt is gone.
+const BOARD_NOTICE: &[u8] = b"\x1b[200~\n[orchestration] child done\n\x1b[201~\r";
+async fn conductor_idle(f: &Fixture, session: SessionBinding, orchestration: &OrchestrationId) {
+    let (effects, _) = f
+        .engine
+        .mark_conductor_with_previous(session, orchestration.clone(), "/fixture/board.md".into())
+        .unwrap();
+    f.sink.apply(effects).await.unwrap();
+    f.sink
+        .apply(f.engine.evaluate_idle(now() + Duration::from_secs(10)))
+        .await
+        .unwrap();
+}
+async fn deliver_board(
+    f: &Fixture,
+    session: SessionBinding,
+    orchestration: &OrchestrationId,
+) -> many_ai_cli::terminal::session::board_input::BoardEventWrite {
+    f.engine
+        .deliver_board_event(
+            session,
+            orchestration,
+            BOARD_NOTICE.to_vec(),
+            &TaskCancellation::default(),
+        )
+        .await
+}
+
+#[tokio::test]
+async fn audit_n03_board_notice_is_held_by_a_prompt_on_the_screen_that_has_no_record() {
+    use many_ai_cli::terminal::session::board_input::BoardEventWrite;
+    let f = fixture();
+    let orchestration = OrchestrationId("synthetic-orch".into());
+    let session = native_session(&f, "git status", "Yes", true).await;
+    answer_on_the_hub(&f, session).await;
+    screen(&f, session, "\x1b[2J\x1b[HWorking...").await;
+    // The CLI asks the very same thing again in the same turn: no record opens.
+    repaint(&f, session, "git status", "Yes", true).await;
+    conductor_idle(&f, session, &orchestration).await;
+    let snapshot = f.engine.snapshot(session.session).unwrap();
+    assert!(
+        !pending(&f, session)
+            && !snapshot.activity.awaiting_approval
+            && !snapshot.activity.awaiting_user
+            && snapshot.activity.is_idle(),
+        "fixture must reproduce an idle conductor whose prompt has no record"
+    );
+    assert!(f.engine.details(session.session).unwrap().prompt_visible);
+    assert!(matches!(
+        deliver_board(&f, session, &orchestration).await,
+        BoardEventWrite::Blocked
+    ));
+    assert_eq!(sent(&f), vec![b"\r".to_vec()], "only the user's answer");
+    // Positive control: with the prompt gone the notice is typed.
+    screen(&f, session, "\x1b[2J\x1b[HWorking...").await;
+    conductor_idle(&f, session, &orchestration).await;
+    assert!(matches!(
+        deliver_board(&f, session, &orchestration).await,
+        BoardEventWrite::Written
+    ));
+    assert_eq!(sent(&f), vec![b"\r".to_vec(), BOARD_NOTICE.to_vec()]);
+}
+
+#[tokio::test]
+async fn board_notice_is_not_written_when_a_prompt_appears_before_the_write() {
+    use many_ai_cli::terminal::session::board_input::BoardEventWrite;
+    let f = fixture();
+    let orchestration = OrchestrationId("synthetic-orch".into());
+    let session = plain_session(&f).await;
+    screen(&f, session, "\x1b[2J\x1b[HReady").await;
+    conductor_idle(&f, session, &orchestration).await;
+    // The prompt is drawn after the checks and before the frame is dispatched:
+    // the write itself must check again under the session lock.
+    f.transport.pause_call.store(1, Ordering::SeqCst);
+    let engine = f.engine.clone();
+    let task = tokio::spawn({
+        let orchestration = orchestration.clone();
+        async move {
+            engine
+                .deliver_board_event(
+                    session,
+                    &orchestration,
+                    BOARD_NOTICE.to_vec(),
+                    &TaskCancellation::default(),
+                )
+                .await
+        }
+    });
+    f.transport.entered.notified().await;
+    screen(
+        &f,
+        session,
+        "\x1b[2J\x1b[HRun: git push\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No",
+    )
+    .await;
+    f.transport.resume.notify_one();
+    assert!(matches!(task.await.unwrap(), BoardEventWrite::Blocked));
+    assert!(sent(&f).is_empty(), "nothing may reach the prompt");
+}

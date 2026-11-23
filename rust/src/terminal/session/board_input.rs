@@ -1,5 +1,7 @@
 //! Actionable board notices keep their own FIFO remainder. They never enter
 //! reconnect input queues, which cannot recheck approval or composer readiness.
+//! A notice carries its own Enter, so it is written as `GuardedInternal` and is
+//! held while a prompt is on the screen, recorded or not (audit N03).
 use super::*;
 
 pub enum BoardEventWrite {
@@ -78,16 +80,12 @@ impl SessionEngine {
                         };
                     }
                 };
+                // `guarded_input_block` also counts a prompt on the screen that
+                // has no record (audit N03): the notice's Enter would answer it.
                 if session.snapshot.parent_session_id.0 != 0
                     || session.snapshot.orchestration_id != *orchestration
-                    || !session.connected
-                    || session.input.initial_prompt_phase()
+                    || session.guarded_input_block().is_some()
                     || session.input.gated(Timestamp::now())
-                    || session.input.pending_len() != 0
-                    || session.input.resend_len() != 0
-                    || session.snapshot.activity.awaiting_user
-                    || session.snapshot.activity.awaiting_approval
-                    || session.approval.record().is_some()
                     || !session.snapshot.activity.is_idle()
                 {
                     return BoardEventWrite::Blocked;
@@ -110,11 +108,21 @@ impl SessionEngine {
             }
             // Go sends this one already framed <=4096-byte notice together;
             // unlike user submits it does not settle/retry a second Enter.
+            // GuardedInternal checks again under the lock at dispatch, so a
+            // prompt drawn since the checks above holds the whole frame.
             match self
-                .write_frame(binding, bytes.clone(), None, &InputAuthority::Internal)
+                .write_frame(
+                    binding,
+                    bytes.clone(),
+                    None,
+                    &InputAuthority::GuardedInternal,
+                )
                 .await
             {
                 Ok(_) => BoardEventWrite::Written,
+                Err(SessionError::InvalidRequest(detail)) if guarded_input_held(&detail) => {
+                    BoardEventWrite::Blocked
+                }
                 Err(error) => BoardEventWrite::Failed {
                     remainder: bytes,
                     error,
