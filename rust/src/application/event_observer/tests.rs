@@ -22,6 +22,9 @@ mod relay_assurance;
 
 // Failure-only CI evidence. Do not copy response text, Git stderr, arguments or
 // paths. A response cannot recover a process exit, runner timeout or duration.
+// Git's stderr after a known operation prefix is reduced to fixed words: the
+// most severe line prefix, one class from a fixed phrase list, and the digits
+// of an `(os error N)` suffix. Unmatched text stays `unmatched`, never echoed.
 pub(super) fn test_snapshot_failure_diagnostic(response: &crate::hub::http::Response) -> String {
     let parsed = (response.body.len() <= 4096)
         .then(|| serde_json::from_slice::<serde_json::Value>(&response.body).ok())
@@ -38,17 +41,17 @@ pub(super) fn test_snapshot_failure_diagnostic(response: &crate::hub::http::Resp
         .as_ref()
         .and_then(|value| value["detail"].as_str())
         .unwrap_or_default();
-    let operation = if detail.starts_with("git read-tree HEAD:")
-        || detail.starts_with("git read-tree --empty:")
-    {
-        "read_tree"
-    } else if detail.starts_with("git add -A -- .:") {
-        "add"
-    } else if detail.starts_with("git write-tree:") {
-        "write_tree"
-    } else {
-        "unknown"
-    };
+    let (operation, stderr) = [
+        ("git read-tree HEAD:", "read_tree"),
+        ("git read-tree --empty:", "read_tree"),
+        ("git add -A -- .:", "add"),
+        ("git write-tree:", "write_tree"),
+    ]
+    .into_iter()
+    .find_map(|(prefix, operation)| Some((operation, detail.strip_prefix(prefix)?)))
+    .map_or(("unknown", None), |(operation, rest)| {
+        (operation, Some(rest))
+    });
     let class = match detail {
         "git command timed out" => "budget_exhausted_before_command",
         "git command output exceeded limit or pipes failed to close" => "output_or_pipe_guard",
@@ -56,7 +59,101 @@ pub(super) fn test_snapshot_failure_diagnostic(response: &crate::hub::http::Resp
         "git write-tree returned an invalid object id" => "invalid_object_id",
         _ => "unknown",
     };
-    format!("; test-only response_code={code}, operation_prefix={operation}, detail_class={class}")
+    let (severity, stderr_class, os_error) = stderr.map_or(("n/a", "n/a", "n/a".into()), |text| {
+        test_git_stderr_classes(text)
+    });
+    format!(
+        "; test-only response_code={code}, operation_prefix={operation}, detail_class={class}, \
+         stderr_severity={severity}, stderr_class={stderr_class}, os_error={os_error}"
+    )
+}
+
+/// Fixed words only (see the comment above `test_snapshot_failure_diagnostic`).
+/// An empty stderr after a known prefix means Git printed nothing: the
+/// process was stopped (deadline/cancel) or exited non-zero silently.
+fn test_git_stderr_classes(stderr: &str) -> (&'static str, &'static str, String) {
+    let text = stderr.trim().to_ascii_lowercase();
+    if text.is_empty() {
+        return ("none", "empty_stderr", "none".into());
+    }
+    let lines = || text.lines().map(str::trim_start);
+    let severity = if lines().any(|line| line.starts_with("fatal:")) {
+        "fatal"
+    } else if lines().any(|line| line.starts_with("error:")) {
+        "error"
+    } else if lines().any(|line| line.starts_with("warning:")) {
+        "warning"
+    } else {
+        "unprefixed"
+    };
+    let has = |phrases: &[&str]| phrases.iter().any(|phrase| text.contains(phrase));
+    let stderr_class = if has(&["index.lock", "another git process"])
+        || (text.contains(".lock") && text.contains("file exists"))
+    {
+        "lock_file_exists"
+    } else if has(&[
+        "permission denied",
+        "access is denied",
+        "insufficient permission",
+    ]) {
+        "permission_denied"
+    } else if has(&[
+        "being used by another process",
+        "sharing violation",
+        "resource busy",
+        "resource temporarily unavailable",
+    ]) {
+        "file_busy"
+    } else if has(&["no space left", "disk full", "not enough space"]) {
+        "disk_full"
+    } else if has(&["filename too long", "file name too long"]) {
+        "path_too_long"
+    } else if has(&["unable to write new index file", "unable to write index"]) {
+        "index_write_failed"
+    } else if has(&[
+        "index file corrupt",
+        "index file smaller than expected",
+        "bad signature",
+        "bad index",
+    ]) {
+        "index_corrupt"
+    } else if has(&["unable to create temporary file", "mkstemp"]) {
+        "temp_file_failed"
+    } else if has(&[
+        "unable to index file",
+        "failed to insert into database",
+        "short read",
+        "error: open(",
+    ]) {
+        "worktree_read_failed"
+    } else if has(&[
+        "bad object",
+        "invalid object",
+        "unable to read",
+        "object file",
+        "corrupt",
+    ]) {
+        "object_store_failed"
+    } else if text.contains("not a git repository") {
+        "not_git_repo"
+    } else if text.contains("hooks and filters could not be read") {
+        "named_programs_unreadable"
+    } else if text.contains("(os error ") {
+        "process_io_error"
+    } else {
+        "unmatched"
+    };
+    let os_error = text
+        .split_once("(os error ")
+        .map(|(_, rest)| {
+            rest.chars()
+                .take_while(char::is_ascii_digit)
+                .take(6)
+                .collect::<String>()
+        })
+        .filter(|digits| !digits.is_empty())
+        .unwrap_or_else(|| "none".into());
+    (severity, stderr_class, os_error)
 }
 
 #[test]
@@ -136,19 +233,132 @@ fn snapshot_failure_diagnostics_classify_only_fixed_codes_and_prefixes() {
         ),
     ] {
         let response = crate::hub::http::Response::error(500, code, detail);
+        // A known operation prefix is followed by Git stderr; the synthetic
+        // text matches no fixed phrase and must not be echoed.
+        let stderr = if operation == "unknown" {
+            "stderr_severity=n/a, stderr_class=n/a, os_error=n/a"
+        } else {
+            "stderr_severity=unprefixed, stderr_class=unmatched, os_error=none"
+        };
         assert_eq!(
             test_snapshot_failure_diagnostic(&response),
             format!(
-                "; test-only response_code={code}, operation_prefix={operation}, detail_class={class}"
+                "; test-only response_code={code}, operation_prefix={operation}, detail_class={class}, {stderr}"
             )
         );
     }
 }
 
 #[test]
+fn snapshot_failure_diagnostics_reduce_git_stderr_to_fixed_words() {
+    // Shapes as `files::git` builds them: "git <args>: <sanitized stderr>",
+    // where an empty stderr leaves only the trimmed prefix.
+    for (detail, operation, severity, class, os_error) in [
+        (
+            "git write-tree:",
+            "write_tree",
+            "none",
+            "empty_stderr",
+            "none",
+        ),
+        ("git add -A -- .:   ", "add", "none", "empty_stderr", "none"),
+        (
+            "git add -A -- .: fatal: Unable to create '<path>': File exists.\n\nAnother git process seems to be running in this repository",
+            "add",
+            "fatal",
+            "lock_file_exists",
+            "none",
+        ),
+        (
+            "git write-tree: error: unable to create temporary file: Permission denied\nfatal: git-write-tree: error building trees",
+            "write_tree",
+            "fatal",
+            "permission_denied",
+            "none",
+        ),
+        (
+            "git add -A -- .: error: open(\"synthetic-private-name\"): Invalid argument\nerror: unable to index file 'synthetic-private-name'\nfatal: adding files failed",
+            "add",
+            "fatal",
+            "worktree_read_failed",
+            "none",
+        ),
+        (
+            "git write-tree: fatal: unable to write new index file",
+            "write_tree",
+            "fatal",
+            "index_write_failed",
+            "none",
+        ),
+        (
+            "git read-tree HEAD: fatal: index file smaller than expected",
+            "read_tree",
+            "fatal",
+            "index_corrupt",
+            "none",
+        ),
+        (
+            "git read-tree --empty: error: unable to create temporary file: No space left on device",
+            "read_tree",
+            "error",
+            "disk_full",
+            "none",
+        ),
+        (
+            "git write-tree: The process cannot access the file because it is being used by another process. (os error 32)",
+            "write_tree",
+            "unprefixed",
+            "file_busy",
+            "32",
+        ),
+        (
+            "git add -A -- .: synthetic-private-text (os error 1450)",
+            "add",
+            "unprefixed",
+            "process_io_error",
+            "1450",
+        ),
+        (
+            "git write-tree: git config names of hooks and filters could not be read",
+            "write_tree",
+            "unprefixed",
+            "named_programs_unreadable",
+            "none",
+        ),
+        (
+            "git write-tree: warning: synthetic-private-text\nsynthetic-private-text (os error 99999999)",
+            "write_tree",
+            "warning",
+            "process_io_error",
+            "999999",
+        ),
+        (
+            "git add -A -- .: error: synthetic-private-text <path>",
+            "add",
+            "error",
+            "unmatched",
+            "none",
+        ),
+    ] {
+        let response = crate::hub::http::Response::error(500, "git_command_failed", detail);
+        let diagnostic = test_snapshot_failure_diagnostic(&response);
+        assert_eq!(
+            diagnostic,
+            format!(
+                "; test-only response_code=git_command_failed, operation_prefix={operation}, \
+                 detail_class=unknown, stderr_severity={severity}, stderr_class={class}, \
+                 os_error={os_error}"
+            )
+        );
+        assert!(!diagnostic.contains("synthetic-private"), "{diagnostic}");
+        assert!(!diagnostic.contains("<path>"), "{diagnostic}");
+    }
+}
+
+#[test]
 fn snapshot_failure_diagnostics_never_echo_unknown_malformed_or_oversized_data() {
-    let unknown =
-        "; test-only response_code=unknown, operation_prefix=unknown, detail_class=unknown";
+    let unknown = "; test-only response_code=unknown, operation_prefix=unknown, detail_class=unknown, \
+         stderr_severity=n/a, stderr_class=n/a, os_error=n/a";
     let bodies = [
         serde_json::json!({"error":"synthetic-private-code","detail":"prefix git add -A -- .: synthetic-private-text"}).to_string(),
         serde_json::json!({"error":["synthetic-private-code"],"detail":{"path":"synthetic-private-path"}}).to_string(),
@@ -539,8 +749,9 @@ async fn handoff_gate_is_independent_of_capture_and_summary_requires_both_gates(
         *f.callbacks.trace.lock().unwrap(),
         vec!["callback-after-broadcast"],
         // Evaluated only on assertion failure, after the existing final drain.
-        // This Git-only fixture's observer warnings contain fixed stage names
-        // and response status codes, not Git stderr, work text or paths.
+        // This Git-only fixture's observer warnings contain fixed stage names,
+        // response status codes and fixed-word Git stderr classes, not Git
+        // stderr text, work text or paths.
         "effect completion: {completion:?}; sanitized observer warnings: {:?}",
         f.warnings.lock().unwrap().as_slice(),
     );
