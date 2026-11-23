@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+import { isHttpUrl } from '../src/app/url-detect';
 
 // remote-file-view.ts（ssh 先のファイルを読み取り専用で開く画面）と、それが使う files-view.ts の
 // Markdown 変換（renderMarkdown の remote モード）の実コードを、合成 DOM / 合成 fetch で動かす。
@@ -61,6 +62,7 @@ function fixture() {
     document: { createElement: (tag: string) => new FakeNode(tag), importNode: (node: FakeNode) => node, querySelectorAll: () => [] },
     DOMParser: class { parseFromString() { return { body: { firstElementChild: new FakeNode('div') } }; } },
     URL: { createObjectURL: () => 'blob:synthetic-image', revokeObjectURL: (url: string) => revoked.push(url) },
+    isHttpUrl,
     Blob, TextDecoder, AbortController, encodeURIComponent, Promise, Array, Number, String, JSON, Math,
   };
   ctx.isImagePath = undefined; ctx.isTextPath = undefined;
@@ -194,6 +196,14 @@ describe('ssh 先の Markdown に残してよい属性', () => {
     expect(ok('use', 'xlink:href', '/api/x#a')).toBe(false);
     expect(ok('A', 'HREF', '/etc/passwd')).toBe(false);
   });
+
+  test('http(s) の判定は bindUrlLinksIn と同じ isHttpUrl: `//` の直後が英数字でない行き先は残さない', () => {
+    const { api } = fixture();
+    for (const value of ['https://%65vil.example/login', 'https://@evil.example', 'https:///evil.example', '//evil.example']) {
+      expect(api.isAllowedRemoteAttribute('a', 'href', value)).toBe(false);
+    }
+    expect(api.isAllowedRemoteAttribute('a', 'href', 'https://[::1]:8080/')).toBe(true);
+  });
 });
 
 describe('FilesPreview.renderMarkdown の remote モード', () => {
@@ -205,6 +215,7 @@ describe('FilesPreview.renderMarkdown の remote モード', () => {
     const ctx: any = {
       escapeHtml: (s: unknown) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'),
       findUrlCandidates: () => [],
+      isHttpUrl,
       DOMPurify: { isSupported: true, sanitize: (html: string, config: any) => { sanitizeConfigs.push(config); return html; } },
       hljs: undefined, Array, Object, String, RegExp, JSON,
     };
@@ -260,6 +271,31 @@ describe('FilesPreview.renderMarkdown の remote モード', () => {
     expect(html).toContain('<img src="images/a.png" alt="i">');
     expect(sanitizeConfigs[0].ALLOWED_URI_REGEXP).toBeUndefined();
     expect(sanitizeConfigs[0].ADD_ATTR).toContain('data-files-path-link');
+  });
+
+  test('http(s) に見えて isHttpUrl に合わない行き先は、どちらのモードでも押せるリンクにしない（文字は残す）', () => {
+    const { render } = renderer();
+    const md = '[docs](https://%65vil.example/login) [at](https://@evil.example) [ok](https://example.com/a)';
+    for (const options of [undefined, { remote: true }]) {
+      const html = render(md, '', null, options);
+      expect(html).toContain('<a href="https://example.com/a"');
+      expect(html).not.toContain('href="https://%65vil');
+      expect(html).not.toContain('href="https://@');
+      expect(html).not.toContain('data-files-path-link="https://'); // PC のパスとしても扱わない
+      expect(html).toContain('<span class="files-md-link files-md-link--inert">docs</span>');
+      expect(html).toContain('<span class="files-md-link files-md-link--inert">at</span>');
+    }
+  });
+
+  test('DOMPurify には、画像の上に押せる行き先を置く map / area / usemap を禁止する設定を渡す', () => {
+    const { render, sanitizeConfigs } = renderer();
+    render('x', '', null);
+    render('x', '', null, { remote: true });
+    for (const config of sanitizeConfigs) {
+      expect(config.FORBID_TAGS).toContain('map');
+      expect(config.FORBID_TAGS).toContain('area');
+      expect(config.FORBID_ATTR).toContain('usemap');
+    }
   });
 });
 
@@ -351,5 +387,122 @@ describe('openRemoteFileView', () => {
     expect(f.fetches[0]).not.toContain('files-asset');
     f.state.onClose?.();
     expect(f.revoked).toEqual(['blob:synthetic-image']);
+  });
+});
+
+// url-links.ts の bindUrlLinksIn（Markdown プレビューを描いたあとにリンクのクリックを受け持つ）の実コードを、
+// 合成 DOM で動かす。files-view.ts と remote-file-view.ts は、描いた要素をこの関数へ渡す。
+// 決め（url-links.ts の冒頭・2026-07 監査 H5）: AI や文書が出した行き先を 1 クリックで開かせない。
+// isHttpUrl に合う行き先は URL の全文を見せるポップアップへ、合わない行き先は押しても遷移させない。
+
+const XLINK_NS = 'http://www.w3.org/1999/xlink';
+
+class FakeEl {
+  dataset: Record<string, string> = {};
+  attrs = new Map<string, string>();
+  nsAttrs = new Map<string, string>();
+  listeners = new Map<string, Function[]>();
+  constructor(public tagName: string, attrs: Record<string, string> = {}) {
+    for (const [k, v] of Object.entries(attrs)) this.attrs.set(k, v);
+  }
+  getAttribute(name: string) { return this.attrs.has(name) ? this.attrs.get(name)! : null; }
+  getAttributeNS(ns: string, name: string) { return this.nsAttrs.has(`${ns}|${name}`) ? this.nsAttrs.get(`${ns}|${name}`)! : null; }
+  hasAttribute(name: string) { return this.attrs.has(name); }
+  setAttribute(name: string, value: string) { this.attrs.set(name, value); }
+  addEventListener(name: string, fn: Function) { this.listeners.set(name, [...(this.listeners.get(name) || []), fn]); }
+  getBoundingClientRect() { return { left: 10, bottom: 20 }; }
+  // 押したときにブラウザが遷移するか（どのリスナーも preventDefault しなければ遷移する）
+  press(type = 'click', button = 0) {
+    const ev = { button, clientX: 5, clientY: 6, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, stopPropagation() {} };
+    for (const fn of this.listeners.get(type) || []) fn(ev);
+    return { navigates: !ev.defaultPrevented };
+  }
+}
+
+// querySelectorAll はセレクタを守る（`a[href]` のように属性を要求する書き方なら、属性の無い要素は返さない）。
+function fakeRoot(children: FakeEl[]) {
+  return {
+    querySelectorAll(selector: string) {
+      const parts = selector.split(',').map((s) => s.trim());
+      return children.filter((el) => parts.some((part) => {
+        const m = /^([a-z]+)(?:\[([a-z:-]+)\])?$/.exec(part);
+        if (!m) throw new Error(`unsupported selector in fake: ${part}`);
+        return el.tagName === m[1] && (!m[2] || el.attrs.has(m[2]));
+      }));
+    },
+  };
+}
+
+function load() {
+  const popups: string[] = [];
+  const ctx: any = {
+    isHttpUrl,
+    findUrlCandidates: () => [], splitUrlPieces: () => [],
+    appendLinkedText: () => {}, copyPathText: async () => {},
+    cancelPathPopupHideTimer: () => {},
+    getOrCreatePathPopup: () => ({ innerHTML: '', hidden: true, appendChild: () => {} }),
+    renderPathPopupItems: () => {},
+    // showUrlPopup が URL の全文を出す head 要素に入れた文字を、出したポップアップとして記録する
+    document: { createElement: () => ({ set textContent(v: string) { popups.push(v); } }) },
+    window: { open: () => { throw new Error('must not open without the popup'); } },
+    Array, String, Object,
+  };
+  const source = read('../src/app/url-links.ts').replace(/^import [\s\S]*?;\n/gm, '').replace(/^export /gm, '');
+  runInNewContext(`${transpile(source)}\nglobalThis.api = { bindUrlLinksIn };`, ctx);
+  return { bindUrlLinksIn: ctx.api.bindUrlLinksIn as (root: unknown) => void, popups };
+}
+
+describe('bindUrlLinksIn: 1 クリックで外へ飛ばさない', () => {
+  test('isHttpUrl に合う行き先は、遷移させずに URL の全文のポップアップを出す', () => {
+    const { bindUrlLinksIn, popups } = load();
+    const a = new FakeEl('a', { href: 'https://example.com/docs', target: '_blank' });
+    bindUrlLinksIn(fakeRoot([a]));
+    expect(a.press().navigates).toBe(false);
+    expect(popups).toEqual(['https://example.com/docs']);
+    expect(a.getAttribute('title')).toBe('https://example.com/docs');
+  });
+
+  test('http(s) に見えて isHttpUrl に合わない行き先（%エスケープ・空の userinfo）は押しても遷移しない', () => {
+    const { bindUrlLinksIn, popups } = load();
+    const links = ['https://%65vil.example/login', 'https://@evil.example', 'HTTPS://%2F%2Fevil.example'].map((href) => new FakeEl('a', { href, target: '_blank' }));
+    bindUrlLinksIn(fakeRoot(links));
+    for (const a of links) {
+      expect(a.press().navigates).toBe(false);
+      expect(a.press('auxclick', 1).navigates).toBe(false); // 中クリックで新しいタブにも開かせない
+    }
+    expect(popups).toEqual([]); // 形の合わない行き先はポップアップの「開く」にも載せない
+  });
+
+  test('生の HTML のプロトコル相対・javascript: の <a> は、target が無くても Hub のタブを遷移させない', () => {
+    const { bindUrlLinksIn } = load();
+    const links = ['//evil.example/', 'javascript:alert(1)', '#top'].map((href) => new FakeEl('a', { href }));
+    bindUrlLinksIn(fakeRoot(links));
+    for (const a of links) expect(a.press().navigates).toBe(false);
+  });
+
+  test('<area href> と SVG の <a xlink:href> も受け持つ', () => {
+    const { bindUrlLinksIn, popups } = load();
+    const area = new FakeEl('area', { href: 'https://evil.example/', shape: 'default' });
+    const svgA = new FakeEl('a');
+    svgA.nsAttrs.set(`${XLINK_NS}|href`, 'https://%65vil.example/');
+    bindUrlLinksIn(fakeRoot([area, svgA]));
+    expect(area.press().navigates).toBe(false);
+    expect(popups).toEqual(['https://evil.example/']);
+    expect(svgA.press().navigates).toBe(false);
+  });
+
+  test('呼び出し側が自分で受けるリンク（data-files-*）と、行き先の無い <a> には付けない。2 回呼んでも 1 つだけ', () => {
+    const { bindUrlLinksIn } = load();
+    const rel = new FakeEl('a', { href: '#', 'data-files-rel-link': 'docs/a.md' });
+    const path = new FakeEl('a', { href: '#', 'data-files-path-link': 'C:/x/y.png' });
+    const plain = new FakeEl('a', { name: 'anchor' });
+    const web = new FakeEl('a', { href: 'https://example.com/' });
+    const root = fakeRoot([rel, path, plain, web]);
+    bindUrlLinksIn(root);
+    bindUrlLinksIn(root);
+    expect(rel.listeners.size).toBe(0);
+    expect(path.listeners.size).toBe(0);
+    expect(plain.listeners.size).toBe(0);
+    expect(web.listeners.get('click')).toHaveLength(1);
   });
 });

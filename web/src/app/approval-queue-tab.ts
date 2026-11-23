@@ -9,6 +9,7 @@ import { extractHubMarkerApproval, isBatchOptions } from './approval-parser.js';
 import { isAskUserQuestionPending, pendingApprovalOptions, sendChoice } from './approval.js';
 import { hubBlockLines, isApprovalPending } from './approval-store.js';
 import { apiFetch, showToast } from './util.js';
+import { safeClassToken } from './provider-icon.js';
 
 // 承認タブのバッジカウント更新
 function getApprovalTabBadgeEl() {
@@ -36,9 +37,10 @@ export function updateApprovalTabBadge() {
   if (tabBtn) tabBtn.classList.toggle('has-pending', n > 0);
 }
 
-// プロバイダ色ドット HTML
+// プロバイダ色ドット HTML。provider は wrapper の register がそのまま届く値なので、ほかの画面と同じ
+// safeClassToken（英小文字・数字・- ・_ だけ）を通してから class 属性へ入れる（innerHTML に入るため）。
 function providerDotHtml(provider) {
-  const p = String(provider || '').toLowerCase();
+  const p = safeClassToken(provider);
   return `<span class="aqt-provider-dot prov-shape ${p}" aria-hidden="true"></span>`;
 }
 

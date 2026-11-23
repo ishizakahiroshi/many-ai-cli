@@ -20,6 +20,7 @@ import { apiFetch, showToast } from './util.js';
 import { basenameForPath, closeFileModal, copyPathText, isImagePath, isTextPath, openFileModalShell } from './path-links.js';
 import { FilesPreview } from './files-view.js';
 import { bindUrlLinksIn, linkifyUrlsInElement } from './url-links.js';
+import { isHttpUrl } from './url-detect.js';
 import { openLightbox } from './lightbox.js';
 
 /** 文字のファイル・Markdown をそのまま描く上限。これを超えたら描かず「取ってくる」を案内する（PC のプレビューの切り詰めと同じ 1 MiB）。 */
@@ -85,7 +86,8 @@ export function isAllowedRemoteAttribute(tag: string, name: string, value: strin
   if (attrName.startsWith('on') || attrName.startsWith('data-files-')) return false;
   if (!URL_ATTRIBUTES.includes(attrName)) return true;
   const url = String(value).trim();
-  return (tagName === 'a' && attrName === 'href' && /^https?:\/\//i.test(url))
+  // http(s) の判定は url-links.ts の bindUrlLinksIn と同じ isHttpUrl の 1 本にする（`https://%65vil…` を残さない）
+  return (tagName === 'a' && attrName === 'href' && isHttpUrl(url))
     || (tagName === 'img' && attrName === 'src' && DATA_IMAGE_RE.test(url));
 }
 

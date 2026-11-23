@@ -4,7 +4,8 @@
 // 「ブラウザで開く」「URL をコピー」を出す。AI が出した URL を 1 クリックで開かせない
 // （prompt injection 経由のフィッシング対策・2026-07 監査の H5）ための決めで、
 // 端末・ファイルプレビュー・チャット履歴などどの画面でも同じ動きにする。
-// 画面上の <a> のリンクでは、中クリック・右クリックはブラウザ標準の動き（新しいタブ・リンクのコピー）のまま。
+// 画面上の <a> のリンクでは、中クリック・右クリックはブラウザ標準の動き（新しいタブ・リンクのコピー）のまま
+// （行き先が isHttpUrl に合わないリンクは別で、bindUrlLinksIn が中クリックも止める）。
 import {
   appendLinkedText,
   cancelPathPopupHideTimer,
@@ -31,11 +32,12 @@ export function showUrlPopup(url: string, clientX: number, clientY: number): voi
 }
 
 // <a> のクリックを showUrlPopup へ向ける。キーボード（Enter）で押されたときは座標が 0 なので、
-// リンク自身の位置にポップアップを出す。
-export function bindUrlLink(a: HTMLAnchorElement, url: string): void {
+// リンク自身の位置にポップアップを出す。<area> と SVG の <a> も受ける（bindUrlLinksIn）。
+export function bindUrlLink(a: HTMLElement | SVGElement, url: string): void {
   if (a.dataset.urlLinkBound) return;
   a.dataset.urlLinkBound = '1';
-  a.addEventListener('click', (e) => {
+  // HTMLElement | SVGElement の和では addEventListener の型が Event に落ちるので、HTMLElement として登録する
+  (a as HTMLElement).addEventListener('click', (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
@@ -129,14 +131,42 @@ export function linkifyUrlsInElement(root: Element, className = 'url-link'): voi
   }
 }
 
-// すでに <a href="https://…"> になっているリンク（Markdown の変換結果など）のクリックを
-// showUrlPopup へ向ける。http(s) 以外の href と、処理済みの <a> は触らない。
+// 押すと遷移しうる要素（<a>・<area>・SVG の <a>）。SVG の <a> は xlink:href でも行き先を持てる。
+const NAVIGABLE_SELECTOR = 'a, area';
+const XLINK_NS = 'http://www.w3.org/1999/xlink';
+// 呼び出し側（files-view.ts）が自分でクリックを受けて preventDefault するリンクの印。
+const SELF_HANDLED_ATTRS = ['data-files-rel-link', 'data-files-path-link'];
+
+function navigableHref(el: Element): string | null {
+  return el.getAttribute('href') ?? el.getAttributeNS(XLINK_NS, 'href') ?? el.getAttribute('xlink:href');
+}
+
+// isHttpUrl に合わない行き先のリンクは、押しても（中クリックでも）ブラウザに遷移させない。
+// 文字は残す（読めなくしない）。
+function bindInertLink(el: HTMLElement | SVGElement): void {
+  el.dataset.urlLinkBound = 'inert';
+  const block = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
+  el.addEventListener('click', block);
+  el.addEventListener('auxclick', block);
+}
+
+// 描画済みの要素（Markdown の変換結果など）の中の、押すと遷移しうる要素をすべて受け持つ。
+// 行き先が isHttpUrl に合うものは showUrlPopup へ向け、合わないもの（`https://%65vil…`・`https://@host`・
+// `//host`・`javascript:` など）は押せなくする。どちらにしても 1 クリックでは外へ飛ばさない（冒頭の H5）。
+// 判定は行き先の形だけを見る（表示する側の判定がどれだけ緩くても、ここで止まる）。
+// 処理済みの要素と、呼び出し側が自分で受けるリンク（data-files-*）は触らない。
 export function bindUrlLinksIn(root: Element): void {
-  root.querySelectorAll('a[href]').forEach((el) => {
-    const a = el as HTMLAnchorElement;
-    const href = a.getAttribute('href') || '';
-    if (!isHttpUrl(href) || a.dataset.urlLinkBound) return;
-    if (!a.title) a.title = href;
-    bindUrlLink(a, href);
+  root.querySelectorAll(NAVIGABLE_SELECTOR).forEach((node) => {
+    const el = node as HTMLElement | SVGElement;
+    if (el.dataset.urlLinkBound) return;
+    if (SELF_HANDLED_ATTRS.some((name) => el.hasAttribute(name))) return;
+    const href = navigableHref(el);
+    if (href === null) return; // 行き先の無い <a> は遷移しない
+    if (!isHttpUrl(href)) {
+      bindInertLink(el);
+      return;
+    }
+    if (!el.getAttribute('title')) el.setAttribute('title', href);
+    bindUrlLink(el, href);
   });
 }

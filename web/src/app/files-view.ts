@@ -4,7 +4,7 @@ import { apiFetch, escapeHtml, showToast, ti18n, COPY_ICON, COPIED_ICON } from '
 import { activeSessionId, sessions } from './state.js';
 import { callOpenApi, computeRelPath, copyPathText, getFilesAssetUrl, isAnyAiCliPreviewable, isImagePath, isMediaPath, isVideoPath, openFileModal, showPathPopup } from './path-links.js';
 import { FILES_PANE_CLASS } from './files-open-mode.js';
-import { findUrlCandidates } from './url-detect.js';
+import { findUrlCandidates, isHttpUrl } from './url-detect.js';
 import { bindUrlLinksIn, linkifyUrlsInElement } from './url-links.js';
 import { refitActiveTerminalAfterLayout } from './terminal.js';
 import { markTabLazyLoaded, refreshLazyTabClasses } from './settings.js';
@@ -2276,9 +2276,14 @@ export const FilesPreview = (function () {
       const safeText = escapeHtml(text);
       const safeTitle = title ? ` title="${escapeHtml(title)}"` : '';
 
-      if (/^https?:\/\//i.test(href)) {
-        // クリック時の動きは描画後の bindUrlLinksIn が付ける
+      if (isHttpUrl(href)) {
+        // クリック時の動きは描画後の bindUrlLinksIn が付ける（判定は bindUrlLinksIn と同じ isHttpUrl の 1 本）
         return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer"${safeTitle}>${safeText}</a>${escapeHtml(tail)}`;
+      }
+      if (/^https?:/i.test(href)) {
+        // http(s) に見えるが isHttpUrl に合わない行き先（`https://%65vil…`・`https://@host` など）は
+        // 押せるリンクにしない。文字だけ残す。
+        return `<span class="files-md-link files-md-link--inert"${safeTitle}>${safeText}</span>${escapeHtml(tail)}`;
       }
       if (remote) {
         // 押せるリンクにしない（data 属性にすると、押したとき PC のファイルとして開かれる）。文字だけ残す。
@@ -2356,8 +2361,9 @@ export const FilesPreview = (function () {
     }
     const sanitizeConfig: any = {
       ADD_ATTR: ['target', 'data-files-rel-link', 'data-files-path-link', 'data-files-skip-search'],
-      FORBID_TAGS: ['form', 'button', 'input', 'select', 'option', 'textarea', 'fieldset', 'style', 'link', 'base'],
-      FORBID_ATTR: ['action', 'method', 'form', 'formaction', 'formmethod', 'formenctype', 'formtarget', 'style'],
+      // map / area / usemap: 画像の上に、bindUrlLinksIn の外で押せる行き先を置けるので通さない。
+      FORBID_TAGS: ['form', 'button', 'input', 'select', 'option', 'textarea', 'fieldset', 'style', 'link', 'base', 'map', 'area'],
+      FORBID_ATTR: ['action', 'method', 'form', 'formaction', 'formmethod', 'formenctype', 'formtarget', 'style', 'usemap'],
     };
     if (remote) {
       // Markdown の中に直接書かれた HTML（<a href="/…"> <img src="/…"> <video src> など）も同じ扱いにする。

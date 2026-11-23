@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 import {
   applyProviderPresentation,
   ensureProviderIconSprite,
@@ -530,5 +532,40 @@ describe('icon image in the settings preview', () => {
       expect(html).not.toContain('<image');
       expect(html).toContain('>C</text>');
     }
+  });
+});
+
+// approval-queue-tab.ts の providerDotHtml（承認タブのカードの見出しに innerHTML で入る）の実コードを動かす。
+// provider は wrapper の register がそのまま届く値なので、ほかの画面と同じ safeClassToken を通すこと。
+// approval-queue-tab.ts は読み込むと画面のモジュールを多数引くので、関数だけを切り出して動かす。
+const readSource = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const transpile = (code: string) => new Bun.Transpiler({ loader: 'ts' }).transformSync(code);
+
+function providerDotHtml(): (provider: unknown) => string {
+  const source = readSource('../src/app/approval-queue-tab.ts');
+  const start = source.indexOf('function providerDotHtml');
+  const end = source.indexOf('// セッションのタイトル文字列', start);
+  if (start < 0 || end < 0) throw new Error('cannot slice providerDotHtml');
+  const ctx: any = { safeClassToken, String };
+  runInNewContext(`${transpile(source.slice(start, end))}\nglobalThis.fn = providerDotHtml;`, ctx);
+  return ctx.fn;
+}
+
+describe('承認タブのカードの provider の色ドット', () => {
+  test('組み込みの provider はクラスとしてそのまま入る', () => {
+    const dot = providerDotHtml();
+    expect(dot('claude')).toBe('<span class="aqt-provider-dot prov-shape claude" aria-hidden="true"></span>');
+    expect(dot('Cursor-Agent')).toBe('<span class="aqt-provider-dot prov-shape cursor-agent" aria-hidden="true"></span>');
+  });
+
+  test('引用符や < を含む provider でも、class 属性の外へ HTML を出さない', () => {
+    const dot = providerDotHtml();
+    const html = dot('x"><a href="https://evil.example" style="position:fixed;inset:0"></a><meta http-equiv="refresh" content="0">');
+    expect(html.startsWith('<span class="aqt-provider-dot prov-shape ')).toBe(true);
+    expect(html).not.toContain('<a');
+    expect(html).not.toContain('<meta');
+    expect(html.match(/"/g)).toHaveLength(4); // class と aria-hidden の 2 組だけ
+    const cls = /class="([^"]*)"/.exec(html)![1];
+    expect(cls.split(' ').pop()).toMatch(/^[a-z0-9_-]+$/);
   });
 });
