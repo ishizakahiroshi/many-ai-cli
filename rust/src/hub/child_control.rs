@@ -528,6 +528,22 @@ mod tests {
                 Ok(())
             })
         }
+        // Board notices to the conductor are written as `GuardedInternal`,
+        // which dispatches through this under the engine's lock (audit N03).
+        fn send_guarded<'a>(
+            &'a self,
+            _: SessionBinding,
+            message: crate::proto::Message,
+            guard: InputSendGuard<'a>,
+        ) -> CoreFuture<'a, Result<(), SessionError>> {
+            Box::pin(async move {
+                let mut dispatch = || {
+                    lock(&self.sent).push(message.data.clone());
+                    Ok(())
+                };
+                guard(&mut dispatch)
+            })
+        }
     }
     // Mirror the production observer's dismissal callback. Drop the weak-owner
     // mutex before awaiting: session_ended applies further effects through this sink.
