@@ -162,7 +162,12 @@ impl SessionEngine {
             let mut state = lock(&self.state);
             let s = state.session(binding)?;
             let frame = InputFrame { seq, bytes };
-            if !s.input.readmit(binding.wrapper, &frame) {
+            let admitted = if matches!(authority, InputAuthority::GuardedInternal) {
+                s.input.readmit_guarded(binding.wrapper, &frame)
+            } else {
+                s.input.readmit(binding.wrapper, &frame)
+            };
+            if !admitted {
                 return Err(SessionError::InvalidRequest(
                     "invalid replayed input sequence".into(),
                 ));
@@ -186,6 +191,22 @@ impl SessionEngine {
             // disconnect. Keep the sequence/ACK protocol, but do not retain a
             // raw-byte inflight entry that reattach could resend as Internal.
             s.input.release(binding.wrapper, frame.seq);
+            (
+                InputReservation {
+                    binding,
+                    sequence: frame.seq,
+                },
+                frame,
+            )
+        } else if matches!(authority, InputAuthority::GuardedInternal) {
+            // Kept for resend like any frame, but marked: a resend after a
+            // reconnect goes through the guarded check again (audit N03).
+            let mut state = lock(&self.state);
+            let s = state.session(binding)?;
+            if !s.connected {
+                return Err(SessionError::StaleBinding);
+            }
+            let frame = s.input.reserve_guarded(binding.wrapper, bytes);
             (
                 InputReservation {
                     binding,
@@ -897,30 +918,48 @@ impl InputQueue for SessionEngine {
                 if !s.connected || s.input.gated(Timestamp::now()) {
                     return CoreEffects::default();
                 }
-                (s.input.take_pending(), s.input.take_resend())
+                (s.input.take_pending(), s.input.take_resend_marked())
             };
-            for (i, frame) in resend.iter().enumerate() {
-                if cancel.token().is_cancelled()
-                    || self
-                        .write_frame(
-                            binding,
-                            frame.bytes.clone(),
-                            Some(frame.seq),
-                            &InputAuthority::Internal,
-                        )
+            for (i, (frame, guarded)) in resend.iter().enumerate() {
+                // Text the Hub typed on its own (`GuardedInternal`) is resent
+                // only through the same check: an approval that appeared while
+                // the wrapper was away must not take its Enter (audit N03).
+                let authority = if *guarded {
+                    InputAuthority::GuardedInternal
+                } else {
+                    InputAuthority::Internal
+                };
+                let written = if cancel.token().is_cancelled() {
+                    Err(SessionError::Cancelled)
+                } else {
+                    self.write_frame(binding, frame.bytes.clone(), Some(frame.seq), &authority)
                         .await
-                        .is_err()
-                {
-                    let mut state = lock(&self.state);
-                    if let Some(s) = state
-                        .sessions
-                        .get_mut(&binding.session)
-                        .filter(|s| s.binding.incarnation == binding.incarnation)
+                };
+                match written {
+                    Ok(_) => {}
+                    // Dropped, not held: holding it would keep every later
+                    // guarded input and this queue waiting for another
+                    // reconnect. Its sender already took it as written.
+                    Err(SessionError::InvalidRequest(detail))
+                        if *guarded && guarded_input_held(&detail) =>
                     {
-                        s.input.requeue_resend(resend[i..].iter().cloned());
-                        s.input.requeue_front(pending);
+                        self.warn(
+                            "guarded input resend",
+                            &SessionError::InvalidRequest(detail),
+                        );
                     }
-                    return CoreEffects::default();
+                    Err(_) => {
+                        let mut state = lock(&self.state);
+                        if let Some(s) = state
+                            .sessions
+                            .get_mut(&binding.session)
+                            .filter(|s| s.binding.incarnation == binding.incarnation)
+                        {
+                            s.input.requeue_resend_marked(resend[i..].iter().cloned());
+                            s.input.requeue_front(pending);
+                        }
+                        return CoreEffects::default();
+                    }
                 }
             }
             for (i, bytes) in pending.iter().enumerate() {

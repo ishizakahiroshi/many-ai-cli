@@ -7,7 +7,7 @@ use crate::proto::core::{
 };
 use crate::proto::time::Timestamp;
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Mutex,
 };
 
@@ -15,6 +15,9 @@ use std::{
 struct Inflight {
     connection: WrapperConnectionId,
     bytes: Vec<u8>,
+    /// Written as `GuardedInternal`: its resend after a reconnect has to pass
+    /// the same approval check again (audit N03), never go out as plain input.
+    guarded: bool,
 }
 #[derive(Default)]
 pub struct InputState {
@@ -22,6 +25,8 @@ pub struct InputState {
     pending: VecDeque<Vec<u8>>,
     inflight: BTreeMap<InputSeq, Inflight>,
     resend: Vec<InputFrame>,
+    /// The frames in `resend` that came from guarded inflight entries.
+    resend_guarded: BTreeSet<InputSeq>,
     ack_capable: bool,
     initial_gate: Option<Timestamp>,
 }
@@ -96,7 +101,32 @@ impl InputState {
         self.readmit(connection, &frame);
         frame
     }
+    /// `reserve` for a `GuardedInternal` frame. Should the wrapper drop before
+    /// it ACKs, the frame is resent only through the guarded check.
+    pub fn reserve_guarded(
+        &mut self,
+        connection: WrapperConnectionId,
+        bytes: Vec<u8>,
+    ) -> InputFrame {
+        let frame = self.reserve(connection, bytes);
+        if let Some(inflight) = self.inflight.get_mut(&frame.seq) {
+            inflight.guarded = true;
+        }
+        frame
+    }
     pub fn readmit(&mut self, connection: WrapperConnectionId, frame: &InputFrame) -> bool {
+        self.admit(connection, frame, false)
+    }
+    /// `readmit` for a guarded frame being resent.
+    pub fn readmit_guarded(&mut self, connection: WrapperConnectionId, frame: &InputFrame) -> bool {
+        self.admit(connection, frame, true)
+    }
+    fn admit(
+        &mut self,
+        connection: WrapperConnectionId,
+        frame: &InputFrame,
+        guarded: bool,
+    ) -> bool {
         if frame.seq.0 <= 0 {
             return false;
         }
@@ -105,6 +135,7 @@ impl InputState {
             Inflight {
                 connection,
                 bytes: frame.bytes.clone(),
+                guarded,
             },
         );
         while self.inflight.len() > INPUT_QUEUE_LIMIT {
@@ -158,30 +189,61 @@ impl InputState {
         for seq in ids {
             let data = self.inflight.remove(&seq).unwrap();
             if self.ack_capable || connection_ack_seen {
-                frames.push(InputFrame {
-                    seq,
-                    bytes: data.bytes,
-                });
+                frames.push((
+                    InputFrame {
+                        seq,
+                        bytes: data.bytes,
+                    },
+                    data.guarded,
+                ));
             }
         }
         let n = frames.len();
-        self.requeue_resend(frames);
+        self.requeue_resend_marked(frames);
         n
     }
     pub fn requeue_resend(&mut self, frames: impl IntoIterator<Item = InputFrame>) {
-        self.resend.extend(frames);
+        self.requeue_resend_marked(frames.into_iter().map(|frame| (frame, false)));
+    }
+    /// Requeues frames for resend with whether each was written guarded.
+    pub fn requeue_resend_marked(&mut self, frames: impl IntoIterator<Item = (InputFrame, bool)>) {
+        for (frame, guarded) in frames {
+            if guarded {
+                self.resend_guarded.insert(frame.seq);
+            } else {
+                self.resend_guarded.remove(&frame.seq);
+            }
+            self.resend.push(frame);
+        }
         self.resend.sort_by_key(|f| f.seq);
         if self.resend.len() > INPUT_QUEUE_LIMIT {
-            self.resend.drain(..self.resend.len() - INPUT_QUEUE_LIMIT);
+            for dropped in self.resend.drain(..self.resend.len() - INPUT_QUEUE_LIMIT) {
+                self.resend_guarded.remove(&dropped.seq);
+            }
         }
     }
     pub fn take_resend(&mut self) -> Vec<InputFrame> {
+        self.take_resend_marked()
+            .into_iter()
+            .map(|(frame, _)| frame)
+            .collect()
+    }
+    /// Takes the resend queue with whether each frame was written guarded.
+    pub fn take_resend_marked(&mut self) -> Vec<(InputFrame, bool)> {
+        let guarded = std::mem::take(&mut self.resend_guarded);
         std::mem::take(&mut self.resend)
+            .into_iter()
+            .map(|frame| {
+                let marked = guarded.contains(&frame.seq);
+                (frame, marked)
+            })
+            .collect()
     }
     pub fn clear(&mut self) {
         self.pending.clear();
         self.inflight.clear();
         self.resend.clear();
+        self.resend_guarded.clear();
         self.initial_gate = None;
     }
 }

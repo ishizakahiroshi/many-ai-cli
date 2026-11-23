@@ -1231,3 +1231,88 @@ async fn board_notice_is_not_written_when_a_prompt_appears_before_the_write() {
     assert!(matches!(task.await.unwrap(), BoardEventWrite::Blocked));
     assert!(sent(&f).is_empty(), "nothing may reach the prompt");
 }
+
+// Audit N03, resend path: a guarded frame the wrapper never ACKed is kept for
+// resend like any frame, but after a reconnect it goes out only through the
+// same check. Plain input in the same queue is resent as before.
+const PROMPT_SCREEN: &str =
+    "\x1b[2J\x1b[HRun: git push\r\nDo you want to proceed?\r\n❯ 1. Yes\r\n  2. No";
+async fn written_then_disconnected(f: &Fixture) -> (SessionBinding, Vec<proto::Message>) {
+    let session = register(f).await.binding;
+    let cancel = TaskCancellation::default();
+    f.engine.acknowledge(session, InputSeq(0));
+    let typed = f
+        .engine
+        .submit(
+            session,
+            InputRequest {
+                bytes: b"typed".to_vec(),
+                authority: InputAuthority::Internal,
+            },
+            now(),
+            &cancel,
+        )
+        .await;
+    assert!(matches!(
+        typed.disposition,
+        InputDisposition::TransportWritten { .. }
+    ));
+    assert!(matches!(
+        guarded(f, session).await.disposition,
+        InputDisposition::TransportWritten { .. }
+    ));
+    let written: Vec<_> = f
+        .transport
+        .frames
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(_, m)| m.clone())
+        .collect();
+    assert!(written.len() >= 3, "typed, the paste and its Enter");
+    let effects = f.engine.disconnected(session, now()).unwrap();
+    f.sink.apply(effects).await.unwrap();
+    let r = reattach(f, session, b"", 0, 2, 0).await;
+    (r.binding, written)
+}
+fn resent(f: &Fixture, after: usize) -> Vec<(i64, Vec<u8>)> {
+    f.transport.frames.lock().unwrap()[after..]
+        .iter()
+        .map(|(_, m)| (m.input_seq, m.data.clone()))
+        .collect()
+}
+
+#[tokio::test]
+async fn audit_n03_guarded_frame_is_not_resent_into_a_prompt_that_appeared_while_away() {
+    let f = fixture();
+    let (session, written) = written_then_disconnected(&f).await;
+    screen(&f, session, PROMPT_SCREEN).await;
+    assert!(f.engine.details(session.session).unwrap().prompt_visible);
+    f.sink
+        .apply(f.engine.flush(session, &TaskCancellation::default()).await)
+        .await
+        .unwrap();
+    assert_eq!(
+        resent(&f, written.len()),
+        vec![(written[0].input_seq, b"typed".to_vec())],
+        "only the plain input is resent; nothing guarded reaches the prompt"
+    );
+}
+
+#[tokio::test]
+async fn guarded_frame_is_resent_with_its_sequence_when_no_prompt_is_on_the_screen() {
+    let f = fixture();
+    let (session, written) = written_then_disconnected(&f).await;
+    f.sink
+        .apply(f.engine.flush(session, &TaskCancellation::default()).await)
+        .await
+        .unwrap();
+    assert_eq!(
+        resent(&f, written.len()),
+        written
+            .iter()
+            .map(|m| (m.input_seq, m.data.clone()))
+            .collect::<Vec<_>>(),
+        "every unacknowledged frame is resent in order"
+    );
+}

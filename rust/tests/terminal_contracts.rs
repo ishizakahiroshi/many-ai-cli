@@ -212,6 +212,36 @@ fn input_ack_tracks_connections_and_resends_original_sequence() {
         AckDisposition::CapabilityObserved
     );
 }
+/// Audit N03: a guarded frame stays marked through disconnect and requeue, so
+/// its resend goes through the guarded check; a plain readmit is unmarked.
+#[test]
+fn input_guarded_frames_stay_marked_for_resend() {
+    let mut input = InputState::default();
+    let old = WrapperConnectionId(1);
+    let new = WrapperConnectionId(2);
+    input.acknowledge(old, InputSeq(0));
+    let plain = input.reserve(old, b"plain".to_vec());
+    let guarded = input.reserve_guarded(old, b"guarded".to_vec());
+    assert_eq!(input.disconnected(old, false), 2);
+    let marked = input.take_resend_marked();
+    assert_eq!(
+        marked,
+        vec![(plain.clone(), false), (guarded.clone(), true)]
+    );
+    input.requeue_resend_marked(marked);
+    assert_eq!(
+        input.take_resend_marked(),
+        vec![(plain.clone(), false), (guarded.clone(), true)]
+    );
+    assert!(input.readmit_guarded(new, &guarded));
+    assert!(input.readmit(new, &plain));
+    assert_eq!(input.disconnected(new, false), 2);
+    assert_eq!(
+        input.take_resend_marked(),
+        vec![(plain, false), (guarded, true)]
+    );
+    assert!(input.take_resend_marked().is_empty());
+}
 #[test]
 fn input_old_wrappers_never_resend_and_queues_are_bounded() {
     let mut input = InputState::default();
