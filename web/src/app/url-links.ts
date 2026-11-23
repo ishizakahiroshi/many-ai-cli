@@ -31,11 +31,23 @@ export function showUrlPopup(url: string, clientX: number, clientY: number): voi
   ], clientX, clientY);
 }
 
+// 「処理済み」と「呼び出し側が自分で受ける」の印は、JS の中（WeakSet）だけに持つ。
+// DOM の属性（data-* など）を印にすると、Markdown の生の HTML のように文書の側が同じ属性を書けて、
+// 確認のポップアップを素通りできてしまう（2026-11 のセキュリティレビュー）。
+const boundLinks = new WeakSet<Element>();
+const selfHandledLinks = new WeakSet<Element>();
+
+// 呼び出し側（files-view.ts）が自分でクリックを受けて preventDefault するリンクを登録する。
+// 登録してよいのは、呼び出し側が自分で作ったと確かめた要素だけ（文書が書いた属性で選ばない）。
+export function markSelfHandledLink(el: Element): void {
+  selfHandledLinks.add(el);
+}
+
 // <a> のクリックを showUrlPopup へ向ける。キーボード（Enter）で押されたときは座標が 0 なので、
 // リンク自身の位置にポップアップを出す。<area> と SVG の <a> も受ける（bindUrlLinksIn）。
 export function bindUrlLink(a: HTMLElement | SVGElement, url: string): void {
-  if (a.dataset.urlLinkBound) return;
-  a.dataset.urlLinkBound = '1';
+  if (boundLinks.has(a)) return;
+  boundLinks.add(a);
   // HTMLElement | SVGElement の和では addEventListener の型が Event に落ちるので、HTMLElement として登録する
   (a as HTMLElement).addEventListener('click', (e) => {
     if (e.button !== 0) return;
@@ -134,8 +146,6 @@ export function linkifyUrlsInElement(root: Element, className = 'url-link'): voi
 // 押すと遷移しうる要素（<a>・<area>・SVG の <a>）。SVG の <a> は xlink:href でも行き先を持てる。
 const NAVIGABLE_SELECTOR = 'a, area';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
-// 呼び出し側（files-view.ts）が自分でクリックを受けて preventDefault するリンクの印。
-const SELF_HANDLED_ATTRS = ['data-files-rel-link', 'data-files-path-link'];
 
 function navigableHref(el: Element): string | null {
   return el.getAttribute('href') ?? el.getAttributeNS(XLINK_NS, 'href') ?? el.getAttribute('xlink:href');
@@ -144,7 +154,7 @@ function navigableHref(el: Element): string | null {
 // isHttpUrl に合わない行き先のリンクは、押しても（中クリックでも）ブラウザに遷移させない。
 // 文字は残す（読めなくしない）。
 function bindInertLink(el: HTMLElement | SVGElement): void {
-  el.dataset.urlLinkBound = 'inert';
+  boundLinks.add(el);
   const block = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
   el.addEventListener('click', block);
   el.addEventListener('auxclick', block);
@@ -154,12 +164,12 @@ function bindInertLink(el: HTMLElement | SVGElement): void {
 // 行き先が isHttpUrl に合うものは showUrlPopup へ向け、合わないもの（`https://%65vil…`・`https://@host`・
 // `//host`・`javascript:` など）は押せなくする。どちらにしても 1 クリックでは外へ飛ばさない（冒頭の H5）。
 // 判定は行き先の形だけを見る（表示する側の判定がどれだけ緩くても、ここで止まる）。
-// 処理済みの要素と、呼び出し側が自分で受けるリンク（data-files-*）は触らない。
+// 処理済みの要素と、呼び出し側が markSelfHandledLink で登録したリンクは触らない。
+// どちらも JS の中の印で見て、要素の属性は見ない（文書が属性を書いても素通りさせない）。
 export function bindUrlLinksIn(root: Element): void {
   root.querySelectorAll(NAVIGABLE_SELECTOR).forEach((node) => {
     const el = node as HTMLElement | SVGElement;
-    if (el.dataset.urlLinkBound) return;
-    if (SELF_HANDLED_ATTRS.some((name) => el.hasAttribute(name))) return;
+    if (boundLinks.has(el) || selfHandledLinks.has(el)) return;
     const href = navigableHref(el);
     if (href === null) return; // 行き先の無い <a> は遷移しない
     if (!isHttpUrl(href)) {

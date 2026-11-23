@@ -77,13 +77,14 @@ const URL_ATTRIBUTES = ['href', 'src', 'srcset', 'poster', 'action', 'formaction
 
 /**
  * ssh 先の Markdown を描いた DOM に残してよい属性か。URL を持つ属性で残してよいのは
- * <a href="http(s)://…"> と <img src="data:image/…"> だけ。on* 属性と、押したとき PC のパスを開く印（data-files-*）は
- * 残さない。それ以外の属性（class・title・alt など）は影響しないので残す。
+ * <a href="http(s)://…"> と <img src="data:image/…"> だけ。on* 属性と data-* 属性（押したとき PC のパスを開く印の
+ * data-files-*・処理済みに見せる data-url-link-bound など、画面の部品が読みうる印）は残さない。
+ * ssh 先の文書の描画に data-* は要らないので、名前で選ばず全部外す。それ以外の属性（class・title・alt など）は影響しないので残す。
  */
 export function isAllowedRemoteAttribute(tag: string, name: string, value: string): boolean {
   const tagName = tag.toLowerCase();
   const attrName = name.toLowerCase();
-  if (attrName.startsWith('on') || attrName.startsWith('data-files-')) return false;
+  if (attrName.startsWith('on') || attrName.startsWith('data-')) return false;
   if (!URL_ATTRIBUTES.includes(attrName)) return true;
   const url = String(value).trim();
   // http(s) の判定は url-links.ts の bindUrlLinksIn と同じ isHttpUrl の 1 本にする（`https://%65vil…` を残さない）
@@ -94,7 +95,7 @@ export function isAllowedRemoteAttribute(tag: string, name: string, value: strin
 /**
  * ssh 先の Markdown を描いた DOM から、PC のファイルとして開かれうるものを外す。FilesPreview.renderMarkdown の変換
  * （marked の renderer と DOMPurify の ALLOWED_URI_REGEXP）が先に同じ結果にしているので、ここは二重の安全策
- * （DOMPurify は data-* 属性を通すので、生の HTML に書かれた data-files-path-link はここで外れる）。
+ * （renderMarkdown は DOMPurify に ALLOW_DATA_ATTR: false を渡すが、生の HTML に書かれた data-* はここでも外す）。
  */
 export function scrubRemoteMarkdownDom(root: Element): void {
   for (const el of Array.from(root.querySelectorAll('*'))) {
@@ -241,10 +242,11 @@ export async function openRemoteFileView(
   bodyEl.appendChild(contentEl);
   body.replaceChildren(buildToolbar(host, path, options.onFetch), bodyEl);
   // 画面のどこを押しても、リンクの標準の動き（画面の移動）は起こさない。http(s) のリンクは url-links.ts が自分で止めて
-  // ポップアップを出すので、ここまで届くのは「押せないはずのリンク」だけ。
+  // ポップアップを出す（伝わりも止める）ので、ここまで届くのは「押せないはずのリンク」だけ。
+  // 要素の属性（data-url-link-bound など）で例外を作らない。文書が同じ属性を書けるため。
   contentEl.addEventListener('click', (event) => {
-    const anchor = (event.target as Element | null)?.closest?.('a') as HTMLAnchorElement | null;
-    if (anchor && !anchor.dataset.urlLinkBound) event.preventDefault();
+    const anchor = (event.target as Element | null)?.closest?.('a, area');
+    if (anchor) event.preventDefault();
   });
   showMessage(contentEl, t('remote_view_loading', { target: host }), 'files-preview-loading');
 

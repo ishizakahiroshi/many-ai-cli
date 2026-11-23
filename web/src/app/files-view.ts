@@ -5,7 +5,7 @@ import { activeSessionId, sessions } from './state.js';
 import { callOpenApi, computeRelPath, copyPathText, getFilesAssetUrl, isAnyAiCliPreviewable, isImagePath, isMediaPath, isVideoPath, openFileModal, showPathPopup } from './path-links.js';
 import { FILES_PANE_CLASS } from './files-open-mode.js';
 import { findUrlCandidates, isHttpUrl } from './url-detect.js';
-import { bindUrlLinksIn, linkifyUrlsInElement } from './url-links.js';
+import { bindUrlLinksIn, linkifyUrlsInElement, markSelfHandledLink } from './url-links.js';
 import { refitActiveTerminalAfterLayout } from './terminal.js';
 import { markTabLazyLoaded, refreshLazyTabClasses } from './settings.js';
 import { openLightbox, terminalWrapper } from './attachments.js';
@@ -2240,16 +2240,63 @@ export const FilesPreview = (function () {
     markedBaseConfigured = true;
   }
 
+  // renderMarkdown が自分で作るリンク（相対の .md・PC のパス）の行き先の表。
+  // 行き先は属性に書かず、この表に持つ。HTML には「描くたびに作る乱数の鍵 + 表の番号」だけを
+  // MD_SELF_LINK_ATTR に書き、描いたあと wireMarkdownSelfLinks が鍵の合うものだけを自前のリンクとして登録する。
+  // 文書の生の HTML は鍵を知らない（描く前に中身が決まっている）ので、同じ属性を書いても自前のリンクにならない
+  // （2026-11 のセキュリティレビュー: 属性を印にすると、文書が書いて確認のポップアップを素通りできた）。
+  const MD_SELF_LINK_ATTR = 'data-md-self-link';
+  type MarkdownSelfLink = { kind: 'rel' | 'path'; target: string };
+  type MarkdownSelfLinks = { key: string; links: MarkdownSelfLink[] };
+
+  function newMarkdownLinkKey(): string {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  // 描いた root の中で MD_SELF_LINK_ATTR を持つ要素を見て、鍵と番号が表に合う <a> だけを返す（属性はすべて外す）。
+  // 合わないもの（文書が書いた偽物）は自前のリンクとして扱わず、bindUrlLinksIn に任せる（href="#" なら押せない）。
+  function takeMarkdownSelfLinks(root: Element, selfLinks: MarkdownSelfLinks): Array<{ el: HTMLElement; link: MarkdownSelfLink }> {
+    const out: Array<{ el: HTMLElement; link: MarkdownSelfLink }> = [];
+    const used = new Set<number>();
+    root.querySelectorAll(`[${MD_SELF_LINK_ATTR}]`).forEach((node) => {
+      const el = node as HTMLElement;
+      const value = el.getAttribute(MD_SELF_LINK_ATTR) || '';
+      el.removeAttribute(MD_SELF_LINK_ATTR);
+      if (!selfLinks.key || el.tagName.toLowerCase() !== 'a') return;
+      const prefix = `${selfLinks.key}-`;
+      if (!value.startsWith(prefix)) return;
+      const rest = value.slice(prefix.length);
+      if (!/^\d+$/.test(rest)) return;
+      const index = Number(rest);
+      const link = selfLinks.links[index];
+      if (!link || used.has(index)) return;
+      used.add(index);
+      out.push({ el, link });
+    });
+    return out;
+  }
+
   /**
    * marked で Markdown → HTML 変換し、DOMPurify でサニタイズ。
    * options.remote: ssh 先のファイルの Markdown（remote-file-view.ts が FilesPreview.renderMarkdown 経由で使う）。
    * その文書の相対パス・/ で始まるパス・file: などのリンクと画像は、PC のファイルとして開かれてしまう
    * （別のマシンの話なのに PC の中身が出る）ので、押せない文字・代わりの文字にして出す。http(s) のリンクは通常と同じ。
+   * options.selfLinks: 自前のリンクの表を受け取る入れ物（MarkdownSelfLinks）。描いたあと takeMarkdownSelfLinks に渡す。
    */
   function renderMarkdown(content, baseDir, onLinkClick, options: any = {}) {
     const remote = !!(options && options.remote);
     if (typeof marked === 'undefined') return `<pre>${escapeHtml(content)}</pre>`;
     ensureMarkedBaseConfigured();
+    const selfLinks: MarkdownSelfLinks = (options && options.selfLinks) || { key: '', links: [] };
+    selfLinks.key = newMarkdownLinkKey();
+    selfLinks.links = [];
+    const selfLinkHtml = (kind: MarkdownSelfLink['kind'], target: string, safeTitle: string, safeText: string) => {
+      const id = `${selfLinks.key}-${selfLinks.links.length}`;
+      selfLinks.links.push({ kind, target });
+      return `<a href="#" ${MD_SELF_LINK_ATTR}="${id}" class="files-md-link"${safeTitle}>${safeText}</a>`;
+    };
 
     // marked の renderer をカスタマイズしてリンク処理を差し替え
     const renderer = new marked.Renderer();
@@ -2290,11 +2337,11 @@ export const FilesPreview = (function () {
         return `<span class="files-md-link files-md-link--inert"${safeTitle}>${safeText}</span>`;
       }
       if (/\.(md|txt)$/i.test(href) && !/^https?:\/\//i.test(href) && !href.startsWith('/')) {
-        // 相対 md リンク → data 属性で処理
-        return `<a href="#" data-files-rel-link="${safeHref}" class="files-md-link"${safeTitle}>${safeText}</a>`;
+        // 相対 md リンク → 押すとプレビューで開く（行き先は selfLinks の表に持つ）
+        return selfLinkHtml('rel', String(href), safeTitle, safeText);
       }
-      // その他（絶対OSパス等）→ data 属性
-      return `<a href="#" data-files-path-link="${safeHref}" class="files-md-link"${safeTitle}>${safeText}</a>`;
+      // その他（絶対OSパス等）→ 押すとパスのポップアップ（行き先は selfLinks の表に持つ）
+      return selfLinkHtml('path', String(href), safeTitle, safeText);
     };
 
     if (remote) {
@@ -2360,7 +2407,10 @@ export const FilesPreview = (function () {
       return `<pre class="files-preview-plain">${escapeHtml(content)}</pre>`;
     }
     const sanitizeConfig: any = {
-      ADD_ATTR: ['target', 'data-files-rel-link', 'data-files-path-link', 'data-files-skip-search'],
+      // data-* は既定で全部通るので止め、要るものだけ明示で通す。文書が data-files-* や
+      // 処理済みの印に見える属性を書いても、画面の部品の動きを変えられないようにする。
+      ALLOW_DATA_ATTR: false,
+      ADD_ATTR: ['target', MD_SELF_LINK_ATTR],
       // map / area / usemap: 画像の上に、bindUrlLinksIn の外で押せる行き先を置けるので通さない。
       FORBID_TAGS: ['form', 'button', 'input', 'select', 'option', 'textarea', 'fieldset', 'style', 'link', 'base', 'map', 'area'],
       FORBID_ATTR: ['action', 'method', 'form', 'formaction', 'formmethod', 'formenctype', 'formtarget', 'style', 'usemap'],
@@ -2369,7 +2419,7 @@ export const FilesPreview = (function () {
       // Markdown の中に直接書かれた HTML（<a href="/…"> <img src="/…"> <video src> など）も同じ扱いにする。
       // URL を持つ属性は http(s) だけ通し、相対・絶対パス・file: などは属性ごと外す（<img src="data:…"> は別枠で通る）。
       sanitizeConfig.ALLOWED_URI_REGEXP = /^(?:https?:)/i;
-      sanitizeConfig.ADD_ATTR = ['target', 'data-files-skip-search'];
+      sanitizeConfig.ADD_ATTR = ['target']; // 自前のリンクは作らない（MD_SELF_LINK_ATTR も通さない）
       sanitizeConfig.FORBID_TAGS = sanitizeConfig.FORBID_TAGS.concat(['video', 'audio', 'source', 'track', 'picture', 'iframe', 'frame', 'frameset', 'object', 'embed', 'svg', 'math']);
       sanitizeConfig.FORBID_ATTR = sanitizeConfig.FORBID_ATTR.concat(['srcset', 'poster', 'ping', 'background', 'xlink:href']);
     }
@@ -3068,31 +3118,35 @@ export const FilesPreview = (function () {
           contentEl.appendChild(renderSourceToPre(content, absPath));
           addCodeCopyButtons(contentEl);
         } else if (isMd) {
-          const html = renderMarkdown(content, absPath, null);
+          const selfLinks: MarkdownSelfLinks = { key: '', links: [] };
+          const html = renderMarkdown(content, absPath, null, { selfLinks });
           contentEl.innerHTML = `<div class="files-preview-md-body">${html}</div>`;
           addCodeCopyButtons(contentEl);
           addTableCopyButtons(contentEl);
 
-          // 相対リンク処理
-          contentEl.querySelectorAll('a[data-files-rel-link]').forEach(a => {
-            a.addEventListener('click', (e) => {
-              e.preventDefault();
-              const rel = a.dataset.filesRelLink;
-              if (!rel) return;
-              // 現在のファイルのディレクトリから絶対パスを計算
-              const dir = currentAbsPath ? currentAbsPath.replace(/[/\\][^/\\]*$/, '') : filesRoot;
-              const sep = dir.includes('\\') ? '\\' : '/';
-              const target = dir + sep + rel.replace(/\//g, sep);
-              containerEl._filesPreview && containerEl._filesPreview.loadFile(target, rel);
-            });
-          });
-          contentEl.querySelectorAll('a[data-files-path-link]').forEach(a => {
-            a.addEventListener('click', (e) => {
-              e.preventDefault();
-              const p = a.dataset.filesPathLink;
-              if (p) showPathPopup(p, e.clientX, e.clientY, sessionId || '');
-            });
-          });
+          // 自前のリンク（相対 md・PC のパス）。鍵の合うものだけを受け持ち、url-links.ts へ登録する
+          // （登録の印は JS の中にだけあり、文書の属性では選ばない）。
+          for (const { el: a, link } of takeMarkdownSelfLinks(contentEl, selfLinks)) {
+            markSelfHandledLink(a);
+            if (link.kind === 'rel') {
+              a.addEventListener('click', (e) => {
+                e.preventDefault();
+                const rel = link.target;
+                if (!rel) return;
+                // 現在のファイルのディレクトリから絶対パスを計算
+                const dir = currentAbsPath ? currentAbsPath.replace(/[/\\][^/\\]*$/, '') : filesRoot;
+                const sep = dir.includes('\\') ? '\\' : '/';
+                const target = dir + sep + rel.replace(/\//g, sep);
+                containerEl._filesPreview && containerEl._filesPreview.loadFile(target, rel);
+              });
+            } else {
+              a.addEventListener('click', (e) => {
+                e.preventDefault();
+                const p = link.target;
+                if (p) showPathPopup(p, e.clientX, e.clientY, sessionId || '');
+              });
+            }
+          }
           bindUrlLinksIn(contentEl);
           contentEl.querySelectorAll('pre code').forEach((code) => { linkifyUrlsInElement(code); });
         } else {

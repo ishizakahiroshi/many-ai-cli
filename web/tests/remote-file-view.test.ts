@@ -192,6 +192,11 @@ describe('ssh 先の Markdown に残してよい属性', () => {
     expect(ok('video', 'poster', 'https://example.com/a.png')).toBe(false);
     expect(ok('a', 'data-files-path-link', 'C:\\secret.txt')).toBe(false);
     expect(ok('a', 'data-files-rel-link', 'other.md')).toBe(false);
+    // 処理済みに見せる印・自前のリンクの印も、文書からは残さない（data-* は名前で選ばず全部外す）
+    expect(ok('a', 'data-url-link-bound', '1')).toBe(false);
+    expect(ok('a', 'DATA-URL-LINK-BOUND', 'inert')).toBe(false);
+    expect(ok('a', 'data-md-self-link', 'x-0')).toBe(false);
+    expect(ok('p', 'data-files-skip-search', '')).toBe(false);
     expect(ok('a', 'onclick', 'x()')).toBe(false);
     expect(ok('use', 'xlink:href', '/api/x#a')).toBe(false);
     expect(ok('A', 'HREF', '/etc/passwd')).toBe(false);
@@ -217,11 +222,16 @@ describe('FilesPreview.renderMarkdown の remote モード', () => {
       findUrlCandidates: () => [],
       isHttpUrl,
       DOMPurify: { isSupported: true, sanitize: (html: string, config: any) => { sanitizeConfigs.push(config); return html; } },
-      hljs: undefined, Array, Object, String, RegExp, JSON,
+      crypto: globalThis.crypto,
+      hljs: undefined, Array, Object, String, RegExp, JSON, Uint8Array, Set, Number,
     };
     runInNewContext(read('../src/vendor/marked.min.js'), ctx); // UMD: ctx.marked を定義する
-    runInNewContext(`${code}\nglobalThis.renderMarkdown = renderMarkdown;`, ctx);
-    return { render: ctx.renderMarkdown as (...args: unknown[]) => string, sanitizeConfigs };
+    runInNewContext(`${code}\nglobalThis.renderMarkdown = renderMarkdown; globalThis.takeMarkdownSelfLinks = typeof takeMarkdownSelfLinks === 'function' ? takeMarkdownSelfLinks : undefined;`, ctx);
+    return {
+      render: ctx.renderMarkdown as (...args: unknown[]) => string,
+      take: ctx.takeMarkdownSelfLinks as (root: unknown, selfLinks: { key: string; links: Array<{ kind: string; target: string }> }) => Array<{ el: FakeEl; link: { kind: string; target: string } }>,
+      sanitizeConfigs,
+    };
   }
   const markdown = [
     '[web](https://example.com/a)',
@@ -263,14 +273,61 @@ describe('FilesPreview.renderMarkdown の remote モード', () => {
     expect(config.ADD_ATTR).not.toContain('data-files-rel-link');
   });
 
-  test('通常のモード（PC のファイル）は今までと同じ: 相対リンクは data-files-rel-link、絶対パスは data-files-path-link', () => {
+  test('通常のモード（PC のファイル）: 相対リンクとパスのリンクの行き先は属性に書かず、描くたびの鍵 + 表の番号だけを書く', () => {
     const { render, sanitizeConfigs } = renderer();
-    const html = render('[rel](a.md) [abs](/x/y.png) [web](https://example.com/)\n\n![i](images/a.png)', '', null);
-    expect(html).toContain('<a href="#" data-files-rel-link="a.md" class="files-md-link">rel</a>');
-    expect(html).toContain('<a href="#" data-files-path-link="/x/y.png" class="files-md-link">abs</a>');
+    const selfLinks = { key: '', links: [] as Array<{ kind: string; target: string }> };
+    const html = render('[rel](a.md) [abs](/x/y.png) [win](C:\\work\\s.png) [web](https://example.com/)\n\n![i](images/a.png)', '', null, { selfLinks });
+    expect(selfLinks.key).toMatch(/^[0-9a-f]{32}$/);
+    expect(selfLinks.links).toEqual([
+      { kind: 'rel', target: 'a.md' },
+      { kind: 'path', target: '/x/y.png' },
+      { kind: 'path', target: 'C:\\work\\s.png' },
+    ]);
+    expect(html).toContain(`<a href="#" data-md-self-link="${selfLinks.key}-0" class="files-md-link">rel</a>`);
+    expect(html).toContain(`<a href="#" data-md-self-link="${selfLinks.key}-1" class="files-md-link">abs</a>`);
+    expect(html).not.toContain('data-files-');
+    expect(html).not.toContain('/x/y.png'); // 行き先は HTML に出ない
     expect(html).toContain('<img src="images/a.png" alt="i">');
     expect(sanitizeConfigs[0].ALLOWED_URI_REGEXP).toBeUndefined();
-    expect(sanitizeConfigs[0].ADD_ATTR).toContain('data-files-path-link');
+    // 鍵は描くたびに変わる（文書は描く前に決まっているので、鍵を書き込めない）
+    const again = { key: '', links: [] };
+    render('[rel](a.md)', '', null, { selfLinks: again });
+    expect(again.key).not.toBe(selfLinks.key);
+  });
+
+  test('DOMPurify は data-* を既定で通さず、明示した属性だけ通す（文書が data-files-* や処理済みの印を書けない）', () => {
+    const { render, sanitizeConfigs } = renderer();
+    render('x', '', null);
+    render('x', '', null, { remote: true });
+    for (const config of sanitizeConfigs) {
+      expect(config.ALLOW_DATA_ATTR).toBe(false);
+      for (const name of config.ADD_ATTR) expect(['target', 'data-md-self-link']).toContain(name);
+      for (const name of ['data-files-rel-link', 'data-files-path-link', 'data-files-skip-search', 'data-url-link-bound']) {
+        expect(config.ADD_ATTR).not.toContain(name);
+      }
+    }
+    expect(sanitizeConfigs[1].ADD_ATTR).not.toContain('data-md-self-link'); // ssh 先は自前のリンクを作らない
+  });
+
+  test('描いたあとに自前のリンクとして受け持つのは、鍵と番号が表に合う <a> だけ（文書が書いた印は外して受け持たない）', () => {
+    const { render, take } = renderer();
+    const selfLinks = { key: '', links: [] as Array<{ kind: string; target: string }> };
+    render('[rel](a.md) [abs](/x/y.png)', '', null, { selfLinks });
+    const genuine = new FakeEl('a', { href: '#', 'data-md-self-link': `${selfLinks.key}-1` });
+    const forgedKey = new FakeEl('a', { href: '//evil.example/', 'data-md-self-link': '00000000000000000000000000000000-0' });
+    const outOfRange = new FakeEl('a', { href: '#', 'data-md-self-link': `${selfLinks.key}-9` });
+    const notNumber = new FakeEl('a', { href: '#', 'data-md-self-link': `${selfLinks.key}-0x` });
+    const duplicate = new FakeEl('a', { href: 'https://evil.example/', 'data-md-self-link': `${selfLinks.key}-1` });
+    const notAnchor = new FakeEl('area', { href: 'https://evil.example/', 'data-md-self-link': `${selfLinks.key}-0` });
+    const all = [genuine, forgedKey, outOfRange, notNumber, duplicate, notAnchor];
+    const got = take(fakeRoot(all), selfLinks);
+    expect(got).toHaveLength(1);
+    expect(got[0].el).toBe(genuine);
+    expect(got[0].link).toEqual({ kind: 'path', target: '/x/y.png' });
+    for (const el of all) expect(el.hasAttribute('data-md-self-link')).toBe(false); // 印は全部外す
+    // 鍵の無い表（描いていない）では何も受け持たない
+    const stale = new FakeEl('a', { href: '#', 'data-md-self-link': '-0' });
+    expect(take(fakeRoot([stale]), { key: '', links: [{ kind: 'rel', target: 'a.md' }] })).toEqual([]);
   });
 
   test('http(s) に見えて isHttpUrl に合わない行き先は、どちらのモードでも押せるリンクにしない（文字は残す）', () => {
@@ -409,6 +466,7 @@ class FakeEl {
   getAttributeNS(ns: string, name: string) { return this.nsAttrs.has(`${ns}|${name}`) ? this.nsAttrs.get(`${ns}|${name}`)! : null; }
   hasAttribute(name: string) { return this.attrs.has(name); }
   setAttribute(name: string, value: string) { this.attrs.set(name, value); }
+  removeAttribute(name: string) { this.attrs.delete(name); }
   addEventListener(name: string, fn: Function) { this.listeners.set(name, [...(this.listeners.get(name) || []), fn]); }
   getBoundingClientRect() { return { left: 10, bottom: 20 }; }
   // 押したときにブラウザが遷移するか（どのリスナーも preventDefault しなければ遷移する）
@@ -425,9 +483,9 @@ function fakeRoot(children: FakeEl[]) {
     querySelectorAll(selector: string) {
       const parts = selector.split(',').map((s) => s.trim());
       return children.filter((el) => parts.some((part) => {
-        const m = /^([a-z]+)(?:\[([a-z:-]+)\])?$/.exec(part);
-        if (!m) throw new Error(`unsupported selector in fake: ${part}`);
-        return el.tagName === m[1] && (!m[2] || el.attrs.has(m[2]));
+        const m = /^([a-z]*)(?:\[([a-z:-]+)\])?$/.exec(part);
+        if (!m || (!m[1] && !m[2])) throw new Error(`unsupported selector in fake: ${part}`);
+        return (!m[1] || el.tagName === m[1]) && (!m[2] || el.attrs.has(m[2]));
       }));
     },
   };
@@ -448,8 +506,12 @@ function load() {
     Array, String, Object,
   };
   const source = read('../src/app/url-links.ts').replace(/^import [\s\S]*?;\n/gm, '').replace(/^export /gm, '');
-  runInNewContext(`${transpile(source)}\nglobalThis.api = { bindUrlLinksIn };`, ctx);
-  return { bindUrlLinksIn: ctx.api.bindUrlLinksIn as (root: unknown) => void, popups };
+  runInNewContext(`${transpile(source)}\nglobalThis.api = { bindUrlLinksIn, markSelfHandledLink: typeof markSelfHandledLink === 'function' ? markSelfHandledLink : () => {} };`, ctx);
+  return {
+    bindUrlLinksIn: ctx.api.bindUrlLinksIn as (root: unknown) => void,
+    markSelfHandledLink: ctx.api.markSelfHandledLink as (el: unknown) => void,
+    popups,
+  };
 }
 
 describe('bindUrlLinksIn: 1 クリックで外へ飛ばさない', () => {
@@ -491,12 +553,14 @@ describe('bindUrlLinksIn: 1 クリックで外へ飛ばさない', () => {
     expect(svgA.press().navigates).toBe(false);
   });
 
-  test('呼び出し側が自分で受けるリンク（data-files-*）と、行き先の無い <a> には付けない。2 回呼んでも 1 つだけ', () => {
-    const { bindUrlLinksIn } = load();
-    const rel = new FakeEl('a', { href: '#', 'data-files-rel-link': 'docs/a.md' });
-    const path = new FakeEl('a', { href: '#', 'data-files-path-link': 'C:/x/y.png' });
+  test('呼び出し側が markSelfHandledLink で登録したリンクと、行き先の無い <a> には付けない。2 回呼んでも 1 つだけ', () => {
+    const { bindUrlLinksIn, markSelfHandledLink } = load();
+    const rel = new FakeEl('a', { href: '#' });
+    const path = new FakeEl('a', { href: '#' });
     const plain = new FakeEl('a', { name: 'anchor' });
     const web = new FakeEl('a', { href: 'https://example.com/' });
+    markSelfHandledLink(rel);
+    markSelfHandledLink(path);
     const root = fakeRoot([rel, path, plain, web]);
     bindUrlLinksIn(root);
     bindUrlLinksIn(root);
@@ -504,5 +568,45 @@ describe('bindUrlLinksIn: 1 クリックで外へ飛ばさない', () => {
     expect(path.listeners.size).toBe(0);
     expect(plain.listeners.size).toBe(0);
     expect(web.listeners.get('click')).toHaveLength(1);
+  });
+
+  test('文書が書いた印の属性（data-url-link-bound・data-files-*）では素通りしない', () => {
+    const { bindUrlLinksIn, popups } = load();
+    // 処理済みに見せかけた外向きのリンク
+    const boundWeb = new FakeEl('a', { href: 'https://evil.example/login', 'data-url-link-bound': '1' });
+    boundWeb.dataset.urlLinkBound = '1';
+    const boundInert = new FakeEl('a', { href: '//evil.example/', 'data-url-link-bound': 'inert' });
+    boundInert.dataset.urlLinkBound = 'inert';
+    // 呼び出し側が自分で受けるリンクに見せかけたもの
+    const fakeRel = new FakeEl('a', { href: '//evil.example/', 'data-files-rel-link': 'docs/a.md' });
+    const fakePath = new FakeEl('a', { href: 'https://%65vil.example/', 'data-files-path-link': 'C:/x/y.png' });
+    const fakeSelf = new FakeEl('a', { href: 'javascript:alert(1)', 'data-md-self-link': 'guess-0' });
+    bindUrlLinksIn(fakeRoot([boundWeb, boundInert, fakeRel, fakePath, fakeSelf]));
+    expect(boundWeb.press().navigates).toBe(false);
+    expect(popups).toEqual(['https://evil.example/login']); // URL の全文を見せる確認を通る
+    for (const a of [boundInert, fakeRel, fakePath, fakeSelf]) {
+      expect(a.press().navigates).toBe(false);
+      expect(a.press('auxclick', 1).navigates).toBe(false);
+    }
+    expect(popups).toHaveLength(1);
+  });
+});
+
+describe('ssh 先の文書の画面: 押したリンクの標準の動きを止める', () => {
+  test('文書が data-url-link-bound を書いた <a> も、画面の移動を止める', async () => {
+    const f = fixture();
+    f.setResponse(async () => f.response({ body: encode('[x](https://example.com/)') }));
+    expect(await f.api.openRemoteFileView(7, 'dev@host', '/srv/a.md')).toBe(true);
+    const content = f.find((node) => node.className === 'files-preview-markdown');
+    const onClick = content?.listeners.get('click')?.[0];
+    expect(onClick).toBeDefined();
+    const press = (anchor: unknown) => {
+      const ev = { target: { closest: () => anchor }, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+      onClick!(ev);
+      return ev.defaultPrevented;
+    };
+    expect(press({ dataset: { urlLinkBound: '1' }, getAttribute: () => '1' })).toBe(true);
+    expect(press({ dataset: {} })).toBe(true);
+    expect(press(null)).toBe(false); // リンクでない所を押したときは何もしない
   });
 });
