@@ -10,8 +10,45 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Added
+
+- **`many-ai-cli orchestrate close --role <role> [--id <child session id>]`**
+  lets a conductor close its own child, even while it is working (the newest
+  child of that role when `--id` is omitted). It uses the same path as the
+  dashboard ✕ and records the close and the child's previous state on the
+  board (#24).
+- **Headless runs show live progress** (turns, current tool, elapsed time,
+  cost, last reply) on the session card, in a one-line band in the terminal
+  tab and in panes. Finished headless runs stay listed with their final values
+  without using a child slot or blocking CLI updates, and a stream-json run
+  whose result reports an error is shown as failed even on exit 0. Cost is an
+  estimate while running and the CLI's own result at the end (#14).
+- **Sidebar display density** can be switched between Standard and Compact in
+  Settings. Compact uses one-line cards, thinner project headings and a
+  details popover after a short hover. The selected-session header also shows
+  an abbreviated branch that opens the same Git view as the sidebar badge
+  (#27).
+- **Session cards show a status frame.** A card awaiting approval gets a
+  glowing orange frame, and a session that finished but has not been opened
+  yet gets a quiet yellow frame (#29).
+- A registered AI CLI definition can declare a `screen` section
+  (`ready_markers`, `startup_blockers`, `composer_prefix`,
+  `composer_end_markers`), so the conductor is told when a child sits on a
+  startup screen, and a first instruction left unsent in its input box is
+  retried and reported.
+
 ### Changed
 
+- **The handoff, its preview and the handoff list show only the latest launch
+  when a session number was reused** after a Hub restart. Older lines stay on
+  disk (#46).
+- winget manifests again include PublisherUrl, PublisherSupportUrl,
+  LicenseUrl, ReleaseNotesUrl, Moniker, InstallerLocale, ReleaseDate (from the
+  release's CHANGELOG date) and UpgradeBehavior.
+- README: the PWA install note is for phones and tablets. On the PC that runs
+  the Hub, open the dashboard from many-ai-cli each time.
+- The UI components check lists each stale exception by file, rule, selector
+  and declaration instead of only a count.
 - **Exit from the small Windows window.** Its **Exit** button and title-bar
   **×** now end all connected AI sessions, stop the Hub and close the app.
   When sessions are still running, a confirmation shows their count; with no
@@ -21,6 +58,39 @@ Release artifacts are published at
   browser dashboard; closing a browser tab keeps the sessions running, subject
   to the configured idle timeout. The `stop` command remains available for Hub
   maintenance.
+
+### Fixed
+
+- At window widths around 1275px the top tab row is no longer cut off on the
+  right, and the approval-mode menu of the new-session form no longer
+  overflows its box.
+- A shell launched with a multi-shell detached-window preset now applies the
+  chosen attachment destination to every shell it opens, not just the first.
+- A failed child launch of a registered AI CLI now says which step failed
+  instead of a bare "wrapper process launch failed", and an approval mode a
+  person confirmed reaches the CLI as its own flag.
+- Board notices and relay nudges wait for an approval prompt on the screen,
+  including one that appeared while the wrapper was disconnected; input held
+  only because the session is not ready yet is sent later instead of dropped.
+
+### Security
+
+- Orchestration and relay children launch with Claude Code's
+  `crossSessionInbound: "refuse"`, so another of your Claude sessions cannot
+  hand work to a child that bypasses permission prompts. The conductor keeps
+  instructing children through `orchestrate send`.
+- A registered AI CLI child receives its definition's approval-mode flags only
+  when a person confirmed the launch, and a conductor's spawn request can no
+  longer claim a risk confirmation by itself. With
+  `orchestration.child_full_bypass: false`, such a child starts with no
+  approval mode, matching built-in children.
+- A project `AGENTS.md` that is itself a symlink no longer gets the
+  approval-rules block written through it. On macOS and Linux, rewriting an
+  instruction file keeps its permission bits.
+- The Markdown preview no longer trusts link marker attributes written by the
+  document, and links whose target is not a well-formed http(s) URL no longer
+  open in one click. The approval tab sanitizes the provider name before using
+  it as a CSS class.
 
 ## [0.11.1] - 2026-11-21
 
