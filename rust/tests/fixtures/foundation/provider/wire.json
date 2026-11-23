@@ -1498,9 +1498,10 @@
       "usage": false,
       "subscription": false,
       "permissions": false,
-      "subagents": false
+      "subagents": false,
+      "slash_suggestion_popup": false
     },
-    "expected_json": "{\"launch\":false,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false}"
+    "expected_json": "{\"launch\":false,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false,\"slash_suggestion_popup\":false}"
   },
   {
     "name": "CapabilitySummary/filled",
@@ -1515,7 +1516,8 @@
       "usage": true,
       "subscription": true,
       "permissions": true,
-      "subagents": true
+      "subagents": true,
+      "slash_suggestion_popup": true
     },
     "expected": {
       "launch": true,
@@ -1527,9 +1529,10 @@
       "usage": true,
       "subscription": true,
       "permissions": true,
-      "subagents": true
+      "subagents": true,
+      "slash_suggestion_popup": true
     },
-    "expected_json": "{\"launch\":true,\"models\":true,\"effort\":true,\"headless\":true,\"approval\":true,\"transcript\":true,\"usage\":true,\"subscription\":true,\"permissions\":true,\"subagents\":true}"
+    "expected_json": "{\"launch\":true,\"models\":true,\"effort\":true,\"headless\":true,\"approval\":true,\"transcript\":true,\"usage\":true,\"subscription\":true,\"permissions\":true,\"subagents\":true,\"slash_suggestion_popup\":true}"
   },
   {
     "name": "EffectiveDefinition/zero",
@@ -1567,10 +1570,11 @@
         "usage": false,
         "subscription": false,
         "permissions": false,
-        "subagents": false
+        "subagents": false,
+        "slash_suggestion_popup": false
       }
     },
-    "expected_json": "{\"adapters\":{},\"source\":{},\"effective_source\":{},\"revision\":\"\",\"capabilities_summary\":{\"launch\":false,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false}}"
+    "expected_json": "{\"adapters\":{},\"source\":{},\"effective_source\":{},\"revision\":\"\",\"capabilities_summary\":{\"launch\":false,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false,\"slash_suggestion_popup\":false}}"
   },
   {
     "name": "EffectiveDefinition/filled",
@@ -1786,10 +1790,11 @@
         "usage": true,
         "subscription": true,
         "permissions": true,
-        "subagents": true
+        "subagents": true,
+        "slash_suggestion_popup": false
       }
     },
-    "expected_json": "{\"schema_version\":17,\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"description\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"launch\":{\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"executable_candidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"model_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_levels\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"allowed_env\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"headless\":{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"models\":{\"allow_custom\":true,\"items\":[{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}],\"source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"capabilities\":{\"synthetic\":true},\"adapters\":{\"launch\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"approval\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"transcript\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"usage\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subscription\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"permissions\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subagents\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"approval_pattern_source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"update\":{\"version_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"login_may_be_required\":true,\"timeout_seconds\":17},\"effective_source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"field_origins\":{\"synthetic\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"capabilities_summary\":{\"launch\":true,\"models\":true,\"effort\":true,\"headless\":true,\"approval\":true,\"transcript\":true,\"usage\":true,\"subscription\":true,\"permissions\":true,\"subagents\":true}}"
+    "expected_json": "{\"schema_version\":17,\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"description\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"launch\":{\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"executable_candidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"model_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_levels\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"allowed_env\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"headless\":{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"models\":{\"allow_custom\":true,\"items\":[{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}],\"source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"capabilities\":{\"synthetic\":true},\"adapters\":{\"launch\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"approval\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"transcript\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"usage\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subscription\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"permissions\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subagents\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"approval_pattern_source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"update\":{\"version_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"login_may_be_required\":true,\"timeout_seconds\":17},\"effective_source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"field_origins\":{\"synthetic\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"capabilities_summary\":{\"launch\":true,\"models\":true,\"effort\":true,\"headless\":true,\"approval\":true,\"transcript\":true,\"usage\":true,\"subscription\":true,\"permissions\":true,\"subagents\":true,\"slash_suggestion_popup\":false}}"
   },
   {
     "name": "Summary/zero",
@@ -1829,10 +1834,11 @@
         "usage": false,
         "subscription": false,
         "permissions": false,
-        "subagents": false
+        "subagents": false,
+        "slash_suggestion_popup": false
       }
     },
-    "expected_json": "{\"id\":\"\",\"display_name\":\"\",\"enabled\":false,\"origin\":\"\",\"revision\":\"\",\"capabilities\":{\"launch\":false,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false}}"
+    "expected_json": "{\"id\":\"\",\"display_name\":\"\",\"enabled\":false,\"origin\":\"\",\"revision\":\"\",\"capabilities\":{\"launch\":false,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false,\"slash_suggestion_popup\":false}}"
   },
   {
     "name": "Summary/filled",
@@ -1877,7 +1883,8 @@
         "usage": true,
         "subscription": true,
         "permissions": true,
-        "subagents": true
+        "subagents": true,
+        "slash_suggestion_popup": false
       },
       "presentation": {
         "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
@@ -1885,7 +1892,7 @@
       },
       "icon_image_version": "synthetic-日本語-\u003c\u0026\u003e\u2028"
     },
-    "expected_json": "{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"capabilities\":{\"launch\":true,\"models\":true,\"effort\":true,\"headless\":true,\"approval\":true,\"transcript\":true,\"usage\":true,\"subscription\":true,\"permissions\":true,\"subagents\":true},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"icon_image_version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
+    "expected_json": "{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"capabilities\":{\"launch\":true,\"models\":true,\"effort\":true,\"headless\":true,\"approval\":true,\"transcript\":true,\"usage\":true,\"subscription\":true,\"permissions\":true,\"subagents\":true,\"slash_suggestion_popup\":false},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"icon_image_version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
   },
   {
     "name": "Diagnostic/zero",
@@ -3141,10 +3148,11 @@
         "usage": false,
         "subscription": false,
         "permissions": false,
-        "subagents": false
+        "subagents": false,
+        "slash_suggestion_popup": false
       }
     },
-    "expected_json": "{\"id\":\"fixture\",\"enabled\":false,\"capabilities\":{\"future\":false,\"headless\":true},\"adapters\":{},\"source\":{},\"effective_source\":{\"origin\":\"legacy\"},\"field_origins\":{\"launch.executable\":{\"origin\":\"override\"},\"old\":{}},\"revision\":\"synthetic-r1\",\"capabilities_summary\":{\"launch\":true,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false}}"
+    "expected_json": "{\"id\":\"fixture\",\"enabled\":false,\"capabilities\":{\"future\":false,\"headless\":true},\"adapters\":{},\"source\":{},\"effective_source\":{\"origin\":\"legacy\"},\"field_origins\":{\"launch.executable\":{\"origin\":\"override\"},\"old\":{}},\"revision\":\"synthetic-r1\",\"capabilities_summary\":{\"launch\":true,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false,\"slash_suggestion_popup\":false}}"
   },
   {
     "name": "summary/unknown-origin",
@@ -3173,12 +3181,13 @@
         "usage": false,
         "subscription": false,
         "permissions": false,
-        "subagents": false
+        "subagents": false,
+        "slash_suggestion_popup": false
       },
       "presentation": {},
       "icon_image_version": "1700000000"
     },
-    "expected_json": "{\"id\":\"fixture\",\"display_name\":\"\",\"enabled\":false,\"origin\":\"future-origin\",\"revision\":\"\",\"capabilities\":{\"launch\":false,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false},\"presentation\":{},\"icon_image_version\":\"1700000000\"}"
+    "expected_json": "{\"id\":\"fixture\",\"display_name\":\"\",\"enabled\":false,\"origin\":\"future-origin\",\"revision\":\"\",\"capabilities\":{\"launch\":false,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false,\"slash_suggestion_popup\":false},\"presentation\":{},\"icon_image_version\":\"1700000000\"}"
   },
   {
     "name": "diagnostic/unknown-severity",

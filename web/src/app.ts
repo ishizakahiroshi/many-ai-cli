@@ -31,6 +31,7 @@ import { chatHistoryCommitOutput, isTranscriptBackedSession, mountChatPaneForSes
 import { askRemoteAttachChoice, attachThumbnails, flushPendingAttach, isRemoteAttachChoicePending, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
 import { fetchExposeStatus, disableExpose } from './app/host-expose.js';
+import { hasProviderCapability } from './app/provider-capabilities.js';
 import './app/detached-grid-launcher.js';
 import './app/mobile-home.js';
 import { mobileApprovalActiveBadgeCount } from './app/mobile-approval-sheet.js';
@@ -558,8 +559,10 @@ function buildBodySubmitPart(sessionId, rawText) {
   // Devin TUI は "/" 入力直後に候補ポップアップを開き、最初の Enter をコマンド送信ではなく
   // 候補確定に使う。本文+\r 同梱だと Enter が飲まれてコマンドが入力欄に残り、次の送信と
   // 連結される実害（"/model" の後の文が連結・"/help" が "/help/help" 化）があるため、
-  // devin-cli の "/" 始まりだけはペースト包み＋遅延 Enter に変える。
-  if (provider === 'devin-cli' && rawText.startsWith('/')) {
+  // 候補ポップアップ型の CLI の "/" 始まりだけはペースト包み＋遅延 Enter に変える。
+  // 登録定義の capabilities.slash_suggestion_popup で判別する（devin-cli の id 直書きは
+  // 既存の登録が直るよう後方互換として残す）。
+  if ((provider === 'devin-cli' || hasProviderCapability(provider, 'slash_suggestion_popup')) && rawText.startsWith('/')) {
     return { textPart: '\x1b[200~' + rawText + '\x1b[201~', deferEnter: true };
   }
   const keyLike = rawText === '' || rawText.length === 1 || /^[0-9]+$/.test(rawText) || rawText.startsWith('/');

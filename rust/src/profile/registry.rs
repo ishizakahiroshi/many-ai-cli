@@ -277,6 +277,11 @@ fn derive_capabilities(d: &Definition) -> CapabilitySummary {
                 .as_ref()
                 .is_some_and(|l| !l.permission_args.is_empty()),
         subagents: available(&d.adapters.subagents),
+        slash_suggestion_popup: d
+            .capabilities
+            .get("slash_suggestion_popup")
+            .copied()
+            .unwrap_or(false),
     }
 }
 

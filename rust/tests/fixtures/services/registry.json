@@ -356,7 +356,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -375,7 +376,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -394,7 +396,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -413,7 +416,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -432,7 +436,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -451,7 +456,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -470,7 +476,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         }
       ],
@@ -572,7 +579,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -663,7 +671,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -751,7 +760,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -837,7 +847,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -933,7 +944,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -1020,7 +1032,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -1106,7 +1119,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         }
       ],
@@ -1156,7 +1170,8 @@
             "usage": false,
             "subscription": false,
             "permissions": false,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         }
       ],
@@ -1210,7 +1225,8 @@
             "usage": false,
             "subscription": false,
             "permissions": false,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         }
       ],
@@ -1564,7 +1580,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -1583,7 +1600,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -1602,7 +1620,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -1621,7 +1640,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -1640,7 +1660,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -1659,7 +1680,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -1678,7 +1700,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         }
       ],
@@ -1780,7 +1803,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -1871,7 +1895,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -1959,7 +1984,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -2045,7 +2071,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -2141,7 +2168,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -2228,7 +2256,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -2314,7 +2343,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         }
       ],
@@ -2680,7 +2710,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -2699,7 +2730,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -2718,7 +2750,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -2737,7 +2770,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -2756,7 +2790,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -2775,7 +2810,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -2794,7 +2830,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         }
       ],
@@ -2896,7 +2933,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -2991,7 +3029,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -3079,7 +3118,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -3165,7 +3205,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -3261,7 +3302,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -3348,7 +3390,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -3434,7 +3477,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         }
       ],
@@ -3491,7 +3535,8 @@
             "usage": false,
             "subscription": false,
             "permissions": false,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         }
       ],
@@ -3545,7 +3590,8 @@
             "usage": false,
             "subscription": false,
             "permissions": false,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         }
       ],
@@ -3622,7 +3668,8 @@
             "usage": false,
             "subscription": false,
             "permissions": false,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         }
       ],
@@ -3676,7 +3723,8 @@
             "usage": false,
             "subscription": false,
             "permissions": false,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         }
       ],
@@ -4050,7 +4098,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -4069,7 +4118,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -4088,7 +4138,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -4107,7 +4158,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -4126,7 +4178,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -4145,7 +4198,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -4164,7 +4218,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         }
       ],
@@ -4266,7 +4321,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -4355,7 +4411,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -4443,7 +4500,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -4529,7 +4587,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -4625,7 +4684,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -4712,7 +4772,8 @@
             "usage": true,
             "subscription": true,
             "permissions": true,
-            "subagents": true
+            "subagents": true,
+            "slash_suggestion_popup": false
           }
         },
         {
@@ -4798,7 +4859,8 @@
             "usage": false,
             "subscription": false,
             "permissions": true,
-            "subagents": false
+            "subagents": false,
+            "slash_suggestion_popup": false
           }
         }
       ],

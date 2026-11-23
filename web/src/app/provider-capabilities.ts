@@ -8,6 +8,11 @@ export type ProviderCapabilities = {
   usage: boolean;
   subscription: boolean;
   permissions: boolean;
+  // 定義の capabilities.slash_suggestion_popup: "/" 入力で候補ポップアップを
+  // 開き最初の Enter を候補確定に使う CLI（例: Devin TUI）。true なら
+  // "/" 始まりの送信をペースト包み＋遅延 Enter に変える（app.ts）。
+  // アダプタ由来でない登録型だけが持つ任意キーなので optional。
+  slash_suggestion_popup?: boolean;
 };
 
 export const BUILTIN_PROVIDER_CAPABILITIES: Readonly<Record<string, ProviderCapabilities>> = Object.freeze({

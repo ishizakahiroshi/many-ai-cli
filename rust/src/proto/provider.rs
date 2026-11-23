@@ -486,6 +486,12 @@ pub struct CapabilitySummary {
     pub permissions: bool,
     #[serde(rename = "subagents", deserialize_with = "null_default")]
     pub subagents: bool,
+    /// The CLI opens a suggestion popup for "/" input and consumes the first
+    /// Enter to pick it: the Hub wraps "/" text in bracketed paste and defers
+    /// the Enter. Set with `capabilities.slash_suggestion_popup` in the
+    /// definition; no adapter provides it.
+    #[serde(rename = "slash_suggestion_popup", deserialize_with = "null_default")]
+    pub slash_suggestion_popup: bool,
 }
 
 /// Source: `internal/provider/schema.go`, `EffectiveDefinition`.

@@ -193,8 +193,12 @@ fn effective_definition_keeps_both_capability_fields_and_flattened_base() {
     assert_eq!(encoded["capabilities_summary"]["launch"], true);
     assert_eq!(encoded["capabilities_summary"]["headless"], false);
     assert_eq!(
+        encoded["capabilities_summary"]["slash_suggestion_popup"],
+        false
+    );
+    assert_eq!(
         encoded["capabilities_summary"].as_object().unwrap().len(),
-        10
+        11
     );
 }
 

@@ -438,6 +438,8 @@ pub fn validate_definition(
             "subscription",
             "permissions",
             "subagents",
+            "agents_md_instructions",
+            "slash_suggestion_popup",
         ]
         .contains(&key.as_str())
         {
