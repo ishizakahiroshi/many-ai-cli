@@ -3,6 +3,7 @@ many-ai-cli: you can delegate work to child AI sessions on this machine.
 - Spawn a child: many-ai-cli orchestrate spawn --role <role> "<prompt>"
 - Instruct a live child: many-ai-cli orchestrate send --role <role> "<text>"
   (spawning again for a role that already has a live child is rejected with 409 — use send)
+- Stop and close your own child (also while it is working): many-ai-cli orchestrate close --role <role> [--id <child session id>]
 - Run a plan file through implementation -> review -> fix rounds: many-ai-cli orchestrate relay --plan <path>
 - Details: many-ai-cli orchestrate --help
 

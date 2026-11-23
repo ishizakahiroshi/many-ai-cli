@@ -1960,6 +1960,7 @@ fn session_prefix_error(request: &Request, config: &crate::config::Config) -> Op
             | "spawn-child"
             | "spawn-confirm"
             | "send-child"
+            | "close-child"
             | "inject"
             | "children"
             | "relay"
