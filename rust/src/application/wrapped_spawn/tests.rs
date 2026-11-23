@@ -1129,6 +1129,35 @@ fn a_registered_child_takes_its_confirmed_approval_mode_after_the_separator() {
         .collect();
     let separator = args.iter().position(|v| v == "--").expect("provider tail");
     assert_eq!(&args[separator + 1..], ["--permission-mode", "dangerous"]);
+    // risk_confirmation refuses only bypassPermissions, but a definition maps
+    // the other modes to flags of its own choosing. A mode nobody confirmed
+    // (an autonomous orchestrate child) must not reach the CLI.
+    for mode in ["plan", "acceptEdits", "auto"] {
+        request.permission_mode = mode.into();
+        request.risk_confirmed = false;
+        let prepared = launch::prepare(&t.options, &policy, &request, &|_| {}).unwrap();
+        let args: Vec<_> = prepared
+            .process
+            .args
+            .iter()
+            .map(|v| v.to_string_lossy().into_owned())
+            .collect();
+        assert!(!args.iter().any(|v| v == "dangerous"), "{mode}: {args:?}");
+        request.risk_confirmed = true;
+        let prepared = launch::prepare(&t.options, &policy, &request, &|_| {}).unwrap();
+        let args: Vec<_> = prepared
+            .process
+            .args
+            .iter()
+            .map(|v| v.to_string_lossy().into_owned())
+            .collect();
+        let separator = args.iter().position(|v| v == "--").expect("provider tail");
+        assert_eq!(
+            &args[separator + 1..],
+            ["--permission-mode", "dangerous"],
+            "{mode}"
+        );
+    }
 }
 
 /// pending devin-child (起動 500): every launch step used to end in the same

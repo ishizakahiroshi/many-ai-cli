@@ -329,6 +329,18 @@ fn fill_request(body: &mut ChildSpawnRequest, permission: &ChildApproval) {
     }
     body.risk_confirmed |= permission.risk_confirmed;
 }
+/// `child_full_bypass: false` holds a built-in child to the attended tier. A
+/// registered CLI has no tier table, and its definition maps every approval
+/// mode to flags of its own choosing, so the same setting starts it with no
+/// mode at all rather than one the launch would refuse or never pass on.
+fn drop_registered_mode_when_children_are_attended(
+    body: &mut ChildSpawnRequest,
+    cfg: &OrchestrationConfig,
+) {
+    if is_registered_child_provider(&body.provider) && !cfg.child_full_bypass_enabled() {
+        body.permission_mode.clear();
+    }
+}
 
 /// Only server-resolved provenance can reach the actual launch preparation.
 /// Configuration adds bounded tools through the internal grant field; request
@@ -365,6 +377,7 @@ pub fn prepare_with(
         &cfg.orchestration,
     );
     fill_request(body.request_mut(), &permission);
+    drop_registered_mode_when_children_are_attended(body.request_mut(), &cfg.orchestration);
     // A registered CLI has no tier table, so `resolve_permission` never marks
     // its launch as risk-confirmed. Its approval mode is the one a person chose
     // or saw (the confirmation dialog shows the requested mode and can clear it
@@ -445,6 +458,7 @@ fn preview_for(
                 &cfg.orchestration,
             );
             fill_request(&mut request, &permission);
+            drop_registered_mode_when_children_are_attended(&mut request, &cfg.orchestration);
             permission.permission_mode = request.permission_mode;
             permission.sandbox = request.sandbox;
             permission.ask_for_approval = request.ask_for_approval;
@@ -965,6 +979,43 @@ mod tests {
             serde_json::json!({"provider":"fixture-plain","permission_mode":"bypassPermissions","confirmed":true}),
             &strict,
         ));
+    }
+
+    /// Security review (HIGH): `child_full_bypass: false` holds built-in
+    /// children to the attended tier, but a registered child kept whatever mode
+    /// was asked for, and its definition maps every mode to flags of its own.
+    /// The setting now starts it with no mode, in the launch and the dialog.
+    #[test]
+    fn attended_children_start_a_registered_cli_without_an_approval_mode() {
+        let providers = registered();
+        let strict = Config {
+            orchestration: OrchestrationConfig {
+                child_full_bypass: Some(false),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        for mode in ["plan", "acceptEdits", "auto", "bypassPermissions"] {
+            for confirmed in [true, false] {
+                let input = serde_json::json!({"provider":"fixture-plain","permission_mode":mode,"confirmed":confirmed});
+                let body = request(&input);
+                let preview = preview_tiers(&body, &strict, &providers);
+                for (tier, approval) in &preview["fixture-plain"] {
+                    assert_eq!(approval.permission_mode, "", "{mode} {tier:?}");
+                }
+                let prepared = prepare_with(body, &strict, &providers).unwrap();
+                assert_eq!(prepared.request().permission_mode, "", "{mode}");
+                assert!(!prepared.request().risk_confirmed, "{mode}");
+            }
+        }
+        // The default (child_full_bypass on) keeps the mode the person confirmed.
+        let prepared = prepare_with(
+            request(&serde_json::json!({"provider":"fixture-plain","permission_mode":"acceptEdits","confirmed":true})),
+            &Config::default(),
+            &providers,
+        )
+        .unwrap();
+        assert_eq!(prepared.request().permission_mode, "acceptEdits");
     }
 
     #[test]

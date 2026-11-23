@@ -413,7 +413,15 @@ fn prepare_resolved(
         // An orchestrate child (no start kind) needs them as much as a new
         // session: the wrapper's own `--permission-mode` maps only built-ins,
         // so without this the mode a human confirmed never reached the CLI.
-        if registered {
+        // Only a confirmed mode, though: `risk_confirmation` refuses just
+        // bypassPermissions, yet a definition maps plan/acceptEdits/auto to
+        // flags of its own choosing, so an unconfirmed (autonomous) child's
+        // mode would otherwise reach the CLI with nobody having seen it.
+        if registered
+            && (kind.is_some()
+                || spec.risk_confirmed
+                || matches!(spec.permission_mode.trim(), "" | "default"))
+        {
             provider_tail.extend(
                 resolved
                     .ordinary_permission_args
