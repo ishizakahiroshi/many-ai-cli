@@ -120,7 +120,7 @@ impl CoreEffectSink for Sink {
                     }
                     CoreEffect::Notify(e) => {
                         self.events.lock().unwrap().push(match &e {
-                            CoreEvent::Registered(_) => "registered",
+                            CoreEvent::Registered { .. } => "registered",
                             CoreEvent::GitTurnCapture { .. } => "git",
                             _ => "other",
                         });

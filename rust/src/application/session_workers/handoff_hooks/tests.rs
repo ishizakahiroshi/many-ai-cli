@@ -604,3 +604,78 @@ fn transcript_recorded_by_an_earlier_launch_under_the_same_number_is_recorded_ag
         "/resumed.jsonl"
     ));
 }
+
+#[tokio::test]
+async fn a_reattach_under_the_same_number_keeps_the_records_from_before_it() {
+    use crate::orchestration::handoff::{
+        KIND_DONE, KIND_SESSION_REATTACH, KIND_SESSION_START, render_markdown,
+    };
+    let fixture = Fixture::new(49683);
+    let binding = fixture.register().await;
+    let store = HandoffStore::new(fixture.paths.clone());
+    let id = binding.session.0;
+    let done = |text: &str| Record {
+        kind: KIND_DONE.into(),
+        text: text.into(),
+        ..Default::default()
+    };
+    // Same order as the Hub writes them: an older launch under this number,
+    // then this launch, its work, a Hub restart that reattaches it, more work.
+    store
+        .append(
+            id,
+            Record {
+                kind: KIND_SESSION_START.into(),
+                cwd: "/older-launch".into(),
+                ..Default::default()
+            },
+            Timestamp::now(),
+        )
+        .unwrap();
+    store
+        .append(id, done("OLDER-LAUNCH-DONE"), Timestamp::now())
+        .unwrap();
+    fixture
+        .workers
+        .event(CoreEvent::Registered {
+            binding,
+            resumed: false,
+        })
+        .await
+        .unwrap();
+    store
+        .append(id, done("BEFORE-RESTART-DONE"), Timestamp::now())
+        .unwrap();
+    fixture
+        .workers
+        .event(CoreEvent::Registered {
+            binding,
+            resumed: true,
+        })
+        .await
+        .unwrap();
+    store
+        .append(id, done("AFTER-RESTART-DONE"), Timestamp::now())
+        .unwrap();
+    let records = store.read_session(id).unwrap();
+    let kinds: Vec<_> = records.iter().map(|r| r.kind.as_str()).collect();
+    assert_eq!(
+        kinds,
+        [
+            KIND_SESSION_START,
+            KIND_DONE,
+            KIND_SESSION_START,
+            KIND_DONE,
+            KIND_SESSION_REATTACH,
+            KIND_DONE
+        ]
+    );
+    assert_eq!(records[4].provider, "claude");
+    let markdown = render_markdown(id, &records);
+    assert!(markdown.contains("BEFORE-RESTART-DONE"), "{markdown}");
+    assert!(markdown.contains("AFTER-RESTART-DONE"), "{markdown}");
+    assert!(!markdown.contains("OLDER-LAUNCH-DONE"), "{markdown}");
+    assert!(!markdown.contains("/older-launch"), "{markdown}");
+    assert_eq!(store.read_current_session(id).unwrap().len(), 4);
+    assert!(fixture.warnings.lock().unwrap().is_empty());
+}

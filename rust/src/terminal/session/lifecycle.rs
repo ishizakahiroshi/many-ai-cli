@@ -168,9 +168,10 @@ impl SessionEngine {
         if !session.usage_probe {
             effects.0.push(history(binding.session,now,"session_start",object(serde_json::json!({"provider":m.provider,"cwd":m.cwd,"branch":session.snapshot.branch,"label":m.label,"model":m.model,"shell":m.shell,"pid":m.pid,"parent_session_id":metadata.parent.0,"role":metadata.role,"auto":metadata.auto,"orchestration_id":metadata.orchestration.0,"board_path":metadata.board_path,"subscription_profile_id":session.snapshot.subscription_profile_id})))?);
         }
-        effects
-            .0
-            .push(CoreEffect::Notify(CoreEvent::Registered(binding)));
+        effects.0.push(CoreEffect::Notify(CoreEvent::Registered {
+            binding,
+            resumed: false,
+        }));
         session.replay_epoch = ReplayEpoch(1);
         let mut state = lock(&self.state);
         if let Err(error) = state.admission.register_spawn(
@@ -637,9 +638,10 @@ impl SessionEngine {
         if !m.usage_probe {
             effects.0.push(history_at(binding.session,reattached_at,"session_reattach",object(serde_json::json!({"old_session_id":requested.0,"provider":m.provider,"cwd":m.cwd,"branch":session.snapshot.branch,"label":m.label,"model":m.model,"shell":m.shell,"pid":m.pid,"renumbered":binding.session!=requested}))));
         }
-        effects
-            .0
-            .push(CoreEffect::Notify(CoreEvent::Registered(binding)));
+        effects.0.push(CoreEffect::Notify(CoreEvent::Registered {
+            binding,
+            resumed: binding.session == requested,
+        }));
         state.sessions.insert(binding.session, session);
         effects
             .0

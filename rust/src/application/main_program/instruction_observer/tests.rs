@@ -124,7 +124,12 @@ async fn downstream_failure_preserves_error_after_registration_prepares_then_cle
     );
     observer.bind(Arc::downgrade(&rules)).unwrap();
     assert_eq!(
-        observer.observe(&CoreEvent::Registered(binding)).await,
+        observer
+            .observe(&CoreEvent::Registered {
+                binding,
+                resumed: false
+            })
+            .await,
         Err(original_error.clone())
     );
     let body = std::fs::read(&target).unwrap();

@@ -1931,7 +1931,13 @@ pub enum CoreEvent {
         session: LiveSessionId,
         record: ImmutableApprovalRecord,
     },
-    Registered(SessionBinding),
+    Registered {
+        binding: SessionBinding,
+        /// A wrapper reattached under the number it already had: the same CLI
+        /// launch goes on (for example after a Hub restart). False for a new
+        /// registration and for a reattach that had to take another number.
+        resumed: bool,
+    },
     /// Source reattach restarts retained artifact polls even before new input.
     /// Initial registration emits only Registered; this accompanies it only
     /// in the authoritative after-reattach-ACK effect sequence.

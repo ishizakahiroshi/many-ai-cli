@@ -22,6 +22,10 @@ use std::{
 
 pub const RECORD_VERSION: i64 = 1;
 pub const KIND_SESSION_START: &str = "session_start";
+/// A wrapper came back under the same number (for example after a Hub
+/// restart). The launch goes on, so unlike `session_start` this is not a
+/// boundary between launches.
+pub const KIND_SESSION_REATTACH: &str = "session_reattach";
 pub const KIND_SESSION_END: &str = "session_end";
 pub const KIND_DONE: &str = "done";
 pub const KIND_GIT_TURN: &str = "git_turn";
@@ -233,12 +237,21 @@ impl HandoffStore {
             record.ts = format_rfc3339(now).map_err(io::Error::other)?;
         }
         let transcript = (record.kind == KIND_TRANSCRIPT).then(|| record.transcript.clone());
+        let new_launch = record.kind == KIND_SESSION_START;
         let mut line =
             crate::proto::provider::to_go_json(&sanitize(record)).map_err(io::Error::other)?;
         line.push(b'\n');
         let _guard = APPEND_LOCK
             .lock()
             .map_err(|_| io::Error::other("handoff append lock poisoned"))?;
+        if new_launch {
+            // A new launch is read on its own, so it records its transcript
+            // even when an earlier launch under this number used the same path.
+            self.last_transcript
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&session_id);
+        }
         if let Some(path) = &transcript {
             let mut last = self
                 .last_transcript
@@ -252,9 +265,12 @@ impl HandoffStore {
         let path = self.path_for(session_id)?;
         private_io::open_append(&path)?.write_all(&line)
     }
-    /// Drops transcript records that repeat the previous transcript path, which
-    /// older versions appended on every change. Rendering reads only the latest
-    /// path, so nothing a reader can see is lost. Returns the bytes reclaimed.
+    /// Drops transcript records that repeat the previous transcript path in the
+    /// same launch, which older versions appended on every change. Readers see
+    /// only the latest path of the latest launch, so nothing a reader can see is
+    /// lost. A `session_start` begins a new launch that readers read on its own,
+    /// so its first transcript is kept even when an earlier launch under the
+    /// same number recorded the same path (#46). Returns the bytes reclaimed.
     pub fn compact_transcripts(&self) -> io::Result<u64> {
         let directory = match Dir::open(&self.directory()) {
             Ok(directory) => directory,
@@ -375,10 +391,16 @@ pub struct DirStatus {
 }
 fn drop_repeated_transcripts(bytes: &[u8]) -> Vec<u8> {
     const MARK: &[u8] = b"\"kind\":\"transcript\"";
+    const START: &[u8] = b"\"kind\":\"session_start\"";
     let mut out = Vec::with_capacity(bytes.len());
     let mut previous: Option<String> = None;
     for line in bytes.split_inclusive(|b| *b == b'\n') {
-        if line.windows(MARK.len()).any(|w| w == MARK)
+        if line.windows(START.len()).any(|w| w == START)
+            && serde_json::from_slice::<serde_json::Value>(line)
+                .is_ok_and(|value| value["kind"] == KIND_SESSION_START)
+        {
+            previous = None;
+        } else if line.windows(MARK.len()).any(|w| w == MARK)
             && let Ok(value) = serde_json::from_slice::<serde_json::Value>(line)
             && value["kind"] == KIND_TRANSCRIPT
             && let Some(path) = value["transcript"].as_str()
@@ -437,6 +459,10 @@ fn read_records(file: fs::File) -> io::Result<Vec<Record>> {
 /// but must not appear in this session's handoff (issue #46). Every reader that
 /// shows one session (the rendered handoff, the preview and list identity, the
 /// transcript dedup) goes through this so they agree on the same launch.
+/// A `session_reattach` is not a boundary: the launch goes on. Files written
+/// before that kind existed have a `session_start` for each reattach, which
+/// cannot be told apart from a new launch; there only the part after the last
+/// reattach is shown.
 /// Without any `session_start` the whole file is returned unchanged.
 pub fn records_from_last_session_start(records: &[Record]) -> &[Record] {
     let start = records
@@ -446,12 +472,22 @@ pub fn records_from_last_session_start(records: &[Record]) -> &[Record] {
     &records[start..]
 }
 
-/// The latest non-empty model on a `session_start` or `session_end` in the
-/// segment. The start is often recorded before the model is known.
+/// The latest non-empty model on a `session_start`, `session_reattach` or
+/// `session_end` in the segment. The start is often recorded before the model
+/// is known. An end that is not shown (recorded before the start) does not
+/// lend its model either.
 pub fn model_from_segment(records: &[Record]) -> &str {
+    let start = records
+        .iter()
+        .find(|record| record.kind == KIND_SESSION_START)
+        .map_or("", |record| record.ts.as_str());
     records
         .iter()
-        .filter(|record| record.kind == KIND_SESSION_START || record.kind == KIND_SESSION_END)
+        .filter(|record| match record.kind.as_str() {
+            KIND_SESSION_START | KIND_SESSION_REATTACH => true,
+            KIND_SESSION_END => end_follows_start(start, &record.ts),
+            _ => false,
+        })
         .map(|record| record.model.trim())
         .filter(|model| !model.is_empty())
         .next_back()
@@ -694,6 +730,51 @@ mod transcript_dedupe_tests {
         assert_eq!(records.last().unwrap().transcript, "b.jsonl");
         assert_eq!(store.compact_transcripts().unwrap(), 0);
     }
+
+    #[test]
+    fn compaction_keeps_the_first_path_of_a_later_launch_under_the_same_number() {
+        let (_root, _installed, store) = store();
+        let path = store.path_for(6).unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut lines = String::new();
+        for body in [
+            r#"{"version":1,"kind":"session_start","session_id":6,"cwd":"/old"}"#,
+            r#"{"version":1,"kind":"transcript","transcript":"p.jsonl"}"#,
+            r#"{"version":1,"kind":"session_start","session_id":6,"cwd":"/new"}"#,
+            r#"{"version":1,"kind":"transcript","transcript":"p.jsonl"}"#,
+            r#"{"version":1,"kind":"transcript","transcript":"p.jsonl"}"#,
+        ] {
+            lines.push_str(body);
+            lines.push('\n');
+        }
+        std::fs::write(&path, &lines).unwrap();
+        assert!(store.compact_transcripts().unwrap() > 0);
+        let records = store.read_session(6).unwrap();
+        let kinds: Vec<_> = records.iter().map(|r| r.kind.as_str()).collect();
+        assert_eq!(
+            kinds,
+            ["session_start", "transcript", "session_start", "transcript"]
+        );
+        let markdown = render_markdown(6, &records);
+        assert!(markdown.contains("- p.jsonl"), "{markdown}");
+        assert_eq!(store.compact_transcripts().unwrap(), 0);
+    }
+
+    #[test]
+    fn a_new_launch_records_the_transcript_path_an_earlier_launch_used() {
+        let (_root, _installed, store) = store();
+        let now = Timestamp::now();
+        let start = || Record {
+            kind: KIND_SESSION_START.into(),
+            ..Record::default()
+        };
+        store.append(7, start(), now).unwrap();
+        store.append(7, transcript("p.jsonl"), now).unwrap();
+        store.append(7, start(), now).unwrap();
+        store.append(7, transcript("p.jsonl"), now).unwrap();
+        let current = store.read_current_session(7).unwrap();
+        assert_eq!(current.last().unwrap().transcript, "p.jsonl");
+    }
 }
 #[cfg(test)]
 mod quote_consumer_tests {
@@ -798,12 +879,14 @@ mod last_session_render_tests {
             Record {
                 kind: KIND_SESSION_START.into(),
                 ts: "2026-11-02T08:00:00Z".into(),
+                model: "start-model".into(),
                 ..Record::default()
             },
             Record {
                 kind: KIND_SESSION_END.into(),
                 ts: "2026-11-01T08:00:00Z".into(),
                 text: "stale-end".into(),
+                model: "backwards-model".into(),
                 ..Record::default()
             },
         ];
@@ -811,10 +894,14 @@ mod last_session_render_tests {
         assert!(!markdown.contains("2026-11-01T08:00:00Z"), "{markdown}");
         assert!(!markdown.contains("stale-end"), "{markdown}");
         assert!(markdown.contains("- 終了: (未終了"), "{markdown}");
+        // The hidden end does not lend its model either.
+        assert!(!markdown.contains("backwards-model"), "{markdown}");
+        assert!(markdown.contains("- model: start-model"), "{markdown}");
         let ended = [
             records[0].clone(),
             Record {
                 ts: "2026-11-02T09:00:00Z".into(),
+                model: "valid-end-model".into(),
                 ..records[1].clone()
             },
         ];
@@ -829,6 +916,7 @@ mod last_session_render_tests {
             Record {
                 ts: "2026-11-02T09:00:00Z".into(),
                 text: "valid-end".into(),
+                model: "valid-end-model".into(),
                 ..records[1].clone()
             },
             records[1].clone(),
@@ -839,6 +927,40 @@ mod last_session_render_tests {
             "{markdown}"
         );
         assert!(!markdown.contains("stale-end"), "{markdown}");
+        assert!(!markdown.contains("backwards-model"), "{markdown}");
+        assert!(markdown.contains("- model: valid-end-model"), "{markdown}");
+    }
+
+    #[test]
+    fn a_reattach_does_not_hide_the_records_from_before_it() {
+        let mut lines = MIXED.to_vec();
+        lines.push(
+            r#"{"version":1,"ts":"2026-11-02T09:00:00Z","session_id":6,"kind":"session_reattach","provider":"claude","cwd":"/new/project","model":"reattach-model"}"#,
+        );
+        lines.push(
+            r#"{"version":1,"ts":"2026-11-02T09:10:00Z","session_id":6,"kind":"done","text":"AFTER-REATTACH"}"#,
+        );
+        let records: Vec<Record> = lines
+            .iter()
+            .filter_map(|line| crate::proto::decode_wire::<Record>(line.as_bytes()).ok())
+            .collect();
+        let markdown = render_markdown(6, &records);
+        for kept in [
+            "NEW-DONE",
+            "NEW-COMMIT",
+            "NEW-INTENT",
+            "/new/transcript.jsonl",
+            "NEW-NOTE",
+            "/new/work.md",
+            "AFTER-REATTACH",
+            "- 開始: 2026-11-02T08:00:00Z",
+            "- model: reattach-model",
+        ] {
+            assert!(markdown.contains(kept), "{kept} missing from:\n{markdown}");
+        }
+        for old in ["OLD-DONE-SENTINEL", "/old/project", "2026-10-30T12:00:00Z"] {
+            assert!(!markdown.contains(old), "{old} leaked into:\n{markdown}");
+        }
     }
 
     #[test]

@@ -143,7 +143,7 @@ async fn reattach_only_restart_event_follows_existing_registered_in_after_ack_ef
         .await
         .unwrap();
     assert_eq!(registration.registered.r#type, "registered");
-    assert!(registration.after_registered.0.iter().any(|effect|matches!(effect,CoreEffect::Notify(CoreEvent::Registered(binding)) if *binding==registration.binding)));
+    assert!(registration.after_registered.0.iter().any(|effect|matches!(effect,CoreEffect::Notify(CoreEvent::Registered{binding,resumed:false}) if *binding==registration.binding)));
     assert!(
         !registration
             .after_registered
@@ -191,7 +191,7 @@ async fn reattach_only_restart_event_follows_existing_registered_in_after_ack_ef
         })
         .collect::<Vec<_>>();
     assert!(
-        matches!(events.as_slice(),[CoreEvent::Registered(first),CoreEvent::Reattached(second)] if *first==receipt.binding&&*second==receipt.binding)
+        matches!(events.as_slice(),[CoreEvent::Registered{binding:first,resumed:true},CoreEvent::Reattached(second)] if *first==receipt.binding&&*second==receipt.binding)
     );
     assert!(
         matches!(receipt.after_reattached.0.last(),Some(CoreEffect::Notify(CoreEvent::Reattached(current))) if *current==receipt.binding)

@@ -426,3 +426,33 @@ async fn preview_and_list_show_only_the_latest_launch_of_a_reused_number() {
     // Reading never rewrites the record file.
     assert_eq!(std::fs::read_to_string(&path).unwrap(), body);
 }
+
+#[tokio::test]
+async fn preview_keeps_what_was_recorded_before_a_reattach() {
+    // A Hub restart that reattaches the running CLI under the same number
+    // writes session_reattach, not session_start: the launch goes on (#46).
+    let f = fixture();
+    let note = f._root.path().join("before-restart.note.md");
+    std::fs::write(&note, b"synthetic\n").unwrap();
+    let note = note.to_string_lossy().into_owned();
+    let lines = [
+        serde_json::json!({"version":1,"ts":"2026-11-02T08:00:00Z","session_id":8,"kind":"session_start","provider":"claude","cwd":"/project"}),
+        serde_json::json!({"version":1,"ts":"2026-11-02T08:10:00Z","session_id":8,"kind":"note","note":note}),
+        serde_json::json!({"version":1,"ts":"2026-11-02T09:00:00Z","session_id":8,"kind":"session_reattach","provider":"claude","cwd":"/project","model":"reattach-model"}),
+    ];
+    let path = f.http.store.path_for(8).unwrap();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let body: String = lines.iter().map(|line| format!("{line}\n")).collect();
+    std::fs::write(&path, &body).unwrap();
+
+    let preview = value(
+        f.http
+            .handle_authenticated(&request("GET", "/api/handoff/8", ""), now())
+            .await
+            .unwrap(),
+    );
+    assert_eq!(preview["started_at"], "2026-11-02T08:00:00Z");
+    assert_eq!(preview["model"], "reattach-model");
+    assert_eq!(preview["note_path"], note.as_str());
+    assert!(preview["markdown"].as_str().unwrap().contains(&note));
+}

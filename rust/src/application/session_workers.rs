@@ -13,8 +13,8 @@ use crate::{
     orchestration::{
         child_launch::board::BoardStore,
         handoff::{
-            HandoffStore, KIND_DONE, KIND_SESSION_END, KIND_SESSION_START, KIND_TRANSCRIPT,
-            KIND_TURN_SUMMARY, Record,
+            HandoffStore, KIND_DONE, KIND_SESSION_END, KIND_SESSION_REATTACH, KIND_SESSION_START,
+            KIND_TRANSCRIPT, KIND_TURN_SUMMARY, Record,
         },
         initial_prompt::{
             InitialPromptCallbacks, InitialPromptDriver, InitialPromptOutcome, InitialPromptRequest,
@@ -411,10 +411,18 @@ impl SessionWorkers {
     }
     async fn event(&self, event: CoreEvent) -> Result<(), SessionError> {
         match event {
-            CoreEvent::Registered(binding) => self.append_handoff(
+            // A reattach under the same number is the same launch going on, so
+            // it must not start a new handoff segment: the records written
+            // before a Hub restart still belong to this session (#46).
+            CoreEvent::Registered { binding, resumed } => self.append_handoff(
                 binding,
                 Record {
-                    kind: KIND_SESSION_START.into(),
+                    kind: if resumed {
+                        KIND_SESSION_REATTACH
+                    } else {
+                        KIND_SESSION_START
+                    }
+                    .into(),
                     ..Default::default()
                 },
             ),

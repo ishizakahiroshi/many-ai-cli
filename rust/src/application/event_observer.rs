@@ -575,7 +575,7 @@ impl OrderedEventObserver for ApplicationEventObserver {
     fn observe<'a>(&'a self, event: &'a CoreEvent) -> CoreFuture<'a, Result<(), SessionError>> {
         Box::pin(async move {
             match event {
-                CoreEvent::Registered(binding) => {
+                CoreEvent::Registered { binding, .. } => {
                     if let Some(board) = &self.board
                         && let Some(details) = self.board_details(binding.session)
                     {
