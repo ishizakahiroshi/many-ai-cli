@@ -112,6 +112,16 @@
   - **AI の確認では `bun run test` も `bun --cwd web test` も使わない。** package の `test` は先頭で `bun run build` を実行して `web/dist` を書き換える（ビルドはユーザーが行う決まり）。ビルドせずに走らせるには、`web` ディレクトリで `bun test ./tests/<name>.test.ts`、fixture なら `bun test ./src/app/<name>-fixtures.ts` を使う（2026-09-23 と 2026-09-24 に同じ取り違えが 2 回）
 - **手動検証:** 4 ペイン（Claude × 2 / Codex × 2）並列起動 + Hub UI を別画面で常時表示して動作を確認する（画面の仕様は README とソースが正本）
 
+### proto / wire 構造体にフィールドを足したら Go oracle fixture を 3 点更新する
+
+`rust/src/proto/` の DTO（`CapabilitySummary` 等）は Go 版が出した正確なバイト列を fixture で固定している。フィールドを足すと次が赤くなる:
+
+- `rust/tests/fixtures/foundation/provider/wire.json` — `expected` と `expected_json`（中身は compact JSON 文字列。summary 形オブジェクト全て）
+- `rust/tests/fixtures/services/registry.json` — `list` の `capabilities` と `definitions` の `capabilities_summary`
+- `rust/tests/provider_contracts.rs` 等の件数 assert（`capabilities_summary` のキー数）
+
+エスケープは `to_go_json`（`rust/src/proto/provider.rs`。`<` `>` `&`・U+2028/U+2029 → `\uXXXX`）が正本。`JSON.stringify` は素通りするので、fixture を機械更新するスクリプトは同じ置換を掛けること。
+
 ### `go test ./...` の赤は、切り分けてから自分の変更を疑う
 
 **このリポジトリの `internal/hub` は重い。** 全体実行では並列に走る他パッケージと CPU を奪い合い、hub だけで 148〜181 秒かかる。時間予算を持つテスト（`TestSubmitEnterSettleWaitsForOutputToStop` / `TestHandleAgentChatUsesBoundedBackwardCursorPages` 等）は**そこで落ちる**。個別パッケージで回すと通る。**実行するたびに落ちるテストが変わるのが目印。**

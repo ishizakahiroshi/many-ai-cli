@@ -75,6 +75,10 @@ $d = Get-Date; "{0}({1}) {2}" -f $d.ToString("yyyy-MM-dd"), "日月火水木金�
 - `.gitattributes` は `* text=auto` で、Windows の working tree では CRLF になる（`gofmt` との比べ方は `coding.md` の「`gofmt -l` はこのリポジトリでは使えない」）
 - 改行を固定しているのは `.gitattributes` に個別に書いたものだけ（`*.sh`・`.githooks/*` は `eol=lf`、`*.ps1` は `eol=crlf` など）
 
+### 稼働中の exe ロック（`cargo test` が失敗するとき）
+
+`many-ai-cli` を実機で動かしたまま `cargo test` すると、`target\debug\many-ai-cli.exe` がロックされて `failed to remove file` で止まる。`--lib` は bin を作らず回避できるが、`--test <名>` は `CARGO_BIN_EXE_*` 用に全 bin をビルドするので同じく止まる。回避は `CARGO_TARGET_DIR` を書き込み可能な一時ディレクトリに向ける（例: `CARGO_TARGET_DIR='%TEMP%\many-ai-cli-target' cargo test`）。使い終わったらそのディレクトリごと消す。
+
 ### Windows Defender / SmartScreen
 
 - 自前ビルドの `many-ai-cli.exe` は署名なしのため初回起動時に警告が出る可能性

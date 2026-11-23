@@ -90,7 +90,7 @@ docs/local/        設計書・plan 等（非公開）
 
 ビルドと Git 操作の承認範囲、secrets-scan 責務、plan/bugfix/pending md の作成ルール等は、各利用者のグローバル AI 設定に従う（作者環境の例: `~/.claude/CLAUDE.md` と `~/.claude/guides/`）。本ファイルはプロジェクト固有ルールだけを扱う。
 
-- ビルドだけでなく **実行・Hub 起動・ブラウザリロードも全てユーザーが行う**（`cargo run` / `serve` / `stop` / 再起動 / ブラウザリロード等）
+- ビルドだけでなく **実行・Hub 起動・ブラウザリロードも全てユーザーが行う**（`cargo run` / `serve` / `stop` / 再起動 / ブラウザリロード等。`cargo check`・`cargo test` は対象外で AI が実行してよい）
 - **AI がコードを編集したら、ビルドせず構文だけ確認してよい**（Rust は `cargo +1.90.0 fmt --manifest-path rust/Cargo.toml -- --check`、TS は **`web` ディレクトリで** `bun run check`。リポジトリ直下に `package.json` は無く、直下で叩くと `Script not found` になる）。ただし**構文が通ることは動作の証明ではない**。AI 側で保証できるのは「parse が通る」までと明示する
 - `many-ai-cli` 自身のセッションログは情報密度が低い。承認検出のバグ調査では、実際に動いている AI CLI 本体が書き出す生ログを見ること
 
