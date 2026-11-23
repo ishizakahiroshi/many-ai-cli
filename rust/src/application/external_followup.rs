@@ -1087,6 +1087,11 @@ fn valid_label(text: &str) -> bool {
 /// waiting. It is not completion. More than one pending record, an unknown
 /// approval kind, a missing `allow_once` choice, or a session id that is not
 /// `session_id` becomes [`Screen::Unknown`], so the watcher does not act.
+///
+/// The target is the whole subject (without `kind`) or the whole question,
+/// written as JSON with sorted keys, for example
+/// `{"command":"git status","cwd":"/repo"}`. A key the watcher does not know,
+/// or a target longer than a permit can name, is [`Screen::Unknown`] too.
 pub fn screen_from_msp_pending(session_id: &str, body: &serde_json::Value) -> Screen {
     if !valid_token(session_id) {
         return Screen::Unknown;
@@ -1127,50 +1132,177 @@ fn approval_screen(session_id: &str, value: &serde_json::Value) -> Screen {
     let Some(kind) = subject.get("kind").and_then(serde_json::Value::as_str) else {
         return Screen::Unknown;
     };
-    let Some((operation, target)) = approval_subject(kind, subject) else {
+    let Some((operation, fields)) = subject_fields(kind) else {
         return Screen::Unknown;
     };
-    if !valid_label(&operation) || !valid_label(&target) {
+    let Some(target) = strict_target(subject, &["kind"], fields) else {
+        return Screen::Unknown;
+    };
+    if !valid_label(&target) {
         return Screen::Unknown;
     }
     Screen::Approval {
         card_id: card_id.to_owned(),
-        operation,
+        operation: operation.to_owned(),
         target,
     }
 }
 
-fn approval_subject(
-    kind: &str,
-    subject: &serde_json::Map<String, serde_json::Value>,
-) -> Option<(String, String)> {
-    let text = |key: &str| {
-        subject
-            .get(key)
-            .and_then(serde_json::Value::as_str)
-            .filter(|value| !value.is_empty())
-            .map(str::to_owned)
-    };
-    let pair = match kind {
-        "shell" => ("msp.shell", text("command")?),
-        "fileAccess" => ("msp.file_access", text("path")?),
-        "network" => ("msp.network", network_target(subject, &text("host")?)?),
-        "unixSocket" => ("msp.unix_socket", text("path")?),
-        "process" => ("msp.process", text("target")?),
-        "tool" => ("msp.tool", text("toolName")?),
-        _ => return None,
-    };
-    Some((pair.0.to_owned(), pair.1))
+/// The shape a key of an approval subject or a question must have.
+#[derive(Clone, Copy)]
+enum Field {
+    /// A non-empty string.
+    Text,
+    /// An integer from 0 to 65535.
+    Port,
+    /// An array of strings, such as process arguments.
+    TextList,
+    /// Any JSON value. It is still written whole into the target.
+    Any,
+    /// Question choices: objects with only `id`, `label` and `description`.
+    Options,
+    /// How a question is answered: an object with only `kind`.
+    Selection,
 }
 
-fn network_target(
-    subject: &serde_json::Map<String, serde_json::Value>,
-    host: &str,
+/// One key the watcher understands: its name, its shape, and whether it must
+/// be present.
+type FieldSpec = (&'static str, Field, bool);
+
+/// Every key a subject of `kind` may carry. The target is written from all of
+/// them, so a permit that names a target names the whole subject: the access
+/// kind, arguments, working directory and protocol, not just the path or host.
+/// A key outside the list makes the card [`Screen::Unknown`], because a permit
+/// cannot cover what the target does not show.
+fn subject_fields(kind: &str) -> Option<(&'static str, &'static [FieldSpec])> {
+    const SHELL: &[FieldSpec] = &[("command", Field::Text, true), ("cwd", Field::Text, false)];
+    const FILE_ACCESS: &[FieldSpec] =
+        &[("path", Field::Text, true), ("access", Field::Text, false)];
+    const NETWORK: &[FieldSpec] = &[
+        ("host", Field::Text, true),
+        ("port", Field::Port, false),
+        ("protocol", Field::Text, false),
+    ];
+    const UNIX_SOCKET: &[FieldSpec] = &[("path", Field::Text, true)];
+    const PROCESS: &[FieldSpec] = &[
+        ("target", Field::Text, true),
+        ("args", Field::TextList, false),
+        ("cwd", Field::Text, false),
+    ];
+    const TOOL: &[FieldSpec] = &[
+        ("toolName", Field::Text, true),
+        ("arguments", Field::Any, false),
+    ];
+    Some(match kind {
+        "shell" => ("msp.shell", SHELL),
+        "fileAccess" => ("msp.file_access", FILE_ACCESS),
+        "network" => ("msp.network", NETWORK),
+        "unixSocket" => ("msp.unix_socket", UNIX_SOCKET),
+        "process" => ("msp.process", PROCESS),
+        "tool" => ("msp.tool", TOOL),
+        _ => return None,
+    })
+}
+
+/// Every key a continuation question may carry. The question text, its
+/// choices and how it is answered are all in the target, so a permit for one
+/// question does not answer another that reuses its id.
+const QUESTION_FIELDS: &[FieldSpec] = &[
+    ("id", Field::Text, true),
+    ("question", Field::Text, true),
+    ("header", Field::Text, false),
+    ("options", Field::Options, false),
+    ("selection", Field::Selection, false),
+];
+
+/// Writes `obj`, minus `skip`, as canonical JSON (keys sorted at every depth),
+/// after checking every key against `fields`. Returns `None` for a key outside
+/// the list, a missing required key, or a value of the wrong shape.
+fn strict_target(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    skip: &[&str],
+    fields: &[FieldSpec],
 ) -> Option<String> {
-    match subject.get("port").and_then(serde_json::Value::as_u64) {
-        Some(port) if port <= u64::from(u16::MAX) => Some(format!("{host}:{port}")),
-        Some(_) => None,
-        None => Some(host.to_owned()),
+    let mut kept = serde_json::Map::new();
+    for (key, value) in obj {
+        if skip.contains(&key.as_str()) {
+            continue;
+        }
+        let (_, field, _) = fields.iter().find(|(name, _, _)| name == key)?;
+        if !field_fits(*field, value) {
+            return None;
+        }
+        kept.insert(key.clone(), value.clone());
+    }
+    if fields
+        .iter()
+        .any(|(name, _, required)| *required && !kept.contains_key(*name))
+    {
+        return None;
+    }
+    let mut out = String::new();
+    canonical_json(&serde_json::Value::Object(kept), &mut out);
+    Some(out)
+}
+
+fn field_fits(field: Field, value: &serde_json::Value) -> bool {
+    match field {
+        Field::Text => value.as_str().is_some_and(|text| !text.is_empty()),
+        Field::Port => value
+            .as_u64()
+            .is_some_and(|port| port <= u64::from(u16::MAX)),
+        Field::TextList => value
+            .as_array()
+            .is_some_and(|items| items.iter().all(serde_json::Value::is_string)),
+        Field::Any => true,
+        Field::Options => value.as_array().is_some_and(|items| {
+            items.iter().all(|item| {
+                item.as_object().is_some_and(|choice| {
+                    choice.iter().all(|(key, value)| {
+                        matches!(key.as_str(), "id" | "label" | "description") && value.is_string()
+                    })
+                })
+            })
+        }),
+        Field::Selection => value.as_object().is_some_and(|selection| {
+            selection.len() == 1
+                && selection
+                    .get("kind")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|kind| !kind.is_empty())
+        }),
+    }
+}
+
+/// JSON with object keys sorted at every depth, so one subject always gives
+/// one target whatever order the source wrote its keys in.
+fn canonical_json(value: &serde_json::Value, out: &mut String) {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            out.push('{');
+            for (index, key) in keys.into_iter().enumerate() {
+                if index > 0 {
+                    out.push(',');
+                }
+                out.push_str(&serde_json::Value::String(key.clone()).to_string());
+                out.push(':');
+                canonical_json(&map[key], out);
+            }
+            out.push('}');
+        }
+        serde_json::Value::Array(items) => {
+            out.push('[');
+            for (index, item) in items.iter().enumerate() {
+                if index > 0 {
+                    out.push(',');
+                }
+                canonical_json(item, out);
+            }
+            out.push(']');
+        }
+        other => out.push_str(&other.to_string()),
     }
 }
 
@@ -1190,16 +1322,19 @@ fn continue_screen(session_id: &str, value: &serde_json::Value) -> Screen {
     let [question] = questions.as_slice() else {
         return Screen::Unknown;
     };
-    let Some(question_id) = question.get("id").and_then(serde_json::Value::as_str) else {
+    let Some(question) = question.as_object() else {
         return Screen::Unknown;
     };
-    if !valid_token(prompt_id) || !valid_label(question_id) {
+    let Some(target) = strict_target(question, &[], QUESTION_FIELDS) else {
+        return Screen::Unknown;
+    };
+    if !valid_token(prompt_id) || !valid_label(&target) {
         return Screen::Unknown;
     }
     Screen::Continue {
         prompt_id: prompt_id.to_owned(),
         operation: "msp.user_input".to_owned(),
-        target: question_id.to_owned(),
+        target,
     }
 }
 

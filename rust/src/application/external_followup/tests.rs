@@ -956,7 +956,7 @@ fn msp_list_pending_separates_approval_continue_and_idle() {
         Screen::Approval {
             card_id: "card-1".to_owned(),
             operation: "msp.shell".to_owned(),
-            target: "git status".to_owned(),
+            target: r#"{"command":"git status"}"#.to_owned(),
         }
     );
     let prompt = serde_json::json!({
@@ -978,7 +978,7 @@ fn msp_list_pending_separates_approval_continue_and_idle() {
         Screen::Continue {
             prompt_id: "prompt-1".to_owned(),
             operation: "msp.user_input".to_owned(),
-            target: "next-step".to_owned(),
+            target: r#"{"header":"next","id":"next-step","options":[],"question":"次段の作業を始めて","selection":{"kind":"single"}}"#.to_owned(),
         }
     );
     let idle = serde_json::json!({"approvals": [], "userInputs": []});
@@ -1037,4 +1037,273 @@ fn msp_list_pending_does_not_choose_an_unclear_card() {
         "userInputs": []
     });
     assert_eq!(screen_from_msp_pending("sess-1", &no_once), Screen::Unknown);
+}
+
+fn msp_approval(subject: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "approvals": [{
+            "approvalId": "card-1",
+            "sessionId": "sess-1",
+            "availableChoices": [{"choiceId": "allow_once"}],
+            "subject": subject
+        }],
+        "userInputs": []
+    })
+}
+
+fn msp_target(body: &serde_json::Value) -> Option<String> {
+    match screen_from_msp_pending("sess-1", body) {
+        Screen::Approval { target, .. } | Screen::Continue { target, .. } => Some(target),
+        _ => None,
+    }
+}
+
+#[test]
+fn msp_subject_target_carries_every_authorizing_field() {
+    // Read and write on one path are two targets, so a permit for one does
+    // not answer the other.
+    let read = msp_target(&msp_approval(
+        serde_json::json!({"kind": "fileAccess", "path": "/repo/a", "access": "read"}),
+    ))
+    .unwrap();
+    let write = msp_target(&msp_approval(
+        serde_json::json!({"kind": "fileAccess", "path": "/repo/a", "access": "write"}),
+    ))
+    .unwrap();
+    assert_eq!(read, r#"{"access":"read","path":"/repo/a"}"#);
+    assert_ne!(read, write);
+    let process = msp_target(&msp_approval(serde_json::json!({
+        "kind": "process",
+        "target": "git",
+        "cwd": "/repo",
+        "args": ["push", "--force"]
+    })))
+    .unwrap();
+    assert_eq!(
+        process,
+        r#"{"args":["push","--force"],"cwd":"/repo","target":"git"}"#
+    );
+    let network = msp_target(&msp_approval(serde_json::json!({
+        "kind": "network", "host": "example.com", "port": 443, "protocol": "https"
+    })))
+    .unwrap();
+    assert_eq!(
+        network,
+        r#"{"host":"example.com","port":443,"protocol":"https"}"#
+    );
+    let tool = msp_target(&msp_approval(serde_json::json!({
+        "kind": "tool", "toolName": "fs.delete", "arguments": {"z": 1, "a": ["x"]}
+    })))
+    .unwrap();
+    assert_eq!(
+        tool,
+        r#"{"arguments":{"a":["x"],"z":1},"toolName":"fs.delete"}"#
+    );
+
+    // A permit written for the path alone does not cover the write.
+    let work = "task/1";
+    let intent = Intent {
+        observation_id: "obs-1".to_owned(),
+        operation: "msp.file_access".to_owned(),
+        target: read.clone(),
+        wait: WaitKind::Approval,
+        deadline_ms: None,
+    };
+    let path_only = permit(Effect::ApproveOnce, work, "msp.file_access", "/repo/a");
+    let write_screen = screen_from_msp_pending(
+        "sess-1",
+        &msp_approval(
+            serde_json::json!({"kind": "fileAccess", "path": "/repo/a", "access": "write"}),
+        ),
+    );
+    assert_eq!(
+        judge(
+            work,
+            &intent,
+            Some(&write_screen),
+            std::slice::from_ref(&path_only),
+            1_000,
+            None
+        ),
+        Judgement::Hold {
+            reason: REASON_MISMATCH,
+            terminal: true
+        }
+    );
+    let read_screen = screen_from_msp_pending(
+        "sess-1",
+        &msp_approval(
+            serde_json::json!({"kind": "fileAccess", "path": "/repo/a", "access": "read"}),
+        ),
+    );
+    assert_eq!(
+        judge(work, &intent, Some(&read_screen), &[path_only], 1_000, None),
+        Judgement::Hold {
+            reason: REASON_OUT_OF_SCOPE,
+            terminal: true
+        }
+    );
+    let whole = permit(Effect::ApproveOnce, work, "msp.file_access", &read);
+    assert!(matches!(
+        judge(work, &intent, Some(&read_screen), &[whole], 1_000, None),
+        Judgement::Act { .. }
+    ));
+}
+
+#[test]
+fn msp_subject_with_an_unknown_or_malformed_field_is_unknown() {
+    for subject in [
+        serde_json::json!({"kind": "fileAccess", "path": "/repo/a", "recursive": true}),
+        serde_json::json!({"kind": "network", "host": "example.com", "method": "POST"}),
+        serde_json::json!({"kind": "process", "target": "git", "env": {"A": "1"}}),
+        serde_json::json!({"kind": "tool", "toolName": "fs.delete", "input": {}}),
+        serde_json::json!({"kind": "shell", "command": "ls", "sandbox": false}),
+        serde_json::json!({"kind": "unixSocket", "path": "/run/a.sock", "mode": "rw"}),
+        // Known keys of the wrong shape.
+        serde_json::json!({"kind": "process", "target": "git", "args": "push --force"}),
+        serde_json::json!({"kind": "network", "host": "example.com", "port": 70000}),
+        serde_json::json!({"kind": "fileAccess", "path": ""}),
+        serde_json::json!({"kind": "fileAccess", "access": "read"}),
+    ] {
+        assert_eq!(
+            screen_from_msp_pending("sess-1", &msp_approval(subject.clone())),
+            Screen::Unknown,
+            "{subject}"
+        );
+    }
+}
+
+fn msp_question(question: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "approvals": [],
+        "userInputs": [{
+            "sessionId": "sess-1",
+            "userInputId": "prompt-1",
+            "questions": [question]
+        }]
+    })
+}
+
+#[test]
+fn msp_continue_target_names_the_question_not_only_its_id() {
+    let base = serde_json::json!({
+        "id": "next-step",
+        "question": "次段の作業を始めて",
+        "options": [{"label": "はい"}, {"label": "いいえ"}],
+        "selection": {"kind": "single"}
+    });
+    let first = msp_target(&msp_question(base.clone())).unwrap();
+    let mut reworded = base.clone();
+    reworded["question"] = serde_json::json!("本番へ反映して");
+    let mut more_choices = base.clone();
+    more_choices["options"] = serde_json::json!([{"label": "はい"}, {"label": "全部はい"}]);
+    let mut multi = base.clone();
+    multi["selection"] = serde_json::json!({"kind": "multiple"});
+    for other in [reworded, more_choices, multi] {
+        assert_ne!(msp_target(&msp_question(other)).unwrap(), first);
+    }
+
+    // A permit for the first question does not continue a reworded one that
+    // reuses the id.
+    let work = "task/1";
+    let intent = Intent {
+        observation_id: "obs-2".to_owned(),
+        operation: "msp.user_input".to_owned(),
+        target: first.clone(),
+        wait: WaitKind::Continue,
+        deadline_ms: None,
+    };
+    let mut changed = base.clone();
+    changed["question"] = serde_json::json!("本番へ反映して");
+    let changed_screen = screen_from_msp_pending("sess-1", &msp_question(changed));
+    let allow = permit(Effect::ContinueOnce, work, "msp.user_input", &first);
+    assert_eq!(
+        judge(
+            work,
+            &intent,
+            Some(&changed_screen),
+            std::slice::from_ref(&allow),
+            1_000,
+            None
+        ),
+        Judgement::Hold {
+            reason: REASON_MISMATCH,
+            terminal: true
+        }
+    );
+    let same_screen = screen_from_msp_pending("sess-1", &msp_question(base));
+    assert!(matches!(
+        judge(work, &intent, Some(&same_screen), &[allow], 1_000, None),
+        Judgement::Act {
+            effect: Effect::ContinueOnce,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn msp_question_with_an_unknown_or_malformed_field_is_unknown() {
+    for question in [
+        serde_json::json!({"id": "next-step", "question": "続けて", "default": "yes"}),
+        serde_json::json!({"id": "next-step", "question": "続けて", "options": [{"label": "はい", "autoSelect": true}]}),
+        serde_json::json!({"id": "next-step", "question": "続けて", "selection": {"kind": "single", "max": 2}}),
+        serde_json::json!({"id": "next-step", "question": "続けて", "selection": "single"}),
+        serde_json::json!({"id": "next-step"}),
+        serde_json::json!("next-step"),
+        serde_json::json!({"id": "next-step", "question": "あ".repeat(200)}),
+    ] {
+        assert_eq!(
+            screen_from_msp_pending("sess-1", &msp_question(question.clone())),
+            Screen::Unknown,
+            "{question}"
+        );
+    }
+}
+
+#[test]
+fn a_settled_claim_of_another_work_item_is_not_replayed_or_skipped() {
+    let dir = TempDir::new();
+    let intent = approval_intent();
+    // task/2 already acted under the same observation id and its result never
+    // reached the board.
+    let foreign_result = format!(
+        "{EVENT_PREFIX}{{\"v\":1,\"rec\":\"result\",\"work\":\"task/2\",\"obs\":\"{}\",\"effect\":\"approve_once\",\"permit\":\"permit-2\"}}",
+        intent.observation_id
+    );
+    let claims = serde_json::json!({
+        "schema_version": 1,
+        "claims": [{
+            "work_id": "task/2",
+            "observation_id": intent.observation_id,
+            "phase": "settled",
+            "event_text": foreign_result,
+        }]
+    });
+    fs::write(dir.claim(), claims.to_string()).unwrap();
+    let work = "task/1";
+    let watcher = open_watcher(
+        &dir,
+        Board::with_intent(work, &intent),
+        Ok(Some(approval_screen())),
+        vec![permit(
+            Effect::ApproveOnce,
+            work,
+            &intent.operation,
+            &intent.target,
+        )],
+        false,
+    );
+    let outcome = watcher.tick(1_000).unwrap();
+    assert_eq!(outcome.len(), 1);
+    assert_eq!(outcome[0].status, Status::Acted);
+    assert_eq!(calls(&watcher).len(), 1);
+    assert_eq!(calls(&watcher)[0].work_id, work);
+    // task/1's board never receives task/2's record.
+    assert!(
+        !watcher
+            .board
+            .texts()
+            .iter()
+            .any(|text| text.contains("\"work\":\"task/2\""))
+    );
 }
