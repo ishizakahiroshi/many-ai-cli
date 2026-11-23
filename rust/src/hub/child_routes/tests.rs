@@ -151,6 +151,14 @@ async fn fixture_with_registry(
     limit: i64,
     registry: crate::application::spawn_policy::RegistrySnapshot,
 ) -> Fixture {
+    fixture_with_parent(confirm, limit, registry, "copilot").await
+}
+async fn fixture_with_parent(
+    confirm: &str,
+    limit: i64,
+    registry: crate::application::spawn_policy::RegistrySnapshot,
+    parent_provider: &str,
+) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let runtime = root.path().join("trial");
     std::fs::create_dir(&runtime).unwrap();
@@ -192,7 +200,7 @@ async fn fixture_with_registry(
         .register(
             RegisterRequest {
                 message: crate::proto::Message {
-                    provider: "copilot".into(),
+                    provider: parent_provider.into(),
                     cwd: project.to_string_lossy().into_owned(),
                     pid: 7,
                     cols: 80,
@@ -792,7 +800,10 @@ async fn registered_provider_without_headless_definition_is_refused_for_headless
     assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
 }
 
-fn acp_registry(override_copilot: bool) -> crate::application::spawn_policy::RegistrySnapshot {
+/// A registry with one registered ACP provider, `fixture-acp`. A built-in id
+/// cannot be made an ACP one (an override keeps its shipped connection), so a
+/// test that needs an ACP parent registers the parent as `fixture-acp`.
+fn acp_registry_build() -> crate::profile::registry::Registry {
     use crate::proto::provider::{Definition, LaunchDefinition, Layers};
     let acp = |id: &str| Definition {
         schema_version: 1,
@@ -805,21 +816,22 @@ fn acp_registry(override_copilot: bool) -> crate::application::spawn_policy::Reg
         }),
         ..Default::default()
     };
-    let registry = crate::profile::registry::Registry::build(
+    crate::profile::registry::Registry::build(
         Layers {
             embedded: Some(crate::profile::registry::embedded_definitions().unwrap()),
             user: Some(vec![acp("fixture-acp")]),
-            // The fixture parent session is `copilot`; this makes it an ACP one.
-            overrides: override_copilot.then(|| vec![acp("copilot")]),
             ..Default::default()
         },
         &crate::profile::registry::default_adapters(),
-    );
+    )
+}
+fn acp_registry() -> crate::application::spawn_policy::RegistrySnapshot {
+    let registry = acp_registry_build();
     Arc::new(move || Ok(registry.clone()))
 }
 #[tokio::test]
 async fn an_acp_provider_is_refused_as_a_child() {
-    let f = fixture_with_registry("off", 4, acp_registry(false)).await;
+    let f = fixture_with_registry("off", 4, acp_registry()).await;
     let response = f
         .route
         .spawn_authenticated(
@@ -842,7 +854,7 @@ async fn an_acp_provider_is_refused_as_a_child() {
 }
 #[tokio::test]
 async fn no_child_is_started_under_an_acp_parent() {
-    let f = fixture_with_registry("off", 4, acp_registry(true)).await;
+    let f = fixture_with_parent("off", 4, acp_registry(), "fixture-acp").await;
     let response = f
         .route
         .spawn_authenticated(
@@ -860,21 +872,8 @@ async fn no_child_is_started_under_an_acp_parent() {
 }
 #[tokio::test]
 async fn an_acp_session_takes_no_inject_from_another_session() {
-    let _guard =
-        crate::profile::declared::install_test_registry(crate::profile::registry::Registry::build(
-            crate::proto::provider::Layers {
-                embedded: Some(crate::profile::registry::embedded_definitions().unwrap()),
-                overrides: Some(vec![crate::proto::provider::Definition {
-                    schema_version: 1,
-                    id: "copilot".into(),
-                    connection: "acp".into(),
-                    ..Default::default()
-                }]),
-                ..Default::default()
-            },
-            &crate::profile::registry::default_adapters(),
-        ));
-    let f = fixture_with_registry("off", 4, registered_registry()).await;
+    let _guard = crate::profile::declared::install_test_registry(acp_registry_build());
+    let f = fixture_with_parent("off", 4, registered_registry(), "fixture-acp").await;
     let control = crate::hub::child_control::ChildControl::new(
         f.core.clone(),
         f.route.program.clone(),

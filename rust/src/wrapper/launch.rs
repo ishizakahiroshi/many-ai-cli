@@ -480,15 +480,24 @@ pub fn prepare_launch_with_definition(
             })
             .unwrap_or_default()
     };
-    let headless_definition = definition
-        .and_then(|d| d.definition.launch.as_ref())
-        .and_then(|l| l.headless.as_ref())
-        .map(|h| HeadlessDef {
-            args: h.args.clone(),
-            format: h.format.clone(),
-            prompt_via: h.prompt_via.clone(),
-        })
-        .or_else(|| config::headless_def_for(provider, Some(cfg)));
+    // A built-in's headless argv comes from what shipped only, never from an
+    // override or a distribution layer: the Hub confirms a built-in child by its
+    // mode name alone, and these args sit in front of the mode's own flags.
+    let shipped = crate::proto::provider::BUILTIN_PROVIDER_IDS
+        .contains(&provider)
+        .then(|| crate::profile::declared::builtin(provider))
+        .flatten();
+    let headless_definition = match &shipped {
+        Some(builtin) => builtin.launch.as_ref(),
+        None => definition.and_then(|d| d.definition.launch.as_ref()),
+    }
+    .and_then(|l| l.headless.as_ref())
+    .map(|h| HeadlessDef {
+        args: h.args.clone(),
+        format: h.format.clone(),
+        prompt_via: h.prompt_via.clone(),
+    })
+    .or_else(|| config::headless_def_for(provider, Some(cfg)));
     let mut required_hooks = Vec::new();
     if !login_mode {
         if provider == "opencode" {
@@ -1535,43 +1544,123 @@ mod tests {
         paths: &RuntimePaths,
         edit: impl FnOnce(&mut crate::proto::provider::Definition),
     ) {
+        override_builtin_id(paths, "claude", edit);
+    }
+    fn override_builtin_id(
+        paths: &RuntimePaths,
+        id: &str,
+        edit: impl FnOnce(&mut crate::proto::provider::Definition),
+    ) {
         let config = std::sync::Arc::new(
             crate::config::ConfigStore::new(paths.clone(), Config::default()).unwrap(),
         );
         let store = crate::profile::store::ProviderRegistryStore::new(paths, config).unwrap();
-        let baseline = store.baseline("claude").unwrap();
+        let baseline = store.baseline(id).unwrap();
         let mut edited = baseline.clone();
         edit(&mut edited);
         store
             .history
-            .save_override("claude", edited, &baseline, "", "edit")
+            .save_override(id, edited, &baseline, "", "edit")
             .unwrap();
     }
+    /// The model list command the Hub runs on its own, and the way a built-in
+    /// connects, stay what shipped whatever an override of that built-in says.
     #[test]
-    fn a_builtin_override_is_what_the_wrapper_launches() {
-        // The dashboard shows the registry with overrides applied; the launch
-        // uses that same registry, not the embedded definition.
+    fn a_builtin_override_cannot_change_the_model_list_command_or_the_connection() {
+        use crate::proto::provider::{ModelListDefinition, ModelsDefinition};
+        let (_root, _installed, paths) = trial();
+        let hostile_list = ModelListDefinition {
+            args: argv(&["--force", "-p", "synthetic"]),
+            refresh_args: argv(&["--synthetic-refresh"]),
+            timeout_seconds: 600,
+        };
+        for id in ["cursor-agent", "claude"] {
+            let list = hostile_list.clone();
+            override_builtin_id(&paths, id, move |def| {
+                def.models
+                    .get_or_insert_with(ModelsDefinition::default)
+                    .list = Some(list);
+            });
+        }
+        override_builtin_id(&paths, "grok", |def| {
+            def.connection = "acp".into();
+            let launch = def.launch.as_mut().unwrap();
+            launch.executable = "synthetic-other".into();
+            launch.args = argv(&["--synthetic-flag"]);
+        });
+        let (registry, diagnostics) =
+            provider_registry_for_runtime(&Config::default(), &paths).unwrap();
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        for id in ["cursor-agent", "claude"] {
+            let declared = registry.declared(id).unwrap();
+            let shipped = crate::profile::declared::builtin(id).unwrap();
+            assert!(
+                declared.models.as_ref().and_then(|m| m.list.as_ref())
+                    == shipped.models.as_ref().and_then(|m| m.list.as_ref()),
+                "{id}"
+            );
+        }
+        // cursor-agent ships a list command; claude ships none.
+        let cursor = registry.declared("cursor-agent").unwrap().models.unwrap();
+        assert!(cursor.list.is_some_and(|l| !l.args.is_empty()
+            && !l.args.iter().any(|a| a == "--force")
+            && l.timeout_seconds != 600));
+        assert!(
+            registry
+                .declared("claude")
+                .unwrap()
+                .models
+                .is_none_or(|m| m.list.is_none())
+        );
+        let grok = registry.declared("grok").unwrap();
+        assert_ne!(grok.connection, "acp");
+        assert!(crate::profile::declared::automation_allowed(&grok));
+        let _guard = crate::profile::declared::install_test_registry(registry);
+        assert!(!crate::profile::declared::is_acp("grok"));
+    }
+    #[test]
+    fn a_builtin_override_cannot_change_the_headless_argv() {
+        // The headless args sit in front of the mode's own flags, and the Hub
+        // confirms a built-in child by the mode name alone, so an override of a
+        // built-in must not slip a flag into a headless child.
         let (_root, _installed, paths) = trial();
         override_builtin(&paths, |def| {
             def.launch.as_mut().unwrap().headless =
                 Some(crate::proto::provider::HeadlessDefinition {
-                    args: argv(&["--synthetic-headless"]),
+                    args: argv(&["-p", "--dangerously-skip-permissions"]),
                     format: "text".into(),
                     prompt_via: "stdin".into(),
                 });
         });
-        let (p, _) = runtime_plan(&Config::default(), &paths, "claude", &["--headless"]);
-        assert_eq!(
-            p.headless_definition,
-            Some(HeadlessDef {
-                args: argv(&["--synthetic-headless"]),
-                format: "text".into(),
-                prompt_via: "stdin".into(),
-            })
+        let (registry, diagnostics) =
+            provider_registry_for_runtime(&Config::default(), &paths).unwrap();
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        let p = prepare_launch_with_registry(
+            &Config::default(),
+            "claude",
+            parse(&["--headless", "--permission-mode=plan"]),
+            &registry,
+        )
+        .unwrap();
+        let embedded = prepare_launch(
+            &Config::default(),
+            "claude",
+            parse(&["--headless", "--permission-mode=plan"]),
+        )
+        .unwrap();
+        assert!(embedded.headless_definition.is_some());
+        assert_eq!(p.headless_definition, embedded.headless_definition);
+        let headless = p.headless_definition.as_ref().unwrap();
+        assert!(
+            !headless
+                .args
+                .iter()
+                .chain(p.provider_args.iter())
+                .any(|a| a == "--dangerously-skip-permissions"),
+            "{:?} {:?}",
+            headless.args,
+            p.provider_args
         );
-        let embedded =
-            prepare_launch(&Config::default(), "claude", parse(&["--headless"])).unwrap();
-        assert_ne!(p.headless_definition, embedded.headless_definition);
     }
     /// The Hub confirms a built-in child by its mode name alone, so an override
     /// of a built-in must not change which flag a mode name, an allowed tool

@@ -302,10 +302,10 @@ fn pick<T: Clone>(own: &Option<T>, fallback: &Option<T>) -> Option<T> {
 }
 
 /// `def` with every declarative section that it leaves empty filled from
-/// `builtin` (`permissions`, `approval` and `instructions` always come from
-/// `builtin`, see below). The result is what the rest of the Hub reads; `def`
-/// itself (and therefore the registry revision) is never changed. `builtin` is
-/// given only for a built-in id.
+/// `builtin` (`connection`, `permissions`, `approval`, `instructions` and
+/// `models.list` always come from `builtin`, see below). The result is what
+/// the rest of the Hub reads; `def` itself (and therefore the registry
+/// revision) is never changed. `builtin` is given only for a built-in id.
 pub fn resolve(def: &Definition, builtin: Option<&Definition>) -> Definition {
     let mut out = def.clone();
     fold_launch_permission_args(&mut out);
@@ -313,9 +313,10 @@ pub fn resolve(def: &Definition, builtin: Option<&Definition>) -> Definition {
     let Some(b) = builtin else {
         return out;
     };
-    if out.connection.is_empty() {
-        out.connection = b.connection.clone();
-    }
+    // A built-in always connects the way it shipped (a PTY). An override that
+    // turned it into an ACP agent would start another executable under the
+    // built-in's name, and would also shut every automated path to it.
+    out.connection = b.connection.clone();
     out.slash_commands = pick(&def.slash_commands, &b.slash_commands);
     out.login = pick(&def.login, &b.login);
     out.links = pick(&def.links, &b.links);
@@ -338,11 +339,15 @@ pub fn resolve(def: &Definition, builtin: Option<&Definition>) -> Definition {
     {
         launch.config_dir_env = bl.config_dir_env.clone();
     }
+    // The command the Hub runs on its own to read the model list (the built-in
+    // executable with `models.list` args, no session and no person in the loop)
+    // is the shipped one only; it used to be fixed in code.
+    let shipped_list = b.models.as_ref().and_then(|m| m.list.clone());
+    if let Some(models) = out.models.as_mut() {
+        models.list = shipped_list;
+    }
     match (out.models.as_mut(), b.models.as_ref()) {
         (Some(models), Some(bm)) => {
-            if models.list.is_none() {
-                models.list = bm.list.clone();
-            }
             if models.context_limit == 0 {
                 models.context_limit = bm.context_limit;
             }
