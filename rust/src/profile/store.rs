@@ -153,8 +153,9 @@ pub fn is_builtin(id: &str) -> bool {
     BUILTIN_PROVIDER_IDS.contains(&id)
 }
 /// Ids that are reserved without being launchable: `shell` is a launch identity
-/// and `common` is the approval-pattern file every session shares.
-const RESERVED_NON_PROVIDERS: &[&str] = &["shell", "common"];
+/// and `common` is the approval-pattern file every session shares. `declarations`
+/// is the path of the screen's declarations route under `/api/providers/`.
+const RESERVED_NON_PROVIDERS: &[&str] = &["shell", "common", "declarations"];
 fn reserved(id: &str) -> bool {
     is_builtin(id) || RESERVED_NON_PROVIDERS.contains(&id)
 }

@@ -28,14 +28,8 @@ pub struct Status {
     pub account: Option<u64>,
 }
 pub const PROVIDERS: &[&str] = &["claude", "codex", "grok", "opencode"];
-pub fn env_key(provider: &str) -> Option<&'static str> {
-    match provider {
-        "claude" => Some("CLAUDE_CONFIG_DIR"),
-        "codex" => Some("CODEX_HOME"),
-        "grok" => Some("GROK_HOME"),
-        "opencode" => Some("XDG_DATA_HOME"),
-        _ => None,
-    }
+pub fn env_key(provider: &str) -> Option<String> {
+    crate::profile::declared::builtin_config_dir_env(provider)
 }
 pub trait SubscriptionCli: Send + Sync {
     fn status<'a>(
@@ -126,7 +120,7 @@ impl NativeSubscriptionCli {
         if cfg!(windows) {
             let old = env
                 .keys()
-                .find(|name0| name0.to_string_lossy().eq_ignore_ascii_case(key))
+                .find(|name0| name0.to_string_lossy().eq_ignore_ascii_case(&key))
                 .cloned();
             if let Some(old) = old {
                 env.remove(&old);

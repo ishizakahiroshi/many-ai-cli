@@ -298,6 +298,103 @@ async fn source_shared_provider_lifetime_keeps_block_until_last_actual_session_e
     assert!(!f.paths.root().join("approval-rule-targets.json").exists());
     assert!(f.warnings.lock().unwrap().is_empty());
 }
+/// A registry with the built-ins and three registered CLIs: one that declares
+/// the project file it reads, one that declares nothing, and one reached over
+/// ACP that declares a file all the same.
+fn registered_clis() -> crate::profile::declared::TestRegistryGuard {
+    use crate::{
+        profile::registry,
+        proto::provider::{Definition, InstructionsDefinition, LaunchDefinition, Layers},
+    };
+    let cli = |id: &str, connection: &str, rules_file: &str| Definition {
+        schema_version: 1,
+        id: id.into(),
+        display_name: id.into(),
+        connection: connection.into(),
+        launch: Some(LaunchDefinition {
+            executable: format!("{id}-bin"),
+            ..Default::default()
+        }),
+        instructions: (!rules_file.is_empty()).then(|| InstructionsDefinition {
+            rules_file: rules_file.into(),
+        }),
+        ..Default::default()
+    };
+    crate::profile::declared::install_test_registry(registry::Registry::build(
+        Layers {
+            embedded: Some(registry::embedded_definitions().unwrap()),
+            user: Some(vec![
+                cli("fixture-reads-rules", "", "RULES.md"),
+                cli("fixture-silent", "", ""),
+                cli("fixture-acp", "acp", "RULES.md"),
+            ]),
+            ..Default::default()
+        },
+        &registry::default_adapters(),
+    ))
+}
+fn has_rules(path: &Path) -> bool {
+    const START: &[u8] = b"<!-- many-ai-cli:approval-rules -->";
+    std::fs::read(path).is_ok_and(|body| body.windows(START.len()).any(|v| v == START))
+}
+#[tokio::test]
+async fn a_registered_cli_gets_the_rules_in_the_project_file_it_declares() {
+    let _registry = registered_clis();
+    let f = fixture();
+    let session = register(&f, "fixture-reads-rules", 2051).await;
+    let path = f._root.path().join("project/RULES.md");
+    std::fs::write(&path, b"original").unwrap();
+    let cancel = Cancellation::default();
+    f.owner.change("enable", &cancel).await.unwrap();
+    assert!(has_rules(&path));
+    assert!(!f._root.path().join("project/AGENTS.md").exists());
+    assert!(f.paths.root().join("approval-rule-targets.json").exists());
+    f.core.disconnected(session, at()).unwrap();
+    f.owner.ended(&cancel).await;
+    assert_eq!(std::fs::read(&path).unwrap(), b"original");
+    assert!(!f.paths.root().join("approval-rule-targets.json").exists());
+    assert!(f.warnings.lock().unwrap().is_empty());
+}
+#[tokio::test]
+async fn a_cli_that_declares_no_file_or_is_reached_over_acp_is_left_alone() {
+    let _registry = registered_clis();
+    let f = fixture();
+    let _silent = register(&f, "fixture-silent", 2061).await;
+    let _acp = register(&f, "fixture-acp", 2062).await;
+    let _unknown = register(&f, "nobody-declares-this", 2063).await;
+    let cancel = Cancellation::default();
+    f.owner.change("enable", &cancel).await.unwrap();
+    let project = f._root.path().join("project");
+    assert_eq!(std::fs::read_dir(&project).unwrap().count(), 0);
+    assert!(!f.paths.root().join("approval-rule-targets.json").exists());
+    assert_eq!(f.root_calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert!(f.warnings.lock().unwrap().is_empty());
+}
+#[tokio::test]
+async fn the_built_in_project_file_clis_still_get_the_rules_from_their_declaration() {
+    for (provider, pid) in [
+        ("copilot", 2071),
+        ("cursor-agent", 2072),
+        ("grok", 2073),
+        ("opencode", 2074),
+    ] {
+        let f = fixture();
+        let _session = register(&f, provider, pid).await;
+        let cancel = Cancellation::default();
+        f.owner.change("enable", &cancel).await.unwrap();
+        assert!(
+            has_rules(&f._root.path().join("project/AGENTS.md")),
+            "{provider}"
+        );
+    }
+    let f = fixture();
+    let _session = register(&f, "command-code", 2075).await;
+    f.owner
+        .change("enable", &Cancellation::default())
+        .await
+        .unwrap();
+    assert!(!f._root.path().join("project/AGENTS.md").exists());
+}
 #[tokio::test]
 async fn crash_recovery_removes_only_approved_rules_and_retains_failed_journal_entries() {
     let f = fixture();

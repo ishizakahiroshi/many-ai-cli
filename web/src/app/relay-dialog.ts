@@ -2,7 +2,7 @@ import { t } from '../i18n.js';
 import type { SessionSnapshot } from '../types/proto.js';
 import { sessions } from './state.js';
 import { apiFetch, showToast } from './util.js';
-import { ORCHESTRATION_CLI_OPTIONS } from './orchestration-roles.js';
+import { orchestrationCliOptions } from './orchestration-roles.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 import { permissionPresetLabel } from './spawn-confirm.js';
 import { PERMISSION_PRESET_SCHEMA, isPermissionPresetAvailable } from './spawn-confirm-store.js';
@@ -118,7 +118,7 @@ function savePrefs(): void {
 
 function appendSelectOptions(select: HTMLSelectElement, selected: string): void {
   select.replaceChildren();
-  ORCHESTRATION_CLI_OPTIONS.forEach((choice) => {
+  orchestrationCliOptions().forEach((choice) => {
     const option = document.createElement('option');
     option.value = choice.value;
     option.textContent = choice.label || translated(choice.labelKey || '', choice.labelKey || choice.value);

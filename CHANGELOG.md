@@ -35,10 +35,64 @@ Release artifacts are published at
   (`ready_markers`, `startup_blockers`, `composer_prefix`,
   `composer_end_markers`), so the conductor is told when a child sits on a
   startup screen, and a first instruction left unsent in its input box is
-  retried and reported.
+  retried and reported. Claude Code and Codex read their screens from the
+  same section in the built-in declarations.
+- **Antigravity can be used over its official ACP runtime, only when you
+  drive it yourself.** A sample definition (`docs/samples/acp-agent-sample.json`,
+  `connection: acp`, command `agy acp`) is added with
+  `provider add --definition`; it is not a built-in. An ACP provider is refused
+  on every automated path (child, relay, routine, board, automatic approval and
+  retry). The README lists what is allowed and what is not. Google has not
+  approved many-ai-cli individually, the terms can change, and the behavior
+  against a real `agy acp` is not verified yet.
+- **A registered AI CLI is handled like the built-in seven.** A definition can
+  now declare its slash command source or list, scheduled-run completion, usage
+  page, badge letter and order, permission modes and their launch flags, login
+  arguments, model list command, input habits and ready-screen text. A routine
+  can use a registered CLI, `/api/slash-commands` answers for it, and the
+  dashboard reads names, badge letters, order, usage links and permission
+  choices from the Hub (`GET /api/providers/declarations`) instead of fixed
+  tables. The badge letter of OpenCode and Copilot is now the same on every
+  screen (`O` and `P`; the chat avatar used to show `P` and `A`).
+- **A registered AI CLI can declare where its conversation file lives and how
+  to read it, and how its approval prompt looks.** A definition's `transcript`
+  section names the folder (with `{home}` / `{env:NAME}`), how a Hub session is
+  matched to a file (session id, first-line metadata, or a read-only SQLite
+  table) and how to read it as chat (JSON or JSONL, role and text keys), so the
+  "raw log" button and the chat view work for it. Its `approval` section chooses
+  among a few prompt shapes (numbered options, single keys, button rows) and the
+  wording to look for. The built-in command-code and opencode log lookups and
+  all seven built-in approval detectors now read the same declarations.
+- **A registered AI CLI can be told to ask its questions in the dashboard's
+  format.** A definition's `instructions.rules_file` names the Markdown file in
+  the project root that the CLI always reads (for example `AGENTS.md`). While a
+  session of that CLI runs, the Hub keeps its question and done marker rules in
+  that file and removes them when the last session ends, as it already did for
+  Copilot, Cursor Agent, Grok and OpenCode (those four now read the same
+  declaration). A CLI that declares no file is left alone. Until now a
+  registered CLI never received the rules, so it asked with its own picker and
+  no confirmation dialog appeared. Whether a given CLI follows the rules is
+  not verified.
+- **`provider add --definition <file>` and a feature list in `provider test` and
+  Settings.** An AI can register a whole JSON definition at once (the options
+  `--model`, `--letter`, `--color`, `--usage-url`, `--slash-source` and
+  `--permission-mode` replace single values), and `provider add --help` now
+  tells it what to research (slash command source, where conversations are
+  saved and their format, approval wording and keys, permission flags, model
+  list command, usage page) and to leave out what it cannot find. `provider
+  test` also lists what the CLI can do as available, unavailable (with what to
+  add) or unsupported, and tries the slash command source, the conversation
+  folder and the model list command. Settings -> AI CLI integrations shows the
+  same list for every row. Reading the remaining quota, switching subscription
+  profiles and the sub-agent tree stay unsupported for a registered CLI.
 
 ### Changed
 
+- A provider definition's `launch.permission_args` and
+  `capabilities.slash_suggestion_popup` are read as the same declarations as
+  `permissions.modes` and `input.slash_submit: paste` (a value written in the
+  newer section wins). A registered AI CLI's permission flags still reach it
+  only through the Hub, for a mode a person confirmed.
 - **The handoff, its preview and the handoff list show only the latest launch
   when a session number was reused** after a Hub restart. Older lines stay on
   disk (#46).

@@ -1,15 +1,7 @@
 //! Dispatch mirrors cmd/many-ai-cli/main.go. Execution is wired by the integration owner.
 use std::path::PathBuf;
 
-pub const BUILTIN_PROVIDERS: &[&str] = &[
-    "claude",
-    "codex",
-    "copilot",
-    "cursor-agent",
-    "opencode",
-    "grok",
-    "command-code",
-];
+pub const BUILTIN_PROVIDERS: &[&str] = crate::proto::provider::BUILTIN_PROVIDER_IDS;
 pub const USAGE: &str = "many-ai-cli <serve|connect|setup|doctor|issue|wrap|claude|codex|copilot|cursor-agent|opencode|grok|command-code|shell-init|stop|status|tray|profile-export|log-clean|uninstall|version>";
 pub const TRAY_USAGE: &str = "Windows: many-ai-cli tray [--open] [--replace] [--home <absolute-home>] [--port <port>]\n  --open: start or reuse the Hub and open its browser; omitted: idle tray only\n  --replace: move a console-started Hub into this tray (implies --open)\n  --home/--port: retain the home and port selected by setup\nWindows: many-ai-cli setup [--port <port>]";
 

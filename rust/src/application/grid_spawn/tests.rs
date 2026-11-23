@@ -425,3 +425,79 @@ fn spawn_correlation_grid_schema_and_validation_precede_registry() {
         "invalid client_request_id"
     );
 }
+
+#[tokio::test]
+async fn an_acp_provider_is_refused_by_the_grid() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cwd = tmp.path().join("project");
+    let home = tmp.path().join("home");
+    let trial = tmp.path().join("trial");
+    let installed = tmp.path().join("installed");
+    for path in [&cwd, &home, &trial, &installed] {
+        std::fs::create_dir(path).unwrap();
+    }
+    let paths = RuntimePaths::trial(&trial, 49183, &installed).unwrap();
+    let capture = Arc::new(Capture {
+        requests: Mutex::new(vec![]),
+        fail_at: 0,
+    });
+    let core = Arc::new(SessionEngine::new(
+        EngineOptions::default(),
+        Arc::new(SessionJournal::new(
+            paths,
+            None,
+            JournalOptions {
+                session_enabled: false,
+                max_bytes: 0,
+            },
+        )),
+        Arc::new(Boundary),
+        Arc::new(Boundary),
+        capture.clone(),
+        CoreEventBus::new(16).unwrap(),
+    ));
+    let registry = Registry::build(
+        Layers {
+            embedded: Some(embedded_definitions().unwrap()),
+            user: Some(vec![crate::proto::provider::Definition {
+                schema_version: 1,
+                id: "fixture-acp".into(),
+                display_name: "Fixture ACP".into(),
+                connection: "acp".into(),
+                launch: Some(crate::proto::provider::LaunchDefinition {
+                    executable: "fixture-acp-bin".into(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        },
+        &default_adapters(),
+    );
+    let tasks = crate::hub::task_owner::HubTaskOwner::new(tokio::runtime::Handle::current());
+    let service = Arc::new(GridSpawn::new(Dependencies {
+        core: core.clone(),
+        registry: Arc::new(move || Ok(registry.clone())),
+        hub_cwd: cwd,
+        home,
+        environment: vec![],
+        tasks: tasks.handle(),
+    }));
+    let body = GridRequest {
+        preset: "ai+shell".into(),
+        provider: "fixture-acp".into(),
+        count: 2,
+        ..Default::default()
+    };
+    let result = service
+        .spawn(
+            body,
+            &VerifiedConfirmationRequest::after_server_authentication(core.auth_epoch()),
+        )
+        .await;
+    assert_eq!(
+        result.err().unwrap().detail,
+        "invalid ai provider for ai+shell preset"
+    );
+    assert!(capture.requests.lock().unwrap().is_empty());
+}

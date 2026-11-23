@@ -238,16 +238,12 @@ export function setVoiceEngine(value: any): VoiceEngine {
 
 try { getVoiceEngine(); } catch (_) {}
 
-export const DEFAULT_USAGE_LINKS = {
-  claude:   'https://claude.ai/settings/usage',
-  codex:    'https://chatgpt.com/codex/cloud/settings/analytics#usage',
-  copilot:  'https://github.com/settings/billing',
-  'cursor-agent': 'https://cursor.com/dashboard',
+// 使用量ページの既定の URL のうち、provider ではない画面だけの経路（ollama・lm-studio）の分。
+// provider の分は Hub が送る宣言（links.usage_url）から読む（settings.ts の getUsageLinkUrl）。
+export const DEFAULT_USAGE_LINKS: Record<string, string> = {
   ollama:      'https://ollama.com/settings',
   'lm-studio': 'http://localhost:1234',
-  opencode: 'https://opencode.ai/go',
-  grok:     'https://grok.com/?_s=usage',
-  'command-code': 'https://commandcode.ai/usage',
+  // devin-cli は同梱ではないが、設定の「使用量リンク」に欄がある。登録した定義に links.usage_url があればそちらが勝つ。
   'devin-cli': 'https://app.devin.ai/',
 };
 

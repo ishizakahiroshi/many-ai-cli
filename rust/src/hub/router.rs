@@ -49,6 +49,7 @@ pub struct ServiceRouter {
     icons: Option<Arc<super::icon_routes::IconHttp>>,
     diagnostics: Option<Arc<super::diagnostic_routes::DiagnosticHttp>>,
     agent_history: Option<Arc<super::agent_history_routes::AgentHistoryHttp>>,
+    acp: Option<Arc<super::acp_routes::AcpHttp>>,
     grid: Option<Arc<super::grid_spawn_routes::GridHttp>>,
     mobile: Option<Arc<super::mobile_routes::MobileHttp>>,
     patterns: Option<Arc<super::approval_pattern_routes::ApprovalPatternHttp>>,
@@ -254,6 +255,7 @@ impl ServiceRouter {
             icons: None,
             diagnostics: None,
             agent_history: None,
+            acp: None,
             grid: None,
             mobile: None,
             patterns: None,
@@ -489,6 +491,11 @@ impl ServiceRouter {
         self.agent_history = Some(owner);
         self
     }
+    /// ACP sessions (`/api/acp/...`); reachable only with the dashboard's proof.
+    pub fn with_acp_sessions(mut self, owner: Arc<super::acp_routes::AcpHttp>) -> Self {
+        self.acp = Some(owner);
+        self
+    }
     pub fn with_grid(mut self, owner: Arc<super::grid_spawn_routes::GridHttp>) -> Self {
         self.grid = Some(owner);
         self
@@ -521,6 +528,34 @@ impl ServiceRouter {
     ) -> Self {
         self.board_handoffs = Some(owner);
         self
+    }
+    /// The dashboard's proof: the signed UI cookie plus same-origin Fetch
+    /// Metadata and an allowed Origin. A request that only holds the Hub token
+    /// (a child session, a routine, `orchestrate`) never gets one.
+    fn ui_proof(
+        &self,
+        request: &Request,
+        now: i64,
+        epoch: Option<crate::proto::core::AuthEpoch>,
+    ) -> Option<crate::proto::core::VerifiedUiOrigin> {
+        self.config.snapshot().ok().and_then(|snapshot| {
+            let config = snapshot.config;
+            let bound = self.auth.valid_ui_cookie(request, &config, now)
+                && request
+                    .header("Sec-Fetch-Site")
+                    .trim()
+                    .eq_ignore_ascii_case("same-origin")
+                && !request.header("Origin").trim().is_empty()
+                && auth::allowed_origin(
+                    request.header("Origin").trim(),
+                    i64::from(self.bound_port),
+                    &config.hub.allowed_hosts,
+                    auth::request_authority(request),
+                );
+            epoch
+                .filter(|_| bound)
+                .map(crate::proto::core::VerifiedUiOrigin::after_server_verification)
+        })
     }
     pub(crate) fn owned_request_permit(
         &self,
@@ -790,25 +825,15 @@ impl ServiceRouter {
                 _ => Response::error(503, "spawn_unavailable", "spawn service is not initialized"),
             });
         }
-        if super::child_routes::is_spawn_route(&request.path) {
-            let ui = self.config.snapshot().ok().and_then(|snapshot| {
-                let config = snapshot.config;
-                let bound = self.auth.valid_ui_cookie(request, &config, now)
-                    && request
-                        .header("Sec-Fetch-Site")
-                        .trim()
-                        .eq_ignore_ascii_case("same-origin")
-                    && !request.header("Origin").trim().is_empty()
-                    && auth::allowed_origin(
-                        request.header("Origin").trim(),
-                        i64::from(self.bound_port),
-                        &config.hub.allowed_hosts,
-                        auth::request_authority(request),
-                    );
-                epoch
-                    .filter(|_| bound)
-                    .map(crate::proto::core::VerifiedUiOrigin::after_server_verification)
+        if super::acp_routes::is_route(&request.path) {
+            let ui = self.ui_proof(request, now, epoch);
+            return Dispatch::response(match &self.acp {
+                Some(acp) => acp.handle_authenticated(request, ui).await,
+                None => Response::error(503, "acp_unavailable", "ACP sessions are not initialized"),
             });
+        }
+        if super::child_routes::is_spawn_route(&request.path) {
+            let ui = self.ui_proof(request, now, epoch);
             return Dispatch::response(match &self.children {
                 Some(children) => children.spawn_authenticated(request, ui, waiter, at).await,
                 None => Response::error(
@@ -1193,6 +1218,7 @@ impl ServiceRouter {
             icons: None,
             diagnostics: None,
             agent_history: None,
+            acp: None,
             grid: None,
             mobile: None,
             patterns: None,
@@ -1730,6 +1756,7 @@ pub(crate) fn needs_owned_request(path: &str) -> bool {
     path == super::iris_execution::PATH
         || super::diagnostic_routes::DiagnosticHttp::methods(path).is_some()
         || super::agent_history_routes::methods(path).is_some()
+        || super::acp_routes::is_route(path)
         || super::approval_pattern_routes::is_route(path)
         || super::approval_status_routes::methods(path).is_some()
         || super::mobile_routes::methods(path).is_some()
@@ -1813,6 +1840,7 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
         p if super::agent_history_routes::methods(p).is_some() => {
             super::agent_history_routes::methods(p).unwrap()
         }
+        p if super::acp_routes::is_route(p) => super::acp_routes::methods(p).unwrap(),
         p if super::approval_pattern_routes::is_route(p) => {
             super::approval_pattern_routes::methods(p)
         }

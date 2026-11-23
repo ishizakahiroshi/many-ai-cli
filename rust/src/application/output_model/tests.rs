@@ -44,3 +44,28 @@ fn change_requires_unsplit_raw_trigger_and_preserves_source_effort_case() {
     assert_eq!(change("claude", b"Set model to ", "Set model to \t"), None);
     assert_eq!(change("shell", b"Set model to ", "Set model to Opus"), None);
 }
+#[test]
+fn a_declared_change_pattern_reports_the_model_of_a_registered_provider() {
+    let pattern = r"Now using ([^\r\n]+)";
+    assert_eq!(
+        change_with(pattern, false, b"Now using ", "Now using demo-2\r\n"),
+        Some(detected("demo-2", ""))
+    );
+    assert_eq!(
+        change_with(
+            pattern,
+            true,
+            b"Now using ",
+            "Now using demo-2 with high effort\r\n"
+        ),
+        Some(detected("demo-2", "high"))
+    );
+    // The raw bytes must hold the literal text before the capture group.
+    assert_eq!(
+        change_with(pattern, false, b"other", "Now using demo-2"),
+        None
+    );
+    // A pattern that is not a regular expression never matches (it is refused
+    // when a definition is accepted, so this is only a guard).
+    assert_eq!(change_with("(", false, b"", "Now using demo-2"), None);
+}

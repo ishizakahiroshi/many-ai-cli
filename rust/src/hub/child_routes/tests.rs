@@ -791,3 +791,102 @@ async fn registered_provider_without_headless_definition_is_refused_for_headless
     );
     assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
 }
+
+fn acp_registry(override_copilot: bool) -> crate::application::spawn_policy::RegistrySnapshot {
+    use crate::proto::provider::{Definition, LaunchDefinition, Layers};
+    let acp = |id: &str| Definition {
+        schema_version: 1,
+        id: id.into(),
+        display_name: "Fixture ACP".into(),
+        connection: "acp".into(),
+        launch: Some(LaunchDefinition {
+            executable: "fixture-acp-bin".into(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let registry = crate::profile::registry::Registry::build(
+        Layers {
+            embedded: Some(crate::profile::registry::embedded_definitions().unwrap()),
+            user: Some(vec![acp("fixture-acp")]),
+            // The fixture parent session is `copilot`; this makes it an ACP one.
+            overrides: override_copilot.then(|| vec![acp("copilot")]),
+            ..Default::default()
+        },
+        &crate::profile::registry::default_adapters(),
+    );
+    Arc::new(move || Ok(registry.clone()))
+}
+#[tokio::test]
+async fn an_acp_provider_is_refused_as_a_child() {
+    let f = fixture_with_registry("off", 4, acp_registry(false)).await;
+    let response = f
+        .route
+        .spawn_authenticated(
+            &child_request(
+                f.parent,
+                serde_json::json!({"role":"worker","provider":"fixture-acp","same_tree":true}),
+            ),
+            None,
+            &HttpWaitCancellation::default(),
+            Timestamp::now(),
+        )
+        .await;
+    assert_eq!(response.status, 403);
+    assert!(
+        String::from_utf8(response.body)
+            .unwrap()
+            .contains("automation_refused")
+    );
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+}
+#[tokio::test]
+async fn no_child_is_started_under_an_acp_parent() {
+    let f = fixture_with_registry("off", 4, acp_registry(true)).await;
+    let response = f
+        .route
+        .spawn_authenticated(
+            &child_request(
+                f.parent,
+                serde_json::json!({"role":"worker","provider":"claude","same_tree":true}),
+            ),
+            None,
+            &HttpWaitCancellation::default(),
+            Timestamp::now(),
+        )
+        .await;
+    assert_eq!(response.status, 403);
+    assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+}
+#[tokio::test]
+async fn an_acp_session_takes_no_inject_from_another_session() {
+    let _guard =
+        crate::profile::declared::install_test_registry(crate::profile::registry::Registry::build(
+            crate::proto::provider::Layers {
+                embedded: Some(crate::profile::registry::embedded_definitions().unwrap()),
+                overrides: Some(vec![crate::proto::provider::Definition {
+                    schema_version: 1,
+                    id: "copilot".into(),
+                    connection: "acp".into(),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            },
+            &crate::profile::registry::default_adapters(),
+        ));
+    let f = fixture_with_registry("off", 4, registered_registry()).await;
+    let control = crate::hub::child_control::ChildControl::new(
+        f.core.clone(),
+        f.route.program.clone(),
+        f._tasks.handle(),
+        Arc::new(|_, _| {}),
+    );
+    let req = Request {
+        method: "POST".into(),
+        path: format!("/api/sessions/{}/inject", f.parent.session.0),
+        body: br#"{"text":"hello","press_enter":true}"#.to_vec(),
+        ..Default::default()
+    };
+    let response = control.handle_authenticated(&req, Timestamp::now());
+    assert_eq!(response.status, 403);
+}

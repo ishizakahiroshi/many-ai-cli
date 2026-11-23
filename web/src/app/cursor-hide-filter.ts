@@ -21,6 +21,7 @@
 //   ブロック内で検出したシーケンスは blockBuf に積み、通過時にそのまま再生される。
 
 import { bytesStartWith, isPossiblePrefix } from './hub-marker-filter.js';
+import { providerFullFrameCursor } from './provider-declarations.js';
 
 const asciiEncoder = new TextEncoder();
 export const hideCursorSeq = asciiEncoder.encode('\x1b[?25l');
@@ -33,7 +34,7 @@ export const altScreenExitSeq = asciiEncoder.encode('\x1b[?1049l');
 // 本文そのもの（Grok）や後続描画に必要なカーソル位置（Codex）が失われる。
 // OpenCode は alt buffer 追跡で保護し、Claude は従来どおりスピナーを除去する。
 export function shouldBypassCursorHideFilterForProvider(provider: string | undefined): boolean {
-  return provider === 'grok' || provider === 'codex';
+  return providerFullFrameCursor(provider);
 }
 
 // Claude Code の /model 等のセレクタダイアログは描画後カーソルを非表示のままにして

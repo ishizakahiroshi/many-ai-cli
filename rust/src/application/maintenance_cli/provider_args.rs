@@ -63,11 +63,24 @@ impl Parsed {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct AddArgs {
+    /// Empty only when `definition_file` supplies it.
     pub id: String,
+    /// Empty: the definition file's name, else the id.
     pub label: String,
+    /// Empty only when `definition_file` supplies it.
     pub command: String,
+    /// A whole definition file (JSON). The other options override its values.
+    pub definition_file: Option<String>,
+    /// `--model <id>` repeated: the models the dashboard offers.
+    pub models: Vec<String>,
+    pub letter: String,
+    pub color: String,
+    pub usage_url: String,
+    pub slash_source: String,
+    /// `--permission-mode <name>=<arg>[,<arg>...]` repeated.
+    pub permission_modes: Vec<(String, Vec<String>)>,
     pub args: Vec<String>,
     pub headless_args: Vec<String>,
     /// Some when any `--headless-*` / `--prompt-via` option was given.
@@ -93,6 +106,13 @@ pub fn parse_add(args: &[String]) -> Result<Parse<AddArgs>, String> {
             "prompt-via",
             "description",
             "approval-option",
+            "definition",
+            "model",
+            "letter",
+            "color",
+            "usage-url",
+            "slash-source",
+            "permission-mode",
         ],
     )?;
     if parsed.help {
@@ -111,14 +131,52 @@ pub fn parse_add(args: &[String]) -> Result<Parse<AddArgs>, String> {
             .map(str::to_owned)
             .ok_or_else(|| format!("--{name} is required"))
     };
-    let id = required("id")?;
-    let command = required("command")?;
-    let label = parsed
-        .one("label")?
+    let definition_file = parsed
+        .one("definition")?
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(str::to_owned)
-        .unwrap_or_else(|| id.clone());
+        .map(str::to_owned);
+    if parsed.one("definition")?.is_some() && definition_file.is_none() {
+        return Err("--definition needs a file name".into());
+    }
+    // With a definition file the id and the command may come from the file.
+    let optional = |name: &str| -> Result<String, String> {
+        Ok(parsed.one(name)?.map(str::trim).unwrap_or("").to_owned())
+    };
+    let (id, command) = if definition_file.is_some() {
+        (optional("id")?, optional("command")?)
+    } else {
+        (required("id")?, required("command")?)
+    };
+    let label = optional("label")?;
+    let label = if label.is_empty() && definition_file.is_none() {
+        id.clone()
+    } else {
+        label
+    };
+    let mut permission_modes = vec![];
+    for entry in parsed.many("permission-mode") {
+        let (name, flags) = entry.split_once('=').ok_or_else(|| {
+            format!("--permission-mode must be <name>=<arg>[,<arg>...], not {entry:?}")
+        })?;
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("--permission-mode needs a mode name before '='".into());
+        }
+        permission_modes.push((
+            name.to_owned(),
+            flags
+                .split(',')
+                .map(str::trim)
+                .filter(|flag| !flag.is_empty())
+                .map(str::to_owned)
+                .collect(),
+        ));
+    }
+    let models = parsed.many("model");
+    if models.iter().any(|model| model.trim().is_empty()) {
+        return Err("--model must not be empty".into());
+    }
     let headless_args = parsed.many("headless-arg");
     let format = parsed.one("headless-format")?;
     let via = parsed.one("prompt-via")?;
@@ -152,6 +210,13 @@ pub fn parse_add(args: &[String]) -> Result<Parse<AddArgs>, String> {
         id,
         label,
         command,
+        definition_file,
+        models,
+        letter: optional("letter")?,
+        color: optional("color")?,
+        usage_url: optional("usage-url")?,
+        slash_source: optional("slash-source")?,
+        permission_modes,
         args: parsed.many("arg"),
         headless_args,
         headless,
@@ -286,6 +351,57 @@ mod tests {
                 .contains("backtick")
         );
         assert!(refused(&["--id", "a", "--command", "x", "stray"]).contains("unexpected"));
+    }
+    #[test]
+    fn add_with_a_definition_file_needs_no_id_or_command_and_takes_the_common_flags() {
+        let Parse::Args(add) = parse_add(&strings(&[
+            "--definition",
+            "fixture.json",
+            "--model",
+            "m1",
+            "--model=m2",
+            "--letter",
+            "F",
+            "--color",
+            "#112233",
+            "--usage-url",
+            "https://example.test/usage",
+            "--slash-source",
+            "https://example.test/slash.md",
+            "--permission-mode",
+            "auto=--yolo,--quiet",
+        ]))
+        .unwrap() else {
+            panic!("expected arguments")
+        };
+        assert_eq!(add.definition_file.as_deref(), Some("fixture.json"));
+        assert_eq!(
+            (add.id.as_str(), add.command.as_str(), add.label.as_str()),
+            ("", "", "")
+        );
+        assert_eq!(add.models, ["m1", "m2"]);
+        assert_eq!((add.letter.as_str(), add.color.as_str()), ("F", "#112233"));
+        assert_eq!(add.usage_url, "https://example.test/usage");
+        assert_eq!(add.slash_source, "https://example.test/slash.md");
+        assert_eq!(
+            add.permission_modes,
+            [(
+                "auto".to_owned(),
+                vec!["--yolo".to_owned(), "--quiet".to_owned()]
+            )]
+        );
+    }
+    #[test]
+    fn add_refuses_a_malformed_common_flag() {
+        let refused = |extra: &[&str]| {
+            let mut values = vec!["--id", "a", "--command", "x"];
+            values.extend_from_slice(extra);
+            parse_add(&strings(&values)).unwrap_err()
+        };
+        assert!(refused(&["--permission-mode", "auto"]).contains("<name>=<arg>"));
+        assert!(refused(&["--permission-mode", "=x"]).contains("mode name"));
+        assert!(refused(&["--model", " "]).contains("must not be empty"));
+        assert!(parse_add(&strings(&["--definition", " "])).is_err());
     }
     #[test]
     fn help_is_recognised_before_required_options() {

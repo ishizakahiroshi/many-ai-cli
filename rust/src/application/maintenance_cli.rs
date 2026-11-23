@@ -1,6 +1,7 @@
 //! Source CLI maintenance operations with explicit runtime and filesystem owners.
 mod provider;
 mod provider_args;
+mod provider_checks;
 mod provider_help;
 pub mod provider_hub;
 pub mod provider_registry;

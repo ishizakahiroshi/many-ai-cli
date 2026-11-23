@@ -386,12 +386,11 @@ impl OrchestrationProgram {
             .chars()
             .filter(|c| !c.is_whitespace())
             .collect();
-        let signals: &[&str] = match details.snapshot.provider.as_str() {
-            "codex" => &["AskCodextodoanything"],
-            "claude" => &["shift+tabtocycle"],
-            _ => &[],
-        };
-        Ok(!signals.iter().any(|signal| screen.contains(signal)))
+        // Only launch-argument children (built-ins) are pending here.
+        let signals = crate::orchestration::initial_prompt::ScreenSignals::builtin(
+            &details.snapshot.provider,
+        );
+        Ok(!signals.contains_composer(&screen))
     }
     pub fn append_conductor_instruction(
         &self,

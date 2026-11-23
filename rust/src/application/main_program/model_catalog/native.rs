@@ -56,14 +56,16 @@ impl CatalogIo for NativeCatalogIo {
         force: bool,
     ) -> CoreFuture<'a, io::Result<Vec<Model>>> {
         Box::pin(async move {
-            let mut args: Vec<String> = match provider {
-                "cursor-agent" => vec!["--list-models".into()],
-                "grok" => vec!["models".into()],
-                "opencode" => vec!["models".into(), "opencode".into(), "--verbose".into()],
-                _ => return Err(io::Error::other("unsupported native catalog")),
-            };
-            if provider == "opencode" && force {
-                args.push("--refresh".into());
+            // The command that prints the model list is the provider's own
+            // declaration (`models.list`).
+            let list = crate::profile::declared::declared(provider)
+                .and_then(|d| d.models)
+                .and_then(|m| m.list)
+                .filter(|l| !l.args.is_empty())
+                .ok_or_else(|| io::Error::other("unsupported native catalog"))?;
+            let mut args = list.args.clone();
+            if force {
+                args.extend(list.refresh_args.iter().cloned());
             }
             let executable = execpath::Resolver::new(
                 Platform::native(),
@@ -81,7 +83,12 @@ impl CatalogIo for NativeCatalogIo {
                     cwd: self.cwd.clone(),
                     environment: self.environment.clone(),
                     platform: Platform::native(),
-                    timeout: Duration::from_secs(if provider == "opencode" { 30 } else { 15 }),
+                    timeout: Duration::from_secs(
+                        u64::try_from(list.timeout_seconds)
+                            .ok()
+                            .filter(|s| *s > 0)
+                            .unwrap_or(15),
+                    ),
                     output_cap: 2 * 1024 * 1024,
                 })
                 .await

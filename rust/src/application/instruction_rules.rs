@@ -69,7 +69,8 @@ struct Target {
     providers: Vec<String>,
     #[serde(deserialize_with = "null_default")]
     mode: String,
-    /// The project's `AGENTS.md` (found from a session's folder), whose own
+    /// The project's rules file (`AGENTS.md` or a declared `instructions.rules_file`,
+    /// found from a session's folder), whose own
     /// link is never followed. A journal written before this field existed
     /// reads as `false`: its targets are recovered the way they were written.
     #[serde(deserialize_with = "null_default")]
@@ -292,37 +293,33 @@ impl InstructionRules {
                         project: false,
                     })
                 }
-                "copilot" | "cursor-agent" | "grok" | "opencode" => {
-                    if s.cwd.trim().is_empty() {
-                        None
-                    } else {
-                        Some(Target {
+                // Every other provider, a registered one included, names the
+                // project file it reads in its declaration
+                // (`instructions.rules_file`). A registered CLI that sets the
+                // older `capabilities.agents_md_instructions` reads `AGENTS.md`.
+                // One that declares neither is left alone, so the Hub never
+                // writes a file no CLI asked for; an ACP provider has no
+                // terminal that shows a marker and never gets a file.
+                _ => {
+                    let file =
+                        crate::profile::declared::project_rules_file(provider).or_else(|| {
+                            (agents_file.iter().any(|known| known == provider)
+                                && !crate::profile::declared::is_acp(provider))
+                            .then(|| "AGENTS.md".to_owned())
+                        });
+                    match file {
+                        Some(file) if !s.cwd.trim().is_empty() => Some(Target {
                             path: self
                                 .resolve_root(&s.cwd, cancel, &mut roots)
                                 .await
-                                .join("AGENTS.md"),
+                                .join(file),
                             providers: vec![provider.into()],
                             mode: "shared_block".into(),
                             project: true,
-                        })
+                        }),
+                        _ => None,
                     }
                 }
-                registered if agents_file.iter().any(|known| known == registered) => {
-                    if s.cwd.trim().is_empty() {
-                        None
-                    } else {
-                        Some(Target {
-                            path: self
-                                .resolve_root(&s.cwd, cancel, &mut roots)
-                                .await
-                                .join("AGENTS.md"),
-                            providers: vec![provider.into()],
-                            mode: "shared_block".into(),
-                            project: true,
-                        })
-                    }
-                }
-                _ => None,
             };
             if let Some(target) = target {
                 active.push(target);

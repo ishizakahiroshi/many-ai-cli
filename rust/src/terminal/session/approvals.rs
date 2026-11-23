@@ -122,6 +122,13 @@ impl ApprovalActions for SessionEngine {
                 if s.binding != request.binding.session || !s.connected {
                     return Err(ApprovalActionError::StaleWrapper);
                 }
+                // Permission answers for an ACP provider come from a person on
+                // the dashboard only: no rule, batch, one-tap link or policy.
+                if !matches!(request.origin, NativeActionOrigin::User)
+                    && crate::profile::declared::is_acp(&s.snapshot.provider)
+                {
+                    return Err(ApprovalActionError::HumanOnly);
+                }
                 if s.approval_reservation.is_some() {
                     return Err(ApprovalActionError::Reserved);
                 }

@@ -1084,16 +1084,13 @@ async fn provider_without_composer_extractor_retries_enter_then_records_unconfir
 /// A registered AI CLI that declares the fixture TUI's screen, the way a
 /// Devin CLI definition can: its own ready text and input line.
 fn declared_screen() -> ScreenSource {
-    Arc::new(|provider| {
-        ScreenSignals::declared(
-            provider,
-            Some(&proto::provider::ScreenDefinition {
-                ready_markers: vec!["shift+tab to cycle".into()],
-                startup_blockers: vec!["Trust this workspace?".into()],
-                composer_prefix: "❯".into(),
-                composer_end_markers: vec!["shift+tab to cycle".into()],
-            }),
-        )
+    Arc::new(|_provider| {
+        ScreenSignals::declared(Some(&proto::provider::ScreenDefinition {
+            ready_markers: vec!["shift+tab to cycle".into()],
+            startup_blockers: vec!["Trust this workspace?".into()],
+            composer_prefix: "❯".into(),
+            composer_end_markers: vec!["shift+tab to cycle".into()],
+        }))
     })
 }
 
@@ -1187,15 +1184,15 @@ fn a_registered_provider_screen_comes_from_its_declaration() {
         ),
         None
     );
-    // The two Go-oracle providers keep their fixed tables over any declaration.
-    let claude = ScreenSignals::declared(
-        "claude",
-        Some(&proto::provider::ScreenDefinition {
-            startup_blockers: vec!["Trust this workspace?".into()],
-            ..Default::default()
-        }),
-    );
+    // A built-in reads only its own declaration (the Go oracle's tables),
+    // whatever the registry holds, and the fixture's blocker is not among them.
+    let claude = ScreenSignals::from_registry("claude", None);
     assert_eq!(claude, ScreenSignals::builtin("claude"));
+    assert!(claude.has_composer_signal());
+    assert_eq!(
+        screen_blocker(&claude, &lines("Trust this workspace?")),
+        None
+    );
 }
 
 /// A long paste sits in the input box as "[Pasted text #N ...]", which never

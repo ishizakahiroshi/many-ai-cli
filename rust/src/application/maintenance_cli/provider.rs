@@ -126,7 +126,7 @@ pub fn provider_command(store: &Arc<ProviderRegistryStore>, args: &[String]) -> 
 /// the registry (so `--help` and a refused argument never contact anything).
 pub enum ProviderCommand {
     Text(&'static str),
-    Add(super::provider_args::AddArgs),
+    Add(Box<super::provider_args::AddArgs>),
     List,
     Remove(String),
     Test(super::provider_args::TestArgs),
@@ -143,7 +143,7 @@ pub fn parse_command(args: &[String]) -> io::Result<ProviderCommand> {
         Some("--help" | "-h" | "help") => Ok(ProviderCommand::Text(help::OVERVIEW)),
         Some("add") => Ok(match parse::parse_add(rest).map_err(error)? {
             Parse::Help => ProviderCommand::Text(help::ADD),
-            Parse::Args(add) => ProviderCommand::Add(add),
+            Parse::Args(add) => ProviderCommand::Add(Box::new(add)),
         }),
         Some("list") => Ok(match parse::parse_list(rest).map_err(error)? {
             Parse::Help => ProviderCommand::Text(help::LIST),

@@ -1,4 +1,5 @@
 import { sendText, type ApprovalInputIdentity } from '../app.js';
+import { providerSlowPaste } from './provider-declarations.js';
 import { sessions } from './state.js';
 
 // 複数行ペースト送信の確定 \r を「いつ送るか」を出力駆動で決めるモジュール。
@@ -26,10 +27,9 @@ const MIN_WAIT_MS = 120;    // 送出直後はまだ再描画が始まってい�
 // ペースト確定が落ち着いてから Enter を撃つ。Claude Code 等は畳み込み中に出力が出続けるため
 // 既定の MIN_WAIT のままで idle 側が正しく発火する（挙動不変）。
 const SLOW_PASTE_MIN_WAIT_MS = 700;
-const SLOW_PASTE_PROVIDERS = new Set(['codex', 'opencode']);
 
 export function deferredEnterMinWaitFor(provider: string): number {
-  return SLOW_PASTE_PROVIDERS.has(provider) ? SLOW_PASTE_MIN_WAIT_MS : MIN_WAIT_MS;
+  return providerSlowPaste(provider) ? SLOW_PASTE_MIN_WAIT_MS : MIN_WAIT_MS;
 }
 // 出力が止まらなくても、この時間で必ず action を実行する（保険）。
 // これは「出力が永久に止まらない病的ケース」専用の安全網であって、通常の取り込み・畳み込み

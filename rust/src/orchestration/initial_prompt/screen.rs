@@ -1,43 +1,13 @@
 //! Screen predicates from orchestration.go at the fixed Go oracle.
 //!
-//! A registered AI CLI gets the same predicates from its `screen` declaration.
+//! Every provider's signals come from its `screen` declaration; the built-ins'
+//! declarations hold the values of the oracle's fixed tables.
 use crate::proto::{provider::ScreenDefinition, time::Timestamp};
 use std::time::Duration;
 
 pub(super) fn collapse_whitespace(text: &str) -> String {
     // Go unicode.IsSpace uses Unicode White_Space (as does char::is_whitespace).
     text.chars().filter(|c| !c.is_whitespace()).collect()
-}
-
-/// The two providers whose screens the fixed Go oracle knows. Their tables
-/// stay as they are; a declaration only speaks for any other provider.
-fn fixed(provider: &str) -> bool {
-    matches!(provider, "claude" | "codex")
-}
-
-pub(super) fn composer_signals(provider: &str) -> &'static [&'static str] {
-    match provider {
-        "codex" => &["AskCodextodoanything"],
-        "claude" => &["shift+tabtocycle"],
-        _ => &[],
-    }
-}
-
-fn fixed_blockers(provider: &str) -> &'static [&'static str] {
-    match provider {
-        "codex" => &[
-            "Doyoutrustthecontentsofthisdirectory",
-            "Updateavailable!",
-            "Pressentertocontinue",
-            "Trustthisfolder?Codexcanread",
-        ],
-        "claude" => &[
-            "Isthisaprojectyoucreatedoroneyoutrust?",
-            "Yes,Itrustthisfolder",
-            "AllowexternalCLAUDE.mdfileimports?",
-        ],
-        _ => &[],
-    }
 }
 
 pub(super) fn folder_trust(signal: &str) -> bool {
@@ -51,33 +21,33 @@ pub(super) fn folder_trust(signal: &str) -> bool {
 }
 
 /// What one provider's screen shows when it is ready for a prompt, when a
-/// startup screen holds it, and where its input line is. Claude Code and Codex
-/// use the fixed tables; every other provider (a registered AI CLI such as
-/// Devin CLI) uses its definition's `screen` declaration, so the startup-wait
+/// startup screen holds it, and where its input line is, read from the
+/// provider's `screen` declaration. The built-ins carry theirs (the values of
+/// the fixed Go oracle tables) in `assets/provider/declarations.json`; a
+/// registered AI CLI such as Devin CLI declares its own, so the startup-wait
 /// notice and the "prompt still in the input box" check work for it as well
 /// instead of silently doing nothing. Markers are kept without whitespace,
 /// exactly like the screen text they are compared with.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ScreenSignals {
-    provider: String,
     ready: Vec<String>,
     blockers: Vec<String>,
     composer_prefix: String,
     composer_ends: Vec<String>,
 }
 impl ScreenSignals {
-    /// Only the fixed tables (a provider without a declaration).
+    /// A built-in provider's own declaration (nothing for any other id).
     pub fn builtin(provider: &str) -> Self {
-        Self {
-            provider: provider.into(),
-            ..Self::default()
-        }
+        Self::declared(
+            crate::profile::declared::builtin(provider)
+                .and_then(|definition| definition.screen)
+                .as_ref(),
+        )
     }
-    /// The fixed tables for Claude Code and Codex, the declaration otherwise.
-    pub fn declared(provider: &str, screen: Option<&ScreenDefinition>) -> Self {
-        let mut out = Self::builtin(provider);
-        let Some(screen) = screen.filter(|_| !fixed(provider)) else {
-            return out;
+    /// The signals of one `screen` declaration.
+    pub fn declared(screen: Option<&ScreenDefinition>) -> Self {
+        let Some(screen) = screen else {
+            return Self::default();
         };
         let markers = |values: &[String]| {
             values
@@ -86,21 +56,26 @@ impl ScreenSignals {
                 .filter(|value| !value.is_empty())
                 .collect::<Vec<_>>()
         };
-        out.ready = markers(&screen.ready_markers);
-        out.blockers = markers(&screen.startup_blockers);
-        out.composer_prefix = screen.composer_prefix.trim().to_owned();
-        out.composer_ends = markers(&screen.composer_end_markers);
-        out
+        Self {
+            ready: markers(&screen.ready_markers),
+            blockers: markers(&screen.startup_blockers),
+            composer_prefix: screen.composer_prefix.trim().to_owned(),
+            composer_ends: markers(&screen.composer_end_markers),
+        }
     }
-    /// The provider's declaration in the Hub's current registry. A provider
-    /// the registry does not hold (or no registry) has only the fixed tables.
+    /// A built-in provider reads only its built-in declaration (a registered
+    /// definition cannot change what the Hub expects on its screen); any other
+    /// provider reads its definition in the Hub's current registry. A provider
+    /// the registry does not hold (or no registry) has no signals.
     pub fn from_registry(
         provider: &str,
         registry: Option<&crate::profile::registry::Registry>,
     ) -> Self {
+        if crate::profile::declared::builtin(provider).is_some() {
+            return Self::builtin(provider);
+        }
         let definition = registry.and_then(|registry| registry.lookup(provider));
         Self::declared(
-            provider,
             definition
                 .as_ref()
                 .and_then(|definition| definition.definition.screen.as_ref()),
@@ -108,36 +83,24 @@ impl ScreenSignals {
     }
     /// Whether anything on the screen can say the input box is there.
     pub(super) fn has_composer_signal(&self) -> bool {
-        !composer_signals(&self.provider).is_empty() || !self.ready.is_empty()
+        !self.ready.is_empty()
     }
-    pub(super) fn contains_composer(&self, collapsed: &str) -> bool {
-        composer_signals(&self.provider)
+    /// Whether the collapsed screen shows the input box.
+    pub fn contains_composer(&self, collapsed: &str) -> bool {
+        self.ready
             .iter()
-            .any(|signal| collapsed.contains(signal))
-            || self
-                .ready
-                .iter()
-                .any(|signal| collapsed.contains(signal.as_str()))
+            .any(|signal| collapsed.contains(signal.as_str()))
     }
     pub(super) fn blocker(&self, collapsed: &str) -> Option<String> {
-        fixed_blockers(&self.provider)
+        self.blockers
             .iter()
-            .find(|signal| collapsed.contains(*signal))
-            .map(|signal| (*signal).to_owned())
-            .or_else(|| {
-                self.blockers
-                    .iter()
-                    .find(|signal| collapsed.contains(signal.as_str()))
-                    .cloned()
-            })
+            .find(|signal| collapsed.contains(signal.as_str()))
+            .cloned()
     }
-    /// The text still sitting in the input line. `None` when the provider has
-    /// no input-line reader or the input line is not on the screen.
+    /// The text still sitting in the input line. `None` when the provider
+    /// declares no `composer_prefix` or the input line is not on the screen.
     pub(super) fn composer_text(&self, lines: &[String]) -> Option<String> {
-        if self.provider == "claude" {
-            return composer_lines(lines, "❯", claude_footer);
-        }
-        if fixed(&self.provider) || self.composer_prefix.is_empty() {
+        if self.composer_prefix.is_empty() {
             return None;
         }
         composer_lines(lines, &self.composer_prefix, |line| {
@@ -190,9 +153,6 @@ fn composer_lines(lines: &[String], prefix: &str, ends: impl Fn(&str) -> bool) -
 fn rule_line(line: &str) -> bool {
     line.chars().all(|c| matches!(c, '─' | '━' | '═' | ' '))
         && line.chars().filter(|c| *c != ' ').count() >= 8
-}
-fn claude_footer(line: &str) -> bool {
-    line.starts_with('⏵') || collapse_whitespace(line).contains("shift+tabtocycle")
 }
 
 /// Source launchArgStartupScreen: callers use this only before transcript

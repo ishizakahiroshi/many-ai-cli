@@ -160,6 +160,13 @@ impl ChildControl {
                 let Some(session) = self.core.details(id) else {
                     return Response::error(404, "not_found", "session not found");
                 };
+                if crate::profile::declared::is_acp(&session.snapshot.provider) {
+                    return Response::error(
+                        403,
+                        "automation_refused",
+                        crate::profile::declared::ACP_HUMAN_ONLY,
+                    );
+                }
                 if let Some(refusal) = self.cannot_type(&session) {
                     return refusal;
                 }
@@ -193,6 +200,13 @@ impl ChildControl {
                 let Some(parent) = self.core.details(id) else {
                     return Response::error(404, "not_found", "parent session not found");
                 };
+                if crate::profile::declared::is_acp(&parent.snapshot.provider) {
+                    return Response::error(
+                        403,
+                        "automation_refused",
+                        crate::profile::declared::ACP_HUMAN_ONLY,
+                    );
+                }
                 let child = self
                     .core
                     .snapshots()

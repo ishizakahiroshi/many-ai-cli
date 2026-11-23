@@ -18,7 +18,7 @@ import { t } from '../i18n.js';
 import { apiFetch, escapeHtml, showToast, token } from './util.js';
 import { sessions } from './state.js';
 import { activateSession } from './session-list.js';
-import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
+import { orchestrationCliOptions, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { loadSubscriptions, selectableProfiles } from './subscriptions.js';
 import { appConfirm } from './settings.js';
 import { openFileModal } from './path-links.js';
@@ -104,7 +104,7 @@ interface DeriveSource {
 function providerLabel(value: string, extras: DeriveProviderOption[]): string {
   const custom = extras.find((o) => o.value === value);
   if (custom) return custom.label;
-  const found = ORCHESTRATION_CLI_OPTIONS.find((o) => o.value === value);
+  const found = orchestrationCliOptions().find((o) => o.value === value);
   if (!found) return value;
   return found.label || tx(found.labelKey || '', found.labelKey || value);
 }
@@ -366,7 +366,7 @@ function renderDeriveForm(
     if (kind === 'handoff') {
       return source.candidateProviders.map((value) => ({ value, label: providerLabel(value, customProviders) }));
     }
-    const builtin = ORCHESTRATION_CLI_OPTIONS.filter((o) => o.value)
+    const builtin = orchestrationCliOptions().filter((o) => o.value)
       .map((o) => ({ value: o.value, label: o.label || tx(o.labelKey || '', o.labelKey || o.value) }));
     return [...builtin, ...customProviders];
   }

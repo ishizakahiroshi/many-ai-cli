@@ -5,13 +5,13 @@
     "authority": "Authoritative current source-binding view; top-level routes/dynamic_operations and earlier receipt fields are historical compatibility data.",
     "source_index": "rust/inventory/recovery-current-20261005.json",
     "route_list_maintenance": {
-      "rows": "Rows with a source_index_json_pointer were derived from the source_sha snapshot (Go registrations mapped to Rust owners). Rows with origin rust_only are routes the Rust router added after that snapshot and have no Go registration or snapshot pointer. Routes removed from Rust (jev, nvidia-nim, whisper, voice) were deleted from this list.",
+      "rows": "Rows with a source_index_json_pointer were derived from the source_sha snapshot (Go registrations mapped to Rust owners). Rows with origin rust_only are routes the Rust router added after that snapshot and have no Go registration or snapshot pointer. Routes removed from Rust (jev, nvidia-nim, whisper, voice) were deleted from this list. A prefix row whose suffixes need a fixed shape (ACP session ids and actions) names a probe path the check sends instead of {path}probe.",
       "regeneration": "rust/scripts/audit-recovery-current.py rebuilds only the dated Go-derived snapshot (rust/inventory/recovery-current-20261005.json); it enumerates Go registrations, so it can never list a rust_only route, and it no longer runs as-is because it reads internal/hub/server.go, which moved under go/ when the Go version was frozen. This list is therefore maintained by hand.",
       "check": "rust/src/hub/tests.rs::current_route_ledger_matches_router probes every route-shaped string literal in rust/src against the router: a path the router answers must be listed here, and every row must still be answered, keep its owner file and keep its main binding in serve.rs."
     },
     "counts": {
-      "http_registrations": 158,
-      "http_source_bound": 158,
+      "http_registrations": 160,
+      "http_source_bound": 160,
       "http_source_binding_missing": 0,
       "dynamic_operation_rows": 45,
       "dynamic_source_bound": 45,
@@ -143,6 +143,23 @@
         "main_binding": "with_session_routes",
         "state": "source_implemented_bound_unaccepted",
         "source_index_json_pointer": "/http/17"
+      },
+      {
+        "path": "/api/acp/sessions",
+        "rust_owner": "rust/src/hub/acp_routes.rs",
+        "main_binding": "with_acp_sessions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/acp/sessions/",
+        "rust_owner": "rust/src/hub/acp_routes.rs",
+        "main_binding": "with_acp_sessions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only",
+        "probe": "/api/acp/sessions/1/events"
       },
       {
         "path": "/api/providers",

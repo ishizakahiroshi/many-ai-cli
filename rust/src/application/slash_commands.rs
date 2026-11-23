@@ -24,14 +24,20 @@ use std::{
     sync::{Arc, Mutex, Weak},
     time::Duration,
 };
+const BUILTINS: &[&str] = crate::proto::provider::BUILTIN_PROVIDER_IDS;
+const _: () = assert!(BUILTINS.len() == 7, "PROVIDERS lists every built-in");
+/// The providers whose sources are user-editable settings, in the order of
+/// [`source_fields`]: the built-ins and Devin CLI (Settings -> Slash command
+/// sources has a field for it). Any other registered provider reads the source
+/// or the list its definition declares.
 pub const PROVIDERS: &[&str] = &[
-    "claude",
-    "codex",
-    "copilot",
-    "cursor-agent",
-    "opencode",
-    "grok",
-    "command-code",
+    BUILTINS[0],
+    BUILTINS[1],
+    BUILTINS[2],
+    BUILTINS[3],
+    BUILTINS[4],
+    BUILTINS[5],
+    BUILTINS[6],
     "devin-cli",
 ];
 #[derive(Clone, Default, Debug, PartialEq, Serialize)]
@@ -267,16 +273,54 @@ impl SlashCommands {
         force: bool,
         now: Timestamp,
     ) -> Result<SlashResponse, SlashFailure> {
-        if !PROVIDERS.contains(&provider) {
+        // A built-in (and Devin CLI) reads its user editable source from the
+        // settings. Any other registered AI CLI is valid when the registry knows it, and reads the
+        // source or the list its definition declares (`slash_commands`).
+        let declared = if PROVIDERS.contains(&provider) {
+            None
+        } else {
+            crate::profile::declared::declared(provider)
+        };
+        self.commands_declared(provider, declared, context, force, now)
+            .await
+    }
+    /// [`Self::commands`] with the definition of a provider outside
+    /// [`PROVIDERS`] passed in (`None` for one of them).
+    pub async fn commands_declared(
+        self: &Arc<Self>,
+        provider: &str,
+        declared: Option<crate::proto::provider::Definition>,
+        context: SearchContext,
+        force: bool,
+        now: Timestamp,
+    ) -> Result<SlashResponse, SlashFailure> {
+        if declared.is_none() && !PROVIDERS.contains(&provider) {
             return Err(SlashFailure::InvalidProvider);
         }
-        let key = cache_key(provider, &context);
-        let entry = self
-            .cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(&key)
-            .cloned();
+        if declared
+            .as_ref()
+            .is_some_and(|def| !def.enabled.unwrap_or(true))
+        {
+            return Err(SlashFailure::InvalidProvider);
+        }
+        let direct = declared
+            .as_ref()
+            .and_then(|def| def.slash_commands.as_ref())
+            .is_some_and(|slash| !slash.items.is_empty());
+        let mut key = cache_key(provider, &context);
+        if let Some(slash) = declared.as_ref().and_then(|d| d.slash_commands.as_ref()) {
+            // A changed definition must not be answered from the old entry.
+            key = format!("{key}|{}", slash.source);
+        }
+        let entry = if direct {
+            None
+        } else {
+            self.cache
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&key)
+                .cloned()
+        };
         if !force
             && let Some(entry) = &entry
             && now
@@ -292,9 +336,45 @@ impl SlashCommands {
         {
             return Ok(entry.response());
         }
-        let source = self.sources().map_err(|_| SlashFailure::Unavailable)?;
-        let source = source_fields(&source)[PROVIDERS.iter().position(|p| *p == provider).unwrap()]
-            .to_owned();
+        let source = match &declared {
+            None => {
+                let source = self.sources().map_err(|_| SlashFailure::Unavailable)?;
+                source_fields(&source)[PROVIDERS.iter().position(|p| *p == provider).unwrap()]
+                    .to_owned()
+            }
+            Some(def) => {
+                let slash = def.slash_commands.clone().unwrap_or_default();
+                if !slash.items.is_empty() {
+                    // A list written into the definition needs no fetch.
+                    let skills = self.io.skills(provider, &context);
+                    let cmds = merge(
+                        provider,
+                        slash
+                            .items
+                            .iter()
+                            .map(|item| SlashCmd {
+                                cmd: item.cmd.clone(),
+                                desc: item.desc.clone(),
+                                ..Default::default()
+                            })
+                            .collect(),
+                        skills,
+                    );
+                    let entry = Entry {
+                        cmds: if cmds.is_empty() { None } else { Some(cmds) },
+                        fetched: now,
+                        source: String::new(),
+                    };
+                    let response = entry.response();
+                    self.cache
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .insert(key, entry);
+                    return Ok(response);
+                }
+                slash.source
+            }
+        };
         if source.is_empty() {
             return Err(SlashFailure::NotConfigured);
         }

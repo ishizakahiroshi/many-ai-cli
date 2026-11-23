@@ -815,3 +815,60 @@ fn only_successful_registry_mutations_produce_a_change_notice() {
         Some(("codex".into(), "disabled"))
     );
 }
+
+#[test]
+fn the_declarations_route_gives_the_screen_every_providers_declared_values() {
+    let (_temp, paths, store) = setup();
+    assert_eq!(
+        response(
+            &request("POST", "/api/providers/declarations", json!(null)),
+            &store,
+            &paths
+        )
+        .status,
+        405
+    );
+    let reply = response(
+        &request("GET", "/api/providers/declarations", json!(null)),
+        &store,
+        &paths,
+    );
+    assert_eq!(reply.status, 200);
+    let body = value(&reply);
+    let list = body["declarations"].as_array().unwrap();
+    assert_eq!(list.len(), 7);
+    let claude = list.iter().find(|d| d["id"] == "claude").unwrap();
+    assert_eq!(claude["connection"], "pty");
+    assert_eq!(claude["builtin"], true);
+    assert_eq!(claude["presentation"]["letter"], "C");
+    assert_eq!(claude["presentation"]["order"], 1);
+    assert_eq!(claude["presentation"]["label"], "Claude");
+    assert_eq!(claude["presentation"]["long_label"], "Claude Code");
+    assert_eq!(
+        claude["links"]["usage_url"],
+        "https://claude.ai/settings/usage"
+    );
+    assert!(claude["permissions"]["modes"].get("bounded").is_some());
+    let codex = list.iter().find(|d| d["id"] == "codex").unwrap();
+    assert_eq!(codex["input"]["slow_paste"], true);
+    // The list of what each provider can and cannot do is carried too.
+    for entry in list {
+        let lines = entry["capability_report"].as_array().unwrap();
+        let state = |key: &str| lines.iter().find(|l| l["key"] == key).unwrap()["state"].clone();
+        assert_eq!(state("launch"), "available", "{}", entry["id"]);
+        assert!(
+            ["available", "unavailable", "unsupported"]
+                .contains(&state("usage_meter").as_str().unwrap())
+        );
+    }
+    // No launch command leaves the Hub through this route.
+    for entry in list {
+        assert!(entry.get("launch").is_none(), "{}", entry["id"]);
+    }
+}
+
+#[test]
+fn a_provider_id_cannot_shadow_the_declarations_route() {
+    assert!(crate::profile::store::validate_user_id("declarations").is_err());
+    assert!(crate::profile::store::validate_user_id("my-agent").is_ok());
+}

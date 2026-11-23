@@ -247,20 +247,24 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 ```
 many-ai-cli provider add --id my-agent --command <ホームフォルダ>/bin/my-agent-wrapper --label "My Agent" \
   --arg --interactive --headless-arg -p --approval-option "Allow once"
+many-ai-cli provider add --definition my-agent.json    # 定義ファイルを丸ごと渡す。上のオプションはファイルの値を置き換える
 many-ai-cli provider list
 many-ai-cli provider test my-agent
 many-ai-cli provider remove my-agent
 ```
 
-`--id` は小文字・数字・`.`・`-`・`_`（同梱の id と `shell` は不可）、`--command` は PATH 上の実行ファイルか絶対パスです（CLI のホームを切り替える小さなラッパースクリプトなどを指定できます）。`--arg` は対話起動の引数（繰り返し可）、`--headless-arg` は非対話モードの引数、`--approval-option` はその CLI が承認プロンプトに出す選択肢の文言を表示のとおりに書いたものです（繰り返し可）。`provider test` は headless を 1 回動かし、終了コード・所要秒数・出力の先頭を表示します。many-ai-cli のセッションの中では、これらのコマンドを持つ実行ファイルは環境変数 `MANY_AI_CLI_BIN` が指すものです。PATH 上に別途入れた古い `many-ai-cli`（たとえば npm の 0.9.x）には `provider add` / `list` / `remove` / `test` がありません。
+`--id` は小文字・数字・`.`・`-`・`_`（同梱の id と `shell` は不可）、`--command` は PATH 上の実行ファイルか絶対パスです（CLI のホームを切り替える小さなラッパースクリプトなどを指定できます）。`--arg` は対話起動の引数（繰り返し可）、`--headless-arg` は非対話モードの引数、`--approval-option` はその CLI が承認プロンプトに出す選択肢の文言を表示のとおりに書いたものです（繰り返し可）。`--definition <ファイル>` は JSON の定義を丸ごと登録します（AI が調べた内容をまとめて渡すにはこれが一番楽です）。`--model`・`--letter`・`--color`・`--usage-url`・`--slash-source`・`--permission-mode <名前>=<引数>,...` でよく使う項目を 1 つずつ指定することもできます。`provider test` は headless を 1 回動かして終了コード・所要秒数・出力の先頭を表示し、続けてその CLI の「できること」を **使える** / **未設定で使えない**（宣言がない。理由に足すものが書かれます）/ **未対応**（下記）に分けて並べます。試せるものは実際に試します（スラッシュコマンドの取得元が読めるか、宣言した会話フォルダがあるか、モデル一覧のコマンドが動くか）。many-ai-cli のセッションの中では、これらのコマンドを持つ実行ファイルは環境変数 `MANY_AI_CLI_BIN` が指すものです。PATH 上に別途入れた古い `many-ai-cli`（たとえば npm の 0.9.x）には `provider add` / `list` / `remove` / `test` がありません。
 
 登録した CLI でできること:
 
+- 定義に書いたものは、同梱の 7 本と同じ形で働きます。スラッシュコマンドの候補、モデルの一覧と選んだモデルの受け渡し、許可モード、使用量ページへのリンク、ログインの開始、会話ファイルの場所とチャット表示、承認の文言、定期実行からの利用です。**設定 → AI CLI 連携** の各行に、これらのうちいくつが使え、どれが使えないかが出ます。書いていない項目は、ほかの CLI の動きを借りずに「未設定で使えない」と表示します。
 - **+ 新しいセッション** から、新しいセッションとして起動できます（同梱の CLI と同じく PTY 経由）。
 - `many-ai-cli orchestrate spawn --provider <id>` の子や relay の役割に使えます。headless の子には headless の定義（`--headless-arg` / `--headless-format` / `--prompt-via` のどれか）が要ります。登録した子には同梱の CLI 向けの権限の段やサブスクリプションの扱いは付かず、子の確認ダイアログは表示名を出して権限・モデルの欄を隠します。
 - 承認の検出は同梱の CLI と同じ仕組みです。Yes/No/Allow/Deny などの一般的な文言は登録した全 CLI で検出し、`--approval-option` でその CLI 固有の文言を足せます。
 - Hub が動いていれば `provider add` / `remove` は Hub 経由で行われます。Hub が定義を検査し、控えを残し、読み直し、開いている全ての画面へ知らせるので、画面を再読み込みしなくても新しいセッションの一覧が更新されます。ほかの開いている画面には「<名前> を足しました（command: ...）」と**取り消す**ボタンが出ます（足した画面自身には出ません）。Hub が動いていなければ定義ファイルを直接書き、Hub は次の起動で読みます。
 - `provider remove` が消せるのは `provider add` か画面で登録した CLI だけです（同梱のものと `config.yaml` に書いたものは消せません）。削除前の控え（`before-delete`）は版の履歴に残ります（`many-ai-cli provider backup list <id>`）が、削除した CLI をそこから復元することには対応していません。戻したいときは `provider add` で入れ直します。
+
+**登録した CLI で未対応のもの。** 残量の表示、契約（サブスクリプション）の切り替え、サブエージェントの木の 3 つは各社専用の処理が要るため、定義では足せず「未対応」と表示します。ACP（端末ではなく CLI 自身の通信方式）で動く CLI は人が直接操作するものとして扱い、自動の経路（子・リレー・定期実行・看板など）はすべて断ります。
 
 **画面から足す。** **設定 → AI CLI 連携**、または **+ 新しいセッション** の一覧の末尾の **AI CLI を追加** を開き、表示名と実行ファイルを入力して検証し、保存します。失敗しても入力は残ります。
 
@@ -277,6 +281,21 @@ custom_providers:
 `command` はシェルを通さず、many-ai-cli 自身が実行ファイルと引数に分けます。ASCII の空白とタブが区切りで、`"..."` で 1 つの引数（または一部）をくくれ（引用符は取り除かれ、引用の中の `""` は文字としての `"`）、`\` は常にそのままの文字です。環境変数・`~`・グロブ・`|` や `&&` などは展開も解釈もされません。引用符が閉じていない・空のコマンドは起動前に拒否します。同梱の CLI 向けの `--model`・権限フラグ・環境変数のプリセット・サブスクリプションの選択は、独自の CLI には付きません。`approval_pattern_source` は、絶対パス（`~/.many-ai-cli/` 配下）か `https://raw.githubusercontent.com/...` の URL だけが使えます。実行ファイルが PATH に無ければ、同梱の CLI が無いときと同じく `... not found in PATH` で終わります。`many-ai-cli doctor` は設定済みの独自の CLI が PATH にあるかを、実行せずに確認します。
 
 **同梱の CLI のような審査は入っていません。** [セキュリティ](#セキュリティ)で説明している利用規約の判断（Gemini CLI を対象外とする理由を含む）は、同梱の一覧だけの話です。`command` に何を指定するかはあなたの選択で、その CLI の利用規約を先に確認するのもあなたの責任です。
+
+### Antigravity を ACP で使う: できることとできないこと
+
+Antigravity は同梱の 7 本には**入っていません**。定義のサンプルを [`docs/samples/acp-agent-sample.json`](docs/samples/acp-agent-sample.json) に置いてあり、自分で `many-ai-cli provider add --definition docs/samples/acp-agent-sample.json` として足します（実行ファイル `agy` が PATH にあること。ログインは Antigravity 自身の手順で行います）。`"connection": "acp"` の定義は、端末ではなく公式の `agy acp` と ACP（標準入出力の JSON-RPC）で話し、Hub は**自動の経路をすべてサーバー側で拒否します**。子の起動・relay・定期実行・看板からの引き渡し・自動承認・自動再試行が対象です。ボタンを隠すことが境界ではなく、拒否が境界です。
+
+| できること（本人が操作する） | できないこと（意図して対象外） |
+|---|---|
+| 本人が始め、本人のプロンプトで進む 1 人の対話 | 無人のバックグラウンド実行・タスクキュー・定期実行・Antigravity/Gemini の作業者プール |
+| 公式ランタイム自身の手順でのログイン（Hub はトークンを読まず、更新も中継もしない） | OAuth トークンの抽出・再利用・プロキシ、認証コールバックの中継、アカウントの共有・ローテーション |
+| Gemini のモデルだけ（本人のプランで使えるもの） | 対応 IDE を装って他社のモデルを使うこと |
+| 応答のストリーミング・ツールの実行状況・ファイルの差分・許可と拒否・質問・中断 | 完了や失敗を受けて、人がプロンプトを送らずに自動で返事をする指揮者 |
+| 会話の一覧・読み込み・再開・終了 | 別のエージェント自身の処理ループのモデル提供元として ACP を埋め込むこと |
+| 本人が手で始める複数のセッション（作業コピーを分けて） | `/usage` を一定間隔で送り続けて残量を見張ること（自分で求めたときか設定画面を開いたときだけ） |
+
+この表は、Google が開発者フォーラムと ACP の文書で示した回答に沿っています（2026-11-16 確認。規約と FAQ は発効日を確認できていません）。**認定ではありません。** Google が many-ai-cli を個別に承認したわけではなく、規約は変わりえます。使う前に、Antigravity の最新の規約を自分で確かめてください。まだ決めていないので提供しないもの: スマホや別のマシンからの操作・許可要求への自動の一括返答・Antigravity 自身の `/swarm` / `/teamwork` をこのツール経由で使うこと。**未検証:** 実際の `agy acp` の応答・ログインエラーの文言・入れた版が対応する会話管理の呼び出し。
 
 ---
 
@@ -1489,7 +1508,7 @@ Grok セッションでは、生成された子は親自身のセッションフ
 
 ### ローカル instruction file への書き込み
 
-**承認ボタン機能**を有効にすると、`many-ai-cli` は active な wrapped session が読む instruction file に、many-ai-cli のマーカー付き承認ルールブロックだけを追記します。Claude Code は `~/.claude/CLAUDE.md`、Codex は `$CODEX_HOME/AGENTS.md` または `~/.codex/AGENTS.md`、GitHub Copilot / Cursor Agent / Grok は project instruction root の `AGENTS.md` が対象です（Grok は Claude Code 互換 harness として `CLAUDE.md` / `AGENTS.md` の両方をネイティブに読みます）。Claude Code に入るのは取り込みの 1 行だけです。それ以外の AI CLI には短いブロック（1,200 バイト未満）が入ります。中身は YES/NO の形・完了の形と、ルールの本文（Hub が自分の設定ディレクトリに置くファイル）の場所で、AI はほかの形を使う前に本文を読みます。以前の版が残した、本文を丸ごと入れたブロックは、次にセッションを始めたときに短いブロックへ置き換わります。registry（`providers.d`）に登録した AI CLI は、定義の `capabilities.agents_md_instructions` を `true` にしたものだけが対象になり、project instruction root の `AGENTS.md` に同じ短いブロックが入ります（その CLI が `AGENTS.md` を常時読む場合にだけ宣言してください）。ブロックは冪等に1つだけ入り、そのファイルを使う最後の active wrapped session が終了した時、承認ボタン機能を無効化した時、または Hub 停止時に削除されます。project の `AGENTS.md` そのものが symlink のときは書き込みません。リポジトリがリンクで外のファイルを書き換えさせられないようにするためで、そのファイルは `many-ai-cli doctor` が名指しします。project までの途中のフォルダのリンク（worktree の junction など）は今までどおりたどります。macOS / Linux では、書き換えた instruction file の権限はそのまま保ちます。
+**承認ボタン機能**を有効にすると、`many-ai-cli` は active な wrapped session が読む instruction file に、many-ai-cli のマーカー付き承認ルールブロックだけを追記します。Claude Code は `~/.claude/CLAUDE.md`、Codex は `$CODEX_HOME/AGENTS.md` または `~/.codex/AGENTS.md`、GitHub Copilot / Cursor Agent / Grok は project instruction root の `AGENTS.md` が対象です（Grok は Claude Code 互換 harness として `CLAUDE.md` / `AGENTS.md` の両方をネイティブに読みます）。Claude Code に入るのは取り込みの 1 行だけです。それ以外の AI CLI には短いブロック（1,200 バイト未満）が入ります。中身は YES/NO の形・完了の形と、ルールの本文（Hub が自分の設定ディレクトリに置くファイル）の場所で、AI はほかの形を使う前に本文を読みます。以前の版が残した、本文を丸ごと入れたブロックは、次にセッションを始めたときに短いブロックへ置き換わります。登録した AI CLI は、定義の `instructions.rules_file` に、その CLI が常に読む project root の Markdown ファイル名（例 `AGENTS.md`）を書いたものだけが対象になり、そのファイルに同じ短いブロックが入ります。以前の書き方の `capabilities.agents_md_instructions: true` も使え、`AGENTS.md` を指します（その CLI がそのファイルを常時読む場合にだけ宣言してください。ACP でつなぐ AI には書きません）。ブロックは冪等に1つだけ入り、そのファイルを使う最後の active wrapped session が終了した時、承認ボタン機能を無効化した時、または Hub 停止時に削除されます。project の `AGENTS.md` そのものが symlink のときは書き込みません。リポジトリがリンクで外のファイルを書き換えさせられないようにするためで、そのファイルは `many-ai-cli doctor` が名指しします。project までの途中のフォルダのリンク（worktree の junction など）は今までどおりたどります。macOS / Linux では、書き換えた instruction file の権限はそのまま保ちます。
 
 ### セッション引き継ぎ記録（handoff）
 

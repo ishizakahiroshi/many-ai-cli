@@ -11,6 +11,10 @@ import {
   restoreProviderBooleanSetting,
   selectedApprovalSettings,
 } from '../src/app/spawn-approval-memory.ts';
+import { seedBuiltinProviderDeclarations } from '../src/app/provider-declarations-seed.ts';
+
+// Hub から宣言が届いた後の状態にする（宣言の値は rust/assets/provider/declarations.json）。
+seedBuiltinProviderDeclarations();
 
 describe('spawn approval memory', () => {
   test('defaults to remembering and only an explicit false opts out', () => {

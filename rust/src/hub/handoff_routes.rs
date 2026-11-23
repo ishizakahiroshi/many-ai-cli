@@ -172,18 +172,7 @@ impl HandoffHttp {
                         preview.markdown = self.store.write_rendered(id)?.1;
                     }
                     preview.live = self.core.snapshot(LiveSessionId(id)).is_some();
-                    preview.candidate_providers = [
-                        "claude",
-                        "codex",
-                        "grok",
-                        "copilot",
-                        "cursor-agent",
-                        "opencode",
-                        "command-code",
-                    ]
-                    .into_iter()
-                    .map(str::to_owned)
-                    .collect();
+                    preview.candidate_providers = crate::profile::declared::handoff_candidates();
                     Ok(preview)
                 }) {
                     Ok(preview) => Response::json(200, &preview),

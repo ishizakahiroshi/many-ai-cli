@@ -1,6 +1,7 @@
 import { openSessionListMoveDialog, sessionListMoveLabel, sessionListCanMove, wireSessionListMenu, restoreSessionListFocus, sessionListCardElement, isRestoringSessionListView, rememberSelectedSessionListView } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
 import { quickCommandLabelStorageKey } from './user-prefs.js';
+import { onProviderDeclarationsChanged, providerUsageUrl } from './provider-declarations.js';
 import { t } from '../i18n.js';
 import { confirmationLabels, type ConfirmationAction } from './confirmation-labels.js';
 import { uiButtonClass, uiIconHtml, uiModalClass } from './ui-components.js';
@@ -546,7 +547,9 @@ function usageLinkStorageKey(provider) {
 }
 
 export function getUsageLinkUrl(provider) {
-  return normalizeHttpUrl(localStorage.getItem(usageLinkStorageKey(provider)), DEFAULT_USAGE_LINKS[provider] || '');
+  // 既定: 取得して上書きした値 → 画面だけの経路の値 → provider の宣言（Hub が送る links.usage_url）。
+  const fallback = DEFAULT_USAGE_LINKS[provider] || providerUsageUrl(provider) || '';
+  return normalizeHttpUrl(localStorage.getItem(usageLinkStorageKey(provider)), fallback);
 }
 
 // 行は usage-panel.ts が provider 一覧から生成する。保存・既定値更新のたびに doxguard: allow panel
@@ -2603,6 +2606,9 @@ initSettingsInformationArchitecture();
 
 // token moved to app/util.js (ESM shared export)
 
+// provider の宣言（使用量ページの URL）が届いたら、リンクを引き直す。
+onProviderDeclarationsChanged(() => applyUsageLinks());
+
 // usage-link デフォルトをリモート（GitHub バック）から取得して更新。
 // 失敗時は DEFAULT_USAGE_LINKS のハードコード値をそのまま使う。
 (async () => {
@@ -2610,7 +2616,7 @@ initSettingsInformationArchitecture();
     const res = await apiFetch('/api/usage-link-defaults');
     if (!res.ok) return;
     const d = await res.json();
-    for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok', 'command-code', 'devin-cli']) {
+    for (const k of Object.keys(d || {})) {
       // 空文字は無視（GitHub 側が古くキーを欠く場合に空で返るため、
       // ローカルの正しいデフォルト値を潰さない）。https 以外の値も既定値にしない（監査 N36。
       // Hub の側でも落としている）。

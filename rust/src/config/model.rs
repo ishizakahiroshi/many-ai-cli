@@ -2646,16 +2646,7 @@ fn source_url(group: &str, provider: &str) -> String {
 }
 impl SlashCmdSources {
     pub fn defaults() -> Self {
-        Self {
-            claude: source_url("slash-commands", "claude"),
-            codex: source_url("slash-commands", "codex"),
-            copilot: source_url("slash-commands", "copilot"),
-            cursor_agent: source_url("slash-commands", "cursor-agent"),
-            opencode: source_url("slash-commands", "opencode"),
-            grok: source_url("slash-commands", "grok"),
-            command_code: source_url("slash-commands", "command-code"),
-            devin_cli: source_url("slash-commands", "devin-cli"),
-        }
+        Self::default().effective()
     }
     pub fn effective(mut self) -> Self {
         if self.claude == "https://code.claude.com/docs/en/commands.md" {
@@ -2672,7 +2663,14 @@ impl SlashCmdSources {
             ("devin-cli", &mut self.devin_cli),
         ] {
             if field.is_empty() {
-                *field = source_url("slash-commands", provider);
+                // Devin CLI is not a built-in, so it has no built-in
+                // declaration; its default is the repository list.
+                let declared = crate::profile::declared::builtin_slash_source(provider);
+                *field = if declared.is_empty() {
+                    source_url("slash-commands", provider)
+                } else {
+                    declared
+                };
             }
         }
         self

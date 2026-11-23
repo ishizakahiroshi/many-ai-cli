@@ -173,6 +173,16 @@ impl ChildHttp {
             return session_error(error);
         }
         let providers = self.program.child_providers();
+        // A provider reached over ACP is driven by a person only: never a child,
+        // and no child may be started under an ACP session (its completion would
+        // type into that session on its own).
+        if providers.is_acp(&body.provider) || providers.is_acp(&parent.snapshot.provider) {
+            return Response::error(
+                403,
+                "automation_refused",
+                crate::profile::declared::ACP_HUMAN_ONLY,
+            );
+        }
         if !providers.is_valid(&body.provider) {
             return Response::error(
                 400,

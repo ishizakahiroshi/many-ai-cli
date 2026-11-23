@@ -4,7 +4,7 @@ import { apiFetch } from './util.js';
 import { activeSessionId, sessions } from './state.js';
 import { activateSession } from './session-list.js';
 import { getPromptTemplates } from './prompt-templates.js';
-import { ORCHESTRATION_CLI_OPTIONS } from './orchestration-roles.js';
+import { orchestrationCliOptions } from './orchestration-roles.js';
 import { isRoutineRunActive, routineRunFromURL, routineSessionMatches } from './routines-model.js';
 import type { Routine, RoutineRun, RoutineSchedule } from './routines-model.js';
 
@@ -119,7 +119,7 @@ function editRoutine(routine?: Routine): void {
   const name=input('name',routine?.name||'',true);name.maxLength=120;
   const cwd=input('cwd',routine?.cwd||session?.cwd||'',true);
   const providerLabel=node('label',tr('provider'));const provider=node('select');provider.name='provider';
-  for(const option of ORCHESTRATION_CLI_OPTIONS){if(!option.value || option.value==='shell')continue;const el=node('option',option.label);el.value=option.value;provider.append(el);}
+  for(const option of orchestrationCliOptions()){if(!option.value || option.value==='shell')continue;const el=node('option',option.label);el.value=option.value;provider.append(el);}
   provider.value=routine?.provider||session?.provider||'codex';providerLabel.append(provider);form.append(providerLabel);
   const model=input('model',routine?.model||'');model.placeholder=tr('default_model');
   const templateLabel=node('label',tr('template'));const templates=node('select');templates.append(node('option',tr('choose_template')));

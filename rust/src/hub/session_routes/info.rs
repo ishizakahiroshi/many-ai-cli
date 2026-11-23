@@ -143,22 +143,34 @@ fn capabilities(
         .collect();
     let mut headless = config::headless_providers(Some(config));
     let mut seen: BTreeSet<_> = headless.iter().cloned().collect();
-    // Registered providers only: the approval modes their definition maps to
-    // flags. Built-in providers keep the fixed per-provider lists in the UI.
+    // Registered providers only: the approval modes their permission
+    // declaration offers (`permissions.choices`, or the modes the older
+    // `launch.permission_args` maps). Built-in providers' choices reach the UI
+    // through their declarations.
     let mut permission_modes: BTreeMap<String, Vec<String>> = BTreeMap::new();
     if let Some(registry) = registry {
         for summary in registry.list() {
             if let Some(definition) = registry.lookup(&summary.id)
-                && let Some(launch) = definition.definition.launch
+                && let Some(launch) = definition.definition.launch.clone()
             {
                 if !launch.effort_levels.is_empty() {
                     effort.insert(summary.id.clone(), launch.effort_levels);
                 }
-                if !launch.permission_args.is_empty() {
-                    permission_modes.insert(
-                        summary.id.clone(),
-                        launch.permission_args.keys().cloned().collect(),
-                    );
+                let modes: Vec<String> = if crate::proto::provider::BUILTIN_PROVIDER_IDS
+                    .contains(&summary.id.as_str())
+                {
+                    vec![]
+                } else {
+                    crate::profile::declared::resolve(&definition.definition, None)
+                        .permissions
+                        .map(|p| p.choices)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter(|mode| mode != "default")
+                        .collect()
+                };
+                if !modes.is_empty() {
+                    permission_modes.insert(summary.id.clone(), modes);
                 }
                 if launch.headless.is_some() && seen.insert(summary.id.clone()) {
                     headless.push(summary.id);

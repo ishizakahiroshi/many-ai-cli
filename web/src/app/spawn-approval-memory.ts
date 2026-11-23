@@ -1,3 +1,5 @@
+import { providerIsBuiltin, providerPermissionChoices } from './provider-declarations.js';
+
 export const REMEMBER_APPROVAL_SETTINGS_KEY = 'remember_approval_settings';
 
 export const APPROVAL_SETTING_KEYS = [
@@ -18,21 +20,15 @@ export const DEFAULT_APPROVAL_FORM_SETTINGS = Object.freeze({
   opencode_permission_mode: 'default',
 });
 
-const PERMISSION_MODE_VALUES: Readonly<Record<string, readonly string[]>> = {
-  claude: ['default', 'plan', 'acceptEdits', 'auto', 'bypassPermissions'],
-  grok: ['default', 'plan', 'acceptEdits', 'auto', 'bypassPermissions'],
-  copilot: ['default', 'auto', 'bypassPermissions'],
-  'cursor-agent': ['default', 'auto', 'bypassPermissions'],
-  'command-code': ['default', 'plan', 'acceptEdits', 'bypassPermissions'],
-};
-
-// 登録型 provider（devin-cli や「AI CLI を追加」で登録したもの）も、定義の
-// launch.permission_args が写像しているときは permission_mode を使う。記憶側は
-// provider 定義を知らないので、表に無い provider は呼び出し側の
-// 「permission select を出している」フラグで判別し、スキーマ全体
-// （rust の PERMISSION_ARG_MODES + default）で normalize する。
-// 写像に無いモードが記憶されても、復元時に syncPermissionModeOptions が
-// 選べない選択肢を default へ戻す。
+// 許可モードの選択肢は provider の宣言（permissions.choices。登録型の旧い書き方
+// launch.permission_args は Hub が同じ宣言へ畳み込んで送る）。宣言があるものだけが
+// 「許可モード」の欄を持つ。codex（sandbox と承認の 2 欄）と opencode（専用の 1 欄）は
+// 別の形なので、下で専用に扱う。
+//
+// 宣言がまだ届いていない間の登録型 provider（devin-cli や「AI CLI を追加」で登録したもの）は、
+// 呼び出し側の「permission select を出している」フラグで判別し、スキーマ全体
+// （rust の PERMISSION_ARG_MODES + default）で normalize する。写像に無いモードが記憶されても、
+// 復元時に syncPermissionModeOptions が選べない選択肢を default へ戻す。
 const REGISTERED_PERMISSION_MODES = ['default', 'plan', 'acceptEdits', 'auto', 'bypassPermissions'] as const;
 
 const CODEX_SANDBOX_VALUES = ['workspace-write', 'read-only', 'danger-full-access'] as const;
@@ -44,11 +40,12 @@ function normalizeValue(value: unknown, allowed: readonly string[], fallback: st
 }
 
 // その provider が permission_mode の記憶対象なら許容値の一覧、そうでなければ undefined。
-// built-in は表で判別し、登録型は呼び出し側のフラグ（permission select を出しているか）で判別する。
+// 宣言の選択肢で判別し、宣言が無い登録型は呼び出し側のフラグ（permission select を出しているか）で判別する。
 function permissionModesForProvider(provider: string, usesPermissionMode: boolean): readonly string[] | undefined {
-  if (Object.prototype.hasOwnProperty.call(PERMISSION_MODE_VALUES, provider)) return PERMISSION_MODE_VALUES[provider];
-  if (provider === 'codex' || provider === 'opencode') return undefined;
-  return usesPermissionMode ? REGISTERED_PERMISSION_MODES : undefined;
+  const declared = providerPermissionChoices(provider);
+  if (declared.length > 0) return declared;
+  // 同梱で選択肢を宣言しないもの（codex・opencode）は専用の欄を持つので、登録型の控えを当てない。
+  return usesPermissionMode && !providerIsBuiltin(provider) ? REGISTERED_PERMISSION_MODES : undefined;
 }
 
 /**
@@ -63,7 +60,7 @@ export function providerKey(name: string, provider: string): string {
 
 /** その provider が実際に使う許可設定のキー名（codex だけ 2 つ）。 */
 function approvalKeyNamesForProvider(provider: string, usesPermissionMode = false): readonly ApprovalSettingKey[] {
-  if (Object.prototype.hasOwnProperty.call(PERMISSION_MODE_VALUES, provider)) return ['permission_mode'];
+  if (permissionModesForProvider(provider, usesPermissionMode)) return ['permission_mode'];
   if (provider === 'codex') return ['sandbox', 'ask_for_approval'];
   if (provider === 'opencode') return ['opencode_permission_mode'];
   return usesPermissionMode ? ['permission_mode'] : [];

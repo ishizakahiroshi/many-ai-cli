@@ -547,3 +547,91 @@ async fn native_trial_remote_refused_and_held_local_reads_are_bounded() {
         b"outside private content"
     );
 }
+fn registered(
+    slash: Option<crate::proto::provider::SlashCommandsDefinition>,
+) -> crate::proto::provider::Definition {
+    crate::proto::provider::Definition {
+        id: "synthetic-cli".into(),
+        slash_commands: slash,
+        ..Default::default()
+    }
+}
+#[tokio::test]
+async fn a_registered_provider_reads_the_source_or_list_it_declares() {
+    let f = fixture();
+    // Not a built-in and not declared: still an invalid provider.
+    assert!(matches!(
+        f.owner
+            .commands_declared("synthetic-cli", None, SearchContext::default(), false, at())
+            .await,
+        Err(SlashFailure::InvalidProvider)
+    ));
+    // Declared without a source or list: nothing to read.
+    assert!(matches!(
+        f.owner
+            .commands_declared(
+                "synthetic-cli",
+                Some(registered(None)),
+                SearchContext::default(),
+                false,
+                at()
+            )
+            .await,
+        Err(SlashFailure::NotConfigured)
+    ));
+    // A disabled definition is refused like an unknown one.
+    let mut off = registered(None);
+    off.enabled = Some(false);
+    assert!(matches!(
+        f.owner
+            .commands_declared(
+                "synthetic-cli",
+                Some(off),
+                SearchContext::default(),
+                false,
+                at()
+            )
+            .await,
+        Err(SlashFailure::InvalidProvider)
+    ));
+    // A declared source is fetched and parsed.
+    let from_source = registered(Some(crate::proto::provider::SlashCommandsDefinition {
+        source: "https://example.com/commands.md".into(),
+        ..Default::default()
+    }));
+    let response = f
+        .owner
+        .commands_declared(
+            "synthetic-cli",
+            Some(from_source),
+            SearchContext::default(),
+            false,
+            at(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.source_url, "https://example.com/commands.md");
+    assert_eq!(response.cmds.unwrap()[0].cmd, "/remote");
+    // A declared list needs no fetch.
+    let reads = f.io.reads.load(Ordering::SeqCst);
+    let from_items = registered(Some(crate::proto::provider::SlashCommandsDefinition {
+        items: vec![crate::proto::provider::SlashCommandItem {
+            cmd: "/own".into(),
+            desc: "Declared".into(),
+        }],
+        ..Default::default()
+    }));
+    let response = f
+        .owner
+        .commands_declared(
+            "synthetic-cli",
+            Some(from_items),
+            SearchContext::default(),
+            false,
+            at(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.cmds.unwrap()[0].cmd, "/own");
+    assert_eq!(f.io.reads.load(Ordering::SeqCst), reads);
+}

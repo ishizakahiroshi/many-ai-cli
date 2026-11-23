@@ -89,6 +89,19 @@ impl SessionEngine {
             return Err(SessionError::AuthenticationExpired);
         }
         let s = state.session(binding)?;
+        // A session of a provider reached over ACP takes input only from the
+        // authenticated dashboard (a person); never from the Hub's own paths.
+        if !matches!(
+            authority,
+            InputAuthority::Ui(_)
+                | InputAuthority::UiApproval { .. }
+                | InputAuthority::NativeApproval(_)
+        ) && crate::profile::declared::is_acp(&s.snapshot.provider)
+        {
+            return Err(SessionError::InvalidRequest(
+                crate::profile::declared::ACP_HUMAN_ONLY.into(),
+            ));
+        }
         if !s.connected {
             return Err(SessionError::Transport("wrapper not connected".into()));
         }
@@ -264,7 +277,7 @@ impl SessionEngine {
             state.session(binding)?.snapshot.provider.clone()
         };
         let t = self.options.submit_timing;
-        let minimum = if matches!(provider.as_str(), "codex" | "opencode") {
+        let minimum = if crate::profile::declared::slow_paste(&provider) {
             t.slow_minimum
         } else {
             t.minimum

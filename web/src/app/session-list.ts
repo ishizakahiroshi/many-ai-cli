@@ -45,6 +45,7 @@ import { forwardDetachedActivate, isDetachedTabView } from './detached-view-mode
 // provider アイコンは末端モジュール provider-icon.ts が持つ（他モジュールを import しない）。
 // このファイルの内部でも使うので import し、既存の import 元のために再 export する。
 import { providerDisplayName, providerIconHtml, safeClassToken } from './provider-icon.js';
+import { onProviderDeclarationsChanged, providerBadgeLetter, providerSortOrder } from './provider-declarations.js';
 export { providerDisplayName, providerIconHtml, safeClassToken };
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
@@ -1883,12 +1884,15 @@ export function renderSummaryAndNotifications() {
 	const totalWaiting = stateCounts.waiting;
 	const totalApprovals = Array.from(sessions.values()).filter(s => s.awaiting_approval === true).length;
 
-  const PROVIDER_ORDER = { claude: 0, ollama: 1, 'lm-studio': 2, codex: 3, copilot: 4, opencode: 5, 'cursor-agent': 6, grok: 7, 'command-code': 8 };
+  // 並び順は provider の宣言（presentation.order）。ollama・lm-studio は provider ではなく画面だけの経路で、
+  // claude の次（宣言の順 1 の次）に置く。
+  const LOCAL_ROUTE_ORDER: Record<string, number> = { ollama: 2, 'lm-studio': 3 };
+  const orderOfKey = (key: string): number => (key in LOCAL_ROUTE_ORDER ? LOCAL_ROUTE_ORDER[key] : providerSortOrder(key));
   const sortedGroups = Array.from(providerGroups.values()).sort((a, b) => {
     const ka = a.localRoute || a.provider;
     const kb = b.localRoute || b.provider;
-    const oa = ka in PROVIDER_ORDER ? PROVIDER_ORDER[ka] : 99;
-    const ob = kb in PROVIDER_ORDER ? PROVIDER_ORDER[kb] : 99;
+    const oa = orderOfKey(ka);
+    const ob = orderOfKey(kb);
     if (oa !== ob) return oa - ob;
     return (a.model || '').localeCompare(b.model || '');
   });

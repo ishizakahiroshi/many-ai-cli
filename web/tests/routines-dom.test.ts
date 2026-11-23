@@ -36,7 +36,7 @@ function fixture(url='https://hub.example/', ready=true){
   const sessionMap=new Map();const ctx:any={document,HTMLElement:Element,Element,URL,Intl,Date,Promise,Error,crypto:{randomUUID:()=> 'synthetic-request'},location:{href:url},
     history:{state:null,replaceState(_state:any,_title:string,target:URL){ctx.location.href=String(target);}},
     window:{t:ready?((key:string)=>key):undefined,addEventListener:(type:string,fn:Function)=>listeners.set(type,[...(listeners.get(type)||[]),fn])},
-    t:(key:string)=>key,activeSessionId:null,sessions:sessionMap,activateSession:()=>{},getPromptTemplates:()=>[],ORCHESTRATION_CLI_OPTIONS:[{value:'codex',label:'Codex'}],
+    t:(key:string)=>key,activeSessionId:null,sessions:sessionMap,activateSession:()=>{},getPromptTemplates:()=>[],orchestrationCliOptions:()=>[{value:'codex',label:'Codex'}],
     isRoutineRunActive,routineRunFromURL,routineSessionMatches,uiButtonClass,
     apiFetch:async(path:string,init:any)=>{calls.push({path,init});const value=await respond(path,init);return value?.httpError?{ok:false,status:value.httpError,text:async()=>value.message||'conflict'}:{ok:true,status:200,json:async()=>value};},
     setTimeout:(fn:Function)=>{timers.set(++timerID,fn);return timerID;},clearTimeout:(id:number)=>timers.delete(id),queueMicrotask,

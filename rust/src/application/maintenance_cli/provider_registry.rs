@@ -8,6 +8,7 @@
 //! Hub token or any config value.
 use super::{
     provider_args::{AddArgs, TestArgs},
+    provider_checks,
     provider_hub::HubApi,
 };
 use crate::{
@@ -19,13 +20,14 @@ use crate::{
         execpath::{NativeFs, Platform, Resolver},
     },
     profile::{
+        capability_report, declared,
         registry::default_adapters,
         store::{ProviderRegistryStore, StoreError, is_builtin, validate_user_id},
         validation::validate_definition,
     },
     proto::provider::{
         CURRENT_SCHEMA_VERSION, Definition, EffectiveDefinition, HeadlessDefinition,
-        LaunchDefinition, ORIGIN_LEGACY, ORIGIN_USER, Summary,
+        LinksDefinition, ModelDefinition, ORIGIN_LEGACY, ORIGIN_USER, Summary,
     },
     wrapper::launch::{WrapperArgs, prepare_launch_with_definition},
 };
@@ -79,7 +81,7 @@ const SESSION_VARIABLE_PREFIX: &str = "MANY_AI_CLI_";
 /// Every variable of a Hub session this process inherited, to be removed for a
 /// provider under test: the Hub token, port, session id and local proof, and
 /// anything else with the `MANY_AI_CLI_` prefix (case-insensitive on Windows).
-fn hub_session_variables(
+pub(super) fn hub_session_variables(
     environment: &[String],
     inherited: impl IntoIterator<Item = std::ffi::OsString>,
 ) -> std::collections::BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>> {
@@ -266,56 +268,143 @@ impl<H: HubApi> Registry<'_, H> {
         }
     }
 
+    /// The definition to register: the `--definition` file when given, else an
+    /// empty one, with every other option written over it.
+    fn build_definition(&self, add: &AddArgs) -> io::Result<Definition> {
+        let mut definition = match &add.definition_file {
+            Some(file) => {
+                let path = self.cwd.join(file);
+                let meta = std::fs::metadata(&path).map_err(|e| {
+                    error(format!("could not read the definition file {file:?}: {e}"))
+                })?;
+                if !meta.is_file() || meta.len() > 1024 * 1024 {
+                    return Err(error(format!(
+                        "the definition file {file:?} must be a regular file of at most 1 MiB"
+                    )));
+                }
+                let bytes = std::fs::read(&path).map_err(|e| {
+                    error(format!("could not read the definition file {file:?}: {e}"))
+                })?;
+                crate::proto::decode_wire::<Definition>(&bytes)
+                    .map_err(|e| error(format!("the definition file {file:?} is not valid: {e}")))?
+            }
+            None => Definition::default(),
+        };
+        if definition.schema_version == 0 {
+            definition.schema_version = CURRENT_SCHEMA_VERSION;
+        }
+        if !add.id.is_empty() {
+            definition.id = add.id.clone();
+        }
+        if !add.label.is_empty() {
+            definition.display_name = add.label.clone();
+        } else if definition.display_name.is_empty() {
+            definition.display_name = definition.id.clone();
+        }
+        if !add.description.is_empty() {
+            definition.description = add.description.clone();
+        }
+        if !add.command.is_empty() || !add.args.is_empty() || add.headless.is_some() {
+            let launch = definition.launch.get_or_insert_with(Default::default);
+            if !add.command.is_empty() {
+                launch.executable = add.command.clone();
+            }
+            if !add.args.is_empty() {
+                launch.args = add.args.clone();
+            }
+            if let Some((format, via)) = &add.headless {
+                launch.headless = Some(HeadlessDefinition {
+                    args: add.headless_args.clone(),
+                    format: format.clone(),
+                    prompt_via: via.clone(),
+                });
+            }
+        }
+        if !add.models.is_empty() {
+            let models = definition.models.get_or_insert_with(Default::default);
+            models.items = add
+                .models
+                .iter()
+                .map(|id| ModelDefinition {
+                    id: id.trim().to_owned(),
+                    label: id.trim().to_owned(),
+                })
+                .collect();
+        }
+        if !add.letter.is_empty() || !add.color.is_empty() {
+            let presentation = definition.presentation.get_or_insert_with(Default::default);
+            if !add.letter.is_empty() {
+                presentation.icon_text = add.letter.clone();
+            }
+            if !add.color.is_empty() {
+                presentation.color = add.color.clone();
+            }
+        }
+        if !add.usage_url.is_empty() {
+            definition.links = Some(LinksDefinition {
+                usage_url: add.usage_url.clone(),
+            });
+        }
+        if !add.slash_source.is_empty() {
+            let slash = definition
+                .slash_commands
+                .get_or_insert_with(Default::default);
+            slash.source = add.slash_source.clone();
+        }
+        if !add.permission_modes.is_empty() {
+            let permissions = definition.permissions.get_or_insert_with(Default::default);
+            for (name, flags) in &add.permission_modes {
+                permissions.modes.insert(name.clone(), flags.clone());
+                if !permissions.choices.contains(name) {
+                    permissions.choices.push(name.clone());
+                }
+            }
+        }
+        if !add.approval_options.is_empty() {
+            definition.approval_pattern_source = self
+                .approval_file(&definition.id)
+                .to_string_lossy()
+                .into_owned();
+        }
+        Ok(definition)
+    }
+
     pub async fn add(&self, add: &AddArgs) -> io::Result<String> {
-        if is_builtin(&add.id) || add.id == "shell" {
+        let definition = self.build_definition(add)?;
+        let id = definition.id.clone();
+        if id.is_empty() {
+            return Err(error(
+                "the provider id is missing: give --id, or put \"id\" in the definition file",
+            ));
+        }
+        if is_builtin(&id) || id == "shell" {
             return Err(error(format!(
-                "provider id {:?} is reserved for a built-in; choose another id",
-                add.id
+                "provider id {id:?} is reserved for a built-in; choose another id"
             )));
         }
         // The same id rule the registry applies; it also keeps the id safe to use
         // as a file name for the approval phrases below.
-        validate_user_id(&add.id).map_err(|e| error(format!("provider id {:?}: {e}", add.id)))?;
-        if !self.command_on_path(&add.command) {
+        validate_user_id(&id).map_err(|e| error(format!("provider id {id:?}: {e}")))?;
+        if let Some(command) = definition
+            .launch
+            .as_ref()
+            .map(|l| l.executable.clone())
+            .filter(|c| !c.is_empty())
+            && !self.command_on_path(&command)
+        {
             return Err(error(format!(
-                "executable {:?} was not found on PATH; install it, or register a small wrapper script that starts it (a CLI that needs its own HOME or config directory belongs in such a wrapper)",
-                add.command
+                "executable {command:?} was not found on PATH; install it, or register a small wrapper script that starts it (a CLI that needs its own HOME or config directory belongs in such a wrapper)"
             )));
         }
         let (_, existing) = self.summaries().await?;
-        if let Some(found) = existing.iter().find(|p| p.id == add.id) {
+        if let Some(found) = existing.iter().find(|p| p.id == id) {
             return Err(error(format!(
-                "provider id {:?} already exists ({}); remove it first or choose another id",
-                add.id,
+                "provider id {id:?} already exists ({}); remove it first or choose another id",
                 origin_label(found.origin.as_str())
             )));
         }
-        let source = if add.approval_options.is_empty() {
-            String::new()
-        } else {
-            self.approval_file(&add.id).to_string_lossy().into_owned()
-        };
-        let definition = Definition {
-            schema_version: CURRENT_SCHEMA_VERSION,
-            id: add.id.clone(),
-            display_name: add.label.clone(),
-            description: add.description.clone(),
-            launch: Some(LaunchDefinition {
-                executable: add.command.clone(),
-                args: add.args.clone(),
-                headless: add
-                    .headless
-                    .as_ref()
-                    .map(|(format, via)| HeadlessDefinition {
-                        args: add.headless_args.clone(),
-                        format: format.clone(),
-                        prompt_via: via.clone(),
-                    }),
-                ..Default::default()
-            }),
-            approval_pattern_source: source,
-            ..Default::default()
-        };
+        let label = definition.display_name.clone();
+        let has_phrases = !add.approval_options.is_empty();
         let raw = serde_json::to_vec(&definition).map_err(io::Error::other)?;
         // Nothing is written until the definition is accepted.
         if let Some(hub) = self.hub {
@@ -350,16 +439,16 @@ impl<H: HubApi> Registry<'_, H> {
                 )));
             }
         }
-        if !add.approval_options.is_empty() {
-            self.write_approval_phrases(&add.id, &add.label, &add.approval_options)
+        if has_phrases {
+            self.write_approval_phrases(&id, &label, &add.approval_options)
                 .map_err(|e| error(format!("could not write the approval phrases: {e}")))?;
         }
         let created = self.create(&definition, raw).await;
         let warnings = match created {
             Ok(warnings) => warnings,
             Err(failure) => {
-                if !add.approval_options.is_empty() {
-                    self.remove_approval_phrases(&add.id);
+                if has_phrases {
+                    self.remove_approval_phrases(&id);
                 }
                 return Err(failure);
             }
@@ -420,45 +509,79 @@ impl<H: HubApi> Registry<'_, H> {
         Ok(vec![])
     }
     fn added_report(&self, add: &AddArgs, definition: &Definition, warnings: &[String]) -> String {
-        let mut out = format!("added provider {} ({})\n", add.id, one_line(&add.label));
-        let mut interactive = vec![add.command.clone()];
-        interactive.extend(add.args.clone());
-        out.push_str(&format!("interactive: {}\n", shown(&interactive)));
-        match &add.headless {
-            Some((format, via)) => {
+        let mut out = format!(
+            "added provider {} ({})
+",
+            definition.id,
+            one_line(&definition.display_name)
+        );
+        let launch = definition.launch.clone().unwrap_or_default();
+        let mut interactive = vec![launch.executable.clone()];
+        interactive.extend(launch.args.clone());
+        out.push_str(&format!(
+            "interactive: {}
+",
+            shown(&interactive)
+        ));
+        match &launch.headless {
+            Some(headless) => {
                 let def = HeadlessDef {
-                    args: add.headless_args.clone(),
-                    format: format.clone(),
-                    prompt_via: via.clone(),
+                    args: headless.args.clone(),
+                    format: headless.format.clone(),
+                    prompt_via: headless.prompt_via.clone(),
                 };
-                let mut argv = vec![add.command.clone()];
-                argv.extend(headless::build_argv(&def, &add.args, "<prompt>"));
+                let mut argv = vec![launch.executable.clone()];
+                argv.extend(headless::build_argv(&def, &launch.args, "<prompt>"));
                 out.push_str(&format!(
-                    "headless: yes: {}{} (output format {format})\n",
+                    "headless: yes: {}{} (output format {})
+",
                     shown(&argv),
-                    if via == "stdin" { "  (prompt on stdin)" } else { "" },
+                    if headless.prompt_via == "stdin" { "  (prompt on stdin)" } else { "" },
+                    headless.format,
                 ));
             }
             None => out.push_str(
-                "headless: no (add --headless-arg / --prompt-via to let orchestrate run it as a child)\n",
+                "headless: no (add --headless-arg / --prompt-via to let orchestrate run it as a child)
+",
             ),
         }
-        if !definition.approval_pattern_source.is_empty() {
+        if !definition.approval_pattern_source.is_empty() && !add.approval_options.is_empty() {
             out.push_str(&format!(
-                "approval phrases: {} written to {}\n",
+                "approval phrases: {} written to {}
+",
                 add.approval_options.len(),
                 definition.approval_pattern_source
             ));
         }
         for warning in warnings {
-            out.push_str(&format!("warning: {warning}\n"));
+            out.push_str(&format!(
+                "warning: {warning}
+"
+            ));
         }
+        out.push_str(
+            "what it can do (from the declarations):
+",
+        );
+        out.push_str(&capability_report::render_text(&capability_report::report(
+            &declared::resolve(definition, None),
+        )));
         if self.hub.is_some() {
-            out.push_str("The running Hub reloaded the registry; open dashboards show a notice with an undo.\n");
+            out.push_str(
+                "The running Hub reloaded the registry; open dashboards show a notice with an undo.
+",
+            );
         } else {
-            out.push_str("No Hub is running; the Hub will read it on its next start.\n");
+            out.push_str(
+                "No Hub is running; the Hub will read it on its next start.
+",
+            );
         }
-        out.push_str(&format!("next: many-ai-cli provider test {}\n", add.id));
+        out.push_str(&format!(
+            "next: many-ai-cli provider test {}
+",
+            definition.id
+        ));
         out
     }
 
@@ -541,8 +664,41 @@ impl<H: HubApi> Registry<'_, H> {
         ))
     }
 
+    /// The list of what the provider can and cannot do: the declarations, with
+    /// the ones that can be tried here (slash source, conversation folder, model
+    /// list command) replaced by the result of trying.
+    async fn capability_text(&self, effective: &EffectiveDefinition) -> String {
+        let resolved =
+            declared::resolved_for(&effective.definition.id, Some(&effective.definition))
+                .unwrap_or_else(|| effective.definition.clone());
+        let lines = provider_checks::merge(
+            capability_report::report(&resolved),
+            provider_checks::live_checks(&resolved, self.paths, self.environment, self.cwd).await,
+        );
+        format!(
+            "capabilities (available / unavailable / unsupported):
+{}",
+            capability_report::render_text(&lines)
+        )
+    }
+
     pub async fn test(&self, args: &TestArgs) -> io::Result<String> {
         let effective = self.effective(&args.id).await?;
+        let capabilities = self.capability_text(&effective).await;
+        match self.run_headless(args, &effective).await {
+            Ok(report) => Ok(format!("{report}{capabilities}")),
+            Err(failure) => Err(error(format!(
+                "{failure}
+{capabilities}"
+            ))),
+        }
+    }
+
+    async fn run_headless(
+        &self,
+        args: &TestArgs,
+        effective: &EffectiveDefinition,
+    ) -> io::Result<String> {
         let launch = prepare_launch_with_definition(
             self.config,
             &args.id,
@@ -550,7 +706,7 @@ impl<H: HubApi> Registry<'_, H> {
                 headless: true,
                 ..Default::default()
             },
-            Some(&effective),
+            Some(effective),
         )
         .map_err(|e| error(e.to_string()))?;
         let def = launch.headless_definition.as_ref().ok_or_else(|| {

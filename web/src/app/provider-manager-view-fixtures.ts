@@ -15,6 +15,10 @@ import {
   suggestProviderId,
   type ProviderUpdateFormValues,
 } from './provider-manager-view.js';
+import { seedBuiltinProviderDeclarations } from './provider-declarations-seed.js';
+
+// Hub から宣言が届いた後の状態にする。
+seedBuiltinProviderDeclarations();
 
 test('suggestProviderId: 表示名から小文字スラッグを作る', () => {
   assert.equal(suggestProviderId('My CLI'), 'my-cli');

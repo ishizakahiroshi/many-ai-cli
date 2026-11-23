@@ -60,6 +60,11 @@ pub fn default_adapters() -> AdapterCatalog {
 #[derive(Clone, Default)]
 pub struct Registry {
     definitions: BTreeMap<String, EffectiveDefinition>,
+    /// What the Hub reads for the declarative sections: each definition with the
+    /// sections it leaves empty filled from the built-in declarations. Kept
+    /// apart from `definitions` so the registry revision (an oracle value) is
+    /// computed from the definitions alone.
+    declared: BTreeMap<String, Definition>,
     order: Vec<String>,
     summaries: Vec<Summary>,
     diagnostics: Vec<Diagnostic>,
@@ -68,6 +73,22 @@ pub struct Registry {
 impl Registry {
     pub fn lookup(&self, id: &str) -> Option<EffectiveDefinition> {
         self.definitions.get(id).cloned()
+    }
+    /// The definition of `id` with its declarative sections resolved (own value
+    /// first, then the built-in declaration). `None` for an unknown id.
+    pub fn declared(&self, id: &str) -> Option<Definition> {
+        self.declared.get(id).cloned()
+    }
+    /// [`Self::declared`] without the copy, for a caller on a hot path.
+    pub fn declared_ref(&self, id: &str) -> Option<&Definition> {
+        self.declared.get(id)
+    }
+    /// Every definition with its declarative sections resolved, in registry order.
+    pub fn declared_list(&self) -> Vec<Definition> {
+        self.order
+            .iter()
+            .filter_map(|id| self.declared.get(id).cloned())
+            .collect()
     }
     pub fn list(&self) -> Vec<Summary> {
         self.summaries.clone()
@@ -173,6 +194,7 @@ impl Registry {
                 id.clone(),
             )
         });
+        let builtin_declarations = super::declared::builtin_declarations();
         for id in &registry.order {
             let (value, source, fields) = merged.remove(id).unwrap();
             let raw = serde_json::to_vec(&value).expect("JSON value");
@@ -185,7 +207,16 @@ impl Registry {
                     if def.enabled.is_none() {
                         def.enabled = Some(true);
                     }
-                    let capabilities = derive_capabilities(&def);
+                    let capabilities = super::capability_report::summary(&def);
+                    // Only a built-in id may borrow a built-in declaration; a
+                    // user definition never inherits another provider's values.
+                    let builtin = BUILTIN_PROVIDER_IDS
+                        .contains(&id.as_str())
+                        .then(|| builtin_declarations.get(id.as_str()))
+                        .flatten();
+                    registry
+                        .declared
+                        .insert(id.clone(), super::declared::resolve(&def, builtin));
                     registry.definitions.insert(
                         id.clone(),
                         EffectiveDefinition {
@@ -259,32 +290,6 @@ pub(super) fn diag(code: &str, severity: &str, field: &str, message: &str) -> Di
 pub(super) fn sort_diagnostics(d: &mut [Diagnostic]) {
     d.sort_by(|a, b| (&a.field, &a.code, &a.message).cmp(&(&b.field, &b.code, &b.message)));
 }
-fn available(s: &str) -> bool {
-    !matches!(s, "" | "none" | "unsupported")
-}
-fn derive_capabilities(d: &Definition) -> CapabilitySummary {
-    CapabilitySummary {
-        launch: d.launch.is_some(),
-        models: d.models.is_some(),
-        effort: d.launch.as_ref().is_some_and(|l| !l.effort_args.is_empty()),
-        headless: d.launch.as_ref().is_some_and(|l| l.headless.is_some()),
-        approval: available(&d.adapters.approval),
-        transcript: available(&d.adapters.transcript),
-        usage: available(&d.adapters.usage),
-        subscription: available(&d.adapters.subscription),
-        permissions: available(&d.adapters.permissions)
-            || d.launch
-                .as_ref()
-                .is_some_and(|l| !l.permission_args.is_empty()),
-        subagents: available(&d.adapters.subagents),
-        slash_suggestion_popup: d
-            .capabilities
-            .get("slash_suggestion_popup")
-            .copied()
-            .unwrap_or(false),
-    }
-}
-
 fn expand(args: &[String], key: &str, value: &str) -> Result<Vec<String>, String> {
     args.iter()
         .map(|arg| {
@@ -312,15 +317,22 @@ pub fn effort_args(def: &EffectiveDefinition, effort: &str) -> Result<Vec<String
     }
     expand(&launch.effort_args, "effort", effort)
 }
-/// The provider's own argv for an approval mode; empty for `default`, an
-/// empty mode or a mode the definition does not map.
+/// The provider's own argv for an approval mode, from its permission
+/// declaration (`permissions.modes`, with the older `launch.permission_args`
+/// folded in by [`crate::profile::declared::resolve`]); empty for `default`
+/// (unless the declaration maps it), an empty mode or a mode the definition
+/// does not map.
 pub fn permission_args(def: &EffectiveDefinition, mode: &str) -> Vec<String> {
-    def.definition
-        .launch
-        .as_ref()
-        .and_then(|l| l.permission_args.get(mode))
-        .cloned()
-        .unwrap_or_default()
+    let resolved = crate::profile::declared::resolve(&def.definition, None);
+    if mode.trim() == "default"
+        && !resolved
+            .permissions
+            .as_ref()
+            .is_some_and(|p| p.modes.contains_key("default"))
+    {
+        return vec![];
+    }
+    crate::profile::declared::permission_args(Some(&resolved), mode).0
 }
 pub fn model_args(def: &EffectiveDefinition, model: &str) -> Result<Vec<String>, String> {
     if model.is_empty() {

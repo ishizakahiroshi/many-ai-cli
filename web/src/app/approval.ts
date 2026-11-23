@@ -1,4 +1,5 @@
 // --- ESM imports (generated) ---
+import { providerIgnoresLineClear, providerIsBuiltin } from './provider-declarations.js';
 import { t } from '../i18n.js';
 import { actionBarShownAt, activeSessionId, approvalCandidateShape, approvalSuppressedCache, batchActiveQ, batchFreeText, batchSelections, isStaleHistoryRepaint, lastActionBarRender, maybeAutoSwitchToNextApproval, multiSelectFocusIdx, multiSelectSelections, recordAnsweredApprovalIdentity, enqueueApprovalAutoSwitch, removeApprovalAutoSwitchTarget, sequentialChoiceCache, sequentialChoiceSig, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, _approvalCtxHash, type ApprovalCandidateIdentity } from './state.js';
 import { APPROVAL_KIND_OPENCODE_SHORTCUT, APPROVAL_ORIGIN_NATIVE, approvalRecordFor, approvalRecordToken, approvalViewFor, foldApproval, isApprovalFolded, isApprovalRecordAnswered, subscribeApprovalStore, unfoldApproval } from './approval-store.js';
@@ -82,18 +83,8 @@ export function clearSequentialChoiceState(id) {
 // Go 側の isAIProvider と対応する。承認検出・chat history・done summary 等の
 // AI 固有機能を適用するかどうかの判定に使う。Shell provider は対象外。
 export function isAIProvider(provider: string): boolean {
-  switch (provider) {
-    case 'claude':
-    case 'codex':
-    case 'copilot':
-    case 'cursor-agent':
-    case 'opencode':
-    case 'grok':
-    case 'command-code':
-      return true;
-    default:
-      return false;
-  }
+  // 同梱の AI CLI（登録した AI CLI は isAIOrCustomProvider が受け持つ）。宣言は Hub から届く。
+  return providerIsBuiltin(provider);
 }
 
 export function isShellProvider(provider: string): boolean {
@@ -138,7 +129,7 @@ export function isAIOrCustomProvider(provider: string): boolean {
 // 事後掃除へ移行した。現在この判定を使うのは inputClearBtn の単独 \x15 送信と
 // residue-sweep の掃除スキップの 2 箇所。
 export function shouldSkipClearPrefix(provider: string): boolean {
-  return provider === 'shell' || provider === 'codex';
+  return provider === 'shell' || providerIgnoresLineClear(provider);
 }
 
 function localizeOpenCodeShortcutOptions(options) {

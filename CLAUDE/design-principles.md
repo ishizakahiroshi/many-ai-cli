@@ -1,6 +1,7 @@
 # 設計原則の索引（表）
 
-> 最終更新: 2026-11-17(火) 20:20:29 — 廃止した pending への参照を外し、CLAUDE.md と同じ文だった末尾の 1 段落を消した
+> 最終更新: 2026-11-24(火) — provider の id の直書きを止める検査の行を足した（宣言化の作業ブランチの取り込み）
+> 2026-11-17(火) 20:20:29 — 廃止した pending への参照を外し、CLAUDE.md と同じ文だった末尾の 1 段落を消した
 > 2026-11-17(火) 17:09:27 — `CLAUDE.md` の「設計原則の索引」の表を、行を変えずにここへ移した。常時読ませる量に上限のある AI CLI にも `CLAUDE.md` が全部届くようにするため（上限は `scripts/check-claude-md.mjs` の冒頭）
 
 **いつ読むか**: 実装・修正・設計の提案に入る前に、毎回読む。`@` を展開する AI CLI（Claude Code）には、`CLAUDE.md` の取り込みで常時届く。
@@ -19,6 +20,7 @@
 | `resources/` は `main` へ push した時点で全ユーザーへ live 配信される | [`resources/README.md`](../resources/README.md) | `scripts/check-slash-commands.mjs` |
 | profile へ持ち込む設定は additive のみ。credential は運ばず、書くのは自分のツリーの中だけ | `go/internal/subscription/seed.go` のパッケージ doc | `TestSeedIsAdditiveOnly` / `TestSeedNeverCarriesCredentials` |
 | 本ファイルを索引のまま保つ（本文を書き戻さない） | `scripts/check-claude-md.mjs` の冒頭 | 同スクリプト（Validate CI） |
+| provider の id（同梱 7 本）をコードに文字列で直接書かない。固定が要るときは定義の宣言（`rust/assets/provider/declarations.json`）へ出す | `scripts/check-provider-hardcode.mjs` の冒頭 / `scripts/provider-hardcode-baseline.json` | 同スクリプト（Validate CI）・`scripts/check-provider-hardcode.test.mjs` |
 | 代替画面を CLI が全面管理している端末へこちらのテキストを差し込まない（消せない残骸になる）／マーカーは端末の折り返しで分断される前提で照合する（連続バイト完全一致にしない）／端末出力を溜めて捨てる状態機械を置かない（再描画フレームに CLOSE が描かれないことがある） | `web/src/app/hub-marker-filter.ts` の案 H・案 I・案 J | `hub-marker-filter-fixtures.ts` の案 H 5 件・案 I 8 件・案 J 6 件 |
 | 全画面オーバーレイには wheel 除外クラス `.aac-wheel-overlay` を付ける（端末に重なるだけのポップオーバーは `data-wheel-native`） | `web/src/app/terminal.ts` の `isModalOverlayOpen()` | `scripts/check-wheel-overlays.mjs`（Validate CI） |
 | 画面の JS を読み込んだ瞬間に、循環 import の相手の変数を同期で読まない（TDZ で評価が止まり「読み込み中...」のまま固まる。遅らせるなら `queueMicrotask`）。止まったときは黙らず失敗の帯を出す | `web/src/app/boot-guard.ts` の冒頭 / `scripts/check-web-module-init.mjs` の冒頭 | `scripts/check-web-module-init.mjs`（Validate CI） / `web/tests/boot-guard.test.ts` |

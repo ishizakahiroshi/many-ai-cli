@@ -409,12 +409,22 @@ pub fn prepare_launch_with_definition(
                 extra.extend(["--ask-for-approval".into(), args.ask_for_approval.clone()]);
             }
         }
-        let (permission_args, declared) =
-            permission_args_for_provider(provider, &args.permission_mode);
+        // The permission and allowed-tool flags of a built-in come from its
+        // declaration. A registered AI CLI gets none here: the Hub hands its
+        // mapped flags over behind `--` (`ordinary_permission_args`), and only
+        // for a mode a person confirmed, so a wrapper flag must not map them a
+        // second time, unchecked.
+        let declared = if custom.is_some() {
+            None
+        } else {
+            crate::profile::declared::resolved_for(provider, definition.map(|d| &d.definition))
+        };
+        let (permission_args, applied) =
+            crate::profile::declared::permission_args(declared.as_ref(), &args.permission_mode);
         extra.extend(permission_args);
-        permission_mode = declared;
-        extra.extend(allowed_tool_args(
-            provider,
+        permission_mode = applied;
+        extra.extend(crate::profile::declared::allowed_tool_args(
+            declared.as_ref(),
             &parse_allowed_tool_values(&args.allowed_tools),
         ));
         extra.extend(provider_args);
@@ -453,24 +463,20 @@ pub fn prepare_launch_with_definition(
         None if provider == "copilot" => vec!["copilot".into(), "gh".into()],
         None => vec![provider.into()],
     };
-    let display = match provider {
-        "claude" => "Claude",
-        "codex" => "Codex",
-        "copilot" => "GitHub Copilot",
-        "cursor-agent" => "Cursor Agent",
-        "opencode" => "OpenCode",
-        "grok" => "Grok Build",
-        "command-code" => "Command Code",
-        "shell" => "Shell",
-        _ => "",
-    };
-    let display = if display.is_empty() {
-        custom
-            .as_ref()
-            .map(|p| p.effective_label().to_owned())
-            .unwrap_or_default()
+    // The name comes from the definition (the built-ins' manifests carry theirs).
+    let display = if provider == "shell" {
+        "Shell".to_owned()
     } else {
-        display.into()
+        definition
+            .map(|d| d.definition.display_name.clone())
+            .filter(|name| !name.is_empty())
+            .or_else(|| {
+                custom
+                    .as_ref()
+                    .map(|p| p.effective_label().to_owned())
+                    .filter(|name| !name.is_empty())
+            })
+            .unwrap_or_default()
     };
     let headless_definition = definition
         .and_then(|d| d.definition.launch.as_ref())
@@ -555,12 +561,10 @@ fn strings(values: &[&str]) -> Vec<String> {
     values.iter().map(|v| (*v).into()).collect()
 }
 pub fn subscription_login_args(provider: &str) -> Option<Vec<String>> {
-    match provider {
-        "claude" => Some(strings(&["auth", "login"])),
-        "codex" | "grok" => Some(strings(&["login"])),
-        "opencode" => Some(strings(&["providers", "login"])),
-        _ => None,
-    }
+    crate::profile::declared::builtin(provider)
+        .and_then(|d| d.login)
+        .map(|l| l.args)
+        .filter(|args| !args.is_empty())
 }
 pub fn model_args(
     model: &str,
@@ -584,26 +588,10 @@ pub fn model_args(
     }
 }
 pub fn permission_args_for_provider(provider: &str, mode: &str) -> (Vec<String>, String) {
-    let values = match (provider, mode) {
-        ("claude" | "grok", "" | "default" | "bounded") => vec![],
-        ("claude" | "grok", mode) => vec!["--permission-mode".into(), mode.into()],
-        ("copilot", "bypassPermissions") => strings(&["--allow-all"]),
-        ("copilot", "bounded") => strings(&["--no-ask-user"]),
-        ("copilot", "auto") => strings(&["--autopilot"]),
-        ("cursor-agent", "bypassPermissions") => strings(&["--force"]),
-        ("cursor-agent", "auto") => strings(&["--auto-review"]),
-        ("opencode", "bounded" | "bypassPermissions") => strings(&["--auto"]),
-        ("command-code", "plan") => strings(&["--permission-mode", "plan"]),
-        ("command-code", "acceptEdits" | "auto") => strings(&["--auto-accept"]),
-        ("command-code", "bypassPermissions") => strings(&["--yolo"]),
-        _ => vec![],
-    };
-    let declared = if values.is_empty() {
-        String::new()
-    } else {
-        mode.into()
-    };
-    (values, declared)
+    crate::profile::declared::permission_args(
+        crate::profile::declared::builtin(provider).as_ref(),
+        mode,
+    )
 }
 pub fn parse_allowed_tool_values(raw: &str) -> Vec<String> {
     raw.split(',')
@@ -613,16 +601,10 @@ pub fn parse_allowed_tool_values(raw: &str) -> Vec<String> {
         .collect()
 }
 pub fn allowed_tool_args(provider: &str, values: &[String]) -> Vec<String> {
-    if values.is_empty() {
-        return vec![];
-    }
-    match provider {
-        "claude" => std::iter::once("--allowedTools".into())
-            .chain(values.iter().cloned())
-            .collect(),
-        "copilot" => values.iter().map(|v| format!("--allow-tool={v}")).collect(),
-        _ => vec![],
-    }
+    crate::profile::declared::allowed_tool_args(
+        crate::profile::declared::builtin(provider).as_ref(),
+        values,
+    )
 }
 pub fn claude_session_flag_present(args: &[String]) -> bool {
     args.iter().any(|arg| {
@@ -1462,6 +1444,42 @@ mod tests {
         assert_eq!(p.executable_candidates, argv(&["fixture-agent-bin"]));
         assert_eq!(p.display, "Fixture Agent X");
         assert!(diagnostics.is_empty());
+    }
+    /// A registered provider's declared permission flags are handed over by
+    /// the Hub behind `--` (`ordinary_permission_args`), only for a mode a
+    /// person confirmed. The wrapper's own `--permission-mode` must not map
+    /// them a second time, or an unconfirmed child's mode would reach the CLI.
+    #[test]
+    fn a_registered_provider_gets_no_permission_flags_from_the_wrapper_flag() {
+        use crate::proto::provider::PermissionsDefinition;
+        let (_root, _installed, paths) = trial();
+        let mut def = user_definition("fixture-agent-x");
+        def.permissions = Some(PermissionsDefinition {
+            modes: [("auto".to_owned(), argv(&["--yolo"]))].into(),
+            allowed_tools_args: argv(&["--allow", "{tools}"]),
+            choices: vec![],
+        });
+        crate::profile::store::FileStore::new(&paths)
+            .create_new(&def)
+            .unwrap();
+        let (p, _) = runtime_plan(
+            &Config::default(),
+            &paths,
+            "fixture-agent-x",
+            &["--permission-mode=auto", "--allowed-tools=Read,Grep"],
+        );
+        assert!(p.provider_args.is_empty(), "{:?}", p.provider_args);
+        assert_eq!(p.permission_mode, "");
+        // The same declaration is what the Hub maps for a confirmed launch.
+        let registry = provider_registry_for_runtime(&Config::default(), &paths)
+            .unwrap()
+            .0;
+        let found = registry.lookup("fixture-agent-x").unwrap();
+        assert_eq!(
+            crate::profile::registry::permission_args(&found, "auto"),
+            argv(&["--yolo"])
+        );
+        assert!(crate::profile::registry::permission_args(&found, "plan").is_empty());
     }
     #[test]
     fn user_definition_headless_definition_comes_from_launch_headless() {

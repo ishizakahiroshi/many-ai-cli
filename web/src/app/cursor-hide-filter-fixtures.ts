@@ -6,6 +6,10 @@ import {
   shouldBypassCursorHideFilterForProvider,
   type CursorHideFilterState,
 } from './cursor-hide-filter.js';
+import { seedBuiltinProviderDeclarations } from './provider-declarations-seed.js';
+
+// Hub から宣言が届いた後の状態にする。
+seedBuiltinProviderDeclarations();
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8');

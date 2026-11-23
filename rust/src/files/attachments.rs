@@ -594,11 +594,24 @@ pub fn inject(provider: &str, path: &Path) -> io::Result<String> {
             "attachment path contains unsupported character",
         ));
     }
-    Ok(match provider {
-        "claude" => format!("@{path} "),
-        "codex" => format!("@{} ", path.replace('\\', "/")),
-        _ => format!("{path} "),
+    // How the CLI wants an attached file written is its declaration
+    // (`input.attach_format`): the bare path, `@path`, or `@path` with `/`.
+    let format = crate::profile::declared::with_declared(provider, |def| {
+        def.input
+            .as_ref()
+            .map(|i| i.attach_format.clone())
+            .unwrap_or_default()
     })
+    .unwrap_or_default();
+    Ok(written(&format, &path))
+}
+/// An attached file as it is written into the prompt (`input.attach_format`).
+fn written(format: &str, path: &str) -> String {
+    match format {
+        "at-path" => format!("@{path} "),
+        "at-path-slash" => format!("@{} ", path.replace('\\', "/")),
+        _ => format!("{path} "),
+    }
 }
 
 fn allowed_filename_char(c: char) -> bool {
@@ -651,5 +664,19 @@ mod tests {
         assert!(allowed_filename_char('\u{0651}'));
         assert!(!allowed_filename_char('\u{200e}'));
         assert!(inject("claude", Path::new("/owned/\u{061c}.md")).is_err());
+    }
+
+    #[test]
+    fn the_declared_attach_format_decides_how_a_path_is_written() {
+        assert_eq!(written("at-path", r"C:\a b\c.png"), r"@C:\a b\c.png ");
+        assert_eq!(written("at-path-slash", r"C:\a\c.png"), "@C:/a/c.png ");
+        assert_eq!(written("path", "/a/c.png"), "/a/c.png ");
+        assert_eq!(written("", "/a/c.png"), "/a/c.png ");
+        // Built-ins: claude `@path`, codex `@path` with slashes, the rest bare.
+        let path = std::path::Path::new("/tmp/x.png");
+        assert_eq!(inject("claude", path).unwrap(), "@/tmp/x.png ");
+        assert_eq!(inject("codex", path).unwrap(), "@/tmp/x.png ");
+        assert_eq!(inject("grok", path).unwrap(), "/tmp/x.png ");
+        assert_eq!(inject("synthetic-cli", path).unwrap(), "/tmp/x.png ");
     }
 }

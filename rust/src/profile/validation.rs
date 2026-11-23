@@ -349,11 +349,51 @@ pub fn sanitize_presentation(p: Option<&PresentationDefinition>) -> Option<Prese
     } else {
         String::new()
     };
-    if icon_text.is_empty() && color.is_empty() {
+    let letter = if valid_icon(&p.letter) {
+        p.letter.clone()
+    } else {
+        String::new()
+    };
+    let order = p.order.max(0);
+    let handoff_order = p.handoff_order.max(0);
+    let label = if valid_label(&p.label) {
+        p.label.clone()
+    } else {
+        String::new()
+    };
+    let long_label = if valid_label(&p.long_label) {
+        p.long_label.clone()
+    } else {
+        String::new()
+    };
+    if icon_text.is_empty()
+        && color.is_empty()
+        && letter.is_empty()
+        && order == 0
+        && handoff_order == 0
+        && label.is_empty()
+        && long_label.is_empty()
+    {
         None
     } else {
-        Some(PresentationDefinition { icon_text, color })
+        Some(PresentationDefinition {
+            icon_text,
+            color,
+            letter,
+            order,
+            handoff_order,
+            label,
+            long_label,
+        })
     }
+}
+
+/// A name shown on screen: short, printable, no surrounding whitespace.
+fn valid_label(value: &str) -> bool {
+    !value.is_empty()
+        && value.chars().count() <= 40
+        && value.trim() == value
+        && !value.chars().any(char::is_control)
 }
 
 pub fn validate_definition(
@@ -386,7 +426,17 @@ pub fn validate_definition(
                 "approval_pattern_source",
                 "source",
                 "update",
+                "connection",
+                "slash_commands",
+                "permissions",
+                "login",
+                "links",
+                "input",
+                "routines",
                 "screen",
+                "transcript",
+                "approval",
+                "instructions",
             ]
             .contains(&field.as_str())
             {
@@ -515,8 +565,287 @@ pub fn validate_definition(
     if let Some(v) = &def.screen {
         out.extend(screen(v));
     }
+    out.extend(declared_sections(&def));
     sort_diagnostics(&mut out);
     Ok((def, out))
+}
+
+fn https_url(value: &str) -> bool {
+    value.len() <= 512
+        && !control(value)
+        && value
+            .strip_prefix("https://")
+            .is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/') && !rest.contains(' '))
+}
+fn one_of(value: &str, field: &str, allowed: &[&str], out: &mut Vec<Diagnostic>) {
+    if !value.is_empty() && !allowed.contains(&value) {
+        out.push(diag(
+            "invalid_declaration",
+            "error",
+            field,
+            &format!("{field} must be one of: {}", allowed.join(", ")),
+        ));
+    }
+}
+fn env_name(value: &str) -> bool {
+    let mut chars = value.chars();
+    value.len() <= 64
+        && chars
+            .next()
+            .is_some_and(|c| c.is_ascii_uppercase() || c == '_')
+        && chars.all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+}
+
+/// A file the Hub may write its rules block to: one plain Markdown file name,
+/// never a path. The Hub joins it to the project root, so a separator, a drive
+/// or `..` would let a definition point the write somewhere else.
+pub fn rules_file_name(value: &str) -> bool {
+    let Some(stem) = value
+        .len()
+        .checked_sub(3)
+        .filter(|at| value.is_char_boundary(*at) && value[*at..].eq_ignore_ascii_case(".md"))
+        .map(|at| &value[..at])
+    else {
+        return false;
+    };
+    value.len() <= 64
+        && !stem.is_empty()
+        && stem.chars().any(|c| c.is_ascii_alphanumeric())
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        && !value.contains("..")
+}
+
+/// The Rust-only declarative sections (connection, slash commands, permissions,
+/// login, links, input, routines and the extra launch / models /
+/// presentation fields; `screen` has its own check above). Every problem is an error: a definition with a bad
+/// declaration is refused for new input instead of being half applied.
+fn declared_sections(def: &Definition) -> Vec<Diagnostic> {
+    let mut out = vec![];
+    one_of(&def.connection, "connection", &["pty", "acp"], &mut out);
+    if let Some(s) = &def.slash_commands {
+        if !s.source.is_empty() && !https_url(&s.source) {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "slash_commands.source",
+                "slash_commands.source must be an https URL",
+            ));
+        }
+        if s.items.len() > 2000 {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "slash_commands.items",
+                "too many slash command items",
+            ));
+        }
+        for (i, item) in s.items.iter().enumerate() {
+            let field = format!("slash_commands.items[{i}]");
+            let first = item.cmd.chars().next();
+            if !matches!(first, Some('/') | Some('$'))
+                || item.cmd.len() > 64
+                || item.cmd.contains(char::is_whitespace)
+                || control(&item.cmd)
+                || item.desc.len() > 256
+                || control(&item.desc)
+            {
+                out.push(diag(
+                    "invalid_declaration",
+                    "error",
+                    &field,
+                    "a slash command starts with / or $, has no whitespace, and has a short description",
+                ));
+            }
+        }
+        if !s.skill_prefix.is_empty() && !matches!(s.skill_prefix.as_str(), "/" | "$") {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "slash_commands.skill_prefix",
+                "slash_commands.skill_prefix must be / or $",
+            ));
+        }
+    }
+    if let Some(p) = &def.permissions {
+        if p.modes.len() > 32 {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "permissions.modes",
+                "too many permission modes",
+            ));
+        }
+        for (name, values) in &p.modes {
+            let field = format!("permissions.modes.{name}");
+            if name.is_empty() || name.len() > 64 || control(name) {
+                out.push(diag(
+                    "invalid_declaration",
+                    "error",
+                    &field,
+                    "permission mode name is empty, too long, or contains a control character",
+                ));
+            }
+            let values: Vec<String> = values.iter().map(|v| v.replace("{mode}", "x")).collect();
+            out.extend(args(&field, &values, false));
+        }
+        if p.choices.len() > 32
+            || p.choices
+                .iter()
+                .any(|c| c.is_empty() || c.len() > 64 || control(c) || c == "*")
+        {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "permissions.choices",
+                "permissions.choices holds at most 32 mode names without control characters",
+            ));
+        }
+        let tools: Vec<String> = p
+            .allowed_tools_args
+            .iter()
+            .map(|v| v.replace("{tools}", "x").replace("{tool}", "x"))
+            .collect();
+        out.extend(args("permissions.allowed_tools_args", &tools, false));
+    }
+    if let Some(l) = &def.login {
+        out.extend(args("login.args", &l.args, false));
+    }
+    if let Some(l) = &def.links
+        && !l.usage_url.is_empty()
+        && !https_url(&l.usage_url)
+    {
+        out.push(diag(
+            "invalid_declaration",
+            "error",
+            "links.usage_url",
+            "links.usage_url must be an https URL",
+        ));
+    }
+    if let Some(i) = &def.input {
+        one_of(
+            &i.interrupt_key,
+            "input.interrupt_key",
+            &["esc", "ctrl-c"],
+            &mut out,
+        );
+        one_of(
+            &i.attach_format,
+            "input.attach_format",
+            &["path", "at-path", "at-path-slash"],
+            &mut out,
+        );
+        one_of(
+            &i.slash_submit,
+            "input.slash_submit",
+            &["once", "paste"],
+            &mut out,
+        );
+    }
+    if let Some(r) = &def.routines {
+        one_of(
+            &r.completion_mode,
+            "routines.completion_mode",
+            &["marker", "native_or_marker"],
+            &mut out,
+        );
+    }
+    if let Some(i) = &def.instructions
+        && !i.rules_file.is_empty()
+        && !rules_file_name(&i.rules_file)
+    {
+        out.push(diag(
+            "invalid_declaration",
+            "error",
+            "instructions.rules_file",
+            "instructions.rules_file must be the name of a Markdown file in the project root (letters, digits, '.', '-' and '_', ending in .md)",
+        ));
+    }
+    if let Some(a) = &def.approval {
+        for (field, message) in approval_problems(a) {
+            out.push(diag("invalid_declaration", "error", &field, &message));
+        }
+    }
+    if let Some(t) = &def.transcript {
+        for (field, message) in transcript_problems(t) {
+            out.push(diag("invalid_declaration", "error", &field, &message));
+        }
+    }
+    if let Some(l) = &def.launch
+        && !l.config_dir_env.is_empty()
+        && !env_name(&l.config_dir_env)
+    {
+        out.push(diag(
+            "invalid_declaration",
+            "error",
+            "launch.config_dir_env",
+            "launch.config_dir_env must be an upper case environment variable name",
+        ));
+    }
+    if let Some(m) = &def.models {
+        if m.context_limit < 0 {
+            out.push(diag(
+                "invalid_declaration",
+                "error",
+                "models.context_limit",
+                "models.context_limit must not be negative",
+            ));
+        }
+        if !m.change_pattern.is_empty() {
+            let one_group = m.change_pattern.len() <= 200
+                && regex::Regex::new(&m.change_pattern).is_ok_and(|re| re.captures_len() == 2);
+            if !one_group {
+                out.push(diag(
+                    "invalid_declaration",
+                    "error",
+                    "models.change_pattern",
+                    "models.change_pattern must be a regular expression with exactly one capture group",
+                ));
+            }
+        }
+        if let Some(list) = &m.list {
+            out.extend(args("models.list.args", &list.args, false));
+            out.extend(args("models.list.refresh_args", &list.refresh_args, false));
+            if !(0..=600).contains(&list.timeout_seconds) {
+                out.push(diag(
+                    "invalid_declaration",
+                    "error",
+                    "models.list.timeout_seconds",
+                    "models.list.timeout_seconds must be between 0 and 600",
+                ));
+            }
+        }
+    }
+    if let Some(p) = &def.presentation {
+        if !p.letter.is_empty() && !valid_icon(&p.letter) {
+            out.push(diag(
+                "invalid_presentation",
+                "error",
+                "presentation.letter",
+                "presentation.letter must be 1 to 2 visible characters without surrounding whitespace",
+            ));
+        }
+        for (field, value) in [("label", &p.label), ("long_label", &p.long_label)] {
+            if !value.is_empty() && !valid_label(value) {
+                out.push(diag(
+                    "invalid_presentation",
+                    "error",
+                    &format!("presentation.{field}"),
+                    "a presentation label is 1 to 40 characters without control characters",
+                ));
+            }
+        }
+        if p.order < 0 || p.handoff_order < 0 {
+            out.push(diag(
+                "invalid_presentation",
+                "error",
+                "presentation.order",
+                "presentation.order and presentation.handoff_order must not be negative",
+            ));
+        }
+    }
+    out
 }
 
 /// Fixed Go spawnValidModelLabel, shared by child and ordinary launch paths.
@@ -528,4 +857,258 @@ pub fn valid_spawn_model_label(value: &str) -> bool {
             || n == 0x7f
             || [32, 34, 39, 124, 38, 62, 60, 94, 37, 40, 41, 59, 96, 36].contains(&n)
     })
+}
+
+/// A path pattern of a transcript declaration: it starts at `{home}` or
+/// `{env:NAME}`, may use `{cwd_slug:alnum}` / `{cwd_slug:path}`, and contains
+/// no `..`, no control character and no other `{...}`.
+pub fn transcript_pattern_ok(pattern: &str) -> bool {
+    if pattern.is_empty() || pattern.len() > 300 || control(pattern) || pattern.contains("..") {
+        return false;
+    }
+    let mut rest = pattern;
+    let mut first = true;
+    while let Some(open) = rest.find('{') {
+        if first && open != 0 {
+            return false;
+        }
+        let Some(close) = rest[open..].find('}') else {
+            return false;
+        };
+        let token = &rest[open + 1..open + close];
+        let known = token == "home"
+            || token == "cwd_slug:alnum"
+            || token == "cwd_slug:path"
+            || token.strip_prefix("env:").is_some_and(env_name);
+        if !known || (first && token != "home" && !token.starts_with("env:")) {
+            return false;
+        }
+        if first {
+            // The first path segment is the token alone.
+            let after = &rest[open + close + 1..];
+            if !after.is_empty() && !after.starts_with(['/', '\\']) {
+                return false;
+            }
+        }
+        first = false;
+        rest = &rest[open + close + 1..];
+    }
+    // A closing brace with no opening one is a typo too.
+    !first && !rest.contains('}')
+}
+
+fn sql_name(value: &str) -> bool {
+    let mut chars = value.chars();
+    value.len() <= 64
+        && chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn dotted_key(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 100
+        && value
+            .split('.')
+            .all(|part| !part.is_empty() && !control(part))
+}
+
+/// Problems of a `transcript` declaration as (field, message).
+fn transcript_problems(t: &TranscriptDefinition) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = vec![];
+    let mut bad = |field: &str, message: &str| out.push((field.to_owned(), message.to_owned()));
+    let shape_ok = (!t.root.is_empty() && t.file.is_empty() && !t.find.is_empty())
+        || (t.root.is_empty() && !t.file.is_empty());
+    if !shape_ok {
+        // Either a root with find steps, or a single shared file.
+        bad(
+            "transcript",
+            "transcript needs a root with find steps, or a file",
+        );
+    }
+    for (name, pattern) in [("root", &t.root), ("file", &t.file)] {
+        if !pattern.is_empty() && !transcript_pattern_ok(pattern) {
+            bad(
+                &format!("transcript.{name}"),
+                "the path pattern must start with {home} or {env:NAME} and use only known {...} tokens",
+            );
+        }
+    }
+    let extension_ok = t.extension.is_empty()
+        || (t.extension.len() <= 12 && t.extension.chars().all(|c| c.is_ascii_alphanumeric()));
+    if !extension_ok {
+        bad(
+            "transcript.extension",
+            "transcript.extension must be letters and digits without the dot",
+        );
+    }
+    if !t.id_format.is_empty() && t.id_format != "uuid" {
+        bad("transcript.id_format", "transcript.id_format must be uuid");
+    }
+    for (name, text) in [
+        ("label", &t.label),
+        ("dir_label", &t.dir_label),
+        ("unavailable_reason", &t.unavailable_reason),
+        ("not_found_reason", &t.not_found_reason),
+    ] {
+        if text.len() > 200 || control(text) {
+            bad(
+                &format!("transcript.{name}"),
+                "text is too long or contains a control character",
+            );
+        }
+    }
+    for step in &t.find {
+        match step.as_str() {
+            "session_id" => {}
+            "meta" => match &t.meta {
+                Some(m) if dotted_key(&m.cwd_key) && dotted_key(&m.time_key) => {}
+                _ => bad(
+                    "transcript.meta",
+                    "find: meta needs transcript.meta.cwd_key and time_key",
+                ),
+            },
+            "index" => match &t.index {
+                Some(i)
+                    if transcript_pattern_ok(&i.file)
+                        && [&i.table, &i.id_column, &i.cwd_column, &i.time_column]
+                            .iter()
+                            .all(|v| sql_name(v))
+                        && matches!(i.time_unit.as_str(), "" | "s" | "ms") => {}
+                _ => bad(
+                    "transcript.index",
+                    "find: index needs file, table and column names (letters, digits, _) and time_unit s or ms",
+                ),
+            },
+            _ => bad(
+                "transcript.find",
+                "transcript.find entries must be session_id, meta or index",
+            ),
+        }
+    }
+    if let Some(m) = &t.meta
+        && (m.kind_key.is_empty() != m.kind_value.is_empty()
+            || (!m.kind_key.is_empty() && !dotted_key(&m.kind_key)))
+    {
+        bad(
+            "transcript.meta",
+            "kind_key and kind_value must be given together",
+        );
+    }
+    if let Some(r) = &t.reader {
+        if !matches!(r.format.as_str(), "json" | "jsonl") {
+            bad("transcript.reader.format", "format must be json or jsonl");
+        }
+        if r.format == "json" && !dotted_key(&r.messages) {
+            bad(
+                "transcript.reader.messages",
+                "format json needs the dotted path of the message array",
+            );
+        }
+        if !dotted_key(&r.role_key) || !dotted_key(&r.text_key) {
+            bad("transcript.reader", "reader needs role_key and text_key");
+        }
+        if !r.time_key.is_empty() && !dotted_key(&r.time_key) {
+            bad(
+                "transcript.reader.time_key",
+                "time_key is not a valid key path",
+            );
+        }
+        if r.roles.is_empty() || r.roles.values().any(|v| v != "user" && v != "assistant") {
+            bad(
+                "transcript.reader.roles",
+                "roles must map at least one value to user or assistant",
+            );
+        }
+        if t.root.is_empty() {
+            bad(
+                "transcript.reader",
+                "a reader needs a root (a shared file is never read as a chat)",
+            );
+        }
+    }
+    out
+}
+
+/// Problems of an `approval` declaration as (field, message).
+fn approval_problems(a: &ApprovalDefinition) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = vec![];
+    let mut bad = |field: &str, message: &str| out.push((field.to_owned(), message.to_owned()));
+    if !matches!(a.style.as_str(), "" | "numbered" | "buttons") {
+        bad("approval.style", "style must be numbered or buttons");
+    }
+    for extra in &a.line_extras {
+        if !matches!(
+            extra.as_str(),
+            "paren_marker" | "bracket_keys" | "key_lines"
+        ) {
+            bad(
+                "approval.line_extras",
+                "line_extras entries must be paren_marker, bracket_keys or key_lines",
+            );
+        }
+    }
+    let phrase = |p: &String| !p.is_empty() && p.len() <= 100 && !control(p);
+    for (name, list) in [
+        ("hint_phrases", &a.hint_phrases),
+        ("not_approval_phrases", &a.not_approval_phrases),
+    ] {
+        if list.len() > 64 || !list.iter().all(phrase) {
+            bad(
+                &format!("approval.{name}"),
+                "at most 64 phrases of 1 to 100 characters without control characters",
+            );
+        }
+    }
+    for (name, table) in [("keys", &a.keys), ("bracket_keys", &a.bracket_keys)] {
+        if table.len() > 32 {
+            bad(&format!("approval.{name}"), "too many entries");
+        }
+        for (i, k) in table.iter().enumerate() {
+            let field = format!("approval.{name}[{i}]");
+            if k.keys.is_empty() || !k.keys.iter().all(|s| phrase(s) && !s.contains(['(', ')'])) {
+                bad(
+                    &field,
+                    "keys must be 1 to 100 character spellings without parentheses",
+                );
+            }
+            if !(0..=20).contains(&k.num) {
+                bad(&field, "num must be between 0 and 20");
+            }
+            if k.send.len() > 16 {
+                bad(&field, "send is too long");
+            }
+        }
+    }
+    if a.style == "buttons" && a.buttons.is_empty() {
+        bad("approval.buttons", "style buttons needs buttons");
+    }
+    if a.buttons.len() > 8 {
+        bad("approval.buttons", "too many button rows");
+    }
+    for (i, b) in a.buttons.iter().enumerate() {
+        let field = format!("approval.buttons[{i}]");
+        if b.line_all.is_empty() || !b.line_all.iter().all(phrase) {
+            bad(&field, "line_all needs 1 to 100 character words");
+        }
+        if !b.start_line.is_empty() && !phrase(&b.start_line) {
+            bad(&field, "start_line is too long or has a control character");
+        }
+        if b.labels.is_empty() || b.labels.len() > 8 || !b.labels.iter().all(phrase) {
+            bad(&field, "labels needs 1 to 8 entries");
+        }
+    }
+    if a.suppress_screens.len() > 8 {
+        bad("approval.suppress_screens", "too many entries");
+    }
+    for (i, s) in a.suppress_screens.iter().enumerate() {
+        if !s.all.iter().chain(&s.any).all(phrase) || (s.all.is_empty() && s.any.is_empty()) {
+            bad(
+                &format!("approval.suppress_screens[{i}]"),
+                "all and any need phrases (at least one list is not empty)",
+            );
+        }
+    }
+    out
 }

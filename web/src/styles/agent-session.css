@@ -1,0 +1,224 @@
+/* エージェントセッション画面（人が直接操作する会話）。ボタン・入力・枠の外観は ui-components が持つ。
+   ここは配置と、この画面だけの意味（差分の追加/削除・状態の枠）だけ。色は既存のテーマ変数から取る。 */
+.agent-session-dialog {
+  max-height: calc(100dvh - 32px);
+}
+.agent-session-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.agent-session-dialog.ui-modal {
+  padding: 0;
+}
+.agent-session-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.agent-session-header h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+.agent-session-feedback {
+  padding: 0 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-sm);
+}
+.agent-session-feedback:empty {
+  margin: 4px;
+}
+.agent-session-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0 18px 20px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+.agent-session-note {
+  margin: 4px 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.agent-session-start {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+}
+.agent-session-start label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-body);
+}
+.agent-session-start button {
+  justify-self: start;
+}
+.agent-session-group h3 {
+  margin: 8px 0;
+  font-size: var(--fs-body);
+}
+.agent-session-row,
+.agent-session-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.agent-session-row-main {
+  flex: 1 1 12em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.agent-session-badge {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.agent-session-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 8em;
+  max-height: 55dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 8px 0;
+}
+.agent-session-msg {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.agent-session-user {
+  align-self: flex-end;
+  max-width: 90%;
+  background: var(--accent-soft);
+}
+.agent-session-agent {
+  align-self: flex-start;
+  max-width: 100%;
+}
+.agent-session-replay {
+  opacity: 0.7;
+}
+.agent-session-thought {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agent-session-tool,
+.agent-session-plan,
+.agent-session-permission {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow-wrap: anywhere;
+}
+.agent-session-tool-failed {
+  border-color: var(--danger);
+}
+.agent-session-tool-completed {
+  border-color: var(--green);
+}
+.agent-session-permission {
+  border-color: var(--warn);
+  background: var(--warn-bg);
+}
+.agent-session-tool-head {
+  font-weight: 700;
+}
+.agent-session-tool-text {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-sm);
+}
+.agent-session-diff {
+  margin-top: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.agent-session-diff-path {
+  padding: 4px 8px;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+.agent-session-diff-body {
+  margin: 0;
+  padding: 6px 0;
+  overflow: auto;
+  font-size: var(--fs-sm);
+}
+.agent-session-diff-line {
+  display: inline-block;
+  min-width: 100%;
+  padding: 0 8px;
+  box-sizing: border-box;
+  white-space: pre;
+}
+.agent-session-diff-add {
+  background: var(--green-bg);
+  color: var(--green-text);
+}
+.agent-session-diff-del {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.agent-session-notice {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.agent-session-error {
+  color: var(--danger);
+}
+.agent-session-actions,
+.agent-session-tools,
+.agent-session-confirm {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 6px;
+}
+.agent-session-composer {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: var(--space-2);
+  align-items: end;
+}
+.agent-session-composer textarea {
+  resize: vertical;
+  min-width: 0;
+}
+.agent-session-dialog [hidden] {
+  display: none;
+}
+@media (max-width: 720px) {
+  .agent-session-dialog {
+    max-height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  .agent-session-content {
+    padding: 0 14px 18px;
+  }
+  .agent-session-composer {
+    grid-template-columns: 1fr;
+  }
+}

@@ -442,7 +442,14 @@ fn current_route_ledger_matches_router() {
             );
             continue;
         }
-        let probe = if path.ends_with('/') {
+        // A prefix row whose suffixes have a fixed shape names its own probe.
+        let probe = if let Some(probe) = row["probe"].as_str() {
+            assert!(
+                probe.starts_with(path),
+                "{path}: probe {probe} is outside it"
+            );
+            probe.to_string()
+        } else if path.ends_with('/') {
             format!("{path}probe")
         } else {
             path.to_string()

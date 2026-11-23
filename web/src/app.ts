@@ -1,4 +1,6 @@
 import { noteSpawnSessions } from './app/session-spawn-tracker.js';
+import { providerInterruptKey, providerLongLabel } from './app/provider-declarations.js';
+import { buildBodySubmit, mayUseSlashFallbackList, slashCommandQuickSends } from './app/slash-submit.js';
 import { restoreSessionListDrawerScroll, isSessionInSelectedListTab, preserveSessionListSelection } from './app/session-list-tabs.js';
 import { sessionListCloseNeighbor } from './app/session-list-tab-state.js';
 import { probeSpan } from './debug/probe.js';
@@ -40,6 +42,7 @@ import './app/orchestration-dashboard.js';
 import './app/relay-dialog.js';
 import './app/prompt-templates.js';
 import './app/routines.js';
+import './app/agent-session.js';
 import './app/board-handoffs.js';
 import './app/local-taker.js';
 import './app/memo-panel.js';
@@ -164,9 +167,9 @@ export function isSessionHeadless(sessionId: number | null): boolean {
   return !!s && s.execution_mode === 'headless';
 }
 
-// 停止ボタン（■）が PTY へ送る中断キーを provider 別に返す。
-// grok（Grok Build CLI）は Esc では生成を中断できず Ctrl+C(0x03) のみ有効
-// （Windows 実機 v0.2.93 で確認）。他 provider は従来どおり Esc(0x1b)。
+// 停止ボタン（■）が PTY へ送る中断キーを provider 別に返す。キーは provider の宣言
+// （input.interrupt_key）。grok（Grok Build CLI）は Esc では生成を中断できず Ctrl+C(0x03) のみ有効
+// （Windows 実機 v0.2.93 で確認）なので、同梱の宣言で ctrl-c にしてある。他は Esc(0x1b)。
 export function stopKeyForActiveSession(): string {
   const s = activeSessionId !== null ? sessions.get(activeSessionId) : undefined;
   return s?.provider === 'grok' ? '\x03' : '\x1b';
@@ -547,29 +550,17 @@ function trimTrailingSpaceForSlashCommand(text) {
 // 受け入れ）を宣言していることをログで確認済みのため、本文はペーストで包んで正体を正しく伝える。
 // 生送信（本文+\r 同梱）のまま残す例外は「キー入力として届くべきもの」だけ:
 // - shell: 素の PowerShell / cmd 等はブラケットペースト未宣言がありうる（マーカーがリテラル混入する）
-// - "/" 始まりの単一行: スラッシュコマンド（CLI のコマンドメニュー操作）
+// - "/" 始まりの単一行: スラッシュコマンド（CLI のコマンドメニュー操作）。ただし宣言 input.slash_submit が
+//   paste の provider は、通常の本文と同じ貼り付け＋別送の Enter（コマンド候補が最初の Enter を取る CLI 向け）
 // - 数字のみ / 1 文字: 承認メニュー等へのホットキー応答。ペーストで包むとメニューが受理しない
 //   恐れがあり、かつ数バイトのチャンクはタイプと区別されないため生送信で安全
 function buildBodySubmitPart(sessionId, rawText) {
-  if (rawText.includes('\n')) {
-    // 複数行は provider を問わず従来どおりペースト包み（\n の途中 Enter 解釈を防ぐ）
-    return { textPart: '\x1b[200~' + rawText + '\x1b[201~', deferEnter: true };
-  }
   const provider = sessions.get(sessionId)?.provider || '';
-  // Devin TUI は "/" 入力直後に候補ポップアップを開き、最初の Enter をコマンド送信ではなく
-  // 候補確定に使う。本文+\r 同梱だと Enter が飲まれてコマンドが入力欄に残り、次の送信と
-  // 連結される実害（"/model" の後の文が連結・"/help" が "/help/help" 化）があるため、
-  // 候補ポップアップ型の CLI の "/" 始まりだけはペースト包み＋遅延 Enter に変える。
-  // 登録定義の capabilities.slash_suggestion_popup で判別する（devin-cli の id 直書きは
-  // 既存の登録が直るよう後方互換として残す）。
-  if ((provider === 'devin-cli' || hasProviderCapability(provider, 'slash_suggestion_popup')) && rawText.startsWith('/')) {
-    return { textPart: '\x1b[200~' + rawText + '\x1b[201~', deferEnter: true };
-  }
-  const keyLike = rawText === '' || rawText.length === 1 || /^[0-9]+$/.test(rawText) || rawText.startsWith('/');
-  if (isShellProvider(provider) || keyLike) {
-    return { textPart: rawText + '\r', deferEnter: false };
-  }
-  return { textPart: '\x1b[200~' + rawText + '\x1b[201~', deferEnter: true };
+  // 判定そのものは slash-submit.ts（宣言 input.slash_submit を読む純粋な関数）。
+  // capabilities.slash_suggestion_popup は Hub が input.slash_submit: paste へ畳み込んで送るが、
+  // 宣言が届く前と、どちらも書いていない既存の devin-cli の登録は、ここで同じ扱いにする（後方互換）。
+  const slashPaste = provider === 'devin-cli' || hasProviderCapability(provider, 'slash_suggestion_popup');
+  return buildBodySubmit(provider, rawText, { slashPaste, shell: isShellProvider(provider) });
 }
 
 // 「本文」を 1 件送信する共通経路（チャット自由入力以外＝クイックコマンド・承認 UI の
@@ -930,9 +921,11 @@ async function ensureSlashCommands(provider, sessionId = activeSessionId) {
 }
 
 export function getSlashCommands() {
-  const dyn = slashCmdDynamic.get(slashCmdCacheKey(activeProvider()));
+  const provider = activeProvider();
+  const dyn = slashCmdDynamic.get(slashCmdCacheKey(provider));
   if (dyn && dyn.length > 0) return dyn;
-  return getSlashCommandsFallback();
+  // 固定リストは Claude 向け。登録した AI CLI に別の CLI の候補を出さない（宣言が無ければ候補なし）。
+  return mayUseSlashFallbackList(provider) ? getSlashCommandsFallback() : [];
 }
 
 export const slashMenuEl = document.getElementById('slash-menu');
@@ -1001,7 +994,7 @@ export function selectSlashItem(i) {
   // 引数を取らずダイアログを開くだけのコマンドはクイック実行用途のため、候補選択時に即送信する。
   // /models は OpenCode 側の /model 相当（TUI コマンド名 model.list）。ここに無いと Enter を
   // 2 回押す形になり、Claude の /model と操作が揃わない。
-  if (activeSessionId !== null && (cmd === '/clear' || cmd === '/model' || cmd === '/models')) {
+  if (activeSessionId !== null && slashCommandQuickSends(activeProvider(), cmd, slashItems)) {
     sendQuickCommand(activeSessionId, cmd);
     clearInput();
     hideSlashMenu();
@@ -2851,11 +2844,7 @@ inputEl.addEventListener('blur', (e) => {
     pickerProvider = provider;
     pickerSessionId = sessionId || null;
     pickerEl.hidden = false;
-    titleEl.textContent = provider === 'claude' ? 'Claude Code'
-                        : provider === 'copilot' ? 'GitHub Copilot'
-                        : provider === 'cursor-agent' ? 'Cursor Agent'
-                        : provider === 'command-code' ? 'Command Code'
-                        : 'Codex CLI';
+    titleEl.textContent = providerLongLabel(provider);
     timeEl.textContent  = '';
     listEl.innerHTML = `<div class="slash-picker-status">${t('slash_picker_loading')}</div>`;
     searchEl.value = '';

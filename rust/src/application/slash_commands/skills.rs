@@ -80,7 +80,7 @@ fn read(provider: &str, path: &Path) -> Option<SlashCmd> {
     }
     let desc = markdown::clean(&meta.description);
     Some(SlashCmd {
-        cmd: format!("{}{name}", if provider == "codex" { "$" } else { "/" }),
+        cmd: format!("{}{name}", skill_prefix(provider)),
         desc: if desc.is_empty() {
             "Skill".into()
         } else {
@@ -90,6 +90,15 @@ fn read(provider: &str, path: &Path) -> Option<SlashCmd> {
         name,
         path: path.to_owned(),
     })
+}
+/// The character that starts a skill invocation, declared per provider
+/// (`slash_commands.skill_prefix`; `/` when nothing is declared).
+fn skill_prefix(provider: &str) -> String {
+    crate::profile::declared::declared(provider)
+        .and_then(|d| d.slash_commands)
+        .map(|s| s.skill_prefix)
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(|| "/".into())
 }
 fn env_get<'a>(environment: &'a [String], key: &str) -> &'a str {
     environment
