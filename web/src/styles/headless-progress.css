@@ -24,4 +24,15 @@
 }
 .card .headless-progress { padding: 0.25rem 0 0; }
 .pane-slot > .headless-progress { flex: none; max-height: 9rem; overflow: auto; }
-#active-headless-progress { flex: none; max-height: 9rem; overflow: auto; }
+/* 開いているセッションの帯（#terminal-wrapper の先頭）は 1 行に固定する。値や発言の長さで
+   高さが変わると #terminal-area の行数が変わって pty_resize が飛ぶため、折り返さずに切る。 */
+#active-headless-progress {
+  flex: none;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  white-space: nowrap;
+  border-top: none;
+  border-bottom: 1px solid var(--line);
+}
+#active-headless-progress > .headless-progress-metric { flex: none; }
+#active-headless-progress > .headless-progress-last { flex: 1 1 auto; }

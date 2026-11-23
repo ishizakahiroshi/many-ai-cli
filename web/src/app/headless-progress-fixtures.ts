@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeHeadlessProgress, receiveHeadlessProgress, elapsedHeadlessMs, headlessProgressText, decodeHeadlessText, setHeadlessConnected, renderHeadlessProgressValues } from './headless-progress.js';
 
-const fixture = () => ({ version: 1, run_id: '1:1', sequence: 1, observed_turns: 2, result_turns: null, active_tools: [{ id: 'tool1', name: 'Read' }], started_at_ms: 1000, elapsed_ms: 2300, ended_at_ms: null, cost: { amount_usd: 0.1, currency: 'USD', kind: 'estimate', coverage: 'observed-main' }, last_assistant: 'safe &lt;img src=x&gt;', state: 'running', data_incomplete: false, final_cost_missing: false });
+const fixture = () => ({ version: 1, run_id: '1:1', sequence: 1, observed_turns: 2, result_turns: null, active_tools: [{ id: 'tool1', name: 'Read' }], started_at_ms: 1000, elapsed_ms: 2300, ended_at_ms: null, cost: { amount_usd: 0.1, currency: 'USD', kind: 'estimate', coverage: 'observed-main' }, last_assistant: 'safe &lt;img src=x&gt;', state: 'running', data_incomplete: false, final_cost_missing: false, structured: true });
 const t = (key: string, vars?: Record<string, unknown>) => key + (vars ? JSON.stringify(vars) : '');
 
 test('headless snapshot rejects malformed numeric/cost/lifecycle input', () => {
@@ -94,9 +94,21 @@ test('prelaunch and unsupported provider metrics remain unknown rather than zero
   assert.match(headlessProgressText(initial, t)[0], /headless_waiting/);
   assert.equal(headlessProgressText(initial, t)[1], 'headless_turns_unknown');
   assert.equal(headlessProgressText(initial, t)[3], 'headless_elapsed_unknown');
-  const textOnly = receiveHeadlessProgress(fixture())!;
-  assert.equal(headlessProgressText(textOnly, t, 0, false)[1], 'headless_turns_unknown');
-  assert.equal(headlessProgressText(textOnly, t, 0, false)[2], 'headless_tool_unknown');
-  assert.equal(headlessProgressText(textOnly, t, 0, false)[5], 'headless_last_unknown');
+  // Rust が stream として読んでいない実行（Claude の text 形式など）。provider 名は見ない。
+  const textOnly = receiveHeadlessProgress({ ...fixture(), structured: false })!;
+  assert.equal(headlessProgressText(textOnly, t, 0)[1], 'headless_turns_unknown');
+  assert.equal(headlessProgressText(textOnly, t, 0)[2], 'headless_tool_unknown');
+  assert.equal(headlessProgressText(textOnly, t, 0)[5], 'headless_last_unknown');
+  // 項目の無い古いスナップショットも「未取得」側に倒す（0 を実測値に見せない）。
+  const { structured: _omitted, ...legacy } = fixture();
+  assert.equal(receiveHeadlessProgress(legacy)!.structured, false);
+  assert.equal(headlessProgressText(receiveHeadlessProgress(legacy), t, 0)[1], 'headless_turns_unknown');
   assert.equal(headlessProgressText(null, t)[0], 'headless_waiting');
+});
+
+test('a stream read by Rust is measured whatever the provider is called', () => {
+  const measured = receiveHeadlessProgress({ ...fixture(), structured: true })!;
+  assert.match(headlessProgressText(measured, t, 0)[1], /headless_turns_observed.*2/);
+  assert.match(headlessProgressText(measured, t, 0)[5], /headless_last/);
+  assert.doesNotMatch(headlessProgressText(measured, t, 0)[5], /headless_last_unknown/);
 });

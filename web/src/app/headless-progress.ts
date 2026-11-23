@@ -10,6 +10,8 @@ export interface HeadlessProgress {
   started_at_ms: number; elapsed_ms: number; ended_at_ms?: number | null;
   cost: { amount_usd?: number | null; currency: string; kind: string; coverage: string };
   last_assistant: string; state: string; data_incomplete: boolean; final_cost_missing: boolean;
+  /** Rust が Claude の stream として読んだ実行だけ true（出力の形式で決まる。provider 名ではない）。 */
+  structured: boolean;
 }
 const states = new Set(['running', 'finishing', 'completed', 'failed', 'canceled', 'disconnected']);
 const nonnegative = (v: unknown): v is number => Number.isSafeInteger(v) && Number(v) >= 0;
@@ -47,6 +49,7 @@ export function normalizeHeadlessProgress(raw: unknown): HeadlessProgress | null
     cost: { amount_usd: p.cost.amount_usd ?? null, currency: 'USD', kind: p.cost.kind, coverage: p.cost.coverage },
     last_assistant: p.last_assistant, state: p.state,
     data_incomplete: p.data_incomplete === true, final_cost_missing: p.final_cost_missing === true,
+    structured: p.structured === true,
   };
 }
 
@@ -82,9 +85,9 @@ export type HeadlessTranslate = (key: string, vars?: Record<string, unknown>) =>
 
 /**
  * 表示する 6 行（状態・ターン・道具・経過・費用・最後の発言）。
- * structured=false（Claude の stream 以外）は数えられない値を「未取得」のままにし、0 にしない。
+ * Rust が stream として読んでいない実行（structured=false）は、数えられない値を「未取得」のままにし、0 にしない。
  */
-export function headlessProgressText(p: HeadlessProgress | null | undefined, translate: HeadlessTranslate, now = performance.now(), structured = true): string[] {
+export function headlessProgressText(p: HeadlessProgress | null | undefined, translate: HeadlessTranslate, now = performance.now()): string[] {
   const t = translate;
   if (!p) return [t('headless_waiting'), t('headless_turns_unknown'), t('headless_tool_unknown'), t('headless_elapsed_unknown'), t('headless_cost_unknown'), t('headless_last_unknown')];
   const seconds = Math.floor(elapsedHeadlessMs(p, now) / 1000);
@@ -97,7 +100,7 @@ export function headlessProgressText(p: HeadlessProgress | null | undefined, tra
     : p.cost.kind === 'estimate' ? t(p.cost.coverage === 'partial' ? 'headless_cost_partial' : 'headless_cost_estimate', { amount: money })
     : t('headless_cost_unknown');
   const state = !connected ? t('headless_disconnected') : p.sequence === 0 ? t('headless_waiting') : t(`headless_state_${p.state}`);
-  const observed = structured && p.sequence > 0;
+  const observed = p.structured && p.sequence > 0;
   return [
     `${state}${p.data_incomplete ? ` · ${t('headless_incomplete')}` : ''}`,
     observed ? t(p.result_turns == null ? 'headless_turns_observed' : 'headless_turns_result', { count: p.result_turns ?? p.observed_turns }) : t('headless_turns_unknown'),

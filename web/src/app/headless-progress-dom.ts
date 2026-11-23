@@ -22,8 +22,9 @@ function renderHeadlessProgressElement(el: HTMLElement, id: number): void {
   const session = sessions.get(id);
   el.hidden = !isHeadlessSession(session);
   if (el.hidden) return;
-  // ターン・道具・最後の発言を数えられるのは Claude の stream だけ。ほかは「未取得」のまま。
-  const values = headlessProgressText(session?.headless_progress, t, performance.now(), session?.provider === 'claude');
+  // ターン・道具・最後の発言を数えられるのは、Rust が Claude の stream として読んだ実行だけ。
+  // その判定はスナップショットの structured にあり、provider 名では決めない。
+  const values = headlessProgressText(session?.headless_progress, t, performance.now());
   renderHeadlessProgressValues(el, values);
 }
 
