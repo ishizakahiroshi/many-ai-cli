@@ -205,6 +205,41 @@ async fn two_profiles_linking_one_claude_md_keep_the_import_until_the_last_sessi
     assert!(f.warnings.lock().unwrap().is_empty());
 }
 #[tokio::test]
+async fn a_linked_project_agents_file_is_left_alone_for_the_whole_session() {
+    let f = build(true);
+    let base = f.home.parent().unwrap().to_path_buf();
+    // A cloned repository ships its AGENTS.md as a link to a file of the user's
+    // outside the repository.
+    let outside = f.home.join("secret.txt");
+    std::fs::write(&outside, b"outside\n").unwrap();
+    link_file(&outside, &base.join("project").join("AGENTS.md"));
+    let session = register(&f, "copilot", 2051).await;
+    let cancel = Cancellation::default();
+    f.owner.change("enable", &cancel).await.unwrap();
+    assert_eq!(std::fs::read(&outside).unwrap(), b"outside\n");
+    assert!(
+        f.warnings
+            .lock()
+            .unwrap()
+            .contains(&"approval instruction injection failed")
+    );
+    let journal = f.paths.root().join("approval-rule-targets.json");
+    let recorded: Journal = serde_json::from_slice(&std::fs::read(&journal).unwrap()).unwrap();
+    assert!(recorded.targets.iter().all(|t| t.project));
+    f.core.disconnected(session, at()).unwrap();
+    f.owner.ended(&cancel).await;
+    assert_eq!(std::fs::read(&outside).unwrap(), b"outside\n");
+    // Nothing was written through the link, so the target leaves the journal
+    // instead of failing again at every sweep and every start.
+    assert!(!journal.exists());
+    assert!(
+        !f.warnings
+            .lock()
+            .unwrap()
+            .contains(&"approval instruction removal failed")
+    );
+}
+#[tokio::test]
 async fn registered_cli_gets_the_short_block_only_when_it_declares_the_agents_file() {
     let f = fixture();
     let session = register(&f, "devin-cli", 2021).await;
@@ -282,11 +317,13 @@ async fn crash_recovery_removes_only_approved_rules_and_retains_failed_journal_e
                 path: target.clone(),
                 providers: vec!["codex".into()],
                 mode: "shared_block".into(),
+                project: false,
             },
             Target {
                 path: bad.clone(),
                 providers: vec!["copilot".into()],
                 mode: "shared_block".into(),
+                project: false,
             },
         ],
     };
@@ -371,6 +408,7 @@ async fn oversize_journal_valid_prefix_with_invalid_suffix_cannot_authorize_reco
                 path: target.clone(),
                 providers: vec!["codex".into()],
                 mode: "shared_block".into(),
+                project: false,
             }],
         };
         let journal = f.paths.root().join("approval-rule-targets.json");

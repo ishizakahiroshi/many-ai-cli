@@ -219,6 +219,49 @@ pub fn inject_delegation_content(
     append(&mut result, DELEGATE_START, DELEGATE_END, central);
     Ok(result)
 }
+/// Where an instruction target comes from, which decides whether a link at the
+/// file itself is followed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Origin {
+    /// A file in the user's own configuration folder (`CLAUDE.md` of a profile,
+    /// `$CODEX_HOME/AGENTS.md`). The user placed any link there, so it is
+    /// followed (a dotfiles link keeps working).
+    User,
+    /// `AGENTS.md` at the top of the project a session runs in. The folders
+    /// down to the project are the user's and their links are followed (a
+    /// worktree junction), but the file itself comes with the repository: when
+    /// it is a link it is neither read nor written, so a cloned repository
+    /// cannot point the write at a file outside it.
+    Project,
+}
+/// What `inject` and `delegation` return for a project file that is a link.
+const LINKED_PROJECT_FILE: &str = "project instruction file is a link";
+fn is_link(meta: &std::fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        // FILE_ATTRIBUTE_REPARSE_POINT: symlinks and every other reparse kind.
+        if meta.file_attributes() & 0x400 != 0 {
+            return true;
+        }
+    }
+    meta.file_type().is_symlink()
+}
+/// The mode a rewritten user file is created with. The replacement is a new
+/// file, so the existing one's permission bits are carried over (a 0600 file
+/// stays 0600, an executable keeps its bit); a new file gets 0644.
+fn kept_mode(dir: &Dir, name: &str) -> u32 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = dir.metadata(name) {
+            return meta.permissions().mode() & 0o777;
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = (dir, name);
+    0o644
+}
 pub struct InstructionFiles {
     paths: RuntimePaths,
     home: PathBuf,
@@ -273,16 +316,40 @@ impl InstructionFiles {
     /// once, as the Go version's plain writes did, then open the real location
     /// with the no-follow walk below. A trial keeps the lexical walk so a link
     /// can never lead it out of its root.
-    fn resolve(&self, path: &Path) -> io::Result<PathBuf> {
-        if self.paths.is_trial() {
-            return Ok(path.to_path_buf());
+    ///
+    /// A project's `AGENTS.md` follows the links of its folders only: `None`
+    /// when the file itself is a link, which is then left untouched.
+    fn resolve(&self, path: &Path, origin: Origin) -> io::Result<Option<PathBuf>> {
+        let real = match origin {
+            Origin::User if self.paths.is_trial() => return Ok(Some(path.to_path_buf())),
+            Origin::User => return crate::files::scope::canonical(path).map(Some),
+            Origin::Project if self.paths.is_trial() => path.to_path_buf(),
+            Origin::Project => {
+                let path = crate::files::scope::clean(path);
+                let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+                    return Err(io::Error::other("instruction path unavailable"));
+                };
+                crate::files::scope::canonical(parent)?.join(name)
+            }
+        };
+        match std::fs::symlink_metadata(&real) {
+            Ok(meta) if is_link(&meta) => Ok(None),
+            _ => Ok(Some(real)),
         }
-        crate::files::scope::canonical(path)
+    }
+    /// `resolve` for a write: a linked project file is refused, so the Hub
+    /// warns and doctor names the file that did not get the rules.
+    fn writable(&self, path: &Path, origin: Origin) -> io::Result<PathBuf> {
+        self.resolve(path, origin)?
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, LINKED_PROJECT_FILE))
     }
     /// The real file a target is written through, so two spellings of one file
     /// (two profiles linking the same CLAUDE.md) are known to be one target.
-    pub fn real(&self, path: &Path) -> PathBuf {
-        self.resolve(path).unwrap_or_else(|_| path.to_path_buf())
+    pub fn real(&self, path: &Path, origin: Origin) -> PathBuf {
+        self.resolve(path, origin)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| path.to_path_buf())
     }
     fn selected(&self, path: &Path, create: bool) -> io::Result<(Dir, String)> {
         if !path.is_absolute()
@@ -321,8 +388,9 @@ impl InstructionFiles {
         let (dir, name) = self.selected(path, true)?;
         if private {
             dir.restrict_private()?;
+            return dir.replace(&name, body, 0o600);
         }
-        dir.replace(&name, body, if private { 0o600 } else { 0o644 })
+        dir.replace(&name, body, kept_mode(&dir, &name))
     }
     pub fn remove_file(&self, path: &Path) -> io::Result<()> {
         match self
@@ -349,12 +417,12 @@ impl InstructionFiles {
         dir.replace(&file, body, 0o644)?;
         Ok(body.to_vec())
     }
-    pub fn inject(&self, provider: &str, path: &Path) -> io::Result<()> {
+    pub fn inject(&self, provider: &str, path: &Path, origin: Origin) -> io::Result<()> {
         let _guard = OPERATIONS
             .lock()
             .map_err(|_| io::Error::other("instruction lock failed"))?;
+        let path = &self.writable(path, origin)?;
         let central = self.sync("approval-rules.md", RULES_VERSION, RULES.as_bytes())?; // doxguard: allow approval-rules.md
-        let path = &self.resolve(path)?;
         let content = match self.read(path) {
             Ok(v) => v,
             Err(e) if e.kind() == io::ErrorKind::NotFound => vec![],
@@ -373,11 +441,17 @@ impl InstructionFiles {
         }
         Ok(())
     }
-    pub fn delegation(&self, provider: &str, path: &Path, enabled: bool) -> io::Result<()> {
+    pub fn delegation(
+        &self,
+        provider: &str,
+        path: &Path,
+        origin: Origin,
+        enabled: bool,
+    ) -> io::Result<()> {
         let _guard = OPERATIONS
             .lock()
             .map_err(|_| io::Error::other("instruction lock failed"))?;
-        let path = &self.resolve(path)?;
+        let path = &self.writable(path, origin)?;
         let content = match self.read(path) {
             Ok(v) => v,
             Err(e) if e.kind() == io::ErrorKind::NotFound => vec![],
@@ -401,11 +475,21 @@ impl InstructionFiles {
         }
         Ok(())
     }
-    pub fn remove(&self, provider: &str, path: &Path, delegation: bool) -> io::Result<()> {
+    /// A linked project file was never written, so there is nothing to take out
+    /// of it: it is left alone and reported as done.
+    pub fn remove(
+        &self,
+        provider: &str,
+        path: &Path,
+        origin: Origin,
+        delegation: bool,
+    ) -> io::Result<()> {
         let _guard = OPERATIONS
             .lock()
             .map_err(|_| io::Error::other("instruction lock failed"))?;
-        let path = &self.resolve(path)?;
+        let Some(path) = &self.resolve(path, origin)? else {
+            return Ok(());
+        };
         let content = match self.read(path) {
             Ok(v) => v,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),

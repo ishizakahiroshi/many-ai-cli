@@ -164,7 +164,7 @@ pub(super) fn approval_instructions(owner: &Diagnostics, cfg: &Config) -> Vec<Ch
                 missing.len(),
                 missing.join(", ")
             ),
-            "Hub を再起動すると入れ直します。直らないときは config.yaml の log.enabled を true にして Hub を再起動し、hub.log の approval instruction injection failed を確認してください",
+            "Hub を再起動すると入れ直します。プロジェクトの AGENTS.md がリンクのときは、リポジトリの外のファイルを書き換えないよう承認ルールを書き込みません（実ファイルに置き換えると入ります）。直らないときは config.yaml の log.enabled を true にして Hub を再起動し、hub.log の approval instruction injection failed を確認してください",
         )
     }]
 }

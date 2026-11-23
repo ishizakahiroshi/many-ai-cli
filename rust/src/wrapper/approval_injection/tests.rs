@@ -75,8 +75,10 @@ fn actual_private_trial_rmw_restores_bytes_and_central_version_is_source_authori
     let target = root.path().join("project/AGENTS.md");
     let original = b"private original\xff\xfe";
     files.write(&target, original, false).unwrap();
-    files.inject("codex", &target).unwrap();
-    files.delegation("codex", &target, true).unwrap();
+    files.inject("codex", &target, Origin::User).unwrap();
+    files
+        .delegation("codex", &target, Origin::User, true)
+        .unwrap();
     assert!(
         files
             .read(&target)
@@ -84,13 +86,13 @@ fn actual_private_trial_rmw_restores_bytes_and_central_version_is_source_authori
             .windows(START.len())
             .any(|v| v == START.as_bytes())
     );
-    files.remove("codex", &target, true).unwrap();
+    files.remove("codex", &target, Origin::User, true).unwrap();
     assert_eq!(files.read(&target).unwrap(), original);
     let central = home.join(".many-ai-cli/approval-rules.md");
     files
         .write(&central, b"<!-- version: 26 -->\nuser central \xff", false)
         .unwrap();
-    files.inject("codex", &target).unwrap();
+    files.inject("codex", &target, Origin::User).unwrap();
     assert_eq!(
         files.read(&central).unwrap(),
         b"<!-- version: 26 -->\nuser central \xff"
@@ -112,7 +114,7 @@ fn actual_private_trial_rmw_restores_bytes_and_central_version_is_source_authori
     assert!(injected.windows(named.len()).any(|v| v == named.as_bytes()));
     assert!(
         files
-            .inject("codex", &installed.path().join("AGENTS.md"))
+            .inject("codex", &installed.path().join("AGENTS.md"), Origin::User)
             .is_err()
     );
     assert!(
@@ -136,15 +138,15 @@ fn version_24_central_and_shared_block_upgrade_once_with_surrounding_bytes_prese
         .write(&central, b"<!-- version: 24 -->\nstale central", false)
         .unwrap();
     files.write(&target, original, false).unwrap();
-    files.inject("codex", &target).unwrap();
+    files.inject("codex", &target, Origin::User).unwrap();
     assert_eq!(files.read(&central).unwrap(), RULES.as_bytes());
     assert!(RULES.starts_with("<!-- version: 26 -->\n"));
     let upgraded = files.read(&target).unwrap();
     assert!(current(&upgraded, START, END, SHORT_VERSION));
     assert!(!current(&upgraded, START, END, "<!-- version: 24 -->"));
-    files.inject("codex", &target).unwrap();
+    files.inject("codex", &target, Origin::User).unwrap();
     assert_eq!(files.read(&target).unwrap(), upgraded);
-    files.remove("codex", &target, false).unwrap();
+    files.remove("codex", &target, Origin::User, false).unwrap();
     assert_eq!(files.read(&target).unwrap(), strip_blocks(original));
 }
 #[test]
@@ -167,14 +169,14 @@ fn version_25_central_and_shared_block_upgrade_once_to_the_shipped_rules() {
     )
     .unwrap();
     files.write(&target, &previous, false).unwrap();
-    files.inject("codex", &target).unwrap();
+    files.inject("codex", &target, Origin::User).unwrap();
     assert_eq!(files.read(&central).unwrap(), RULES.as_bytes());
     let upgraded = files.read(&target).unwrap();
     assert!(current(&upgraded, START, END, SHORT_VERSION));
     assert!(!current(&upgraded, START, END, RULES_VERSION));
     assert!(!current(&upgraded, START, END, "<!-- version: 25 -->"));
     assert!(upgraded.starts_with(b"mine\n"));
-    files.inject("codex", &target).unwrap();
+    files.inject("codex", &target, Origin::User).unwrap();
     assert_eq!(files.read(&target).unwrap(), upgraded);
 }
 #[test]
@@ -210,21 +212,21 @@ fn full_rules_block_is_replaced_by_the_short_one_and_claude_keeps_its_import() {
     let previous = inject_rules_content("codex", b"mine\n", RULES.as_bytes()).unwrap();
     assert!(previous.len() > RULES.len());
     files.write(&target, &previous, false).unwrap();
-    files.inject("codex", &target).unwrap();
+    files.inject("codex", &target, Origin::User).unwrap();
     let replaced = files.read(&target).unwrap();
     assert!(replaced.starts_with(b"mine\n"));
     assert!(current(&replaced, START, END, SHORT_VERSION));
     assert!(!current(&replaced, START, END, RULES_VERSION));
     // The file grows by the short block only (markers and newlines included).
     assert!(replaced.len() <= b"mine\n".len() + SHORT_LIMIT + START.len() + END.len() + 4);
-    files.inject("codex", &target).unwrap();
+    files.inject("codex", &target, Origin::User).unwrap();
     assert_eq!(files.read(&target).unwrap(), replaced);
-    files.remove("codex", &target, false).unwrap();
+    files.remove("codex", &target, Origin::User, false).unwrap();
     assert_eq!(files.read(&target).unwrap(), b"mine\n");
     // Claude Code still gets one import line and no block.
     let claude = root.path().join("project/CLAUDE.md");
     files.write(&claude, b"own\n", false).unwrap();
-    files.inject("claude", &claude).unwrap();
+    files.inject("claude", &claude, Origin::User).unwrap();
     assert_eq!(
         files.read(&claude).unwrap(),
         format!("own\n\n{IMPORT}\n").as_bytes()
@@ -232,7 +234,7 @@ fn full_rules_block_is_replaced_by_the_short_one_and_claude_keeps_its_import() {
     // An id the injection does not know is refused before the file is touched.
     let other = root.path().join("project/OTHER.md");
     files.write(&other, b"keep\n", false).unwrap();
-    assert!(files.inject("unknown", &other).is_err());
+    assert!(files.inject("unknown", &other, Origin::User).is_err());
     assert_eq!(files.read(&other).unwrap(), b"keep\n");
 }
 #[test]
@@ -276,7 +278,7 @@ fn held_trial_parent_rejects_symlink_instruction_targets() {
     std::os::unix::fs::symlink(&foreign, root.path().join("AGENTS.md")).unwrap();
     assert!(
         files
-            .inject("codex", &root.path().join("AGENTS.md"))
+            .inject("codex", &root.path().join("AGENTS.md"), Origin::User)
             .is_err()
     );
     assert_eq!(std::fs::read(&foreign).unwrap(), b"foreign");
@@ -328,15 +330,17 @@ fn production_targets_reached_through_user_links_are_written_at_the_real_file() 
     std::fs::write(real.join("p1/AGENTS.md"), b"original").unwrap();
     link_directory(&real, &home.join("subscriptions"));
     let through = home.join("subscriptions").join("p1").join("AGENTS.md");
-    files.inject("codex", &through).unwrap();
-    files.delegation("codex", &through, true).unwrap();
+    files.inject("codex", &through, Origin::User).unwrap();
+    files
+        .delegation("codex", &through, Origin::User, true)
+        .unwrap();
     let body = std::fs::read(real.join("p1/AGENTS.md")).unwrap();
     assert!(rules_present("codex", &body));
     assert!(
         body.windows(DELEGATE_START.len())
             .any(|v| v == DELEGATE_START.as_bytes())
     );
-    files.remove("codex", &through, true).unwrap();
+    files.remove("codex", &through, Origin::User, true).unwrap();
     assert_eq!(
         std::fs::read(real.join("p1/AGENTS.md")).unwrap(),
         b"original"
@@ -344,7 +348,7 @@ fn production_targets_reached_through_user_links_are_written_at_the_real_file() 
     // A file (and folder) not yet created beneath a linked folder appears at
     // the real place.
     let fresh = home.join("subscriptions").join("p2").join("AGENTS.md");
-    files.inject("codex", &fresh).unwrap();
+    files.inject("codex", &fresh, Origin::User).unwrap();
     assert!(rules_present(
         "codex",
         &std::fs::read(real.join("p2/AGENTS.md")).unwrap()
@@ -357,7 +361,7 @@ fn production_targets_reached_through_user_links_are_written_at_the_real_file() 
     std::fs::create_dir(home.join(".claude")).unwrap();
     let linked = home.join(".claude").join("CLAUDE.md");
     link_file(&shared, &linked);
-    files.inject("claude", &linked).unwrap();
+    files.inject("claude", &linked, Origin::User).unwrap();
     assert_eq!(
         std::fs::read(&shared).unwrap(),
         format!("custom\n\n{IMPORT}\n").as_bytes()
@@ -368,13 +372,16 @@ fn production_targets_reached_through_user_links_are_written_at_the_real_file() 
             .file_type()
             .is_symlink()
     );
-    assert_eq!(files.real(&linked), files.real(&shared));
-    files.remove("claude", &linked, true).unwrap();
+    assert_eq!(
+        files.real(&linked, Origin::User),
+        files.real(&shared, Origin::User)
+    );
+    files.remove("claude", &linked, Origin::User, true).unwrap();
     assert_eq!(std::fs::read(&shared).unwrap(), b"custom\n");
     // A broken link is refused rather than replaced by a plain file.
     let dangling = home.join(".claude").join("dangling.md");
     link_file(&base.join("missing.md"), &dangling);
-    assert!(files.inject("claude", &dangling).is_err());
+    assert!(files.inject("claude", &dangling, Origin::User).is_err());
     assert!(
         std::fs::symlink_metadata(&dangling)
             .unwrap()
@@ -382,6 +389,93 @@ fn production_targets_reached_through_user_links_are_written_at_the_real_file() 
             .is_symlink()
     );
     assert!(!base.join("missing.md").exists());
+}
+#[test]
+fn a_project_agents_file_that_is_a_link_is_never_followed_out_of_the_repository() {
+    let temp = tempfile::tempdir().unwrap();
+    let base = std::fs::canonicalize(temp.path()).unwrap();
+    let home = base.join("home");
+    std::fs::create_dir(&home).unwrap();
+    let files =
+        InstructionFiles::new(RuntimePaths::production(&home).unwrap(), home.clone()).unwrap();
+    // The project sits behind the user's own folder link (a worktree junction),
+    // and the repository it holds ships `AGENTS.md` as a link to a file outside.
+    let real = base.join("real");
+    std::fs::create_dir_all(real.join("repo")).unwrap();
+    link_directory(&real, &base.join("worktrees"));
+    let outside = home.join("secret.txt");
+    std::fs::write(&outside, b"outside\n").unwrap();
+    let target = base.join("worktrees").join("repo").join("AGENTS.md");
+    link_file(&outside, &target);
+    // Same order as a session's sweep: inject, delegation, then removal.
+    assert!(files.inject("codex", &target, Origin::Project).is_err());
+    assert!(
+        files
+            .delegation("codex", &target, Origin::Project, true)
+            .is_err()
+    );
+    assert_eq!(std::fs::read(&outside).unwrap(), b"outside\n");
+    // Nothing was written, so the removal has nothing to do and succeeds: the
+    // Hub drops the target instead of warning on every sweep.
+    files
+        .remove("codex", &target, Origin::Project, true)
+        .unwrap();
+    assert_eq!(std::fs::read(&outside).unwrap(), b"outside\n");
+    assert!(
+        std::fs::symlink_metadata(&target)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(
+        files.real(&target, Origin::Project),
+        target,
+        "a linked project file is not resolved to its target"
+    );
+    // A plain project file behind the same folder link is still reached.
+    std::fs::remove_file(&target).unwrap();
+    std::fs::write(real.join("repo/AGENTS.md"), b"original").unwrap();
+    files.inject("codex", &target, Origin::Project).unwrap();
+    files
+        .delegation("codex", &target, Origin::Project, true)
+        .unwrap();
+    assert!(rules_present(
+        "codex",
+        &std::fs::read(real.join("repo/AGENTS.md")).unwrap()
+    ));
+    files
+        .remove("codex", &target, Origin::Project, true)
+        .unwrap();
+    assert_eq!(
+        std::fs::read(real.join("repo/AGENTS.md")).unwrap(),
+        b"original"
+    );
+    assert_eq!(std::fs::read(&outside).unwrap(), b"outside\n");
+}
+#[cfg(unix)]
+#[test]
+fn rewriting_an_instruction_file_keeps_its_permission_bits() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let base = std::fs::canonicalize(temp.path()).unwrap();
+    let home = base.join("home");
+    std::fs::create_dir(&home).unwrap();
+    let files =
+        InstructionFiles::new(RuntimePaths::production(&home).unwrap(), home.clone()).unwrap();
+    let target = home.join("AGENTS.md");
+    std::fs::write(&target, b"original").unwrap();
+    std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+    files.inject("codex", &target, Origin::User).unwrap();
+    assert!(rules_present("codex", &std::fs::read(&target).unwrap()));
+    assert_eq!(mode(&target), 0o600);
+    files.remove("codex", &target, Origin::User, true).unwrap();
+    assert_eq!(std::fs::read(&target).unwrap(), b"original");
+    assert_eq!(mode(&target), 0o600);
+    // A file the Hub creates still gets the ordinary mode (before the umask).
+    let fresh = home.join("fresh").join("AGENTS.md");
+    files.inject("codex", &fresh, Origin::User).unwrap();
+    assert_eq!(mode(&fresh) & 0o600, 0o600);
 }
 
 #[test]
@@ -408,9 +502,9 @@ fn oversize_instruction_rmw_rejects_before_mutation_and_preserves_actual_tail() 
     let length = std::fs::metadata(&target).unwrap().len();
     for operation in 0..3 {
         let result = match operation {
-            0 => files.inject("codex", &target),
-            1 => files.remove("codex", &target, true),
-            _ => files.delegation("codex", &target, true),
+            0 => files.inject("codex", &target, Origin::User),
+            1 => files.remove("codex", &target, Origin::User, true),
+            _ => files.delegation("codex", &target, Origin::User, true),
         };
         assert!(result.is_err());
         let mut held = std::fs::File::open(&target).unwrap();
@@ -464,8 +558,8 @@ fn selected_trial_alias_stays_bound_to_canonical_instruction_tree() {
     // redirect a later instruction write away from the validated root.
     std::fs::remove_file(&selected).unwrap();
     symlink(&installed, &selected).unwrap();
-    files.inject("codex", &target).unwrap();
-    files.remove("codex", &target, false).unwrap();
+    files.inject("codex", &target, Origin::User).unwrap();
+    files.remove("codex", &target, Origin::User, false).unwrap();
     assert_eq!(files.read(&target).unwrap(), b"original");
     assert_eq!(
         std::fs::read(root.join("project/AGENTS.md")).unwrap(),

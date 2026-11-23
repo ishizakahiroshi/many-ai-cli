@@ -12,7 +12,7 @@ use crate::{
         wire::{self, Field, Schema},
     },
     terminal::session::SessionEngine,
-    wrapper::approval_injection::InstructionFiles,
+    wrapper::approval_injection::{InstructionFiles, Origin},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -69,8 +69,20 @@ struct Target {
     providers: Vec<String>,
     #[serde(deserialize_with = "null_default")]
     mode: String,
+    /// The project's `AGENTS.md` (found from a session's folder), whose own
+    /// link is never followed. A journal written before this field existed
+    /// reads as `false`: its targets are recovered the way they were written.
+    #[serde(deserialize_with = "null_default")]
+    project: bool,
 }
 impl Target {
+    fn origin(&self) -> Origin {
+        if self.project {
+            Origin::Project
+        } else {
+            Origin::User
+        }
+    }
     fn provider(&self) -> &str {
         if self.mode == "claude_import" {
             "claude"
@@ -134,6 +146,8 @@ fn merge(targets: Vec<Target>) -> Vec<Target> {
             let old: &mut Target = &mut out[index];
             old.providers.extend(target.providers);
             old.providers = providers(&old.providers);
+            // One spelling reached both ways: never follow the file's own link.
+            old.project |= target.project;
         } else {
             target.providers = providers(&target.providers);
             indices.insert(k, out.len());
@@ -257,6 +271,7 @@ impl InstructionRules {
                         path: root.join("CLAUDE.md"),
                         providers: vec![provider.into()],
                         mode: "claude_import".into(),
+                        project: false,
                     })
                 }
                 "codex" => {
@@ -274,6 +289,7 @@ impl InstructionRules {
                         path: root.join("AGENTS.md"),
                         providers: vec![provider.into()],
                         mode: "shared_block".into(),
+                        project: false,
                     })
                 }
                 "copilot" | "cursor-agent" | "grok" | "opencode" => {
@@ -287,6 +303,7 @@ impl InstructionRules {
                                 .join("AGENTS.md"),
                             providers: vec![provider.into()],
                             mode: "shared_block".into(),
+                            project: true,
                         })
                     }
                 }
@@ -301,6 +318,7 @@ impl InstructionRules {
                                 .join("AGENTS.md"),
                             providers: vec![provider.into()],
                             mode: "shared_block".into(),
+                            project: true,
                         })
                     }
                 }
@@ -317,6 +335,7 @@ impl InstructionRules {
                         .join("AGENTS.md"),
                     providers: vec!["codex".into()],
                     mode: "shared_block".into(),
+                    project: true,
                 });
             }
         }
@@ -337,7 +356,7 @@ impl InstructionRules {
         for target in merge(targets) {
             if self
                 .files
-                .remove(target.provider(), &target.path, delegation)
+                .remove(target.provider(), &target.path, target.origin(), delegation)
                 .is_err()
             {
                 (self.warning)("approval instruction removal failed");
@@ -380,6 +399,10 @@ impl InstructionRules {
                     Field {
                         name: "mode",
                         kind: "string",
+                    },
+                    Field {
+                        name: "project",
+                        kind: "bool",
                     },
                 ],
             },
@@ -430,6 +453,7 @@ impl InstructionRules {
             if let Some(existing) = known.get_mut(&k) {
                 existing.providers.extend(target.providers.clone());
                 existing.providers = providers(&existing.providers);
+                existing.project |= target.project;
             } else {
                 known.insert(k, target.clone());
             }
@@ -439,7 +463,11 @@ impl InstructionRules {
             return;
         }
         for target in &active {
-            if self.files.inject(target.provider(), &target.path).is_err() {
+            if self
+                .files
+                .inject(target.provider(), &target.path, target.origin())
+                .is_err()
+            {
                 (self.warning)("approval instruction injection failed");
                 continue;
             }
@@ -448,6 +476,7 @@ impl InstructionRules {
                 .delegation(
                     target.provider(),
                     &target.path,
+                    target.origin(),
                     config.config.user_prefs.spawn.delegation_auto,
                 )
                 .is_err()
@@ -476,12 +505,13 @@ impl InstructionRules {
     ) -> Vec<Target> {
         let keys = active
             .iter()
-            .flat_map(|v| [key(&v.path), key(&self.files.real(&v.path))])
+            .flat_map(|v| [key(&v.path), key(&self.files.real(&v.path, v.origin()))])
             .collect::<BTreeSet<_>>();
         merge(legacy.into_iter().chain(known.values().cloned()).collect())
             .into_iter()
             .filter(|v| {
-                !keys.contains(&key(&v.path)) && !keys.contains(&key(&self.files.real(&v.path)))
+                !keys.contains(&key(&v.path))
+                    && !keys.contains(&key(&self.files.real(&v.path, v.origin())))
             })
             .collect()
     }
