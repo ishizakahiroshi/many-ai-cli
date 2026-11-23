@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "628c7626d6865d57e8cb144de15a28824c157f4b",
+    "commit": "740589ccdabf002c5bb85cd097dca311a015a263",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2110,
-    "analyzed": 1653,
+    "discovered": 2114,
+    "analyzed": 1657,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 442,
@@ -45389,6 +45389,96 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/headless-progress-dom.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "画面なし実行の進みを描く DOM の口。サイドバーのカード・開いているセッションの帯・"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/headless-progress-fixtures.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "headless-progress.ts の合成 fixture。値はすべて合成で、実際の実行・費用ではない。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/headless-progress.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "画面なし（headless）実行の進み。Hub が持つ同じスナップショットと、受け取った時刻を"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/history-lite.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -50191,6 +50281,32 @@
       "unresolved": []
     },
     {
+      "path": "web/src/styles/headless-progress.css",
+      "adapter": "css",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "out_of_scope"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/styles/history-lite.css",
       "adapter": "css",
       "status": "analyzed",
@@ -51013,8 +51129,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "Legacy wire mirror with explicit additive Rust-only extensions."
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"

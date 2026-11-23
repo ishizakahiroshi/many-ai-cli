@@ -1,5 +1,6 @@
 import { initializeSessionListTabs, renderSessionListTabs, isSessionInSelectedListTab, preserveSessionListSelection, visibleSessionListTree, revealSessionListOwner, sessionListScrollBeforeRender, sessionListScrollAfterRender, isSessionListStopped, noteSessionListOpened } from './session-list-tabs.js';
 import { isApprovalPending } from './approval-store.js';
+import { createHeadlessProgressElement, isHeadlessSession, refreshHeadlessProgress } from './headless-progress-dom.js';
 import { sessionStartups } from './session-startup.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
@@ -1505,6 +1506,9 @@ export function renderSessionList() {
 		`<div class="card-title-row">${statePillHtml} <b>#${s.id}</b> ${cardProviderModelHtml(s)}${taskTitleHtml}${cardMemoBadgeHtml(s)}</div>` +
 	        metaRow;
       }
+      // 画面なしの実行は、ターン・道具・経過・費用・最後の発言をカードの下段に出す。
+      // コンパクト表示でも出す（画面なしの実行は端末を持たず、進みを読む場所がここと開いた画面だけのため）。
+      if (isHeadlessSession(s)) c.appendChild(createHeadlessProgressElement(s.id));
 
       const childToggleEl = c.querySelector('.card-children-toggle') as HTMLElement | null;
       if (childToggleEl) {
@@ -1700,6 +1704,8 @@ export function renderSessionList() {
 
 
 export function updateMainTabStatus() {
+  // 画面なし実行の進み（経過の時計を含む）も同じ 1Hz で描き直す。
+  refreshHeadlessProgress();
   // D11: セッション情報チップも同タイミングで更新 (state badge を反映)
   if (typeof renderSessionInfoChip === 'function') renderSessionInfoChip();
   // カードのライブ情報（ctx% / 応答経過 / 長時間バッジ）も毎秒・state 変化時に追従させる。

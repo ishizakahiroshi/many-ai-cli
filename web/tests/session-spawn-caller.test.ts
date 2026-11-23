@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+import { receiveHeadlessProgress, setHeadlessConnected } from '../src/app/headless-progress.js';
 import * as tracking from '../src/app/session-spawn-state.js';
 import * as tabs from '../src/app/session-list-tab-state.js';
 import { buildDeriveBody } from '../src/app/derive-dialog-store.js';
@@ -98,7 +99,8 @@ test('actual grid caller opens only its correlated identities, including after H
 test('actual snapshot caller builds the FULL session map before family correlation',()=>{
  const text=source('ws-client.ts'),start=text.indexOf("  if (m.type === 'snapshot') {"),end=text.indexOf("  } else if (m.type === 'session_update')",start);
  const sessions=new Map();let seen:number[]=[];
- const noop=()=>{};const ctx:any={sessions,_hubInstance:'',_pendingOpenSessionId:0,pendingOpenFromReconnect:false,
+ const noop=()=>{};const ctx:any={receiveHeadlessProgress,setHeadlessConnected,isHeadlessSession:(s:any)=>s?.execution_mode==='headless',scheduleDeadSessionDismiss:noop,
+  sessions,_hubInstance:'',_pendingOpenSessionId:0,pendingOpenFromReconnect:false,
   purgeLocalStateForHubRestart:noop,setApprovalFoldScope:noop,requestSessionDismiss:noop,deriveProjectKeyFromCwd:()=> 'example',addToSessionOrder:noop,
   noteSpawnSnapshot:(_instance:string,all:any[])=>{seen=all.map(s=>s.id);assert.equal(all.find(s=>s.id===2).parent_session_id,1);},
   document:{dispatchEvent:noop,getElementById:()=>({textContent:''})},Event:class{},window:{},t:(key:string)=>key,
@@ -194,4 +196,60 @@ test('actual grid caller hands the remote-attach choice to EVERY correlated sess
  assert.deepEqual(chosen.opened,['grid:7,8,9,10']);
  // 「決めない」・選択なし（ランチャーの窓から開いた場合）は何も知らせない
  assert.deepEqual((await run('',[7,8])).events,[]);assert.deepEqual((await run(undefined,[7,8])).events,[]);
+});
+
+// 画面なし実行の進み: ws-client の実際の分岐を合成の値で回す。
+const headlessProgress=(extra:any={})=>({version:1,run_id:'17:1',sequence:1,observed_turns:1,result_turns:null,active_tools:[],started_at_ms:1,elapsed_ms:2,ended_at_ms:null,
+ cost:{amount_usd:null,currency:'USD',kind:'unavailable',coverage:'unavailable'},last_assistant:'safe',state:'running',data_incomplete:false,final_cost_missing:false,...extra});
+const isHeadless=(s:any)=>s?.execution_mode==='headless';
+
+test('actual headless progress caller replaces only a newer snapshot of a headless session',()=>{
+ const text=source('ws-client.ts'),start=text.indexOf("  if (m.type === 'headless_progress') {"),end=text.indexOf("  if (m.type === 'session_spawn_correlated')",start);
+ const headless:any={id:17,execution_mode:'headless',state:'running',headless_progress:receiveHeadlessProgress(headlessProgress({sequence:0}))};
+ const interactive:any={id:18,state:'running'};let refreshes=0;
+ const ctx:any={sessions:new Map([[17,headless],[18,interactive]]),receiveHeadlessProgress,isHeadlessSession:isHeadless,refreshHeadlessProgress:()=>{refreshes++;}};
+ runInNewContext(compile('function apply(m:any) {\n'+text.slice(start,end)+'\n}\nglobalThis.apply=apply;'),ctx);
+ ctx.apply({type:'headless_progress',session_id:17,headless_progress:headlessProgress({sequence:2,observed_turns:4})});
+ assert.equal(headless.headless_progress.observed_turns,4);assert.equal(refreshes,1);
+ // An older or repeated snapshot never adds to or rolls back the shown values.
+ ctx.apply({type:'headless_progress',session_id:17,headless_progress:headlessProgress({sequence:2,observed_turns:9})});
+ ctx.apply({type:'headless_progress',session_id:17,headless_progress:headlessProgress({sequence:1,observed_turns:1})});
+ assert.equal(headless.headless_progress.observed_turns,4);assert.equal(refreshes,1);
+ ctx.apply({type:'headless_progress',session_id:18,headless_progress:headlessProgress({sequence:3})});
+ assert.equal(interactive.headless_progress,undefined);assert.equal(refreshes,1);
+});
+
+test('actual snapshot caller keeps a completed headless run with its final progress and dismisses others',()=>{
+ const text=source('ws-client.ts'),start=text.indexOf("  if (m.type === 'snapshot') {"),end=text.indexOf("  } else if (m.type === 'session_update')",start);
+ const sessions=new Map();const dismissed:number[]=[],scheduled:number[]=[];const noop=()=>{};
+ const ctx:any={receiveHeadlessProgress,setHeadlessConnected,isHeadlessSession:isHeadless,scheduleDeadSessionDismiss:(id:number)=>scheduled.push(id),
+  sessions,_hubInstance:'',_pendingOpenSessionId:0,pendingOpenFromReconnect:false,purgeLocalStateForHubRestart:noop,setApprovalFoldScope:noop,
+  requestSessionDismiss:(id:number)=>dismissed.push(id),deriveProjectKeyFromCwd:()=> 'example',addToSessionOrder:noop,noteSpawnSnapshot:noop,
+  document:{dispatchEvent:noop,getElementById:()=>({textContent:''})},Event:class{},window:{},t:(key:string)=>key,
+  migratePinnedSessionsOnce:noop,renderSessionList:noop,checkApprovalOnStartup:noop,syncElapsedTimer:noop};
+ runInNewContext(compile('function apply(m:any) {\n'+text.slice(start,end)+'\n}\n}\nglobalThis.apply=apply;'),ctx);
+ const final=headlessProgress({sequence:5,state:'completed',ended_at_ms:3,cost:{amount_usd:0.25,currency:'USD',kind:'result',coverage:'cli-result'}});
+ ctx.apply({type:'snapshot',hub_instance:'hub-A',sessions:[{id:1,state:'completed',cwd:'/repos/example'},
+  {id:2,state:'completed',execution_mode:'headless',cwd:'/repos/example',headless_progress:final},
+  {id:3,state:'running',execution_mode:'headless',cwd:'/repos/example',headless_progress:{...final,elapsed_ms:-1}}]});
+ assert.deepEqual(dismissed,[1]);assert.deepEqual(scheduled,[2]);
+ assert.equal(sessions.get(2).headless_progress.cost.amount_usd,0.25);
+ // A snapshot that fails the allowlist is dropped rather than shown.
+ assert.equal(sessions.get(3).headless_progress,null);
+});
+
+test('actual session_end caller keeps a completed headless card and its pane placement',()=>{
+ const text=source('ws-client.ts'),start=text.indexOf("  } else if (m.type === 'session_end') {"),end=text.indexOf("  } else if (m.type === 'session_removed')",start);
+ const removed:number[]=[],dismissed:number[]=[],ended:number[]=[],scheduled:number[]=[];const noop=()=>{};
+ const headless:any={id:17,execution_mode:'headless',state:'running'};
+ const ctx:any={sessions:new Map([[17,headless],[18,{id:18,state:'running'}]]),activeSessionId:0,isHeadlessSession:isHeadless,
+  window:{multiPaneManager:{onSessionEnded:(id:number)=>ended.push(id)}},scheduleGitLockCheck:noop,
+  requestSessionDismiss:(id:number)=>dismissed.push(id),removeLocalSession:(id:number)=>removed.push(id),
+  updateInputAffordance:noop,syncLiveStatusDomForActive:noop,clearApprovalMarkerSuppressed:noop,removeApprovalAutoSwitchTarget:noop,
+  maybeAutoSwitchToNextApproval:noop,scheduleDeadSessionDismiss:(id:number)=>scheduled.push(id)};
+ runInNewContext(compile('function apply(m:any) {\n  if (false) {\n'+text.slice(start,end)+'\n  }\n}\nglobalThis.apply=apply;'),ctx);
+ ctx.apply({type:'session_end',session_id:17,state:'completed'});
+ ctx.apply({type:'session_end',session_id:18,state:'completed'});
+ assert.equal(headless.state,'completed');assert.deepEqual(scheduled,[17]);
+ assert.deepEqual(removed,[18]);assert.deepEqual(dismissed,[18]);assert.deepEqual(ended,[18]);
 });

@@ -7,6 +7,7 @@ import { ensureAltScrollRail, requestEdge } from './alt-scroll-rail-view.js';
 import { ensureAltDragSelect } from './alt-drag-select-view.js';
 import { activeSessionId, openProjectKey, sessions, set_openProjectKey } from './state.js';
 import { applyPaneStateBadge } from './pane-state-badge.js';
+import { createHeadlessProgressElement, isHeadlessSession } from './headless-progress-dom.js';
 import { NO_PROJECT_KEY, deriveProjectKeyFromCwd, projectKeyForSession } from './sidebar-tree.js';
 import { isValidTabName } from './project-view-memory.js';
 import { saveOpenProjectKey } from './project-view-store.js';
@@ -495,6 +496,7 @@ export class MultiPaneManager {
 
     const header = this._buildHeader(idx, session);
     el.appendChild(header);
+    if (isHeadlessSession(session)) el.appendChild(createHeadlessProgressElement(session.id));
 
     this._wireDropTarget(el, idx);
 
@@ -1443,8 +1445,9 @@ export class MultiPaneManager {
       if (key.startsWith('session:')) {
         const owner = layout.slots.find(slot => slot?.kind === 'session');
         const liveOwner = owner && live.get(owner.sessionId);
+        // 画面なしの実行は終わった後も最後の進みを見せるため、置き場所を残す。
         if (!owner || !liveOwner || String(liveOwner.started_at || '') !== owner.startedAt ||
-            ['completed', 'error', 'disconnected'].includes(liveOwner.state)) {
+            (!isHeadlessSession(liveOwner) && ['completed', 'error', 'disconnected'].includes(liveOwner.state))) {
           delete this.customLayouts[key];
           changed = true;
           continue;
@@ -1455,7 +1458,7 @@ export class MultiPaneManager {
         if (!content || content.sessionId === null) continue;
         const session = live.get(content.sessionId);
         if (!session || String(session.started_at || '') !== content.startedAt ||
-            ['completed', 'error', 'disconnected'].includes(session.state)) {
+            (!isHeadlessSession(session) && ['completed', 'error', 'disconnected'].includes(session.state))) {
           layout.slots[i] = null;
           changed = true;
         }

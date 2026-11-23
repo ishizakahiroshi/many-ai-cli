@@ -11,6 +11,8 @@ import { migratePinnedSessionsOnce, activateSession, render, renderSessionList, 
 import { applyRemotePtyResize, ensureTerminal, forgetSentPtySize, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup, isSessionCurrentlyViewed, playNotificationSound, showDesktopTurnEndNotification } from './settings.js';
 import { mergeLaunchDeclaration } from './session-launch-declaration.js';
+import { receiveHeadlessProgress, setHeadlessConnected } from './headless-progress.js';
+import { isHeadlessSession, refreshHeadlessProgress } from './headless-progress-dom.js';
 import { forgetTurnEndNotify, observeStoppedMarkCandidate, observeTurnEndCandidate, shouldNotifyTurnEnd, turnEndRunningStartedAt } from './turn-end-notify-store.js';
 import { clearAllTurnEndBellMutes, isTurnEndBellOff, isTurnEndNotifyEnabled } from './user-prefs.js';
 import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed } from './approval-ui.js';
@@ -230,6 +232,19 @@ export function sessionLayoutSnapshot(s) {
   ].join('\x1f');
 }
 
+// 記事書き等の長寿命セッションが席を離れた数分〜数十分の隙に消えていた事故
+// (docs/local/bugfix_session-silent-auto-dismiss_2026-07-21.md) を受け、
+// 元の 5s から 24h へ延長。実質「席を戻したときはまだ残っている」を確保しつつ、
+// 何日も放置した死セッションは翌日には自動で片付く。
+function scheduleDeadSessionDismiss(sessionId: number): void {
+  if (autoDismissTimers.has(sessionId)) return;
+  const timer = setTimeout(() => {
+    autoDismissTimers.delete(sessionId);
+    dismissSession(sessionId);
+  }, 24 * 60 * 60 * 1000);
+  autoDismissTimers.set(sessionId, timer);
+}
+
 export function _connectWs() {
   // HTTPS（Tailscale serve / リモート公開）経由では平文 ws:// が mixed-content で
   // ブロックされ snapshot を受信できずセッションカードが出ない。ページの protocol に
@@ -243,7 +258,10 @@ export function _connectWs() {
     if (_wsWatchdog) { clearInterval(_wsWatchdog); _wsWatchdog = null; }
     if (_elapsedTimerInterval) { clearInterval(_elapsedTimerInterval); set__elapsedTimerInterval(null); }
     if (activeSessionId !== null) _lastActiveSessionIdBeforeDisconnect = activeSessionId;
+    // 切れている間は画面なし実行の時計を止め、古い数字を進行中に見せない。
+    setHeadlessConnected(false);
     sessions.clear();
+    refreshHeadlessProgress();
     noteSpawnDisconnected();
     resetUsageCache();
     autoDismissTimers.forEach(t => clearTimeout(t));
@@ -568,6 +586,15 @@ export function _connectWs() {
     return;
   }
 
+  // 画面なし実行の進み。Hub が持つ同じスナップショットを置き換える（足し込まない）。
+  if (m.type === 'headless_progress') {
+    const session = sessions.get(Number(m.session_id));
+    if (!session || !isHeadlessSession(session)) return;
+    const progress = receiveHeadlessProgress(m.headless_progress, session.headless_progress);
+    if (progress) { session.headless_progress = progress; refreshHeadlessProgress(); }
+    return;
+  }
+
   if (m.type === 'session_spawn_correlated') {
     noteSpawnCorrelation({ client_request_id: String(m.client_request_id || ''), session_id: Number(m.session_id),
       started_at: String(m.started_at || ''), hub_instance: String(m.hub_instance || '') }, Array.from(sessions.values()));
@@ -594,10 +621,16 @@ export function _connectWs() {
     // 承認の畳み状態は Hub の起動ごとに分ける（セッション番号が振り直されるため）。
     // Hub はこの snapshot の後に approval_snapshot を送るので、まとめの適用より先に渡る。
     if (inst) setApprovalFoldScope(inst);
+    setHeadlessConnected(true);
     (arr || []).forEach(s => {
-      if (s.state === 'completed') {
+      // 画面なしの実行は終わった後も最後の進み（費用・ターン）を見せるため、すぐには閉じない。
+      if (s.state === 'completed' && !isHeadlessSession(s)) {
         requestSessionDismiss(s.id);
         return;
+      }
+      if (isHeadlessSession(s)) {
+        s.headless_progress = receiveHeadlessProgress(s.headless_progress);
+        if (s.state === 'completed') scheduleDeadSessionDismiss(s.id);
       }
 		// snapshot は activity を入れ子で返す。差分更新と同じ読み出し口に揃える。
 		if (s.activity) {
@@ -631,7 +664,7 @@ export function _connectWs() {
     checkApprovalOnStartup();
     syncElapsedTimer();
   } else if (m.type === 'session_update') {
-    if (m.state === 'completed') {
+    if (m.state === 'completed' && !isHeadlessSession(m) && !isHeadlessSession(sessions.get(m.session_id))) {
       requestSessionDismiss(m.session_id);
       removeLocalSession(m.session_id);
       return;
@@ -791,10 +824,12 @@ export function _connectWs() {
       activateSession(m.session_id);
     }
   } else if (m.type === 'session_end') {
-    window.multiPaneManager?.onSessionEnded?.(m.session_id);
+    // 画面なしの実行はペインの置き場所とカードを残し、終わった時点の進みを見せ続ける。
+    const headless = isHeadlessSession(sessions.get(m.session_id));
+    if (!headless) window.multiPaneManager?.onSessionEnded?.(m.session_id);
     // commit の途中で終わったセッションは index.lock を残す。Hub が調べた後に一覧を取る。
     scheduleGitLockCheck();
-    if ((m.state || 'disconnected') === 'completed') {
+    if ((m.state || 'disconnected') === 'completed' && !headless) {
       requestSessionDismiss(m.session_id);
       removeLocalSession(m.session_id);
       return;
@@ -809,18 +844,9 @@ export function _connectWs() {
     clearApprovalMarkerSuppressed(m.session_id);
     removeApprovalAutoSwitchTarget(m.session_id);
     maybeAutoSwitchToNextApproval();
-    const deadStates = ['error', 'disconnected'];
-    // 記事書き等の長寿命セッションが席を離れた数分〜数十分の隙に消えていた事故
-    // (docs/local/bugfix_session-silent-auto-dismiss_2026-07-21.md) を受け、
-    // 元の 5s から 24h へ延長。実質「席を戻したときはまだ残っている」を確保しつつ、
-    // 何日も放置した死セッションは翌日には自動で片付く。
-    if (deadStates.includes(m.state) && !autoDismissTimers.has(m.session_id)) {
-      const timer = setTimeout(() => {
-        autoDismissTimers.delete(m.session_id);
-        dismissSession(m.session_id);
-      }, 24 * 60 * 60 * 1000);
-      autoDismissTimers.set(m.session_id, timer);
-    }
+    // 画面なしで完了した実行も、ほかの終わったセッションと同じく翌日には片付ける。
+    const deadStates = headless ? ['completed', 'error', 'disconnected'] : ['error', 'disconnected'];
+    if (deadStates.includes(m.state)) scheduleDeadSessionDismiss(m.session_id);
   } else if (m.type === 'session_removed') {
     removeLocalSession(m.session_id);
     removeUsageCacheEntry(m.session_id);

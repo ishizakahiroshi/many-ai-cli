@@ -1,0 +1,27 @@
+/* headless-progress.css — 画面なし（headless）実行の進み（ターン・道具・経過・費用・最後の発言）。
+   描くのは web/src/app/headless-progress-dom.ts。サイドバーのカード・開いているセッションの帯・
+   ペインが同じ class を使う。色は既存の変数だけを使い、ここでは配置と大きさだけを持つ。 */
+.headless-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.7rem;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+}
+.headless-progress[hidden] { display: none; }
+.headless-progress-metric { min-width: 0; overflow-wrap: anywhere; }
+/* 最後の発言は 1 行で切る（長い発言で帯の高さが変わり続けないように）。 */
+.headless-progress-last {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card .headless-progress { padding: 0.25rem 0 0; }
+.pane-slot > .headless-progress { flex: none; max-height: 9rem; overflow: auto; }
+#active-headless-progress { flex: none; max-height: 9rem; overflow: auto; }
