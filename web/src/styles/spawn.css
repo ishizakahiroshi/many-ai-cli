@@ -351,7 +351,8 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .spawn-cwd-row { display: flex; gap: var(--space-1); align-items: center; }
 .spawn-cwd-row > .spawn-input { flex: 1; }
 .spawn-model-row { display: flex; gap: var(--space-1); align-items: center; }
-.spawn-model-row > .spawn-input { flex: 1; }
+/* min-width: 0 — 入力欄は既定で約 20 文字ぶんの幅より縮まないので、サイドバーが狭いと右端の 🔗 がパネルの外へ押し出される（C4）。 */
+.spawn-model-row > .spawn-input { flex: 1; min-width: 0; }
 #spawn-model-refresh.is-loading { opacity: 0.5; pointer-events: none; }
 .spawn-model-clear { min-width: 26px; padding-left: 0; padding-right: 0; }
 .spawn-model-discover { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
@@ -526,6 +527,12 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .spawn-input {
   padding: 5px 8px;
 }
+/* select の幅は、選んでいる項目ではなく一番長い選択肢の文字幅で決まる。上限が無いと、
+   「⚠ 全許可（bypassPermissions・承認スキップ）」のような長い選択肢を持つ承認モード欄
+   （#spawn-permission-mode。Codex は #spawn-sandbox・#spawn-ask-approval）が、
+   サイドバー 260px のパネルの内側（約 216px）を越えて右端の ▾ が切れ、パネルに横スクロールが出ていた
+   （bugfix_pending-batch-small-fixes_2026-11-21 の C4）。器の幅を上限にして、長い文字は select の中で切る。 */
+.spawn-select { max-width: 100%; }
 
 /* plan_session-handoff-board_c4_prompted-spawn.md C2: 最初に渡す指示（任意）欄。
    spawn-input の見た目を引き継ぎつつ、複数行入力向けに resize と行間だけ足す。 */

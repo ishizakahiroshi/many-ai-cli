@@ -309,6 +309,73 @@ body.pane-resizing .xterm { pointer-events: none; }
   border-color: color-mix(in srgb, var(--warn) 55%, transparent);
   background: color-mix(in srgb, var(--warn) 14%, transparent);
 }
+
+/* ── タブの段の幅が足りないときの段階的省略（PC 幅だけ・段自身の幅で判定）──────────
+   窓の幅 1275px（サイドバー 260px・段の中身の幅 約 970px）で、タブ 9 個（約 775px）と
+   セッション情報チップ（約 470〜680px）が 1 段に入らず、右のタブが切れて段の中が横スクロールに
+   なっていた（bugfix_pending-batch-small-fixes_2026-11-21 の C3）。
+   判定は #unified-tab-bar 自身の幅（@container）。サイドバーの幅や左右の配置で段の幅は変わるので、
+   窓の幅では判定しない（token-statusbar.css の段階的省略と同じ作り）。
+   0 段目: タブは縮めず、チップの中の長い文字（AI 名・モデル・エージェント名・契約）を … で縮める。
+           それぞれ 4 文字ぶんは残す（空の枠だけにしない）。全文はそれぞれのツールチップで読める。
+           番号・状態・対話/ヘッドレス・effort・起動時の権限は縮めない。
+           段の中身が 880px より狭いときは縮めない（縮めると、チップの末尾にある起動時の権限まで
+           切れてしまうため）。そこより狭い幅は、これまでどおり段の中の横スクロールになる。
+   1 段目（1320px 以下）: タブの文字の前の絵を外す（文字は残す）。チップの項目の間を詰める。
+   2 段目（1100px 以下）: マルチの配置（2×2 など）・AI 名の文字（AI のアイコンは残る）・「対話」を外す。
+           ヘッドレスは端末へ打ち込めない印なので残す。
+   3 段目（960px 以下）: ターミナルとチャット以外のタブを絵だけにする（スマホ幅で読み方の 2 つだけ
+           名前を残すのと同じ考え）。文字は画面から外すだけで、読み上げ用の名前としては残す。
+   閾値は、実物の CSS をサイドバー 260px で当てて日本語の文字で測った幅（静的な確認・JS なし）から
+   置いた概算。モデル名・契約名・言語で項目の幅は変わる（CSS だけで直す方式の既知の弱点）。
+   スマホ幅（720px 以下）は styles.css の別の並びで、container を持たないので下の規則は効かない。 */
+@media (min-width: 721px) {
+  #unified-tab-bar { container: unified-tab-bar / inline-size; }
+}
+@container unified-tab-bar (min-width: 880px) {
+  .session-info-chip { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+  .session-info-chip > * { flex-shrink: 0; }
+  .session-info-chip .card-provider-chip,
+  .session-info-chip .tsb-agent-name,
+  .session-info-chip .card-subscription {
+    min-width: 4ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* モデルはアイコン（10px）と間（3px）の後ろに 4 文字ぶん。文字の … は styles.css の .card-model-text が持つ。 */
+  .session-info-chip .card-model { min-width: calc(13px + 4ch); }
+  /* 縮める順: 契約 → エージェント名 → AI 名 → モデル（モデル名はほかの場所に出ないので最後まで残す）。 */
+  .session-info-chip .card-subscription { flex-shrink: 8; }
+  .session-info-chip .tsb-agent-name { flex-shrink: 4; }
+  .session-info-chip .card-provider-chip { flex-shrink: 2; }
+  .session-info-chip .card-model { flex-shrink: 1; }
+  /* inline-flex のままだと文字に … が付かない（text-overflow はブロックの箱にだけ効く）。 */
+  .session-info-chip .card-provider-chip { display: block; }
+}
+@container unified-tab-bar (max-width: 1320px) {
+  #unified-tab-bar .view-tab-icon { display: none; }
+  .session-info-chip { gap: var(--space-1); }
+}
+@container unified-tab-bar (max-width: 1100px) {
+  #unified-tab-bar .multi-layout-badge,
+  .session-info-chip .card-provider-chip,
+  .session-info-chip .session-mode-chip:not(.headless) { display: none; }
+}
+@container unified-tab-bar (max-width: 960px) {
+  #unified-tab-bar .view-tab:not([data-tab="terminal"]):not([data-tab="chat"]) .view-tab-icon { display: inline-flex; }
+  #unified-tab-bar .view-tab:not([data-tab="terminal"]):not([data-tab="chat"]) > span:not(.view-tab-icon):not([id]):not(.mobile-reading-mode-label) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
 /* 表示モード系タブ。ボタン部品は quiet（面と枠なし）を使い、タブの形はここで決める:
    選択は下線で示すので下の角は丸めない。文字はセッション情報チップと同じヘッダーの大きさ。 */
 .view-tab {
