@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import * as tracking from '../src/app/session-spawn-state.js';
 import * as tabs from '../src/app/session-list-tab-state.js';
 import { buildDeriveBody } from '../src/app/derive-dialog-store.js';
 import { SessionStartupStore } from '../src/app/session-startup.js';
+import { REMOTE_ATTACH_LAUNCH_EVENT, normalizeLaunchChoice, remoteAttachLaunchDetails } from '../src/app/remote-attach-profiles.js';
 const source=(name:string)=>readFileSync(new URL('../src/app/'+name,import.meta.url),'utf8');
 const compile=(text:string)=>new Bun.Transpiler({loader:'ts'}).transformSync(text.replace(/^import[\s\S]*?;\r?$/gm,'').replace(/^export /gm,''));
 const tick=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
@@ -141,4 +142,56 @@ test('delayed actual correlation WS branch refreshes the open mobile drawer afte
  runInNewContext(compile('function apply(m:any) {\n'+text.slice(start,end)+'\n}\nglobalThis.apply=apply;'),ctx);
  ctx.apply({type:'session_spawn_correlated',client_request_id:request,session_id:1,started_at:'start-1',hub_instance:'hub-A'});
  assert.equal(calls,1);assert.deepEqual(drawerIds,[1]);
+});
+
+// 複数のシェルを一度に開く別窓プリセットでも、起動フォームの「添付の送り先」を最初の 1 本だけでなく全部に効かせる。
+// 呼び出しの順（起動フォーム → プリセット → spawn-grid → 始まった番号）のとおりに並べる。
+class FakeCustomEvent { type:string;detail:any;constructor(type:string,init:any){this.type=type;this.detail=init?.detail;} }
+// 起動フォームのファイルは、spawnSession を持つ 1 本として探す（ファイル名を書かない）。
+const launchFormSource=()=>{const hits=readdirSync(new URL('../src/app/',import.meta.url)).filter(n=>n.endsWith('.ts')&&source(n).includes('  async function spawnSession()'));assert.equal(hits.length,1);return source(hits[0]);};
+test('actual spawn click hands the shell remote-attach choice to its own shells AND to the multi-shell preset',async()=>{
+ const text=launchFormSource(),start=text.indexOf('  async function spawnSession()'),end=text.indexOf('\n  }',start)+4;
+ const no=()=>{};let nested:any;const events:any[]=[];
+ const inputs:any={'spawn-provider':{value:'shell'},'spawn-label':{value:''}};
+ const ctx:any={spawnLaunchSequence:0,captureSpawnTab:()=> 'click-tab',spawnCwdInput:{value:'/repos/example'},
+  document:{getElementById:(id:string)=>inputs[id]||{value:''},dispatchEvent:(e:any)=>{events.push(e);return true;}},CustomEvent:FakeCustomEvent,
+  spawnLaunchBlockReason:()=>'',isPathMissing:()=>false,commandMissingProviderIds:new Set(),spawnLaunchBtn:{disabled:false},spawnModelInput:{value:''},
+  updateSpawnLaunchButton:no,getCachedSpawnModelGroups:()=>[],isModelCompatibleWithProvider:()=>true,resolveRoute:()=>'',isCustomProviderValue:()=>false,
+  providerHasPermissionSelect:()=>false,readSpawnDefaults:()=>({}),hasProviderBooleanSetting:()=>false,spawnInitialPrompt:{value:''},selectedSubscriptionID:()=>'',
+  effortForSpawnBody:()=>'',selectedEffort:()=>'',claudeModelSelection:null,codexModelSelection:null,spawnOrchestrationMode:false,boardHandoff:null,setBoardHandoff:no,
+  beginTrackedSpawn:()=> 'ordinary-id',apiFetch:async()=>({ok:true}),saveCwdHistory:no,waitForTrackedSpawn:async()=>[21],
+  getSpawnOpenTarget:()=> 'detached',getSpawnGridLayout:()=> '2x2',spawnDetachedPreset:{value:'shell-2x2'},
+  spawnRemoteAttachSelect:{value:'last'},normalizeLaunchChoice,remoteAttachLaunchDetails,REMOTE_ATTACH_LAUNCH_EVENT,REMOTE_LAUNCH_KEY:'remote_attach_launch',
+  spawnSubscriptionRow:{hidden:true},spawnIsolateWorktree:{checked:false},spawnDelegation:{checked:false},spawnRememberApprovalSettings:{checked:true},
+  mergeProviderBooleanSetting:(base:any)=>base,mergeApprovalSettings:(base:any)=>base,saveSpawnSettings:async()=>{},newSessionPanel:{hidden:false},setSpawnOrchestrationMode:no,
+  window:{launchDetachedPreset:(opts:any)=>{nested=opts;return Promise.resolve();}},alert:(msg:string)=>{throw Error(msg);},t:(key:string)=>key,showToast:no};
+ runInNewContext(compile(text.slice(start,end))+'\nglobalThis.spawn=spawnSession;',ctx);await ctx.spawn();await tick();
+ assert.equal(nested.presetId,'shell-2x2');assert.equal(nested.remoteAttachChoice,'last');
+ assert.deepEqual(events.map(e=>[e.type,e.detail.sessionId,e.detail.choice]),[[REMOTE_ATTACH_LAUNCH_EVENT,21,'last']]);
+});
+test('actual preset launcher passes the remote-attach choice to every shell-spawning preset',async()=>{
+ const text=source('detached-grid-launcher.ts'),start=text.indexOf('export async function launchDetachedPreset'),end=text.indexOf('// ─── Launcher ダイアログ',start);
+ assert.ok(start>=0&&end>start);const seen:any[]=[];
+ const ctx:any={DETACHED_PRESETS:[{id:'shell-2x2',defaultLayout:'2x2'},{id:'shell-3x3',defaultLayout:'3x3'},{id:'claude+shell-2x2',defaultLayout:'2x2'},{id:'custom',defaultLayout:'2x2'}],
+  spawnGridAndOpen:async(opts:any)=>{seen.push(opts);},getDetachedGridPrefs:()=>({}),setDetachedGridPrefs:()=>{},sessions:new Map(),openDetachedGridForSessions:()=>{}};
+ runInNewContext(compile(text.slice(start,end))+'\nglobalThis.launch=launchDetachedPreset;',ctx);
+ for(const presetId of ['shell-2x2','shell-3x3','claude+shell-2x2','custom'])await ctx.launch({presetId,cwd:'/repos/example',remoteAttachChoice:'local'});
+ assert.deepEqual(seen.map(o=>o.remoteAttachChoice),['local','local','local','local']);
+});
+test('actual grid caller hands the remote-attach choice to EVERY correlated session, not only the first',async()=>{
+ const text=source('detached-grid-launcher.ts'),start=text.indexOf('export async function spawnGridAndOpen'),end=text.indexOf('// ─── プリセット実行',start);
+ const run=async(choice:string|undefined,ids:number[])=>{
+  let resolve!:(ids:number[])=>void;const events:any[]=[];const opened:string[]=[];
+  const ctx:any={beginTrackedSpawn:()=> 'grid-request',captureSpawnTab:()=> 'tab',waitForTrackedSpawn:()=>new Promise(r=>{resolve=r;}),
+   window:{open:(url:string)=>opened.push(url),showToast:()=>{},t:()=> 'partial'},buildDetachedGridUrl:(list:number[])=>'grid:'+list.join(','),apiFetch:async()=>({ok:true}),
+   document:{dispatchEvent:(e:any)=>{events.push(e);return true;}},CustomEvent:FakeCustomEvent,remoteAttachLaunchDetails,REMOTE_ATTACH_LAUNCH_EVENT};
+  runInNewContext(compile(text.slice(start,end))+'\nglobalThis.spawn=spawnGridAndOpen;',ctx);
+  await ctx.spawn({preset:'shell',count:ids.length,cwd:'/repos/example',layout:'2x2',sourceTabId:'tab',remoteAttachChoice:choice});
+  resolve(ids);await tick();return {events,opened};
+ };
+ const chosen=await run('profile:dev',[7,8,9,10]);
+ assert.deepEqual(chosen.events.map(e=>[e.type,e.detail.sessionId,e.detail.choice]),[7,8,9,10].map(id=>[REMOTE_ATTACH_LAUNCH_EVENT,id,'profile:dev']));
+ assert.deepEqual(chosen.opened,['grid:7,8,9,10']);
+ // 「決めない」・選択なし（ランチャーの窓から開いた場合）は何も知らせない
+ assert.deepEqual((await run('',[7,8])).events,[]);assert.deepEqual((await run(undefined,[7,8])).events,[]);
 });

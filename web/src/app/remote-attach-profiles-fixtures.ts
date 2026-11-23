@@ -10,6 +10,7 @@ import {
   parseRemoteLast,
   parseRemoteProfiles,
   profileChoiceValue,
+  remoteAttachLaunchDetails,
   removeRemoteProfile,
   resolveLaunchChoice,
   serializeRemoteLast,
@@ -108,4 +109,21 @@ test('detectSshFromTitle: ssh コマンドから接続先と鍵を読む。接�
   assert.equal(detectSshFromTitle('ssh -J jump devuser@dev-host'), null);
   assert.equal(detectSshFromTitle('bash'), null);
   assert.equal(detectSshFromTitle('ssh -i key'), null);
+});
+
+test('remoteAttachLaunchDetails: 1 回で始まったシェル全部へ同じ選択を渡す（最初の 1 本だけにしない）', () => {
+  assert.deepEqual(remoteAttachLaunchDetails([11, 12, 13, 14], LAUNCH_CHOICE_LAST), [
+    { sessionId: 11, choice: 'last' },
+    { sessionId: 12, choice: 'last' },
+    { sessionId: 13, choice: 'last' },
+    { sessionId: 14, choice: 'last' },
+  ]);
+  // 「決めない」は何も渡さない
+  assert.deepEqual(remoteAttachLaunchDetails([11, 12], LAUNCH_CHOICE_ASK), []);
+  // 同じ番号は 1 回、正の整数でない番号は捨てる
+  assert.deepEqual(remoteAttachLaunchDetails([5, 5, 0, -1, 1.5, Number.NaN, 6], LAUNCH_CHOICE_LOCAL), [
+    { sessionId: 5, choice: 'local' },
+    { sessionId: 6, choice: 'local' },
+  ]);
+  assert.deepEqual(remoteAttachLaunchDetails([], profileChoiceValue('開発')), []);
 });

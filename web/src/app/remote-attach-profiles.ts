@@ -168,6 +168,28 @@ export function resolveLaunchChoice(
   return { kind: 'ask' };
 }
 
+/** 起動した新しいシェルへ、起動フォームで選んだ送り先を渡す画面内の知らせ（受けるのは attachments.ts）。 */
+export const REMOTE_ATTACH_LAUNCH_EVENT = 'remote-attach-launch-choice';
+
+export type RemoteAttachLaunchDetail = { sessionId: number; choice: string };
+
+/**
+ * 1 回の起動で始まったセッション全部へ渡す知らせの中身を作る。
+ * 別窓の 2x2・3x3 のように 1 回で何本も始まる起動では、最初の 1 本だけでなく全部に同じ選択を効かせる。
+ * 「決めない」（''）は何も渡さない。同じ番号は 1 回だけ、正の整数でない番号は捨てる。
+ */
+export function remoteAttachLaunchDetails(ids: readonly number[], choice: string): RemoteAttachLaunchDetail[] {
+  if (!choice) return [];
+  const seen = new Set<number>();
+  const out: RemoteAttachLaunchDetail[] = [];
+  for (const id of ids) {
+    if (!Number.isSafeInteger(id) || id <= 0 || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ sessionId: id, choice });
+  }
+  return out;
+}
+
 /** 保存済みの選択値として読める形か。読めなければ「聞く」（''）にする。 */
 export function normalizeLaunchChoice(raw: unknown): string {
   if (typeof raw !== 'string') return LAUNCH_CHOICE_ASK;

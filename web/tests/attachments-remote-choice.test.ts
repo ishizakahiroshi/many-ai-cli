@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+import { remoteAttachLaunchDetails } from '../src/app/remote-attach-profiles.js';
 
 // attachments.ts の「添付の送り先」の節（実コード）を合成 DOM で動かす。Hub・ブラウザ・web/dist は使わない。
 // bugfix_shell-long-paste-local-path-without-remote-target_2026-10-28.md の再現テスト。
@@ -47,6 +48,7 @@ function fixture(opts: { stored?: unknown; storageBroken?: boolean } = {}) {
   const store = new Map<string, string>();
   if (opts.stored !== undefined) store.set('remoteAttachTargetsV1', JSON.stringify(opts.stored));
   const toasts: string[] = [];
+  const docListeners = new Map<string, Function[]>();
   const body = new FakeEl('BODY', focusLog);
   const remoteBtn = new FakeEl('BUTTON', focusLog);
   const composer = new FakeEl('TEXTAREA', focusLog);
@@ -61,7 +63,7 @@ function fixture(opts: { stored?: unknown; storageBroken?: boolean } = {}) {
     document: {
       body,
       getElementById: (id: string) => (id === 'attach-remote-btn' ? remoteBtn : null),
-      addEventListener: () => {},
+      addEventListener: (type: string, fn: Function) => { docListeners.set(type, [...(docListeners.get(type) || []), fn]); },
       createElement: (tag: string) => new FakeEl(tag.toUpperCase(), focusLog),
     },
     window: { addEventListener: () => {}, innerWidth: 1000 },
@@ -97,7 +99,8 @@ ${source}`), ctx);
   const actionButtons = () => popup().children.find((c) => c.className.includes('agent-log-popup-actions'))!.children;
   const inputBox = () => popup().children.find((c) => c.tagName === 'INPUT')!;
   const findButton = (label: string) => actionButtons().find((b) => b.textContent === label)!;
-  return { ctx, sessions, store, stored, toasts, remoteBtn, composer, focusLog, popup, tick, actionButtons, inputBox, findButton };
+  const fireDocument = (type: string, detail: unknown) => { for (const fn of docListeners.get(type) || []) fn({ detail }); };
+  return { ctx, sessions, store, stored, toasts, fireDocument, remoteBtn, composer, focusLog, popup, tick, actionButtons, inputBox, findButton };
 }
 
 describe('添付の送り先: 「まだ選んでいない」と「このPCで読むと決めた」を区別して覚える', () => {
@@ -307,6 +310,28 @@ describe('添付を送る前に送り先の窓を出す（askRemoteAttachChoice�
     f.remoteBtn.fire('click');
     expect(f.popup().children.map((c) => c.textContent)).not.toContain('remote_attach_choose_first');
     f.findButton('remote_attach_read_local').fire('click');
+    expect(f.ctx.isRemoteAttachChoicePending(7)).toBe(false);
+  });
+});
+
+describe('起動フォームの送り先を、1 回で始まったシェル全部へ効かせる（remote-attach-launch-choice）', () => {
+  test('別窓の 2x2 のように何本も始まったら、全部のシェルに同じ選択が入る。AI のセッションは待たずに飛ばす', () => {
+    const f = fixture();
+    let timers = 0;
+    f.ctx.setTimeout = () => { timers++; return 0; };
+    for (const detail of remoteAttachLaunchDetails([7, 8, 9], 'local')) f.fireDocument('remote-attach-launch-choice', detail);
+    expect(f.ctx.isRemoteAttachChoicePending(7)).toBe(false);
+    expect(f.ctx.isRemoteAttachChoicePending(9)).toBe(false);
+    expect(f.stored()).toEqual([{ key: '7|S1', target: '', local: true }, { key: '9|S1', target: '', local: true }]);
+    // 8 は claude。送り先を持たないので記録も、画面に載るのを待つ再試行もしない
+    expect(timers).toBe(0);
+  });
+
+  test('利用者が先に決めたシェルは上書きしない（ほかのシェルには入る）', () => {
+    const f = fixture();
+    f.ctx.setRemoteAttachTarget(9, 'a@b');
+    for (const detail of remoteAttachLaunchDetails([7, 9], 'local')) f.fireDocument('remote-attach-launch-choice', detail);
+    expect(f.ctx.remoteAttachTarget(9)).toBe('a@b');
     expect(f.ctx.isRemoteAttachChoicePending(7)).toBe(false);
   });
 });

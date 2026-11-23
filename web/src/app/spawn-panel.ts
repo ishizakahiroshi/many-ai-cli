@@ -31,6 +31,7 @@ import {
   LAUNCH_CHOICE_ASK,
   LAUNCH_CHOICE_LAST,
   LAUNCH_CHOICE_LOCAL,
+  REMOTE_ATTACH_LAUNCH_EVENT,
   REMOTE_LAST_KEY,
   REMOTE_LAUNCH_KEY,
   REMOTE_PROFILES_KEY,
@@ -38,6 +39,7 @@ import {
   parseRemoteLast,
   parseRemoteProfiles,
   profileChoiceValue,
+  remoteAttachLaunchDetails,
 } from './remote-attach-profiles.js';
 
 export { compareCwdByBasename, sortCwdSubdirItems, splitCwdPath } from './cwd-path.js';
@@ -3122,14 +3124,16 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
           void saveSpawnSettings(persistedDefaults).catch(() => showToast(t('startup_preferences_failed')));
         }
         // 起動できたシェルへ、選んだ送り先を決める（セッション番号が決まってから。「決めない」は何もしない）。
+        // 別窓のプリセットが追加で開くシェルには、下の launchDetachedPreset へ同じ選択を渡す。
         if (submittedRemoteAttachChoice) {
           const choice = submittedRemoteAttachChoice;
           void waitForTrackedSpawn(spawnRequest).then(ids => {
-            if (ids.length) {
-              document.dispatchEvent(new CustomEvent('remote-attach-launch-choice', { detail: { sessionId: ids[0], choice } }));
+            for (const detail of remoteAttachLaunchDetails(ids, choice)) {
+              document.dispatchEvent(new CustomEvent(REMOTE_ATTACH_LAUNCH_EVENT, { detail }));
             }
           });
         }
+        const presetRemoteAttachChoice = submittedRemoteAttachChoice || undefined;
         const sameForm = launchSequence === spawnLaunchSequence &&
           document.getElementById('spawn-provider').value === provider && spawnCwdInput.value.trim() === cwd &&
           document.getElementById('spawn-label').value.trim() === label && spawnModelInput.value.trim() === model &&
@@ -3167,6 +3171,7 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
                 cwd,
                 sourceTabId: spawnTabId,
                 provider,
+                remoteAttachChoice: presetRemoteAttachChoice,
               }).catch(() => {});
             }
           } else if (detachedPreset === 'shell-2x2') {
@@ -3177,6 +3182,7 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
                 count: 4,
                 cwd,
                 sourceTabId: spawnTabId,
+                remoteAttachChoice: presetRemoteAttachChoice,
               }).catch(() => {});
             }
           } else if (detachedPreset === 'shell-3x3') {
@@ -3187,6 +3193,7 @@ export function openSpawnPanelWith(opts: SpawnPanelPreset): void {
                 count: 9,
                 cwd,
                 sourceTabId: spawnTabId,
+                remoteAttachChoice: presetRemoteAttachChoice,
               }).catch(() => {});
             }
           } else if (detachedPreset === 'advanced') {

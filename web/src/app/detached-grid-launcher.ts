@@ -7,6 +7,7 @@ import { beginTrackedSpawn, captureSpawnTab, waitForTrackedSpawn } from './sessi
 import { apiFetch, escapeHtml } from './util.js';
 import { sessions } from './state.js';
 import { calcDetachedLayout, openDetachedGridForSessions } from './session-list.js';
+import { REMOTE_ATTACH_LAUNCH_EVENT, remoteAttachLaunchDetails } from './remote-attach-profiles.js';
 import {
   STORAGE_DETACHED_GRID_PRESET_KEY,
   STORAGE_DETACHED_GRID_LAYOUT_KEY,
@@ -112,10 +113,17 @@ export function buildDetachedGridUrl(sessionIds: number[], layout?: string): str
 export async function spawnGridAndOpen(opts: {
   preset: 'shell' | 'ai+shell'; layout: string; count: number; cwd: string;
   labelPrefix?: string; provider?: string; sourceTabId?: string;
+  /** 起動フォームで選んだ「添付の送り先」。始まったシェル全部へ渡す（AI のセッションは受け手が無視する）。 */
+  remoteAttachChoice?: string;
 }): Promise<void> {
   const requestId = beginTrackedSpawn(opts.count, opts.sourceTabId || captureSpawnTab());
   // Observation starts before HTTP: lost/failed responses may still have accepted starts.
   void waitForTrackedSpawn(requestId).then(ids => {
+    if (opts.remoteAttachChoice) {
+      for (const detail of remoteAttachLaunchDetails(ids, opts.remoteAttachChoice)) {
+        document.dispatchEvent(new CustomEvent(REMOTE_ATTACH_LAUNCH_EVENT, { detail }));
+      }
+    }
     if (ids.length) window.open(buildDetachedGridUrl(ids, opts.layout), '_blank');
     if (ids.length < opts.count) (window as any).showToast?.((window as any).t?.('spawn_correlation_unavailable') || 'Some requested sessions could not be confirmed.');
   });
@@ -140,6 +148,8 @@ export interface LaunchPresetOptions {
   selectedIds?: number[];
   /** 'project' プリセット用: project group キー */
   projectKey?: string;
+  /** シェルを起動するプリセット用: 起動フォームで選んだ「添付の送り先」（全部のシェルに効かせる） */
+  remoteAttachChoice?: string;
 }
 
 /**
@@ -197,6 +207,7 @@ export async function launchDetachedPreset(opts: LaunchPresetOptions): Promise<v
         sourceTabId: opts.sourceTabId,
         labelPrefix: `${provider}-shell`,
         provider,
+        remoteAttachChoice: opts.remoteAttachChoice,
       });
       break;
     }
@@ -209,6 +220,7 @@ export async function launchDetachedPreset(opts: LaunchPresetOptions): Promise<v
         cwd: opts.cwd || '',
         sourceTabId: opts.sourceTabId,
         labelPrefix: 'shell',
+        remoteAttachChoice: opts.remoteAttachChoice,
       });
       break;
     }
@@ -221,6 +233,7 @@ export async function launchDetachedPreset(opts: LaunchPresetOptions): Promise<v
         cwd: opts.cwd || '',
         sourceTabId: opts.sourceTabId,
         labelPrefix: 'shell',
+        remoteAttachChoice: opts.remoteAttachChoice,
       });
       break;
     }
@@ -244,6 +257,7 @@ export async function launchDetachedPreset(opts: LaunchPresetOptions): Promise<v
         cwd: opts.cwd || '',
         sourceTabId: opts.sourceTabId,
         labelPrefix: 'grid',
+        remoteAttachChoice: opts.remoteAttachChoice,
       });
       break;
     }

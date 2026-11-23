@@ -9,7 +9,7 @@ import { openLightbox } from './lightbox.js';
 import { isFetchableRemotePath, isRemoteViewablePath, openRemoteFileView } from './remote-file-view.js';
 import { STORAGE_SPAWN_KEY, setUserPref } from './user-prefs.js';
 // 注意: 添付の送り先の test（tests/attachments-*.test.ts）は import を 1 行ずつ外して読み込むので、import は複数行に分けない。
-import { detectSshFromTitle, MAX_PROFILE_NAME, MAX_REMOTE_PROFILES, REMOTE_LAST_KEY, REMOTE_PROFILES_KEY, isValidProfileName, isValidRemoteIdentity, isValidRemoteTarget, parseRemoteLast, parseRemoteProfiles, removeRemoteProfile, resolveLaunchChoice, serializeRemoteLast, serializeRemoteProfiles, upsertRemoteProfile, type RemoteAttachProfile } from './remote-attach-profiles.js';
+import { detectSshFromTitle, MAX_PROFILE_NAME, MAX_REMOTE_PROFILES, REMOTE_LAST_KEY, REMOTE_PROFILES_KEY, isValidProfileName, isValidRemoteIdentity, isValidRemoteTarget, parseRemoteLast, parseRemoteProfiles, removeRemoteProfile, REMOTE_ATTACH_LAUNCH_EVENT, resolveLaunchChoice, serializeRemoteLast, serializeRemoteProfiles, upsertRemoteProfile, type RemoteAttachProfile } from './remote-attach-profiles.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -274,6 +274,9 @@ function storeRemoteProfiles(profiles: RemoteAttachProfile[]): void {
  * 起動の応答の直後は、画面側にセッションがまだ載っていないことがあるので、少しだけ待って試す。
  */
 function applyRemoteAttachLaunchChoice(sessionId: number, choice: string, attempt = 0): void {
+  // AI とシェルを一緒に開く別窓では AI の番号も届く。送り先を持たないので待たずに終える。
+  const session = sessions.get(sessionId);
+  if (session && session.provider !== 'shell') return;
   if (!remoteTargetKey(sessionId)) {
     if (attempt < 10) setTimeout(() => applyRemoteAttachLaunchChoice(sessionId, choice, attempt + 1), 200);
     return;
@@ -286,7 +289,7 @@ function applyRemoteAttachLaunchChoice(sessionId: number, choice: string, attemp
   syncRemoteAttachButton();
 }
 
-document.addEventListener('remote-attach-launch-choice', (event) => {
+document.addEventListener(REMOTE_ATTACH_LAUNCH_EVENT, (event) => {
   const detail = (event as CustomEvent<{ sessionId?: unknown; choice?: unknown }>).detail;
   if (!detail || typeof detail.sessionId !== 'number' || typeof detail.choice !== 'string') return;
   applyRemoteAttachLaunchChoice(detail.sessionId, detail.choice);
