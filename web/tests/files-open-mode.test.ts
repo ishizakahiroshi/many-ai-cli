@@ -120,7 +120,9 @@ describe('タブの段は幅が足りないとき段階的に詰める（C3）',
     expect(pcBlock).toContain('.session-info-chip > * { flex-shrink: 0; }');
     // チップに min-width: 0 や overflow: hidden を付けると、子の最小幅の合計が段に入らないとき
     // 末尾の契約が横スクロールもできずに切り取られる（英語の長い権限表示で実測）。
-    const chipRules = [...tabsCss.matchAll(/(^|[\s,}])\.session-info-chip\s*\{([^}]*)\}/g)].map((m) => m[2]).join('\n');
+    // 注記（「overflow: hidden も付けない」など）に当たらないよう、コメントを外してから読む。
+    const cssWithoutComments = tabsCss.replace(/\/\*[\s\S]*?\*\//g, '');
+    const chipRules = [...cssWithoutComments.matchAll(/(^|[\s,}])\.session-info-chip\s*\{([^}]*)\}/g)].map((m) => m[2]).join('\n');
     expect(chipRules).not.toMatch(/min-width:\s*0/);
     expect(chipRules).not.toMatch(/overflow(-x)?:\s*(hidden|clip)/);
     // 起動時の権限は縮める対象に入れない。
@@ -142,10 +144,10 @@ describe('タブの段は幅が足りないとき段階的に詰める（C3）',
     expect(pcBlock).toContain('.session-info-chip .card-model.card-model--with-icon .card-model-text');
   });
 
-  test('チップの末尾は 起動時の権限 → 契約 の並び（コメントと実物を揃える）', () => {
+  test('チップの末尾は 起動時の権限 → 契約 → ブランチ の並び（コメントと実物を揃える）', () => {
     const settingsSrc = readFileSync(join(import.meta.dir, '../src/app/settings.ts'), 'utf8');
-    expect(settingsSrc).toContain('${agentNameBadge}${permissionBadge}${subBadge}`;');
-    expect(tabsCss).toContain('「… → エージェント名 → 起動時の権限 → 契約」で、末尾は契約。');
+    expect(settingsSrc).toContain('${agentNameBadge}${permissionBadge}${subBadge}${branchBadge}`;');
+    expect(tabsCss).toContain('「… → エージェント名 → 起動時の権限 → 契約 → ブランチ」で、末尾はブランチ');
   });
 
   test('段階の閾値は 絵を外す → 項目を外す → 絵だけ の順に狭くなる', () => {
