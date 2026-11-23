@@ -114,7 +114,7 @@ describe('closeSpawnConfirmation', () => {
 
 describe('selectOldestPendingConfirmation', () => {
   function record(id: string, parentId: number, requestedAtMs: number): SpawnConfirmationRecord {
-    return { id, parentId, role: '', provider: '', model: '', cwd: '', initialPrompt: '', requestedAtMs };
+    return { id, parentId, role: '', provider: '', model: '', cwd: '', initialPrompt: '', effort: '', executionMode: '', permissionPreset: '', permissionMode: '', rememberPermission: false, trustGrantProviders: [], requestedAtMs, approval: {} };
   }
 
   test('picks the oldest (smallest requestedAtMs) confirmation for the given parent', () => {
@@ -528,9 +528,10 @@ describe('子の起動確認で契約を選ぶ（issue #43）', () => {
     expect(subscriptionDecision(true, ' work ', true)).toBe('work');
   });
 
-  test('欄が無い・「既定」のまま・拒否では JSON に載せない', () => {
+  test('欄が無い・拒否では JSON に載せない。欄がある「既定」は空文字を送って要求を取り消す', () => {
     expect(subscriptionDecision(false, 'work', true)).toBeUndefined(); // 契約が 1 件以下の CLI
-    expect(subscriptionDecision(true, '', true)).toBeUndefined(); // 既定のまま
+    expect(subscriptionDecision(true, '', true)).toBe(''); // 「既定」= 既定のログインとして要求を取り消す
+    expect(subscriptionDecision(true, '  ', true)).toBe(''); // 空白だけの入力も同じ
     expect(subscriptionDecision(true, 'work', false)).toBeUndefined(); // 拒否
   });
 });

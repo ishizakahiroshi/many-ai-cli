@@ -407,6 +407,9 @@ fn requested_message(
             .is_some_and(|value| !value.is_empty()),
         cwd: body.cwd.clone(),
         initial_prompt: body.initial_prompt.clone(),
+        // The dialog shows the launch's requested mode so the human sees the
+        // mode the AI asked for instead of a blank "unchanged" field.
+        permission_mode: body.permission_mode.clone(),
         // Go's UnixMilli uses floor division for pre-epoch timestamps.
         spawn_requested_at_ms: requested_at.unix_nanos().div_euclid(1_000_000) as i64,
         spawn_child_approval: child_options::preview_tiers(

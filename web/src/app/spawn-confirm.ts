@@ -469,6 +469,8 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     refreshRegisteredPermissionModes();
   }
   // 登録した AI は、定義が起動引数へ写像している承認モードだけを選べる。写像が無ければ欄ごと出さない。
+  // 先頭の「default」は「権限フラグを付けない」明示の選択肢で、AI が要求したモードを
+  // 下げる道を残す。初期値は要求のモード（写像があれば）にして、AI の要求を見せる。
   function refreshRegisteredPermissionModes(): void {
     const field = dialog.querySelector('[data-spawn-confirm-regmode-field]') as HTMLElement | null;
     const select = field?.querySelector('select') as HTMLSelectElement | null;
@@ -481,8 +483,11 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       auto: t('spawn_permission_auto'),
       bypassPermissions: t('spawn_permission_bypass'),
     };
-    const keep = modes.includes(select.value) ? select.value : '';
-    select.innerHTML = [`<option value="">${escapeHtml(t('spawn_confirm_option_unset'))}</option>`,
+    const choices = ['default', ...modes];
+    const keep = choices.includes(select.value) ? select.value
+      : modes.includes(record.permissionMode) ? record.permissionMode
+      : 'default';
+    select.innerHTML = [`<option value="default">${escapeHtml(t('spawn_permission_default'))}</option>`,
       ...modes.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(labels[m] || m)}</option>`)].join('');
     select.value = keep;
     field.hidden = modes.length === 0;
@@ -660,11 +665,13 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     if (approved && registered) {
       const modeEl = dialog.querySelector('[name=permission_mode]') as HTMLSelectElement | null;
       const modeField = dialog.querySelector('[data-spawn-confirm-regmode-field]') as HTMLElement | null;
-      if (modeEl && modeField && !modeField.hidden && modeEl.value) payload.permission_mode = modeEl.value;
+      // 欄が出ているときは見えている値を必ず送る（default も含む）。Hub は「人が選んだ
+      // 値」として要求のモードを上書きし、default は権限フラグ無しで起こす。
+      if (modeEl && modeField && !modeField.hidden) payload.permission_mode = modeEl.value || 'default';
     }
     if (approved && !registered) payload.remember_permission = !!rememberInput?.checked;
-    // 契約は欄を出していて、既定以外を選んで承認したときだけ送る。欄が無い CLI や
-    // 「既定」のままなら JSON に載せず、契約を指定しない今までの起動と同じにする。
+    // 契約は欄を出しているときは見えている値を必ず送る。「既定」は空文字で、Hub は
+    // 既定のログインを選んだ決定として AI の要求を取り消す（見えない要求が残らない）。
     const subscriptionId = subscriptionDecision(!!subscriptionField && !subscriptionField.hidden, subscriptionSelect?.value || '', approved);
     if (subscriptionId !== undefined) payload.subscription_profile_id = subscriptionId;
     // 信頼の登録は、チェックボックスを出しているときに承認した場合だけ送る。

@@ -47,6 +47,10 @@ export interface SpawnConfirmationRecord {
   effort: string;
   executionMode: string;
   permissionPreset: string;
+  // 登録した AI 用に AI が要求した承認モード。ダイアログは写像があるときだけ
+  // select の初期値として見せる（見えなければ「未指定が選ばれている」誤解になる）。
+  // 欄を持たない古い Hub からは空になる（=「指定なし」）。
+  permissionMode: string;
   // 「この役割では次回もこの段を使う」チェックボックスの初期状態。Hub がその役割の
   // 段を既に覚えていれば true で開く。欄を持たない古い Hub からは false になり、
   // そのときは「覚えていない」と同じ見え方になる（承認しても記憶は増えない）。
@@ -312,6 +316,7 @@ export function recordFromMessage(m: any): SpawnConfirmationRecord {
     effort: String(m?.effort || ''),
     executionMode: String(m?.execution_mode || ''),
     permissionPreset: String(m?.permission_preset || ''),
+    permissionMode: String(m?.permission_mode || ''),
     rememberPermission: Boolean(m?.remember_permission),
     trustGrantProviders: Array.isArray(m?.trust_grant_providers)
       ? m.trust_grant_providers.map((v: any) => String(v ?? '').trim()).filter((v: string) => v)
@@ -336,13 +341,13 @@ export function folderTrustDecision(offered: boolean, checked: boolean, approved
 }
 
 // 決定の本文に載せる subscription_profile_id（issue #43）。承認し、契約の欄を
-// 出していて（有効な契約が 2 件以上の CLI）、「既定」以外を選んだときだけ値を返す。
-// それ以外は undefined で、呼び出し側は欄ごと送らない: 契約を指定しない今までの
-// 起動と同じにするため、空文字も送らない。
+// 出している（有効な契約が 2 件以上の CLI）ときは、見えている選択をそのまま返す:
+// 「既定」は空文字で、Hub は「既定のログインを選んだ」決定として AI の要求を
+// 取り消す。欄を出していない（選択肢の無い CLI）ときだけ undefined で、
+// 呼び出し側は欄ごと送らない（= 要求をそのまま通す）。
 export function subscriptionDecision(shown: boolean, selected: string, approved: boolean): string | undefined {
-  const id = String(selected || '').trim();
-  if (!approved || !shown || !id) return undefined;
-  return id;
+  if (!approved || !shown) return undefined;
+  return String(selected || '').trim();
 }
 
 // 旧 Hub から届いた（このフィールドを持たない）メッセージでも落ちないよう、

@@ -2218,9 +2218,10 @@ pub struct SpawnConfirmationResponse {
     pub remember_permission: Option<bool>,
     #[serde(rename = "grant_folder_trust")]
     pub grant_folder_trust: Option<bool>,
-    /// The subscription profile the human picked in the dialog. Absent or blank
-    /// keeps the request as it was (the unspecified launch), so the dialog only
-    /// sends it when it showed the field and a profile was chosen (issue #43).
+    /// The subscription profile the human picked in the dialog. Absent keeps
+    /// the request as it was; present is the human's decision, where blank
+    /// means the default login (it clears a profile the AI asked for). The
+    /// dialog sends the field whenever it showed the field (issue #43).
     #[serde(rename = "subscription_profile_id")]
     pub subscription_profile_id: Option<String>,
     /// The approval mode the human picked for a registered AI CLI (the modes its
@@ -2323,21 +2324,30 @@ impl ChildSpawnRequest {
             self.remember_permission = Some(value);
         }
         if let Some(value) = decision.permission_mode.as_deref().map(str::trim)
-            && ["plan", "acceptEdits", "auto", "bypassPermissions"].contains(&value)
+            && [
+                "plan",
+                "acceptEdits",
+                "auto",
+                "bypassPermissions",
+                "default",
+            ]
+            .contains(&value)
         {
+            // "default" is explicit too: it launches the registered provider
+            // without a permission flag, clearing a mode the AI asked for.
             self.permission_mode = value.to_owned();
         }
-        let chosen = decision
-            .subscription_profile_id
-            .as_deref()
-            .map(str::trim)
-            .unwrap_or("");
-        if !chosen.is_empty() {
-            self.subscription_profile_id = chosen.to_owned();
-        } else if requested_provider != self.provider {
-            // A profile the AI asked for belongs to the provider it asked for.
-            // After the human switches CLI it would name another CLI's profile.
-            self.subscription_profile_id.clear();
+        match &decision.subscription_profile_id {
+            // Present means the human decided: a value picks that profile,
+            // a blank picks the default login (clearing a profile the AI
+            // asked for). Absent keeps the request as it was.
+            Some(raw) => self.subscription_profile_id = raw.trim().to_owned(),
+            None if requested_provider != self.provider => {
+                // A profile the AI asked for belongs to the provider it asked for.
+                // After the human switches CLI it would name another CLI's profile.
+                self.subscription_profile_id.clear();
+            }
+            None => {}
         }
     }
 }
@@ -3117,7 +3127,9 @@ mod internal_contract_tests {
             },
             &proof,
         );
-        assert_eq!(body.subscription_profile_id, "asked");
+        // A present-but-blank choice is the human picking the default login:
+        // it clears the profile the AI asked for.
+        assert_eq!(body.subscription_profile_id, "");
         body.apply_human_decision(
             &SpawnConfirmationResponse {
                 subscription_profile_id: Some(" work ".into()),
