@@ -245,7 +245,21 @@ impl SessionHooks {
         Ok(path)
     }
     /// A headless session gets only the bounded settings; the status line and
-    /// cross-session messages are for an interactive one.
+    /// the cross-session refusal are for an interactive one.
+    ///
+    /// An interactive orchestration or relay child refuses Claude Code's
+    /// cross-session messages (`crossSessionInbound: "refuse"`). The child
+    /// usually bypasses permission prompts, so `accept` would let another of
+    /// the user's sessions, one that still asks before acting, hand it work it
+    /// runs without asking. Claude Code's own default would hold such a
+    /// message behind a dialog nobody watches. The conductor instructs a child
+    /// through `orchestrate send`, which the Hub records on the board, so the
+    /// child needs no other inbound path. `--settings` outranks the user's
+    /// settings, and a project or local `refuse` only agrees with this one.
+    /// Native Windows gets it too: Claude Code has the feature there since
+    /// v2.1.234, and a version that predates the key ignores it. A headless
+    /// child keeps Claude Code's default, which delivers only from a sender
+    /// that bypasses prompts as well.
     #[allow(clippy::too_many_arguments)]
     pub fn claude_settings(
         &mut self,
@@ -258,10 +272,7 @@ impl SessionHooks {
         bounded: bool,
     ) -> io::Result<ClaudeLaunch> {
         let statusbar = !headless && registered.token_statusbar;
-        let cross = !headless
-            && !native_windows
-            && registered.auto
-            && !registered.orchestration_id.is_empty();
+        let cross = !headless && registered.auto && !registered.orchestration_id.is_empty();
         if !statusbar && !cross && !bounded {
             return Ok(ClaudeLaunch::default());
         }
@@ -283,7 +294,7 @@ impl SessionHooks {
             );
         }
         if cross {
-            doc.insert("crossSessionInbound".into(), Value::String("accept".into()));
+            doc.insert("crossSessionInbound".into(), Value::String("refuse".into()));
         }
         if bounded {
             // The bounded tier allows editing and a list of commands. Claude's
@@ -580,7 +591,7 @@ mod tests {
         let file = Path::new(&args[1]);
         assert!(file.starts_with(paths.root()));
         let body: Value = serde_json::from_slice(&std::fs::read(file).unwrap()).unwrap();
-        assert_eq!(body["crossSessionInbound"], "accept");
+        assert_eq!(body["crossSessionInbound"], "refuse");
         // The token stays in the environment Claude inherits (U03).
         assert_eq!(
             body["statusLine"]["command"],
@@ -602,6 +613,55 @@ mod tests {
         hooks.finish().unwrap();
         assert!(!file.exists());
         assert!(!Path::new(&delegation[1]).exists());
+    }
+    #[test]
+    fn orchestration_children_refuse_messages_from_other_claude_sessions() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = paths(root.path());
+        let exe = Path::new("/synthetic/many-ai-cli");
+        let child = Message {
+            session_id: 7,
+            auto: true,
+            orchestration_id: "synthetic".into(),
+            ..Default::default()
+        };
+        let inbound = |reg: &Message, native_windows: bool, headless: bool| -> Option<Value> {
+            let mut hooks = SessionHooks::default();
+            let launch = hooks
+                .claude_settings(&paths, reg, exe, 49011, native_windows, headless, false)
+                .unwrap();
+            let value = launch.args.get(1).map(|file| {
+                let body: Value = serde_json::from_slice(&std::fs::read(file).unwrap()).unwrap();
+                body["crossSessionInbound"].clone()
+            });
+            hooks.finish().unwrap();
+            value.filter(|value| !value.is_null())
+        };
+        // A child, which usually bypasses permission prompts, never takes a
+        // message another session sends it: the conductor reaches it through
+        // `orchestrate send` instead. Native Windows has the feature as well.
+        for native_windows in [false, true] {
+            assert_eq!(
+                inbound(&child, native_windows, false),
+                Some(json!("refuse")),
+                "native_windows={native_windows}"
+            );
+        }
+        // The conductor and a session the user started keep Claude Code's
+        // default, since the user is watching them.
+        let conductor = Message {
+            auto: false,
+            ..child.clone()
+        };
+        assert_eq!(inbound(&conductor, false, false), None);
+        let plain = Message {
+            orchestration_id: String::new(),
+            ..child.clone()
+        };
+        assert_eq!(inbound(&plain, false, false), None);
+        // A headless child keeps the default, which delivers only from a
+        // sender that bypasses prompts too.
+        assert_eq!(inbound(&child, false, true), None);
     }
     #[test]
     fn audit_u60_production_files_stay_in_the_users_folder_under_unpredictable_names() {
