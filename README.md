@@ -103,7 +103,7 @@ The install-status list (first-run screen, and Settings → AI CLI integrations)
 - **File and image attach** — paste or drag-and-drop images and files into the terminal session
 - **Raw-log shortcuts** — from a session's raw transcript, copy its full path or open the containing folder in the system file manager
 - **Voice input** — dictate prompts through the browser's built-in speech recognition
-- **PWA + opt-in Web Push** — install the Hub as a local web app and receive approval notifications after explicitly enabling push in Settings
+- **PWA + opt-in Web Push** — on a phone or tablet, add the Hub to the home screen (see *Using from a smartphone* below) and receive approval notifications after explicitly enabling push in Settings. On the PC that runs the Hub, open the dashboard from many-ai-cli each time: there, a bookmark or an app installed from `127.0.0.1` shows "not signed in" (see *Security / Privacy*)
 - **Finished-run notifications** — desktop notification and sound also fire when a session finishes a run and goes back to idle, not only for approvals; mute it per session with the bell on its card, or turn it off entirely in Settings
 - **Approval pattern profiles** — keep official remote-synced trigger phrases separate from local custom edits
 - **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
