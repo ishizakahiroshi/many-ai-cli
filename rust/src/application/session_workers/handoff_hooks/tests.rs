@@ -568,3 +568,39 @@ async fn audit_n05_a_note_or_summary_request_is_typed_only_once_the_approval_pro
     }
     fixture.stop().await;
 }
+
+#[test]
+fn transcript_recorded_by_an_earlier_launch_under_the_same_number_is_recorded_again() {
+    use crate::orchestration::handoff::{KIND_SESSION_START, KIND_TRANSCRIPT};
+    let start = |cwd: &str| Record {
+        kind: KIND_SESSION_START.into(),
+        cwd: cwd.into(),
+        ..Default::default()
+    };
+    let transcript = |path: &str| Record {
+        kind: KIND_TRANSCRIPT.into(),
+        transcript: path.into(),
+        ..Default::default()
+    };
+    // Same order as the record file: an older launch, then the current one.
+    let reused = [start("/old"), transcript("/resumed.jsonl"), start("/new")];
+    assert!(needs_transcript_record(&reused, "/resumed.jsonl"));
+    let recorded = [
+        start("/old"),
+        transcript("/resumed.jsonl"),
+        start("/new"),
+        transcript("/resumed.jsonl"),
+    ];
+    assert!(!needs_transcript_record(&recorded, "/resumed.jsonl"));
+    // No record file yet: nothing is appended (unchanged).
+    assert!(!needs_transcript_record(&[], "/resumed.jsonl"));
+    // No session_start at all: the whole file is one launch (unchanged).
+    assert!(!needs_transcript_record(
+        &[transcript("/resumed.jsonl")],
+        "/resumed.jsonl"
+    ));
+    assert!(needs_transcript_record(
+        &[transcript("/other.jsonl")],
+        "/resumed.jsonl"
+    ));
+}

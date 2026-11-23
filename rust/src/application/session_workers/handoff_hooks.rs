@@ -2,6 +2,14 @@ use super::*;
 use crate::hub::handoff_routes::HandoffHttpHooks;
 #[cfg(test)]
 mod tests;
+/// Whether the latest launch in `records` still lacks a transcript record for
+/// `text`. A reused session number can leave an earlier launch with the same
+/// transcript path in the file; that record is outside what the handoff shows,
+/// so it must not stop this launch from recording its own (#46).
+fn needs_transcript_record(records: &[Record], text: &str) -> bool {
+    let current = crate::orchestration::handoff::records_from_last_session_start(records);
+    !current.is_empty() && !current.iter().any(|record| record.transcript == text)
+}
 impl SessionWorkers {
     pub(super) async fn finish_handoff_note(
         &self,
@@ -57,7 +65,7 @@ impl HandoffHttpHooks for SessionWorkers {
             Err(_) => return Ok(()),
         };
         let text = path.to_string_lossy().into_owned();
-        if records.is_empty() || records.iter().any(|record| record.transcript == text) {
+        if !needs_transcript_record(&records, &text) {
             return Ok(());
         }
         let snapshot = details.snapshot;

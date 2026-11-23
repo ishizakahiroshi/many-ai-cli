@@ -4,7 +4,8 @@ use crate::{
     config::{ConfigStore, RuntimePaths},
     files::safe_fs::Dir,
     orchestration::handoff::{
-        HandoffStore, KIND_NOTE, KIND_SESSION_END, KIND_SESSION_START, Record,
+        HandoffStore, KIND_NOTE, KIND_SESSION_END, KIND_SESSION_START, Record, end_follows_start,
+        model_from_segment,
     },
     proto::{core::*, time::Timestamp},
     storage::mask_secrets,
@@ -196,11 +197,19 @@ impl HandoffHttp {
         })
     }
     fn identity(&self, id: i64) -> io::Result<Preview> {
-        let records = self.store.read_session(id)?;
+        // Same launch as the rendered handoff: a reused session number can
+        // leave earlier launches in the same file (#46). They stay on disk.
+        let records = self.store.read_current_session(id)?;
         let mut preview = Preview {
             ok: true,
             session_id: id,
             exists: !records.is_empty(),
+            // Like the rendered handoff, the model is shown only with a start.
+            model: if records.iter().any(|r| r.kind == KIND_SESSION_START) {
+                model_from_segment(&records).to_owned()
+            } else {
+                String::new()
+            },
             ..Default::default()
         };
         let mut seen = BTreeSet::new();
@@ -210,11 +219,12 @@ impl HandoffHttp {
                     preview.provider = record.provider;
                     preview.cwd = record.cwd;
                     preview.branch = record.branch;
-                    preview.model = record.model;
                     preview.started_at = record.ts;
                     preview.handoff_from = record.handoff_from;
                 }
-                KIND_SESSION_END => preview.ended_at = record.ts,
+                KIND_SESSION_END if end_follows_start(&preview.started_at, &record.ts) => {
+                    preview.ended_at = record.ts
+                }
                 _ => {}
             }
             let transcript = record.transcript.trim();

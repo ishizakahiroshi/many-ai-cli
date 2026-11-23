@@ -292,6 +292,14 @@ impl HandoffStore {
             other => other,
         }
     }
+    /// Records of the latest launch only (see `records_from_last_session_start`).
+    /// The file itself is left untouched.
+    pub fn read_current_session(&self, id: i64) -> io::Result<Vec<Record>> {
+        let mut records = self.read_session(id)?;
+        let start = records.len() - records_from_last_session_start(&records).len();
+        records.drain(..start);
+        Ok(records)
+    }
     pub fn write_rendered(&self, id: i64) -> io::Result<(PathBuf, String)> {
         let path = self.rendered_path_for(id)?;
         // Hold the same directory for both the source and the replacement. A
@@ -424,9 +432,49 @@ fn read_records(file: fs::File) -> io::Result<Vec<Record>> {
     Ok(records)
 }
 
+/// Records from the latest `session_start` onward. When a session number was
+/// reused, one file can hold several launches; earlier records stay on disk
+/// but must not appear in this session's handoff (issue #46). Every reader that
+/// shows one session (the rendered handoff, the preview and list identity, the
+/// transcript dedup) goes through this so they agree on the same launch.
+/// Without any `session_start` the whole file is returned unchanged.
+pub fn records_from_last_session_start(records: &[Record]) -> &[Record] {
+    let start = records
+        .iter()
+        .rposition(|record| record.kind == KIND_SESSION_START)
+        .unwrap_or(0);
+    &records[start..]
+}
+
+/// The latest non-empty model on a `session_start` or `session_end` in the
+/// segment. The start is often recorded before the model is known.
+pub fn model_from_segment(records: &[Record]) -> &str {
+    records
+        .iter()
+        .filter(|record| record.kind == KIND_SESSION_START || record.kind == KIND_SESSION_END)
+        .map(|record| record.model.trim())
+        .filter(|model| !model.is_empty())
+        .next_back()
+        .unwrap_or("")
+}
+
+/// An end recorded earlier than the start belongs to another launch or to a
+/// broken clock; it is not shown as this session's end.
+pub fn end_follows_start(start: &str, end: &str) -> bool {
+    match (
+        crate::proto::time::parse_rfc3339(start),
+        crate::proto::time::parse_rfc3339(end),
+    ) {
+        (Ok(start), Ok(end)) => end >= start,
+        _ => true,
+    }
+}
+
 /// Pure rendering; only recorded path strings are displayed, never opened.
 pub fn render_markdown(mut session_id: i64, records: &[Record]) -> String {
     use std::fmt::Write;
+    let records = records_from_last_session_start(records);
+    let model = model_from_segment(records);
     let mut start = None;
     let mut end = None;
     let (mut dones, mut git_turns, mut intents) = (vec![], vec![], vec![]);
@@ -434,7 +482,11 @@ pub fn render_markdown(mut session_id: i64, records: &[Record]) -> String {
     for record in records {
         match record.kind.as_str() {
             "session_start" => start = Some(record),
-            "session_end" => end = Some(record),
+            "session_end"
+                if start.is_none_or(|start: &Record| end_follows_start(&start.ts, &record.ts)) =>
+            {
+                end = Some(record)
+            }
             "done" => dones.push(record),
             "git_turn" => git_turns.push(record),
             "intent" => intents.push(record),
@@ -458,12 +510,12 @@ pub fn render_markdown(mut session_id: i64, records: &[Record]) -> String {
     let mut out = format!("# 引き継ぎ: セッション #{session_id}\n\n## セッションの素性\n");
     if let Some(start) = start {
         for (label, value) in [
-            ("provider", &start.provider),
-            ("cwd", &start.cwd),
-            ("branch", &start.branch),
-            ("model", &start.model),
-            ("subscription", &start.subscription_id),
-            ("開始", &start.ts),
+            ("provider", start.provider.as_str()),
+            ("cwd", start.cwd.as_str()),
+            ("branch", start.branch.as_str()),
+            ("model", model),
+            ("subscription", start.subscription_id.as_str()),
+            ("開始", start.ts.as_str()),
         ] {
             writeln!(out, "- {label}: {}", or_no_record(value)).unwrap();
         }
@@ -658,5 +710,223 @@ mod quote_consumer_tests {
             git_turn_line(&record),
             "commit 0123456789ab \"\\U0002ebf0\""
         );
+    }
+}
+
+#[cfg(test)]
+mod last_session_render_tests {
+    //! Issue #46: render only the records after the last `session_start` so a
+    //! reused session number does not mix an earlier launch into the handoff.
+    use super::*;
+
+    fn store() -> (tempfile::TempDir, tempfile::TempDir, HandoffStore) {
+        let root = tempfile::tempdir().unwrap();
+        let installed = tempfile::tempdir().unwrap();
+        let paths = RuntimePaths::trial(root.path(), 49121, installed.path()).unwrap();
+        (root, installed, HandoffStore::new(paths))
+    }
+
+    /// Two launches under number 6, as older versions left them: the first
+    /// launch has its own end and every other kind of record, and the second
+    /// is still running, so a whole-file reader would show the old end.
+    const MIXED: &[&str] = &[
+        r#"{"version":1,"ts":"2026-10-01T09:00:00Z","session_id":6,"kind":"session_start","provider":"codex","cwd":"/old/project","model":"old-start-model"}"#,
+        r#"{"version":1,"ts":"2026-10-01T10:00:00Z","session_id":6,"kind":"done","text":"OLD-DONE-SENTINEL"}"#,
+        r#"{"version":1,"ts":"2026-10-01T10:05:00Z","session_id":6,"kind":"git_turn","commit":"aaaaaaaaaaaa","commit_subject":"OLD-COMMIT-SENTINEL"}"#,
+        r#"{"version":1,"ts":"2026-10-01T10:06:00Z","session_id":6,"kind":"intent","text":"OLD-INTENT-SENTINEL"}"#,
+        r#"{"version":1,"ts":"2026-10-01T10:07:00Z","session_id":6,"kind":"transcript","transcript":"/old/transcript.jsonl"}"#,
+        r#"{"version":1,"ts":"2026-10-01T10:08:00Z","session_id":6,"kind":"note","note":"OLD-NOTE-SENTINEL"}"#,
+        r#"{"version":1,"ts":"2026-10-01T10:09:00Z","session_id":6,"kind":"done","work_doc":"/old/work.md"}"#,
+        r#"{"version":1,"ts":"2026-10-30T12:00:00Z","session_id":6,"kind":"session_end","model":"old-model","text":"exit"}"#,
+        "not json at all",
+        r#"{"version":1,"ts":"2026-11-02T08:00:00Z","session_id":6,"kind":"session_start","provider":"claude","cwd":"/new/project","model":"new-start-model"}"#,
+        r#"{"version":1,"ts":"2026-11-02T08:30:00Z","session_id":6,"kind":"done","text":"NEW-DONE"}"#,
+        r#"{"version":1,"ts":"2026-11-02T08:31:00Z","session_id":6,"kind":"git_turn","commit":"bbbbbbbbbbbb","commit_subject":"NEW-COMMIT"}"#,
+        r#"{"version":1,"ts":"2026-11-02T08:32:00Z","session_id":6,"kind":"intent","text":"NEW-INTENT"}"#,
+        r#"{"version":1,"ts":"2026-11-02T08:33:00Z","session_id":6,"kind":"transcript","transcript":"/new/transcript.jsonl"}"#,
+        r#"{"version":1,"ts":"2026-11-02T08:34:00Z","session_id":6,"kind":"note","note":"NEW-NOTE"}"#,
+        r#"{"version":1,"ts":"2026-11-02T08:35:00Z","session_id":6,"kind":"done","work_doc":"/new/work.md"}"#,
+    ];
+
+    fn write_mixed(store: &HandoffStore) {
+        let path = store.path_for(6).unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, MIXED.join("\n") + "\n").unwrap();
+    }
+
+    #[test]
+    fn a_mixed_record_file_renders_only_the_latest_session() {
+        let (_root, _installed, store) = store();
+        write_mixed(&store);
+        let before = std::fs::read(store.path_for(6).unwrap()).unwrap();
+        let records = store.read_session(6).unwrap();
+        let markdown = render_markdown(6, &records);
+        for old in [
+            "OLD-DONE-SENTINEL",
+            "OLD-COMMIT-SENTINEL",
+            "OLD-INTENT-SENTINEL",
+            "/old/transcript.jsonl",
+            "OLD-NOTE-SENTINEL",
+            "/old/work.md",
+            "/old/project",
+            "old-start-model",
+            "old-model",
+            "2026-10-30T12:00:00Z",
+        ] {
+            assert!(!markdown.contains(old), "{old} leaked into:\n{markdown}");
+        }
+        assert!(markdown.contains("- provider: claude"), "{markdown}");
+        assert!(markdown.contains("- cwd: /new/project"), "{markdown}");
+        assert!(markdown.contains("- model: new-start-model"), "{markdown}");
+        assert!(markdown.contains("NEW-DONE"), "{markdown}");
+        assert!(markdown.contains("NEW-COMMIT"), "{markdown}");
+        assert!(markdown.contains("NEW-INTENT"), "{markdown}");
+        assert!(markdown.contains("/new/transcript.jsonl"), "{markdown}");
+        assert!(markdown.contains("NEW-NOTE"), "{markdown}");
+        assert!(markdown.contains("/new/work.md"), "{markdown}");
+        assert!(markdown.contains("- 終了: (未終了"), "{markdown}");
+        // Rendering never rewrites or drops the older launches.
+        let (_, written) = store.write_rendered(6).unwrap();
+        assert_eq!(written, markdown);
+        assert_eq!(std::fs::read(store.path_for(6).unwrap()).unwrap(), before);
+        assert_eq!(store.read_session(6).unwrap().len(), MIXED.len() - 1);
+    }
+
+    #[test]
+    fn an_end_recorded_before_the_start_is_not_shown() {
+        let records = [
+            Record {
+                kind: KIND_SESSION_START.into(),
+                ts: "2026-11-02T08:00:00Z".into(),
+                ..Record::default()
+            },
+            Record {
+                kind: KIND_SESSION_END.into(),
+                ts: "2026-11-01T08:00:00Z".into(),
+                text: "stale-end".into(),
+                ..Record::default()
+            },
+        ];
+        let markdown = render_markdown(3, &records);
+        assert!(!markdown.contains("2026-11-01T08:00:00Z"), "{markdown}");
+        assert!(!markdown.contains("stale-end"), "{markdown}");
+        assert!(markdown.contains("- 終了: (未終了"), "{markdown}");
+        let ended = [
+            records[0].clone(),
+            Record {
+                ts: "2026-11-02T09:00:00Z".into(),
+                ..records[1].clone()
+            },
+        ];
+        let ended = render_markdown(3, &ended);
+        assert!(
+            ended.contains("- 終了: 2026-11-02T09:00:00Z (stale-end)"),
+            "{ended}"
+        );
+        // A backwards end that follows a valid one does not erase the valid end.
+        let valid_then_backwards = [
+            records[0].clone(),
+            Record {
+                ts: "2026-11-02T09:00:00Z".into(),
+                text: "valid-end".into(),
+                ..records[1].clone()
+            },
+            records[1].clone(),
+        ];
+        let markdown = render_markdown(3, &valid_then_backwards);
+        assert!(
+            markdown.contains("- 終了: 2026-11-02T09:00:00Z (valid-end)"),
+            "{markdown}"
+        );
+        assert!(!markdown.contains("stale-end"), "{markdown}");
+    }
+
+    #[test]
+    fn read_current_session_returns_only_the_latest_launch_and_keeps_the_file() {
+        let (_root, _installed, store) = store();
+        write_mixed(&store);
+        let before = std::fs::read(store.path_for(6).unwrap()).unwrap();
+        let current = store.read_current_session(6).unwrap();
+        assert_eq!(current.first().unwrap().kind, KIND_SESSION_START);
+        assert_eq!(current.first().unwrap().cwd, "/new/project");
+        assert_eq!(current.len(), 7);
+        assert_eq!(std::fs::read(store.path_for(6).unwrap()).unwrap(), before);
+        assert!(store.read_current_session(404).unwrap().is_empty());
+    }
+
+    #[test]
+    fn model_is_taken_from_session_start_or_session_end_in_the_segment() {
+        let start_only = [
+            Record {
+                kind: KIND_SESSION_START.into(),
+                ts: "2026-11-02T08:00:00Z".into(),
+                model: "from-start".into(),
+                ..Record::default()
+            },
+            Record {
+                kind: KIND_DONE.into(),
+                text: "work".into(),
+                model: "from-done-ignored".into(),
+                ..Record::default()
+            },
+        ];
+        let markdown = render_markdown(5, &start_only);
+        assert!(markdown.contains("- model: from-start"), "{markdown}");
+        assert!(!markdown.contains("from-done-ignored"), "{markdown}");
+
+        let end_only = [
+            Record {
+                kind: KIND_SESSION_START.into(),
+                ts: "2026-11-01T08:00:00Z".into(),
+                model: "old-model".into(),
+                ..Record::default()
+            },
+            Record {
+                kind: KIND_SESSION_END.into(),
+                ts: "2026-11-01T09:00:00Z".into(),
+                model: "old-end-model".into(),
+                ..Record::default()
+            },
+            Record {
+                kind: KIND_SESSION_START.into(),
+                ts: "2026-11-02T08:00:00Z".into(),
+                ..Record::default()
+            },
+            Record {
+                kind: KIND_SESSION_END.into(),
+                ts: "2026-11-02T09:00:00Z".into(),
+                model: "from-end".into(),
+                text: "exit".into(),
+                ..Record::default()
+            },
+        ];
+        let markdown = render_markdown(5, &end_only);
+        assert!(markdown.contains("- model: from-end"), "{markdown}");
+        assert!(!markdown.contains("old-model"), "{markdown}");
+        assert!(!markdown.contains("old-end-model"), "{markdown}");
+        assert!(
+            markdown.contains("- 終了: 2026-11-02T09:00:00Z (exit)"),
+            "{markdown}"
+        );
+    }
+
+    #[test]
+    fn records_without_a_session_start_render_as_before() {
+        let records = [Record {
+            kind: KIND_DONE.into(),
+            text: "only-done".into(),
+            model: "m1".into(),
+            note: "keep-note".into(),
+            ..Record::default()
+        }];
+        let markdown = render_markdown(4, &records);
+        assert!(markdown.contains("only-done"), "{markdown}");
+        assert!(markdown.contains("keep-note"), "{markdown}");
+        assert!(
+            markdown.contains("記録なし（session_start が看板に無い）"),
+            "{markdown}"
+        );
+        assert!(!markdown.contains("- model:"), "{markdown}");
+        assert!(!markdown.contains("- 終了:"), "{markdown}");
     }
 }

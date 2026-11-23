@@ -337,3 +337,92 @@ async fn handoff_get_dispatches_a_recorded_transcript_effect_and_replaces_render
         }
     }
 }
+
+#[tokio::test]
+async fn preview_and_list_show_only_the_latest_launch_of_a_reused_number() {
+    // Issue #46: the preview and list read the same launch as the rendered
+    // handoff. The older launch stays in the file but must not leak its end,
+    // transcript, note or successor link.
+    let f = fixture();
+    let old_transcript = f._root.path().join("old-transcript.jsonl");
+    let old_note = f._root.path().join("old.note.md");
+    std::fs::write(&old_transcript, b"synthetic\n").unwrap();
+    std::fs::write(&old_note, b"synthetic\n").unwrap();
+    let old_transcript = old_transcript.to_string_lossy().into_owned();
+    let old_note = old_note.to_string_lossy().into_owned();
+    f.http
+        .store
+        .append(
+            2,
+            Record {
+                kind: KIND_SESSION_START.into(),
+                provider: "codex".into(),
+                ..Default::default()
+            },
+            now(),
+        )
+        .unwrap();
+    let lines = [
+        serde_json::json!({"version":1,"ts":"2026-10-01T09:00:00Z","session_id":6,"kind":"session_start","provider":"codex","cwd":"/old/project","model":"old-model","handoff_from":2}),
+        serde_json::json!({"version":1,"ts":"2026-10-01T10:00:00Z","session_id":6,"kind":"transcript","transcript":old_transcript}),
+        serde_json::json!({"version":1,"ts":"2026-10-01T10:01:00Z","session_id":6,"kind":"note","note":old_note}),
+        serde_json::json!({"version":1,"ts":"2026-10-30T12:00:00Z","session_id":6,"kind":"session_end","model":"old-end-model","text":"exit"}),
+        serde_json::json!({"version":1,"ts":"2026-11-02T08:00:00Z","session_id":6,"kind":"session_start","provider":"claude","cwd":"/new/project","model":"new-model"}),
+        serde_json::json!({"version":1,"ts":"2026-11-01T08:00:00Z","session_id":6,"kind":"session_end","text":"backwards"}),
+    ];
+    let path = f.http.store.path_for(6).unwrap();
+    let body: String = lines.iter().map(|line| format!("{line}\n")).collect();
+    std::fs::write(&path, &body).unwrap();
+
+    let preview = value(
+        f.http
+            .handle_authenticated(&request("GET", "/api/handoff/6", ""), now())
+            .await
+            .unwrap(),
+    );
+    assert_eq!(preview["exists"], true);
+    assert_eq!(preview["provider"], "claude");
+    assert_eq!(preview["cwd"], "/new/project");
+    assert_eq!(preview["model"], "new-model");
+    assert_eq!(preview["started_at"], "2026-11-02T08:00:00Z");
+    for absent in [
+        "ended_at",
+        "transcript_path",
+        "note_path",
+        "note_paths",
+        "handoff_from",
+    ] {
+        assert!(preview.get(absent).is_none(), "{absent}: {preview}");
+    }
+    let markdown = preview["markdown"].as_str().unwrap();
+    for old in [
+        old_transcript.as_str(),
+        old_note.as_str(),
+        "/old/project",
+        "old-model",
+        "2026-10-30T12:00:00Z",
+        "backwards",
+    ] {
+        assert!(!markdown.contains(old), "{old} leaked into:\n{markdown}");
+    }
+
+    let list = value(
+        f.http
+            .handle_authenticated(&request("GET", PATH, ""), now())
+            .await
+            .unwrap(),
+    );
+    let entries = list["entries"].as_array().unwrap();
+    let entry = |id: i64| {
+        entries
+            .iter()
+            .find(|e| e["session_id"] == id)
+            .unwrap_or_else(|| panic!("#{id} missing: {list}"))
+    };
+    assert_eq!(entry(6)["provider"], "claude");
+    assert!(entry(6).get("ended_at").is_none(), "{list}");
+    assert!(entry(6).get("transcript_path").is_none(), "{list}");
+    assert!(entry(2).get("handoff_to").is_none(), "{list}");
+    // Reading never rewrites the record file.
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), body);
+}
