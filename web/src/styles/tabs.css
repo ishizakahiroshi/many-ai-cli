@@ -320,7 +320,9 @@ body.pane-resizing .xterm { pointer-events: none; }
   background: color-mix(in srgb, var(--warn) 14%, transparent);
 }
 /* 選択中セッションのブランチ（コンパクト表示のカードから外した分をここで読む）。押すとカードの
-   ブランチ表示と同じ経路で Git タブを開く。長い名前は 18 文字で切る（PR #32 と同じ）。 */
+   ブランチ表示と同じ経路で Git タブを開く。長い名前は max-width: 18ch で切る（PR #32 と同じ）。
+   .ui-button は border-box なので 18ch に左右の余白（12px×2）と枠（1px×2）が含まれ、文字は約 14 字ぶん。
+   PC 幅（721px 以上）では下の @media の規則で、契約名と同じく 4 文字ぶんまで縮む。 */
 .session-info-chip .session-info-branch {
   font-size: var(--header-font-size);
   display: block;
@@ -336,10 +338,10 @@ body.pane-resizing .xterm { pointer-events: none; }
    なっていた（bugfix_pending-batch-small-fixes_2026-11-21 の C3）。
    判定は #unified-tab-bar 自身の幅（@container）。サイドバーの幅や左右の配置で段の幅は変わるので、
    窓の幅では判定しない（token-statusbar.css の段階的省略と同じ作り）。
-   0 段目（PC 幅ならいつも）: タブは縮めず、チップの中の長い文字（AI 名・モデル・エージェント名・契約）を
+   0 段目（PC 幅ならいつも）: タブは縮めず、チップの中の長い文字（AI 名・モデル・エージェント名・契約・ブランチ）を
            … で縮める。それぞれ半角 4 文字ぶんは残す（空の枠だけにしない）。全文はそれぞれのツールチップで読める。
            番号・状態・対話/ヘッドレス・effort・🧠・起動時の権限は縮めない。チップの並びは
-           「… → エージェント名 → 起動時の権限 → 契約」で、末尾は契約。
+           「… → エージェント名 → 起動時の権限 → 契約 → ブランチ」で、末尾はブランチ（git 外のセッションでは契約）。
            チップは切り取らない（overflow も min-width も既定のまま）。チップの最小幅は、縮めない項目と
            縮める項目の 4 文字ぶんの合計で、それより狭い段では段の中の横スクロールになり、全部の項目へ届く。
            こうするため、縮める項目は 1 行に折り返させて 2 行目以降を -webkit-line-clamp で隠す（… も付く）。
@@ -357,6 +359,7 @@ body.pane-resizing .xterm { pointer-events: none; }
    測った中身は全項目入り（モデル claude-opus-4-5-20251101・effort・🧠・エージェント名・起動時の権限・契約）で、
    日本語・英語・ベトナム語。対話のセッションは 3 言語とも段の幅 960px 以上で横スクロールが出ない。
    ヘッドレスは項目が 1 つ多いので、言語によって段の幅 1060〜1105px の間に横スクロールが残る（切り取りではない）。
+   この測定にブランチは入っていない（ブランチは後から足した。4 文字ぶん＋ボタンの余白と枠だけ最小幅が増える）。
    モデル名・契約名・言語で項目の幅は変わる（CSS だけで直す方式の既知の弱点）。
    スマホ幅（720px 以下）は styles.css の別の並びで、container を持たないので下の規則は効かない。 */
 @media (min-width: 721px) {
@@ -385,8 +388,14 @@ body.pane-resizing .xterm { pointer-events: none; }
   /* モデルは箱（styles.css で overflow: hidden・min-width: 0）にもアイコン（10px）と間（3px）の後ろの 4 文字ぶんを持たせる。
      styles.css の本体の規則は @import した tabs.css より後に来るので、同じ強さでは負ける。クラスを 1 つ多く書いて勝たせる。 */
   .session-info-chip .card-model.card-model--with-icon { min-width: calc(13px + 4ch); }
-  /* 縮める順: 契約 → エージェント名 → AI 名 → モデル（モデル名はほかの場所に出ないので最後まで残す）。 */
+  /* ブランチは Git ボタン（.ui-button・border-box）。本体の規則で display: block・overflow: hidden・
+     nowrap・text-overflow: ellipsis なので、line-clamp を使わなくても自動の最小幅は 0 になり … で縮む。
+     本体の flex-shrink: 0 を後ろの同じ強さの規則で上書きし、4 文字ぶん＋余白 12px×2＋枠 1px×2 を残す。
+     コンパクト表示ではブランチをここで読むので、2 段目（1180px 以下）でも外さない。 */
+  .session-info-chip .session-info-branch { min-width: calc(4ch + 26px); }
+  /* 縮める順: 契約 → ブランチ・エージェント名 → AI 名 → モデル（モデル名はほかの場所に出ないので最後まで残す）。 */
   .session-info-chip .card-subscription { flex-shrink: 8; }
+  .session-info-chip .session-info-branch,
   .session-info-chip .tsb-agent-name { flex-shrink: 4; }
   .session-info-chip .card-provider-chip { flex-shrink: 2; }
   .session-info-chip .card-model { flex-shrink: 1; }

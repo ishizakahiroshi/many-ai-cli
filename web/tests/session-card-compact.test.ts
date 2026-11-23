@@ -183,8 +183,18 @@ test('the header chip never clips the permission warning; only variable-length n
   const chip = rule('.session-info-chip');
   assert.doesNotMatch(chip, /max-width/);
   assert.doesNotMatch(chip, /overflow\s*:\s*hidden/);
+  // Base rule only (used at phone widths). At PC widths the @media block below lets the chip shrink.
   assert.match(chip, /flex-shrink: 0;/);
   assert.match(css.slice(css.indexOf('\n#unified-tab-bar {\n')).split('}')[0], /overflow-x: auto;/);
+  // At PC widths (the rules that actually apply there sit indented inside @media, which rule() skips),
+  // the branch shrinks like the other names down to 4 characters plus the button's padding and border,
+  // instead of keeping its full width and bringing back the tab bar's horizontal scroll.
+  const pcStart = css.indexOf('\n@media (min-width: 721px) {\n  #unified-tab-bar { container:');
+  assert.ok(pcStart >= 0, 'the PC-width tab bar block exists');
+  const pc = css.slice(pcStart, css.indexOf('\n}\n', pcStart)).replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(pc, /\.session-info-chip \{ flex: 0 1 auto; \}/);
+  assert.match(pc, /\.session-info-chip \.session-info-branch \{ min-width: calc\(4ch \+ 26px\); \}/);
+  assert.match(pc, /\.session-info-chip \.session-info-branch,\s*\.session-info-chip \.tsb-agent-name \{ flex-shrink: 4; \}/);
   // The launch permission chip keeps its full width and is never in a shrinking/ellipsis rule.
   assert.match(rule('.session-info-chip .session-permission-chip'), /flex-shrink: 0;/);
   for (const selector of ['.session-permission-chip', '.session-mode-chip', '.tsb-pill', '.sid'].map(name => `.session-info-chip ${name}`)) {
