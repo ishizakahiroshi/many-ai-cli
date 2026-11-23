@@ -4,9 +4,14 @@
     "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
     "authority": "Authoritative current source-binding view; top-level routes/dynamic_operations and earlier receipt fields are historical compatibility data.",
     "source_index": "rust/inventory/recovery-current-20261005.json",
+    "route_list_maintenance": {
+      "rows": "Rows with a source_index_json_pointer were derived from the source_sha snapshot (Go registrations mapped to Rust owners). Rows with origin rust_only are routes the Rust router added after that snapshot and have no Go registration or snapshot pointer. Routes removed from Rust (jev, nvidia-nim, whisper, voice) were deleted from this list.",
+      "regeneration": "rust/scripts/audit-recovery-current.py rebuilds only the dated Go-derived snapshot (rust/inventory/recovery-current-20261005.json); it enumerates Go registrations, so it can never list a rust_only route, and it no longer runs as-is because it reads internal/hub/server.go, which moved under go/ when the Go version was frozen. This list is therefore maintained by hand.",
+      "check": "rust/src/hub/tests.rs::current_route_ledger_matches_router probes every route-shaped string literal in rust/src against the router: a path the router answers must be listed here, and every row must still be answered, keep its owner file and keep its main binding in serve.rs."
+    },
     "counts": {
-      "http_registrations": 147,
-      "http_source_bound": 147,
+      "http_registrations": 158,
+      "http_source_bound": 158,
       "http_source_binding_missing": 0,
       "dynamic_operation_rows": 44,
       "dynamic_source_bound": 44,
@@ -138,13 +143,6 @@
         "main_binding": "with_session_routes",
         "state": "source_implemented_bound_unaccepted",
         "source_index_json_pointer": "/http/17"
-      },
-      {
-        "path": "/api/jev/evaluate",
-        "rust_owner": "rust/src/hub/jev_routes.rs",
-        "main_binding": "with_jev",
-        "state": "source_implemented_bound_unaccepted",
-        "source_index_json_pointer": "/http/18"
       },
       {
         "path": "/api/providers",
@@ -579,27 +577,6 @@
         "main_binding": "with_notifications",
         "state": "source_implemented_bound_unaccepted",
         "source_index_json_pointer": "/http/81"
-      },
-      {
-        "path": "/api/nvidia-nim",
-        "rust_owner": "rust/src/hub/nvidia_routes.rs",
-        "main_binding": "with_nvidia",
-        "state": "source_implemented_bound_unaccepted",
-        "source_index_json_pointer": "/http/82"
-      },
-      {
-        "path": "/api/nvidia-nim/key",
-        "rust_owner": "rust/src/hub/nvidia_routes.rs",
-        "main_binding": "with_nvidia",
-        "state": "source_implemented_bound_unaccepted",
-        "source_index_json_pointer": "/http/83"
-      },
-      {
-        "path": "/api/nvidia-nim/test",
-        "rust_owner": "rust/src/hub/nvidia_routes.rs",
-        "main_binding": "with_nvidia",
-        "state": "source_implemented_bound_unaccepted",
-        "source_index_json_pointer": "/http/84"
       },
       {
         "path": "/api/encoding-check",
@@ -1048,6 +1025,126 @@
         "main_binding": "with_servers",
         "state": "source_implemented_bound_unaccepted",
         "source_index_json_pointer": "/http/154"
+      },
+      {
+        "path": "/api/ai-launch-shell",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/asset-ticket",
+        "rust_owner": "rust/src/hub/auth.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/auth/launch",
+        "rust_owner": "rust/src/hub/pin.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/auth/launch-code",
+        "rust_owner": "rust/src/hub/pin.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/board-handoffs",
+        "rust_owner": "rust/src/hub/board_handoff_routes.rs",
+        "main_binding": "with_board_handoffs",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/files-save-leftover-discard",
+        "rust_owner": "rust/src/files/save_backup.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/files-save-leftover-restore",
+        "rust_owner": "rust/src/files/save_backup.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/files-save-leftovers",
+        "rust_owner": "rust/src/files/save_backup.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/git-lock-leftovers",
+        "rust_owner": "rust/src/files/git.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/git-lock-remove",
+        "rust_owner": "rust/src/files/git.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/hub/launch-state",
+        "rust_owner": "rust/src/application/hub_launch.rs",
+        "main_binding": "with_hub_launch",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/iris-execution/mcp",
+        "rust_owner": "rust/src/hub/iris_execution.rs",
+        "main_binding": "with_iris_execution",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/local-taker",
+        "rust_owner": "rust/src/hub/board_handoff_routes.rs",
+        "main_binding": "with_board_handoffs",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/local-taker/stream",
+        "rust_owner": "rust/src/hub/board_handoff_routes.rs",
+        "main_binding": "with_board_handoffs",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
+      },
+      {
+        "path": "/api/tray-migrate",
+        "rust_owner": "rust/src/application/hub_launch.rs",
+        "main_binding": "with_tray_migrate",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": null,
+        "origin": "rust_only"
       }
     ],
     "dynamic_operations": [

@@ -281,6 +281,176 @@ fn service_route_coverage_does_not_hide_unresolved_entries() {
     }
 }
 
+/// Collects every whole string literal that looks like a Hub HTTP path from
+/// the Rust sources (production and tests alike). Literals assembled with
+/// `format!`/`concat!` are invisible here; route owners keep whole literals.
+fn route_path_literals(
+    root: &std::path::Path,
+    dir: &std::path::Path,
+    out: &mut std::collections::BTreeMap<String, String>,
+) {
+    let mut entries: Vec<_> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    entries.sort();
+    for path in entries {
+        if path.is_dir() {
+            route_path_literals(root, &path, out);
+            continue;
+        }
+        if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
+            continue;
+        }
+        let source = std::fs::read_to_string(&path).unwrap();
+        for opening in ["\"/api/", "\"/approval-patterns/"] {
+            let mut rest = source.as_str();
+            while let Some(index) = rest.find(opening) {
+                let tail = &rest[index + 1..];
+                let Some(end) = tail.find('"') else { break };
+                let literal = &tail[..end];
+                if literal
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_' | '.'))
+                {
+                    out.entry(literal.to_string())
+                        .or_insert_with(|| path.strip_prefix(root).unwrap().display().to_string());
+                }
+                rest = &tail[end..];
+            }
+        }
+    }
+}
+
+/// `current_source_coverage` is the ledger of what the Rust router answers
+/// today (the top-level `routes` stay the frozen Go-baseline inventory). A
+/// path the router answers but the ledger omits, or a ledger row the router no
+/// longer answers or whose owner/main binding is gone, fails here.
+#[test]
+fn current_route_ledger_matches_router() {
+    let rust_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = rust_root.parent().unwrap();
+    let coverage: serde_json::Value =
+        serde_json::from_str(include_str!("route_coverage.json")).unwrap();
+    let current = &coverage["current_source_coverage"];
+    let rows = current["routes"].as_array().unwrap();
+    let ledger: Vec<&str> = rows.iter().map(|r| r["path"].as_str().unwrap()).collect();
+    let dynamic: Vec<&str> = current["dynamic_operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["pattern"].as_str().unwrap())
+        .collect();
+    assert_eq!(current["counts"]["http_registrations"], rows.len());
+    assert_eq!(current["counts"]["http_source_bound"], rows.len());
+    assert_eq!(current["counts"]["dynamic_operation_rows"], dynamic.len());
+    let unique: std::collections::BTreeSet<_> = ledger.iter().collect();
+    assert_eq!(unique.len(), ledger.len(), "duplicate ledger rows");
+
+    let (_dir, router) = router();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    // The router's own answer for a path no owner recognizes.
+    let fallback = Response::error(
+        501,
+        "migration_unimplemented",
+        "service operation is not implemented",
+    );
+    let answers = |path: &str| -> bool {
+        if path == "/ws" {
+            // The transport upgrades /ws before the router sees the request.
+            return include_str!("transport.rs").contains(r#"request.path == "/ws""#);
+        }
+        if super::router::needs_owned_request(path) {
+            return true;
+        }
+        let mut probe = request();
+        probe.method = "GET".into();
+        probe.path = path.into();
+        let at = UNIX_EPOCH + std::time::Duration::from_secs(1000);
+        let response = runtime
+            .block_on(router.handle_async_at(&probe, at))
+            .response;
+        !(response.status == fallback.status && response.body == fallback.body)
+    };
+    // A prefix row ("/api/sessions/") covers its dynamic suffixes; the index
+    // row "/" is not a prefix row.
+    let covered = |path: &str| {
+        ledger.contains(&path)
+            || dynamic.contains(&path)
+            || ledger
+                .iter()
+                .any(|row| *row != "/" && row.ends_with('/') && path.starts_with(row))
+    };
+
+    // Router -> ledger: every path literal the router answers is listed.
+    let mut literals = std::collections::BTreeMap::new();
+    route_path_literals(rust_root, &rust_root.join("src"), &mut literals);
+    for table in [
+        super::settings::PATHS,
+        crate::files::ROUTES,
+        super::session_routes::READ_ROUTES,
+        super::session_routes::MAINTENANCE_ROUTES,
+        super::session_routes::LOG_MAINTENANCE_ROUTES,
+    ] {
+        for path in table {
+            literals
+                .entry((*path).to_string())
+                .or_insert_with(|| "route table".into());
+        }
+    }
+    let missing: Vec<String> = literals
+        .iter()
+        .filter(|(path, _)| answers(path) && !covered(path))
+        .map(|(path, file)| format!("{path} ({file})"))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "router answers paths missing from current_source_coverage.routes: {missing:#?}"
+    );
+    for path in super::assets::STATIC_PATHS {
+        assert!(ledger.contains(path), "static asset path {path} missing");
+    }
+
+    // Ledger -> router: every row is still answered and still composed.
+    let serve =
+        std::fs::read_to_string(rust_root.join("src/application/main_program/serve.rs")).unwrap();
+    for row in rows {
+        let path = row["path"].as_str().unwrap();
+        let owner = row["rust_owner"].as_str().unwrap();
+        assert!(
+            repo_root.join(owner).is_file(),
+            "{path}: owner {owner} is gone"
+        );
+        let binding = row["main_binding"].as_str().unwrap();
+        if binding.starts_with("with_") {
+            assert!(
+                serve.contains(&format!(".{binding}(")),
+                "{path}: main binding {binding} is not composed"
+            );
+        }
+        if path != "/"
+            && path != "/ws"
+            && !path.starts_with("/api/")
+            && !super::approval_pattern_routes::is_route(path)
+        {
+            assert!(
+                super::assets::STATIC_PATHS.contains(&path),
+                "{path}: not a static asset path"
+            );
+            continue;
+        }
+        let probe = if path.ends_with('/') {
+            format!("{path}probe")
+        } else {
+            path.to_string()
+        };
+        assert!(answers(&probe), "{path}: the router no longer answers it");
+    }
+}
+
 fn router() -> (tempfile::TempDir, super::ServiceRouter) {
     let dir = tempfile::tempdir().unwrap();
     let trial = dir.path().join("trial");

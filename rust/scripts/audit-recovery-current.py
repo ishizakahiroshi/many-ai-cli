@@ -2,6 +2,11 @@
 
 This is a source audit, not a runtime or browser acceptance runner. It reads
 only repository source and writes the new recovery snapshot.
+
+It enumerates Go registrations, so it never lists routes the Rust router added
+later. The current route list lives in rust/src/hub/route_coverage.json
+(current_source_coverage.routes) and is checked against the router by
+rust/src/hub/tests.rs::current_route_ledger_matches_router.
 """
 import argparse
 import datetime
