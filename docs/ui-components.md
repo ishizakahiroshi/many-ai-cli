@@ -10,7 +10,8 @@ last_reviewed: 2026-10-25
 
 # Web UI部品と確認文言の共通化
 
-> 最終更新: 2026-11-16(月) 09:38:51 — 行内の「?」に使う `ui-button--help` を追記
+> 最終更新: 2026-11-23(月) 23:32:56 — 古い例外を項目名つきで一覧にする旨を追記
+> 2026-11-16(月) 09:38:51 — 行内の「?」に使う `ui-button--help` を追記
 > 2026-10-25(日) 07:11:18 — ライブ状態帯のテーマ別配色とパレットの操作を追記
 > 2026-10-13(火) 12:56:37 — アイコンだけの操作の列に使う `ui-toolbar` を追記
 > 2026-10-13(火) 12:41:11 — popup・右クリックメニューの1行に使う `menuItem` を追記
@@ -113,7 +114,8 @@ CSSのquote/comment/括弧を読み、既存のpinned esbuildでも構文だけ�
 theme/component/footerの正本以外でcustom propertyへ生の色を上書きすることも検出する。
 `scripts/ui-components-exceptions.json` は既存例外のexact fingerprint・最大出現数・理由を持つ。
 ファイル全体の除外ではなく、selector/condition/property/valueが変われば再レビューする。
-削除済みの例外はstaleとして報告する。新しい例外を自動採番・自動追加する運用はしない。
+削除済みの例外はstaleとして、件数とともに1件ずつ（file・rule・selector・宣言・fingerprintの先頭）一覧にする。
+staleがあっても終了コードは変えない（`--json` では `stale` 配列に入る）。新しい例外を自動採番・自動追加する運用はしない。
 
 これはCSS engineやJS dataflowの完全解析ではない。動的style生成、classの実効cascade、
 runtimeのDOM配置と送信payloadは変更元で別にレビューする。

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { appearanceFindings, cssDeclarations, cssSyntaxIssues, codeFindings, audit } from './check-ui-components.mjs';
+import { appearanceFindings, cssDeclarations, cssSyntaxIssues, codeFindings, audit, describeStaleException } from './check-ui-components.mjs';
 
 test('nested CSS respects quoted braces, functions and comments', () => {
   const result = cssDeclarations('@media (min-width: 400px) { .ui-copy { content: "}; #fff"; background-image: url("data:image/svg+xml;{a}"); color: var(--text); } }', 'web/src/styles/example.css');
@@ -92,6 +92,45 @@ test('the actual CLI exits nonzero when a clean fixture gains a raw color', () =
     assert.ok(path.resolve(temporary).startsWith(path.resolve(os.tmpdir()) + path.sep));
     fs.rmSync(temporary, { recursive: true });
   }
+});
+
+test('stale exceptions are listed by name and never change the exit code', () => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'many-ui-stale-'));
+  try {
+    fs.mkdirSync(path.join(temporary, 'web/src/styles'), { recursive: true });
+    const file = path.join(temporary, 'web/src/styles/example.css');
+    fs.writeFileSync(file, '.example { color: #abc; }');
+    const [finding] = audit(temporary).blocked;
+    const { file: rel, selector, context, property, value, rule, fingerprint } = finding;
+    const exceptionPath = path.join(temporary, 'exceptions.json');
+    fs.writeFileSync(exceptionPath, JSON.stringify({ entries: [{ file: rel, selector, context, property, value, rule, fingerprint, count: 1, reason: 'Synthetic semantic color example' }] }));
+    // The declaration is removed; its reviewed exception is now stale.
+    fs.writeFileSync(file, '.example { color: var(--text); }');
+    const exceptions = JSON.parse(fs.readFileSync(exceptionPath, 'utf8'));
+    const result = audit(temporary, exceptions);
+    assert.equal(result.blocked.length, 0);
+    assert.equal(result.staleExceptions, 1);
+    assert.deepEqual(result.stale, [{ file: 'web/src/styles/example.css', rule: 'literal-color', selector: '.example', context: '', property: 'color', value: '#abc', fingerprint }]);
+    const run = args => spawnSync(process.execPath, [fileURLToPath(new URL('./check-ui-components.mjs', import.meta.url)), '--root', temporary, '--exceptions', exceptionPath, ...args], { encoding: 'utf8' });
+    const text = run([]);
+    assert.equal(text.status, 0, text.stderr);
+    assert.match(text.stdout, /1 stale exceptions\./);
+    assert.ok(text.stdout.includes(`stale exception: web/src/styles/example.css literal-color: .example { color: #abc } fingerprint=${fingerprint.slice(0, 12)}`), text.stdout);
+    const json = run(['--json']);
+    assert.equal(json.status, 0, json.stderr);
+    assert.deepEqual(JSON.parse(json.stdout).stale.map(item => item.fingerprint), [fingerprint]);
+  } finally {
+    assert.ok(path.resolve(temporary).startsWith(path.resolve(os.tmpdir()) + path.sep));
+    fs.rmSync(temporary, { recursive: true });
+  }
+});
+
+test('a stale exception without recorded names still prints a bounded line', () => {
+  const line = describeStaleException({ file: '', rule: '', selector: '', context: '', property: '', value: 'x'.repeat(500), fingerprint: 'a'.repeat(64) });
+  assert.ok(line.startsWith('stale exception: (no file recorded) (no rule recorded): '), line);
+  assert.ok(line.includes(`${'x'.repeat(120)}… }`), line);
+  assert.ok(!line.includes('x'.repeat(121)), line);
+  assert.ok(line.endsWith('fingerprint=aaaaaaaaaaaa'), line);
 });
 
 test('dangling selectors and a selector joined to an at-rule fail CSS parsing', () => {

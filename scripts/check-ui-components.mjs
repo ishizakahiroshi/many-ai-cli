@@ -159,12 +159,12 @@ export function audit(root = ROOT, exceptions = { entries: [] }) {
       })));
     }
   }
-  const allowances = new Map();
+  const allowances = new Map(), reviewed = new Map();
   for (const e of exceptions.entries || []) {
     if (!e.reason?.trim() || !/^[a-f0-9]{64}$/.test(e.fingerprint || '') || !Number.isInteger(e.count) || e.count < 1 || allowances.has(e.fingerprint)) {
       errors.push('Invalid or duplicate reviewed UI exception'); continue;
     }
-    allowances.set(e.fingerprint, e.count);
+    allowances.set(e.fingerprint, e.count); reviewed.set(e.fingerprint, e);
   }
   const used = new Map(), blocked = [];
   for (const f of findings) {
@@ -172,8 +172,22 @@ export function audit(root = ROOT, exceptions = { entries: [] }) {
     if (count > (allowances.get(f.fingerprint) || 0)) blocked.push(f);
   }
   // Removal is safe; report obsolete exceptions for cleanup without blocking it.
-  const stale = [...allowances.keys()].filter(key => !used.has(key));
-  return { cssFiles: cssFiles.length, codeFiles: codeFiles.length, errors, blocked, findings, staleExceptions: stale.length };
+  // Each one is named (file, rule, selector, declaration) so it can be found
+  // in ui-components-exceptions.json and removed.
+  const stale = [...allowances.keys()].filter(key => !used.has(key)).map(fingerprint => {
+    const { file = '', rule = '', selector = '', context = '', property = '', value = '' } = reviewed.get(fingerprint);
+    return { file, rule, selector, context, property, value, fingerprint };
+  });
+  return { cssFiles: cssFiles.length, codeFiles: codeFiles.length, errors, blocked, findings, staleExceptions: stale.length, stale };
+}
+
+const STALE_VALUE_LIMIT = 120;
+export function describeStaleException(item) {
+  const text = String(item.value);
+  const value = text.length > STALE_VALUE_LIMIT ? `${text.slice(0, STALE_VALUE_LIMIT)}…` : text;
+  const where = item.file || '(no file recorded)';
+  const rule = item.rule || '(no rule recorded)';
+  return `stale exception: ${where} ${rule}: ${item.selector} { ${item.property}: ${value} } fingerprint=${item.fingerprint.slice(0, 12)}`;
 }
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) {
@@ -189,6 +203,8 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(file
     for (const error of result.errors) console.error(error);
     for (const item of result.blocked.slice(0, 25)) console.error(`${item.file}:${item.line} ${item.rule}: ${item.selector} { ${item.property}: ${item.value} }`);
     console.log(`UI components: ${result.cssFiles} CSS / ${result.codeFiles} code files, ${result.errors.length} syntax/config errors, ${result.blocked.length} new appearance declarations; ${result.staleExceptions} stale exceptions.`);
+    // Informational: stale exceptions never change the exit code.
+    for (const item of result.stale) console.log(describeStaleException(item));
   }
   if (result.errors.length || result.blocked.length) process.exitCode = 1;
 }
