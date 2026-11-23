@@ -316,53 +316,71 @@ body.pane-resizing .xterm { pointer-events: none; }
    なっていた（bugfix_pending-batch-small-fixes_2026-11-21 の C3）。
    判定は #unified-tab-bar 自身の幅（@container）。サイドバーの幅や左右の配置で段の幅は変わるので、
    窓の幅では判定しない（token-statusbar.css の段階的省略と同じ作り）。
-   0 段目: タブは縮めず、チップの中の長い文字（AI 名・モデル・エージェント名・契約）を … で縮める。
-           それぞれ 4 文字ぶんは残す（空の枠だけにしない）。全文はそれぞれのツールチップで読める。
-           番号・状態・対話/ヘッドレス・effort・起動時の権限は縮めない。
-           段の中身が 880px より狭いときは縮めない（縮めると、チップの末尾にある起動時の権限まで
-           切れてしまうため）。そこより狭い幅は、これまでどおり段の中の横スクロールになる。
-   1 段目（1320px 以下）: タブの文字の前の絵を外す（文字は残す）。チップの項目の間を詰める。
-   2 段目（1100px 以下）: マルチの配置（2×2 など）・AI 名の文字（AI のアイコンは残る）・「対話」を外す。
+   0 段目（PC 幅ならいつも）: タブは縮めず、チップの中の長い文字（AI 名・モデル・エージェント名・契約）を
+           … で縮める。それぞれ半角 4 文字ぶんは残す（空の枠だけにしない）。全文はそれぞれのツールチップで読める。
+           番号・状態・対話/ヘッドレス・effort・🧠・起動時の権限は縮めない。チップの並びは
+           「… → エージェント名 → 起動時の権限 → 契約」で、末尾は契約。
+           チップは切り取らない（overflow も min-width も既定のまま）。チップの最小幅は、縮めない項目と
+           縮める項目の 4 文字ぶんの合計で、それより狭い段では段の中の横スクロールになり、全部の項目へ届く。
+           こうするため、縮める項目は 1 行に折り返させて 2 行目以降を -webkit-line-clamp で隠す（… も付く）。
+           white-space: nowrap と text-overflow のままだと、項目の最小幅（min-content）が全文の幅になり、
+           チップも全文の幅より細くなれない。チップ側に min-width: 0 と overflow: hidden を付けて縮めると、
+           英語・ベトナム語の長い権限表示のときに末尾の契約が黙って切り取られた（レビューの実測）。
+   1 段目（1400px 以下）: タブの文字の前の絵を外す（文字は残す）。チップの項目の間を詰める。
+   2 段目（1180px 以下）: マルチの配置（2×2 など）・AI 名の文字（AI のアイコンは残る）・「対話」を外す。
            ヘッドレスは端末へ打ち込めない印なので残す。
-   3 段目（960px 以下）: ターミナルとチャット以外のタブを絵だけにする（スマホ幅で読み方の 2 つだけ
+   3 段目（1040px 以下）: ターミナルとチャット以外のタブを絵だけにする（スマホ幅で読み方の 2 つだけ
            名前を残すのと同じ考え）。文字は画面から外すだけで、読み上げ用の名前としては残す。
-   閾値は、実物の CSS をサイドバー 260px で当てて日本語の文字で測った幅（静的な確認・JS なし）から
-   置いた概算。モデル名・契約名・言語で項目の幅は変わる（CSS だけで直す方式の既知の弱点）。
+           絵だけのタブの名前は、マウスを乗せたときのツールチップでも読める（index.html と settings.ts の
+           refreshLazyTabClasses）。
+   閾値は、実物の CSS を当てて段の幅を 5px ずつ変えて測った値（静的な確認・JS なし）から置いた概算。
+   測った中身は全項目入り（モデル claude-opus-4-5-20251101・effort・🧠・エージェント名・起動時の権限・契約）で、
+   日本語・英語・ベトナム語。対話のセッションは 3 言語とも段の幅 960px 以上で横スクロールが出ない。
+   ヘッドレスは項目が 1 つ多いので、言語によって段の幅 1060〜1105px の間に横スクロールが残る（切り取りではない）。
+   モデル名・契約名・言語で項目の幅は変わる（CSS だけで直す方式の既知の弱点）。
    スマホ幅（720px 以下）は styles.css の別の並びで、container を持たないので下の規則は効かない。 */
 @media (min-width: 721px) {
   #unified-tab-bar { container: unified-tab-bar / inline-size; }
-}
-@container unified-tab-bar (min-width: 880px) {
-  .session-info-chip { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+  /* 縮められるのはチップだけ（タブは flex-shrink: 0 のまま）。min-width と overflow は既定のままにして、
+     子の最小幅の合計より細くならないようにする（切り取らず、段の横スクロールへ戻す）。 */
+  .session-info-chip { flex: 0 1 auto; }
   .session-info-chip > * { flex-shrink: 0; }
   .session-info-chip .card-provider-chip,
   .session-info-chip .tsb-agent-name,
-  .session-info-chip .card-subscription {
-    min-width: 4ch;
+  .session-info-chip .card-subscription,
+  .session-info-chip .card-model.card-model--with-icon .card-model-text {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    /* overflow-wrap: anywhere だと「claude-opus…」の - の後ろで行が切れて 1 行目が短くなる。文字単位で詰める。 */
+    word-break: break-all;
   }
-  /* モデルはアイコン（10px）と間（3px）の後ろに 4 文字ぶん。文字の … は styles.css の .card-model-text が持つ。 */
-  .session-info-chip .card-model { min-width: calc(13px + 4ch); }
+  /* 4 文字ぶん＋左右の余白と枠（AI 名は 6px×2、契約は 5px×2＋枠 1px×2）。 */
+  .session-info-chip .card-provider-chip,
+  .session-info-chip .card-subscription { min-width: calc(4ch + 12px); }
+  .session-info-chip .tsb-agent-name,
+  .session-info-chip .card-model.card-model--with-icon .card-model-text { min-width: 4ch; }
+  /* モデルは箱（styles.css で overflow: hidden・min-width: 0）にもアイコン（10px）と間（3px）の後ろの 4 文字ぶんを持たせる。
+     styles.css の本体の規則は @import した tabs.css より後に来るので、同じ強さでは負ける。クラスを 1 つ多く書いて勝たせる。 */
+  .session-info-chip .card-model.card-model--with-icon { min-width: calc(13px + 4ch); }
   /* 縮める順: 契約 → エージェント名 → AI 名 → モデル（モデル名はほかの場所に出ないので最後まで残す）。 */
   .session-info-chip .card-subscription { flex-shrink: 8; }
   .session-info-chip .tsb-agent-name { flex-shrink: 4; }
   .session-info-chip .card-provider-chip { flex-shrink: 2; }
   .session-info-chip .card-model { flex-shrink: 1; }
-  /* inline-flex のままだと文字に … が付かない（text-overflow はブロックの箱にだけ効く）。 */
-  .session-info-chip .card-provider-chip { display: block; }
 }
-@container unified-tab-bar (max-width: 1320px) {
+@container unified-tab-bar (max-width: 1400px) {
   #unified-tab-bar .view-tab-icon { display: none; }
   .session-info-chip { gap: var(--space-1); }
 }
-@container unified-tab-bar (max-width: 1100px) {
+@container unified-tab-bar (max-width: 1180px) {
   #unified-tab-bar .multi-layout-badge,
   .session-info-chip .card-provider-chip,
   .session-info-chip .session-mode-chip:not(.headless) { display: none; }
 }
-@container unified-tab-bar (max-width: 960px) {
+@container unified-tab-bar (max-width: 1040px) {
   #unified-tab-bar .view-tab:not([data-tab="terminal"]):not([data-tab="chat"]) .view-tab-icon { display: inline-flex; }
   #unified-tab-bar .view-tab:not([data-tab="terminal"]):not([data-tab="chat"]) > span:not(.view-tab-icon):not([id]):not(.mobile-reading-mode-label) {
     position: absolute;

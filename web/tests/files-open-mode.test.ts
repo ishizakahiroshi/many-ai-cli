@@ -96,30 +96,64 @@ function containerStages(css: string): Array<{ feature: string; px: number; body
   return out;
 }
 
+/** PC 幅（721px 以上）の @media の中身。container とチップを縮める規則はここにある。 */
+// 同じ幅の「and (pointer: fine)」付きの @media が先にあるので、条件がこれだけの方を選ぶ。
+const pcBlock = blockAfter(tabsCss.slice(tabsCss.indexOf('@media (min-width: 721px) {')), '@media (min-width: 721px)');
+
+/** pcBlock の中で、selector を含む規則の中身を全部つなげたもの。 */
+function rulesFor(selectorPart: string): string {
+  return [...pcBlock.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+    .filter((m) => m[1].includes(selectorPart))
+    .map((m) => m[2])
+    .join('\n');
+}
+
 describe('タブの段は幅が足りないとき段階的に詰める（C3）', () => {
   test('段自身の幅で判定する container を、PC 幅だけで持つ', () => {
-    expect(tabsCss).toMatch(/@media \(min-width: 721px\) \{\s*#unified-tab-bar \{ container: unified-tab-bar \/ inline-size; \}\s*\}/);
+    expect(pcBlock).toContain('#unified-tab-bar { container: unified-tab-bar / inline-size; }');
     // スマホ幅の並び（styles.css）には container を足さない。
     expect(tabsCss.match(/container: unified-tab-bar/g)?.length).toBe(1);
   });
 
-  test('チップはタブより先に縮み、起動時の権限は縮める対象に入れない', () => {
-    const shrink = containerStages(tabsCss).find((s) => s.feature === 'min');
-    expect(shrink).toBeDefined();
-    expect(shrink!.body).toMatch(/\.session-info-chip \{[^}]*flex: 0 1 auto;[^}]*min-width: 0;[^}]*overflow: hidden;/);
-    expect(shrink!.body).toContain('.session-info-chip > * { flex-shrink: 0; }');
-    expect(shrink!.body).not.toContain('session-permission-chip');
-    // 縮めても空の枠だけにしない（4 文字ぶんは残す）。
-    expect(shrink!.body).toMatch(/\.card-subscription \{[\s\S]*?min-width: 4ch;/);
+  test('チップはタブより先に縮むが、切り取らない（細くなれるのは子の最小幅の合計まで）', () => {
+    expect(pcBlock).toContain('.session-info-chip { flex: 0 1 auto; }');
+    expect(pcBlock).toContain('.session-info-chip > * { flex-shrink: 0; }');
+    // チップに min-width: 0 や overflow: hidden を付けると、子の最小幅の合計が段に入らないとき
+    // 末尾の契約が横スクロールもできずに切り取られる（英語の長い権限表示で実測）。
+    const chipRules = [...tabsCss.matchAll(/(^|[\s,}])\.session-info-chip\s*\{([^}]*)\}/g)].map((m) => m[2]).join('\n');
+    expect(chipRules).not.toMatch(/min-width:\s*0/);
+    expect(chipRules).not.toMatch(/overflow(-x)?:\s*(hidden|clip)/);
+    // 起動時の権限は縮める対象に入れない。
+    expect(pcBlock).not.toContain('session-permission-chip');
   });
 
-  test('段階の閾値は 絵を外す → 項目を外す → 絵だけ の順に狭くなり、縮める下限はその下にある', () => {
+  test('縮める項目は最小幅（min-content）を 4 文字ぶんまで下げられる形にする', () => {
+    // nowrap のままだと項目の最小幅が全文の幅になり、チップが全文より細くなれない。
+    // 1 行に折り返させて 2 行目以降を隠すと、最小幅は min-width の 4 文字ぶんになる。
+    for (const sel of ['.card-provider-chip', '.tsb-agent-name', '.card-subscription', '.card-model-text']) {
+      const body = rulesFor(sel);
+      expect({ sel, clamp: /-webkit-line-clamp: 1;/.test(body) }).toEqual({ sel, clamp: true });
+      expect({ sel, wrap: /white-space: normal;/.test(body) && /word-break: break-all;/.test(body) }).toEqual({ sel, wrap: true });
+      expect({ sel, nowrap: /white-space: nowrap/.test(body) }).toEqual({ sel, nowrap: false });
+      expect({ sel, min: /min-width: (calc\(4ch \+ 12px\)|4ch);/.test(body) }).toEqual({ sel, min: true });
+    }
+    // styles.css の .card-model.card-model--with-icon（min-width: 0・tabs.css より後）に負けない強さで書く。
+    expect(pcBlock).toContain('.session-info-chip .card-model.card-model--with-icon { min-width: calc(13px + 4ch); }');
+    expect(pcBlock).toContain('.session-info-chip .card-model.card-model--with-icon .card-model-text');
+  });
+
+  test('チップの末尾は 起動時の権限 → 契約 の並び（コメントと実物を揃える）', () => {
+    const settingsSrc = readFileSync(join(import.meta.dir, '../src/app/settings.ts'), 'utf8');
+    expect(settingsSrc).toContain('${agentNameBadge}${permissionBadge}${subBadge}`;');
+    expect(tabsCss).toContain('「… → エージェント名 → 起動時の権限 → 契約」で、末尾は契約。');
+  });
+
+  test('段階の閾値は 絵を外す → 項目を外す → 絵だけ の順に狭くなる', () => {
     const stages = containerStages(tabsCss);
+    expect(stages.filter((s) => s.feature === 'min')).toEqual([]);
     const max = stages.filter((s) => s.feature === 'max').map((s) => s.px);
-    const floor = stages.find((s) => s.feature === 'min')!.px;
     expect(max).toEqual([...max].sort((a, b) => b - a));
     expect(max.length).toBe(3);
-    expect(floor).toBeLessThan(Math.min(...max));
     const [icons, items, iconOnly] = stages.filter((s) => s.feature === 'max');
     expect(icons.body).toContain('#unified-tab-bar .view-tab-icon { display: none; }');
     expect(items.body).toContain('.session-mode-chip:not(.headless)');
@@ -139,6 +173,28 @@ describe('タブの段は幅が足りないとき段階的に詰める（C3）',
       expect({ name, labels: labels.length }).toEqual({ name, labels: 1 });
       expect(inner).toMatch(/class="view-tab-icon"/);
     }
+  });
+
+  test('絵だけになるタブは、マウスを乗せると名前が出る', () => {
+    const i18nDir = join(import.meta.dir, '../src/i18n');
+    const dicts = ['ja', 'en', 'vi'].map((l) => JSON.parse(readFileSync(join(i18nDir, `${l}.json`), 'utf8')) as Record<string, string>);
+    const tabs = [...indexHtml.matchAll(/<button (class="[^"]*\bview-tab\b[^"]*" data-tab="([a-z]+)"[^>]*)>/g)];
+    // Files・Git・Review は settings.ts の refreshLazyTabClasses が名前から始まるツールチップを付け直す。
+    const lazyTabs = new Set(['files', 'git', 'review']);
+    for (const [, attrs, name] of tabs) {
+      if (name === 'terminal' || name === 'chat' || lazyTabs.has(name)) continue;
+      const key = attrs.match(/data-i18n-tooltip="([^"]+)"/)?.[1] ?? '';
+      expect({ name, key: key !== '' }).toEqual({ name, key: true });
+      for (const d of dicts) expect({ name, key, has: typeof d[key] === 'string' && d[key] !== '' }).toEqual({ name, key, has: true });
+    }
+    expect(indexHtml).toContain('id="tab-multi" type="button" data-i18n-tooltip="tab_multi"');
+    expect(indexHtml).toContain('id="approval-tab-btn" data-i18n-tooltip="tab_approval"');
+    expect(indexHtml).toContain('id="history-tab-btn" data-i18n-tooltip="detached_tab_title_history"');
+    const settingsSrc = readFileSync(join(import.meta.dir, '../src/app/settings.ts'), 'utf8');
+    const lazyFn = blockAfter(settingsSrc, 'export function refreshLazyTabClasses(sid)');
+    expect(lazyFn).toContain("for (const tab of ['files', 'git', 'review'])");
+    expect(lazyFn).toContain('const name = t(`tab_${tab}`);');
+    expect(lazyFn).toContain('btn.dataset.tooltip = loaded ? name : `${name} · ${t(`tab_${tab}_lazy_tooltip`)}`;');
   });
 });
 

@@ -3143,25 +3143,18 @@ export function maybeFireLockedModeToast(sid, requestedMode) {
   showToast(tfn('toast_locked_mode_switched', { mode: modeLabel }));
 }
 
-// Files/Git/Review のうち、現セッションでまだ未取得のものは .lazy クラスを付け直す
+// Files/Git/Review のうち、現セッションでまだ未取得のものは .lazy クラスを付け直す。
+// ツールチップはタブの名前から始める。段が狭いとタブは絵だけになる（tabs.css の 3 段目）ので、
+// 名前をマウスでも読めるようにする。未取得のときだけ、名前の後ろに読み込みの説明を足す。
 export function refreshLazyTabClasses(sid) {
-  const filesBtn  = document.querySelector('#unified-tab-bar .view-tab[data-tab="files"]');
-  const gitBtn    = document.querySelector('#unified-tab-bar .view-tab[data-tab="git"]');
-  const reviewBtn = document.querySelector('#unified-tab-bar .view-tab[data-tab="review"]');
-  if (filesBtn) {
-    const loaded = isTabLazyLoaded(sid, 'files');
-    filesBtn.classList.toggle('lazy', !loaded);
-    filesBtn.classList.toggle('loaded', loaded);
-  }
-  if (gitBtn) {
-    const loaded = isTabLazyLoaded(sid, 'git');
-    gitBtn.classList.toggle('lazy', !loaded);
-    gitBtn.classList.toggle('loaded', loaded);
-  }
-  if (reviewBtn) {
-    const loaded = isTabLazyLoaded(sid, 'review');
-    reviewBtn.classList.toggle('lazy', !loaded);
-    reviewBtn.classList.toggle('loaded', loaded);
+  for (const tab of ['files', 'git', 'review']) {
+    const btn = document.querySelector<HTMLElement>(`#unified-tab-bar .view-tab[data-tab="${tab}"]`);
+    if (!btn) continue;
+    const loaded = isTabLazyLoaded(sid, tab);
+    btn.classList.toggle('lazy', !loaded);
+    btn.classList.toggle('loaded', loaded);
+    const name = t(`tab_${tab}`);
+    btn.dataset.tooltip = loaded ? name : `${name} · ${t(`tab_${tab}_lazy_tooltip`)}`;
   }
 }
 
