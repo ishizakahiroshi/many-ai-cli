@@ -2,6 +2,7 @@
 //! Output queues work; bounded parsing runs outside the canonical session lock.
 use super::*;
 use crate::application::session_observations::{
+    journal,
     journal_state::{PollContext, Watcher},
     task_detail, workflow,
     workflow_state::{self, VtState},
@@ -85,6 +86,7 @@ impl TaskDetail {
                 &worker.paths,
                 Path::new(&transcript),
                 &run.to_string_lossy(),
+                task_detail::READ_TIME,
             );
             if self.task.is_none() {
                 if self.attempts >= 5 {
@@ -310,6 +312,7 @@ impl Collector {
                             signature: &state.vt.signature,
                             idle: snapshot.details.snapshot.activity.output_idle,
                             now,
+                            read_time: journal::READ_TIME,
                         },
                     )
                     .map_err(|_| storage_error("workflow journal observation failed"))?;

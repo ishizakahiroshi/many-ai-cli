@@ -4,7 +4,7 @@ use std::{
     fs::File,
     io::{self, Read, Seek, SeekFrom},
     path::Path,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, SystemTime},
 };
 #[derive(Clone, Copy, Default, PartialEq)]
 enum Mode {
@@ -188,17 +188,34 @@ pub struct ReadStats {
     pub records: usize,
     pub hit_budget: bool,
 }
+/// Wall-clock cap of one journal tail (the Go reference's
+/// `workflowJournalReadTimeBudget`).
+pub const READ_TIME: Duration = Duration::from_millis(100);
 pub struct Budget {
     pub bytes: usize,
     pub records: usize,
-    pub deadline: Instant,
+    /// A tail stops once this much wall-clock time has passed since it began.
+    /// It is a budget value, not a constant inside the reader, so a test that
+    /// asserts on what was read can lift it (`unhurried`) and stay independent
+    /// of how fast the machine happens to be.
+    pub read_time: Duration,
 }
 impl Default for Budget {
     fn default() -> Self {
         Self {
             bytes: 4 * 1024 * 1024,
             records: 256,
-            deadline: Instant::now() + Duration::from_millis(100),
+            read_time: READ_TIME,
+        }
+    }
+}
+impl Budget {
+    /// Default byte and record caps without the wall-clock cut-off.
+    #[cfg(test)]
+    pub fn unhurried() -> Self {
+        Self {
+            read_time: Duration::MAX,
+            ..Self::default()
         }
     }
 }
@@ -210,6 +227,7 @@ pub fn tail_opened(
     mut state: FileState,
     budget: &Budget,
 ) -> io::Result<(FileState, ReadStats)> {
+    let clock = super::subagents::ReadClock::start(budget.read_time);
     let metadata = file.metadata()?;
     state.modified = Some(metadata.modified()?);
     let mut stats = ReadStats::default();
@@ -236,14 +254,14 @@ pub fn tail_opened(
         budget.records
     };
     'reading: while stats.records < max_records && stats.bytes < max_bytes {
-        if Instant::now() >= budget.deadline {
+        if clock.expired() {
             stats.hit_budget = true;
             break;
         }
         let count = file.read(&mut buffer[..(max_bytes - stats.bytes).min(64 * 1024)])?;
         stats.bytes += count;
         for &b in &buffer[..count] {
-            if Instant::now() >= budget.deadline {
+            if clock.expired() {
                 stats.hit_budget = true;
                 break 'reading;
             }
@@ -271,7 +289,7 @@ pub fn tail_opened(
                 break 'reading;
             }
         }
-        if stats.bytes >= max_bytes || Instant::now() >= budget.deadline {
+        if stats.bytes >= max_bytes || clock.expired() {
             stats.hit_budget = true;
             break;
         }
@@ -290,7 +308,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("journal.jsonl");
         std::fs::write(&path,b"{\"type\":\"started\",\"agentId\":\"a\"}\n{\"type\":\"result\",\"agentId\":\"a\",\"result\":\"").unwrap();
-        let (state, _) = tail(&path, FileState::default(), &Budget::default()).unwrap();
+        let (state, _) = tail(&path, FileState::default(), &Budget::unhurried()).unwrap();
         assert_eq!(state.started.len(), 1);
         assert!(state.results.is_empty());
         assert!(state.parser.quoted.is_empty());
@@ -306,7 +324,7 @@ mod tests {
         drop(file);
         let mut state = state;
         for _ in 0..50 {
-            state = tail(&path, state, &Budget::default()).unwrap().0;
+            state = tail(&path, state, &Budget::unhurried()).unwrap().0;
             assert!(state.parser.quoted.len() <= 256);
             if !state.results.is_empty() {
                 break;
@@ -316,7 +334,7 @@ mod tests {
         assert_eq!(state.offset, std::fs::metadata(&path).unwrap().len());
         assert!(state.parser.quoted.is_empty());
         std::fs::write(&path, b"{\"type\":\"started\",\"agentId\":\"new\"}\n").unwrap();
-        let (state, _) = tail(&path, state, &Budget::default()).unwrap();
+        let (state, _) = tail(&path, state, &Budget::unhurried()).unwrap();
         assert!(state.frozen);
         assert_eq!(state.started.len(), 1);
         assert_eq!(state.results.len(), 1);
@@ -332,15 +350,43 @@ mod tests {
         .unwrap();
         let budget = Budget {
             records: 1,
-            ..Default::default()
+            ..Budget::unhurried()
         };
         let (state, stats) = tail(&path, FileState::default(), &budget).unwrap();
         assert!(stats.hit_budget);
         assert_eq!(stats.records, 1);
         assert_eq!(state.started.len(), 1);
         assert_eq!(state.results.len(), 0);
-        let (state, stats) = tail(&path, state, &Budget::default()).unwrap();
+        let (state, stats) = tail(&path, state, &Budget::unhurried()).unwrap();
         assert_eq!(stats.records, 1);
+        assert_eq!(state.started.len(), 1);
+        assert_eq!(state.results.len(), 1);
+    }
+    #[test]
+    fn tail_cut_off_comes_from_the_budget_not_the_machine_speed() {
+        // The product keeps the Go reference's 100 ms cap per tail.
+        assert_eq!(Budget::default().read_time, Duration::from_millis(100));
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("journal.jsonl");
+        std::fs::write(
+            &path,
+            b"{\"type\":\"started\",\"agentId\":\"a\"}\n{\"type\":\"result\",\"agentId\":\"a\"}\n",
+        )
+        .unwrap();
+        // A machine slower than the cap: the tail stops before its first byte
+        // and resumes from the same offset next time.
+        let exhausted = Budget {
+            read_time: Duration::ZERO,
+            ..Budget::default()
+        };
+        let (state, stats) = tail(&path, FileState::default(), &exhausted).unwrap();
+        assert!(stats.hit_budget);
+        assert_eq!(state.offset, 0);
+        assert!(state.started.is_empty());
+        // Tests lift the cap, so the same file always reads in full.
+        let (state, stats) = tail(&path, state, &Budget::unhurried()).unwrap();
+        assert!(!stats.hit_budget);
+        assert_eq!(stats.records, 2);
         assert_eq!(state.started.len(), 1);
         assert_eq!(state.results.len(), 1);
     }

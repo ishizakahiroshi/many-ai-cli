@@ -47,6 +47,7 @@ fn scan(
     directory: &Path,
     detected: Timestamp,
     existing: &Files,
+    read_time: Duration,
 ) -> io::Result<Files> {
     let workflow = directory.join("subagents/workflows");
     let entries = subagents::entries(paths, &workflow)?;
@@ -76,7 +77,11 @@ fn scan(
             continue;
         }
         let prior = files.get(&path).cloned().unwrap_or_default();
-        let Ok((state, _)) = journal::tail_opened(file, prior, &journal::Budget::default()) else {
+        let budget = journal::Budget {
+            read_time,
+            ..journal::Budget::default()
+        };
+        let Ok((state, _)) = journal::tail_opened(file, prior, &budget) else {
             continue;
         };
         if !known
@@ -92,14 +97,19 @@ fn scan(
     }
     Ok(files)
 }
-fn discover(paths: &RuntimePaths, project: &Path, detected: Timestamp) -> io::Result<Vec<Group>> {
+fn discover(
+    paths: &RuntimePaths,
+    project: &Path,
+    detected: Timestamp,
+    read_time: Duration,
+) -> io::Result<Vec<Group>> {
     let mut groups = Vec::new();
     for entry in subagents::entries(paths, project)? {
         if !entry.is_dir {
             continue;
         }
         let directory = project.join(entry.name);
-        let Ok(files) = scan(paths, &directory, detected, &Files::new()) else {
+        let Ok(files) = scan(paths, &directory, detected, &Files::new(), read_time) else {
             continue;
         };
         let (started, done, _, _) = counts(&files);
@@ -145,6 +155,9 @@ pub struct PollContext<'a> {
     pub signature: &'a str,
     pub idle: bool,
     pub now: Timestamp,
+    /// Wall-clock cap of each journal tail; the live worker passes
+    /// [`journal::READ_TIME`]; a test that asserts on what was read lifts it.
+    pub read_time: Duration,
 }
 impl Watcher {
     pub fn start(&mut self, now: Timestamp, signature: &str, idle: bool) {
@@ -182,6 +195,7 @@ impl Watcher {
             signature,
             idle,
             now,
+            read_time,
         } = context;
         if self.due.is_none_or(|due| due > now) {
             return Ok(false);
@@ -191,7 +205,7 @@ impl Watcher {
             return Ok(false);
         };
         let group = if let Some(directory) = &self.directory {
-            scan(paths, directory, detected, &self.files)
+            scan(paths, directory, detected, &self.files, read_time)
                 .ok()
                 .map(|files| {
                     let (started, done, _, _) = counts(&files);
@@ -203,7 +217,7 @@ impl Watcher {
                     }
                 })
         } else {
-            discover(paths, project, detected)
+            discover(paths, project, detected, read_time)
                 .ok()
                 .and_then(|groups| select(groups, vt.map_or(0, |p| p.done)))
         };
@@ -368,6 +382,7 @@ mod tests {
                     signature: "running",
                     idle: true,
                     now: later,
+                    read_time: Duration::MAX,
                 },
             )
             .unwrap();
@@ -385,6 +400,7 @@ mod tests {
                     signature: "running",
                     idle: true,
                     now: later,
+                    read_time: Duration::MAX,
                 },
             )
             .unwrap();
@@ -396,5 +412,43 @@ mod tests {
         watcher.start(later, "next-run", true);
         assert_eq!(watcher.due, Some(later));
         assert!(watcher.progress.is_none());
+    }
+    #[test]
+    fn journal_tail_cut_off_comes_from_the_poll_context_not_the_machine_speed() {
+        let root = tempfile::tempdir().unwrap();
+        let installed = tempfile::tempdir().unwrap();
+        let paths = RuntimePaths::trial(root.path(), 49328, installed.path()).unwrap();
+        let project = root.path().join("projects/synthetic");
+        let directory = project.join("session/subagents/workflows/wf_run");
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join("journal.jsonl"),
+            b"{\"type\":\"started\",\"agentId\":\"a\"}\n",
+        )
+        .unwrap();
+        let now = Timestamp::now();
+        let mut watcher = Watcher::default();
+        watcher.start(now, "running", false);
+        let context = |now, read_time| PollContext {
+            vt: None,
+            has_signal: true,
+            signature: "running",
+            idle: false,
+            now,
+            read_time,
+        };
+        // A machine slower than the cap: the tail stops before its first
+        // record, so nothing is associated yet and the watcher polls again.
+        watcher
+            .poll(&paths, &project, context(now, Duration::ZERO))
+            .unwrap();
+        assert!(watcher.progress.is_none());
+        let next = watcher.due.unwrap();
+        // Tests lift the cap, so the same journal always reads in full.
+        watcher
+            .poll(&paths, &project, context(next, Duration::MAX))
+            .unwrap();
+        let progress = watcher.progress.as_ref().unwrap();
+        assert_eq!((progress.total, progress.done), (1, 0));
     }
 }

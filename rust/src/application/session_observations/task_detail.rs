@@ -12,7 +12,7 @@ use std::{
     collections::BTreeMap,
     io,
     path::{Path, PathBuf},
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 #[derive(Clone, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -306,19 +306,30 @@ pub fn overlay(output: &mut WorkflowProgress, detail: &WorkflowProgress) {
     output.phases = detail.phases.clone();
     output.task_detail_source = detail.task_detail_source.clone()
 }
-pub fn resolve(paths: &RuntimePaths, transcript: &Path, workflow_dir: &str) -> Option<String> {
+/// Wall-clock cap of one task-ID resolution (the Go reference's
+/// `workflowTaskDetailReadTimeBudget`).
+pub const READ_TIME: Duration = Duration::from_millis(100);
+/// `read_time` caps the whole resolution, read included. The live worker
+/// passes [`READ_TIME`]; a test that asserts on the answer lifts it, so the
+/// answer does not depend on how fast the machine happens to be.
+pub fn resolve(
+    paths: &RuntimePaths,
+    transcript: &Path,
+    workflow_dir: &str,
+    read_time: Duration,
+) -> Option<String> {
     let workflow_dir = workflow_dir.trim();
     if transcript.as_os_str().is_empty() || workflow_dir.is_empty() {
         return None;
     }
-    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(100);
+    let clock = super::subagents::ReadClock::start(read_time);
     let bytes = read_tail(paths, transcript, 2 * 1024 * 1024).ok()?;
     let text = proto::wire::go_utf8_lossy(&bytes);
     let mut results = BTreeMap::<String, (String, String)>::new();
     let task = regex::Regex::new(r"Task ID:[\t\n\x0c\r ]*([^\t\n\x0c\r ]+)").unwrap();
     let directory = regex::Regex::new(r"Transcript dir:[\t\n\x0c\r ]*(.+)").unwrap();
     for line in text.lines().rev().take(500) {
-        if std::time::Instant::now() >= deadline {
+        if clock.expired() {
             return None;
         }
         let Ok(value) = proto::decode_wire::<Transcript>(line.as_bytes()) else {
@@ -428,13 +439,34 @@ mod tests {
         let launch = serde_json::json!({"type":"assistant","message":{"content":[{"type":"tool_use","id":"wf-tool","name":"Workflow","input":{"ignored":"synthetic"}}]}});
         let result = serde_json::json!({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"wf-tool","content":[{"text":"Task ID: task-a"},{"content":"Transcript dir: wf_a"}]}]}});
         std::fs::write(&transcript, format!("{launch}\n{result}\n")).unwrap();
+        // The answers below must not depend on how fast the machine reads.
+        let unhurried = Duration::MAX;
         assert_eq!(
-            resolve(&paths, &transcript, " wf_a ").as_deref(),
+            resolve(&paths, &transcript, " wf_a ", unhurried).as_deref(),
             Some("task-a")
         );
-        assert!(resolve(&paths, &transcript, "wf_b").is_none());
+        assert!(resolve(&paths, &transcript, "wf_b", unhurried).is_none());
         let invalid = r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":123,"tool_use_id":"wf-tool","content":"Task ID: task-b\nTranscript dir: wf_a"}]}}"#;
         std::fs::write(&transcript, format!("{launch}\n{invalid}\n")).unwrap();
-        assert!(resolve(&paths, &transcript, "wf_a").is_none());
+        assert!(resolve(&paths, &transcript, "wf_a", unhurried).is_none());
+    }
+    #[test]
+    fn resolution_cut_off_comes_from_the_caller_not_the_machine_speed() {
+        // The product keeps the Go reference's 100 ms cap per resolution.
+        assert_eq!(READ_TIME, Duration::from_millis(100));
+        let root = tempfile::tempdir().unwrap();
+        let installed = tempfile::tempdir().unwrap();
+        let paths = RuntimePaths::trial(root.path(), 49329, installed.path()).unwrap();
+        let transcript = root.path().join("session.jsonl");
+        let launch = serde_json::json!({"type":"assistant","message":{"content":[{"type":"tool_use","id":"wf-tool","name":"Workflow"}]}});
+        let result = serde_json::json!({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"wf-tool","content":"Task ID: task-a\nTranscript dir: wf_a"}]}});
+        std::fs::write(&transcript, format!("{launch}\n{result}\n")).unwrap();
+        // A machine slower than the cap gives no answer this time (the worker
+        // retries); a lifted cap always finds the same task.
+        assert!(resolve(&paths, &transcript, "wf_a", Duration::ZERO).is_none());
+        assert_eq!(
+            resolve(&paths, &transcript, "wf_a", Duration::MAX).as_deref(),
+            Some("task-a")
+        );
     }
 }
