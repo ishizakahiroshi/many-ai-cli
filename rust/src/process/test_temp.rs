@@ -7,6 +7,11 @@
 //! machine. This folder waits for the processes to let go, and fails the test
 //! if they never do: a folder that cannot be removed means a process outlived
 //! the test that started it.
+//!
+//! The same holds for a fixture whose owners start work on the async runtime
+//! (a server task, Hub task lanes): work still running when the fixture drops
+//! holds files inside the folder, so such a fixture uses this folder too and
+//! its tests stop that work before the end.
 use std::{
     path::Path,
     time::{Duration, Instant},
@@ -48,7 +53,7 @@ impl Drop for ProcessTempDir {
                     // A failing test already has its own message.
                     if !std::thread::panicking() {
                         panic!(
-                            "a process started by this test still holds its temporary folder \
+                            "a process or task started by this test still holds its temporary folder \
                              after {:?}: {error}",
                             self.release
                         );

@@ -26,8 +26,6 @@ use tokio_tungstenite::{WebSocketStream, client_async, tungstenite::Message};
 const STEP: Duration = Duration::from_secs(30);
 
 struct Fixture {
-    // Retained until all fixture-owned processes have been terminated/reaped.
-    _temporary: tempfile::TempDir,
     paths: RuntimePaths,
     home: PathBuf,
     repo: PathBuf,
@@ -40,6 +38,9 @@ struct Fixture {
     port: u16,
     token: String,
     client: reqwest::Client,
+    // Retained until all fixture-owned processes have been terminated/reaped.
+    // Last: fields drop in declaration order.
+    _temporary: tempfile::TempDir,
 }
 
 impl Fixture {

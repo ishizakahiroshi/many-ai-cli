@@ -968,6 +968,14 @@ async fn guarded_enter_is_not_written_when_an_approval_opens_after_the_paste() {
     assert_eq!(unsent_remainder, b"\r", "only the Enter is left to type");
     assert_eq!(sent(&f), vec![b"\x1b[200~relay reminder\x1b[201~".to_vec()]);
     assert!(pending(&f, session));
+    // The hook above holds the engine; the fixture must still let it, and the
+    // database in the test's folder, go when the test ends.
+    let engine = Arc::downgrade(&f.engine);
+    drop(f);
+    assert!(
+        engine.upgrade().is_none(),
+        "the send hook kept the engine and its database open"
+    );
 }
 
 #[tokio::test]

@@ -9,9 +9,10 @@ use many_ai_cli::{
 use std::{fs, path::PathBuf};
 
 struct Fixture {
-    _root: tempfile::TempDir,
     paths: RuntimePaths,
     outside: PathBuf,
+    // Last: fields drop in declaration order.
+    _root: tempfile::TempDir,
 }
 impl Fixture {
     fn new() -> Self {

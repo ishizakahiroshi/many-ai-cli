@@ -16,9 +16,10 @@ use std::{
 };
 
 struct Fixture {
+    paths: RuntimePaths,
+    // Last: fields drop in declaration order.
     _trial: tempfile::TempDir,
     _installed: tempfile::TempDir,
-    paths: RuntimePaths,
 }
 impl Fixture {
     fn new() -> Self {

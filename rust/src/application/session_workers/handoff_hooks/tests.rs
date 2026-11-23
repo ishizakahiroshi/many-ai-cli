@@ -69,7 +69,7 @@ impl WrappedSessionSpawner for NoSpawn {
     }
 }
 struct Fixture {
-    _tasks: HubTaskOwner,
+    tasks: HubTaskOwner,
     paths: RuntimePaths,
     config: Arc<ConfigStore>,
     core: Arc<SessionEngine>,
@@ -78,12 +78,14 @@ struct Fixture {
     workers: Arc<SessionWorkers>,
     warnings: Arc<Mutex<Vec<String>>>,
     // Last: fields drop in this order, and on Windows the folder cannot be
-    // removed while a field above still holds a file inside it.
-    _root: tempfile::TempDir,
+    // removed while a field above still holds a file inside it. Work still
+    // running on the Hub tasks also holds it; a test that does not `stop()`
+    // that work fails here instead of leaving the folder behind.
+    _root: crate::process::test_temp::ProcessTempDir,
 }
 impl Fixture {
     fn new(port: u16) -> Self {
-        let root = tempfile::tempdir().unwrap();
+        let root = crate::process::test_temp::tempdir();
         let runtime = root.path().join("trial");
         std::fs::create_dir(&runtime).unwrap();
         let paths = RuntimePaths::trial(&runtime, port, &root.path().join("installed")).unwrap();
@@ -157,7 +159,7 @@ impl Fixture {
             .unwrap();
         Self {
             _root: root,
-            _tasks: tasks,
+            tasks,
             paths,
             config,
             core,
@@ -166,6 +168,16 @@ impl Fixture {
             workers,
             warnings,
         }
+    }
+    /// The Hub's own shutdown order for its task lanes: requests first, then
+    /// the effects they may have started.
+    async fn stop(self) {
+        self.tasks.stop_requests();
+        self.tasks.cancel_requests().unwrap();
+        self.tasks.drain_requests().await;
+        self.tasks.stop_effects().unwrap();
+        self.tasks.cancel_effects().unwrap();
+        self.tasks.drain_effects().await;
     }
     async fn register(&self) -> SessionBinding {
         self.core
@@ -255,6 +267,7 @@ async fn memo_receipt_checks_file_and_primes_real_delivery_without_reading_body(
     assert!(message.note_ok);
     assert_eq!(message.note_path, path.to_string_lossy());
     assert!(fixture.warnings.lock().unwrap().is_empty());
+    fixture.stop().await;
 }
 
 type Client = tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>;
@@ -430,6 +443,7 @@ async fn handoff_marker_keeps_later_effects_and_real_wrapper_connection_alive() 
         .unwrap()
         .unwrap()
         .unwrap();
+    fixture.stop().await;
 }
 
 fn typed(wrapper: &Recording) -> Vec<u8> {
@@ -552,4 +566,5 @@ async fn audit_n05_a_note_or_summary_request_is_typed_only_once_the_approval_pro
         });
         assert!(typed(&wrapper).starts_with(b"\x1b[200~"), "{request}");
     }
+    fixture.stop().await;
 }

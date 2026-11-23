@@ -154,14 +154,24 @@ impl WrappedSessionSpawner for NoSpawn {
     }
 }
 struct Fixture {
-    _root: tempfile::TempDir,
-    _installed: tempfile::TempDir,
     engine: Arc<SessionEngine>,
     transport: Arc<Transport>,
     sink: Arc<Sink>,
     store: Arc<SqliteSessionStorage>,
     /// What the engine reads as a Claude session's unanswered shell calls.
     transcript: Arc<Mutex<Vec<String>>>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds the database inside it.
+    _root: tempfile::TempDir,
+    _installed: tempfile::TempDir,
+}
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        // A send hook that holds the engine closes a cycle (the engine holds
+        // this transport), and the database inside the folder would stay open
+        // until the test process exits. Break it before the fields drop.
+        self.transport.on_send.lock().unwrap().take();
+    }
 }
 fn fixture() -> Fixture {
     fixture_with_spawner(Arc::new(NoSpawn))

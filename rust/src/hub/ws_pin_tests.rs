@@ -158,6 +158,7 @@ async fn audit_n26_a_wrapper_role_connection_from_elsewhere_is_not_taken() {
         // The wrapper many-ai-cli itself starts is taken as before.
         let (_wrapper, id) = wrapper(&f).await;
         assert!(id > 0, "pin={pin}");
+        f.stop().await;
     }
 }
 

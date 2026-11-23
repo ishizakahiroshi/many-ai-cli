@@ -42,8 +42,10 @@ struct Fixture {
     cancel: Cancellation,
     server: Option<tokio::task::JoinHandle<std::io::Result<()>>>,
     // Last: fields drop in this order, and on Windows the folder cannot be
-    // removed while a field above still holds a file inside it.
-    _root: tempfile::TempDir,
+    // removed while a field above still holds a file inside it. A test that
+    // drops the fixture without `stop().await` leaves the server task holding
+    // the folder; this folder then fails the test instead of staying behind.
+    _root: crate::process::test_temp::ProcessTempDir,
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
@@ -66,7 +68,7 @@ async fn fixture_with_preparation(
     observer: Arc<dyn OrderedEventObserver>,
     preparation: Option<Arc<dyn RegistrationPreparation>>,
 ) -> Fixture {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::process::test_temp::tempdir();
     let trial = root.path().join("trial");
     std::fs::create_dir(&trial).unwrap();
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))

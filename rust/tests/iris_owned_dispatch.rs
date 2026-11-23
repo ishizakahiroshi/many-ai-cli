@@ -206,12 +206,35 @@ impl OwnedLaunchPort for FakePort {
     }
 }
 struct Fixture {
-    root: tempfile::TempDir,
     bindings: Vec<Binding>,
     manifest: Value,
     journal: Arc<Mutex<Journal>>,
     owners: Arc<Mutex<OwnerStore>>,
     port: Arc<FakePort>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    root: tempfile::TempDir,
+}
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            return;
+        }
+        // The dispatcher's cleanup lane is a detached OS thread that holds the
+        // journal until a moment after the dispatcher is dropped, and its
+        // worker holds the owner store until it ends. The folder cannot be
+        // removed while either is open, so wait for both (the fixture holds
+        // one of each, the fake port a second owner store), and fail the test
+        // if they never let go instead of leaving the folder behind.
+        let end = std::time::Instant::now() + Duration::from_secs(30);
+        while Arc::strong_count(&self.journal) > 1 || Arc::strong_count(&self.owners) > 2 {
+            assert!(
+                std::time::Instant::now() < end,
+                "the dispatcher still holds the journal or the owner store after 30s"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
 }
 impl Fixture {
     fn new(mode: Mode) -> Self {

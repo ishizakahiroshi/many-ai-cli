@@ -6,7 +6,9 @@
 //! `tempfile::TempDir` ignores the failure, so every test run left its folders
 //! behind: 281 of them per run of this library's tests, 6,921 in four days,
 //! with every test passing. This check reads the sources and fails as soon as
-//! such a struct is written again.
+//! such a struct is written again. It reads `tests/` as well: the fixture of
+//! `tests/session_engine_contracts.rs` left 78 more folders per run the same
+//! way, unseen while the check read only `src/`.
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
@@ -135,7 +137,11 @@ fn sources(dir: &Path, into: &mut Vec<(PathBuf, String)>) {
 #[test]
 fn every_struct_drops_its_temporary_folder_last() {
     let mut all = vec![];
-    sources(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut all);
+    // The integration tests under `tests/` leave their folders in the same
+    // temp directory, so they are held to the same order.
+    for dir in ["src", "tests"] {
+        sources(&Path::new(env!("CARGO_MANIFEST_DIR")).join(dir), &mut all);
+    }
     assert!(all.len() > 100, "the sources were not found");
     let found = misplaced(&all);
     assert!(

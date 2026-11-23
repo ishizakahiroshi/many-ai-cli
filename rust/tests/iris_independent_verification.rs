@@ -47,7 +47,6 @@ fn binding() -> Binding {
     }
 }
 struct Fixture {
-    _dir: tempfile::TempDir,
     b: Binding,
     owners: OwnerStore,
     store: VerificationStore,
@@ -55,6 +54,9 @@ struct Fixture {
     db: PathBuf,
     result: PathBuf,
     at: u64,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    _dir: tempfile::TempDir,
 }
 impl Fixture {
     fn new() -> Self {

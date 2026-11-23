@@ -28,8 +28,6 @@ const PROVIDER: &str = "synth-echo";
 const LABEL: &str = "native-conpty-roundtrip";
 
 struct Fixture {
-    // Kept alive until the Hub and its entire owned process tree are reaped.
-    _temporary: tempfile::TempDir,
     paths: RuntimePaths,
     home: PathBuf,
     work: PathBuf,
@@ -37,6 +35,9 @@ struct Fixture {
     system_root: OsString,
     token: String,
     client: reqwest::Client,
+    // Kept alive until the Hub and its entire owned process tree are reaped.
+    // Last: fields drop in declaration order.
+    _temporary: tempfile::TempDir,
 }
 
 impl Fixture {

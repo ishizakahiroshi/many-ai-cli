@@ -392,69 +392,82 @@ async fn actual_registration_ack_observes_instruction_file_and_shutdown_restores
     assert_eq!(std::fs::read(&target).unwrap(), b"synthetic original\n");
 }
 
-#[tokio::test]
-async fn production_log_spelling_is_preserved_while_selected_cwd_controls_actual_storage() {
+#[test]
+fn production_log_spelling_is_preserved_while_selected_cwd_controls_actual_storage() {
     for (configured, relative_database) in [
         ("logs", Some("logs/any-ai-cli.db")),
         ("one/logs", Some("one/any-ai-cli.db")),
         ("", None),
     ] {
         let root = tempfile::tempdir().unwrap();
-        let mut context = fixture_context(&root).await;
-        let port = context.paths.port();
-        // The production instruction-home walk starts at the filesystem root
-        // and uses O_NOFOLLOW, so it does not expand macOS /var, /tmp, or /etc.
-        // tempfile sits on that alias; hold the same directory by its physical spelling.
-        let home = crate::config::paths::native_system_path(root.path()).join("synthetic-home");
-        std::fs::create_dir(&home).unwrap();
-        let paths = RuntimePaths::production(&home).unwrap();
-        let cwd = context.cwd.clone();
-        let mut config = Config {
-            token: "synthetic-production-fixture-token".into(),
-            ..Default::default()
-        };
-        config.hub.port = i64::from(port);
-        config.hub.log_dir = configured.into();
-        config.log.enabled = true;
-        context.paths = paths.clone();
-        context.config = Arc::new(ConfigStore::new(paths, config).unwrap());
-        context.environment = vec![
-            format!("HOME={}", home.display()),
-            format!("USERPROFILE={}", home.display()),
-            "PATH=".into(),
-        ];
-        context.vendor_home = home.clone();
-        context.application_home = home;
-        assert_eq!(
-            context.config.snapshot().unwrap().config.hub.log_dir,
-            configured
-        );
-        let composition = HubComposition::new(context, ServeOptions::default())
-            .await
-            .unwrap_or_else(|error| {
-                panic!("HubComposition failed for log_dir={configured:?}: {error}")
-            });
-        assert_eq!(
-            composition
-                .dependencies
-                .config
-                .snapshot()
-                .unwrap()
-                .config
-                .hub
-                .log_dir,
-            configured
-        );
-        if let Some(relative) = relative_database {
-            assert!(cwd.join(relative).is_file());
-        } else {
-            assert!(!cwd.join("any-ai-cli.db").exists());
-            assert!(
-                cwd.join("hub.log").is_file(),
-                "empty configured logs use cwd, never default runtime/logs"
+        // A composition that never ran leaves the work its owners started on
+        // the runtime, and that work holds hub.log and the database. Only
+        // dropping the runtime ends it, so each case has its own runtime and
+        // the folder is removed after it, as when a Hub process exits.
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let mut context = fixture_context(&root).await;
+            let port = context.paths.port();
+            // The production instruction-home walk starts at the filesystem root
+            // and uses O_NOFOLLOW, so it does not expand macOS /var, /tmp, or /etc.
+            // tempfile sits on that alias; hold the same directory by its physical spelling.
+            let home = crate::config::paths::native_system_path(root.path()).join("synthetic-home");
+            std::fs::create_dir(&home).unwrap();
+            let paths = RuntimePaths::production(&home).unwrap();
+            let cwd = context.cwd.clone();
+            let mut config = Config {
+                token: "synthetic-production-fixture-token".into(),
+                ..Default::default()
+            };
+            config.hub.port = i64::from(port);
+            config.hub.log_dir = configured.into();
+            config.log.enabled = true;
+            context.paths = paths.clone();
+            context.config = Arc::new(ConfigStore::new(paths, config).unwrap());
+            context.environment = vec![
+                format!("HOME={}", home.display()),
+                format!("USERPROFILE={}", home.display()),
+                "PATH=".into(),
+            ];
+            context.vendor_home = home.clone();
+            context.application_home = home;
+            assert_eq!(
+                context.config.snapshot().unwrap().config.hub.log_dir,
+                configured
             );
-        }
-        drop(composition);
+            let composition = HubComposition::new(context, ServeOptions::default())
+                .await
+                .unwrap_or_else(|error| {
+                    panic!("HubComposition failed for log_dir={configured:?}: {error}")
+                });
+            assert_eq!(
+                composition
+                    .dependencies
+                    .config
+                    .snapshot()
+                    .unwrap()
+                    .config
+                    .hub
+                    .log_dir,
+                configured
+            );
+            if let Some(relative) = relative_database {
+                assert!(cwd.join(relative).is_file());
+            } else {
+                assert!(!cwd.join("any-ai-cli.db").exists());
+                assert!(
+                    cwd.join("hub.log").is_file(),
+                    "empty configured logs use cwd, never default runtime/logs"
+                );
+            }
+            drop(composition);
+        });
+        drop(runtime);
+        root.close()
+            .unwrap_or_else(|error| panic!("log_dir={configured:?} left its folder: {error}"));
     }
 }
 

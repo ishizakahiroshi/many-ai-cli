@@ -41,11 +41,13 @@ fn now() -> i64 {
         .as_secs() as i64
 }
 struct Fixture {
-    root: tempfile::TempDir,
     binding: Binding,
     ticket: OwnerTicket,
     manifest: Value,
     journal: Option<Journal>,
+    // Last: fields drop in this order, and on Windows the folder cannot be
+    // removed while a field above still holds a file inside it.
+    root: tempfile::TempDir,
 }
 impl Fixture {
     fn new(with_main: bool) -> Self {
