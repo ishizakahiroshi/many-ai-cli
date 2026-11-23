@@ -603,6 +603,10 @@ impl SessionEngine {
                 session.snapshot.last_output_at = reattached_at.clone();
             }
         }
+        // The resend flush starts right after `reattach_ack`, before the CLI
+        // has to draw anything: a prompt shown while away must already count.
+        let phrases = self.approval_phrases_for(&session.snapshot.provider);
+        session.rescan_native_prompt(&phrases, now);
         // Go reattach restarts the two-second timer while retaining warm
         // project/stats latches, including a same-ID replacement's saved state.
         session.branch_refresh.checked_at = Some(now);

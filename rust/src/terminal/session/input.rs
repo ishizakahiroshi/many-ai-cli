@@ -937,11 +937,16 @@ impl InputQueue for SessionEngine {
                 };
                 match written {
                     Ok(_) => {}
-                    // Dropped, not held: holding it would keep every later
-                    // guarded input and this queue waiting for another
-                    // reconnect. Its sender already took it as written.
+                    // A prompt on the screen: dropped, not held. Holding it
+                    // would keep every later guarded input and this queue
+                    // waiting for another reconnect, and the prompt may never
+                    // go. Its sender already took it as written and has no
+                    // way to hear of this, so the warning is the only trace.
+                    // Not ready yet (e.g. the initial prompt still running) is
+                    // kept with its mark below: the flush after that phase
+                    // sends it.
                     Err(SessionError::InvalidRequest(detail))
-                        if *guarded && guarded_input_held(&detail) =>
+                        if *guarded && detail == INPUT_BLOCKED_BY_APPROVAL =>
                     {
                         self.warn(
                             "guarded input resend",

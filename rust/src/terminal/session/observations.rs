@@ -79,10 +79,7 @@ impl SessionEngine {
         }
         // Custom providers are detected too (the frozen Go build did the same:
         // `isAIProvider || customProviderSession`); only probes and shells are not.
-        let eligible = !s.usage_probe
-            && s.snapshot.provider != "shell"
-            && !terminal(&s.snapshot.state)
-            && s.resize_debounce.is_none_or(|until| now > until);
+        let eligible = s.native_detection_eligible(now);
         if eligible
             && !s.marker_source.is_transcript(&s.snapshot.provider)
             && let Some(marker) = marker::extract_vt(&s.vt)
@@ -685,6 +682,24 @@ impl State {
 /// reattach keeps it (lifecycle.rs).
 const GROW_PUSH_INTERVAL: Duration = Duration::from_secs(10);
 impl Session {
+    /// Whether the screen is read for approvals (markers and native prompts).
+    fn native_detection_eligible(&self, now: Timestamp) -> bool {
+        !self.usage_probe
+            && self.snapshot.provider != "shell"
+            && !terminal(&self.snapshot.state)
+            && self.resize_debounce.is_none_or(|until| now > until)
+    }
+    /// Reads the screen a reconnect rebuilt (the old screen plus the gap, or
+    /// the replay) for a native prompt, so a prompt that appeared while the
+    /// wrapper was away holds guarded input from the first resend on (audit
+    /// N03). The reconnect output never passes `observe_output`, and the record
+    /// was closed on the disconnect. Opens no record and leaves `native_tail`
+    /// empty, so the next output still reads the screen and opens one.
+    pub(super) fn rescan_native_prompt(&mut self, phrases: &[String], now: Timestamp) {
+        self.native_prompt_visible = self.native_detection_eligible(now)
+            && detect::detect_native(&self.snapshot.provider, &self.vt.tail_lines(90), phrases)
+                .is_some();
+    }
     /// Record growth and return the frame to push when one is due; otherwise the
     /// value waits for `evaluate_idle` (so it is at most one interval late).
     fn note_growth(&mut self, grew_at: String, now: Timestamp) -> Option<proto::Message> {
