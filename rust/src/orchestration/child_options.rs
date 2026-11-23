@@ -365,6 +365,20 @@ pub fn prepare_with(
         &cfg.orchestration,
     );
     fill_request(body.request_mut(), &permission);
+    // A registered CLI has no tier table, so `resolve_permission` never marks
+    // its launch as risk-confirmed. Its approval mode is the one a person chose
+    // or saw (the confirmation dialog shows the requested mode and can clear it
+    // with `default`). That choice is the confirmation; without it a human who
+    // picked bypassPermissions always hit "risk confirmation required" (a 500).
+    // An autonomous request is never confirmed this way, and
+    // `child_full_bypass: false` keeps refusing high-risk modes for children.
+    if is_registered_child_provider(&provider)
+        && body.origin().is_human()
+        && cfg.orchestration.child_full_bypass_enabled()
+        && !matches!(body.request().permission_mode.trim(), "" | "default")
+    {
+        body.request_mut().risk_confirmed = true;
+    }
     body.fill_allowed_tools_from_config(permission.allowed_tools);
     Ok(body)
 }
@@ -900,6 +914,57 @@ mod tests {
             assert!(approval.sandbox.is_empty());
             assert!(!approval.risk_confirmed);
         }
+    }
+
+    /// pending devin-child (起動 500): a person confirmed a registered child's
+    /// bypassPermissions, but nothing marked it risk-confirmed, so the launch
+    /// always failed with "risk confirmation required".
+    #[test]
+    fn a_human_confirmed_registered_mode_is_the_risk_confirmation() {
+        let providers = registered();
+        let prepared = |input: serde_json::Value, cfg: &Config| {
+            prepare_with(request(&input), cfg, &providers)
+                .unwrap()
+                .request()
+                .risk_confirmed
+        };
+        let cfg = Config::default();
+        // The AI asked for the mode; the person saw it in the dialog and approved.
+        assert!(prepared(
+            serde_json::json!({"provider":"fixture-plain","permission_mode":"bypassPermissions","confirmed":true}),
+            &cfg,
+        ));
+        assert!(prepared(
+            serde_json::json!({"provider":"fixture-plain","permission_mode":"acceptEdits","confirmed":true}),
+            &cfg,
+        ));
+        // No mode, or the dialog's explicit "no flag", needs no confirmation.
+        for mode in ["", "default"] {
+            assert!(
+                !prepared(
+                    serde_json::json!({"provider":"fixture-plain","permission_mode":mode,"confirmed":true}),
+                    &cfg,
+                ),
+                "{mode:?}"
+            );
+        }
+        // Nobody saw an autonomous request.
+        assert!(!prepared(
+            serde_json::json!({"provider":"fixture-plain","permission_mode":"bypassPermissions"}),
+            &cfg,
+        ));
+        // child_full_bypass: false keeps refusing a high-risk child mode.
+        let strict = Config {
+            orchestration: OrchestrationConfig {
+                child_full_bypass: Some(false),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(!prepared(
+            serde_json::json!({"provider":"fixture-plain","permission_mode":"bypassPermissions","confirmed":true}),
+            &strict,
+        ));
     }
 
     #[test]

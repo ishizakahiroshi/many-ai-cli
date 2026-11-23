@@ -1085,6 +1085,95 @@ fn resolved_model_suppression_and_registry_effort_argv_are_not_reinterpreted() {
     assert!(prepared.record_model.is_none());
 }
 
+/// pending devin-child (起動 500): a registered child's approval mode is the
+/// provider's own flag. The wrapper's `--permission-mode` maps only built-ins,
+/// so a mode a person confirmed for an orchestrate child never reached the CLI.
+#[test]
+fn a_registered_child_takes_its_confirmed_approval_mode_after_the_separator() {
+    struct RegistryPolicy<'a>(&'a Policy);
+    impl SpawnLaunchPolicy for RegistryPolicy<'_> {
+        fn resolve(
+            &self,
+            spec: &WrappedSpawnSpec,
+            env: &[String],
+        ) -> io::Result<ResolvedSpawnPolicy> {
+            let mut resolved = self.0.resolve(spec, env)?;
+            resolved.ordinary_permission_args =
+                vec!["--permission-mode".into(), "dangerous".into()];
+            Ok(resolved)
+        }
+        fn folder_trust(&self, spec: &WrappedSpawnSpec, env: &[String]) -> io::Result<()> {
+            self.0.folder_trust(spec, env)
+        }
+        fn registered_model(&self, provider: &str, model: &str) -> io::Result<()> {
+            self.0.registered_model(provider, model)
+        }
+    }
+    let t = runtime(8, false);
+    let policy = RegistryPolicy(t.policy.as_ref());
+    let mut request = spec(t.root.path(), 1);
+    request.provider = "synthetic-custom".into();
+    request.permission_mode = "bypassPermissions".into();
+    request.risk_confirmed = false;
+    assert_eq!(
+        launch::prepare(&t.options, &policy, &request, &|_| {}).err(),
+        Some(launch::LaunchFailure::RiskConfirmation)
+    );
+    request.risk_confirmed = true;
+    let prepared = launch::prepare(&t.options, &policy, &request, &|_| {}).unwrap();
+    let args: Vec<_> = prepared
+        .process
+        .args
+        .iter()
+        .map(|v| v.to_string_lossy().into_owned())
+        .collect();
+    let separator = args.iter().position(|v| v == "--").expect("provider tail");
+    assert_eq!(&args[separator + 1..], ["--permission-mode", "dangerous"]);
+}
+
+/// pending devin-child (起動 500): every launch step used to end in the same
+/// "wrapper process launch failed", so a refused risk confirmation could not
+/// be told from a wrapper that never ran, in the 500 or in the Hub log.
+#[tokio::test]
+async fn a_failed_launch_names_its_step_in_the_outcome_and_the_hub_log() {
+    for (fail_policy, expected) in [
+        (true, launch::LaunchFailure::ProviderPolicy),
+        (false, launch::LaunchFailure::RiskConfirmation),
+    ] {
+        let t = runtime(8, fail_policy);
+        let warnings = Arc::new(Mutex::new(Vec::new()));
+        let log = warnings.clone();
+        let spawner = ProcessWrappedSpawner::new(
+            t.options.clone(),
+            t.policy.clone(),
+            Arc::new(|_, _| Ok(())),
+            Arc::new(move |message| lock(&log).push(message)),
+        )
+        .unwrap();
+        let mut request = spec(t.root.path(), 1);
+        request.risk_confirmed = false;
+        request.model_selection = "required".into();
+        assert_eq!(
+            spawner
+                .spawn_and_wait(
+                    request,
+                    Duration::from_secs(3),
+                    &HttpWaitCancellation::default()
+                )
+                .await,
+            SpawnWaitOutcome::Failed(expected.message().into())
+        );
+        assert!(
+            expected
+                .message()
+                .starts_with("wrapper process launch failed: ")
+        );
+        assert_eq!(*lock(&warnings), [expected.message()]);
+        spawner.close();
+        assert_eq!(spawner.drain().await.unreaped_startups, 0);
+    }
+}
+
 #[test]
 fn invalid_model_and_label_still_observe_the_once_only_profile_policy_boundary() {
     for model in [true, false] {

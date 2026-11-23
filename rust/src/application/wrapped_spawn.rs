@@ -552,17 +552,15 @@ async fn lifecycle(
         // advisory callbacks stay outside locks and may safely reenter close.
         let mut state = lock(&entry.state);
         if !matches!(state.phase, Phase::Installing) || spec.cancellation.token().is_cancelled() {
-            return Err(io::Error::new(
-                io::ErrorKind::Interrupted,
-                "wrapper startup closed",
-            ));
+            return Err(launch::LaunchFailure::Closed);
         }
         let owner = WrapperStartup::spawn(
             entry.attempt,
             &prepared.process,
             prepared.stdout,
             prepared.stderr,
-        )?;
+        )
+        .map_err(|_| launch::LaunchFailure::NativeStart)?;
         let receipt = owner.receipt();
         state.native_start = Some(owner.pid());
         // Ordinary Start owns this advisory write, never the eventual ACK.
@@ -606,11 +604,13 @@ async fn lifecycle(
             entry.publish_start(SpawnStartOutcome::Started { pid: receipt.pid() });
             Some(receipt)
         }
-        Err(_) => {
-            inner.fail(
-                &entry,
-                SpawnWaitOutcome::Failed("wrapper process launch failed".into()),
-            );
+        Err(failure) => {
+            // The step that failed reaches both the caller (a child's 500) and
+            // the Hub log; a Hub stop/cancel racing the launch is not a fault.
+            if failure != launch::LaunchFailure::Closed {
+                warn_safely(&inner.warn, failure.message());
+            }
+            inner.fail(&entry, SpawnWaitOutcome::Failed(failure.message().into()));
             None
         }
     };

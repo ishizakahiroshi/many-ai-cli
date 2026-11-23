@@ -107,6 +107,72 @@ pub(super) struct PreparedSpawn {
 fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
 }
+/// Which step stopped a wrapper launch. Every step has a fixed text, so the
+/// failure a caller receives (a child's `spawn error: ...` 500) and the Hub log
+/// say which step failed without carrying an OS message, a path or a profile.
+/// Before this, every step was the same "wrapper process launch failed", and a
+/// refused risk confirmation could not be told from a wrapper that never ran.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum LaunchFailure {
+    /// Working directory, model, label or provider name the launch cannot use.
+    InvalidRequest,
+    /// A high-risk launch (bypass, model change) nobody confirmed.
+    RiskConfirmation,
+    /// The provider is absent, disabled or has no launch definition, or its
+    /// model/label were refused by the launch policy.
+    ProviderPolicy,
+    SubscriptionProfile,
+    Route,
+    /// Environment entries, protected-name list or the registration proof.
+    Environment,
+    IrisOwner,
+    PromptFile,
+    SpawnLog,
+    /// The wrapper process itself could not be created.
+    NativeStart,
+    /// Hub stop or task cancellation closed the startup first.
+    Closed,
+}
+impl LaunchFailure {
+    pub(super) fn message(self) -> &'static str {
+        match self {
+            Self::InvalidRequest => {
+                "wrapper process launch failed: invalid working directory, model, label or provider"
+            }
+            Self::RiskConfirmation => "wrapper process launch failed: risk confirmation required",
+            Self::ProviderPolicy => {
+                "wrapper process launch failed: the provider is unavailable or refused this launch"
+            }
+            Self::SubscriptionProfile => {
+                "wrapper process launch failed: subscription profile error"
+            }
+            Self::Route => "wrapper process launch failed: route error",
+            Self::Environment => "wrapper process launch failed: invalid launch environment",
+            Self::IrisOwner => "wrapper process launch failed: invalid Iris owner bootstrap",
+            Self::PromptFile => {
+                "wrapper process launch failed: the initial prompt file could not be written"
+            }
+            Self::SpawnLog => "wrapper process launch failed: the spawn log could not be opened",
+            Self::NativeStart => {
+                "wrapper process launch failed: the wrapper process could not be started"
+            }
+            Self::Closed => "wrapper process launch failed: wrapper startup closed",
+        }
+    }
+    fn policy(error: &io::Error) -> Self {
+        use crate::application::spawn_policy::{PolicyFailureStage, failure_stage};
+        match failure_stage(error) {
+            Some(PolicyFailureStage::Route) => Self::Route,
+            Some(PolicyFailureStage::Subscription) => Self::SubscriptionProfile,
+            None => Self::ProviderPolicy,
+        }
+    }
+}
+impl std::fmt::Display for LaunchFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.message())
+    }
+}
 fn valid_model_label(value: &str) -> bool {
     !value.starts_with('-') && crate::profile::validation::valid_spawn_model_label(value)
 }
@@ -151,13 +217,13 @@ fn environment_key(name: &str) -> String {
 fn add_environment(
     environment: &mut BTreeMap<String, (String, String)>,
     entries: &[String],
-) -> io::Result<()> {
+) -> Result<(), LaunchFailure> {
     for entry in entries {
         let Some((key, value)) = entry.split_once('=') else {
-            return Err(invalid("invalid wrapper environment entry"));
+            return Err(LaunchFailure::Environment);
         };
         if key.is_empty() || key.contains('\0') || value.contains('\0') {
-            return Err(invalid("invalid wrapper environment entry"));
+            return Err(LaunchFailure::Environment);
         }
         let value = if key.eq_ignore_ascii_case("PATH") {
             value
@@ -221,14 +287,16 @@ pub(super) fn prepare(
     policy: &dyn SpawnLaunchPolicy,
     spec: &WrappedSpawnSpec,
     warn: &(dyn Fn(&'static str) + Send + Sync),
-) -> io::Result<PreparedSpawn> {
+) -> Result<PreparedSpawn, LaunchFailure> {
     if !spec.cwd.is_absolute() {
-        return Err(invalid("invalid wrapper working directory"));
+        return Err(LaunchFailure::InvalidRequest);
     }
     // Profile selection happens before model/label validation in Go. The real
     // policy repeats those checks after selection and before route/key work;
     // this caller does not silently skip auto-selection's source mutation.
-    let resolved = policy.resolve(spec, &options.environment)?;
+    let resolved = policy
+        .resolve(spec, &options.environment)
+        .map_err(|error| LaunchFailure::policy(&error))?;
     prepare_resolved(options, policy, spec, &resolved, None, warn)
 }
 /// The ordinary caller already selected its profile/route/model. Never resolve
@@ -240,7 +308,7 @@ pub(super) fn prepare_start(
     resolved: &ResolvedSpawnPolicy,
     kind: WrappedStartKind,
     warn: &(dyn Fn(&'static str) + Send + Sync),
-) -> io::Result<PreparedSpawn> {
+) -> Result<PreparedSpawn, LaunchFailure> {
     prepare_resolved(options, policy, spec, resolved, Some(kind), warn)
 }
 fn prepare_resolved(
@@ -250,17 +318,21 @@ fn prepare_resolved(
     resolved: &ResolvedSpawnPolicy,
     kind: Option<WrappedStartKind>,
     warn: &(dyn Fn(&'static str) + Send + Sync),
-) -> io::Result<PreparedSpawn> {
+) -> Result<PreparedSpawn, LaunchFailure> {
+    use LaunchFailure::{Environment, InvalidRequest, IrisOwner, PromptFile, SpawnLog};
     if !spec.cwd.is_absolute() {
-        return Err(invalid("invalid wrapper working directory"));
+        return Err(InvalidRequest);
     }
     let bare = matches!(kind, Some(WrappedStartKind::Bare | WrappedStartKind::Grid));
     if (!bare && !valid_model_label(&spec.model)) || !valid_model_label(&spec.label) {
-        return Err(invalid("invalid wrapper model or label"));
+        return Err(InvalidRequest);
     }
     if !bare && risk_confirmation(spec, resolved, kind.is_some()) {
-        return Err(invalid("risk confirmation required"));
+        return Err(LaunchFailure::RiskConfirmation);
     }
+    let registered = !crate::proto::provider::BUILTIN_PROVIDER_IDS
+        .contains(&spec.provider.as_str())
+        && spec.provider != "shell";
     let mut args = Vec::<OsString>::new();
     if options.paths.is_trial() {
         args.extend([
@@ -338,9 +410,10 @@ fn prepare_resolved(
             _ => {}
         }
         // A registered provider's approval-mode flags are its own spelling too.
-        if kind.is_some()
-            && !crate::proto::provider::BUILTIN_PROVIDER_IDS.contains(&spec.provider.as_str())
-        {
+        // An orchestrate child (no start kind) needs them as much as a new
+        // session: the wrapper's own `--permission-mode` maps only built-ins,
+        // so without this the mode a human confirmed never reached the CLI.
+        if registered {
             provider_tail.extend(
                 resolved
                     .ordinary_permission_args
@@ -376,7 +449,7 @@ fn prepare_resolved(
         if config::is_headless_execution_mode(&spec.execution_mode) {
             args.push("--headless".into());
         }
-        prompt = self::prompt(&options.paths, &spec.initial_prompt)?;
+        prompt = self::prompt(&options.paths, &spec.initial_prompt).map_err(|_| PromptFile)?;
         if let Some(prompt) = &prompt {
             args.extend(["--prompt-file".into(), prompt.path().into_os_string()]);
         }
@@ -436,7 +509,7 @@ fn prepare_resolved(
     environment.remove(&protected_name_key);
     if !protected_names.is_empty() {
         let serialized = serde_json::to_string(&protected_names.into_iter().collect::<Vec<_>>())
-            .map_err(|_| invalid("spawn environment policy is invalid"))?;
+            .map_err(|_| Environment)?;
         environment.insert(
             protected_name_key,
             (
@@ -462,9 +535,9 @@ fn prepare_resolved(
         let value = crate::hub::iris_execution_mcp::parse_json(
             spec.registration_metadata.iris_owner_context.as_bytes(),
         )
-        .map_err(|_| invalid("invalid Iris owner bootstrap"))?;
+        .map_err(|_| IrisOwner)?;
         let ticket: crate::hub::iris_execution_owner::OwnerTicket =
-            serde_json::from_value(value).map_err(|_| invalid("invalid Iris owner bootstrap"))?;
+            serde_json::from_value(value).map_err(|_| IrisOwner)?;
         if ticket.binding.provider != spec.provider
             || ticket.binding.profile_id
                 != if spec.subscription_profile_id.is_empty() {
@@ -473,7 +546,7 @@ fn prepare_resolved(
                     &spec.subscription_profile_id
                 }
         {
-            return Err(invalid("Iris owner provider/profile mismatch"));
+            return Err(IrisOwner);
         }
         environment.insert(
             environment_key(crate::wrapper::iris_owner::OWNER_ENV),
@@ -483,10 +556,7 @@ fn prepare_resolved(
             ),
         );
     }
-    let proof = spec
-        .registration_proof
-        .as_ref()
-        .ok_or_else(|| invalid("core registration proof is required"))?;
+    let proof = spec.registration_proof.as_ref().ok_or(Environment)?;
     environment.insert(
         environment_key(SPAWN_PROOF_ENV),
         (SPAWN_PROOF_ENV.into(), proof.as_header_value().into()),
@@ -521,7 +591,7 @@ fn prepare_resolved(
     }
     // Preserve Go's provider + local-time append log name. A provider accepted
     // by application policy must still be one basename at this filesystem edge.
-    crate::files::safe_fs::basename(&spec.provider)?;
+    crate::files::safe_fs::basename(&spec.provider).map_err(|_| InvalidRequest)?;
     let filename = format!(
         "{}-{}.log",
         spec.provider,
@@ -541,11 +611,14 @@ fn prepare_resolved(
             let null = "NUL";
             #[cfg(not(windows))]
             let null = "/dev/null";
-            std::fs::OpenOptions::new().write(true).open(null)?
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(null)
+                .map_err(|_| SpawnLog)?
         }
-        Err(error) => return Err(error),
+        Err(_) => return Err(SpawnLog),
     };
-    let stderr = stdout.try_clone()?;
+    let stderr = stdout.try_clone().map_err(|_| SpawnLog)?;
     if !bare
         && spec.grants.grant_folder_trust()
         && policy.folder_trust(spec, &exact_environment).is_err()
