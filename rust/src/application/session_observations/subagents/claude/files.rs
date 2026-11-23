@@ -64,10 +64,10 @@ fn tail(
     path: &Path,
     cap: usize,
     records_cap: usize,
+    read_time: Duration,
 ) -> io::Result<(Vec<Vec<u8>>, usize)> {
     super::super::check_path(paths, path)?;
-    let started = Instant::now();
-    let deadline = Duration::from_millis(100);
+    let clock = super::super::ReadClock::start(read_time);
     let mut file = super::super::open_artifact(paths, path)?;
     let size = file.metadata()?.len();
     let start = size.saturating_sub(cap as u64);
@@ -76,7 +76,7 @@ fn tail(
     let mut loaded = len;
     let mut n = 0;
     while loaded > 0 {
-        if started.elapsed() >= deadline {
+        if clock.expired() {
             return Ok((vec![], n));
         }
         let begin = loaded.saturating_sub(64 * 1024);
@@ -91,7 +91,7 @@ fn tail(
     let mut end = last + 1;
     let mut records = vec![];
     while end > 0 && records.len() < records_cap {
-        if started.elapsed() >= deadline {
+        if clock.expired() {
             break;
         }
         let begin = bytes[..end - 1]
@@ -111,9 +111,11 @@ pub(super) fn read_tail(
     path: &Path,
     cap: usize,
     parent: bool,
+    read_time: Duration,
     stats: &mut ReadStats,
 ) -> Vec<Vec<u8>> {
-    match tail(paths, path, cap, if parent { PARENT_RECORDS } else { 512 }) {
+    let records = if parent { PARENT_RECORDS } else { 512 };
+    match tail(paths, path, cap, records, read_time) {
         Ok((rows, n)) => {
             stats.files_read += 1;
             if parent {

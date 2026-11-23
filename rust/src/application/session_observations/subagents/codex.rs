@@ -13,7 +13,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     io::{self, BufRead, Read},
     path::{Path, PathBuf},
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, SystemTime},
 };
 #[derive(Clone, Default, Deserialize)]
 #[serde(default)]
@@ -378,9 +378,10 @@ fn signals(
     paths: &RuntimePaths,
     path: &Path,
     nodes: &BTreeMap<String, SubagentNode>,
+    read_time: Duration,
 ) -> BTreeMap<String, Signal> {
     let mut signals = BTreeMap::<String, Signal>::new();
-    let deadline = Instant::now() + Duration::from_millis(100);
+    let clock = super::ReadClock::start(read_time);
     let Ok(bytes) = read_tail(paths, path, 2 * 1024 * 1024) else {
         return signals;
     };
@@ -390,7 +391,7 @@ fn signals(
         .filter(|line| !line.is_empty())
         .take(500)
     {
-        if Instant::now() >= deadline {
+        if clock.expired() {
             break;
         }
         let Ok(SignalWire(meta)) = proto::decode_wire::<SignalWire>(line) else {
@@ -421,8 +422,8 @@ fn signals(
     }
     signals
 }
-fn last_tool(paths: &RuntimePaths, path: &Path, cap: u64) -> (String, String) {
-    let deadline = Instant::now() + Duration::from_millis(100);
+fn last_tool(paths: &RuntimePaths, path: &Path, cap: u64, read_time: Duration) -> (String, String) {
+    let clock = super::ReadClock::start(read_time);
     let Ok(bytes) = read_tail(paths, path, if cap == 0 { 128 * 1024 } else { cap }) else {
         return Default::default();
     };
@@ -432,7 +433,7 @@ fn last_tool(paths: &RuntimePaths, path: &Path, cap: u64) -> (String, String) {
         .filter(|line| !line.is_empty())
         .take(512)
     {
-        if Instant::now() >= deadline {
+        if clock.expired() {
             break;
         }
         let Ok(ToolWire(meta)) = proto::decode_wire::<ToolWire>(line) else {
@@ -496,7 +497,7 @@ pub fn read(
         };
         if child.modified != Some(modified) || child.size != info.len() {
             (child.last_tool, child.last_summary) =
-                last_tool(paths, &child.path, budget.tail_bytes);
+                last_tool(paths, &child.path, budget.tail_bytes, budget.read_time);
             child.modified = Some(modified);
             child.size = info.len();
         }
@@ -527,7 +528,7 @@ pub fn read(
     if nodes.is_empty() {
         return Ok((None, state));
     }
-    let signals = signals(paths, parent, &nodes);
+    let signals = signals(paths, parent, &nodes, budget.read_time);
     for (id, node) in &mut nodes {
         let child = state.children.get_mut(id).unwrap();
         if let Some(signal) = signals.get(id) {

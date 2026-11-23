@@ -20,7 +20,7 @@ fn live_sibling_tool_and_started_latch_survive_parent_window_then_terminal_meta_
         &parent,
         Timestamp::UNIX_EPOCH,
         State::default(),
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         Timestamp::now(),
     )
@@ -35,7 +35,7 @@ fn live_sibling_tool_and_started_latch_survive_parent_window_then_terminal_meta_
         &parent,
         Timestamp::UNIX_EPOCH,
         state,
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         Timestamp::now(),
     )
@@ -47,7 +47,7 @@ fn live_sibling_tool_and_started_latch_survive_parent_window_then_terminal_meta_
         &parent,
         Timestamp::UNIX_EPOCH,
         state,
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         Timestamp::now(),
     )
@@ -65,10 +65,58 @@ fn live_sibling_tool_and_started_latch_survive_parent_window_then_terminal_meta_
         &parent,
         Timestamp::UNIX_EPOCH,
         state,
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         Timestamp::now(),
     )
     .unwrap();
     assert_eq!(tree.unwrap().nodes[0].state, "done");
+}
+#[test]
+fn tail_scan_cut_off_comes_from_the_budget_not_the_machine_speed() {
+    let root = tempfile::tempdir().unwrap();
+    let installed = tempfile::tempdir().unwrap();
+    let paths = RuntimePaths::trial(root.path(), 49319, installed.path()).unwrap();
+    let session = root.path().join("profile/sessions/cwd/parent");
+    std::fs::create_dir_all(session.join("subagents/worker")).unwrap();
+    let sibling = session.parent().unwrap().join("child");
+    std::fs::create_dir(&sibling).unwrap();
+    std::fs::write(
+        sibling.join("events.jsonl"),
+        "{\"type\":\"tool_started\",\"tool_name\":\"Bash\",\"arguments\":\"synthetic omitted\"}\n",
+    )
+    .unwrap();
+    let parent = session.join("updates.jsonl");
+    let spawn = serde_json::json!({"timestamp":100,"params":{"update":{"sessionUpdate":"subagent_spawned","subagent_id":"worker","subagent_type":"review","description":"worker label","model":"model","child_session_id":"child"}}});
+    std::fs::write(&parent, format!("{spawn}\n")).unwrap();
+    // A machine slower than the cap: the parent scan stops before the spawn record.
+    let exhausted = ReadBudget {
+        read_time: Duration::ZERO,
+        ..ReadBudget::default()
+    };
+    let (tree, _) = read(
+        &parent,
+        Timestamp::UNIX_EPOCH,
+        State::default(),
+        &exhausted,
+        &paths,
+        Timestamp::now(),
+    )
+    .unwrap();
+    let node = &tree.unwrap().nodes[0];
+    assert_ne!(node.state, "running");
+    assert!(node.last_tool_name.is_empty());
+    // Tests lift the cap, so the same files always read in full.
+    let (tree, _) = read(
+        &parent,
+        Timestamp::UNIX_EPOCH,
+        State::default(),
+        &ReadBudget::unhurried(),
+        &paths,
+        Timestamp::now(),
+    )
+    .unwrap();
+    let node = &tree.unwrap().nodes[0];
+    assert_eq!(node.state, "running");
+    assert_eq!(node.last_tool_name, "Bash");
 }

@@ -23,6 +23,8 @@ pub(super) struct Native {
     attempted: Option<Timestamp>,
     signature: String,
     had_tree: bool,
+    /// Reader caps, held here so a test can lift the wall-clock cut-off.
+    budget: subagents::ReadBudget,
 }
 pub(super) fn signature(tree: &proto::SubagentTree) -> String {
     let mut text = format!("{}|{}", tree.provider, tree.omitted);
@@ -130,14 +132,14 @@ impl Native {
         let Some(path) = self.path.as_deref() else {
             return Ok(None);
         };
-        let budget = subagents::ReadBudget::default();
+        let budget = &self.budget;
         let prior = self.reader.clone();
         let result = match (provider, prior) {
             ("claude", Reader::Claude(state)) => subagents::claude::read(
                 path,
                 snapshot.turn_started_at,
                 state,
-                &budget,
+                budget,
                 &worker.paths,
                 now,
             )
@@ -146,7 +148,7 @@ impl Native {
                 path,
                 snapshot.turn_started_at,
                 Default::default(),
-                &budget,
+                budget,
                 &worker.paths,
                 now,
             )
@@ -155,7 +157,7 @@ impl Native {
                 path,
                 snapshot.turn_started_at,
                 state,
-                &budget,
+                budget,
                 &worker.paths,
                 now,
             )
@@ -164,7 +166,7 @@ impl Native {
                 path,
                 snapshot.turn_started_at,
                 Default::default(),
-                &budget,
+                budget,
                 &worker.paths,
                 now,
             )
@@ -173,7 +175,7 @@ impl Native {
                 path,
                 snapshot.turn_started_at,
                 state,
-                &budget,
+                budget,
                 &worker.paths,
                 now,
             )
@@ -182,7 +184,7 @@ impl Native {
                 path,
                 snapshot.turn_started_at,
                 Default::default(),
-                &budget,
+                budget,
                 &worker.paths,
                 now,
             )

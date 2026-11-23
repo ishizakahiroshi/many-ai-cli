@@ -100,7 +100,7 @@ fn pinned_go_native_reader_cases() {
                 state,
                 &ReadBudget {
                     max_nodes: stage.max,
-                    ..Default::default()
+                    ..ReadBudget::unhurried()
                 },
                 &paths,
                 at,
@@ -137,7 +137,7 @@ fn real_ten_mib_child_reads_never_exceed_head_tail_and_unchanged_poll_reads_zero
         &parent,
         now() - Duration::from_secs(1),
         State::default(),
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         now(),
         &mut stats,
@@ -159,7 +159,7 @@ fn real_ten_mib_child_reads_never_exceed_head_tail_and_unchanged_poll_reads_zero
         &parent,
         now(),
         state,
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         now() + Duration::from_secs(1200),
         &mut cached,
@@ -186,7 +186,7 @@ fn metadata_cached_once_and_disappearing_entry_prunes_continuation() {
         &parent,
         now(),
         State::default(),
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         now(),
     )
@@ -203,14 +203,22 @@ fn metadata_cached_once_and_disappearing_entry_prunes_continuation() {
         &parent,
         now(),
         state,
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         now() + Duration::from_secs(1),
     )
     .unwrap();
     assert_eq!(tree.unwrap().nodes[0].label, "short label");
     fs::remove_file(&meta_path).unwrap();
-    let (tree, state) = read(&parent, now(), state, &ReadBudget::default(), &paths, now()).unwrap();
+    let (tree, state) = read(
+        &parent,
+        now(),
+        state,
+        &ReadBudget::unhurried(),
+        &paths,
+        now(),
+    )
+    .unwrap();
     assert!(tree.is_none());
     assert!(state.children.is_empty());
 }
@@ -234,7 +242,7 @@ fn newest_complete_lines_only_and_500_parent_records_bound_signal_scan() {
         &parent,
         now() - Duration::from_secs(1),
         State::default(),
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         now(),
     )
@@ -249,7 +257,7 @@ fn newest_complete_lines_only_and_500_parent_records_bound_signal_scan() {
         &parent,
         now(),
         State::default(),
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         now(),
     )
@@ -271,7 +279,7 @@ fn trial_child_symlink_cannot_read_foreign_transcript() {
         &parent,
         now(),
         State::default(),
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         now(),
     )
@@ -320,7 +328,7 @@ fn observe(
         parent,
         now() - Duration::from_secs(3600),
         state,
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         paths,
         at,
     )
@@ -420,4 +428,32 @@ fn resume_leaving_the_parent_window_does_not_stay_running_forever() {
     log += &"{}\n".repeat(600);
     let (s, _, _) = observe(&paths2, &parent2, &log, st2, 1300);
     assert_eq!(s, "done");
+}
+#[test]
+fn tail_scan_cut_off_comes_from_the_budget_not_the_machine_speed() {
+    let (_root, paths, parent) = fixture();
+    write(&parent, b"", now());
+    child(&parent, "a", META, BODY, now());
+    // A machine slower than the cap: the child tail scan stops before its record.
+    let exhausted = ReadBudget {
+        read_time: Duration::ZERO,
+        ..ReadBudget::default()
+    };
+    let (tree, _) = read(&parent, now(), State::default(), &exhausted, &paths, now()).unwrap();
+    let node = &tree.unwrap().nodes[0];
+    assert!(node.last_tool_name.is_empty());
+    assert!(node.last_tool_summary.is_empty());
+    // Tests lift the cap, so the same file always reads in full.
+    let (tree, _) = read(
+        &parent,
+        now(),
+        State::default(),
+        &ReadBudget::unhurried(),
+        &paths,
+        now(),
+    )
+    .unwrap();
+    let node = &tree.unwrap().nodes[0];
+    assert_eq!(node.last_tool_name, "Bash");
+    assert_eq!(node.last_tool_summary, "git status");
 }

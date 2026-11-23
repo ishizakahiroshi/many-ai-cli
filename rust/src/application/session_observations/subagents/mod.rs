@@ -8,11 +8,19 @@ use std::{
     fs::{self, File},
     io::{self, Read, Seek, SeekFrom},
     path::Path,
+    time::{Duration, Instant},
 };
+/// Wall-clock cap of one tail scan (the Go reference's `agentChatReadTimeBudget`).
+pub const READ_TIME: Duration = Duration::from_millis(100);
 pub struct ReadBudget {
     pub head_bytes: u64,
     pub tail_bytes: u64,
     pub max_nodes: usize,
+    /// Each tail scan stops once this much wall-clock time has passed since it
+    /// began. It is a budget value, not a constant inside the readers, so a
+    /// test that asserts on read results can lift it with `unhurried()` and
+    /// stay independent of how fast the machine happens to be.
+    pub read_time: Duration,
 }
 impl Default for ReadBudget {
     fn default() -> Self {
@@ -20,7 +28,36 @@ impl Default for ReadBudget {
             head_bytes: 64 * 1024,
             tail_bytes: 128 * 1024,
             max_nodes: 50,
+            read_time: READ_TIME,
         }
+    }
+}
+impl ReadBudget {
+    /// Default byte and node caps without the wall-clock cut-off.
+    #[cfg(test)]
+    pub fn unhurried() -> Self {
+        Self {
+            read_time: Duration::MAX,
+            ..Self::default()
+        }
+    }
+}
+/// Started when a tail scan begins; `expired` compares elapsed time instead of
+/// adding to `Instant`, so `Duration::MAX` never overflows.
+#[derive(Clone, Copy)]
+pub struct ReadClock {
+    started: Instant,
+    limit: Duration,
+}
+impl ReadClock {
+    pub fn start(limit: Duration) -> Self {
+        Self {
+            started: Instant::now(),
+            limit,
+        }
+    }
+    pub fn expired(&self) -> bool {
+        self.started.elapsed() >= self.limit
     }
 }
 pub fn check_path(paths: &RuntimePaths, path: &Path) -> io::Result<()> {

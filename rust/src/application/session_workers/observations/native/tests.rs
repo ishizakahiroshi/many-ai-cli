@@ -113,7 +113,13 @@ async fn custom_definition_adapter_runs_real_codex_reader_clears_once_and_replay
             ..Default::default()
         },
     );
-    let mut native = Native::default();
+    // The live worker keeps the reference wall-clock cap; this test lifts it so
+    // its assertions never depend on how fast the machine reads.
+    assert_eq!(Native::default().budget.read_time, subagents::READ_TIME);
+    let mut native = Native {
+        budget: subagents::ReadBudget::unhurried(),
+        ..Default::default()
+    };
     assert!(native.due.is_none());
     native.start(now);
     let tree = native.poll(&worker, &snapshot, true, now).unwrap().unwrap();

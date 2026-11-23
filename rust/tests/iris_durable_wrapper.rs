@@ -20,13 +20,13 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
-    io,
+    io::{self, Write},
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, AtomicUsize, Ordering},
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 fn sha(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
@@ -45,6 +45,9 @@ struct Fixture {
     ticket: OwnerTicket,
     manifest: Value,
     journal: Option<Journal>,
+    /// Pause the helper between opening and filling its result, standing in for
+    /// a scheduler that preempts it right there.
+    write_gap: Duration,
     // Last: fields drop in this order, and on Windows the folder cannot be
     // removed while a field above still holds a file inside it.
     root: tempfile::TempDir,
@@ -112,6 +115,7 @@ impl Fixture {
             ticket,
             manifest,
             journal,
+            write_gap: Duration::ZERO,
         }
     }
     fn adopt(&self) -> Arc<DurableExecutionOwner> {
@@ -130,6 +134,10 @@ impl Fixture {
             .path()
             .join("iris-execution-artifacts/result.json")
     }
+    /// Written by the fake transport once it has dropped the Hub.
+    fn lost_path(&self) -> PathBuf {
+        self.root.path().join("transport-lost")
+    }
     fn process(&self) -> ProcessPlan {
         let body = json!({"binding":self.binding,"owner_id":self.ticket.owner_id,"owner_epoch":self.ticket.owner_epoch,"instruction_hash":self.binding.instruction_hash,"outcome":"succeeded","effects":"none","synthetic":true}).to_string();
         let mut env = BTreeMap::new();
@@ -140,6 +148,14 @@ impl Fixture {
         env.insert(
             "MANY_AI_SYNTHETIC_DURABLE_RESULT_BODY".into(),
             Some(body.into()),
+        );
+        env.insert(
+            "MANY_AI_SYNTHETIC_DURABLE_LOST_PATH".into(),
+            Some(self.lost_path().into_os_string()),
+        );
+        env.insert(
+            "MANY_AI_SYNTHETIC_DURABLE_WRITE_GAP_MS".into(),
+            Some(self.write_gap.as_millis().to_string().into()),
         );
         ProcessPlan {
             executable: std::env::current_exe().unwrap(),
@@ -166,12 +182,14 @@ impl Fixture {
 }
 struct Connector {
     path: PathBuf,
+    lost: PathBuf,
     disconnected: Arc<AtomicBool>,
     frames: Arc<Mutex<Vec<String>>>,
 }
 struct Socket {
     registered: bool,
     path: PathBuf,
+    lost: PathBuf,
     disconnected: Arc<AtomicBool>,
     frames: Arc<Mutex<Vec<String>>>,
 }
@@ -181,6 +199,7 @@ impl HubConnector for Connector {
             Ok(Box::new(Socket {
                 registered: false,
                 path: self.path.clone(),
+                lost: self.lost.clone(),
                 disconnected: self.disconnected.clone(),
                 frames: self.frames.clone(),
             }) as Box<dyn HubSocket>)
@@ -213,6 +232,7 @@ impl HubSocket for Socket {
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
             self.disconnected.store(true, Ordering::SeqCst);
+            std::fs::write(&self.lost, b"").unwrap();
             Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
                 "synthetic transport loss after artifact write",
@@ -236,6 +256,7 @@ async fn run(
 ) -> io::Result<runtime::WrapperResult> {
     let connector = Connector {
         path: f.result_path(),
+        lost: f.lost_path(),
         disconnected,
         frames: Arc::new(Mutex::new(vec![])),
     };
@@ -267,15 +288,47 @@ async fn run(
 fn native_durable_helper() {
     if let Some(path) = std::env::var_os("MANY_AI_SYNTHETIC_DURABLE_RESULT_PATH") {
         let body = std::env::var_os("MANY_AI_SYNTHETIC_DURABLE_RESULT_BODY").unwrap();
-        std::fs::write(Path::new(&path), body.to_str().unwrap()).unwrap();
-        // Keep the root alive until the fake transport observes the file and
-        // disconnects; output integrity and local cessation remain independent.
-        std::thread::sleep(Duration::from_millis(300));
+        let gap = std::env::var("MANY_AI_SYNTHETIC_DURABLE_WRITE_GAP_MS")
+            .ok()
+            .and_then(|ms| ms.parse().ok())
+            .map(Duration::from_millis)
+            .unwrap_or_default();
+        // The fake transport drops the Hub as soon as the result name exists,
+        // and the owner then stops this process. Publish the whole body under
+        // that name in one rename, so no stop can leave it empty or partial.
+        let path = Path::new(&path);
+        let staging = path.with_extension("json.partial");
+        let mut file = std::fs::File::create(&staging).unwrap();
+        std::thread::sleep(gap);
+        file.write_all(body.to_str().unwrap().as_bytes()).unwrap();
+        drop(file);
+        std::fs::rename(&staging, path).unwrap();
+        // Keep the root alive until the fake transport has observed the file
+        // and disconnected, however long that takes on a loaded machine; the
+        // owner normally stops this process right after. Output integrity and
+        // local cessation remain independent. The bound only keeps a broken run
+        // from leaving the helper behind, and sits well inside `run`'s deadline.
+        let lost = std::env::var_os("MANY_AI_SYNTHETIC_DURABLE_LOST_PATH").unwrap();
+        let give_up = Instant::now() + Duration::from_secs(10);
+        while !Path::new(&lost).exists() && Instant::now() < give_up {
+            std::thread::sleep(Duration::from_millis(5));
+        }
     }
 }
 #[tokio::test]
 async fn durable_native_owner_survives_socket_loss_and_replay_cannot_spawn() {
-    let f = Fixture::new(true);
+    survives_socket_loss_and_replay_cannot_spawn(Duration::ZERO).await;
+}
+/// Once at random, the helper was stopped between creating the result and
+/// writing it; the owner then refused the empty artifact and `run` failed.
+/// A wide gap makes that preemption certain instead of rare.
+#[tokio::test]
+async fn result_published_only_when_complete_survives_preemption_mid_write() {
+    survives_socket_loss_and_replay_cannot_spawn(Duration::from_millis(500)).await;
+}
+async fn survives_socket_loss_and_replay_cannot_spawn(write_gap: Duration) {
+    let mut f = Fixture::new(true);
+    f.write_gap = write_gap;
     let owner = f.adopt();
     let factory = CountFactory::default();
     let disconnected = Arc::new(AtomicBool::new(false));

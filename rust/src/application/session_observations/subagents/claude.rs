@@ -13,7 +13,7 @@ use std::{
     collections::BTreeMap,
     io::{self, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    time::{Duration, Instant},
+    time::Duration,
 };
 const PARENT_BYTES: usize = 2 * 1024 * 1024;
 const PARENT_RECORDS: usize = 500;
@@ -311,7 +311,8 @@ fn read_inner(
             let (started, calls) = read_head(paths, &path, head_cap(budget), stamp.size, stats);
             child.started_at = started;
             child.tool_calls = calls;
-            let (name, summary) = read_last_tool(paths, &path, tail_cap(budget), stats);
+            let (name, summary) =
+                read_last_tool(paths, &path, tail_cap(budget), budget.read_time, stats);
             child.last_tool_name = name;
             child.last_tool_summary = summary;
         }
@@ -340,7 +341,7 @@ fn read_inner(
     if !nodes.is_empty() {
         let stamp = Stamp::read(paths, parent).ok();
         if state.parent_stamp.is_none() || stamp != state.parent_stamp {
-            (state.signals, state.resumes) = scan_parent(paths, parent, stats);
+            (state.signals, state.resumes) = scan_parent(paths, parent, budget.read_time, stats);
             state.parent_stamp = stamp;
         }
         for (id, node) in &mut nodes {
@@ -443,9 +444,10 @@ fn read_last_tool(
     paths: &RuntimePaths,
     path: &Path,
     cap: usize,
+    read_time: Duration,
     stats: &mut ReadStats,
 ) -> (String, String) {
-    for line in read_tail(paths, path, cap, false, stats) {
+    for line in read_tail(paths, path, cap, false, read_time, stats) {
         let Ok(record) = decode_record(&line, "Transcript") else {
             continue;
         };
@@ -509,6 +511,7 @@ fn resumed_agent(raw: &str) -> Option<String> {
 fn scan_parent(
     paths: &RuntimePaths,
     path: &Path,
+    read_time: Duration,
     stats: &mut ReadStats,
 ) -> (BTreeMap<String, Signal>, BTreeMap<String, String>) {
     static NOTICE: OnceLock<regex::Regex> = OnceLock::new();
@@ -530,7 +533,7 @@ fn scan_parent(
     let mut signals = BTreeMap::new();
     let mut resumes = BTreeMap::new();
     // Records arrive newest first, so the first resume seen per agent is the latest run.
-    for line in read_tail(paths, path, PARENT_BYTES, true, stats) {
+    for line in read_tail(paths, path, PARENT_BYTES, true, read_time, stats) {
         let Ok(record) = decode_record(&line, "Parent") else {
             continue;
         };

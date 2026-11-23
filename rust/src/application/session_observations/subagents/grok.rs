@@ -12,7 +12,7 @@ use std::{
     collections::BTreeMap,
     io,
     path::Path,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, SystemTime},
 };
 #[derive(Default, Deserialize)]
 #[serde(default)]
@@ -167,10 +167,11 @@ fn modified_time(value: SystemTime) -> i64 {
 fn updates(
     paths: &RuntimePaths,
     parent: &Path,
+    read_time: Duration,
 ) -> (BTreeMap<String, Child>, BTreeMap<String, Child>) {
     let mut spawned = BTreeMap::new();
     let mut finished = BTreeMap::new();
-    let deadline = Instant::now() + Duration::from_millis(100);
+    let clock = super::ReadClock::start(read_time);
     let Ok(bytes) = read_tail(paths, parent, 2 * 1024 * 1024) else {
         return (spawned, finished);
     };
@@ -180,7 +181,7 @@ fn updates(
         .filter(|line| !line.is_empty())
         .take(500)
     {
-        if Instant::now() >= deadline {
+        if clock.expired() {
             break;
         }
         let Ok(env) = proto::decode_wire::<Envelope>(line) else {
@@ -237,8 +238,8 @@ fn updates(
     }
     (spawned, finished)
 }
-fn last_tool(paths: &RuntimePaths, path: &Path, cap: u64) -> String {
-    let deadline = Instant::now() + Duration::from_millis(100);
+fn last_tool(paths: &RuntimePaths, path: &Path, cap: u64, read_time: Duration) -> String {
+    let clock = super::ReadClock::start(read_time);
     let Ok(bytes) = read_tail(paths, path, if cap == 0 { 128 * 1024 } else { cap }) else {
         return String::new();
     };
@@ -248,7 +249,7 @@ fn last_tool(paths: &RuntimePaths, path: &Path, cap: u64) -> String {
         .filter(|line| !line.is_empty())
         .take(512)
     {
-        if Instant::now() >= deadline {
+        if clock.expired() {
             break;
         }
         let Ok(event) = proto::decode_wire::<Event>(line) else {
@@ -320,7 +321,7 @@ pub fn read(
         .iter()
         .any(|e| state.children.get(&e.name).is_none_or(|child| !child.done));
     let (spawned, finished) = if need {
-        updates(paths, parent)
+        updates(paths, parent, budget.read_time)
     } else {
         Default::default()
     };
@@ -390,7 +391,8 @@ pub fn read(
                 && let Ok(modified) = info.modified()
             {
                 if child.events_modified != Some(modified) || child.events_size != info.len() {
-                    child.last_tool = last_tool(paths, &events, budget.tail_bytes);
+                    child.last_tool =
+                        last_tool(paths, &events, budget.tail_bytes, budget.read_time);
                     child.events_modified = Some(modified);
                     child.events_size = info.len()
                 }

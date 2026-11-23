@@ -46,7 +46,7 @@ fn sticky_parent_signal_and_allowlisted_custom_tool_summary() {
         &parent,
         Timestamp::UNIX_EPOCH,
         State::default(),
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         now,
     )
@@ -72,7 +72,7 @@ fn sticky_parent_signal_and_allowlisted_custom_tool_summary() {
         &parent,
         Timestamp::UNIX_EPOCH,
         state,
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         now,
     )
@@ -96,7 +96,7 @@ fn unseen_first_observation_remains_unknown_after_new_growth() {
         &parent,
         Timestamp::UNIX_EPOCH,
         State::default(),
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         now,
     )
@@ -110,10 +110,57 @@ fn unseen_first_observation_remains_unknown_after_new_growth() {
         &parent,
         Timestamp::UNIX_EPOCH,
         state,
-        &ReadBudget::default(),
+        &ReadBudget::unhurried(),
         &paths,
         now,
     )
     .unwrap();
     assert_eq!(tree.unwrap().nodes[0].state, "unknown");
+}
+#[test]
+fn tail_scan_cut_off_comes_from_the_budget_not_the_machine_speed() {
+    // The product keeps the Go reference's 100 ms cap per tail scan.
+    assert_eq!(ReadBudget::default().read_time, Duration::from_millis(100));
+    let (_root, _installed, paths, parent, child, now) = fixture();
+    append(
+        &child,
+        serde_json::json!({"type":"response_item","payload":{"type":"custom_tool_call","name":"exec","input":"echo synthetic"}}),
+    );
+    append(
+        &parent,
+        serde_json::json!({"type":"event_msg","payload":{"type":"item_completed","completed_at_ms":83,"item":{"type":"SubAgentActivity","agent_thread_id":"child","kind":"completed"}}}),
+    );
+    // A machine slower than the cap: both scans stop before their first record.
+    // This used to happen at random on a loaded CI runner with the default budget.
+    let exhausted = ReadBudget {
+        read_time: Duration::ZERO,
+        ..ReadBudget::default()
+    };
+    let (tree, _) = read(
+        &parent,
+        Timestamp::UNIX_EPOCH,
+        State::default(),
+        &exhausted,
+        &paths,
+        now,
+    )
+    .unwrap();
+    let node = &tree.unwrap().nodes[0];
+    assert_ne!(node.state, "done");
+    assert_eq!(node.finished_at, 0);
+    assert!(node.last_tool_name.is_empty());
+    // Tests lift the cap, so the same files always read in full.
+    let (tree, _) = read(
+        &parent,
+        Timestamp::UNIX_EPOCH,
+        State::default(),
+        &ReadBudget::unhurried(),
+        &paths,
+        now,
+    )
+    .unwrap();
+    let node = &tree.unwrap().nodes[0];
+    assert_eq!(node.state, "done");
+    assert_eq!(node.finished_at, 83);
+    assert_eq!(node.last_tool_name, "exec");
 }
