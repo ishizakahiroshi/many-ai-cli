@@ -22,6 +22,7 @@ pub mod approval_rules;
 pub mod board_sync;
 pub mod cli_updates;
 pub mod event_observer;
+pub mod external_followup;
 pub mod grid_spawn;
 pub mod host_actions;
 pub mod instruction_rules;

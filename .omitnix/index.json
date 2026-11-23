@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "c25bb626d15e22062bd9241246a230de6e70b9da",
+    "commit": "dd8f184e4150f484e6e916a51ee23aa19b2d775a",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2094,
-    "analyzed": 1642,
+    "discovered": 2097,
+    "analyzed": 1644,
     "unresolved": 15,
     "unknown": 0,
-    "unclaimed": 437,
+    "unclaimed": 438,
     "skipped_by_config": 0
   },
   "files": [
@@ -1232,6 +1232,14 @@
         }
       },
       "unresolved": []
+    },
+    {
+      "path": "docs/design_external-ai-board-followup.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
     },
     {
       "path": "docs/manual_board-sync.md",
@@ -22796,6 +22804,64 @@
         "summary": {
           "state": "value",
           "value": "P004-C-N01/N02/N03: real core/observer/effect driver/notification manager,"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/application/external_followup.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Decisions for an external AI that may be waiting on an approval card or a"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/application/external_followup/tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
