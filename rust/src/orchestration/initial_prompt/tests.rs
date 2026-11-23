@@ -1211,6 +1211,8 @@ fn a_pasted_placeholder_left_in_the_input_box_is_not_a_cleared_composer() {
         .composer_text(&sent)
         .unwrap();
     assert!(!screen::has_paste_placeholder(&text));
+    // Only "[Pasted text #<digit>" is the stand-in, not any bracketed word.
+    assert!(!screen::has_paste_placeholder("[Pastedtext#x]"));
 }
 
 #[tokio::test(start_paused = true)]
