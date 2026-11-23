@@ -6,6 +6,8 @@ signature. Canonical supplemental checksum rows are validated, but their files
 are not fetched or byte-verified. Build-input evidence is not license clearance.
 Only stable SemVer and rc.N prereleases are representable here. rc.N maps to
 ~rc.N in Debian/RPM and skips Homebrew/winget (never updates stable channels).
+Stable tags need --release-date YYYY-MM-DD (winget ReleaseDate; the release
+workflow reads it from the tag's CHANGELOG heading).
 References: Debian Policy 5.6.12; rpm.org/docs/latest/manual/spec.html;
  github.com/microsoft/winget-pkgs/tree/master/doc/manifest/schema/1.12.0
 Package builds/installation/update/rollback remain integration checks. Examples:
@@ -15,6 +17,7 @@ Package builds/installation/update/rollback remain integration checks. Examples:
 Use an isolated absolute OUT with no RPM macro characters for integration.
 """
 import argparse
+import datetime
 import hashlib
 import io
 import json
@@ -55,6 +58,20 @@ def identity(tag, repo):
     if prerelease and not re.fullmatch(r'rc\.(?:0|[1-9][0-9]*)', prerelease):
         raise ValueError('unsupported Debian/RPM prerelease: only rc.N has an explicit mapping')
     return tag[1:], match[1] + ('~' + prerelease if prerelease else ''), bool(prerelease)
+
+
+def checked_release_date(value, prerelease):
+    # winget's ReleaseDate. The caller reads it from the tag's CHANGELOG
+    # heading so a later channel rerun writes the same date. Stable releases
+    # emit winget manifests and therefore need it; rc.N skips winget.
+    if value is None:
+        if prerelease:
+            return None
+        raise ValueError('stable releases need --release-date YYYY-MM-DD for the winget manifest')
+    if not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', value):
+        raise ValueError('release date must be YYYY-MM-DD')
+    datetime.date.fromisoformat(value)  # rejects impossible dates such as 2026-02-30
+    return value
 
 
 def no_links(path):
@@ -139,7 +156,7 @@ def preflight(archives, version):
     return verified, payloads
 
 
-def render(version, package_version, prerelease, repo, tag, verified, payloads):
+def render(version, package_version, prerelease, repo, tag, verified, payloads, release_date):
     files = {}
     modes = {}
     def add(path, value, mode=0o644):
@@ -221,14 +238,26 @@ end
             return (f'# yaml-language-server: $schema=https://aka.ms/winget-manifest.{kind}.{SCHEMA}.schema.json\n'
                     + common + body + f'ManifestType: {kind}\nManifestVersion: {SCHEMA}\n')
         add(f'winget/{ID}.yaml', yaml('version', 'DefaultLocale: en-US\n'))
+        # The eight fields after PackageUrl/InstallerType were in every Go-era
+        # (GoReleaser) manifest; winget-pkgs PR #481014 flagged v0.10.0 for
+        # dropping them, so the tests pin them as required.
+        owner = repo.split('/')[0]
         add(f'winget/{ID}.locale.en-US.yaml', yaml('defaultLocale', f'''PackageLocale: en-US
 Publisher: ishizakahiroshi
+PublisherUrl: https://github.com/{owner}
+PublisherSupportUrl: https://github.com/{repo}/issues
 PackageName: many-ai-cli
 License: MIT
+LicenseUrl: https://github.com/{repo}/blob/{tag}/LICENSE
 ShortDescription: Local workspace for AI command-line tools
+Moniker: many-ai-cli
 PackageUrl: https://github.com/{repo}
+ReleaseNotesUrl: https://github.com/{repo}/releases/tag/{tag}
 '''))
-        add(f'winget/{ID}.installer.yaml', yaml('installer', f'''InstallerType: zip
+        add(f'winget/{ID}.installer.yaml', yaml('installer', f'''InstallerLocale: en-US
+InstallerType: zip
+ReleaseDate: "{release_date}"
+UpgradeBehavior: uninstallPrevious
 NestedInstallerType: portable
 NestedInstallerFiles:
 - RelativeFilePath: many-ai-cli.exe
@@ -251,13 +280,14 @@ Installers:
     return files, modes
 
 
-def prepare(archives, tag, repo, output):
+def prepare(archives, tag, repo, output, release_date=None):
     version, package_version, prerelease = identity(tag, repo)
+    release_date = checked_release_date(release_date, prerelease)
     no_links(output)
     if output.exists():
         raise ValueError('output must be new; existing files are never overwritten')
     verified, payloads = preflight(archives, version)
-    files, modes = render(version, package_version, prerelease, repo, tag, verified, payloads)
+    files, modes = render(version, package_version, prerelease, repo, tag, verified, payloads, release_date)
     # All four archives and every metadata byte validated before any output exists.
     output.mkdir(parents=True, exist_ok=False)
     for name, data in sorted(files.items()):
@@ -274,9 +304,10 @@ def main():
     parser.add_argument('--tag', required=True)
     parser.add_argument('--repo', required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--release-date', help='YYYY-MM-DD; required for stable tags (winget ReleaseDate)')
     args = parser.parse_args()
     try:
-        prepare(args.archives, args.tag, args.repo, args.output)
+        prepare(args.archives, args.tag, args.repo, args.output, args.release_date)
     except (ValueError, OSError, UnicodeError, zipfile.BadZipFile, zlib.error, RuntimeError, NotImplementedError):
         parser.exit(2, 'channel preparation failed: invalid inputs or unavailable output; nothing published\n')
     print('Channel inputs prepared; package builds, installation and publication are not performed.')

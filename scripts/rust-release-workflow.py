@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import datetime
 import hashlib
 import json
 import os
@@ -88,6 +89,23 @@ def extract_notes(changelog: str, tag: str) -> str:
     if not any(line.strip() and not line.lstrip().startswith("#") for line in meaningful.splitlines()):
         raise ValueError("release CHANGELOG section is empty")
     return body + "\n"
+
+
+def extract_release_date(changelog: str, tag: str) -> str:
+    """The date on the tag's CHANGELOG heading, `## [1.0.0] - YYYY-MM-DD`.
+
+    winget's ReleaseDate comes from here rather than the clock, so a channel
+    rerun days later writes the same manifest as the release run did."""
+    checked_tag(tag)
+    heading = re.compile(r"^## \[" + re.escape(tag[1:]) + r"\](?:\s.*)?$")
+    matches = [line for line in changelog.splitlines() if heading.fullmatch(line)]
+    if len(matches) != 1:
+        raise ValueError("CHANGELOG must contain exactly one section for the release tag")
+    found = re.fullmatch(r"## \[[^\]]+\] - ([0-9]{4}-[0-9]{2}-[0-9]{2})", matches[0])
+    if not found:
+        raise ValueError("the release CHANGELOG heading needs ' - YYYY-MM-DD' for the winget ReleaseDate")
+    datetime.date.fromisoformat(found[1])
+    return found[1]
 
 
 def regular(path: Path) -> Path:
@@ -491,6 +509,8 @@ def main() -> None:
     notes = subs.add_parser("notes")
     notes.add_argument("--tag", required=True)
     notes.add_argument("--output", type=Path, required=True)
+    date = subs.add_parser("release-date")
+    date.add_argument("--tag", required=True)
     native = subs.add_parser("check-native-artifacts")
     for name in ("repository", "source", "run-id", "attempt"):
         native.add_argument("--" + name, required=True)
@@ -515,6 +535,8 @@ def main() -> None:
             output.write("".join(f"{key}={value}\n" for key, value in result.items()))
     elif args.command == "notes":
         args.output.write_text(extract_notes(Path("CHANGELOG.md").read_text(encoding="utf-8"), args.tag), encoding="utf-8")
+    elif args.command == "release-date":
+        print(extract_release_date(Path("CHANGELOG.md").read_text(encoding="utf-8"), args.tag))
     elif args.command == "verify-archives":
         verify_archives(args.directory, args.tag, args.source)
     elif args.command == "prepare-assets":

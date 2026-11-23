@@ -119,7 +119,8 @@ class PackerNpmIntegration(unittest.TestCase):
             def channels(archives, destination):
                 result = subprocess.run([sys.executable, str(ARGS.channels_helper.resolve()),
                                          "--archives", str(archives), "--tag", tag,
-                                         "--repo", "example/project", "--output", str(destination)],
+                                         "--repo", "example/project", "--output", str(destination),
+                                         "--release-date", "2026-11-16"],
                                         cwd=root, env=environment, capture_output=True, text=True, timeout=60)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 with zipfile.ZipFile(output / f"many-ai-cli-{version}-linux-x64.zip") as archive:

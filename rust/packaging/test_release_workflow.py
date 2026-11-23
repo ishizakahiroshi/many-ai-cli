@@ -98,6 +98,50 @@ class ReleaseWorkflowTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 MODULE.extract_notes(bad, "v1.0.0")
 
+    def test_release_date_is_the_tag_changelog_heading_date(self):
+        text = "## [Unreleased]\n## [1.0.0] - 2026-11-16\n### Fixed\n- x\n## [0.9.0] - 2026-09-27\nold\n"
+        self.assertEqual(MODULE.extract_release_date(text, "v1.0.0"), "2026-11-16")
+        self.assertEqual(MODULE.extract_release_date(text, "v0.9.0"), "2026-09-27")
+        for bad in ("## [1.0.0]\nx\n", "## [1.0.0] - TBD\nx\n", "## [1.0.0] - 2026-02-30\nx\n",
+                    "## [1.0.0] - 2026-11-16 extra\nx\n", "## [1.0.0] - 2026-1-6\nx\n",
+                    "## [1.0.0] - 2026-11-16\nx\n## [1.0.0] - 2026-11-17\ny\n", "## [1.0.01] - 2026-11-16\nx\n"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                MODULE.extract_release_date(bad, "v1.0.0")
+
+    def test_release_date_cli_reads_the_checkout_changelog(self):
+        (self.root / "CHANGELOG.md").write_text("## [1.0.0] - 2026-11-16\n- x\n", encoding="utf-8")
+        result = subprocess.run([sys.executable, str(SCRIPT), "release-date", "--tag", "v1.0.0"],
+                                cwd=self.root, capture_output=True, text=True, timeout=30)
+        self.assertEqual((result.returncode, result.stdout), (0, "2026-11-16\n"), result.stderr)
+        result = subprocess.run([sys.executable, str(SCRIPT), "release-date", "--tag", "v2.0.0"],
+                                cwd=self.root, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+
+    def test_every_channel_preparation_passes_the_changelog_release_date(self):
+        # winget-pkgs PR #481014: ReleaseDate (one of eight dropped fields) must
+        # reach the helper from both callers, and a missing date stops the step.
+        text = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        jobs = dict(re.findall(r"^  ([a-z]+):\n(.*?)(?=^  [a-z]+:|\Z)", text.split("jobs:\n", 1)[1], re.M | re.S))
+        steps = [(name, step) for name, body in jobs.items() for step in body.split("      - ")[1:]
+                 if "prepare-rust-release-channels.py" in step]
+        self.assertEqual(sorted(name for name, _ in steps), ["package", "pointers"])
+        read = 'release_date=$(python3 scripts/rust-release-workflow.py release-date --tag "$RELEASE_TAG")'
+        for name, step in steps:
+            with self.subTest(job=name):
+                self.assertIn("set -euo pipefail", step)
+                self.assertIn(read, step)
+                self.assertIn('--release-date "$release_date"', step)
+                self.assertLess(step.index("set -euo pipefail"), step.index(read))
+                self.assertLess(step.index(read), step.index("prepare-rust-release-channels.py"))
+        # The pointer job reads CHANGELOG.md from the tag checkout before preparing.
+        pointers = jobs["pointers"]
+        self.assertLess(pointers.index("actions/checkout@"), pointers.index("release-date --tag"))
+        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        for tag in ("v0.10.0", "v0.9.0"):
+            with self.subTest(tag=tag):
+                MODULE.extract_release_date(changelog, tag)
+
     def test_real_archive_verification_caller(self):
         archives = self.archives()
         self.cli("verify-archives", "--directory", archives, "--tag", "v1.0.0")

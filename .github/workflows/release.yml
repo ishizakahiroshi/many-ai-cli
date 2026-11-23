@@ -217,11 +217,16 @@ jobs:
           set -euo pipefail
           python3 scripts/package-rust-candidates.py --inputs .rust-release-inputs --output .rust-release-bundle --release-tag "$RELEASE_TAG"
           mkdir .rust-release-linux
+      # winget's ReleaseDate is the date on the tag's CHANGELOG heading, not
+      # the clock, so a channel rerun writes the same manifest.
       - name: Prepare Linux packages and stable pointers from canonical ZIPs
         if: needs.plan.outputs.prerelease == 'false'
-        run: >-
-          python3 scripts/prepare-rust-release-channels.py --archives .rust-release-bundle
-          --tag "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --output .rust-release-channels
+        run: |
+          set -euo pipefail
+          release_date=$(python3 scripts/rust-release-workflow.py release-date --tag "$RELEASE_TAG")
+          python3 scripts/prepare-rust-release-channels.py --archives .rust-release-bundle \
+            --tag "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --output .rust-release-channels \
+            --release-date "$release_date"
       - name: Build Linux package containers without native compilation
         if: needs.plan.outputs.prerelease == 'false'
         run: |
@@ -604,9 +609,12 @@ jobs:
           path: .canonical/
       - name: Prepare stable pointer manifests from canonical archives
         if: env.POINTER_AVAILABLE == 'true' && env.STABLE == 'true' && (env.MODE == 'full' || env.MODE == env.CHANNEL)
-        run: >-
-          python3 scripts/prepare-rust-release-channels.py --archives .canonical
-          --tag "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --output .pointer-inputs
+        run: |
+          set -euo pipefail
+          release_date=$(python3 scripts/rust-release-workflow.py release-date --tag "$RELEASE_TAG")
+          python3 scripts/prepare-rust-release-channels.py --archives .canonical \
+            --tag "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --output .pointer-inputs \
+            --release-date "$release_date"
       # The token lives only in this environment, so its scopes are checked
       # here; a job outside the environment reads it as empty and would skip
       # the check every time (audit N40). `repo` is needed to write the tap and

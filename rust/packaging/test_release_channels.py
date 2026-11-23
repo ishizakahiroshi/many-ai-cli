@@ -19,6 +19,7 @@ WEB_NOTICE_OUTPUT = 'WEB-THIRD-PARTY-LICENSES.txt'
 DOCS = ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'packaging-inputs/BUILD-INPUTS.json',
         'packaging-inputs/CRATE-NOTICES.txt', 'packaging-inputs/build-inputs.spdx.json', WEB_NOTICE)
 ID = 'ishizakahiroshi.many-ai-cli'
+RELEASE_DATE = '2026-11-16'
 
 
 def digest(data):
@@ -64,10 +65,11 @@ class ReleaseChannels(unittest.TestCase):
         (self.archives / 'SHA256SUMS.txt').write_text(''.join(
             f'{digest(p.read_bytes())}  {p.name}\n' for p in sorted(self.archives.glob('*.zip'))), encoding='utf-8')
 
-    def run_cli(self, tag=None, repo='example/project'):
+    def run_cli(self, tag=None, repo='example/project', release_date=RELEASE_DATE):
+        date = [] if release_date is None else ['--release-date=' + release_date]
         return subprocess.run([sys.executable, str(HELPER), '--archives', str(self.archives),
                                '--tag=' + (tag or 'v' + self.version), '--repo=' + repo,
-                               '--output', str(self.output)], capture_output=True, text=True, timeout=60)
+                               '--output', str(self.output), *date], capture_output=True, text=True, timeout=60)
 
     def reject(self, **kwargs):
         result = self.run_cli(**kwargs)
@@ -151,6 +153,67 @@ class ReleaseChannels(unittest.TestCase):
             self.assertIn('ManifestVersion: 1.12.0', text)
             self.assertIn(f'PackageIdentifier: {ID}', text)
             self.assertIn('PackageVersion: "1.0.0"', text)
+
+    def winget_fields(self, kind):
+        # Top-level `Key: value` lines only; the helper writes flat YAML and
+        # the tests stay on the standard library. kind '' is the version file.
+        text = (self.output / f"winget/{ID}{'.' + kind if kind else ''}.yaml").read_text()
+        fields = {}
+        for line in text.splitlines():
+            if line and not line.startswith(('#', ' ', '-')):
+                key, _, value = line.partition(': ')
+                self.assertNotIn(key, fields, f'{kind} repeats {key}')
+                fields[key] = value
+        return fields
+
+    def test_winget_manifests_carry_the_fields_winget_pkgs_reviewers_require(self):
+        # winget-pkgs PR #481014 (v0.10.0) was flagged for dropping these eight
+        # fields that every Go-era manifest carried.
+        result = self.run_cli(repo='example/project')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        locale = self.winget_fields('locale.en-US')
+        expected_locale = {
+            'PublisherUrl': 'https://github.com/example',
+            'PublisherSupportUrl': 'https://github.com/example/project/issues',
+            'LicenseUrl': 'https://github.com/example/project/blob/v1.0.0/LICENSE',
+            'ReleaseNotesUrl': 'https://github.com/example/project/releases/tag/v1.0.0',
+            'Moniker': 'many-ai-cli',
+            'PackageLocale': 'en-US',
+            'Publisher': 'ishizakahiroshi',
+            'PackageName': 'many-ai-cli',
+            'License': 'MIT',
+            'PackageUrl': 'https://github.com/example/project',
+            'ManifestType': 'defaultLocale',
+        }
+        for key, value in expected_locale.items():
+            self.assertEqual(locale.get(key), value, key)
+        installer = self.winget_fields('installer')
+        expected_installer = {
+            'InstallerLocale': 'en-US',
+            'ReleaseDate': f'"{RELEASE_DATE}"',
+            'UpgradeBehavior': 'uninstallPrevious',
+            'InstallerType': 'zip',
+            'NestedInstallerType': 'portable',
+            'ManifestType': 'installer',
+        }
+        for key, value in expected_installer.items():
+            self.assertEqual(installer.get(key), value, key)
+        self.assertEqual(self.winget_fields('')['DefaultLocale'], 'en-US')
+
+    def test_stable_release_needs_a_real_release_date_before_any_output(self):
+        for date in (None, '', '2026-1-1', '2026-02-30', '26-11-16', '2026-11-16\nX: y',
+                     '2026-11-16T00:00:00Z', '"2026-11-16"', '２０２６-11-16'):
+            with self.subTest(date=date):
+                self.reject(release_date=date)
+
+    def test_prerelease_does_not_need_a_release_date(self):
+        for p in self.archives.glob('*.zip'):
+            p.unlink()
+        self.version = '1.0.0-rc.1'
+        self.write_archives()
+        result = self.run_cli(release_date=None)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.output / 'winget').exists())
 
     def test_cask_explicitly_excludes_linux(self):
         self.assertEqual(self.run_cli().returncode, 0)
