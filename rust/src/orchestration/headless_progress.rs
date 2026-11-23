@@ -93,6 +93,11 @@ pub struct HeadlessProgress {
     pub state: ProgressState,
     pub data_incomplete: bool,
     pub final_cost_missing: bool,
+    /// True only while the wrapper reads the run's output as the Claude stream
+    /// (`claude-stream-json`), whatever the provider name. Otherwise turns,
+    /// tools and the last reply are unknown, never zero. Absent means false.
+    #[serde(default)]
+    pub structured: bool,
 }
 impl HeadlessProgress {
     pub fn new(run_id: String, started_at_ms: i64) -> Self {
@@ -111,6 +116,7 @@ impl HeadlessProgress {
             state: ProgressState::Running,
             data_incomplete: false,
             final_cost_missing: false,
+            structured: false,
         }
     }
     pub fn validate(&self) -> Result<(), &'static str> {
@@ -621,9 +627,14 @@ pub struct ProgressParser {
     dirty: bool,
 }
 impl ProgressParser {
+    /// The parser reads the Claude stream, so its snapshots are structured
+    /// unless the caller says the run's format is not that stream.
     pub fn new(run_id: String, started_at_ms: i64) -> Self {
         Self {
-            progress: HeadlessProgress::new(run_id, started_at_ms),
+            progress: HeadlessProgress {
+                structured: true,
+                ..HeadlessProgress::new(run_id, started_at_ms)
+            },
             responses: BTreeMap::new(),
             completed_tools: BTreeSet::new(),
             current_id: None,
@@ -634,6 +645,10 @@ impl ProgressParser {
             estimate: ProgressCost::default(),
             dirty: true,
         }
+    }
+    pub fn set_structured(&mut self, structured: bool) {
+        self.progress.structured = structured;
+        self.dirty = true;
     }
     pub fn heartbeat(&mut self) {
         self.dirty = true;
@@ -1009,11 +1024,13 @@ impl ProgressParser {
                 .saturating_add(self.progress.elapsed_ms as i64),
         );
         self.progress.active_tools.clear();
-        // Lost output (lag or forced pipe close) is a failed run. A record the
-        // parser could not read only makes the progress incomplete: the
-        // provider's exit and result still decide whether the run succeeded.
-        let output_lost = dropped > 0 || output.pipes_forced_closed;
-        self.progress.data_incomplete |= output_lost;
+        // A channel lag stops the run and fails it, exactly as `run` does.
+        // A forced pipe close (the direct child exited 0 while a grandchild
+        // still held the pipes) and a record the parser could not read only
+        // make the progress incomplete: the provider's exit and result still
+        // decide whether the run succeeded (windows_contracts "normal").
+        let output_lost = dropped > 0;
+        self.progress.data_incomplete |= output_lost || output.pipes_forced_closed;
         let successful = matches!(output.outcome, ExitOutcome::Exited { code: Some(0), .. })
             && !self.result_failed
             && !output_lost;
@@ -1450,13 +1467,25 @@ mod tests {
         assert_eq!(after.cost.coverage, CostCoverage::Partial);
     }
     #[test]
-    fn cancellation_and_forced_pipe_close_are_not_success() {
+    fn cancellation_and_lag_fail_but_forced_pipe_close_only_marks_incomplete() {
         let mut p = parser();
         let mut o = output(0);
         o.outcome = ExitOutcome::Cancelled;
         assert_eq!(p.finish(&o, 0, 1).state, ProgressState::Canceled);
         let mut p = parser();
+        let lagged = p.finish(&output(0), 3, 1);
+        assert_eq!(lagged.state, ProgressState::Failed);
+        assert!(lagged.data_incomplete);
+        // The direct child exited 0 while a grandchild held the pipes: the
+        // existing contract keeps this run completed.
+        let mut p = parser();
         let mut o = output(0);
+        o.pipes_forced_closed = true;
+        let forced = p.finish(&o, 0, 1);
+        assert_eq!(forced.state, ProgressState::Completed);
+        assert!(forced.data_incomplete);
+        let mut p = parser();
+        let mut o = output(1);
         o.pipes_forced_closed = true;
         assert_eq!(p.finish(&o, 0, 1).state, ProgressState::Failed);
     }
@@ -1473,6 +1502,23 @@ mod tests {
         assert!(s.data_incomplete);
         assert_eq!(s.cost.kind, CostKind::Result);
         assert!(!serde_json::to_string(&s).unwrap().contains("SENTINEL"));
+    }
+    #[test]
+    fn structured_flag_is_on_the_wire_and_absent_means_unknown() {
+        let mut p = parser();
+        let s = p.snapshot(0).unwrap();
+        assert!(s.structured);
+        let mut wire = serde_json::to_value(&s).unwrap();
+        assert_eq!(wire["structured"], json!(true));
+        p.set_structured(false);
+        assert!(!p.snapshot(1).unwrap().structured);
+        wire.as_object_mut().unwrap().remove("structured");
+        assert!(
+            !decode_progress(&serde_json::to_vec(&wire).unwrap())
+                .unwrap()
+                .structured
+        );
+        assert!(!HeadlessProgress::new("1:1".into(), 0).structured);
     }
     #[test]
     fn public_wire_rejects_extra_fields_ranges_and_unmasked_content() {

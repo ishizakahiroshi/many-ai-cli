@@ -663,7 +663,7 @@ async fn failed_registration_preparation_releases_persistence_ticket_for_disconn
 }
 
 #[tokio::test]
-async fn loopback_headless_progress_reaches_ui_and_unreadable_snapshots_are_dropped() {
+async fn loopback_headless_progress_reaches_ui_and_unreadable_or_refused_snapshots_are_dropped() {
     use base64::Engine as _;
     let encode = |value: &serde_json::Value| {
         base64::engine::general_purpose::STANDARD.encode(serde_json::to_vec(value).unwrap())
@@ -703,6 +703,13 @@ async fn loopback_headless_progress_reaches_ui_and_unreadable_snapshots_are_drop
             serde_json::json!({"type":"headless_progress","session_id":id,"data":encode(&unknown)}),
         )
         .await;
+    // A readable snapshot the Hub refuses (another run) is dropped the same way.
+    let mut foreign = progress.clone();
+    foreign.run_id = "999:1".into();
+    foreign.observed_turns = 77;
+    wrapper
+        .json(serde_json::json!({"type":"headless_progress","session_id":id,"data":encode(&serde_json::to_value(&foreign).unwrap())}))
+        .await;
     wrapper
         .json(serde_json::json!({"type":"headless_progress","session_id":id,"data":encode(&serde_json::to_value(&progress).unwrap())}))
         .await;
@@ -710,7 +717,7 @@ async fn loopback_headless_progress_reaches_ui_and_unreadable_snapshots_are_drop
     assert_eq!(live["headless_progress"]["sequence"], 1);
     assert_eq!(live["headless_progress"]["observed_turns"], 3);
     assert!(!live.to_string().contains("PRIVATE_SENTINEL"));
-    // The dropped snapshot did not close the wrapper connection.
+    // The dropped snapshots did not close the wrapper connection.
     wrapper
         .json(serde_json::json!({"type":"pty_data","session_id":id,"data":[120]}))
         .await;

@@ -384,6 +384,57 @@ mod tests {
         assert!(final_progress.ended_at_ms.is_some());
     }
     #[tokio::test]
+    async fn a_completed_headless_card_keeps_no_admission_slot() {
+        let (_root, core) = fixture();
+        let end = |state: &str, code: i64| SessionEnd {
+            declared_state: state.into(),
+            exit_code: code,
+            reason: String::new(),
+        };
+        // Same order as the wrapper: end frame first, then the transport closes.
+        let done = register(&core, true, 1).await;
+        let failed = register(&core, true, 2).await;
+        let interactive = register(&core, false, 3).await;
+        assert_eq!(core.provider_session_count("claude"), 3);
+        core.observe_end(done.binding, end("completed", 0), now())
+            .unwrap();
+        // The process is still exiting until the transport closes.
+        assert_eq!(core.provider_session_count("claude"), 3);
+        core.disconnected(done.binding, now()).unwrap();
+        core.observe_end(failed.binding, end("error", 1), now())
+            .unwrap();
+        core.disconnected(failed.binding, now()).unwrap();
+        core.observe_end(interactive.binding, end("completed", 0), now())
+            .unwrap();
+        core.disconnected(interactive.binding, now()).unwrap();
+        // Only the completed headless run left the count; its card and final
+        // progress remain for the UI until dismissal.
+        assert_eq!(core.provider_session_count("claude"), 2);
+        assert_eq!(
+            core.snapshot(done.binding.session)
+                .unwrap()
+                .headless_progress
+                .unwrap()
+                .state,
+            ProgressState::Completed
+        );
+        let ui = UiBinding {
+            connection: UiConnectionId(7),
+            auth_epoch: core.auth_epoch(),
+        };
+        core.attach_ui(ui, None, None).unwrap();
+        core.dismiss_from_ui(ui, failed.binding.session, now())
+            .unwrap();
+        core.dismiss_from_ui(ui, interactive.binding.session, now())
+            .unwrap();
+        // With nothing else retained, a CLI update is admitted even though the
+        // completed headless card is still listed.
+        assert_eq!(core.provider_session_count("claude"), 0);
+        let lease = core.begin_provider_update("claude").unwrap();
+        core.end_provider_update(lease);
+        assert!(core.snapshot(done.binding.session).is_some());
+    }
+    #[tokio::test]
     async fn a_headless_run_cannot_be_reattached() {
         let (_root, core) = fixture();
         let one = register(&core, true, 1).await;

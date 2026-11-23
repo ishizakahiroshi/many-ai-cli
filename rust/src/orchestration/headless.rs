@@ -208,7 +208,14 @@ pub async fn run_with_progress(
         vec![]
     };
     let now_ms = || chrono::Utc::now().timestamp_millis();
-    let mut tracker = ProgressParser::new(run_id.clone(), now_ms());
+    // The screen decides "measured" vs "unknown" from this flag, so it follows
+    // the same format test as the parser (not the provider name).
+    let new_tracker = || {
+        let mut tracker = ProgressParser::new(run_id.clone(), now_ms());
+        tracker.set_structured(structured);
+        tracker
+    };
+    let mut tracker = new_tracker();
     if cancel.is_cancelled() {
         let output = ProcessOutput {
             stdout: vec![],
@@ -254,7 +261,7 @@ pub async fn run_with_progress(
                 Ok(ProcessEvent::Started { .. }) => {
                     // The clock starts with the actual provider process.
                     started = Some(Instant::now());
-                    tracker = ProgressParser::new(run_id.clone(), now_ms());
+                    tracker = new_tracker();
                     if let Some(snapshot) = tracker.snapshot(0) { progress(snapshot); }
                 },
                 Ok(ProcessEvent::Output { stream, bytes }) => {
@@ -274,8 +281,7 @@ pub async fn run_with_progress(
                     // Lost bytes cannot safely be spliced into structured records.
                     stdout.clear(); stderr.clear(); strict.clear(); process.close();
                     tracker.mark_incomplete();
-                    let line = format!("many-ai-cli: headless output lost ({count} chunks); stopping run
-        ");
+                    let line = format!("many-ai-cli: headless output lost ({count} chunks); stopping run\r\n");
                     emit(line.as_bytes());
                 }
             }
@@ -604,6 +610,7 @@ mod progress_contracts {
         assert!(last.active_tools.is_empty());
         assert_eq!(last.state, ProgressState::Completed);
         assert!(!last.data_incomplete);
+        assert!(snapshots.iter().all(|p| p.structured));
         // The terminal keeps showing the existing formatted projection.
         assert!(terminal.contains("[tool] Read"));
         assert!(terminal.contains("[result]"));
@@ -618,6 +625,8 @@ mod progress_contracts {
         assert_wire_clean(&snapshots);
         let last = snapshots.last().unwrap();
         assert_eq!(last.state, ProgressState::Completed);
+        // The screen shows "unknown" for these, decided by the same format test.
+        assert!(snapshots.iter().all(|p| !p.structured));
         assert_eq!(last.observed_turns, 0);
         assert!(last.result_turns.is_none());
         assert!(last.last_assistant.is_empty());
@@ -682,11 +691,12 @@ mod progress_contracts {
         let mut spec = fixture("burst", root.path());
         spec.event_capacity = 1;
         let mut snapshots = vec![];
+        let mut terminal = vec![];
         let result = run_with_progress(
             spec,
             "1:2".into(),
             &Cancellation::default(),
-            |_| {},
+            |b| terminal.extend_from_slice(b),
             |p| {
                 if snapshots.is_empty() {
                     std::thread::sleep(Duration::from_millis(150));
@@ -701,6 +711,14 @@ mod progress_contracts {
         let last = snapshots.last().unwrap();
         assert_eq!(last.state, ProgressState::Failed);
         assert!(last.data_incomplete);
+        // The notice is one CRLF-terminated terminal line, as `run` writes it.
+        let terminal = String::from_utf8_lossy(&terminal);
+        let notice = terminal
+            .find("many-ai-cli: headless output lost")
+            .expect("lag notice on the terminal");
+        let line_end = terminal[notice..].find('\n').unwrap() + notice;
+        assert!(terminal[notice..=line_end].ends_with("; stopping run\r\n"));
+        assert!(!terminal[line_end + 1..].starts_with("        "));
     }
     #[tokio::test]
     async fn separated_records_and_error_bodies_never_reach_progress() {

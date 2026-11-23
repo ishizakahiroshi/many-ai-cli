@@ -2857,6 +2857,8 @@ impl AdmissionState {
         Ok(())
     }
     /// A transport disconnect must NOT call this: retained cards count for updates.
+    /// The one exception is a completed headless run, whose process has exited
+    /// and which can never be reattached (`SessionEngine::disconnected`).
     pub fn dismiss_session(&mut self, id: LiveSessionId) {
         self.live.remove(&id);
     }

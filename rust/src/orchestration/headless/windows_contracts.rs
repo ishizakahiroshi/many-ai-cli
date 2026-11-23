@@ -6,7 +6,10 @@
 #![cfg(all(test, windows))]
 
 use crate::{
-    orchestration::headless::{Spec, run},
+    orchestration::{
+        headless::{Spec, run, run_with_progress},
+        headless_progress::ProgressState,
+    },
     process::{Cancellation, ExitOutcome, ProcessPlan, SpawnOptions, run_capped_with_options},
 };
 use serde::Deserialize;
@@ -508,11 +511,27 @@ async fn rust_runner(root: &Path, case: &str) -> Value {
     let bytes = Arc::new(Mutex::new(Vec::new()));
     let captured = bytes.clone();
     let run_cancel = cancel.clone();
+    // The production wrapper runs every headless provider through
+    // run_with_progress; it must keep the same verdict as `run`.
+    let with_progress = case == "normal-progress";
+    let snapshots = Arc::new(Mutex::new(Vec::new()));
+    let recorded = snapshots.clone();
     let mut run_task = tokio::spawn(async move {
-        run(spec, &run_cancel, move |chunk| {
-            captured.lock().unwrap().extend_from_slice(chunk)
-        })
-        .await
+        if with_progress {
+            run_with_progress(
+                spec,
+                "1:1".into(),
+                &run_cancel,
+                move |chunk| captured.lock().unwrap().extend_from_slice(chunk),
+                move |progress| recorded.lock().unwrap().push(progress),
+            )
+            .await
+        } else {
+            run(spec, &run_cancel, move |chunk| {
+                captured.lock().unwrap().extend_from_slice(chunk)
+            })
+            .await
+        }
     });
     let ready_until = Instant::now() + STEP;
     loop {
@@ -540,7 +559,9 @@ async fn rust_runner(root: &Path, case: &str) -> Value {
     let trigger = Instant::now();
     match case {
         "cancel" => cancel.cancel(),
-        "normal" => publish(root, "exit-direct", b"owned direct child may exit"),
+        "normal" | "normal-progress" => {
+            publish(root, "exit-direct", b"owned direct child may exit")
+        }
         "deadline" => assert!(
             start.elapsed() < RUN_TIMEOUT,
             "readiness must precede product deadline"
@@ -559,11 +580,17 @@ async fn rust_runner(root: &Path, case: &str) -> Value {
             assert_eq!(result.state, "error");
             assert!(trigger.elapsed() < RETURN_BOUND);
         }
-        "normal" => {
+        "normal" | "normal-progress" => {
             assert_eq!(result.exit_code, 0);
             assert_eq!(result.state, "completed");
             assert!(result.process_output.pipes_forced_closed);
             assert!(trigger.elapsed() < RETURN_BOUND);
+            if with_progress {
+                // The retained pipes only make the progress incomplete.
+                let last = snapshots.lock().unwrap().last().cloned().unwrap();
+                assert_eq!(last.state, ProgressState::Completed);
+                assert!(last.data_incomplete);
+            }
         }
         "deadline" => {
             assert!(result.timed_out && !result.canceled);
@@ -662,6 +689,11 @@ fn headless_deadline_reaps_native_grandchild_retaining_both_pipes() {
 #[test]
 fn headless_direct_exit_bounds_drain_and_reaps_native_grandchild() {
     rust_case("normal");
+}
+
+#[test]
+fn headless_progress_run_keeps_direct_exit_completed_when_grandchild_holds_pipes() {
+    rust_case("normal-progress");
 }
 
 #[derive(Deserialize)]

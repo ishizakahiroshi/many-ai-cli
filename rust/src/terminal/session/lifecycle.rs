@@ -782,6 +782,14 @@ impl SessionEngine {
                 },
             }));
         }
+        // A completed headless card stays on screen with its final progress,
+        // but its provider process is gone and it can never be reattached.
+        // It must not keep a child/total slot or block a provider update
+        // while it waits for the UI's dismissal.
+        let release = s.snapshot.execution_mode == "headless" && s.snapshot.state == "completed";
+        if release {
+            state.admission.dismiss_session(binding.session);
+        }
         Ok(state.route(effects))
     }
     /// Source orchestration.go markConductor changes the current session card

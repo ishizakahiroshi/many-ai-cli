@@ -698,15 +698,22 @@ impl WebSocketService {
                             "invalid headless progress identity".into(),
                         ));
                     }
-                    // A snapshot this Hub cannot read is dropped, not fatal: the
-                    // run keeps streaming its terminal output either way.
-                    match crate::orchestration::headless_progress::decode_progress(&message.data) {
-                        Ok(progress) => self.core.observe_headless_progress(binding, progress)?,
-                        Err(_) => {
-                            (self.warning)(
-                                "Headless progress",
-                                &SessionError::InvalidRequest("invalid headless progress".into()),
-                            );
+                    // Progress is best effort. A snapshot this Hub cannot read or
+                    // refuses (another run, a regressed clock, after the end) is
+                    // dropped with a warning, never fatal: the run keeps
+                    // streaming its terminal output either way.
+                    let observed =
+                        crate::orchestration::headless_progress::decode_progress(&message.data)
+                            .map_err(|_| {
+                                SessionError::InvalidRequest("invalid headless progress".into())
+                            })
+                            .and_then(|progress| {
+                                self.core.observe_headless_progress(binding, progress)
+                            });
+                    match observed {
+                        Ok(effects) => effects,
+                        Err(error) => {
+                            (self.warning)("Headless progress", &error);
                             continue;
                         }
                     }
