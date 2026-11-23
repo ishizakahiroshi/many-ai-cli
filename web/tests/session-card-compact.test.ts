@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { collectCardNotes, computeBaselines } from '../src/app/session-card-notes.js';
 import { buildSidebarTree, flattenSidebarTree } from '../src/app/sidebar-tree.js';
+import { filterSessionListTree } from '../src/app/session-list-tab-state.js';
 import { abbreviateBranchName } from '../src/app/session-strip-branch.js';
 
 // Execute the actual rendering functions with synthetic data. This is not screen acceptance.
@@ -84,6 +85,25 @@ test('while a color filter is on, the baseline compares only the cards the group
   assert.ok(!ctx.compactCardDetailsHtml(4).includes('card_note_permission'));
 });
 
+test('a sidebar tab that splits a project also narrows the baseline to the cards that tab shows', () => {
+  const { ctx, sessions } = cards();
+  sessions.set(4, { id: 4, cwd: 'example', branch: 'develop', permission_mode: 'auto', state: 'standby' });
+  sessions.set(5, { id: 5, cwd: 'example', branch: 'develop', permission_mode: 'auto', state: 'standby' });
+  ctx.sessionOrder = [1, 2, 3, 4, 5];
+  // Same filter as session-list-tabs.ts: 1-3 belong to tab "a", 4-5 to tab "b".
+  const owners = new Map([[1, 'a'], [2, 'a'], [3, 'a'], [4, 'b'], [5, 'b']]);
+  let selected = 'a';
+  ctx.visibleSessionListTree = (tree: any) => filterSessionListTree(tree, owners, selected);
+  const inA = ctx.compactBaselinesBySession();
+  assert.equal(inA.has(4), false, 'cards of the other tab are not counted');
+  assert.equal(inA.get(1).permissionMode, 'plan');
+  selected = 'b';
+  const inB = ctx.compactBaselinesBySession();
+  assert.equal(inB.has(1), false);
+  assert.equal(inB.get(4).permissionMode, 'auto');
+  assert.equal(ctx.cardNotesHtml(sessions.get(4), inB.get(4)), '', 'no ● for the usual mode of the cards the tab shows');
+});
+
 test('details carry the explanations the compact row drops, without repeating visible text', () => {
   const { ctx, sessions } = cards();
   ctx.cardStatusRowHtml = () => '<span class="card-longproc" data-tooltip="Synthetic: send ESC instead of resending">⚠ Long 5m</span>';
@@ -151,15 +171,35 @@ test('header omits empty launch/branch values and preserves Git-button focus wit
   button.listeners[0](); assert.deepEqual(opened, [1]);
 });
 
-test('the header chip is capped so permission, contract and branch cannot push the view tabs away', () => {
+test('the header chip never clips the permission warning; only variable-length names are capped', () => {
   const css = read('../src/styles/tabs.css');
-  const chip = between(css, '\n.session-info-chip {', '}');
-  assert.match(chip, /max-width: 50%;/);
-  assert.match(chip, /overflow: hidden;/);
-  const branch = between(css, '.session-info-chip .session-info-branch {', '}');
-  assert.match(branch, /max-width: 18ch;/);
-  assert.match(branch, /text-overflow: ellipsis;/);
-  assert.match(between(css, '.session-info-chip .tsb-agent-name,', '}'), /min-width: 0;/);
+  const rule = (selector: string) => {
+    const start = css.indexOf(`\n${selector} {`);
+    assert.ok(start >= 0, `${selector} has its own rule`);
+    return css.slice(start, css.indexOf('}', start)).replace(/\/\*[\s\S]*?\*\//g, '');
+  };
+  // A width cap with overflow: hidden on the whole chip cuts the non-shrinking items off without an
+  // ellipsis (the bypass warning first at ~960px). The tab bar's own horizontal scroll is the last resort.
+  const chip = rule('.session-info-chip');
+  assert.doesNotMatch(chip, /max-width/);
+  assert.doesNotMatch(chip, /overflow\s*:\s*hidden/);
+  assert.match(chip, /flex-shrink: 0;/);
+  assert.match(css.slice(css.indexOf('\n#unified-tab-bar {\n')).split('}')[0], /overflow-x: auto;/);
+  // The launch permission chip keeps its full width and is never in a shrinking/ellipsis rule.
+  assert.match(rule('.session-info-chip .session-permission-chip'), /flex-shrink: 0;/);
+  for (const selector of ['.session-permission-chip', '.session-mode-chip', '.tsb-pill', '.sid'].map(name => `.session-info-chip ${name}`)) {
+    const shrinking = css.split('}').filter(block => block.includes(selector) && /text-overflow|min-width:\s*0/.test(block));
+    assert.deepEqual(shrinking, [], `${selector} is not truncated in the header`);
+  }
+  // Each variable-length name has its own cap with an ellipsis instead.
+  const styles = read('../src/styles.css');
+  assert.match(styles, /\.card-model\.card-model--with-icon \.card-model-text \{[^}]*max-width: 10ch;[^}]*text-overflow: ellipsis;/);
+  assert.match(read('../src/styles/token-statusbar.css'), /\.tsb-agent-name \{[^}]*max-width: 10ch;[^}]*text-overflow: ellipsis;/);
+  for (const [selector, cap] of [['.session-info-chip .card-subscription', '14ch'], ['.session-info-chip .session-info-branch', '18ch']]) {
+    const capped = rule(selector);
+    assert.match(capped, new RegExp(`max-width: ${cap};`));
+    assert.match(capped, /text-overflow: ellipsis;/);
+  }
 });
 
 test('density stays device-local, cleanup is wired, and popover summaries wrap', () => {

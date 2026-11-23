@@ -257,14 +257,14 @@ body.pane-resizing .xterm { pointer-events: none; }
   font-size: var(--header-font-size);
   white-space: nowrap;
   flex-shrink: 0;
-  /* 権限・ブランチ・契約まで並ぶと幅が伸び、表示モードのタブを右へ押し出す。チップはタブの段の
-     半分までにして、はみ出す分はモデル名・エージェント名・契約名・ブランチを省略して収める。 */
-  max-width: 50%;
-  overflow: hidden;
+  /* チップ全体には幅の上限も overflow: hidden も付けない。付けると、縮まない権限チップ（全許可の
+     警告色）や状態・実行モードが、省略記号なしで端から切り落とされる。長さが変わる名前（モデル・
+     エージェント名・契約名・ブランチ）だけを個別に ch で頭打ちにしてチップの幅を抑え、それでも
+     段に入らないときは、これまでどおりタブの段の横スクロールで全部を読めるようにする。 */
 }
-.session-info-chip .tsb-agent-name,
+/* 契約名は利用者が付けた名前なので長くなりうる。モデル名・エージェント名（10ch）と同じく頭打ちにする。 */
 .session-info-chip .card-subscription {
-  min-width: 0;
+  max-width: 14ch;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -320,12 +320,11 @@ body.pane-resizing .xterm { pointer-events: none; }
   background: color-mix(in srgb, var(--warn) 14%, transparent);
 }
 /* 選択中セッションのブランチ（コンパクト表示のカードから外した分をここで読む）。押すとカードの
-   ブランチ表示と同じ経路で Git タブを開く。長い名前は 18 文字で切り、狭いときは 6 文字まで縮む。 */
+   ブランチ表示と同じ経路で Git タブを開く。長い名前は 18 文字で切る（PR #32 と同じ）。 */
 .session-info-chip .session-info-branch {
   font-size: var(--header-font-size);
   display: block;
-  flex: 0 1 auto;
-  min-width: 6ch;
+  flex-shrink: 0;
   max-width: 18ch;
   overflow: hidden;
   text-overflow: ellipsis;

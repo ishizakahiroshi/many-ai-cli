@@ -29,10 +29,11 @@ last_reviewed: 2026-10-20
 | 手元の取り込み審査 | 手元 AI | 完了 | Drive patch を git am。tree 一致を確認 |
 | 手元検収（実機の見た目） | 利用者 | 待ち | ビルド後に、行の高さ・ポップ・ヘッダー幅を目視 |
 | develop への移植 | 手元 AI | 完了 | PR #32（d87b6a33）を develop dd8f184e の上へ移植。ヘッダーの権限チップは develop 側の実装を使い、ブランチだけ足した。残していた軽い指摘 4 件（別カードへの即時表示・色フィルタ時の基準・ポップの説明文・ヘッダーの最大幅）も直した |
+| 移植のレビューと手直し | 手元 AI（実装とは別担当） | 完了 | 95391135 をレビューし、ブロッキング 1 件（ヘッダーのチップ全体を段の半分で切ると、縮まない権限チップ（全許可の警告）が省略記号なしで切れる）。チップ全体の上限をやめ、名前（モデル・エージェント・契約・ブランチ）だけを ch で頭打ちにし、入らないときは段の横スクロールに戻した。手直しの commit は別担当の再レビューなし |
 
 | 項目 | 値 |
 |---|---|
-| 実 code SHA | 440c1eac0e0796f45d0bae154556953bd8f07f63 |
-| review 済み SHA | ab2b3ad6（dots 実装分）。440c1eac の修正差分は別担当の再レビューなし |
+| 実 code SHA | develop 移植版: 95391135 と、その上の手直し commit（branch `wt/af-sidebar-compact` の先頭）。PR 版: 440c1eac0e0796f45d0bae154556953bd8f07f63 |
+| review 済み SHA | ab2b3ad6（dots 実装分）。440c1eac の修正差分は別担当の再レビューなし。移植版 95391135 は手元の別担当がレビュー済み（上の行）。移植で足した 4 件の手直しのうち、ヘッダー幅は手直し後の commit を再レビューしていない |
 | Draft PR | https://github.com/ishizakahiroshi/many-ai-cli/pull/32 |
 | CI（実行 step と結果） | web-check の全 step success、doxguard / gitleaks / instrumentation / package-manager-consistency pass、release-token-scopes は skipping |
