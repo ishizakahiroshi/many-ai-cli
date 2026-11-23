@@ -59,11 +59,31 @@ async fn repo() -> (tempfile::TempDir, FilesService, PathBuf) {
     // Git still runs for real and is still killed after that. Expiry is tested
     // by expiring a budget on purpose (`expire_completed_resolution_for_test`).
     service.pin_git_clock();
+    // Likewise the 250 ms an exited Git has to close its pipes: on a busy
+    // machine reading the pipes' end can take longer, and Git's real answer
+    // (an error naming index.lock, say) became "pipes failed to close".
+    // These tests are about the answer, so the pipes get longer to close.
+    service.git_pipe_drain = Some(Duration::from_secs(10));
     Git::new(&service, 5)
         .run(&root, &["init", "-b", "synthetic"])
         .await
         .unwrap();
     (dir, service, root)
+}
+/// The product keeps 250 ms for an exited Git to close its pipes; only a test
+/// fixture lifts it (`repo` does), so lifting it changes no production path.
+#[test]
+fn git_pipe_drain_is_250ms_unless_a_test_lifts_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = dir.path().join("runtime");
+    fs::create_dir(&app).unwrap();
+    let paths =
+        crate::config::RuntimePaths::trial(&app, 49223, &dir.path().join("installed")).unwrap();
+    let mut service = FilesService::new(dir.path().into(), paths);
+    assert_eq!(GIT_PIPE_DRAIN, Duration::from_millis(250));
+    assert_eq!(service.git_pipe_drain(), GIT_PIPE_DRAIN);
+    service.git_pipe_drain = Some(Duration::from_secs(10));
+    assert_eq!(service.git_pipe_drain(), Duration::from_secs(10));
 }
 #[test]
 fn revision_and_process_error_guards() {
@@ -215,6 +235,7 @@ async fn a_commit_stopped_at_its_limit_leaves_a_lock_that_is_listed_and_removed(
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
     }
+    let limit = Duration::from_secs(4);
     let plan = crate::process::git::GitCommand {
         executable: service.git_executable.clone(),
         args: ["-C", &root.to_string_lossy(), "commit", "-a", "-m", "held"]
@@ -224,7 +245,7 @@ async fn a_commit_stopped_at_its_limit_leaves_a_lock_that_is_listed_and_removed(
         cwd: root.clone(),
         env: service.git_environment.clone(),
         stdin: vec![],
-        timeout: Duration::from_secs(4),
+        timeout: limit,
         output_cap: 64 * 1024,
         pipe_drain_timeout: Duration::from_millis(250),
         // The user's own commit: its pre-commit hook holds the lock here.
@@ -238,13 +259,16 @@ async fn a_commit_stopped_at_its_limit_leaves_a_lock_that_is_listed_and_removed(
         let plan = plan.clone();
         async move { crate::process::run_capped(&plan, &Cancellation::default()).await }
     });
-    for _ in 0..100 {
-        if lock.exists() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
+    // Wait for the lock for as long as the commit can run, not a count of
+    // polls: the commit ends (stopped at its limit) before this wait does,
+    // and an ended commit stops the wait. The margin only bounds a commit
+    // that never ends at all.
+    let waited = std::time::Instant::now();
+    while !lock.exists() && !running.is_finished() && waited.elapsed() < limit * 3 {
+        tokio::time::sleep(Duration::from_millis(20)).await;
     }
     let lock_was_present = lock.exists();
+    let lock_wait = (waited.elapsed(), running.is_finished());
     let while_running = service.locks.inspect(
         &root,
         started,
@@ -257,7 +281,12 @@ async fn a_commit_stopped_at_its_limit_leaves_a_lock_that_is_listed_and_removed(
     let out = running.await.unwrap().unwrap();
     assert!(
         lock_was_present,
-        "the hook holds the commit with index.lock taken"
+        "the hook holds the commit with index.lock taken \
+         (waited {:?}, commit already ended: {}, outcome {:?}, stderr {})",
+        lock_wait.0,
+        lock_wait.1,
+        out.outcome,
+        String::from_utf8_lossy(&out.stderr)
     );
     assert_eq!(out.outcome, ExitOutcome::TimedOut);
     if cfg!(any(windows, target_os = "linux")) {
@@ -278,6 +307,24 @@ async fn a_commit_stopped_at_its_limit_leaves_a_lock_that_is_listed_and_removed(
         lock.exists(),
         "a commit stopped at its limit leaves index.lock"
     );
+    // The stop ends the whole process tree, but a Git process that was just
+    // ended can still be listed for a moment. What is under test is that the
+    // leftover is listed once no Git works in the repository, so wait for
+    // that (bounded) instead of inspecting at the instant of the stop.
+    if cfg!(any(windows, target_os = "linux")) {
+        let ending = std::time::Instant::now();
+        let mut last = crate::process::live_git::using(&root);
+        while matches!(last, Ok(crate::process::live_git::Using::Running(_)))
+            && ending.elapsed() < Duration::from_secs(10)
+        {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            last = crate::process::live_git::using(&root);
+        }
+        assert!(
+            !matches!(last, Ok(crate::process::live_git::Using::Running(_))),
+            "the stopped commit's Git is still running in the repository: {last:?}"
+        );
+    }
     let found = service
         .locks
         .inspect(

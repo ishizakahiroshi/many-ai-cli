@@ -62,6 +62,8 @@ pub(super) struct DiffFile {
     pub removed: i64,
     pub diff: String,
 }
+/// What `Git::env` allows an exited Git command to close its pipes.
+const GIT_PIPE_DRAIN: Duration = Duration::from_millis(250);
 pub(super) struct Git<'a> {
     service: &'a FilesService,
     until: Instant,
@@ -151,7 +153,7 @@ impl<'a> Git<'a> {
             stdin: vec![],
             timeout,
             output_cap: 16 * 1024 * 1024,
-            pipe_drain_timeout: Duration::from_millis(250),
+            pipe_drain_timeout: self.service.git_pipe_drain(),
             user_action,
         }
         .plan()
@@ -289,6 +291,18 @@ impl FilesService {
             }
         }
         Instant::now()
+    }
+    /// How long an exited Git command may take to close its output pipes
+    /// before they are forced shut and the command fails ("pipes failed to
+    /// close"). Production always allows 250 ms. A test about what Git answers
+    /// may allow more (`git_pipe_drain`), so a busy machine that is slow to
+    /// read the pipes' end does not turn Git's real error into that one.
+    fn git_pipe_drain(&self) -> Duration {
+        #[cfg(test)]
+        if let Some(drain) = self.git_pipe_drain {
+            return drain;
+        }
+        GIT_PIPE_DRAIN
     }
     /// Freeze the budget clock at the current instant. Only the counting of
     /// budgets stops: each Git process still runs for real and is still killed

@@ -50,6 +50,10 @@ pub struct FilesService {
     /// lookups more than their 250 ms (`files::branch`).
     #[cfg(test)]
     pub(crate) display_lookup_budget: Option<std::time::Duration>,
+    /// A test about what Git answers, not how fast its pipes close, may give
+    /// an exited Git command more than its 250 ms to close them (`files::git`).
+    #[cfg(test)]
+    pub(crate) git_pipe_drain: Option<std::time::Duration>,
     history: Option<std::sync::Arc<dyn PersistenceEffectSink>>,
 }
 impl FilesService {
@@ -74,6 +78,8 @@ impl FilesService {
             pinned_git_clock: Default::default(),
             #[cfg(test)]
             display_lookup_budget: None,
+            #[cfg(test)]
+            git_pipe_drain: None,
             history: None,
         }
     }
