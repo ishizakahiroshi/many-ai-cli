@@ -169,6 +169,44 @@ mod tests {
         registration.after_registered = CoreEffects::default();
         registration
     }
+    /// A headless child registered through the same one-use proof a real
+    /// spawn issues, so the admission table records its parent.
+    async fn register_child(core: &SessionEngine, parent: LiveSessionId, pid: i64) -> Registration {
+        let proof = SpawnRegistrationProof::issue().unwrap();
+        {
+            let mut state = lock(&core.state);
+            let lease = state.admission.begin_provider_spawn("claude").unwrap();
+            state.spawn_proofs.insert(
+                crate::approval::identity::digest(proof.as_header_value()),
+                PendingSpawn {
+                    lease,
+                    metadata: SpawnRegistrationMetadata {
+                        parent,
+                        ..Default::default()
+                    },
+                },
+            );
+        }
+        let mut registration = core
+            .register(
+                RegisterRequest {
+                    message: proto::Message {
+                        provider: "claude".into(),
+                        pid,
+                        execution_mode: "headless".into(),
+                        cwd: "synthetic-progress".into(),
+                        ..Default::default()
+                    },
+                    spawn_proof: Some(proof.as_header_value().to_owned()),
+                },
+                WrapperConnectionId(pid as u64),
+                now(),
+            )
+            .await
+            .unwrap();
+        registration.after_registered = CoreEffects::default();
+        registration
+    }
     #[tokio::test]
     async fn binding_run_sequence_and_mode_are_checked_before_mutation() {
         let (_root, core) = fixture();
@@ -433,6 +471,74 @@ mod tests {
         let lease = core.begin_provider_update("claude").unwrap();
         core.end_provider_update(lease);
         assert!(core.snapshot(done.binding.session).is_some());
+    }
+    #[tokio::test]
+    async fn completed_headless_children_free_the_per_parent_and_total_limits() {
+        let (_root, core) = fixture();
+        let conductor = register(&core, false, 1).await;
+        let parent = conductor.binding.session;
+        let end = |state: &str, code: i64| SessionEnd {
+            declared_state: state.into(),
+            exit_code: code,
+            reason: String::new(),
+        };
+        let request = AdmissionRequest {
+            parent,
+            slots: 1,
+            origin: VerifiedSpawnOrigin::Autonomous,
+            replace: None,
+        };
+        // The default automatic limit, with a total budget that the conductor
+        // plus a full set of children would also exhaust.
+        let limits = AdmissionLimits {
+            max_children_per_parent: 10,
+            max_total_sessions: 11,
+        };
+        let mut children = Vec::new();
+        for pid in 2..=11 {
+            let child = register_child(&core, parent, pid).await;
+            assert_eq!(
+                core.snapshot(child.binding.session)
+                    .unwrap()
+                    .parent_session_id,
+                parent
+            );
+            core.observe_end(child.binding, end("completed", 0), now())
+                .unwrap();
+            core.disconnected(child.binding, now()).unwrap();
+            children.push(child);
+        }
+        // Ten completed cards are still listed, yet the 11th automatic spawn
+        // is admitted by both the per-parent and the total limit.
+        assert!(
+            children
+                .iter()
+                .all(|c| core.snapshot(c.binding.session).is_some())
+        );
+        let reservation = core.reserve_children(request.clone(), limits).unwrap();
+        assert!(core.release_children(&reservation.id));
+        // A child that failed keeps its slot until its card is closed.
+        let failed = register_child(&core, parent, 12).await;
+        core.observe_end(failed.binding, end("error", 1), now())
+            .unwrap();
+        core.disconnected(failed.binding, now()).unwrap();
+        let one = AdmissionLimits {
+            max_children_per_parent: 1,
+            max_total_sessions: 2,
+        };
+        assert!(matches!(
+            core.reserve_children(request.clone(), one),
+            Err(AdmissionError::ChildrenPerParent { used: 1, .. })
+        ));
+        let ui = UiBinding {
+            connection: UiConnectionId(7),
+            auth_epoch: core.auth_epoch(),
+        };
+        core.attach_ui(ui, None, None).unwrap();
+        core.dismiss_from_ui(ui, failed.binding.session, now())
+            .unwrap();
+        let reservation = core.reserve_children(request, one).unwrap();
+        assert!(core.release_children(&reservation.id));
     }
     #[tokio::test]
     async fn a_headless_run_cannot_be_reattached() {
