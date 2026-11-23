@@ -337,3 +337,42 @@ fn provider_raw_unknown_unicode_and_extreme_number_use_shared_decoder() {
             .any(|d| d.code == "unknown_field" && d.field == "\u{fffd}")
     );
 }
+/// pending devin-child (screen): a registered AI CLI declares its screen in
+/// its definition. The field survives the shared decoder (which drops fields
+/// its schema does not name), and whitespace-only or control-character
+/// markers, which would match every screen, are refused.
+#[test]
+fn a_definition_screen_declaration_is_decoded_and_its_markers_are_checked() {
+    let raw = r#"{"schema_version":1,"id":"synthetic","display_name":"Synthetic","launch":{"executable":"fake"},
+        "screen":{"ready_markers":["Ask me anything"],"startup_blockers":["Trust this folder?"],
+        "composer_prefix":">","composer_end_markers":["esc to cancel"]}}"#;
+    let (definition, diagnostics) =
+        validation::validate_definition(raw.as_bytes(), &registry::default_adapters()).unwrap();
+    assert!(
+        diagnostics.is_empty(),
+        "{:?}",
+        diagnostics.iter().map(|d| &d.field).collect::<Vec<_>>()
+    );
+    let screen = definition.screen.unwrap();
+    assert_eq!(screen.ready_markers, ["Ask me anything"]);
+    assert_eq!(screen.startup_blockers, ["Trust this folder?"]);
+    assert_eq!(screen.composer_prefix, ">");
+    assert_eq!(screen.composer_end_markers, ["esc to cancel"]);
+    let raw = r#"{"schema_version":1,"id":"synthetic","display_name":"Synthetic","launch":{"executable":"fake"},
+        "screen":{"ready_markers":["  "],"startup_blockers":["a\u0007"],"composer_prefix":" > "}}"#;
+    let (_, diagnostics) =
+        validation::validate_definition(raw.as_bytes(), &registry::default_adapters()).unwrap();
+    let fields = diagnostics
+        .iter()
+        .filter(|d| d.code == "invalid_screen")
+        .map(|d| d.field.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        fields,
+        [
+            "screen.composer_prefix",
+            "screen.ready_markers[0]",
+            "screen.startup_blockers[0]"
+        ]
+    );
+}

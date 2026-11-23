@@ -310,10 +310,22 @@ impl SessionWorkers {
         &self,
         request: InitialPromptRequest,
     ) -> Result<(), SessionError> {
-        let driver = Arc::new(InitialPromptDriver::new(
-            Arc::downgrade(&self.core()?),
-            self.this.upgrade().ok_or(SessionError::Shutdown)?,
-        ));
+        // A registered AI CLI's input box is known only from its `screen`
+        // declaration, read from the same registry the Hub launches with.
+        let registry = self.observation_registry.get().cloned();
+        let driver = Arc::new(
+            InitialPromptDriver::new(
+                Arc::downgrade(&self.core()?),
+                self.this.upgrade().ok_or(SessionError::Shutdown)?,
+            )
+            .with_screen(Arc::new(move |provider| {
+                let registry = registry.as_ref().and_then(|snapshot| snapshot().ok());
+                crate::orchestration::initial_prompt::ScreenSignals::from_registry(
+                    provider,
+                    registry.as_ref(),
+                )
+            })),
+        );
         drop(driver.start_owned(&self.tasks, request)?);
         Ok(())
     }

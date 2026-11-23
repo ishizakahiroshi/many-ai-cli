@@ -113,6 +113,14 @@ struct Fixture {
     root: tempfile::TempDir,
 }
 async fn fixture() -> Fixture {
+    fixture_with(Arc::new(|| {
+        Err(std::io::Error::other(
+            "test rejects native provider discovery",
+        ))
+    }))
+    .await
+}
+async fn fixture_with(registry: crate::application::spawn_policy::RegistrySnapshot) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let runtime = root.path().join("trial");
     std::fs::create_dir(&runtime).unwrap();
@@ -175,11 +183,7 @@ async fn fixture() -> Fixture {
         effects: Arc::downgrade(&effects),
         config,
         paths: paths.clone(),
-        registry: Arc::new(|| {
-            Err(std::io::Error::other(
-                "test rejects native provider discovery",
-            ))
-        }),
+        registry,
         environment: Vec::new(),
         hub_cwd: runtime,
         workers,
@@ -883,6 +887,150 @@ fn startup_failed_tail_masks_secrets_and_keeps_only_the_last_five_lines() {
     assert!(!tail.contains("dropped"), "{tail}");
     assert!(!tail.contains("boxed line"), "{tail}");
     assert_eq!(tail.lines().count(), 5, "{tail}");
+}
+/// A registered AI CLI whose definition declares its startup screen.
+fn declared_registry(screen: bool) -> crate::application::spawn_policy::RegistrySnapshot {
+    use crate::profile::registry::{Registry, default_adapters, embedded_definitions};
+    use crate::proto::provider::{Definition, LaunchDefinition, Layers, ScreenDefinition};
+    let registry = Registry::build(
+        Layers {
+            embedded: Some(embedded_definitions().unwrap()),
+            user: Some(vec![Definition {
+                schema_version: 1,
+                id: "fixture-agent".into(),
+                display_name: "Fixture Agent".into(),
+                launch: Some(LaunchDefinition {
+                    executable: "fixture-agent-bin".into(),
+                    ..Default::default()
+                }),
+                screen: screen.then(|| ScreenDefinition {
+                    ready_markers: vec!["Ask Fixture anything".into()],
+                    startup_blockers: vec!["Trust this workspace?".into()],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        },
+        &default_adapters(),
+    );
+    Arc::new(move || Ok(registry.clone()))
+}
+/// A child whose instructions are typed after registration: the only route a
+/// registered AI CLI has (it takes no launch-argument prompt).
+async fn typed_child(f: &Fixture, provider: &str, role: &str, at: Timestamp) -> SessionBinding {
+    let spec = WrappedSpawnSpec {
+        registration_metadata: SpawnRegistrationMetadata {
+            parent: f.binding.session,
+            role: role.into(),
+            auto: true,
+            depth: 1,
+            orchestration: f.id.clone(),
+            board_path: f.path.to_string_lossy().into_owned(),
+            spawned_at: Some(at),
+            ..Default::default()
+        },
+        spawn_attempt: None,
+        registration_proof: None,
+        provider: provider.into(),
+        cwd: f.owner.deps.hub_cwd.clone(),
+        model: String::new(),
+        model_selection: String::new(),
+        risk_confirmed: false,
+        label: format!("test-{role}"),
+        permission_mode: String::new(),
+        sandbox: String::new(),
+        ask_for_approval: String::new(),
+        route: String::new(),
+        utf8_session: false,
+        effort: String::new(),
+        execution_mode: "interactive".into(),
+        permission_preset: String::new(),
+        initial_prompt: String::new(),
+        subscription_profile_id: String::new(),
+        subscription_login: false,
+        usage_probe: false,
+        grants: InternalSpawnGrants::default(),
+        cancellation: TaskCancellation::default(),
+    };
+    let binding = match f
+        .core
+        .spawn_and_wait(
+            spec.clone(),
+            Duration::from_secs(1),
+            &HttpWaitCancellation::default(),
+        )
+        .await
+    {
+        SpawnWaitOutcome::Registered(binding) => binding,
+        _ => panic!("synthetic wrapper must register"),
+    };
+    f.owner
+        .child_registered(
+            RegisteredChild {
+                binding,
+                parent: f.binding,
+                role: role.into(),
+                preparation: child_launch::ChildPreparation {
+                    orchestration: f.id.clone(),
+                    board_path: f.path.clone(),
+                    absolute_cwd: f.owner.deps.hub_cwd.clone(),
+                    child_cwd: f.owner.deps.hub_cwd.clone(),
+                    branch: String::new(),
+                },
+                restart_spec: spec,
+                initial_prompt: "synthetic task".into(),
+                prompt_via_launch_arg: false,
+                inject_after_registration: Some("synthetic typed task".into()),
+                spawned_at: at,
+            },
+            TaskCancellation::default(),
+        )
+        .await
+        .unwrap();
+    binding
+}
+/// pending devin-child (startup_wait): the startup-screen notice was only for
+/// launch-argument children and only knew Claude Code's and Codex's screens,
+/// so a registered child sitting on a startup screen never told the conductor.
+#[tokio::test]
+async fn a_registered_child_on_its_declared_startup_screen_tells_the_conductor() {
+    for screen in [true, false] {
+        let f = fixture_with(declared_registry(screen)).await;
+        configure(&f, |cfg| {
+            cfg.orchestration.child_startup_fail = Some(false);
+            cfg.orchestration.child_timeout_seconds = 0;
+            cfg.orchestration.idle_done_threshold_sec = 0;
+        });
+        let at = Timestamp::now();
+        let binding = typed_child(&f, "fixture-agent", "impl", at).await;
+        output(&f, binding, "Trust this workspace?\r\n1. Yes  2. No", at);
+        // Still drawing: not a held screen yet.
+        lifecycle::poll(&f.owner, at + Duration::from_secs(5))
+            .await
+            .unwrap();
+        assert!(
+            !lock(&f.owner.state).boards[&f.id].children[&binding.session].startup_wait_notified
+        );
+        lifecycle::poll(&f.owner, at + Duration::from_secs(30))
+            .await
+            .unwrap();
+        let notified =
+            lock(&f.owner.state).boards[&f.id].children[&binding.session].startup_wait_notified;
+        let board = std::fs::read_to_string(&f.path).unwrap();
+        if screen {
+            assert!(notified);
+            assert!(
+                board.contains("before its input box appears")
+                    && board.contains("(Trustthisworkspace?)")
+                    && board.contains("Hub has not typed the instructions yet"),
+                "{board}"
+            );
+        } else {
+            // Without a declaration nothing about its screen is guessed.
+            assert!(!notified, "{board}");
+        }
+    }
 }
 #[tokio::test]
 async fn progress_and_new_pty_activity_prevent_timeout_but_elapsed_inactivity_fires_once() {

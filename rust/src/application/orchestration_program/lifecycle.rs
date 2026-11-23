@@ -9,6 +9,9 @@ struct Timer {
     threshold: i64,
     screen: Vec<String>,
     blocker: String,
+    /// The instructions wait for the input box to be typed in (registration
+    /// route), instead of having been handed over as a launch argument.
+    typed: bool,
 }
 impl OrchestrationProgram {
     /// Keep attribution and the engine's dismissal in one critical section.
@@ -374,6 +377,13 @@ pub(super) async fn poll(owner: &OrchestrationProgram, now: Timestamp) -> Result
     };
     let mut timers = Vec::new();
     let mut ends = Vec::new();
+    // A registered AI CLI's startup screens are known only from its `screen`
+    // declaration. An unreadable registry leaves the fixed tables.
+    let registry = if ids.is_empty() {
+        None
+    } else {
+        (owner.deps.registry)().ok()
+    };
     for (id, child_id) in ids {
         let Some(details) = core.details(child_id) else {
             continue;
@@ -383,6 +393,10 @@ pub(super) async fn poll(owner: &OrchestrationProgram, now: Timestamp) -> Result
             .map(|(_, screen)| screen)
             .unwrap_or_default();
         let outcome = core.initial_prompt_outcome(details.binding).ok().flatten();
+        let signals = crate::orchestration::initial_prompt::ScreenSignals::from_registry(
+            &details.snapshot.provider,
+            registry.as_ref(),
+        );
         let mut state = lock(&owner.state);
         let Some(board) = state.boards.get_mut(&id) else {
             continue;
@@ -407,11 +421,22 @@ pub(super) async fn poll(owner: &OrchestrationProgram, now: Timestamp) -> Result
             Some((InitialPromptOutcome::Failed { .. }, _)) => (None, true),
             _ => (None, false),
         };
-        let waiting = child.registration.prompt_via_launch_arg
+        // Launch-argument route: the instructions are already handed over and
+        // start once the screen is answered. Registration route (every
+        // registered AI CLI): Hub still holds them until the input box shows,
+        // so only while its delivery has not concluded (a concluded failure
+        // already told the conductor with its own notice).
+        let typed = !child.registration.prompt_via_launch_arg
+            && child.registration.inject_after_registration.is_some();
+        let pending = if typed {
+            outcome.is_none()
+        } else {
+            child.registration.prompt_via_launch_arg && delivered.is_none()
+        };
+        let waiting = pending
             && child.stamp.is_none()
-            && delivered.is_none()
             && crate::orchestration::initial_prompt::launch_arg_startup_screen(
-                &details.snapshot.provider,
+                &signals,
                 &screen,
                 child.registration.spawned_at,
                 details.last_output_at,
@@ -431,6 +456,7 @@ pub(super) async fn poll(owner: &OrchestrationProgram, now: Timestamp) -> Result
             threshold,
             screen: screen.clone(),
             blocker,
+            typed,
         };
         let grace = if cfg.child_startup_grace_seconds <= 0 {
             60
@@ -484,12 +510,8 @@ pub(super) async fn poll(owner: &OrchestrationProgram, now: Timestamp) -> Result
             }
         }
         if waiting && !child.startup_wait_notified {
-            let blocker = crate::orchestration::initial_prompt::screen_blocker(
-                &details.snapshot.provider,
-                &screen,
-            )
-            .unwrap_or("")
-            .to_owned();
+            let blocker = crate::orchestration::initial_prompt::screen_blocker(&signals, &screen)
+                .unwrap_or_default();
             let event = timer("startup_wait", 0, blocker);
             child.startup_wait_notified = true;
             timers.push(event);
@@ -571,7 +593,12 @@ pub(super) async fn poll(owner: &OrchestrationProgram, now: Timestamp) -> Result
                         | "Isthisaprojectyoucreatedoroneyoutrust?"
                         | "Yes,Itrustthisfolder"
                 );
-                let text = if folder {
+                let text = if timer.typed {
+                    format!(
+                        "child waiting on a startup screen before its input box appears: role={} id={} ({blocker}). Hub has not typed the instructions yet and types them once the input box appears; ask the user to open the child session and answer that screen. If the board later says the initial prompt was NOT delivered, send the instructions again with orchestrate send",
+                        timer.role, timer.child.0
+                    )
+                } else if folder {
                     format!(
                         "child waiting on its folder-trust prompt: role={} id={} ({blocker}). The instructions were handed over at launch and start as soon as the user opens the child session and chooses Yes (Codex: Trust and continue); do not send them again",
                         timer.role, timer.child.0

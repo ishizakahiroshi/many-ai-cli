@@ -59,6 +59,31 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
                 name: "update",
                 kind: "*UpdateDefinition",
             },
+            Field {
+                name: "screen",
+                kind: "*ScreenDefinition",
+            },
+        ],
+    },
+    Schema {
+        name: "ScreenDefinition",
+        fields: &[
+            Field {
+                name: "ready_markers",
+                kind: "[]string",
+            },
+            Field {
+                name: "startup_blockers",
+                kind: "[]string",
+            },
+            Field {
+                name: "composer_prefix",
+                kind: "string",
+            },
+            Field {
+                name: "composer_end_markers",
+                kind: "[]string",
+            },
         ],
     },
     Schema {
@@ -389,6 +414,10 @@ impl GoWire for PresentationDefinition {
 }
 impl GoWire for UpdateDefinition {
     const GO_TYPE: &'static str = "UpdateDefinition";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+impl GoWire for ScreenDefinition {
+    const GO_TYPE: &'static str = "ScreenDefinition";
     const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
 }
 impl GoWire for AdapterRefs {

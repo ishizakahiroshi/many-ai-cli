@@ -190,6 +190,43 @@ fn launch(launch: &LaunchDefinition) -> Vec<Diagnostic> {
     }
     out
 }
+/// `screen` markers are compared with the screen after whitespace is removed,
+/// so a marker that is only whitespace would match every screen.
+fn screen(screen: &ScreenDefinition) -> Vec<Diagnostic> {
+    let mut out = vec![];
+    if screen.composer_prefix.trim() != screen.composer_prefix
+        || screen.composer_prefix.chars().count() > 8
+        || control(&screen.composer_prefix)
+    {
+        out.push(diag(
+            "invalid_screen",
+            "error",
+            "screen.composer_prefix",
+            "screen.composer_prefix must be at most 8 characters without surrounding whitespace or control characters",
+        ));
+    }
+    for (field, markers) in [
+        ("screen.ready_markers", &screen.ready_markers),
+        ("screen.startup_blockers", &screen.startup_blockers),
+        ("screen.composer_end_markers", &screen.composer_end_markers),
+    ] {
+        if markers.len() > 32 {
+            out.push(diag("invalid_screen", "error", field, "too many markers"));
+            continue;
+        }
+        for (i, marker) in markers.iter().enumerate() {
+            if marker.trim().is_empty() || marker.len() > 128 || control(marker) {
+                out.push(diag(
+                    "invalid_screen",
+                    "error",
+                    &format!("{field}[{i}]"),
+                    "a screen marker is empty, too long, or contains a control character",
+                ));
+            }
+        }
+    }
+    out
+}
 fn update(update: &UpdateDefinition) -> Vec<Diagnostic> {
     let mut out = vec![];
     if update.enabled == Some(true) && update.args.is_empty() {
@@ -349,6 +386,7 @@ pub fn validate_definition(
                 "approval_pattern_source",
                 "source",
                 "update",
+                "screen",
             ]
             .contains(&field.as_str())
             {
@@ -473,6 +511,9 @@ pub fn validate_definition(
     }
     if let Some(v) = &def.update {
         out.extend(update(v));
+    }
+    if let Some(v) = &def.screen {
+        out.extend(screen(v));
     }
     sort_diagnostics(&mut out);
     Ok((def, out))

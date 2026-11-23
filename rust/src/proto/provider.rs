@@ -205,6 +205,51 @@ pub struct Definition {
     pub source: SourceRef,
     #[serde(rename = "update", skip_serializing_if = "Option::is_none")]
     pub update: Option<UpdateDefinition>,
+    /// What the CLI's terminal screen shows. Not part of the fixed Go schema:
+    /// Claude Code and Codex keep their built-in screen tables, and this lets a
+    /// registered AI CLI declare the same signals instead of being left out.
+    #[serde(rename = "screen", skip_serializing_if = "Option::is_none")]
+    pub screen: Option<ScreenDefinition>,
+}
+
+/// A provider's screen signals, compared with the screen text after every
+/// whitespace character is removed (so `Ask me anything` matches `Askmeanything`).
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScreenDefinition {
+    /// Text on the screen once the CLI is ready for a prompt (its input box).
+    #[serde(
+        rename = "ready_markers",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub ready_markers: Vec<String>,
+    /// Text of a startup screen that holds the CLI before its input box (a
+    /// folder-trust question, an update notice). The Hub tells the conductor
+    /// the child is waiting there instead of typing the instructions into it.
+    #[serde(
+        rename = "startup_blockers",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub startup_blockers: Vec<String>,
+    /// The glyph that starts the input line (for example `❯`). With it the Hub
+    /// reads the text still sitting in the input box after a submit and presses
+    /// Enter again when the pasted prompt was not taken.
+    #[serde(
+        rename = "composer_prefix",
+        deserialize_with = "null_default",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub composer_prefix: String,
+    /// Text on a line below the input line that ends the input box (a footer or
+    /// status line). A rule line of box-drawing characters always ends it.
+    #[serde(
+        rename = "composer_end_markers",
+        deserialize_with = "go_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub composer_end_markers: Vec<String>,
 }
 
 /// Source: `internal/provider/schema.go`, `LaunchDefinition`.

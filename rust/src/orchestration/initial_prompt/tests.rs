@@ -36,37 +36,56 @@ fn fixed_source_screen_predicates() {
     assert!(screen::echo_visible("[Pastedtext#12+33lines]", "absent"));
     assert!(!screen::echo_visible("[Pastedtext#x]", "absent"));
     assert_eq!(
-        screen_blocker("codex", &lines("Trust this folder?\nCodex can read")),
-        Some("Trustthisfolder?Codexcanread")
+        screen_blocker(
+            &ScreenSignals::builtin("codex"),
+            &lines("Trust this folder?\nCodex can read")
+        ),
+        Some("Trustthisfolder?Codexcanread".into())
     );
     assert_eq!(
         screen_blocker(
-            "claude",
+            &ScreenSignals::builtin("claude"),
             &lines("Is this a project you created or one you trust?")
         ),
-        Some("Isthisaprojectyoucreatedoroneyoutrust?")
+        Some("Isthisaprojectyoucreatedoroneyoutrust?".into())
     );
     assert_eq!(
-        screen_blocker("claude", &lines("Allow external CLAUDE.md file imports?")),
-        Some("AllowexternalCLAUDE.mdfileimports?")
+        screen_blocker(
+            &ScreenSignals::builtin("claude"),
+            &lines("Allow external CLAUDE.md file imports?")
+        ),
+        Some("AllowexternalCLAUDE.mdfileimports?".into())
     );
     assert_eq!(
-        screen_blocker("grok", &lines("Trust this folder? Codex can read")),
+        screen_blocker(
+            &ScreenSignals::builtin("grok"),
+            &lines("Trust this folder? Codex can read")
+        ),
         None
     );
     let text = lines(&format!(
         "❯ prior turn\n{RULE}\n❯ wrapped task\nlast line\n{RULE}\nfooter"
     ));
     assert_eq!(
-        screen::composer_text("claude", &text).as_deref(),
+        ScreenSignals::builtin("claude")
+            .composer_text(&text)
+            .as_deref(),
         Some("wrappedtasklastline")
     );
-    assert_eq!(screen::composer_text("codex", &text), None);
-    assert_eq!(screen::composer_text("claude", &lines("splash only")), None);
+    assert_eq!(ScreenSignals::builtin("codex").composer_text(&text), None);
+    assert_eq!(
+        ScreenSignals::builtin("claude").composer_text(&lines("splash only")),
+        None
+    );
     let clear = lines(&format!(
         "❯ prior task\n{RULE}\n❯ \n{RULE}\n⏵⏵ auto mode on (shift+tab to cycle)"
     ));
-    assert_eq!(screen::composer_text("claude", &clear).as_deref(), Some(""));
+    assert_eq!(
+        ScreenSignals::builtin("claude")
+            .composer_text(&clear)
+            .as_deref(),
+        Some("")
+    );
 }
 
 #[test]
@@ -76,16 +95,28 @@ fn launch_argument_startup_wait_is_screen_state_not_quoted_words() {
     let old_output = Some(now - Duration::from_secs(11));
     let trust = lines("Trust this folder? Codex can read");
     assert_eq!(
-        launch_arg_startup_screen("codex", &trust, spawn, old_output, now),
-        Some("Trustthisfolder?Codexcanread")
+        launch_arg_startup_screen(
+            &ScreenSignals::builtin("codex"),
+            &trust,
+            spawn,
+            old_output,
+            now
+        ),
+        Some("Trustthisfolder?Codexcanread".into())
     );
     assert_eq!(
-        launch_arg_startup_screen("codex", &trust, spawn, Some(now), now),
+        launch_arg_startup_screen(
+            &ScreenSignals::builtin("codex"),
+            &trust,
+            spawn,
+            Some(now),
+            now
+        ),
         None
     );
     assert_eq!(
         launch_arg_startup_screen(
-            "codex",
+            &ScreenSignals::builtin("codex"),
             &lines("Ask Codex to do anything\nTrust this folder? Codex can read"),
             spawn,
             old_output,
@@ -95,17 +126,17 @@ fn launch_argument_startup_wait_is_screen_state_not_quoted_words() {
     );
     assert_eq!(
         launch_arg_startup_screen(
-            "claude",
+            &ScreenSignals::builtin("claude"),
             &lines("unknown startup menu"),
             spawn,
             old_output,
             now
         ),
-        Some("")
+        Some("".into())
     );
     assert_eq!(
         launch_arg_startup_screen(
-            "claude",
+            &ScreenSignals::builtin("claude"),
             &lines("unknown startup menu"),
             now,
             old_output,
@@ -114,11 +145,23 @@ fn launch_argument_startup_wait_is_screen_state_not_quoted_words() {
         None
     );
     assert_eq!(
-        launch_arg_startup_screen("grok", &trust, spawn, old_output, now),
+        launch_arg_startup_screen(
+            &ScreenSignals::builtin("grok"),
+            &trust,
+            spawn,
+            old_output,
+            now
+        ),
         None
     );
     assert_eq!(
-        launch_arg_startup_screen("codex", &[], spawn, old_output, now),
+        launch_arg_startup_screen(
+            &ScreenSignals::builtin("codex"),
+            &[],
+            spawn,
+            old_output,
+            now
+        ),
         None
     );
 }
@@ -443,6 +486,9 @@ struct Fixture {
 }
 impl Fixture {
     async fn new(provider: &str, submit_on: usize) -> Self {
+        Self::with_screen(provider, submit_on, Arc::new(ScreenSignals::builtin)).await
+    }
+    async fn with_screen(provider: &str, submit_on: usize, screen: ScreenSource) -> Self {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir(root.path().join("runtime")).unwrap();
         let paths = RuntimePaths::trial(
@@ -512,7 +558,8 @@ impl Fixture {
             sink,
             board_fail: AtomicBool::new(false),
         });
-        let mut driver = InitialPromptDriver::new(Arc::downgrade(&engine), callbacks.clone());
+        let mut driver = InitialPromptDriver::new(Arc::downgrade(&engine), callbacks.clone())
+            .with_screen(screen);
         driver.timing = Timing {
             composer_wait: Duration::from_millis(20),
             composer_stable: Duration::from_millis(4),
@@ -1034,6 +1081,141 @@ async fn provider_without_composer_extractor_retries_enter_then_records_unconfir
     assert_eq!(fixture.transport.enters.load(Ordering::SeqCst), 2);
 }
 
+/// A registered AI CLI that declares the fixture TUI's screen, the way a
+/// Devin CLI definition can: its own ready text and input line.
+fn declared_screen() -> ScreenSource {
+    Arc::new(|provider| {
+        ScreenSignals::declared(
+            provider,
+            Some(&proto::provider::ScreenDefinition {
+                ready_markers: vec!["shift+tab to cycle".into()],
+                startup_blockers: vec!["Trust this workspace?".into()],
+                composer_prefix: "❯".into(),
+                composer_end_markers: vec!["shift+tab to cycle".into()],
+            }),
+        )
+    })
+}
+
+/// pending devin-child (composer): a registered provider's input box was
+/// never read, so a prompt left sitting there after two Enters was recorded
+/// as an unconfirmed delivery and nobody was told. With its declared input
+/// line the Hub sees it, and the conductor and board get the failure.
+#[tokio::test(start_paused = true)]
+async fn a_registered_provider_declaring_its_input_line_reports_a_prompt_left_unsent() {
+    let fixture = Fixture::with_screen("fixture-agent", 0, declared_screen()).await;
+    let result = fixture.run().await;
+    assert!(
+        matches!(result.outcome, InitialPromptOutcome::Failed { .. }),
+        "{result:?}"
+    );
+    assert_eq!(fixture.transport.bodies.load(Ordering::SeqCst), 1);
+    assert_eq!(fixture.transport.enters.load(Ordering::SeqCst), 2);
+    let board = std::fs::read_to_string(fixture.root.path().join("board.md")).unwrap();
+    assert!(board.contains("initial prompt NOT delivered"), "{board}");
+    assert_eq!(fixture.callbacks.parents.lock().unwrap().len(), 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_registered_provider_declaring_its_input_line_confirms_the_retry_enter() {
+    let fixture = Fixture::with_screen("fixture-agent", 2, declared_screen()).await;
+    let result = fixture.run().await;
+    assert!(
+        matches!(
+            result.outcome,
+            InitialPromptOutcome::Delivered {
+                evidence: DeliveryEvidence::ComposerCleared,
+                ..
+            }
+        ),
+        "{result:?}"
+    );
+    // The same Enter count as Claude Code's own composer retry.
+    assert_eq!(fixture.transport.enters.load(Ordering::SeqCst), 2);
+    assert!(!fixture.root.path().join("board.md").exists());
+}
+
+#[test]
+fn a_registered_provider_screen_comes_from_its_declaration() {
+    let signals = declared_screen()("fixture-agent");
+    let screen = lines(&format!(
+        "❯ prior turn\n{RULE}\n❯ wrapped task\nlast line\n⏵⏵ shift+tab to cycle"
+    ));
+    assert_eq!(
+        signals.composer_text(&screen).as_deref(),
+        Some("wrappedtasklastline")
+    );
+    assert_eq!(
+        screen_blocker(&signals, &lines("Trust this\nworkspace?")).as_deref(),
+        Some("Trustthisworkspace?")
+    );
+    let now = Timestamp::UNIX_EPOCH + Duration::from_secs(100);
+    let spawn = now - Duration::from_secs(60);
+    let old_output = Some(now - Duration::from_secs(11));
+    assert_eq!(
+        launch_arg_startup_screen(
+            &signals,
+            &lines("Trust this workspace?"),
+            spawn,
+            old_output,
+            now
+        )
+        .as_deref(),
+        Some("Trustthisworkspace?")
+    );
+    // Its ready text wins over a quoted startup word, as for the built-ins.
+    assert_eq!(
+        launch_arg_startup_screen(
+            &signals,
+            &lines("Trust this workspace?\n(shift+tab to cycle)"),
+            spawn,
+            old_output,
+            now
+        ),
+        None
+    );
+    // Without a declaration nothing is guessed for it.
+    let undeclared = ScreenSignals::builtin("fixture-agent");
+    assert_eq!(undeclared.composer_text(&screen), None);
+    assert_eq!(
+        launch_arg_startup_screen(
+            &undeclared,
+            &lines("Trust this workspace?"),
+            spawn,
+            old_output,
+            now
+        ),
+        None
+    );
+    // The two Go-oracle providers keep their fixed tables over any declaration.
+    let claude = ScreenSignals::declared(
+        "claude",
+        Some(&proto::provider::ScreenDefinition {
+            startup_blockers: vec!["Trust this workspace?".into()],
+            ..Default::default()
+        }),
+    );
+    assert_eq!(claude, ScreenSignals::builtin("claude"));
+}
+
+/// A long paste sits in the input box as "[Pasted text #N ...]", which never
+/// contains the prompt's words; it is still a prompt that was not submitted.
+#[test]
+fn a_pasted_placeholder_left_in_the_input_box_is_not_a_cleared_composer() {
+    let stuck = lines(&format!(
+        "❯ [Pasted text #1 +23 lines]\n{RULE}\n⏵⏵ (shift+tab to cycle)"
+    ));
+    let text = ScreenSignals::builtin("claude")
+        .composer_text(&stuck)
+        .unwrap();
+    assert!(screen::has_paste_placeholder(&text));
+    let sent = lines(&format!("❯ \n{RULE}\n⏵⏵ (shift+tab to cycle)"));
+    let text = ScreenSignals::builtin("claude")
+        .composer_text(&sent)
+        .unwrap();
+    assert!(!screen::has_paste_placeholder(&text));
+}
+
 #[tokio::test(start_paused = true)]
 async fn transient_ready_or_blocked_screen_does_not_end_stability_wait() {
     let fixture = Fixture::new("codex", 1).await;
@@ -1042,9 +1224,10 @@ async fn transient_ready_or_blocked_screen_does_not_end_stability_wait() {
         b"\x1b[2J\x1b[HAsk Codex to do anything".to_vec(),
     );
     let cancel = TaskCancellation::default();
+    let signals = ScreenSignals::builtin("codex");
     let ready = fixture
         .driver
-        .wait_composer(&fixture.engine, fixture.binding, &cancel);
+        .wait_composer(&fixture.engine, fixture.binding, &signals, &cancel);
     let redraw = async {
         tokio::time::sleep(Duration::from_millis(1)).await;
         fixture.transport.draw(
@@ -1055,7 +1238,7 @@ async fn transient_ready_or_blocked_screen_does_not_end_stability_wait() {
     let (ready, ()) = tokio::join!(ready, redraw);
     assert!(matches!(
         ready.unwrap(),
-        ComposerReady::Blocked("Trustthisfolder?Codexcanread")
+        ComposerReady::Blocked(signal) if signal == "Trustthisfolder?Codexcanread"
     ));
 }
 
@@ -1107,6 +1290,7 @@ async fn post_echo_approval_prevents_orchestration_composer_enter_retry() {
         .confirm(
             &fixture.engine,
             fixture.binding,
+            &ScreenSignals::builtin("claude"),
             &screen::echo_marker(PROMPT),
             1,
             &TaskCancellation::default(),

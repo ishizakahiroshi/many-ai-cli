@@ -98,8 +98,11 @@ impl SessionEngine {
                         .filter(|c| !c.is_whitespace())
                         .collect();
                     if screen.contains("Sidefrommainthread")
-                        || crate::orchestration::initial_prompt::screen_blocker("codex", &lines)
-                            .is_some()
+                        || crate::orchestration::initial_prompt::screen_blocker(
+                            &crate::orchestration::initial_prompt::ScreenSignals::builtin("codex"),
+                            &lines,
+                        )
+                        .is_some()
                         || !screen.contains("AskCodextodoanything")
                     {
                         return BoardEventWrite::Blocked;

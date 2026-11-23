@@ -289,15 +289,18 @@ impl OrchestrationProgram {
             Err(SessionError::StaleBinding) => return Ok(None),
             Err(error) => return Err(error),
         };
+        // Only launch-argument children reach here (built-ins), so the fixed
+        // tables are the whole answer; no registry read is needed.
         Ok(
             crate::orchestration::initial_prompt::launch_arg_startup_screen(
-                &details.snapshot.provider,
+                &crate::orchestration::initial_prompt::ScreenSignals::builtin(
+                    &details.snapshot.provider,
+                ),
                 &screen,
                 spawned,
                 details.last_output_at,
                 now,
-            )
-            .map(str::to_owned),
+            ),
         )
     }
     pub async fn notify_relay_parent(

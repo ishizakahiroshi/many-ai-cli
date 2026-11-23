@@ -18,14 +18,18 @@ use std::{
 use tokio::time::Instant;
 
 mod screen;
-pub use screen::launch_arg_startup_screen;
+pub use screen::{ScreenSignals, launch_arg_startup_screen};
 #[cfg(test)]
 mod tests;
 
 /// Source provider startup blocker classifier. Pure, with no session ownership.
-pub(crate) fn screen_blocker(provider: &str, lines: &[String]) -> Option<&'static str> {
-    screen::blocker(provider, &screen::collapse_whitespace(&lines.concat()))
+pub(crate) fn screen_blocker(signals: &ScreenSignals, lines: &[String]) -> Option<String> {
+    signals.blocker(&screen::collapse_whitespace(&lines.concat()))
 }
+
+/// Reads a provider's screen signals (its `screen` declaration for a
+/// registered AI CLI) when a delivery starts.
+pub type ScreenSource = Arc<dyn Fn(&str) -> ScreenSignals + Send + Sync>;
 
 #[derive(Clone, Debug, Default)]
 pub struct InitialPromptNotice {
@@ -189,14 +193,24 @@ pub struct InitialPromptDriver {
     engine: Weak<SessionEngine>,
     callbacks: Arc<dyn InitialPromptCallbacks>,
     timing: Timing,
+    screen: ScreenSource,
 }
 impl InitialPromptDriver {
+    /// Knows only the fixed screen tables; see [`Self::with_screen`].
     pub fn new(engine: Weak<SessionEngine>, callbacks: Arc<dyn InitialPromptCallbacks>) -> Self {
         Self {
             engine,
             callbacks,
             timing: Timing::default(),
+            screen: Arc::new(ScreenSignals::builtin),
         }
+    }
+    /// Read the screen signals a registered provider declares. Without them a
+    /// registered child's input box is never recognised, so a pasted prompt
+    /// left unsent there could not be told from one the CLI took.
+    pub fn with_screen(mut self, screen: ScreenSource) -> Self {
+        self.screen = screen;
+        self
     }
 
     /// Registration has already installed the source initial gate. The caller
@@ -361,6 +375,8 @@ impl InitialPromptDriver {
     ) -> Result<InitialPromptOutcome, SessionError> {
         const MAX_ATTEMPTS: usize = 2;
         let binding = request.binding;
+        let (details, _) = observation(engine, binding, cancel)?;
+        let signals = (self.screen)(&details.snapshot.provider);
         let marker = screen::echo_marker(&request.prompt);
         let bytes = format!(
             "\x1b[200~{}\x1b[201~\r",
@@ -368,10 +384,13 @@ impl InitialPromptDriver {
         )
         .into_bytes();
         for attempt in 1..=MAX_ATTEMPTS {
-            match self.wait_composer(engine, binding, cancel).await? {
+            match self
+                .wait_composer(engine, binding, &signals, cancel)
+                .await?
+            {
                 ComposerReady::Blocked(signal) => {
                     return Ok(InitialPromptOutcome::Failed {
-                        detail: screen::blocked_detail(signal),
+                        detail: screen::blocked_detail(&signal),
                     });
                 }
                 ComposerReady::Ready => {}
@@ -385,7 +404,7 @@ impl InitialPromptDriver {
                     .await?
             {
                 return self
-                    .confirm(engine, binding, &marker, attempt - 1, cancel)
+                    .confirm(engine, binding, &signals, &marker, attempt - 1, cancel)
                     .await;
             }
             let receipt = engine
@@ -411,7 +430,7 @@ impl InitialPromptDriver {
                 .await?
             {
                 return self
-                    .confirm(engine, binding, &marker, attempt, cancel)
+                    .confirm(engine, binding, &signals, &marker, attempt, cancel)
                     .await;
             }
         }
@@ -426,10 +445,10 @@ impl InitialPromptDriver {
         &self,
         engine: &SessionEngine,
         binding: SessionBinding,
+        signals: &ScreenSignals,
         cancel: &TaskCancellation,
     ) -> Result<ComposerReady, SessionError> {
-        let (details, _) = observation(engine, binding, cancel)?;
-        if screen::composer_signals(&details.snapshot.provider).is_empty() {
+        if !signals.has_composer_signal() {
             return Ok(ComposerReady::NoSignal);
         }
         let start = Instant::now();
@@ -437,18 +456,17 @@ impl InitialPromptDriver {
         let mut blocked_since = None;
         let mut last_blocker = None;
         loop {
-            let (details, lines) = observation(engine, binding, cancel)?;
+            let (_, lines) = observation(engine, binding, cancel)?;
             let collapsed = screen::collapse_whitespace(&lines.concat());
-            let blocked = screen_blocker(&details.snapshot.provider, &lines);
-            if let Some(signal) = blocked {
-                last_blocker = Some(signal);
+            if let Some(signal) = signals.blocker(&collapsed) {
+                last_blocker = Some(signal.clone());
                 ready_since = None;
                 if blocked_since.get_or_insert_with(Instant::now).elapsed()
                     >= self.timing.composer_stable
                 {
                     return Ok(ComposerReady::Blocked(signal));
                 }
-            } else if screen::contains_composer(&details.snapshot.provider, &collapsed) {
+            } else if signals.contains_composer(&collapsed) {
                 blocked_since = None;
                 if ready_since.get_or_insert_with(Instant::now).elapsed()
                     >= self.timing.composer_stable
@@ -512,12 +530,16 @@ impl InitialPromptDriver {
         &self,
         engine: &SessionEngine,
         binding: SessionBinding,
+        signals: &ScreenSignals,
         marker: &str,
         attempts: usize,
         cancel: &TaskCancellation,
     ) -> Result<InitialPromptOutcome, SessionError> {
         for retried in [false, true] {
-            match self.wait_clear(engine, binding, marker, cancel).await? {
+            match self
+                .wait_clear(engine, binding, signals, marker, cancel)
+                .await?
+            {
                 ComposerClear::Cleared => {
                     return Ok(InitialPromptOutcome::Delivered {
                         evidence: DeliveryEvidence::ComposerCleared,
@@ -583,19 +605,20 @@ impl InitialPromptDriver {
         &self,
         engine: &SessionEngine,
         binding: SessionBinding,
+        signals: &ScreenSignals,
         marker: &str,
         cancel: &TaskCancellation,
     ) -> Result<ComposerClear, SessionError> {
         let start = Instant::now();
         let mut clear_since = None;
         loop {
-            let (details, lines) = observation(engine, binding, cancel)?;
-            let Some(text) = screen::composer_text(&details.snapshot.provider, &lines)
-                .filter(|_| !marker.is_empty())
-            else {
+            let (_, lines) = observation(engine, binding, cancel)?;
+            let Some(text) = signals.composer_text(&lines).filter(|_| !marker.is_empty()) else {
                 return Ok(ComposerClear::Unknown);
             };
-            if text.contains(marker) {
+            // A long paste sits in the input box as "[Pasted text #N ...]",
+            // which never contains the prompt's own words.
+            if text.contains(marker) || screen::has_paste_placeholder(&text) {
                 clear_since = None;
                 if start.elapsed() >= self.timing.confirm_wait {
                     return Ok(ComposerClear::Stuck);
@@ -629,7 +652,7 @@ async fn pause(duration: Duration, cancel: &TaskCancellation) -> Result<(), Sess
 }
 enum ComposerReady {
     Ready,
-    Blocked(&'static str),
+    Blocked(String),
     Unknown,
     NoSignal,
 }
