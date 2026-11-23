@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "97b21f77359fd30fe987cb77caae50ffe5314b68",
+    "commit": "628c7626d6865d57e8cb144de15a28824c157f4b",
     "dirty": true,
     "tool": "omitnix 0.1.4",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 2108,
-    "analyzed": 1651,
+    "discovered": 2110,
+    "analyzed": 1653,
     "unresolved": 15,
     "unknown": 0,
     "unclaimed": 442,
@@ -33544,6 +33544,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/orchestration/headless_progress.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Rust-only, allowlisted headless progress. Never serialize provider records."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/orchestration/initial_prompt.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -36540,6 +36569,35 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/terminal/session/headless_progress.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Structured headless observations belong to the existing session incarnation."
         },
         "authentication": {
           "state": "not_configured"

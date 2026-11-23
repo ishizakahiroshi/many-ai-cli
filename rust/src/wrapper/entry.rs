@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{
     config::{Config, RuntimePaths},
-    orchestration::headless,
+    orchestration::{headless, headless_progress::HeadlessProgress},
     process::{
         Cancellation, ProcessPlan,
         pty::{NativePtyFactory, PtyExit},
@@ -597,6 +597,8 @@ async fn run_headless(
     let (mut socket, registered) =
         register(connector, &registration, proof.as_deref(), timeout, cancel).await?;
     proof.take();
+    // Progress is reported only for the run the Hub issued at registration.
+    let run_id = registered_run_id(&registered);
     let mut hooks = SessionHooks::default();
     let mut args = launch.provider_args.clone();
     apply_hooks(
@@ -612,6 +614,7 @@ async fn run_headless(
         &launch::take_prompt_file(context.paths, Path::new(launch.args.prompt_file.trim()))?,
         registered.session_id,
     );
+    add_progress_args(&launch.provider, &def.format, &mut args);
     args = headless::build_argv(def, &args, &prompt);
     let command =
         match resolver.resolve_provider(&launch.provider, launch.custom_argv.as_deref(), &args) {
@@ -642,6 +645,9 @@ async fn run_headless(
     let child_cancel = Cancellation::default();
     let output_cancel = child_cancel.clone();
     let (tx, mut outputs) = tokio::sync::mpsc::channel::<Vec<u8>>(1024);
+    // Progress snapshots are coalesced to the latest; raw bytes never are.
+    let (progress_tx, mut latest) = tokio::sync::watch::channel::<Option<HeadlessProgress>>(None);
+    let progress_enabled = run_id.is_some();
     let spec = headless::Spec {
         process,
         prompt,
@@ -661,42 +667,81 @@ async fn run_headless(
             }),
         event_capacity: 1024,
     };
-    let execution = headless::run(spec, &child_cancel, move |bytes| {
-        if tx.try_send(bytes.to_vec()).is_err() {
-            output_cancel.cancel();
-        }
-    });
+    let execution = headless::run_with_progress(
+        spec,
+        run_id.unwrap_or_else(|| "unreported".into()),
+        &child_cancel,
+        move |bytes| {
+            if tx.try_send(bytes.to_vec()).is_err() {
+                output_cancel.cancel();
+            }
+        },
+        move |snapshot| {
+            if progress_enabled {
+                progress_tx.send_replace(Some(snapshot));
+            }
+        },
+    );
     tokio::pin!(execution);
     let mut socket = Some(socket);
     let mut total = 0i64;
     let mut cancel_seen = false;
     let mut output_open = true;
+    let mut progress_open = progress_enabled;
+    let mut last_sequence = None;
     let result = loop {
         enum Event {
             Output(Option<Vec<u8>>),
+            Progress(bool),
             Frame(io::Result<Box<Message>>),
             Done(io::Result<headless::RunResult>),
             Cancel,
         }
         let event = if let Some(socket) = socket.as_mut() {
             tokio::select! {
-                result=&mut execution=>Event::Done(result),_ = cancel.cancelled(), if !cancel_seen =>Event::Cancel,
-                bytes=outputs.recv(), if output_open =>Event::Output(bytes),frame=socket.receive()=>Event::Frame(frame.map(Box::new)),
+                result = &mut execution => Event::Done(result),
+                _ = cancel.cancelled(), if !cancel_seen => Event::Cancel,
+                bytes = outputs.recv(), if output_open => Event::Output(bytes),
+                changed = latest.changed(), if progress_open => Event::Progress(changed.is_ok()),
+                frame = socket.receive() => Event::Frame(frame.map(Box::new)),
             }
         } else {
-            tokio::select! {result=&mut execution=>Event::Done(result),_=cancel.cancelled(), if !cancel_seen =>Event::Cancel,bytes=outputs.recv(), if output_open =>Event::Output(bytes)}
+            tokio::select! {
+                result = &mut execution => Event::Done(result),
+                _ = cancel.cancelled(), if !cancel_seen => Event::Cancel,
+                bytes = outputs.recv(), if output_open => Event::Output(bytes),
+            }
         };
         match event {
             Event::Done(result) => match result {
                 Ok(result) => break result,
                 Err(error) => {
                     if let Some(socket) = socket.as_mut() {
+                        if let Some(frame) = next_progress_frame(
+                            registered.session_id,
+                            &mut latest,
+                            &mut last_sequence,
+                        ) {
+                            let _ = tokio::time::timeout(timeout, socket.send(&frame)).await;
+                        }
                         let frame = start_failed(registered.session_id, &error);
                         let _ = tokio::time::timeout(timeout, socket.send(&frame)).await;
                     }
                     return Err(error);
                 }
             },
+            Event::Progress(false) => progress_open = false,
+            Event::Progress(true) => {
+                if let Some(current) = socket.as_mut()
+                    && let Some(frame) =
+                        next_progress_frame(registered.session_id, &mut latest, &mut last_sequence)
+                    && tokio::time::timeout(timeout, current.send(&frame))
+                        .await
+                        .map_or(true, |r| r.is_err())
+                {
+                    socket.take();
+                }
+            }
             Event::Cancel => {
                 cancel_seen = true;
                 child_cancel.cancel();
@@ -745,6 +790,12 @@ async fn run_headless(
             )
             .await;
         }
+        // The final snapshot precedes the end frame so the card freezes on it.
+        if let Some(frame) =
+            next_progress_frame(registered.session_id, &mut latest, &mut last_sequence)
+        {
+            let _ = tokio::time::timeout(timeout, socket.send(&frame)).await;
+        }
         let final_text = if result.timed_out {
             "[error] run timed out\r\n".into()
         } else if result.canceled {
@@ -779,6 +830,64 @@ async fn run_headless(
         },
         reconnects: 0,
         output_bytes: total,
+    })
+}
+
+/// Claude reports response boundaries and token usage only with partial
+/// messages; without them the last utterance and the estimate stay unknown.
+fn add_progress_args(provider: &str, format: &str, args: &mut Vec<String>) {
+    const PARTIAL: &str = "--include-partial-messages";
+    if provider == "claude"
+        && format == crate::config::HEADLESS_FORMAT_CLAUDE_STREAM_JSON
+        && !args.iter().any(|arg| arg == PARTIAL)
+    {
+        args.push(PARTIAL.into());
+    }
+}
+/// The run identity the Hub issued for this headless registration. Anything
+/// else (an older Hub, an unexpected payload) disables progress reporting
+/// without stopping the run.
+fn registered_run_id(registered: &Message) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct RegistrationData {
+        headless_run_id: String,
+    }
+    if registered.data.is_empty() || registered.data.len() > 1024 {
+        return None;
+    }
+    let data: RegistrationData = serde_json::from_slice(&registered.data).ok()?;
+    HeadlessProgress::new(data.headless_run_id.clone(), 0)
+        .validate()
+        .ok()?;
+    Some(data.headless_run_id)
+}
+/// The latest unsent snapshot as a headless_progress frame. The payload uses
+/// the frozen Message's existing base64 data bytes.
+fn next_progress_frame(
+    session_id: i64,
+    latest: &mut tokio::sync::watch::Receiver<Option<HeadlessProgress>>,
+    last_sequence: &mut Option<u64>,
+) -> Option<Message> {
+    let value = latest.borrow_and_update().clone()?;
+    if last_sequence.is_some_and(|sent| value.sequence <= sent) {
+        return None;
+    }
+    let frame = headless_progress_frame(session_id, &value)?;
+    *last_sequence = Some(value.sequence);
+    Some(frame)
+}
+fn headless_progress_frame(session_id: i64, value: &HeadlessProgress) -> Option<Message> {
+    value.validate().ok()?;
+    let data = serde_json::to_vec(value).ok()?;
+    if data.len() > crate::orchestration::headless_progress::MAX_PROGRESS_BYTES {
+        return None;
+    }
+    Some(Message {
+        r#type: "headless_progress".into(),
+        session_id,
+        data,
+        ..Default::default()
     })
 }
 
@@ -985,5 +1094,79 @@ mod tests {
         };
         assert!(!failed_path.exists());
         assert!(process.env.contains_key(std::ffi::OsStr::new(PAYLOAD_ENV)));
+    }
+}
+
+#[cfg(test)]
+mod progress_boundary_tests {
+    use super::*;
+    use crate::orchestration::headless_progress::{decode_progress, safe_excerpt};
+
+    #[test]
+    fn registration_run_id_is_hub_issued_and_progress_uses_the_existing_byte_contract() {
+        let mut registered = Message {
+            session_id: 12,
+            ..Default::default()
+        };
+        assert_eq!(registered_run_id(&registered), None);
+        registered.data = br#"{"headless_run_id":"12:8"}"#.to_vec();
+        assert_eq!(registered_run_id(&registered).as_deref(), Some("12:8"));
+        registered.data = br#"{"headless_run_id":"12:8","api_key":"PRIVATE_SENTINEL"}"#.to_vec();
+        assert_eq!(registered_run_id(&registered), None);
+        registered.data = br#"{"headless_run_id":"not a run id"}"#.to_vec();
+        assert_eq!(registered_run_id(&registered), None);
+
+        let mut progress = HeadlessProgress::new("12:8".into(), 1);
+        progress.sequence = 1;
+        progress.last_assistant = safe_excerpt("API_KEY=synthetic_secret_123456", 512);
+        let frame = headless_progress_frame(12, &progress).unwrap();
+        let serialized = serde_json::to_value(&frame).unwrap();
+        assert_eq!(serialized["type"], "headless_progress");
+        // The generated Message keeps its base64 data field.
+        assert!(serialized["data"].is_string());
+        let restored =
+            crate::proto::decode_wire::<Message>(&serde_json::to_vec(&frame).unwrap()).unwrap();
+        assert_eq!(decode_progress(&restored.data).unwrap(), progress);
+        assert!(
+            !String::from_utf8(restored.data)
+                .unwrap()
+                .contains("synthetic_secret")
+        );
+    }
+
+    #[test]
+    fn progress_frames_are_sent_once_per_newer_sequence() {
+        let (tx, mut latest) = tokio::sync::watch::channel::<Option<HeadlessProgress>>(None);
+        let mut sent = None;
+        assert!(next_progress_frame(3, &mut latest, &mut sent).is_none());
+        let mut progress = HeadlessProgress::new("3:1".into(), 1);
+        tx.send_replace(Some(progress.clone()));
+        assert!(next_progress_frame(3, &mut latest, &mut sent).is_some());
+        assert!(next_progress_frame(3, &mut latest, &mut sent).is_none());
+        progress.sequence = 2;
+        tx.send_replace(Some(progress.clone()));
+        assert!(next_progress_frame(3, &mut latest, &mut sent).is_some());
+        assert_eq!(sent, Some(2));
+        progress.sequence = 1;
+        tx.send_replace(Some(progress));
+        assert!(next_progress_frame(3, &mut latest, &mut sent).is_none());
+    }
+
+    #[test]
+    fn partial_messages_are_requested_only_for_the_claude_stream() {
+        let mut args = vec!["--model".to_string(), "synthetic".to_string()];
+        add_progress_args("claude", "claude-stream-json", &mut args);
+        add_progress_args("claude", "claude-stream-json", &mut args);
+        assert_eq!(
+            args.iter()
+                .filter(|arg| *arg == "--include-partial-messages")
+                .count(),
+            1
+        );
+        for (provider, format) in [("claude", "text"), ("codex", "claude-stream-json")] {
+            let mut args = vec![];
+            add_progress_args(provider, format, &mut args);
+            assert!(args.is_empty());
+        }
     }
 }

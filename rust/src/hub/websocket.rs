@@ -692,6 +692,25 @@ impl WebSocketService {
                 incoming = receive(reader, &self.shutdown) => match incoming? { Some(message) => message, None => return Ok(()) },
             };
             let effects = match message.r#type.as_str() {
+                "headless_progress" => {
+                    if message.session_id != 0 && message.session_id != binding.session.0 {
+                        return Err(SessionError::InvalidRequest(
+                            "invalid headless progress identity".into(),
+                        ));
+                    }
+                    // A snapshot this Hub cannot read is dropped, not fatal: the
+                    // run keeps streaming its terminal output either way.
+                    match crate::orchestration::headless_progress::decode_progress(&message.data) {
+                        Ok(progress) => self.core.observe_headless_progress(binding, progress)?,
+                        Err(_) => {
+                            (self.warning)(
+                                "Headless progress",
+                                &SessionError::InvalidRequest("invalid headless progress".into()),
+                            );
+                            continue;
+                        }
+                    }
+                }
                 "pty_data" => {
                     // Audit U23: Claude writes the call before drawing the prompt;
                     // read it now so the record carries the whole command.

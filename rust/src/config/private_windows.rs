@@ -42,6 +42,31 @@ unsafe fn sid_string(sid: PSID) -> io::Result<String> {
             .map_err(|_| io::Error::other("invalid SID encoding"))
     }
 }
+/// The owner SID of the open `file` (READ_CONTROL access).
+fn owner_sid(file: &std::fs::File) -> io::Result<String> {
+    use std::os::windows::io::AsRawHandle;
+    // SAFETY: the handle is live; the owner points into the descriptor,
+    // which its guard frees after the owner has been read.
+    unsafe {
+        let mut owner = ptr::null_mut();
+        let mut descriptor = ptr::null_mut();
+        let status = GetSecurityInfo(
+            file.as_raw_handle(),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION,
+            &mut owner,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            &mut descriptor,
+        );
+        if status != 0 {
+            return Err(io::Error::from_raw_os_error(status as i32));
+        }
+        let _descriptor = Local(descriptor);
+        sid_string(owner)
+    }
+}
 /// The SID of the user this process runs as.
 fn current_user_sid() -> io::Result<String> {
     // SAFETY: the pseudo handle of the current process needs no closing.
@@ -126,28 +151,7 @@ impl PrivateSecurity {
     /// by the administrators or the system, whom the private ACL lets in
     /// anyway. A file another user made in a shared folder is not (U54).
     pub fn trusted_owner(file: &std::fs::File) -> io::Result<bool> {
-        use std::os::windows::io::AsRawHandle;
-        // SAFETY: the handle is live; the owner points into the descriptor,
-        // which its guard frees after the owner has been read.
-        let owner = unsafe {
-            let mut owner = ptr::null_mut();
-            let mut descriptor = ptr::null_mut();
-            let status = GetSecurityInfo(
-                file.as_raw_handle(),
-                SE_FILE_OBJECT,
-                OWNER_SECURITY_INFORMATION,
-                &mut owner,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null_mut(),
-                &mut descriptor,
-            );
-            if status != 0 {
-                return Err(io::Error::from_raw_os_error(status as i32));
-            }
-            let _descriptor = Local(descriptor);
-            sid_string(owner)?
-        };
+        let owner = owner_sid(file)?;
         // Builtin Administrators and Local System.
         Ok(owner == current_user_sid()? || owner == "S-1-5-32-544" || owner == "S-1-5-18")
     }
@@ -227,8 +231,10 @@ impl PrivateSecurity {
         // SAFETY: the descriptor allocation is guarded.
         unsafe {
             let inheritance = if is_dir { "OICI" } else { "" };
+            // An elevated token's default owner can be Administrators. Pin new
+            // objects to this user, the same SID the protected DACL names.
             let sddl = format!(
-                "D:P(A;{inheritance};FA;;;{sid})(A;{inheritance};FA;;;SY)(A;{inheritance};FA;;;BA)"
+                "O:{sid}D:P(A;{inheritance};FA;;;{sid})(A;{inheritance};FA;;;SY)(A;{inheritance};FA;;;BA)"
             );
             let sddl: Vec<u16> = sddl.encode_utf16().chain([0]).collect();
             let mut descriptor = ptr::null_mut();
@@ -283,5 +289,36 @@ impl PrivateSecurity {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn private_files_and_directories_are_owned_by_this_user() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("synthetic-private");
+        let path = directory.join("synthetic-private.json");
+        for body in [b"first".as_slice(), b"replacement".as_slice()] {
+            crate::config::private_io::write_atomic(&path, body).unwrap();
+            let file = std::fs::File::open(&path).unwrap();
+            assert_eq!(owner_sid(&file).unwrap(), current_user_sid().unwrap());
+            assert!(!PrivateSecurity::grants_others(&file).unwrap());
+            assert_eq!(std::fs::read(&path).unwrap(), body);
+        }
+        let security = PrivateSecurity::for_current_user(false).unwrap();
+        let mut owner = ptr::null_mut();
+        let mut defaulted = 0;
+        // SAFETY: the descriptor is owned by `security` and outlives the SID read.
+        let sid = unsafe {
+            assert_ne!(
+                GetSecurityDescriptorOwner(security.descriptor.0, &mut owner, &mut defaulted),
+                0
+            );
+            sid_string(owner).unwrap()
+        };
+        assert_eq!(sid, current_user_sid().unwrap());
     }
 }

@@ -188,6 +188,10 @@ pub struct SessionSnapshot {
         skip_serializing_if = "String::is_empty"
     )]
     pub execution_mode: String,
+    /// Rust-only headless progress. Present only for headless sessions; the
+    /// Hub owns the run identity and accepts snapshots from the bound wrapper.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub headless_progress: Option<crate::orchestration::headless_progress::HeadlessProgress>,
     #[serde(
         rename = "permission_mode",
         deserialize_with = "null_default",
@@ -1345,6 +1349,12 @@ pub trait SessionCore:
         observation: SessionObservation,
         now: Timestamp,
     ) -> Result<CoreEffects, SessionError>;
+    /// Replaces the bound headless run's progress snapshot (never accumulates).
+    fn observe_headless_progress(
+        &self,
+        binding: SessionBinding,
+        progress: crate::orchestration::headless_progress::HeadlessProgress,
+    ) -> Result<CoreEffects, SessionError>;
     fn observe_output(
         &self,
         binding: SessionBinding,
@@ -1505,6 +1515,26 @@ pub struct SpawnCorrelationNotification {
     pub session_id: i64,
     pub started_at: String,
     pub client_request_id: String,
+}
+/// Additive Rust-only notification carrying one complete headless snapshot.
+/// The generated Message stays frozen; the payload is the allowlisted type.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct HeadlessProgressNotification {
+    pub r#type: &'static str,
+    pub session_id: i64,
+    pub headless_progress: crate::orchestration::headless_progress::HeadlessProgress,
+}
+impl HeadlessProgressNotification {
+    pub fn new(
+        session_id: i64,
+        headless_progress: crate::orchestration::headless_progress::HeadlessProgress,
+    ) -> Self {
+        Self {
+            r#type: "headless_progress",
+            session_id,
+            headless_progress,
+        }
+    }
 }
 /// Correlation is not a credential or an idempotency key. Empty preserves old clients.
 pub fn valid_client_request_id(value: &str) -> bool {
@@ -2044,6 +2074,12 @@ pub enum CoreEffect {
     Broadcast(super::Message),
     BroadcastGitTurn(GitTurnNotification),
     BroadcastSpawnCorrelation(SpawnCorrelationNotification),
+    BroadcastHeadlessProgress(HeadlessProgressNotification),
+    SendUiHeadlessProgress {
+        binding: UiBinding,
+        event: HeadlessProgressNotification,
+        best_effort: bool,
+    },
     SendUiSpawnCorrelation {
         binding: UiBinding,
         event: SpawnCorrelationNotification,

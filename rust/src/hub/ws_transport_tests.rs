@@ -661,3 +661,61 @@ async fn failed_registration_preparation_releases_persistence_ticket_for_disconn
     drop(ui);
     fixture.stop().await;
 }
+
+#[tokio::test]
+async fn loopback_headless_progress_reaches_ui_and_unreadable_snapshots_are_dropped() {
+    use base64::Engine as _;
+    let encode = |value: &serde_json::Value| {
+        base64::engine::general_purpose::STANDARD.encode(serde_json::to_vec(value).unwrap())
+    };
+    let fixture = fixture().await;
+    let (mut ui, _) = Client::connect(fixture.port, "").await;
+    ui.json(serde_json::json!({"role":"ui","type":"anything","token":"synthetic-websocket-token","cols":120,"rows":40})).await;
+    assert_eq!(ui.frame().await.unwrap()["type"], "snapshot");
+    let (mut wrapper, _) = Client::connect(fixture.port, "").await;
+    wrapper.json(serde_json::json!({"type":"register","provider":"claude","execution_mode":"headless","cwd":fixture._root.path(),"pid":321,"token":"synthetic-websocket-token"})).await;
+    let ack = wrapper.frame().await.unwrap();
+    assert_eq!(ack["type"], "registered");
+    let id = ack["session_id"].as_i64().unwrap();
+    let data = base64::engine::general_purpose::STANDARD
+        .decode(ack["data"].as_str().unwrap())
+        .unwrap();
+    let run_id = serde_json::from_slice::<serde_json::Value>(&data).unwrap()["headless_run_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let initial = ui.until("headless_progress").await;
+    assert_eq!(initial["session_id"], id);
+    assert_eq!(initial["headless_progress"]["sequence"], 0);
+
+    let mut progress = crate::orchestration::headless_progress::HeadlessProgress::new(
+        run_id,
+        initial["headless_progress"]["started_at_ms"]
+            .as_i64()
+            .unwrap(),
+    );
+    progress.sequence = 1;
+    progress.observed_turns = 3;
+    let mut unknown = serde_json::to_value(&progress).unwrap();
+    unknown["raw_error"] = serde_json::json!("PRIVATE_SENTINEL");
+    wrapper
+        .json(
+            serde_json::json!({"type":"headless_progress","session_id":id,"data":encode(&unknown)}),
+        )
+        .await;
+    wrapper
+        .json(serde_json::json!({"type":"headless_progress","session_id":id,"data":encode(&serde_json::to_value(&progress).unwrap())}))
+        .await;
+    let live = ui.until("headless_progress").await;
+    assert_eq!(live["headless_progress"]["sequence"], 1);
+    assert_eq!(live["headless_progress"]["observed_turns"], 3);
+    assert!(!live.to_string().contains("PRIVATE_SENTINEL"));
+    // The dropped snapshot did not close the wrapper connection.
+    wrapper
+        .json(serde_json::json!({"type":"pty_data","session_id":id,"data":[120]}))
+        .await;
+    assert_eq!(ui.until("pty_data").await["session_id"], id);
+    let snapshot = fixture.core.details(LiveSessionId(id)).unwrap().snapshot;
+    assert_eq!(snapshot.headless_progress.unwrap().observed_turns, 3);
+    fixture.stop().await;
+}

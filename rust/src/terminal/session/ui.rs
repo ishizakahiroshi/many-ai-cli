@@ -209,6 +209,11 @@ impl SessionEngine {
                         event,
                         best_effort: false,
                     },
+                    UiFrame::HeadlessProgress(event) => CoreEffect::SendUiHeadlessProgress {
+                        binding: ui,
+                        event,
+                        best_effort: false,
+                    },
                 })
                 .collect(),
         ))
