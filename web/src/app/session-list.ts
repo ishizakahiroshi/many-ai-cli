@@ -475,6 +475,26 @@ export function stateActivityDecoration(s) {
   return { className: '', iconKind: 'dot', label: baseLabel };
 }
 
+// セッションカード（サイドバーの .card）に付ける状態クラスの単一ソース。一覧を描き直すとき（renderSessionList）と、
+// その場で状態だけ書き換えるとき（updateSessionCardStateInPlace）の 2 か所が同じ規則で付け外しする。2 か所に別々に
+// 書くと、片方だけに新しいクラスが足されて「描き直したときだけ枠が出る／状態更新では消えない」食い違いになる。
+// 見た目（枠・左バー・色）は styles.css の「状態の枠」ブロックにある。
+/** カードに付け外しする状態クラスの全部。updateSessionCardStateInPlace はこの全部を toggle する。 */
+export const SESSION_CARD_STATE_CLASSES = ['running', 'waiting', 'awaiting-approval', 'stopped-unseen', 'pending-spawn-confirm'] as const;
+type SessionCardStateClass = typeof SESSION_CARD_STATE_CLASSES[number];
+/**
+ * Hub の state と、stateActivityDecoration が返した付帯状態のクラス名から、カードに付ける状態クラスを返す。
+ * running / waiting は Hub の state だけで決める（起動中の回る輪の activity.className 'running' はカードの枠に使わない）。
+ */
+export function sessionCardStateClasses(state: string, activityClassName: string): SessionCardStateClass[] {
+  const classes: SessionCardStateClass[] = [];
+  if (state === 'running' || state === 'waiting') classes.push(state);
+  if (activityClassName === 'awaiting-approval' || activityClassName === 'stopped-unseen' || activityClassName === 'pending-spawn-confirm') {
+    classes.push(activityClassName);
+  }
+  return classes;
+}
+
 // provider アイコンの定義（図形・頭文字・色）と表示名（providerDisplayName）は provider-icon.ts が単一ソース。
 // 呼び出し元 10 ファイルの import を変えずに済ませるため、ここから再 export する。
 
@@ -1298,12 +1318,10 @@ export function renderSessionList() {
       const c = document.createElement('div');
       const state = s.state || 'standby';
       const activity = stateActivityDecoration(s);
-      const stateClass = (state === 'running' || state === 'waiting') ? ` ${state}` : '';
-      const approvalClass = activity.className === 'awaiting-approval' ? ' awaiting-approval' : '';
-      const pendingSpawnConfirmClass = activity.className === 'pending-spawn-confirm' ? ' pending-spawn-confirm' : '';
+      const stateClasses = sessionCardStateClasses(state, activity.className).map(name => ' ' + name).join('');
       const orchClass = entry.depth > 0 ? ' orchestration-child' : (entry.childCount > 0 || s.orchestration_id ? ' orchestration-parent' : '');
       const colorClass = s.color ? ` card-color-${safeClassToken(s.color)}` : '';
-      c.className = 'card' + stateClass + approvalClass + pendingSpawnConfirmClass + orchClass + colorClass + (s.id === activeSessionId ? ' active' : '');
+      c.className = 'card' + stateClasses + orchClass + colorClass + (s.id === activeSessionId ? ' active' : '');
       c.tabIndex = isCollapsed ? -1 : 0;
       c.setAttribute('role', 'button');
       const label = stateLabel(state);
@@ -1847,10 +1865,9 @@ export function updateSessionCardStateInPlace(id) {
   if (!card) return false;
   const state = s.state || 'standby';
   const activity = stateActivityDecoration(s);
-  card.classList.toggle('running', state === 'running');
-  card.classList.toggle('waiting', state === 'waiting');
-  card.classList.toggle('awaiting-approval', activity.className === 'awaiting-approval');
-  card.classList.toggle('pending-spawn-confirm', activity.className === 'pending-spawn-confirm');
+  // 一覧の描き直し（renderSessionList）と同じ規則で、状態クラスを全部付け外しする（sessionCardStateClasses）。
+  const stateClasses = sessionCardStateClasses(state, activity.className);
+  for (const name of SESSION_CARD_STATE_CLASSES) card.classList.toggle(name, stateClasses.includes(name));
   card.classList.toggle('active', id === activeSessionId);
   const pill = card.querySelector('.card-state-pill');
   if (pill) {
