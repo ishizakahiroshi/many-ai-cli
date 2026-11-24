@@ -27,28 +27,35 @@ Release artifacts are published at
   login unless API key billing is picked for that one run in the spawn
   confirmation dialog (or asked for with `orchestrate spawn --billing-mode
   api-key --billing-profile <id> --max-budget-usd <amount>`, which always
-  waits for a person). The key comes from the command named in the private
+  waits in that dialog). The key comes from the command named in the private
   `~/.many-ai-cli/headless-billing.json`, run by Claude Code itself as its
   `apiKeyHelper`; the Hub never runs it, stores a key or keeps raw output of
   such a run. API key billing exists only for a profile you create in that
-  file, and every such run needs a budget above 0, passed to Claude Code as
-  `--max-budget-usd`. The approval must carry the dashboard's proof (its
-  signed cookie and same-origin headers): one sent with the Hub token alone
-  (as a conductor's shell has) is refused. That proof is not a strict
-  barrier, since a local program holding the Hub token can obtain it too, so
-  the profile and the budget are what limit the spend. Conflicting
+  file, and each profile must state the largest budget one run may use
+  (`max_budget_usd`). A run's budget must be above 0 and no larger than that
+  limit, and is passed to Claude Code as `--max-budget-usd`. The approval
+  must carry the dashboard's proof (its signed cookie and same-origin
+  headers): one sent with the Hub token alone (as a conductor's shell has) is
+  refused. That proof is not a strict barrier, since a local program holding
+  the Hub token can obtain it too, so what limits the spend is that a profile
+  exists only if you wrote it, and the limit you wrote in it. Conflicting
   credentials, managed policy, another settings root or a Claude Code version
   not yet reviewed (2.1.295 and 2.1.330 are) stop the run before it starts,
-  and it is never restarted automatically (#14).
-- **A plan login headless Claude run no longer bills a key silently.** A
-  non-empty `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR`) in
-  the environment is removed from that run's environment, and `apiKeyHelper`
-  or `env.ANTHROPIC_API_KEY` in your user or project Claude settings is
-  blanked in the run's own `--settings` for that run only; your settings files
-  are not changed, and runs that use them keep starting. Only when that cannot
-  be done for certain (the run's arguments already pass another `--settings`,
-  or its settings file cannot be written) does the run stop, with a message
-  saying why. Local model routes are not affected (#14).
+  with the reason on its card, and it is never restarted automatically. Relay
+  children cannot use API key billing (#14).
+- **A plan login headless Claude run does not use an API key.** A non-empty
+  `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR`) in the
+  environment is removed from that run's environment, and the run's own
+  `--settings` always sets `apiKeyHelper` and `env.ANTHROPIC_API_KEY` to
+  empty for that run only, so a key in your user or project Claude settings
+  is not used. Your settings files are not changed, and runs with such
+  settings keep starting. Managed policy settings rank above `--settings` and
+  are not overridden. If you used headless children with an API key and no
+  plan login, log in to your plan, or create a profile and approve API key
+  billing per run. A run stops before it starts, with the reason on its card,
+  only when its arguments already pass another `--settings` or its session
+  settings cannot be written. A run with `ANTHROPIC_BASE_URL` (a local model
+  route or your own gateway) keeps its key and settings as before (#14).
 - **Sidebar display density** can be switched between Standard and Compact in
   Settings. Compact uses one-line cards, thinner project headings and a
   details popover after a short hover. The selected-session header also shows

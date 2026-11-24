@@ -905,7 +905,7 @@ const SYNTHETIC_RECIPE: &str = "synthetic-resolver-never-run";
 fn save_billing_profile(paths: &RuntimePaths) {
     crate::config::private_io::write_atomic(
         &paths.resource(crate::config::Resource::HeadlessBilling),
-        format!(r#"{{"version":1,"profiles":[{{"id":"synthetic","display_name":"Synthetic","provider":"claude","command":"{SYNTHETIC_RECIPE}"}}]}}"#).as_bytes(),
+        format!(r#"{{"version":1,"profiles":[{{"id":"synthetic","display_name":"Synthetic","provider":"claude","command":"{SYNTHETIC_RECIPE}","max_budget_usd":5.0}}]}}"#).as_bytes(),
     )
     .unwrap();
 }
@@ -1216,8 +1216,16 @@ async fn a_plan_login_confirmation_cannot_be_raised_to_api_key_billing_with_the_
     assert_eq!(f.core.pending().len(), 1);
     assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
     // Even from the dashboard, API key billing never starts without a budget
-    // above 0: the spend stays within what the person set for this run.
-    for budget in [None, Some(0.0), Some(-1.0), Some(f64::INFINITY)] {
+    // above 0, nor with one above the limit the person wrote in the profile
+    // (5.0 here): the spend stays within what the person set.
+    for budget in [
+        None,
+        Some(0.0),
+        Some(-1.0),
+        Some(f64::INFINITY),
+        Some(5.01),
+        Some(1e12),
+    ] {
         let mut unbounded = approve(Some(&revision), pending.id.clone());
         unbounded.max_budget_usd = budget;
         let error = f

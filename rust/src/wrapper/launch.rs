@@ -194,7 +194,7 @@ pub fn claude_bounded(args: &WrapperArgs) -> bool {
 /// No Debug implementation: arbitrary custom arguments may carry credentials.
 pub struct LaunchPlan {
     /// The requested headless billing, checked for shape only. Plan login
-    /// launches exactly as before.
+    /// launches as before, except that a key is switched off (`billing.rs`).
     pub billing: config::headless_billing::ResolvedBilling,
     pub provider: String,
     pub args: WrapperArgs,

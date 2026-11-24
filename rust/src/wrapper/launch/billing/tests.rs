@@ -20,7 +20,7 @@ fn trial() -> (tempfile::TempDir, tempfile::TempDir, RuntimePaths) {
 fn save_recipe(paths: &RuntimePaths) {
     private_io::write_atomic(
         &paths.resource(Resource::HeadlessBilling),
-        format!(r#"{{"version":1,"profiles":[{{"id":"synthetic","display_name":"Synthetic","provider":"claude","command":"{RECIPE}"}}]}}"#).as_bytes(),
+        format!(r#"{{"version":1,"profiles":[{{"id":"synthetic","display_name":"Synthetic","provider":"claude","command":"{RECIPE}","max_budget_usd":5.0}}]}}"#).as_bytes(),
     )
     .unwrap();
 }
@@ -273,9 +273,10 @@ fn initial_config_root_is_supported_but_a_nested_root_override_is_refused() {
     assert!(check_auth_files(&paths, &home, &cwd, &["CLAUDE_CONFIG_DIR=relative".into()]).is_err());
 }
 
-/// Plan login is the default: a key the environment or settings provide would
-/// bill the run to it, so that key is switched off for this run instead of
-/// refusing it. Synthetic names and values; the person's files are unchanged.
+/// Plan login is the default: a key the environment or settings could bill the
+/// run to is switched off for this run instead of refusing it. The blanks are
+/// written every time, not only for a key that was found. Synthetic names and
+/// values; the person's files are unchanged.
 #[test]
 fn a_plan_login_run_switches_off_a_key_that_would_bill_it_instead() {
     let (root, _installed, paths) = trial();
@@ -294,67 +295,72 @@ fn a_plan_login_run_switches_off_a_key_that_would_bill_it_instead() {
             })
             .collect::<Vec<_>>()
     };
-    // Nothing set: the plan run starts exactly as before. The plan's own login
-    // token, a debug switch or an empty key are not a key.
-    assert_eq!(plan(&[]), PlanLoginOverride::default());
-    assert_eq!(
-        plan(&[
-            "CLAUDE_CODE_OAUTH_TOKEN=synthetic".into(),
+    let blanks = |found: &PlanLoginOverride| {
+        let mut doc = serde_json::Map::new();
+        SessionCredential::PlanLogin(found).insert_settings(&mut doc);
+        serde_json::Value::Object(doc)
+    };
+    // Nothing set: the run still gets the blanks, and nothing is removed from
+    // the environment. The plan's own login token, a debug switch or an empty
+    // key are not a key.
+    for environment in [
+        vec![],
+        vec![
+            "CLAUDE_CODE_OAUTH_TOKEN=synthetic".to_owned(),
             "DEBUG=1".into(),
             "ANTHROPIC_API_KEY=".into(),
-        ]),
-        PlanLoginOverride::default()
-    );
-    // A key in the environment is removed from what the provider inherits;
-    // no settings file is needed for that.
+        ],
+    ] {
+        let found = plan(&environment);
+        assert!(found.needs_settings());
+        assert!(removed(&found).is_empty());
+        let doc = blanks(&found);
+        assert_eq!(doc["apiKeyHelper"], "");
+        assert_eq!(doc["env"]["ANTHROPIC_API_KEY"], "");
+    }
+    // A key in the environment is removed from what the provider inherits.
     let found = plan(&[
         "ANTHROPIC_API_KEY=synthetic-not-a-key".into(),
         "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR=9".into(),
     ]);
-    assert!(!found.needs_settings());
+    assert!(found.needs_settings());
     assert_eq!(
         removed(&found),
         ["ANTHROPIC_API_KEY", "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR"]
     );
     assert!(!format!("{found:?}").contains("synthetic-not-a-key"));
-    // A local model route clears the key and sets its own endpoint: kept.
-    assert_eq!(
-        plan(&[
-            "ANTHROPIC_AUTH_TOKEN=synthetic".into(),
+    // Another endpoint (a local model route, or the person's own gateway that
+    // needs the key) keeps its key and its settings exactly as before.
+    for environment in [
+        vec![
+            "ANTHROPIC_AUTH_TOKEN=synthetic".to_owned(),
             "ANTHROPIC_API_KEY=".into(),
             "ANTHROPIC_BASE_URL=http://127.0.0.1:9".into(),
-        ]),
-        PlanLoginOverride::default()
-    );
-    // A key helper or key in the user settings is blanked in the run's own
+        ],
+        vec![
+            "ANTHROPIC_API_KEY=synthetic-not-a-key".to_owned(),
+            "ANTHROPIC_BASE_URL=https://gateway.invalid".into(),
+        ],
+    ] {
+        let found = plan(&environment);
+        assert_eq!(found, PlanLoginOverride::default());
+        assert!(!found.needs_settings());
+        assert!(removed(&found).is_empty());
+        assert_eq!(blanks(&found), serde_json::json!({}));
+    }
+    // A key helper or key in the user settings is blanked by the run's own
     // settings, which Claude Code ranks above the user and project settings.
     let user_settings = home.join(".claude/settings.json");
-    for (settings, helper, env) in [
-        (
-            serde_json::json!({"apiKeyHelper": "synthetic-do-not-execute"}),
-            true,
-            false,
-        ),
-        (
-            serde_json::json!({"env": {"ANTHROPIC_API_KEY": "synthetic"}}),
-            false,
-            true,
-        ),
+    for settings in [
+        serde_json::json!({"apiKeyHelper": "synthetic-do-not-execute"}),
+        serde_json::json!({"env": {"ANTHROPIC_API_KEY": "synthetic"}}),
     ] {
         let original = serde_json::to_vec(&settings).unwrap();
         std::fs::write(&user_settings, &original).unwrap();
-        let found = plan(&[]);
-        assert!(found.needs_settings(), "{settings}");
-        let mut doc = serde_json::Map::new();
-        SessionCredential::PlanLogin(&found).insert_settings(&mut doc);
-        assert_eq!(doc.contains_key("apiKeyHelper"), helper, "{settings}");
-        if helper {
-            assert_eq!(doc["apiKeyHelper"], "");
-        }
-        if env {
-            assert_eq!(doc["env"]["ANTHROPIC_API_KEY"], "");
-        }
-        assert!(!serde_json::to_string(&doc).unwrap().contains("synthetic"));
+        let doc = blanks(&plan(&[]));
+        assert_eq!(doc["apiKeyHelper"], "", "{settings}");
+        assert_eq!(doc["env"]["ANTHROPIC_API_KEY"], "", "{settings}");
+        assert!(!doc.to_string().contains("synthetic"));
         // The person's file is read, never written.
         assert_eq!(std::fs::read(&user_settings).unwrap(), original);
     }
@@ -364,26 +370,38 @@ fn a_plan_login_run_switches_off_a_key_that_would_bill_it_instead() {
         r#"{"env":{"anthropic_api_key":"synthetic"}}"#,
     )
     .unwrap();
-    let mut doc = serde_json::Map::new();
-    SessionCredential::PlanLogin(&plan(&[])).insert_settings(&mut doc);
+    let doc = blanks(&plan(&[]));
     assert_eq!(doc["env"]["anthropic_api_key"], "");
     assert_eq!(doc["env"]["ANTHROPIC_API_KEY"], "");
-    // Other settings, and a file that does not parse, are left as before.
-    for settings in [r#"{"model":"synthetic"}"#, "{not json"] {
+    // A file that cannot be read for spellings (too large, not JSON), a
+    // relative config root, or a project file that appears later: the blanks
+    // do not depend on the look, so they are there all the same.
+    for settings in [
+        format!(
+            r#"{{"apiKeyHelper":"synthetic-do-not-execute","padding":"{}"}}"#,
+            "x".repeat(200 * 1024)
+        ),
+        "{not json".into(),
+    ] {
         std::fs::write(&user_settings, settings).unwrap();
-        assert_eq!(plan(&[]), PlanLoginOverride::default(), "{settings}");
+        let doc = blanks(&plan(&[]));
+        assert_eq!(doc["apiKeyHelper"], "");
+        assert_eq!(doc["env"]["ANTHROPIC_API_KEY"], "");
     }
-    // A project's settings above cwd count too.
+    let relative = plan(&["CLAUDE_CONFIG_DIR=relative".into()]);
+    assert!(relative.needs_settings());
+    assert_eq!(blanks(&relative)["apiKeyHelper"], "");
+    let found = plan(&[]);
     std::fs::create_dir_all(root.path().join(".claude")).unwrap();
     std::fs::write(
         root.path().join(".claude/settings.local.json"),
-        r#"{"apiKeyHelper":"synthetic-do-not-execute"}"#,
+        r#"{"apiKeyHelper":"synthetic-written-after-the-look"}"#,
     )
     .unwrap();
-    let found = plan(&[]);
-    assert!(found.needs_settings());
-    // Only when the provider arguments already carry a settings file of their
-    // own can the key not be switched off for certain: then the run stops.
+    assert_eq!(blanks(&found)["apiKeyHelper"], "");
+    // When the provider arguments already carry a settings file of their own,
+    // the key cannot be switched off for certain: then the run stops, whether
+    // or not a key was found.
     assert!(!plan_login_override_conflicts(
         &found,
         &["--model".into(), "x".into()]
@@ -393,14 +411,16 @@ fn a_plan_login_run_switches_off_a_key_that_would_bill_it_instead() {
         vec!["--settings=other.json".to_owned()],
     ] {
         assert!(plan_login_override_conflicts(&found, &args));
+        assert!(plan_login_override_conflicts(
+            &plan(&["CLAUDE_CONFIG_DIR=relative".into()]),
+            &args
+        ));
     }
-    // Nothing to switch off in settings, nothing to conflict with.
+    // A run sent to another endpoint keeps its own --settings as before.
     assert!(!plan_login_override_conflicts(
         &PlanLoginOverride::default(),
         &["--settings".into(), "other.json".into()]
     ));
-    std::fs::remove_file(root.path().join(".claude/settings.local.json")).unwrap();
-    assert_eq!(plan(&[]), PlanLoginOverride::default());
 }
 
 /// The plan run's blanks go into the one session-owned settings file, with
@@ -590,7 +610,7 @@ async fn api_prepare_merges_one_owned_settings_file_without_running_the_recipe()
         )
         .unwrap();
     args.extend(extra.args);
-    finish_args(&mut args, &plan.billing).unwrap();
+    finish_args(&mut args, &plan.billing, recipe.max_budget_usd()).unwrap();
     assert_eq!(args.iter().filter(|v| *v == "--settings").count(), 1);
     assert_eq!(args.iter().filter(|v| *v == "--bare").count(), 1);
     let budget = args.iter().position(|v| v == "--max-budget-usd").unwrap();
@@ -604,7 +624,13 @@ async fn api_prepare_merges_one_owned_settings_file_without_running_the_recipe()
     // A second settings source would make the helper ambiguous.
     let mut doubled = args.clone();
     doubled.extend(["--settings".into(), "other".into()]);
-    assert!(finish_args(&mut doubled, &plan.billing).is_err());
+    assert!(finish_args(&mut doubled, &plan.billing, recipe.max_budget_usd()).is_err());
+    // The budget handed to the CLI never exceeds the profile's own limit.
+    let mut fresh = plan.provider_args.clone();
+    fresh.extend(["--settings".into(), "synthetic".into()]);
+    let error = finish_args(&mut fresh, &plan.billing, 0.1).unwrap_err();
+    assert_eq!(error.to_string(), BillingError::BudgetOverLimit.to_string());
+    assert!(!fresh.iter().any(|arg| arg == "--max-budget-usd"));
     hooks.finish().unwrap();
     assert!(!file.exists());
 }
@@ -680,7 +706,7 @@ async fn unconfirmed_changed_or_conflicting_api_runs_stop_before_any_probe() {
     // The private file changed after the person confirmed it.
     private_io::write_atomic(
         &paths.resource(Resource::HeadlessBilling),
-        br#"{"version":1,"profiles":[{"id":"synthetic","display_name":"Synthetic","provider":"claude","command":"another-synthetic-resolver"}]}"#,
+        br#"{"version":1,"profiles":[{"id":"synthetic","display_name":"Synthetic","provider":"claude","command":"another-synthetic-resolver","max_budget_usd":5.0}]}"#,
     )
     .unwrap();
     assert_eq!(

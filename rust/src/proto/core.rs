@@ -2244,7 +2244,9 @@ pub struct ChildSpawnRequest {
     #[serde(rename = "execution_mode", deserialize_with = "null_default")]
     pub execution_mode: String,
     /// Rust-only (Issue #14): `plan-login` (empty) or `api-key`. A request for
-    /// `api-key` always waits for a person's spawn confirmation.
+    /// `api-key` always waits for an approval in the spawn confirmation
+    /// dialog, which needs the dashboard's proof (not a strict barrier: a
+    /// local program holding the Hub token can obtain it too).
     #[serde(
         rename = "billing_mode",
         deserialize_with = "null_default",

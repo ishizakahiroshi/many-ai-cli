@@ -306,8 +306,10 @@ impl OrchestrateCli {
                     ],
                     &mut body,
                 );
-                // API key billing is only asked for here; the Hub always waits
-                // for a person to approve it in the spawn confirmation.
+                // API key billing is only asked for here; the Hub always waits for
+                // an approval in the spawn confirmation dialog, which needs the
+                // dashboard's proof. That proof is not a strict barrier: a local
+                // program holding the Hub token can obtain it too.
                 if !flags.value("max-budget-usd").is_empty() {
                     let budget = flags
                         .value("max-budget-usd")

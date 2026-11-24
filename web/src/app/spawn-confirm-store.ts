@@ -78,6 +78,8 @@ export interface SpawnBillingProfile {
   id: string;
   displayName: string;
   provider: string;
+  // 本人が headless-billing.json に書いた 1 回の上限（USD）。予算の欄はこれを超えられない。
+  maxBudgetUsd: number;
 }
 export interface SpawnBillingDisclosure {
   // AI が要求した払い方。'plan-login'（既定）か 'api-key'。
@@ -110,15 +112,22 @@ export function billingFromMessageData(data: unknown): SpawnBillingDisclosure {
   const text = (value: unknown, limit: number): string =>
     typeof value === 'string' && value.length <= limit ? value : '';
   const budget = Number(parsed.max_budget_usd);
+  const positive = (value: unknown): number | undefined => {
+    const n = typeof value === 'number' ? value : NaN;
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  };
   return {
     mode: parsed.billing_mode === BILLING_API_KEY ? BILLING_API_KEY : BILLING_PLAN_LOGIN,
     profile: text(parsed.billing_profile, 80),
     maxBudgetUsd: parsed.max_budget_usd != null && Number.isFinite(budget) && budget > 0 ? budget : undefined,
     profiles: Array.isArray(parsed.billing_profiles)
       ? parsed.billing_profiles
-        .filter((p: any) => text(p?.id, 80) && text(p?.display_name, 120) && text(p?.provider, 64))
+        .filter((p: any) => text(p?.id, 80) && text(p?.display_name, 120) && text(p?.provider, 64)
+          && positive(p?.max_budget_usd) !== undefined)
         .slice(0, 64)
-        .map((p: any) => ({ id: p.id, displayName: p.display_name, provider: p.provider }))
+        .map((p: any) => ({
+          id: p.id, displayName: p.display_name, provider: p.provider, maxBudgetUsd: p.max_budget_usd,
+        }))
       : [],
     revision: /^[a-f0-9]{64}$/.test(text(parsed.billing_revision, 64)) ? parsed.billing_revision : '',
     unavailable: text(parsed.billing_unavailable, 200),
@@ -138,7 +147,8 @@ export function billingFieldShown(billing: SpawnBillingDisclosure, provider: str
 }
 
 // 決定の本文に載せる払い方。欄を出していないときは undefined（欄ごと送らない）。
-// キー課金は画面なし・取り出し方・正の予算がそろったときだけで、欠けたら error を返す。
+// キー課金は画面なし・取り出し方・正でその取り出し方の上限以下の予算がそろったときだけで、
+// 欠けたら error を返す（上限は Hub も確かめる。ここは送る前に気づかせるため）。
 export type BillingDecision =
   | { fields: Record<string, unknown> }
   | { error: 'headless_billing_invalid' };
@@ -150,11 +160,13 @@ export function billingDecision(input: {
   profile: string;
   budgetText: string;
   revision: string;
+  profileMaxUsd?: number;
 }): BillingDecision | undefined {
   if (!input.approved || !input.shown) return undefined;
   if (input.mode !== BILLING_API_KEY) return { fields: { billing_mode: BILLING_PLAN_LOGIN } };
   const budget = Number(String(input.budgetText || '').trim());
-  if (input.executionMode !== 'headless' || !input.profile || !Number.isFinite(budget) || budget <= 0) {
+  if (input.executionMode !== 'headless' || !input.profile || !Number.isFinite(budget) || budget <= 0
+    || (input.profileMaxUsd !== undefined && budget > input.profileMaxUsd)) {
     return { error: 'headless_billing_invalid' };
   }
   return {

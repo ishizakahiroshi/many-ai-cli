@@ -285,8 +285,8 @@ impl SessionHooks {
     /// Like [`Self::claude_settings`], also carrying the run's credential
     /// settings (Issue #14) in the same session-owned private file, so the
     /// launch passes exactly one `--settings`: an API key billing recipe as
-    /// `apiKeyHelper`, or for a plan login run the blanks that switch off a key
-    /// the person's own settings provide. The file is removed with the
+    /// `apiKeyHelper`, or for a plan login run the blanks that switch off any
+    /// key the person's own settings could provide. The file is removed with the
     /// session; leftovers are collected on a later start. The recipe never
     /// reaches argv, the environment or an error.
     #[allow(clippy::too_many_arguments)]

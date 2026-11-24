@@ -386,6 +386,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       <label class="spawn-confirm-field" data-billing-api hidden>
         <span class="spawn-confirm-field-label">${escapeHtml(t('headless_billing_budget_label'))}</span>
         <input name="max_budget_usd" class="ui-input spawn-input" type="number" min="0.01" step="0.01" inputmode="decimal" autocomplete="off" value="${record.billing.maxBudgetUsd ?? ''}">
+        <small class="spawn-confirm-billing-note" data-billing-budget-max hidden></small>
       </label>
       <p class="spawn-confirm-billing-note" data-billing-api hidden>${escapeHtml(t('headless_billing_api_notice'))}${record.billing.unavailable ? ' ' + escapeHtml(t('headless_billing_unavailable')) : ''}</p>
       <label class="spawn-confirm-remember" data-spawn-confirm-remember>
@@ -434,6 +435,25 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   const billingSelect = dialog.querySelector('[name=billing_mode]') as HTMLSelectElement | null;
   const billingProfileSelect = dialog.querySelector('[name=billing_profile]') as HTMLSelectElement | null;
   const billingBudget = dialog.querySelector('[name=max_budget_usd]') as HTMLInputElement | null;
+  const billingBudgetMax = dialog.querySelector('[data-billing-budget-max]') as HTMLElement | null;
+
+  // 選んでいる取り出し方に本人が書いた上限。予算の欄の max と、欄の下の一言に出す。
+  function selectedProfileMax(): number | undefined {
+    const provider = providerSelect?.value || record.provider;
+    const id = billingProfileSelect?.value || '';
+    return billingProfilesFor(record.billing, provider).find((p) => p.id === id)?.maxBudgetUsd;
+  }
+  function refreshBudgetLimit(): void {
+    const max = selectedProfileMax();
+    if (billingBudget) {
+      if (max === undefined) billingBudget.removeAttribute('max');
+      else billingBudget.max = String(max);
+    }
+    if (billingBudgetMax) {
+      billingBudgetMax.hidden = max === undefined;
+      billingBudgetMax.textContent = max === undefined ? '' : t('headless_billing_budget_max', { max: String(max) });
+    }
+  }
 
   // 払い方の欄（Issue #14）。選んでいる CLI に取り出し方の設定があるか、AI がキー課金を
   // 求めたときだけ出す。キー課金を選んだときだけ、取り出し方・予算・注意を出す。
@@ -452,8 +472,10 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       ].join('');
       billingProfileSelect.value = profiles.some((p) => p.id === keep) ? keep : '';
     }
+    refreshBudgetLimit();
   }
   billingSelect?.addEventListener('change', refreshBilling);
+  billingProfileSelect?.addEventListener('change', refreshBudgetLimit);
   refreshBilling();
 
   // CLI を差し替えたら、その CLI の契約一覧に引き直す。別 CLI の契約は残さない
@@ -686,6 +708,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       profile: billingProfileSelect?.value || '',
       budgetText: billingBudget?.value || '',
       revision: record.billing.revision,
+      profileMaxUsd: selectedProfileMax(),
     });
     if (billing && 'error' in billing) {
       showStatus(t(billing.error));

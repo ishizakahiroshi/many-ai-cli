@@ -241,8 +241,10 @@ impl ChildHttp {
         {
             return Response::error(400, "bad_request", &error.to_string());
         }
-        // API key billing spends money: a person confirms it in the dialog
-        // whatever the confirmation setting is or who asked (Issue #14).
+        // API key billing spends money: it always waits in the dialog for an
+        // approval with the dashboard's proof, whatever the confirmation
+        // setting is or who asked (Issue #14). The proof is not a strict
+        // barrier; the profile's own budget limit bounds the spend.
         let confirmation = body.requests_api_billing()
             || !body.origin().is_human()
                 && match config::effective_spawn_confirm_mode(&cfg.orchestration.spawn_confirm_mode)

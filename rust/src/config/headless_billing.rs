@@ -9,11 +9,15 @@
 //! the command into Debug output, errors, the wire, the database or a log.
 //!
 //! What keeps the spend bounded: API key billing exists only for a profile
-//! the person wrote into that file themselves, every such run needs a
-//! positive budget that is passed to the CLI as `--max-budget-usd`, and its
-//! approval must carry the dashboard's proof (`VerifiedConfirmationRequest::
-//! from_ui`). That proof is not a strict barrier: a local program holding the
-//! Hub token can obtain it too.
+//! the person wrote into that file themselves, each profile carries the
+//! largest budget a run may use (`max_budget_usd`, required, written by the
+//! person), and every such run needs a positive budget no larger than that
+//! limit, which is passed to the CLI as `--max-budget-usd`. The limit is part
+//! of the file's revision, so it is checked at the approval, at the launch
+//! and again in the wrapper. The approval must carry the dashboard's proof
+//! (`VerifiedConfirmationRequest::from_ui`). That proof is not a strict
+//! barrier: a local program holding the Hub token can obtain it too, so the
+//! person's own limit is what bounds a run that such a program approves.
 //!
 //! Only a built-in provider whose shipped headless output is Claude Code's
 //! stream-json supports it (the helper, `--bare` and `--max-budget-usd` are
@@ -34,11 +38,14 @@ const MAX_CONFIG_BYTES: usize = 128 * 1024;
 const MAX_PROFILES: usize = 64;
 
 /// What the confirmation dialog may show about a profile. No command field.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct BillingProfileSummary {
     pub id: String,
     pub display_name: String,
     pub provider: String,
+    /// The largest budget a run of this profile may use (written by the
+    /// person). The dialog uses it as the budget field's maximum.
+    pub max_budget_usd: f64,
 }
 
 /// The selection a person confirmed. Safe to show and to carry through the
@@ -85,14 +92,21 @@ struct Recipe {
     display_name: String,
     provider: String,
     command: String,
+    /// Required: the person's own limit for one run of this profile.
+    max_budget_usd: f64,
 }
 
 /// Intentionally neither Debug, Clone nor Serialize: the only use is merging
 /// the command into a session-owned private Claude settings document.
 pub struct PrivateRecipe {
     command: String,
+    max_budget_usd: f64,
 }
 impl PrivateRecipe {
+    /// The profile's limit, checked once more against the budget the CLI gets.
+    pub fn max_budget_usd(&self) -> f64 {
+        self.max_budget_usd
+    }
     pub(crate) fn insert_settings(
         &self,
         settings: &mut serde_json::Map<String, serde_json::Value>,
@@ -113,7 +127,44 @@ pub enum BillingError {
     RevisionChanged,
     AuthConflict,
     UnsupportedVersion,
-    PlanLoginWouldUseKey,
+    /// The run's budget is above the limit the person wrote in the profile.
+    BudgetOverLimit,
+    /// A plan login run whose own arguments carry another `--settings`: a key
+    /// there could not be switched off for that run alone.
+    PlanLoginOwnSettings,
+    /// A plan login run whose session settings (which switch a key off)
+    /// could not be written.
+    PlanLoginSettingsUnwritable,
+    /// The session settings a run needs (the bounded tier's) could not be
+    /// written. Fixed text: the file error could name a path.
+    SessionSettingsFailed,
+}
+impl BillingError {
+    /// The fixed reason a headless session ends with when its launch is
+    /// refused for this error; the dashboard shows `end_reason_<code>`.
+    pub fn reason_code(self) -> &'static str {
+        match self {
+            Self::InvalidSelection => "billing_invalid_selection",
+            Self::HumanConfirmationRequired => "billing_confirmation_required",
+            Self::InvalidProfile => "billing_invalid_profile",
+            Self::UnknownProfile => "billing_unknown_profile",
+            Self::PrivateConfig => "billing_private_config",
+            Self::RevisionChanged => "billing_revision_changed",
+            Self::AuthConflict => "billing_auth_conflict",
+            Self::UnsupportedVersion => "billing_unsupported_version",
+            Self::BudgetOverLimit => "billing_budget_over_limit",
+            Self::PlanLoginOwnSettings => "plan_login_own_settings",
+            Self::PlanLoginSettingsUnwritable => "plan_login_settings_unwritable",
+            Self::SessionSettingsFailed => "session_settings_failed",
+        }
+    }
+    /// The billing error an I/O error carries, if any.
+    pub fn of(error: &io::Error) -> Option<Self> {
+        error
+            .get_ref()
+            .and_then(|inner| inner.downcast_ref::<Self>())
+            .copied()
+    }
 }
 impl fmt::Display for BillingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -122,9 +173,11 @@ impl fmt::Display for BillingError {
                 "invalid headless billing selection: API key billing needs a headless run of a provider that supports it, a profile and a positive budget"
             }
             Self::HumanConfirmationRequired => {
-                "API key billing needs a person to approve the spawn confirmation"
+                "API key billing needs an approval in the dashboard's spawn confirmation dialog"
             }
-            Self::InvalidProfile => "invalid headless billing profile configuration",
+            Self::InvalidProfile => {
+                "invalid headless billing profile configuration: each profile needs id, display_name, provider, command and a max_budget_usd above 0"
+            }
             Self::UnknownProfile => "headless billing profile is unavailable",
             Self::PrivateConfig => {
                 "headless billing private configuration is unavailable or not private to this user"
@@ -136,8 +189,17 @@ impl fmt::Display for BillingError {
                 "headless billing authentication configuration conflicts with API key billing"
             }
             Self::UnsupportedVersion => "headless billing Claude Code version is not verified",
-            Self::PlanLoginWouldUseKey => {
-                "plan login was selected, but the Claude settings provide an API key (apiKeyHelper or env.ANTHROPIC_API_KEY) that could not be switched off for this run alone, so the run was not started to keep it from being billed to that key; remove the key from the Claude settings or choose API key billing"
+            Self::BudgetOverLimit => {
+                "API key billing budget is above the max_budget_usd written in the headless billing profile; lower the budget or raise the limit in that file"
+            }
+            Self::PlanLoginOwnSettings => {
+                "plan login was selected, but the run's arguments pass their own --settings, so an API key set there could not be switched off for this run alone; the run was not started so it is not billed to a key. Remove --settings from the run's arguments, or choose API key billing"
+            }
+            Self::PlanLoginSettingsUnwritable => {
+                "plan login was selected, but the run's session settings that switch off an API key could not be written, so the run was not started so it is not billed to a key. Check that the many-ai-cli data folder is writable, then start it again"
+            }
+            Self::SessionSettingsFailed => {
+                "the run's session settings could not be written, so the run was not started. Check that the many-ai-cli data folder is writable, then start it again"
             }
         })
     }
@@ -277,6 +339,7 @@ fn document(paths: &RuntimePaths) -> Result<Option<(Document, String)>, BillingE
             || profile.command.trim().is_empty()
             || profile.command.len() > 16 * 1024
             || profile.command.contains(['\0', '\r', '\n'])
+            || !valid_budget(Some(profile.max_budget_usd))
         {
             return Err(BillingError::InvalidProfile);
         }
@@ -302,6 +365,7 @@ pub fn disclosure(
                         id: profile.id,
                         display_name: profile.display_name,
                         provider: profile.provider,
+                        max_budget_usd: profile.max_budget_usd,
                     })
                     .collect(),
                 revision,
@@ -337,8 +401,14 @@ pub fn presentation(paths: &RuntimePaths) -> BillingDisclosure {
     }
 }
 
+/// Whether a run's budget is positive and no larger than the profile's limit.
+pub fn within_limit(budget: Option<f64>, limit: f64) -> bool {
+    valid_budget(budget) && valid_budget(Some(limit)) && budget.is_some_and(|value| value <= limit)
+}
+
 /// Fills the display name and pins the current revision. A plan-login
-/// selection is returned unchanged without reading the file.
+/// selection is returned unchanged without reading the file. A budget above
+/// the profile's limit is refused.
 pub fn resolve(
     paths: &RuntimePaths,
     mut selected: ResolvedBilling,
@@ -352,13 +422,16 @@ pub fn resolve(
         .into_iter()
         .find(|p| p.id == selected.profile_id && p.provider == selected.provider)
         .ok_or(BillingError::UnknownProfile)?;
+    if !within_limit(selected.max_budget_usd, profile.max_budget_usd) {
+        return Err(BillingError::BudgetOverLimit);
+    }
     selected.display_name = profile.display_name;
     selected.revision = revision;
     Ok(selected)
 }
 
 /// The recipe of a confirmed selection, only while the file still has the
-/// revision the person confirmed.
+/// revision the person confirmed and the budget is within its limit.
 pub fn recipe(
     paths: &RuntimePaths,
     selected: &ResolvedBilling,
@@ -375,8 +448,12 @@ pub fn recipe(
         .into_iter()
         .find(|p| p.id == selected.profile_id && p.provider == selected.provider)
         .ok_or(BillingError::UnknownProfile)?;
+    if !within_limit(selected.max_budget_usd, profile.max_budget_usd) {
+        return Err(BillingError::BudgetOverLimit);
+    }
     Ok(PrivateRecipe {
         command: profile.command,
+        max_budget_usd: profile.max_budget_usd,
     })
 }
 
@@ -470,7 +547,7 @@ mod tests {
     fn save(paths: &RuntimePaths, command: &str) {
         super::super::private_io::write_atomic(
             &paths.resource(Resource::HeadlessBilling),
-            serde_json::to_string(&serde_json::json!({"version":1,"profiles":[{"id":"synthetic","display_name":"Synthetic resolver","provider":"claude","command":command}]}))
+            serde_json::to_string(&serde_json::json!({"version":1,"profiles":[{"id":"synthetic","display_name":"Synthetic resolver","provider":"claude","command":command,"max_budget_usd":5.0}]}))
                 .unwrap()
                 .as_bytes(),
         )
@@ -590,11 +667,11 @@ mod tests {
     fn unsupported_providers_and_unknown_fields_in_the_file_are_refused() {
         let (_root, paths) = setup();
         for document in [
-            serde_json::json!({"version":1,"profiles":[{"id":"synthetic","display_name":"S","provider":"codex","command":"synthetic"}]}),
-            serde_json::json!({"version":1,"profiles":[{"id":"synthetic","display_name":"S","provider":"claude","command":"synthetic","key":"synthetic"}]}),
+            serde_json::json!({"version":1,"profiles":[{"id":"synthetic","display_name":"S","provider":"codex","command":"synthetic","max_budget_usd":5.0}]}),
+            serde_json::json!({"version":1,"profiles":[{"id":"synthetic","display_name":"S","provider":"claude","command":"synthetic","max_budget_usd":5.0,"key":"synthetic"}]}),
             serde_json::json!({"version":2,"profiles":[]}),
-            serde_json::json!({"version":1,"profiles":[{"id":"a","display_name":"S","provider":"claude","command":"x"},{"id":"a","display_name":"T","provider":"claude","command":"y"}]}),
-            serde_json::json!({"version":1,"profiles":[{"id":"a","display_name":"S","provider":"claude","command":"line\nbreak"}]}),
+            serde_json::json!({"version":1,"profiles":[{"id":"a","display_name":"S","provider":"claude","command":"x","max_budget_usd":5.0},{"id":"a","display_name":"T","provider":"claude","command":"y","max_budget_usd":5.0}]}),
+            serde_json::json!({"version":1,"profiles":[{"id":"a","display_name":"S","provider":"claude","command":"line\nbreak","max_budget_usd":5.0}]}),
         ] {
             super::super::private_io::write_atomic(
                 &paths.resource(Resource::HeadlessBilling),
@@ -603,6 +680,94 @@ mod tests {
             .unwrap();
             assert_eq!(profiles(&paths).unwrap_err(), BillingError::InvalidProfile);
         }
+    }
+    /// The person's own limit bounds every API key run of the profile: a
+    /// profile without one is refused, and a budget above it never resolves
+    /// or yields the recipe, whoever approved it.
+    #[test]
+    fn each_profile_needs_its_own_budget_limit_and_runs_cannot_exceed_it() {
+        let (_root, paths) = setup();
+        for limit in [
+            serde_json::Value::Null,
+            0.0.into(),
+            (-1.0).into(),
+            "5".into(),
+        ] {
+            let mut profile = serde_json::json!({"id":"synthetic","display_name":"S","provider":"claude","command":"synthetic"});
+            if !limit.is_null() {
+                profile["max_budget_usd"] = limit.clone();
+            }
+            super::super::private_io::write_atomic(
+                &paths.resource(Resource::HeadlessBilling),
+                &serde_json::to_vec(&serde_json::json!({"version":1,"profiles":[profile]}))
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                profiles(&paths).unwrap_err(),
+                BillingError::InvalidProfile,
+                "{limit}"
+            );
+        }
+        save(&paths, "synthetic-resolver-never-executed");
+        assert_eq!(profiles(&paths).unwrap()[0].max_budget_usd, 5.0);
+        let request = |budget: f64| {
+            validate_selection("claude", "headless", API_KEY, "synthetic", Some(budget), "")
+                .unwrap()
+        };
+        // At the limit is allowed; above it is refused at the approval.
+        let at_limit = resolve(&paths, request(5.0)).unwrap();
+        assert!(recipe(&paths, &at_limit).is_ok());
+        assert_eq!(recipe(&paths, &at_limit).unwrap().max_budget_usd(), 5.0);
+        for over in [5.01, 1e12] {
+            assert_eq!(
+                resolve(&paths, request(over)).unwrap_err(),
+                BillingError::BudgetOverLimit
+            );
+            // A selection that skipped the approval's check (same revision,
+            // larger budget) is refused at the launch too.
+            let mut raised = at_limit.clone();
+            raised.max_budget_usd = Some(over);
+            assert_eq!(
+                verify_revision(&paths, &raised).unwrap_err(),
+                BillingError::BudgetOverLimit
+            );
+            assert!(recipe(&paths, &raised).is_err());
+        }
+        assert!(within_limit(Some(0.5), 5.0));
+        assert!(!within_limit(None, 5.0));
+        assert!(!within_limit(Some(f64::NAN), 5.0));
+        assert!(!within_limit(Some(1.0), f64::INFINITY));
+    }
+    #[test]
+    fn every_refusal_has_its_own_fixed_reason_code() {
+        let all = [
+            BillingError::InvalidSelection,
+            BillingError::HumanConfirmationRequired,
+            BillingError::InvalidProfile,
+            BillingError::UnknownProfile,
+            BillingError::PrivateConfig,
+            BillingError::RevisionChanged,
+            BillingError::AuthConflict,
+            BillingError::UnsupportedVersion,
+            BillingError::BudgetOverLimit,
+            BillingError::PlanLoginOwnSettings,
+            BillingError::PlanLoginSettingsUnwritable,
+            BillingError::SessionSettingsFailed,
+        ];
+        let codes: BTreeSet<_> = all.iter().map(|error| error.reason_code()).collect();
+        assert_eq!(codes.len(), all.len());
+        for error in all {
+            let io_error: io::Error = error.into();
+            assert_eq!(BillingError::of(&io_error), Some(error));
+            assert!(
+                error
+                    .reason_code()
+                    .bytes()
+                    .all(|c| c.is_ascii_lowercase() || c == b'_')
+            );
+        }
+        assert_eq!(BillingError::of(&io::Error::other("synthetic")), None);
     }
     #[cfg(unix)]
     #[test]
@@ -627,7 +792,7 @@ mod tests {
         // A plain write keeps the inherited (unprotected) ACL of the folder.
         std::fs::write(
             &path,
-            br#"{"version":1,"profiles":[{"id":"synthetic","display_name":"S","provider":"claude","command":"synthetic"}]}"#,
+            br#"{"version":1,"profiles":[{"id":"synthetic","display_name":"S","provider":"claude","command":"synthetic","max_budget_usd":5.0}]}"#,
         )
         .unwrap();
         assert_eq!(profiles(&paths).unwrap_err(), BillingError::PrivateConfig);
@@ -666,7 +831,7 @@ mod tests {
         let (_root, paths) = setup();
         let sentinel = format!("sk-ant-{}", "syntheticnotarealsecret".repeat(3));
         for field in ["id", "display_name", "command"] {
-            let mut profile = serde_json::json!({"id":"synthetic","display_name":"Synthetic resolver","provider":"claude","command":"synthetic-resolver"});
+            let mut profile = serde_json::json!({"id":"synthetic","display_name":"Synthetic resolver","provider":"claude","command":"synthetic-resolver","max_budget_usd":5.0});
             profile[field] = sentinel.clone().into();
             super::super::private_io::write_atomic(
                 &paths.resource(Resource::HeadlessBilling),
